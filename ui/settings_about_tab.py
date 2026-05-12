@@ -197,7 +197,7 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     hotkeys_label = QLabel(
         "<p><b>Hotkeys While Running:</b></p>"
         "<p>"
-        "<b>Right-Click (Ctrl Held/Hard Exit)</b> - Opens Context Menu<br>"
+        "<b>Right-Click (Ctrl Held/Interaction Mode)</b> - Opens Context Menu<br>"
         "<b>S</b>  - Stop screensaver and open Settings<br>"
         "<b>ESC</b> - Exit screensaver<br>"
         "<b>Ctrl (HOLD)</b> - Temporary interaction mode (widgets clickable without exiting)<br>"

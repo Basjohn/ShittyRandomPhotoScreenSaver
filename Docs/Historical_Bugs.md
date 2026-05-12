@@ -654,7 +654,7 @@ This is the long-term anti-regression record for the project, not an active task
   - Revised model: Not "child widget focus theft" (H1 was wrong), but "no focus restoration after click". The child widget legitimately receives focus on click; the bug is that `handle_mousePressEvent` never calls `_restore_mc_input_focus()` to return focus to `DisplayWidget`.
   - **Next step**: Wire `_restore_mc_input_focus()` into `handle_mousePressEvent` after widget click routing (MC mode, non-exit clicks).
 - **2026-04-25 FIX APPLIED — `_restore_mc_input_focus` WIRED and HALO SIDE-EFFECT RESOLVED**:
-  - `_restore_mc_input_focus()` wired into `handle_mousePressEvent` at 3 return points within `hard_exit`/`ctrl_mode` branches: after context menu click, after handled widget click, after unhandled interaction click.
+  - `_restore_mc_input_focus()` wired into `handle_mousePressEvent` at 3 return points within the `interaction_mode`/`ctrl_mode` branches: after context menu click, after handled widget click, after unhandled interaction click.
   - **Result**: Media keys, hotkeys (`C`, `S`) now work after manual click into SRPSS MC on secondary display. MC bug is **resolved**.
   - **Side effect**: `widget.raise_()` in `_restore_mc_input_focus` pushed cursor halo behind `DisplayWidget`, making it invisible. Fixed by adding `hint.raise_()` at end of `_restore_mc_input_focus` to re-raise the halo after `DisplayWidget` activation. Halo is a `Qt.Tool` + `WindowDoesNotAcceptFocus` window, so `raise_()` only affects z-order, not keyboard focus.
   - **No taskbar/Alt-Tab behavior preserved**: `Qt.Tool` + `WS_EX_TOOLWINDOW` unchanged.
@@ -789,7 +789,7 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 **Symptoms**
 - MC hotkeys and media keys could stop working after interaction clicks.
 - Ctrl-held suppression could drift across local/global/handler state.
-- Cursor Halo behavior regressed around compositor interaction: it could fail to return after slight coordinate drift, and hard-exit interaction clicks could make it vanish immediately.
+- Cursor Halo behavior regressed around compositor interaction: it could fail to return after slight coordinate drift, and Interaction Mode clicks could make it vanish immediately.
 
 **Failed / insufficient attempts**
 1. Relying on only one Ctrl-held source was too fragile; focus/ownership drift could leave different subsystems disagreeing about whether interaction mode was active.
@@ -801,7 +801,7 @@ Mitigation last resort, but unacceptable as early builds of this project did not
 - `InputHandler.handle_ctrl_press()` explicitly marks handler-held state, so downstream guards agree even after interaction/focus churn.
 - MC interaction clicks now perform a best-effort focus reclaim via `display_input._restore_mc_input_focus()`, which keeps keyboard/media support alive after clicking overlays.
 - `display_input.show_ctrl_cursor_hint()` clamps small compositor drift back inside the display instead of treating it as a real out-of-bounds exit.
-- `display_input.handle_mousePressEvent()` now refreshes halo visibility/activity after interactive clicks in hard-exit mode, so clicking compositor elements no longer makes the halo disappear immediately.
+- `display_input.handle_mousePressEvent()` now refreshes halo visibility/activity after interactive clicks in Interaction Mode, so clicking compositor elements no longer makes the halo disappear immediately.
 - `CursorHaloWidget._forward_mouse_event()` now routes button events back through the fullscreen display root so the existing interaction router, preset cycling, focus reclaim, and halo keepalive logic all run on forwarded clicks.
 - Later Mar 22 follow-up: the blanket click-triggered halo keepalive / focus-reclaim calls in `display_input.handle_mousePressEvent()` were backed back out. They were well-intended, but in live use they worsened Halo visibility and click behavior instead of restoring last-commit behavior. The valuable retained parts are the multi-source Ctrl gate, display-root forwarding, and drift clamp.
 

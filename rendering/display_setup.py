@@ -214,7 +214,7 @@ def prewarm_context_menu(widget) -> None:
 
     try:
         current_transition, random_enabled = widget._refresh_transition_state_from_settings()
-        hard_exit = widget._is_hard_exit_enabled()
+        interaction_mode = widget._is_interaction_mode_enabled()
         dimming_enabled = False
         if widget.settings_manager:
             dimming_enabled = SettingsManager.to_bool(
@@ -235,7 +235,7 @@ def prewarm_context_menu(widget) -> None:
             current_transition=current_transition,
             random_enabled=random_enabled,
             dimming_enabled=dimming_enabled,
-            hard_exit_enabled=hard_exit,
+            interaction_mode_enabled=interaction_mode,
             is_mc_build=widget._is_mc_build,
             always_on_top=widget._always_on_top,
             current_visualizer=current_vis,
@@ -247,7 +247,7 @@ def prewarm_context_menu(widget) -> None:
         widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
         widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
         widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
-        widget._context_menu.hard_exit_toggled.connect(widget._on_context_hard_exit_toggled)
+        widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
         widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
         widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
 

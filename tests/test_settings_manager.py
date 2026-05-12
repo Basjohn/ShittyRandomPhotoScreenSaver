@@ -222,13 +222,30 @@ class TestSettingsManagerDefaults:
             application="Screensaver_MC",
             storage_base_dir=tmp_path / "mc_profile",
         )
-        manager.set("input.hard_exit", False)
+        manager.set("input.interaction_mode", False)
         manager.set("display.show_on_monitors", [0, 1, 2])
 
         manager.reset_to_defaults()
 
-        assert manager.get("input.hard_exit") is True
+        assert manager.get("input.interaction_mode") is True
         assert manager.get("display.show_on_monitors") == [1]
+
+    def test_legacy_hard_exit_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.remove("input.interaction_mode")
+        manager._settings.setValue("input.hard_exit", True)
+        manager._settings.sync()
+
+        reloaded = SettingsManager(
+            organization=manager.get_organization_name(),
+            application=manager.get_application_name(),
+            storage_base_dir=manager._storage_base_dir,
+        )
+
+        assert reloaded.get("input.interaction_mode") is True
+        assert reloaded.get("input.hard_exit") is True
+        assert reloaded.contains("input.interaction_mode") is True
+        assert reloaded._settings.contains("input.hard_exit") is False
 
     def test_reset_visualizers_to_defaults_replaces_stale_visualizer_section(self, tmp_path: Path) -> None:
         from core.settings.defaults import get_default_settings

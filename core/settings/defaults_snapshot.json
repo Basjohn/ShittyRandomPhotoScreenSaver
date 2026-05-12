@@ -23,7 +23,7 @@
     },
     "input": {
         "halo_shape": "cursor_light",
-        "hard_exit": false
+        "interaction_mode": false
     },
     "mc": {},
     "queue": {

@@ -402,8 +402,12 @@ class ResetDefaultsDialog(QWidget):
         outer_layout.addWidget(card)
         self.adjustSize()
 
-        # Auto-dismiss after a short delay so this behaves like a toast.
-        QTimer.singleShot(2000, self.accept)
+        # Own the auto-dismiss timer so an early close cannot leave a late
+        # callback targeting an already-closing toast.
+        self._auto_close_timer = QTimer(self)
+        self._auto_close_timer.setSingleShot(True)
+        self._auto_close_timer.timeout.connect(self.accept)
+        self._auto_close_timer.start(2000)
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
@@ -421,11 +425,14 @@ class ResetDefaultsDialog(QWidget):
 
     def accept(self) -> None:
         """Close the toast when acknowledged or after timeout."""
+        timer = getattr(self, "_auto_close_timer", None)
+        if timer is not None and timer.isActive():
+            timer.stop()
         self.close()
 
     def reject(self) -> None:
         """Treat rejection the same as acceptance for this toast."""
-        self.close()
+        self.accept()
 
 
 class SettingsDialog(QDialog):

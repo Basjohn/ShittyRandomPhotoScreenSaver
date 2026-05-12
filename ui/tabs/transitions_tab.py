@@ -184,7 +184,7 @@ class TransitionsTab(QWidget):
         # cycling. Explicit selection via the dropdown remains available
         # regardless of this flag.
         pool_row = _aligned_row(type_layout, "", wrap=False)
-        self.pool_checkbox = QCheckBox("Include in switch/random pool")
+        self.pool_checkbox = QCheckBox("Include in Switch/Random Pool")
         self.pool_checkbox.setProperty("circleIndicator", True)
         self.pool_checkbox.stateChanged.connect(self._save_settings)
         pool_row.addWidget(self.pool_checkbox)

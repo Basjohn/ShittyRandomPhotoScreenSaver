@@ -116,7 +116,7 @@ class ScreensaverContextMenu(QMenu):
     visualizer_selected = Signal(str)  # mode_id
     settings_requested = Signal()
     dimming_toggled = Signal(bool)  # new state
-    hard_exit_toggled = Signal(bool)  # new state
+    interaction_mode_toggled = Signal(bool)  # new state
     always_on_top_toggled = Signal(bool)  # new state (MC mode only)
     exit_requested = Signal()
     
@@ -126,7 +126,7 @@ class ScreensaverContextMenu(QMenu):
         transition_types: Optional[List[str]] = None,
         current_transition: str = "Crossfade",
         dimming_enabled: bool = False,
-        hard_exit_enabled: bool = False,
+        interaction_mode_enabled: bool = False,
         is_mc_build: bool = False,
         always_on_top: bool = False,
         random_enabled: bool = False,
@@ -144,7 +144,7 @@ class ScreensaverContextMenu(QMenu):
         self._current_transition = current_transition
         self._random_enabled = random_enabled
         self._dimming_enabled = dimming_enabled
-        self._hard_exit_enabled = hard_exit_enabled
+        self._interaction_mode_enabled = interaction_mode_enabled
         self._current_visualizer = current_visualizer
         
         self.setStyleSheet(MENU_STYLE)
@@ -220,11 +220,11 @@ class ScreensaverContextMenu(QMenu):
         self._dimming_action.setChecked(self._dimming_enabled)
         self._dimming_action.triggered.connect(self._on_dimming_toggled)
         
-        # Hard Exit Mode toggle - monochrome lock
-        self._hard_exit_action = self.addAction("⊘  Hard Exit Mode")
-        self._hard_exit_action.setCheckable(True)
-        self._hard_exit_action.setChecked(self._hard_exit_enabled)
-        self._hard_exit_action.triggered.connect(self._on_hard_exit_toggled)
+        # Interaction Mode toggle - monochrome lock
+        self._interaction_mode_action = self.addAction("⊘  Interaction Mode")
+        self._interaction_mode_action.setCheckable(True)
+        self._interaction_mode_action.setChecked(self._interaction_mode_enabled)
+        self._interaction_mode_action.triggered.connect(self._on_interaction_mode_toggled)
         
         # Always On Top toggle (MC mode only) - monochrome pin
         # COMMENTED OUT: Removed from MC mode context menu per user request
@@ -270,11 +270,11 @@ class ScreensaverContextMenu(QMenu):
         self.dimming_toggled.emit(self._dimming_enabled)
         logger.debug("Context menu: dimming toggled: %s", self._dimming_enabled)
     
-    def _on_hard_exit_toggled(self) -> None:
-        """Handle hard exit toggle."""
-        self._hard_exit_enabled = self._hard_exit_action.isChecked()
-        self.hard_exit_toggled.emit(self._hard_exit_enabled)
-        logger.debug("Context menu: hard exit toggled: %s", self._hard_exit_enabled)
+    def _on_interaction_mode_toggled(self) -> None:
+        """Handle Interaction Mode toggle."""
+        self._interaction_mode_enabled = self._interaction_mode_action.isChecked()
+        self.interaction_mode_toggled.emit(self._interaction_mode_enabled)
+        logger.debug("Context menu: interaction mode toggled: %s", self._interaction_mode_enabled)
     
     def update_current_transition(self, name: str) -> None:
         """Update the currently selected transition."""
@@ -285,10 +285,10 @@ class ScreensaverContextMenu(QMenu):
         self._dimming_enabled = enabled
         self._dimming_action.setChecked(enabled)
     
-    def update_hard_exit_state(self, enabled: bool) -> None:
-        """Update the hard exit checkbox state."""
-        self._hard_exit_enabled = enabled
-        self._hard_exit_action.setChecked(enabled)
+    def update_interaction_mode_state(self, enabled: bool) -> None:
+        """Update the Interaction Mode checkbox state."""
+        self._interaction_mode_enabled = enabled
+        self._interaction_mode_action.setChecked(enabled)
     
     def _on_always_on_top_toggled(self) -> None:
         """Handle always on top toggle."""

@@ -226,7 +226,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_glow_color_row.addWidget(tab.sine_glow_color_btn)
     sine_glow_color_row.addStretch()
 
-    tab.sine_reactive_glow = QCheckBox("Reactive Glow (energy-driven)")
+    tab.sine_reactive_glow = QCheckBox("Reactive Glow (Energy-Driven)")
     tab.sine_reactive_glow.setProperty("circleIndicator", True)
     tab.sine_reactive_glow.setChecked(tab._default_bool('spotify_visualizer', 'sine_reactive_glow', True))
     bind_setting_signal(tab, tab.sine_reactive_glow.stateChanged)
@@ -559,7 +559,7 @@ def build_sine_wave_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     sine_l1_shift_row.addWidget(tab.sine_line1_shift_label)
 
     # Multi-line
-    tab.sine_multi_line = QCheckBox("Multi-Line Mode (up to 3 lines)")
+    tab.sine_multi_line = QCheckBox("Multi-Line Mode (Up to 3 Lines)")
     tab.sine_multi_line.setProperty("circleIndicator", True)
     tab.sine_multi_line.setChecked(
         tab._default_int('spotify_visualizer', 'sine_line_count', 1) > 1

@@ -785,49 +785,49 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Boolean toggles
     appearance_inner.addSpacing(8)
 
-    tab.gmail_show_sender = QCheckBox("Show sender name")
+    tab.gmail_show_sender = QCheckBox("Show Sender Name")
     tab.gmail_show_sender.setProperty("circleIndicator", True)
     tab.gmail_show_sender.setChecked(tab._default_bool('gmail', 'show_sender', True))
     tab.gmail_show_sender.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_sender)
 
-    tab.gmail_show_subject = QCheckBox("Show subject line")
+    tab.gmail_show_subject = QCheckBox("Show Subject Line")
     tab.gmail_show_subject.setProperty("circleIndicator", True)
     tab.gmail_show_subject.setChecked(tab._default_bool('gmail', 'show_subject', True))
     tab.gmail_show_subject.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_subject)
 
-    tab.gmail_show_envelope = QCheckBox("Show envelope icon")
+    tab.gmail_show_envelope = QCheckBox("Show Envelope Icon")
     tab.gmail_show_envelope.setProperty("circleIndicator", True)
     tab.gmail_show_envelope.setChecked(tab._default_bool('gmail', 'show_envelope_icon', True))
     tab.gmail_show_envelope.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_envelope)
 
-    tab.gmail_show_three_dot = QCheckBox("Show action menu (three-dot)")
+    tab.gmail_show_three_dot = QCheckBox("Show Action Menu (Three-Dot)")
     tab.gmail_show_three_dot.setProperty("circleIndicator", True)
     tab.gmail_show_three_dot.setChecked(tab._default_bool('gmail', 'show_three_dot_menu', True))
     tab.gmail_show_three_dot.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_three_dot)
 
-    tab.gmail_show_refresh_spiral = QCheckBox("Show refresh spiral")
+    tab.gmail_show_refresh_spiral = QCheckBox("Show Refresh Spiral")
     tab.gmail_show_refresh_spiral.setProperty("circleIndicator", True)
     tab.gmail_show_refresh_spiral.setChecked(tab._default_bool('gmail', 'show_refresh_spiral', True))
     tab.gmail_show_refresh_spiral.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_refresh_spiral)
 
-    tab.gmail_show_unread_count = QCheckBox("Show unread count in header")
+    tab.gmail_show_unread_count = QCheckBox("Show Unread Count in Header")
     tab.gmail_show_unread_count.setProperty("circleIndicator", True)
     tab.gmail_show_unread_count.setChecked(tab._default_bool('gmail', 'show_unread_count_in_header', True))
     tab.gmail_show_unread_count.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_unread_count)
 
-    tab.gmail_show_header_border = QCheckBox("Show header border")
+    tab.gmail_show_header_border = QCheckBox("Show Header Border")
     tab.gmail_show_header_border.setProperty("circleIndicator", True)
     tab.gmail_show_header_border.setChecked(tab._default_bool('gmail', 'show_header_border', True))
     tab.gmail_show_header_border.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_show_header_border)
 
-    tab.gmail_show_timestamp = QCheckBox("Show time received")
+    tab.gmail_show_timestamp = QCheckBox("Show Time Received")
     tab.gmail_show_timestamp.setProperty("circleIndicator", True)
     tab.gmail_show_timestamp.setChecked(tab._default_bool('gmail', 'show_timestamp', True))
     tab.gmail_show_timestamp.stateChanged.connect(tab._save_settings)
@@ -853,13 +853,13 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     date_mode_row.addWidget(tab.gmail_date_display_mode)
     date_mode_row.addStretch()
 
-    tab.gmail_group_threads = QCheckBox("Group similar email threads")
+    tab.gmail_group_threads = QCheckBox("Group Similar Email Threads")
     tab.gmail_group_threads.setProperty("circleIndicator", True)
     tab.gmail_group_threads.setChecked(tab._default_bool('gmail', 'group_threads', False))
     tab.gmail_group_threads.stateChanged.connect(tab._save_settings)
     appearance_inner.addWidget(tab.gmail_group_threads)
 
-    tab.gmail_auto_title_case = QCheckBox("Auto title-case subjects")
+    tab.gmail_auto_title_case = QCheckBox("Auto Title-Case Subjects")
     tab.gmail_auto_title_case.setProperty("circleIndicator", True)
     tab.gmail_auto_title_case.setChecked(tab._default_bool('gmail', 'auto_title_case', True))
     tab.gmail_auto_title_case.stateChanged.connect(tab._save_settings)
@@ -917,7 +917,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     text_limit_row.addLayout(text_limit_grid)
     text_limit_row.addStretch()
 
-    tab.gmail_desaturate = QCheckBox("Desaturate logo when no unread")
+    tab.gmail_desaturate = QCheckBox("Desaturate Logo When No Unread")
     tab.gmail_desaturate.setProperty("circleIndicator", True)
     tab.gmail_desaturate.setChecked(tab._default_bool('gmail', 'desaturate_when_no_unread', True))
     tab.gmail_desaturate.stateChanged.connect(tab._save_settings)
@@ -1008,7 +1008,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         defer_initial_visibility=True,
     )
 
-    tab.gmail_show_separators = QCheckBox("Show separator lines")
+    tab.gmail_show_separators = QCheckBox("Show Separator Lines")
     tab.gmail_show_separators.setProperty("circleIndicator", True)
     tab.gmail_show_separators.setChecked(tab._default_bool('gmail', 'show_separators', True))
     tab.gmail_show_separators.stateChanged.connect(tab._save_settings)

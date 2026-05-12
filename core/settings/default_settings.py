@@ -166,7 +166,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
              'sharpen_downscale': False,
              'show_on_monitors': 'ALL',
              'use_lanczos': False},
- 'input': {'halo_shape': 'cursor_light', 'hard_exit': False},
+ 'input': {'halo_shape': 'cursor_light', 'interaction_mode': False},
  'mc': {},
  'preset': 'custom',
  'queue': {'shuffle': True},

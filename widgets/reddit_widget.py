@@ -5,7 +5,7 @@ subreddit, styled similarly to the Spotify media widget.
 
 The widget is strictly read-only: clicking a row opens the post in the
 system default browser. Interaction is gated by DisplayWidget's
-Ctrl-held / hard-exit modes; this widget itself does not handle mouse
+Ctrl-held / Interaction Mode; this widget itself does not handle mouse
 or keyboard input directly.
 """
 from __future__ import annotations
@@ -76,7 +76,7 @@ class RedditWidget(BaseOverlayWidget):
       Spotify card header style.
     - Configurable position, font, colours, and background frame.
     - Non-interactive at the widget level; click handling is delegated
-      to DisplayWidget during Ctrl-held / hard-exit interaction mode.
+      to DisplayWidget during Ctrl-held / Interaction Mode.
     """
     
     # Override defaults for reddit widget

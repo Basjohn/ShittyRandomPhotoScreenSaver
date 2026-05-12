@@ -1,7 +1,7 @@
 """System tray integration for ShittyRandomPhotoScreenSaver.
 
 Provides a small, themed tray icon with a context menu for
-opening Settings and exiting the screensaver when hard-exit
+opening Settings and exiting the screensaver when Interaction Mode
 mode is enabled. Tooltip shows GPU usage (if available) on hover.
 """
 from __future__ import annotations

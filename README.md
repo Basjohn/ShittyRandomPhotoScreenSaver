@@ -61,10 +61,10 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
   Cntrl holding gives you a temporary interaction mode that makes you able to move/see/click the mouse without exiting (but if you click a reddit link we're going to exit and take you to the         comments so you can join everyone else in not reading the article/source)  
 
-  Hard Exit on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
+  Interaction Mode on the other hand makes nothing except ESC/RightClick/Reddit links close the screensaver. (This is replicated in the SRPSS_MC release version)
   While seeming strange at first, if you have multiple monitors you can pick one or two of them, leave it running 24/7 with widgets of your choice. Your image will change reducing any burn worries   aaaand you have pretty widgets.
 
-  MC/Media Center Builds are designed for Hard Exit especially. These come with it turned on and run in the background with minimal resource usage.
+  MC/Media Center Builds are designed for Interaction Mode especially. These come with it turned on and run in the background with minimal resource usage.
 
   (If you have an OLED nothing is gonna stop burn in except a black screen but you know that already)  
 ---
@@ -126,7 +126,7 @@ The settings dialog lets you:
 - Change display mode, interval, sharpen, and refresh sync
 - Choose the active transition with deep per‑type options
 - Enable/disable and style each overlay widget with sliders in your sliders.
-- Enable **HARD Exit** becauseyou'refuckinghardcore (input.hard_exit)
+- Enable **INTERACTION MODE** becauseyou'refuckinghardcore (input.interaction_mode)
 
 All changes are applied immediately and persisted between runs.
 

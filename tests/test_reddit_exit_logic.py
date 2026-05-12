@@ -2,7 +2,7 @@
 
 These tests verify the smart exit behavior implemented to fix the Phase E
 cache corruption issue. The logic is:
-- Case A: Primary covered + hard_exit → Exit immediately
+- Case A: Primary covered + Interaction Mode → Exit immediately
 - Case B: Primary covered + Ctrl held → Exit immediately  
 - Case C: MC mode (primary NOT covered) → Stay open, bring browser to foreground
 
@@ -628,8 +628,8 @@ class TestDeferredRedditFlow:
 class TestRedditExitIntegration:
     """Integration tests requiring full DisplayWidget setup."""
     
-    def test_case_a_hard_exit_primary_covered(self):
-        """Case A: hard_exit + primary covered → immediate exit."""
+    def test_case_a_interaction_mode_primary_covered(self):
+        """Case A: Interaction Mode + primary covered → immediate exit."""
         pass
     
     def test_case_b_ctrl_held_primary_covered(self):

@@ -4,9 +4,9 @@ import json
 import sys
 
 import pytest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import Qt
-from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton
+from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
 from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
@@ -84,6 +84,24 @@ def test_settings_dialog_creation(qapp, settings_manager, animation_manager):
     assert dialog.windowFlags() & Qt.WindowType.FramelessWindowHint
     assert dialog.minimumSize().width() == 1280
     assert dialog.minimumSize().height() == 700
+
+
+def test_reset_defaults_toast_owns_and_stops_auto_close_timer(qapp):
+    """The reset toast should own its timeout and stop it on early close."""
+    parent = QWidget()
+    toast = ResetDefaultsDialog(parent)
+    try:
+        timer = toast._auto_close_timer
+        assert timer.parent() is toast
+        assert timer.isSingleShot() is True
+        assert timer.isActive() is True
+
+        toast.reject()
+
+        assert timer.isActive() is False
+    finally:
+        toast.deleteLater()
+        parent.deleteLater()
 
 
 def test_settings_dialog_has_title_bar(qapp, settings_manager, animation_manager):

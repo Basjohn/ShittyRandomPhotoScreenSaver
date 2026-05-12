@@ -15,6 +15,7 @@ except ModuleNotFoundError:  # pragma: no cover
 import uuid
 
 from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QToolButton
 
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
@@ -24,6 +25,13 @@ from core.settings.visualizer_mode_registry import (
     iter_visualizer_mode_descriptors,
 )
 from core.settings.visualizer_presets import MODE_KEY_PREFIXES
+
+
+def _find_toggle(container, text: str) -> QToolButton | None:
+    for toggle in container.findChildren(QToolButton):
+        if toggle.text() == text:
+            return toggle
+    return None
 
 @pytest.fixture
 def widgets_tab(qt_app, settings_manager):
@@ -59,20 +67,20 @@ class TestWidgetsTab:
         assert tab.clock_format.currentText() == "24 Hour"
         assert tab.clock_seconds.isChecked() is True
         assert tab.clock_show_background.isChecked() is False
-        assert tab.clock_bg_opacity.value() == 60
+        assert tab.clock_bg_opacity.value() == 30
         # Monitor selection uses canonical 'ALL' default so combo reflects that
         assert tab.clock_monitor_combo.currentText() == "ALL"
 
         # Weather defaults: enabled on monitor 1 with a Top Left layout and a
         # non-empty location (placeholder "New York" or a timezone-derived
-        # city), styled with background enabled at 70% opacity.
+        # city), styled with background enabled at the current canonical opacity.
         assert tab.weather_enabled.isChecked() is True
         assert tab.weather_position.currentText() == "Top Left"
         loc = tab.weather_location.text()
         assert isinstance(loc, str) and loc
         assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
         assert tab.weather_show_background.isChecked() is True
-        assert tab.weather_bg_opacity.value() == 60
+        assert tab.weather_bg_opacity.value() == 30
         assert tab.widget_shadows_enabled.isChecked() is True
         assert tab.widget_text_shadows_enabled.isChecked() is True
         assert tab.widget_header_shadows_enabled.isChecked() is True
@@ -1317,6 +1325,58 @@ def test_visualizer_technical_bucket_visibility_roundtrip(qt_app, settings_manag
             reloaded.deleteLater()
     finally:
         pass
+
+
+def test_widget_bucket_toggles_default_closed(qt_app, settings_manager):
+    """Non-Gmail widget buckets should start collapsed on a fresh profile."""
+    tab = WidgetsTab(settings_manager)
+    try:
+        checks = (
+            (tab._clock_controls_container, "Time Content"),
+            (tab._weather_controls_container, "Location & Layout"),
+            (tab._media_controls_container, "Provider & Layout"),
+            (tab._reddit_controls_container, "Feed & Interaction"),
+        )
+        for container, text in checks:
+            toggle = _find_toggle(container, text)
+            assert toggle is not None, f"Missing bucket toggle: {text}"
+            assert toggle.isChecked() is False
+    finally:
+        tab.deleteLater()
+
+
+def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
+    """Expanded widget bucket state should persist through WidgetsTab reloads."""
+    tab = WidgetsTab(settings_manager)
+    try:
+        checks = (
+            (tab._clock_controls_container, "Time Content", "clock", "time"),
+            (tab._media_controls_container, "Transport & Volume", "media", "controls"),
+            (tab._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
+        )
+        for container, text, section, bucket in checks:
+            toggle = _find_toggle(container, text)
+            assert toggle is not None, f"Missing bucket toggle: {text}"
+            toggle.click()
+            qt_app.processEvents()
+            assert tab.get_widget_bucket_state(section, bucket, False) is True
+    finally:
+        tab.deleteLater()
+
+    reloaded = WidgetsTab(settings_manager)
+    try:
+        checks = (
+            (reloaded._clock_controls_container, "Time Content", "clock", "time"),
+            (reloaded._media_controls_container, "Transport & Volume", "media", "controls"),
+            (reloaded._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
+        )
+        for container, text, section, bucket in checks:
+            toggle = _find_toggle(container, text)
+            assert toggle is not None, f"Missing bucket toggle after reload: {text}"
+            assert reloaded.get_widget_bucket_state(section, bucket, False) is True
+            assert toggle.isChecked() is True
+    finally:
+        reloaded.deleteLater()
 
 
 def test_bubble_swirl_toggle_hides_conflicting_direction_rows(qt_app, settings_manager):

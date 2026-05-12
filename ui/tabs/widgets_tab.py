@@ -199,6 +199,7 @@ class WidgetsTab(QWidget):
         self._visualizer_tech_bucket_state: Dict[str, bool] = self._load_tech_bucket_states()
         self._visualizer_bucket_state: Dict[str, bool] = self._load_bucket_states()
         self._gmail_bucket_state: Dict[str, bool] = self._load_gmail_bucket_states()
+        self._widget_bucket_state: Dict[str, bool] = self._load_widget_bucket_states()
         self._loading = True
         self._save_coalesce_pending = False
         _ui_start = time.perf_counter()
@@ -325,6 +326,7 @@ class WidgetsTab(QWidget):
     _BUCKET_STATE_KEY = "ui.visualizer_bucket_states"
     _SCROLL_POS_KEY = "ui.visualizer_scroll_positions"
     _GMAIL_BUCKET_STATE_KEY = "ui.gmail_bucket_states"
+    _WIDGET_BUCKET_STATE_KEY = "ui.widget_bucket_states"
 
     def _load_adv_states(self) -> Dict[str, bool]:
         """Load persisted advanced toggle states from SettingsManager."""
@@ -421,6 +423,13 @@ class WidgetsTab(QWidget):
             return {str(k): bool(v) for k, v in raw.items()}
         return {}
 
+    def _load_widget_bucket_states(self) -> Dict[str, bool]:
+        """Load persisted non-Gmail widget bucket expanded states."""
+        raw = self._settings.get(self._WIDGET_BUCKET_STATE_KEY, {})
+        if isinstance(raw, dict):
+            return {str(k): bool(v) for k, v in raw.items()}
+        return {}
+
     def get_gmail_bucket_state(self, bucket: str, default: bool = False) -> bool:
         """Return remembered expanded state for a Gmail bucket."""
         states = getattr(self, "_gmail_bucket_state", {})
@@ -437,6 +446,26 @@ class WidgetsTab(QWidget):
         states[bucket] = bool(expanded)
         try:
             self._settings.set(self._GMAIL_BUCKET_STATE_KEY, dict(states))
+        except Exception:
+            pass
+
+    def get_widget_bucket_state(self, section: str, bucket: str, default: bool = False) -> bool:
+        """Return remembered expanded state for a non-Gmail widget bucket."""
+        states = getattr(self, "_widget_bucket_state", {})
+        return bool(states.get(f"{section}:{bucket}", default))
+
+    def set_widget_bucket_state(self, section: str, bucket: str, expanded: bool) -> None:
+        """Persist expanded/collapsed state for a non-Gmail widget bucket."""
+        states = getattr(self, "_widget_bucket_state", None)
+        if not isinstance(states, dict):
+            states = {}
+            self._widget_bucket_state = states
+        key = f"{section}:{bucket}"
+        if states.get(key) == bool(expanded):
+            return
+        states[key] = bool(expanded)
+        try:
+            self._settings.set(self._WIDGET_BUCKET_STATE_KEY, dict(states))
         except Exception:
             pass
 

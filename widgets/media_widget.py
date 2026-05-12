@@ -4,7 +4,7 @@ This widget displays the current media playback state (track title,
 artist, album) using the centralized media controller abstraction.
 
 Transport controls (play/pause, previous/next) are exposed but are
-strictly gated behind explicit user intent (Ctrl-held or hard-exit
+strictly gated behind explicit user intent (Ctrl-held or Interaction Mode
 interaction modes) as routed by DisplayWidget; normal screensaver
 mode remains non-interactive.
 """

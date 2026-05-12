@@ -486,16 +486,16 @@ def handle_eventFilter(widget, watched, event):
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
         if event is not None and event.type() == QEvent.Type.MouseMove:
-            hard_exit = False
+            interaction_mode = False
             try:
-                hard_exit = widget._is_hard_exit_enabled()
+                interaction_mode = widget._is_interaction_mode_enabled()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                hard_exit = False
+                interaction_mode = False
 
             # Phase 5: Use coordinator for global Ctrl state and halo ownership
             ctrl_held = bool(widget._coordinator.ctrl_held or getattr(DisplayWidget, "_global_ctrl_held", False))
-            if ctrl_held or hard_exit:
+            if ctrl_held or interaction_mode:
                 # Use global cursor position so we track even when the
                 # event originates from a child widget. Resolve the
                 # DisplayWidget that owns the halo based on the cursor's
@@ -591,28 +591,28 @@ def handle_eventFilter(widget, watched, event):
 
                 if local_pos is not None:
                     try:
-                        # In hard-exit mode the halo should always be
+                        # In Interaction Mode the halo should always be
                         # visible while the cursor is over an active
                         # DisplayWidget, without requiring Ctrl to be
                         # held. On the first move we trigger a fade-in;
                         # subsequent moves just reposition the halo.
                         #
-                        # IMPORTANT: Check hard_exit on the OWNER widget, not widget,
+                        # IMPORTANT: Check interaction mode on the OWNER widget, not widget,
                         # because multiple DisplayWidgets install eventFilters and
                         # self might not be the widget under the cursor.
-                        owner_hard_exit = False
+                        owner_interaction_mode = False
                         try:
-                            owner_hard_exit = owner._is_hard_exit_enabled()
+                            owner_interaction_mode = owner._is_interaction_mode_enabled()
                         except Exception as e:
                             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                            owner_hard_exit = hard_exit  # fallback to self's value
+                            owner_interaction_mode = interaction_mode  # fallback to self's value
                         
                         hint = getattr(owner, "_ctrl_cursor_hint", None)
                         halo_hidden = hint is None or not hint.isVisible()
                         
-                        # In hard exit mode, always show halo on mouse move
+                        # In Interaction Mode, always show halo on mouse move
                         # Phase 5: Use coordinator for halo ownership
-                        if owner_hard_exit:
+                        if owner_interaction_mode:
                             if widget._coordinator.halo_owner is None or halo_hidden:
                                 # Fade in if halo owner not set OR if halo is hidden
                                 widget._coordinator.set_halo_owner(owner)

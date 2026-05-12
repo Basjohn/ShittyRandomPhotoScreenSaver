@@ -658,8 +658,8 @@ class DisplayWidget(QWidget):
         from rendering.display_setup import setup_pixel_shift
         setup_pixel_shift(self)
 
-    def _is_hard_exit_enabled(self) -> bool:
-        """Return True if hard-exit mode is enabled via settings.
+    def _is_interaction_mode_enabled(self) -> bool:
+        """Return True if Interaction Mode is enabled via settings.
 
         When enabled, mouse movement/clicks should not close the screensaver;
         only keyboard exit keys are honoured.
@@ -667,7 +667,7 @@ class DisplayWidget(QWidget):
         if not self.settings_manager:
             return False
         try:
-            raw = self.settings_manager.get('input.hard_exit', False)
+            raw = self.settings_manager.get('input.interaction_mode', False)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return False
@@ -1361,7 +1361,7 @@ class DisplayWidget(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
-        if self._is_hard_exit_enabled() or ctrl_mode_active:
+        if self._is_interaction_mode_enabled() or ctrl_mode_active:
             if self._input_handler is not None:
                 self._input_handler.route_volume_release(getattr(self, "spotify_volume_widget", None))
             event.accept()
@@ -1371,7 +1371,7 @@ class DisplayWidget(QWidget):
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Route wheel scrolling to Spotify volume widget in interaction mode."""
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
-        if self._is_hard_exit_enabled() or ctrl_mode_active:
+        if self._is_interaction_mode_enabled() or ctrl_mode_active:
             # Delegate to InputHandler
             if self._input_handler is not None:
                 try:
@@ -1412,10 +1412,10 @@ class DisplayWidget(QWidget):
         from rendering.display_context_menu import on_context_dimming_toggled
         on_context_dimming_toggled(self, enabled)
 
-    def _on_context_hard_exit_toggled(self, enabled: bool) -> None:
+    def _on_context_interaction_mode_toggled(self, enabled: bool) -> None:
         """Delegates to rendering.display_context_menu."""
-        from rendering.display_context_menu import on_context_hard_exit_toggled
-        on_context_hard_exit_toggled(self, enabled)
+        from rendering.display_context_menu import on_context_interaction_mode_toggled
+        on_context_interaction_mode_toggled(self, enabled)
 
     def _on_context_always_on_top_toggled(self, on_top: bool) -> None:
         """Delegates to rendering.display_context_menu."""

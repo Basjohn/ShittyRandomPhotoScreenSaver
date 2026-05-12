@@ -46,6 +46,9 @@ class SettingsManager(QObject):
         "widgets.imgur.intense_shadow",
         "widgets.gmail.intense_shadow",
     })
+    _LEGACY_KEY_ALIASES = {
+        "input.hard_exit": "input.interaction_mode",
+    }
     _MISSING = object()
     _MANUAL_FLOOR_MIN = 0.12
     _MANUAL_FLOOR_MAX = 1.0
@@ -98,6 +101,11 @@ class SettingsManager(QObject):
             )
             self.reset_to_defaults()
             self._settings.clear_load_failure_flag()
+
+        try:
+            self._migrate_legacy_setting_aliases()
+        except Exception:
+            logger.debug("Legacy settings alias migration failed", exc_info=True)
 
         # Initialize defaults
         self._set_defaults()
@@ -231,6 +239,31 @@ class SettingsManager(QObject):
         # never inherit local paths. Detection of Pictures folders now happens
         # only when the user explicitly selects sources.
         return []
+
+    @classmethod
+    def _canonicalize_key(cls, key: str) -> str:
+        """Return the canonical dotted key for a possibly legacy alias."""
+        return cls._LEGACY_KEY_ALIASES.get(str(key), str(key))
+
+    def _migrate_legacy_setting_aliases(self) -> None:
+        """Forward-migrate retired dotted keys to their canonical names."""
+        migrated: list[tuple[str, str]] = []
+        with self._lock:
+            for legacy_key, canonical_key in self._LEGACY_KEY_ALIASES.items():
+                if not self._settings.contains(legacy_key):
+                    continue
+                legacy_value = self._settings.value(legacy_key)
+                if not self._settings.contains(canonical_key):
+                    self._settings.setValue(canonical_key, legacy_value)
+                    migrated.append((legacy_key, canonical_key))
+                self._settings.remove(legacy_key)
+
+            if migrated:
+                self._settings.sync()
+                self._cache.clear()
+
+        if migrated:
+            logger.info("Migrated legacy setting aliases: %s", migrated)
     
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
@@ -297,7 +330,7 @@ class SettingsManager(QObject):
         app_name = getattr(self, "_application", "")
         if app_name == "Screensaver_MC":
             defaults['display.show_on_monitors'] = [1]
-            defaults['input.hard_exit'] = True
+            defaults['input.interaction_mode'] = True
             widgets = defaults.setdefault('widgets', {})
             gmail = widgets.setdefault('gmail', {})
             gmail['monitor'] = '2'
@@ -407,6 +440,7 @@ class SettingsManager(QObject):
         Returns:
             Setting value or default
         """
+        key = self._canonicalize_key(key)
         with self._lock:
             # Check cache first (P2 optimization)
             cache_key = f"{key}:{id(default)}"
@@ -512,6 +546,7 @@ class SettingsManager(QObject):
             "display.same_image_all_monitors",
             "sources.rss_save_to_disk",
             "input.hard_exit",
+            "input.interaction_mode",
             "queue.shuffle",
         }
         int_keys = {
@@ -613,6 +648,7 @@ class SettingsManager(QObject):
             key: Setting key in dot notation
             value: Value to set
         """
+        key = self._canonicalize_key(key)
         with self._lock:
             handled, old_value = self._set_structured_value_locked(key, value)
             if not handled:
@@ -1112,6 +1148,7 @@ class SettingsManager(QObject):
     
     def contains(self, key: str) -> bool:
         """Check if a setting key exists."""
+        key = self._canonicalize_key(key)
         with self._lock:
             structured = self._contains_structured_key_locked(key)
             if structured is not None:
@@ -1120,6 +1157,7 @@ class SettingsManager(QObject):
     
     def remove(self, key: str) -> None:
         """Remove a setting key."""
+        key = self._canonicalize_key(key)
         with self._lock:
             removed = self._remove_structured_key_locked(key)
             if not removed:

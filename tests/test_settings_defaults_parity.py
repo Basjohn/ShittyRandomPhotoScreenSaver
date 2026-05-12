@@ -42,7 +42,7 @@ class TestDefaultsStructure:
     def test_defaults_has_input_section(self):
         defaults = get_default_settings()
         assert "input" in defaults
-        assert "hard_exit" in defaults["input"]
+        assert "interaction_mode" in defaults["input"]
 
     def test_defaults_has_queue_section(self):
         defaults = get_default_settings()

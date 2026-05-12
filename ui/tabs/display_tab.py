@@ -125,7 +125,7 @@ class DisplayTab(QWidget):
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.same_image_check = QCheckBox("Show same image on all monitors")
+        self.same_image_check = QCheckBox("Show Same Image on All Monitors")
         self.same_image_check.setProperty("circleIndicator", True)
         self.same_image_check.setChecked(True)
         self.same_image_check.stateChanged.connect(self._save_settings)
@@ -190,7 +190,7 @@ class DisplayTab(QWidget):
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.shuffle_check = QCheckBox("Shuffle images (random order)")
+        self.shuffle_check = QCheckBox("Shuffle Images (Random Order)")
         self.shuffle_check.setProperty("circleIndicator", True)
         self.shuffle_check.setChecked(True)
         self.shuffle_check.stateChanged.connect(self._save_settings)
@@ -212,7 +212,7 @@ class DisplayTab(QWidget):
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.lanczos_check = QCheckBox("Use Lanczos scaling (higher quality, more CPU)")
+        self.lanczos_check = QCheckBox("Use Lanczos Scaling (Higher Quality, More CPU)")
         self.lanczos_check.setProperty("circleIndicator", True)
         self.lanczos_check.setChecked(True)
         self.lanczos_check.setToolTip(
@@ -229,7 +229,7 @@ class DisplayTab(QWidget):
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.sharpen_check = QCheckBox("Apply sharpening filter when downscaling")
+        self.sharpen_check = QCheckBox("Apply Sharpening Filter When Downscaling")
         self.sharpen_check.setProperty("circleIndicator", True)
         self.sharpen_check.setChecked(False)
         self.sharpen_check.stateChanged.connect(self._save_settings)
@@ -240,27 +240,27 @@ class DisplayTab(QWidget):
         
         # Pan and Scan has been removed in v1.2; no dedicated UI group remains.
 
-        # Input & Exit group
-        input_group = QGroupBox("Input && Exit")
+        # Interaction group
+        input_group = QGroupBox("Interaction")
         style_group_box(input_group)
         input_layout = QVBoxLayout(input_group)
         input_layout.setContentsMargins(0, 12, 0, 0)
         input_layout.setSpacing(12)
-        hard_exit_row, _ = add_aligned_row(
+        interaction_mode_row, _ = add_aligned_row(
             input_layout,
             "",
             label_width=self._LABEL_WIDTH,
             wrap=False,
         )
-        self.hard_exit_check = QCheckBox("Hard Exit (ESC only)")
-        self.hard_exit_check.setProperty("circleIndicator", True)
-        self.hard_exit_check.setToolTip(
-            "Makes the screensaver only close if you press escape and no longer for simple mouse movement"
+        self.interaction_mode_check = QCheckBox("Interaction Mode (ESC Only)")
+        self.interaction_mode_check.setProperty("circleIndicator", True)
+        self.interaction_mode_check.setToolTip(
+            "Keeps the screensaver active during simple mouse movement or clicks so you can interact with widgets until you press Escape."
         )
-        self.hard_exit_check.setChecked(False)
-        self.hard_exit_check.stateChanged.connect(self._save_settings)
-        hard_exit_row.addWidget(self.hard_exit_check)
-        hard_exit_row.addStretch()
+        self.interaction_mode_check.setChecked(False)
+        self.interaction_mode_check.stateChanged.connect(self._save_settings)
+        interaction_mode_row.addWidget(self.interaction_mode_check)
+        interaction_mode_row.addStretch()
 
         # Cursor Halo Shape
         halo_row, _ = add_aligned_row(
@@ -282,7 +282,7 @@ class DisplayTab(QWidget):
                 "Cursor Pointer (Dark)",
             ]
         )
-        self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Hard Exit / Ctrl-click mode.")
+        self.halo_shape_combo.setToolTip("Visual shape of the cursor halo in Interaction / Ctrl-Held Mode.")
         self.halo_shape_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
         self.halo_shape_combo.currentIndexChanged.connect(self._save_settings)
         halo_row.addWidget(self.halo_shape_combo)
@@ -321,7 +321,7 @@ class DisplayTab(QWidget):
         self.lanczos_check.blockSignals(True)
         self.sharpen_check.blockSignals(True)
         # Block input toggles
-        self.hard_exit_check.blockSignals(True)
+        self.interaction_mode_check.blockSignals(True)
         
         try:
             # Monitor selection (new canonical: display.show_on_monitors)
@@ -397,10 +397,10 @@ class DisplayTab(QWidget):
             sharpen = SettingsManager.to_bool(sharpen_raw, False)
             self.sharpen_check.setChecked(sharpen)
 
-            # Input / Hard Exit
-            hard_exit_raw = self._settings.get('input.hard_exit', False)
-            hard_exit = SettingsManager.to_bool(hard_exit_raw, False)
-            self.hard_exit_check.setChecked(hard_exit)
+            # Interaction Mode
+            interaction_mode_raw = self._settings.get('input.interaction_mode', False)
+            interaction_mode = SettingsManager.to_bool(interaction_mode_raw, False)
+            self.interaction_mode_check.setChecked(interaction_mode)
 
             # Cursor Halo Shape
             halo_shape = str(self._settings.get('input.halo_shape', 'circle')).lower()
@@ -434,7 +434,7 @@ class DisplayTab(QWidget):
             self.shuffle_check.blockSignals(False)
             self.lanczos_check.blockSignals(False)
             self.sharpen_check.blockSignals(False)
-            self.hard_exit_check.blockSignals(False)
+            self.interaction_mode_check.blockSignals(False)
             self._loading = False
     
     def _save_settings(self) -> None:
@@ -476,8 +476,8 @@ class DisplayTab(QWidget):
         sharpen = self.sharpen_check.isChecked()
         self._settings.set('display.sharpen_downscale', sharpen)
 
-        # Input / Exit
-        self._settings.set('input.hard_exit', self.hard_exit_check.isChecked())
+        # Interaction
+        self._settings.set('input.interaction_mode', self.interaction_mode_check.isChecked())
 
         # Cursor Halo Shape
         shape_names = [

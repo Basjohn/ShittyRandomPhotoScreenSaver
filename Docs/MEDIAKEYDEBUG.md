@@ -226,7 +226,7 @@ Multiple independent sources confirm `Qt::Tool` / `WS_EX_TOOLWINDOW` windows exh
 - `_restore_mc_input_focus()` calls `widget.setFocus(Qt.FocusReason.MouseFocusReason)`.
 - `MouseFocusReason` tells Qt the focus change was caused by a mouse click. Qt's internal focus routing may behave differently than `ActiveWindowFocusReason` (used in `show_on_screen()`).
 - **Problem**: If a child widget under the cursor has `ClickFocus` policy, `MouseFocusReason` may give focus to the child widget instead of the DisplayWidget. The child widget (e.g., a Reddit link label, a media widget button) may not handle key events, causing them to be "eaten".
-- **Finding**: In hard_exit mode, left-clicks route to `route_widget_click()` which checks if a widget was clicked. But if no widget handles the click, `event.accept()` is called and the function returns. The focus may still be on a child widget that didn't handle the click.
+- **Finding**: In Interaction Mode, left-clicks route to `route_widget_click()` which checks if a widget was clicked. But if no widget handles the click, `event.accept()` is called and the function returns. The focus may still be on a child widget that didn't handle the click.
 - **Severity**: MODERATE. This could explain why manual click causes focus to land on a child widget, but doesn't explain why media keys (which bypass Qt entirely via Raw Input) are also eaten.
 
 **Issue 3: CursorHaloWidget is a separate top-level Tool window**
@@ -305,7 +305,7 @@ Several of the code issues identified above are not unique to U-05; they are lat
 - The real fix is restoring focus, not preventing children from receiving it
 - H1 destabilized the focus tree and caused shadow cache corruption as a side effect
 
-**Why this only affects MC builds**: In normal builds, window activation/focus behavior differs due to `Qt.SplashScreen` vs `Qt.Tool` window flags and `WS_EX_TOOLWINDOW`. The specific code path that omits focus restoration is in the `hard_exit` / interaction-mode branch of `handle_mousePressEvent`, which is more heavily exercised in MC mode. Also, normal builds exit on click, so the focus-never-restored bug is masked by the application exiting.
+**Why this only affects MC builds**: In normal builds, window activation/focus behavior differs due to `Qt.SplashScreen` vs `Qt.Tool` window flags and `WS_EX_TOOLWINDOW`. The specific code path that omits focus restoration is in the `interaction_mode` / Ctrl-mode branch of `handle_mousePressEvent`, which is more heavily exercised in MC mode. Also, normal builds exit on click, so the focus-never-restored bug is masked by the application exiting.
 
 **Previous hypothesis (child widget focus theft) — ruled out by H1 test**: Incorrect. Child widgets legitimately get focus; the bug is the missing restoration step.
 
@@ -392,7 +392,7 @@ The codebase used to carry multiple mitigations:
 
 **Why `SetForegroundWindow` works**: It resets the Windows foreground window and Qt active window to `DisplayWidget`, bypassing whatever child widget had focus.
 
-**Why only MC builds**: In normal builds, the `Qt.SplashScreen` window + `WS_EX_TOOLWINDOW` combination may cause Qt to handle focus differently (e.g., focus remains on the top-level widget by default). In MC builds, the explicit window flag toggling during `__init__` plus the `hard_exit` interaction mode creates a code path where focus is never reclaimed.
+**Why only MC builds**: In normal builds, the `Qt.SplashScreen` window + `WS_EX_TOOLWINDOW` combination may cause Qt to handle focus differently (e.g., focus remains on the top-level widget by default). In MC builds, the explicit window flag toggling during `__init__` plus Interaction Mode creates a code path where focus is never reclaimed.
 
 ## 10. Recommended Next Steps (Research-Only)
 
@@ -405,7 +405,7 @@ The codebase used to carry multiple mitigations:
 
 ### 11.1 What Was Changed
 
-`rendering/display_input.py::handle_mousePressEvent()` now calls `_restore_mc_input_focus(widget, reason)` at 3 return points within the `hard_exit`/`ctrl_mode` branches:
+`rendering/display_input.py::handle_mousePressEvent()` now calls `_restore_mc_input_focus(widget, reason)` at 3 return points within the `interaction_mode`/`ctrl_mode` branches:
 
 1. **After right-click context menu** (`"context_menu_click"`) — restores focus after menu popup closes
 2. **After handled widget click** (`"widget_click_handled"`) — restores focus after Reddit/media/Spotify clicks

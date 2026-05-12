@@ -9,6 +9,7 @@ Tests cover:
 - Settings integration for live updates
 - ResourceManager integration
 """
+import time
 import pytest
 from unittest.mock import MagicMock
 from typing import Dict, Any
@@ -314,6 +315,55 @@ class TestRaiseOperations:
         assert w1._raised is True
         assert w2._raised is True
 
+    def test_raise_all_widgets_re_raises_widgets_after_main_window_raise(self):
+        """Widget re-raise should happen synchronously after the main window raise path."""
+        from rendering.widget_manager import WidgetManager
+
+        order: list[str] = ["main-window"]
+
+        class OrderedWidget(MockWidget):
+            def raise_(self):
+                order.append(self._name)
+                super().raise_()
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        w1 = OrderedWidget("clock")
+        w2 = OrderedWidget("media")
+        manager.register_widget("clock", w1)
+        manager.register_widget("media", w2)
+
+        manager.raise_all_widgets()
+
+        assert order == ["main-window", "clock", "media"]
+
+    def test_raise_all_widgets_re_raises_clock_tz_label_after_widget(self):
+        """Clock timezone labels should be re-raised after their parent widget."""
+        from rendering.widget_manager import WidgetManager
+
+        order: list[str] = []
+
+        class OrderedWidget(MockWidget):
+            def raise_(self):
+                order.append(self._name)
+                super().raise_()
+
+        class OrderedLabel:
+            def raise_(self):
+                order.append("clock_tz_label")
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        clock = OrderedWidget("clock")
+        clock._tz_label = OrderedLabel()  # type: ignore[attr-defined]
+        manager.register_widget("clock", clock)
+
+        manager.raise_all_widgets()
+
+        assert order == ["clock", "clock_tz_label"]
+
 
 class TestFadeCallbacks:
     """Tests for fade callback coordination."""
@@ -524,6 +574,61 @@ class TestCleanup:
         manager.cleanup()
         
         assert widget._lifecycle_state == "CLEANED"
+
+    def test_cleanup_stops_and_clears_raise_timer(self, monkeypatch):
+        """Deferred raise timer should be stopped and cleared during cleanup."""
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeSignal:
+            def __init__(self):
+                self._callback = None
+
+            def connect(self, callback):
+                self._callback = callback
+
+        class _FakeTimer:
+            def __init__(self):
+                self.timeout = _FakeSignal()
+                self.single_shot = False
+                self.started_with: list[int] = []
+                self.stop_calls = 0
+
+            def setSingleShot(self, value):
+                self.single_shot = bool(value)
+
+            def start(self, interval_ms):
+                self.started_with.append(int(interval_ms))
+
+            def stop(self):
+                self.stop_calls += 1
+
+        parent = MagicMock()
+        resource_manager = MockResourceManager()
+        manager = WidgetManager(parent, resource_manager)
+
+        fake_timer_instances: list[_FakeTimer] = []
+
+        def _timer_factory():
+            timer = _FakeTimer()
+            fake_timer_instances.append(timer)
+            return timer
+
+        monkeypatch.setattr("rendering.widget_manager.QTimer", _timer_factory)
+
+        manager._last_raise_time = time.time()
+        manager.raise_all()
+
+        assert manager._pending_raise is True
+        assert len(fake_timer_instances) == 1
+        timer = fake_timer_instances[0]
+        assert timer.single_shot is True
+        assert timer.started_with
+        assert id(timer) in resource_manager._registered
+
+        manager.cleanup()
+
+        assert timer.stop_calls == 1
+        assert manager._raise_timer is None
 
 
 class TestPositioning:

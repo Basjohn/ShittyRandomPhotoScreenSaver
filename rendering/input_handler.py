@@ -99,13 +99,13 @@ class InputHandler(QObject):
     # Configuration
     # =========================================================================
     
-    def is_hard_exit_enabled(self) -> bool:
-        """Check if hard exit mode is enabled."""
+    def is_interaction_mode_enabled(self) -> bool:
+        """Check if Interaction Mode is enabled."""
         if self._settings_manager is None:
             return False
         try:
             return SettingsManager.to_bool(
-                self._settings_manager.get('input.hard_exit', False), False
+                self._settings_manager.get('input.interaction_mode', False), False
             )
         except Exception as e:
             logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
@@ -185,9 +185,9 @@ class InputHandler(QObject):
         
         # Determine current interaction mode
         ctrl_mode_active = self._ctrl_held
-        hard_exit_enabled = self.is_hard_exit_enabled()
+        interaction_mode_enabled = self.is_interaction_mode_enabled()
         
-        # Hotkeys (always available regardless of hard-exit/ctrl state)
+        # Hotkeys (always available regardless of Interaction Mode/Ctrl state)
         if key_text == 'z' or key == Qt.Key.Key_Z or native_vk == 0x5A:
             logger.info("Z key pressed - previous image requested")
             self.previous_image_requested.emit()
@@ -212,9 +212,9 @@ class InputHandler(QObject):
             self.exit_requested.emit()
             return True
         
-        # In hard-exit mode or Ctrl interaction mode, non-hotkey keys are ignored
-        if hard_exit_enabled or ctrl_mode_active:
-            logger.debug("Key %s ignored due to hard-exit/Ctrl interaction mode", key)
+        # In Interaction Mode or Ctrl interaction mode, non-hotkey keys are ignored
+        if interaction_mode_enabled or ctrl_mode_active:
+            logger.debug("Key %s ignored due to interaction-mode/Ctrl interaction mode", key)
             return False
         
         # Normal mode: any other key exits
@@ -284,10 +284,10 @@ class InputHandler(QObject):
         
         # Right-click context menu handling
         if event.button() == Qt.MouseButton.RightButton:
-            hard_exit_enabled = self.is_hard_exit_enabled()
+            interaction_mode_enabled = self.is_interaction_mode_enabled()
             
-            # Context menu available in hard-exit mode or with Ctrl held
-            if hard_exit_enabled or ctrl_mode_active:
+            # Context menu available in Interaction Mode or with Ctrl held
+            if interaction_mode_enabled or ctrl_mode_active:
                 global_pos = event.globalPos()
                 
                 # Phase E: Notify WidgetManager before menu popup
@@ -303,7 +303,7 @@ class InputHandler(QObject):
         # Left-click handling
         if event.button() == Qt.MouseButton.LeftButton:
             # In interaction mode, let widgets handle clicks
-            if ctrl_mode_active or self.is_hard_exit_enabled():
+            if ctrl_mode_active or self.is_interaction_mode_enabled():
                 return False  # Let DisplayWidget handle widget interaction
             
             # Normal mode: exit on click
@@ -331,10 +331,10 @@ class InputHandler(QObject):
             return False
         
         ctrl_mode_active = self._ctrl_held or global_ctrl_held
-        hard_exit_enabled = self.is_hard_exit_enabled()
+        interaction_mode_enabled = self.is_interaction_mode_enabled()
         
-        # In hard-exit mode or Ctrl interaction mode, mouse movement doesn't exit
-        if hard_exit_enabled or ctrl_mode_active:
+        # In Interaction Mode or Ctrl interaction mode, mouse movement doesn't exit
+        if interaction_mode_enabled or ctrl_mode_active:
             return False
         
         # Track initial position for exit threshold
@@ -577,10 +577,10 @@ class InputHandler(QObject):
         Args:
             coordinator: MultiMonitorCoordinator for cross-display state
         """
-        hard_exit = self.is_hard_exit_enabled()
-        
-        if hard_exit:
-            # In hard-exit mode, just clear Ctrl state but keep halo
+        interaction_mode = self.is_interaction_mode_enabled()
+
+        if interaction_mode:
+            # In Interaction Mode, just clear Ctrl state but keep halo
             coordinator.set_ctrl_held(False)
             self._ctrl_held = False
             try:

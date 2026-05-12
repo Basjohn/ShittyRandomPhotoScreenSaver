@@ -27,6 +27,7 @@ from ui.tabs.shared_styles import (
     LABEL_WIDTH,  # Promoted to module-level constant
     add_aligned_row,
     create_inline_label,
+    build_bucket_toggle,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from ui.tabs.settings_binding import (
@@ -76,6 +77,12 @@ if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
 
 logger = get_logger(__name__)
+
+
+def _finalize_bucket_body(toggle, body: QWidget) -> None:
+    expanded = bool(toggle.isChecked())
+    if body.isHidden() == expanded:
+        body.setVisible(expanded)
 
 
 _OSC_MULTI_LINE_COLOR_BINDINGS = [
@@ -230,8 +237,42 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_enabled.stateChanged.connect(tab._update_stack_status)
     media_layout.addWidget(tab.media_enabled)
 
+    # Container for all media controls gated by enable checkbox
+    tab._media_controls_container = QWidget()
+    _media_ctrl_layout = QVBoxLayout(tab._media_controls_container)
+    _media_ctrl_layout.setContentsMargins(0, 0, 0, 12)
+    _media_ctrl_layout.setSpacing(12)
+
+    provider_toggle, provider_body, provider_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Provider & Layout",
+        expanded=tab.get_widget_bucket_state("media", "provider_layout", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "provider_layout", checked),
+        defer_initial_visibility=True,
+    )
+    appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Appearance",
+        expanded=tab.get_widget_bucket_state("media", "appearance", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "appearance", checked),
+        defer_initial_visibility=True,
+    )
+    artwork_toggle, artwork_body, artwork_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Artwork & Header",
+        expanded=tab.get_widget_bucket_state("media", "artwork_header", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "artwork_header", checked),
+        defer_initial_visibility=True,
+    )
+    controls_toggle, controls_body, controls_layout = build_bucket_toggle(
+        _media_ctrl_layout,
+        "Transport & Volume",
+        expanded=tab.get_widget_bucket_state("media", "controls", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("media", "controls", checked),
+        defer_initial_visibility=True,
+    )
     # Provider toggle row
-    _provider_row = _aligned_row(media_layout, "Provider:")
+    provider_row = _aligned_row(provider_layout, "Provider:")
     tab.media_provider_combo = StyledComboBox()
     tab.media_provider_combo.addItem("Spotify", "spotify")
     tab.media_provider_combo.addItem("MusicBee", "musicbee")
@@ -244,7 +285,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_provider_combo.currentIndexChanged.connect(
         lambda: _update_musicbee_plugin_visibility(tab)
     )
-    _provider_row.addWidget(tab.media_provider_combo)
+    provider_row.addWidget(tab.media_provider_combo)
 
     # GET PLUGIN button — visible only when MusicBee is selected
     tab._musicbee_plugin_btn = QPushButton("Get GSMTC Plugin")
@@ -262,16 +303,10 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         )
     )
     tab._musicbee_plugin_btn.setVisible(False)
-    _provider_row.addWidget(tab._musicbee_plugin_btn)
-    _provider_row.addStretch()
+    provider_row.addWidget(tab._musicbee_plugin_btn)
+    provider_row.addStretch()
 
-    # Container for all media controls gated by enable checkbox
-    tab._media_controls_container = QWidget()
-    _media_ctrl_layout = QVBoxLayout(tab._media_controls_container)
-    _media_ctrl_layout.setContentsMargins(0, 0, 0, 12)
-    _media_ctrl_layout.setSpacing(12)
-
-    media_pos_row = _aligned_row(_media_ctrl_layout, "Position:")
+    media_pos_row = _aligned_row(provider_layout, "Position:")
     tab.media_position = StyledComboBox()
     tab.media_position.addItems([
         "Top Left", "Top Center", "Top Right",
@@ -289,7 +324,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_pos_row.addWidget(tab.media_stack_status)
     media_pos_row.addStretch()
 
-    media_disp_row = _aligned_row(_media_ctrl_layout, "Display:")
+    media_disp_row = _aligned_row(provider_layout, "Display:")
     tab.media_monitor_combo = StyledComboBox(size_variant="compact")
     tab.media_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.media_monitor_combo.currentTextChanged.connect(tab._save_settings)
@@ -300,7 +335,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab._set_combo_text(tab.media_monitor_combo, str(media_monitor_default))
     media_disp_row.addStretch()
 
-    media_font_family_row = _aligned_row(_media_ctrl_layout, "Font:")
+    media_font_family_row = _aligned_row(provider_layout, "Font:")
     tab.media_font_combo = StyledFontComboBox(size_variant="hero")
     default_media_font = tab._default_str('media', 'font_family', 'Inter')
     tab.media_font_combo.setCurrentFont(QFont(default_media_font))
@@ -309,7 +344,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_font_family_row.addWidget(tab.media_font_combo)
     media_font_family_row.addStretch()
 
-    media_font_row = _aligned_row(_media_ctrl_layout, "Font Size:")
+    media_font_row = _aligned_row(provider_layout, "Font Size:")
     tab.media_font_size = QSpinBox()
     tab.media_font_size.setRange(10, 72)
     tab.media_font_size.setValue(tab._default_int('media', 'font_size', 20))
@@ -322,7 +357,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_font_row.addWidget(font_px)
     media_font_row.addStretch()
 
-    media_margin_row = _aligned_row(_media_ctrl_layout, "Margin:")
+    media_margin_row = _aligned_row(provider_layout, "Margin:")
     tab.media_margin = QSpinBox()
     tab.media_margin.setRange(0, 100)
     tab.media_margin.setValue(tab._default_int('media', 'margin', 30))
@@ -334,7 +369,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_margin_row.addWidget(margin_px)
     media_margin_row.addStretch()
 
-    media_color_row = _swatch_row(_media_ctrl_layout, "Text Color:")
+    media_color_row = _swatch_row(appearance_layout, "Text Color:")
     tab.media_color_btn = ColorSwatchButton(title="Choose Spotify Text Color")
     tab.media_color_btn.set_color(tab._media_color)
     tab.media_color_btn.color_changed.connect(
@@ -347,7 +382,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_show_background.setProperty("circleIndicator", True)
     tab.media_show_background.setChecked(tab._default_bool('media', 'show_background', True))
     tab.media_show_background.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_show_background)
+    appearance_layout.addWidget(tab.media_show_background)
 
     # Background sub-controls container (shown only when show_background is checked)
     tab._media_bg_container = QWidget()
@@ -407,11 +442,11 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.media_border_opacity_label.setMinimumWidth(50)
     media_border_opacity_row.addWidget(tab.media_border_opacity_label)
 
-    _media_ctrl_layout.addWidget(tab._media_bg_container)
+    appearance_layout.addWidget(tab._media_bg_container)
     tab.media_show_background.stateChanged.connect(lambda: _update_media_bg_visibility(tab))
     _update_media_bg_visibility(tab)
 
-    media_volume_fill_row = _swatch_row(_media_ctrl_layout, "Volume Fill Color:")
+    media_volume_fill_row = _swatch_row(appearance_layout, "Volume Fill Color:")
     tab.media_volume_fill_color_btn = ColorSwatchButton(title="Choose Spotify Volume Fill Color")
     tab.media_volume_fill_color_btn.set_color(getattr(tab, '_media_volume_fill_color', tab._media_color))
     tab.media_volume_fill_color_btn.color_changed.connect(
@@ -420,7 +455,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     media_volume_fill_row.addWidget(tab.media_volume_fill_color_btn)
     media_volume_fill_row.addStretch()
 
-    media_artwork_row = _aligned_row(_media_ctrl_layout, "Artwork Size:")
+    media_artwork_row = _aligned_row(artwork_layout, "Artwork Size:")
     tab.media_artwork_size = QSpinBox()
     tab.media_artwork_size.setRange(100, 300)
     tab.media_artwork_size.setValue(tab._default_int('media', 'artwork_size', 200))
@@ -439,7 +474,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'rounded_artwork_border', True)
     )
     tab.media_rounded_artwork.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_rounded_artwork)
+    artwork_layout.addWidget(tab.media_rounded_artwork)
 
     tab.media_show_header_frame = QCheckBox("Header Border Around Logo + Title")
     tab.media_show_header_frame.setProperty("circleIndicator", True)
@@ -447,7 +482,7 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_header_frame', True)
     )
     tab.media_show_header_frame.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_show_header_frame)
+    artwork_layout.addWidget(tab.media_show_header_frame)
 
     tab.media_show_controls = QCheckBox("Show Transport Controls")
     tab.media_show_controls.setProperty("circleIndicator", True)
@@ -455,19 +490,19 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'show_controls', True)
     )
     tab.media_show_controls.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_show_controls)
+    controls_layout.addWidget(tab.media_show_controls)
 
     tab.media_spotify_volume_enabled = QCheckBox("Enable Spotify Volume Slider")
     tab.media_spotify_volume_enabled.setProperty("circleIndicator", True)
     tab.media_spotify_volume_enabled.setToolTip(
         "Show a slim vertical volume slider next to the Spotify card when Core Audio/pycaw is available. "
-        "The slider only affects the Spotify session volume and is gated by hard-exit / Ctrl interaction modes."
+        "The slider only affects the Spotify session volume and is gated by Interaction Mode / Ctrl-held interaction modes."
     )
     tab.media_spotify_volume_enabled.setChecked(
         tab._default_bool('media', 'spotify_volume_enabled', True)
     )
     tab.media_spotify_volume_enabled.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_spotify_volume_enabled)
+    controls_layout.addWidget(tab.media_spotify_volume_enabled)
 
     tab.media_mute_button_enabled = QCheckBox("Enable System Mute Button")
     tab.media_mute_button_enabled.setProperty("circleIndicator", True)
@@ -479,7 +514,15 @@ def build_media_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
         tab._default_bool('media', 'mute_button_enabled', False)
     )
     tab.media_mute_button_enabled.stateChanged.connect(tab._save_settings)
-    _media_ctrl_layout.addWidget(tab.media_mute_button_enabled)
+    controls_layout.addWidget(tab.media_mute_button_enabled)
+
+    for toggle, body in (
+        (provider_toggle, provider_body),
+        (appearance_toggle, appearance_body),
+        (artwork_toggle, artwork_body),
+        (controls_toggle, controls_body),
+    ):
+        _finalize_bucket_body(toggle, body)
 
     media_layout.addWidget(tab._media_controls_container)
     tab.media_enabled.stateChanged.connect(lambda: _update_media_enabled_visibility(tab))

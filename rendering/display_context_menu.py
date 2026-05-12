@@ -1,7 +1,7 @@
 """Display Context Menu Handlers - Extracted from display_widget.py.
 
 Contains context menu creation, transition selection, dimming toggle,
-hard exit toggle, always-on-top toggle, and exit request handlers.
+Interaction Mode toggle, always-on-top toggle, and exit request handlers.
 All functions accept the widget instance as the first parameter.
 """
 
@@ -41,7 +41,7 @@ def show_context_menu(widget, global_pos) -> None:
     try:
         current_transition, random_enabled = widget._refresh_transition_state_from_settings()
         
-        hard_exit = widget._is_hard_exit_enabled()
+        interaction_mode = widget._is_interaction_mode_enabled()
         
         # Get dimming state - use dot notation for settings
         dimming_enabled = False
@@ -61,7 +61,7 @@ def show_context_menu(widget, global_pos) -> None:
                 current_transition=current_transition,
                 random_enabled=random_enabled,
                 dimming_enabled=dimming_enabled,
-                hard_exit_enabled=hard_exit,
+                interaction_mode_enabled=interaction_mode,
                 is_mc_build=widget._is_mc_build,
                 always_on_top=widget._always_on_top,
                 current_visualizer=current_vis,
@@ -73,7 +73,7 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
             widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
             widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
-            widget._context_menu.hard_exit_toggled.connect(widget._on_context_hard_exit_toggled)
+            widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
             widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
             widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
             try:
@@ -108,7 +108,7 @@ def show_context_menu(widget, global_pos) -> None:
             current_transition, random_enabled = widget._refresh_transition_state_from_settings()
             widget._context_menu.update_transition_state(current_transition, random_enabled)
             widget._context_menu.update_dimming_state(dimming_enabled)
-            widget._context_menu.update_hard_exit_state(hard_exit)
+            widget._context_menu.update_interaction_mode_state(interaction_mode)
             widget._context_menu.update_always_on_top_state(widget._always_on_top)
             widget._context_menu.update_visualizer_state(current_vis)
         
@@ -167,14 +167,14 @@ def show_context_menu(widget, global_pos) -> None:
                             )
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    # Restore halo after menu closes if still in hard_exit or Ctrl mode
+                    # Restore halo after menu closes if still in Interaction Mode or Ctrl mode
                     try:
-                        hard_exit = False
+                        interaction_mode = False
                         if widget.settings_manager:
-                            hard_exit = SettingsManager.to_bool(
-                                widget.settings_manager.get("input.hard_exit", False), False
+                            interaction_mode = SettingsManager.to_bool(
+                                widget.settings_manager.get("input.interaction_mode", False), False
                             )
-                        if hard_exit or widget._coordinator.ctrl_held:
+                        if interaction_mode or widget._coordinator.ctrl_held:
                             # Re-show halo at current cursor position
                             global_pos = QCursor.pos()
                             local_pos = widget.mapFromGlobal(global_pos)
@@ -273,15 +273,15 @@ def on_context_dimming_toggled(widget, enabled: bool) -> None:
     except Exception:
         logger.debug("Failed to toggle dimming from context menu", exc_info=True)
 
-def on_context_hard_exit_toggled(widget, enabled: bool) -> None:
-    """Handle hard exit toggle from context menu."""
+def on_context_interaction_mode_toggled(widget, enabled: bool) -> None:
+    """Handle Interaction Mode toggle from context menu."""
     try:
         if widget.settings_manager:
-            widget.settings_manager.set("input.hard_exit", enabled)
+            widget.settings_manager.set("input.interaction_mode", enabled)
             widget.settings_manager.save()
-            logger.info("Context menu: hard exit mode set to %s", enabled)
+            logger.info("Context menu: interaction mode set to %s", enabled)
     except Exception:
-        logger.debug("Failed to toggle hard exit from context menu", exc_info=True)
+        logger.debug("Failed to toggle interaction mode from context menu", exc_info=True)
 
 def on_context_always_on_top_toggled(widget, on_top: bool) -> None:
     """Handle always on top toggle from context menu (MC mode only)."""

@@ -348,18 +348,18 @@ def run_screensaver(app: QApplication) -> int:
     # Create settings manager
     settings = SettingsManager()
 
-    # Determine whether hard-exit mode is enabled so we can optionally
+    # Determine whether Interaction Mode is enabled so we can optionally
     # expose a small system tray for Settings/Exit while the saver runs.
-    hard_exit_enabled = False
+    interaction_mode_enabled = False
     try:
-        raw_hard_exit = settings.get('input.hard_exit', False)
+        raw_interaction_mode = settings.get('input.interaction_mode', False)
         if hasattr(SettingsManager, "to_bool"):
-            hard_exit_enabled = SettingsManager.to_bool(raw_hard_exit, False)
+            interaction_mode_enabled = SettingsManager.to_bool(raw_interaction_mode, False)
         else:
-            hard_exit_enabled = bool(raw_hard_exit)
+            interaction_mode_enabled = bool(raw_interaction_mode)
     except Exception as e:
         logger.debug("[MAIN] Exception suppressed: %s", e)
-        hard_exit_enabled = False
+        interaction_mode_enabled = False
     
     # Check if sources are configured (using dot notation)
     folders = settings.get('sources.folders', [])
@@ -422,9 +422,9 @@ def run_screensaver(app: QApplication) -> int:
             msg3.exec()
             return run_config(app)
         
-        # Optional system tray presence in hard-exit mode.
+        # Optional system tray presence in Interaction Mode.
         tray_icon = None
-        if hard_exit_enabled:
+        if interaction_mode_enabled:
             try:
                 tray_icon = ScreensaverTrayIcon(app, app.windowIcon())
             except Exception:

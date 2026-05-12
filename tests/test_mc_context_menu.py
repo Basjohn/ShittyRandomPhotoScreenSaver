@@ -74,16 +74,16 @@ class TestContextMenuSignals:
         assert len(signals_received) == 1
         assert signals_received[0] is True
     
-    def test_hard_exit_signal(self, qtbot):
-        """Test hard exit toggle signal."""
+    def test_interaction_mode_signal(self, qtbot):
+        """Test Interaction Mode toggle signal."""
         menu = ScreensaverContextMenu()
         qtbot.addWidget(menu)
         
         signals_received = []
-        menu.hard_exit_toggled.connect(lambda v: signals_received.append(v))
+        menu.interaction_mode_toggled.connect(lambda v: signals_received.append(v))
         
-        menu._hard_exit_action.setChecked(True)
-        menu._on_hard_exit_toggled()
+        menu._interaction_mode_action.setChecked(True)
+        menu._on_interaction_mode_toggled()
         
         assert len(signals_received) == 1
         assert signals_received[0] is True

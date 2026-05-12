@@ -41,7 +41,7 @@ def main() -> int:
 
     try:
         mgr = SettingsManager()
-        mgr.set("input.hard_exit", True)
+        mgr.set("input.interaction_mode", True)
     except Exception as e:
         logger.debug("[MISC] Exception suppressed: %s", e)
 

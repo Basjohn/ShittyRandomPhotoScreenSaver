@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-11
+Last updated: 2026-05-13
 
 This file tracks active work only. Completed implementation details belong in `Docs/Historical_Bugs.md` or the relevant reference docs, not here.
 
@@ -11,58 +11,24 @@ This file tracks active work only. Completed implementation details belong in `D
 - Do not close visual/runtime bugs from tests alone when symptoms are user-visible.
 - Avoid broad focus, window-flag, compositor, widget-shadow, visualizer, or Qt effect rewrites unless the current task directly requires them.
 
-----
-
 ## Active Tasks
 
-
-### 1. Module Size Refactors (2026-05-11) — IN PROGRESS
-
-#### 1a. Split `core/settings/models.py` → `core/settings/models/` package ✅ DONE
-- `_enums.py` — DisplayMode, TransitionType, WidgetPosition
-- `_core.py` — Display, Transition, Input, Cache, Source, Shadow, Clock settings
-- `_visualizer_helpers.py` — per-mode constants and coercion helpers
-- `_spotify_visualizer.py` — SpotifyVisualizerSettings (1624 lines, standalone)
-- `_widget_settings.py` — Weather, Reddit, Media, Accessibility settings
-- `_app.py` — AppSettings container
-- `__init__.py` — re-exports all public names (backward compat verified, 171 tests pass)
-
-#### 1b. Extract from `spotify_visualizer_widget.py` (2958 → 2159) ✅ DONE
-Five extraction passes completed — each a pure structural move with thin forwarder left behind:
-
-| Pass | Cluster | Target file | Lines: before→after |
-|---|---|---|---|
-| 1 | Startup staging + lifecycle hooks | `spotify_visualizer/startup_staging.py` | 2958→2681 (−277) |
-| 2 | Painted-frame-shadow + card paint | `spotify_visualizer/card_paint.py` | 2681→2564 (−117) |
-| 3 | Media state, anchor, overlay teardown | `spotify_visualizer/media_bridge.py` | 2564→2350 (−214) |
-| 4 | Engine reset, fallback, wake, gen tracking | `spotify_visualizer/engine_lifecycle.py` | 2350→2242 (−108) |
-| 5 | `_replay_engine_config` → `config_applier.py` | — | 2242→2159 (−83) |
-
-Total reduction: **2958 → 2159 (−799 lines, −27%)**. All 155 tests pass. Index.md updated.
-
-### 2. Completed Audit Items (2026-05-11)
-- ✅ D-01: Removed stale archive comment in `widget_manager.py`
-- ✅ D-05: Removed always-true `is_devcurve_enabled()` gate
-- ✅ D-06: Removed dead `force_gate(devcurve=...)` parameter
-- ✅ V-08/A-08: Moved `_exchange_code` off UI thread via ThreadManager
-- ✅ V-01: Registered gmail_widget.py QTimers with ResourceManager
-- ✅ A-03: Registered feedback.py shared QTimer with ResourceManager
-- ✅ D-02: Deleted `core/presets.py` shim (zero callers)
-- ✅ V-02, A-04, A-05, A-06: Reddit/weather/spotify_volume/widget_manager timers verified already registered
-
-### 3. Defaults Snapshot Parity (2026-05-11) — IN PROGRESS
-- Regenerate the derived defaults snapshot artifacts from canonical defaults so `tests/test_settings_defaults_parity.py` matches the current defaults contract again.
-- Keep `core/settings/default_settings.py` and `core/settings/defaults.py` as the only sources of truth; regenerated artifacts must stay derived-only.
-- Validation target: run the defaults parity test after regeneration so the active plan does not carry stale artifact drift.
-
-### 4. Audit Follow-Through: Startup / Cleanup / Stability (2026-05-11) — IN PROGRESS
+### 1. Audit Follow-Through: Startup / Cleanup / Stability (2026-05-11) — IN PROGRESS
 - Prioritize startup-speed/startup-consistency and closing/cleanup stability items from the 2026-05-11 audit before lower-signal cleanup.
+- Assessment update:
+  - `rendering/widget_manager.py` already registers `_raise_timer` with `ResourceManager` when available and stops it in `cleanup()`. The remaining gap is regression coverage, not first-pass ownership wiring.
 - First focus:
-  - V-05 / A-06 / T-04 — `rendering/widget_manager.py` raise-timer ownership, lifecycle cleanup, and teardown coverage.
-  - V-07 — `ui/settings_dialog.py` toast auto-dismiss timer safety during early dialog close.
-  - V-13 — targeted `deleteLater()` lifecycle audit for high-count widget teardown paths where cleanup safety is still unclear.
+  - T-03 / T-04 coverage is now in place for synchronous overlay re-raise order, clock timezone-label re-raise, and `_raise_timer` cleanup.
+  - V-07 is now closed: the reset-defaults toast owns its auto-dismiss timer and the early-close path is covered by targeted regression tests.
+  - V-13 is now narrowed: the highest-count overlay cleanup paths are mostly explicit stop + parent-owned timer teardown, so this is no longer a broad "all deleteLater calls are suspect" task.
   - Risk Register P2 migration overhead note — keep an eye on settings-load migration cost if startup work touches that path.
 - If these no longer produce worthwhile active tasks, next-best audit targets should come from unresolved P1/P2 items with clear tests and bounded risk, not broad speculative rewrites.
+
+### 2. Settings Dialog IA / Terminology Follow-Through (2026-05-13) — IN PROGRESS
+- `Hard Exit` has been renamed to `Interaction Mode` across the active runtime/UI/docs surface.
+- Settings compatibility is preserved through a legacy alias migration from `input.hard_exit` to canonical `input.interaction_mode`.
+- Widgets-tab regrouping has now landed for `Clock`, `Weather`, `Media`, `Reddit`, and `Imgur`, following the Gmail bucket pattern without reopening the historical construction-flicker path.
+- Future settings-dialog regrouping should keep using `Docs/Settings_Dialog_Bucketing_Audit.md` instead of appending controls ad hoc.
 
 ## Watchlist
 - Mute button fade-in reliability under startup event pressure.
@@ -71,9 +37,6 @@ Total reduction: **2958 → 2159 (−799 lines, −27%)**. All 155 tests pass. I
 - Settings cache stale-read behavior after section/root writes.
 
 ## Deferred / Not Active
-- Gmail IMAP Archive remains hidden unless a source-backed finding or small diagnostic harness proves a reliable accepted command.
-- Shared “open Gmail/Reddit links on monitor index 0” work remains optional stretch work and is not active.
-- Visualizer technical-ownership migration, activation-payload unification, preset/runtime bleed cleanup, and painted-card clipping work are complete and should stay documented in `Spec.md`, `Index.md`, and `Docs/Historical_Bugs.md`, not carried here as active tasks.
 - `card_height.py` centralization is not active work. Revisit only if a focused sizing bug justifies it.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
 
@@ -84,3 +47,9 @@ Total reduction: **2958 → 2159 (−799 lines, −27%)**. All 155 tests pass. I
 - Dated regressions: `Docs/Historical_Bugs.md`
 - Drift-check routine: `Docs/Documentation_Maintenance.md`
 - Harness reference: `Docs/Harness_Index.md`
+
+#######
+### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.
+----
+----
+######

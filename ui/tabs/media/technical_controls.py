@@ -935,7 +935,7 @@ def build_per_mode_technical_group(tab, parent_layout: QVBoxLayout, mode_key: st
     toggle_row.addStretch()
     host_layout.addLayout(toggle_row)
 
-    helper = QLabel("Technical controls still apply when hidden.")
+    helper = QLabel("Technical Controls Still Apply When Hidden.")
     helper.setProperty("class", "adv-helper")
     helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     host_layout.addWidget(helper)

@@ -92,21 +92,21 @@ class TransitionSettings:
 @dataclass
 class InputSettings:
     """Input-related settings."""
-    hard_exit: bool = False
+    interaction_mode: bool = False
     halo_shape: str = "circle"
 
     @classmethod
     def from_settings(cls, settings: "SettingsManager") -> "InputSettings":
         """Load input settings from SettingsManager."""
         return cls(
-            hard_exit=settings.get("input.hard_exit", False),
+            interaction_mode=settings.get("input.interaction_mode", False),
             halo_shape=str(settings.get("input.halo_shape", "circle")).lower(),
         )
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for saving."""
         return {
-            "input.hard_exit": self.hard_exit,
+            "input.interaction_mode": self.interaction_mode,
             "input.halo_shape": self.halo_shape,
         }
 

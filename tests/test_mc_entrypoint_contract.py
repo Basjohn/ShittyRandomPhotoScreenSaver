@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 
-def test_main_mc_forces_hard_exit_default(monkeypatch) -> None:
+def test_main_mc_forces_interaction_mode_default(monkeypatch) -> None:
     import main_mc
 
     calls: list[tuple[str, object]] = []
@@ -16,5 +16,5 @@ def test_main_mc_forces_hard_exit_default(monkeypatch) -> None:
 
     result = main_mc.main()
 
-    assert ("input.hard_exit", True) in calls
+    assert ("input.interaction_mode", True) in calls
     assert result == 123

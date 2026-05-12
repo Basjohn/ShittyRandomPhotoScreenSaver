@@ -217,7 +217,7 @@ def build_mode_scaffold(
     toggle_row.addStretch()
     advanced_host_layout.addLayout(toggle_row)
 
-    helper = QLabel("Advanced sliders still apply when hidden.")
+    helper = QLabel("Advanced Sliders Still Apply When Hidden.")
     helper.setProperty("class", "adv-helper")
     helper.setStyleSheet(ADV_HELPER_LABEL_STYLE)
     setattr(tab, advanced_helper_attr, helper)

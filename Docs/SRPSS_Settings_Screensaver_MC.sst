@@ -28,7 +28,7 @@
     },
     "input": {
       "halo_shape": "cursor_light",
-      "hard_exit": true
+      "interaction_mode": true
     },
     "queue": {
       "shuffle": true

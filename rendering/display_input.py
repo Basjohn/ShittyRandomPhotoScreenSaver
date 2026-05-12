@@ -100,9 +100,9 @@ def _restore_mc_input_focus(widget, reason: str) -> None:
 
 
 def _refresh_halo_after_interaction_click(widget, pos) -> None:
-    """Keep the halo alive after interactive clicks in hard-exit mode."""
+    """Keep the halo alive after interactive clicks in Interaction Mode."""
     try:
-        if not widget._is_hard_exit_enabled():
+        if not widget._is_interaction_mode_enabled():
             return
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
@@ -306,14 +306,14 @@ def on_halo_inactivity_timeout(widget) -> None:
         hide_ctrl_cursor_hint(widget, immediate=True)
 
 def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
-    """Handle mouse press - exit on any click unless hard exit is enabled."""
+    """Handle mouse press - exit on any click unless Interaction Mode is enabled."""
     # Phase 5: Use coordinator for global Ctrl state
     ctrl_mode_active = _ctrl_interaction_active(widget)
     
     # Phase E: Delegate right-click context menu to InputHandler if available
     # This ensures effect invalidation is triggered consistently before menu popup
     if event.button() == Qt.MouseButton.RightButton:
-        if widget._is_hard_exit_enabled() or ctrl_mode_active:
+        if widget._is_interaction_mode_enabled() or ctrl_mode_active:
             if widget._input_handler is not None:
                 try:
                     # InputHandler will trigger effect invalidation and emit context_menu_requested
@@ -329,7 +329,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
             return
         # Normal mode without Ctrl - fall through to exit
     
-    if widget._is_hard_exit_enabled() or ctrl_mode_active:
+    if widget._is_interaction_mode_enabled() or ctrl_mode_active:
         # Delegate widget click routing to InputHandler
         handled = False
         reddit_handled = False
@@ -359,7 +359,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                         handled, reddit_handled, reddit_exit_on_click, widget.screen_index)
             if reddit_handled and reddit_exit_on_click:
                 # Detect display configuration for Reddit link handling:
-                # A) All displays covered + hard_exit: Exit immediately
+                # A) All displays covered + Interaction Mode: Exit immediately
                 # B) All displays covered + Ctrl held: Exit immediately
                 # C) MC mode (primary NOT covered): Stay open, bring browser to foreground
                 #
@@ -485,7 +485,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
     event.accept()
 
 def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
-    """Handle mouse move - exit if moved beyond threshold (unless hard exit)."""
+    """Handle mouse move - exit if moved beyond threshold (unless Interaction Mode is active)."""
     # Don't exit while context menu is active
     if widget._context_menu_active:
         event.accept()
@@ -493,8 +493,8 @@ def handle_mouseMoveEvent(widget, event: QMouseEvent) -> None:
     
     # Phase 5: Use coordinator for global Ctrl state
     ctrl_mode_active = _ctrl_interaction_active(widget)
-    hard_exit = widget._is_hard_exit_enabled()
-    if hard_exit or ctrl_mode_active:
+    interaction_mode = widget._is_interaction_mode_enabled()
+    if interaction_mode or ctrl_mode_active:
         # Show/update halo position — but skip repositioning when the event
         # was forwarded FROM the halo itself (prevents jitter feedback loop).
         halo_forwarding = getattr(widget, "_halo_forwarding", False)

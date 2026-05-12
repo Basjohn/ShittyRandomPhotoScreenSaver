@@ -8,7 +8,7 @@ pycaw/Core Audio when available.
 The widget itself is non-interactive in Qt hit-testing terms
 (``WA_TransparentForMouseEvents``); DisplayWidget is responsible for
 routing clicks, drags and wheel events into the public handler methods
-so interaction remains gated by hard-exit / Ctrl-held modes.
+so interaction remains gated by Interaction Mode / Ctrl-held modes.
 """
 from __future__ import annotations
 

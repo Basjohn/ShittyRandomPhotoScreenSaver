@@ -399,7 +399,7 @@ def build_spectrum_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     # Mirrored Layout
     _mirror_row = _aligned_row(shape_bucket, "Mirrored Layout:")
-    tab.spectrum_mirrored = QCheckBox("Center-out (mirrored shape)")
+    tab.spectrum_mirrored = QCheckBox("Center-Out (Mirrored Shape)")
     tab.spectrum_mirrored.setProperty("circleIndicator", True)
     _mirror_default = tab._default_bool('spotify_visualizer', 'spectrum_mirrored', True)
     tab.spectrum_mirrored.setChecked(_mirror_default)

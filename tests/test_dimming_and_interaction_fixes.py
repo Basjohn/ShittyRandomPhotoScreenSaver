@@ -94,7 +94,7 @@ class TestCtrlHaloAttributes:
         assert "local_point.setX(max(rect.left(), min(rect.right(), local_point.x())))" in source
         assert "local_point.setY(max(rect.top(), min(rect.bottom(), local_point.y())))" in source
 
-    def test_hard_exit_clicks_do_not_force_halo_refresh(self, qt_app):
+    def test_interaction_mode_clicks_do_not_force_halo_refresh(self, qt_app):
         """Interactive clicks should not run extra halo keepalive logic from the click path."""
         from rendering import display_input
 
