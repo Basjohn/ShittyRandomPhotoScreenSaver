@@ -210,6 +210,38 @@ class TestDisplayTab:
             new_tab = DisplayTab(display_tab.settings_manager)
             assert new_tab is not None
             new_tab.deleteLater()
+
+    def test_mc_profile_forces_interaction_mode_enabled_and_disabled(self, qt_app, tmp_path):
+        """MC profile should present Interaction Mode as locked on."""
+        settings = SettingsManager(
+            organization="Test",
+            application="Screensaver_MC",
+            storage_base_dir=tmp_path / "mc_display_tab",
+        )
+        settings.set("input.interaction_mode", False)
+
+        tab = DisplayTab(settings)
+
+        assert tab.interaction_mode_check.isEnabled() is False
+        assert tab.interaction_mode_check.isChecked() is True
+
+        tab.deleteLater()
+
+    def test_mc_profile_save_keeps_interaction_mode_true(self, qt_app, tmp_path):
+        """MC profile save path should persist true even if settings were stale."""
+        settings = SettingsManager(
+            organization="Test",
+            application="Screensaver_MC",
+            storage_base_dir=tmp_path / "mc_display_save",
+        )
+        settings.set("input.interaction_mode", False)
+
+        tab = DisplayTab(settings)
+        tab._save_settings()
+
+        assert settings.get("input.interaction_mode") is True
+
+        tab.deleteLater()
     
     def test_display_tab_ui_elements_exist(self, qt_app, display_tab):
         """Test that key UI elements are present in the tab."""

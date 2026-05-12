@@ -593,36 +593,7 @@ class WeatherWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate weather widget - stop updates (lifecycle hook)."""
-        # Stop timers
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-        
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._update_timer = None
-        
-        if self._retry_timer:
-            try:
-                self._retry_timer.stop()
-                self._retry_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._retry_timer = None
-        
-        if self._icon_timer_handle is not None:
-            try:
-                self._icon_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self._icon_timer_handle = None
+        self._stop_runtime_timers(delete_qtimers=True)
         
         logger.debug("[LIFECYCLE] WeatherWidget deactivated")
     
@@ -723,7 +694,16 @@ class WeatherWidget(BaseOverlayWidget):
         """Stop weather updates."""
         if not self._enabled:
             return
+
+        self._stop_runtime_timers(delete_qtimers=True)
         
+        self._enabled = False
+        self._pending_first_show = False
+        self.hide()
+        
+        logger.debug("Weather widget stopped")
+
+    def _stop_runtime_timers(self, *, delete_qtimers: bool) -> None:
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
@@ -734,14 +714,17 @@ class WeatherWidget(BaseOverlayWidget):
         if self._update_timer is not None:
             try:
                 self._update_timer.stop()
-                self._update_timer.deleteLater()
+                if delete_qtimers:
+                    self._update_timer.deleteLater()
             except RuntimeError:
                 pass
             self._update_timer = None
+
         if self._retry_timer:
             try:
                 self._retry_timer.stop()
-                self._retry_timer.deleteLater()
+                if delete_qtimers:
+                    self._retry_timer.deleteLater()
             except RuntimeError:
                 pass
             self._retry_timer = None
@@ -752,12 +735,6 @@ class WeatherWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._icon_timer_handle = None
-        
-        self._enabled = False
-        self._pending_first_show = False
-        self.hide()
-        
-        logger.debug("Weather widget stopped")
     
     def is_running(self) -> bool:
         """Check if weather widget is running."""

@@ -276,6 +276,12 @@ def on_context_dimming_toggled(widget, enabled: bool) -> None:
 def on_context_interaction_mode_toggled(widget, enabled: bool) -> None:
     """Handle Interaction Mode toggle from context menu."""
     try:
+        if bool(getattr(widget, "_is_mc_build", False)):
+            if widget.settings_manager:
+                widget.settings_manager.set("input.interaction_mode", True)
+                widget.settings_manager.save()
+            logger.info("Context menu: MC build keeps interaction mode forced on")
+            return
         if widget.settings_manager:
             widget.settings_manager.set("input.interaction_mode", enabled)
             widget.settings_manager.save()

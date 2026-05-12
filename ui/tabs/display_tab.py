@@ -51,6 +51,7 @@ class DisplayTab(QWidget):
         
         self._settings = settings
         self.settings_manager = settings  # Also expose as property for tests
+        self._is_mc_profile = settings.get_application_name() == "Screensaver_MC"
         self._loading: bool = False
         self._setup_ui()
         self._load_settings()
@@ -258,6 +259,11 @@ class DisplayTab(QWidget):
             "Keeps the screensaver active during simple mouse movement or clicks so you can interact with widgets until you press Escape."
         )
         self.interaction_mode_check.setChecked(False)
+        if self._is_mc_profile:
+            self.interaction_mode_check.setEnabled(False)
+            self.interaction_mode_check.setToolTip(
+                "Media Center builds keep Interaction Mode always enabled."
+            )
         self.interaction_mode_check.stateChanged.connect(self._save_settings)
         interaction_mode_row.addWidget(self.interaction_mode_check)
         interaction_mode_row.addStretch()
@@ -399,7 +405,7 @@ class DisplayTab(QWidget):
 
             # Interaction Mode
             interaction_mode_raw = self._settings.get('input.interaction_mode', False)
-            interaction_mode = SettingsManager.to_bool(interaction_mode_raw, False)
+            interaction_mode = True if self._is_mc_profile else SettingsManager.to_bool(interaction_mode_raw, False)
             self.interaction_mode_check.setChecked(interaction_mode)
 
             # Cursor Halo Shape
@@ -477,7 +483,10 @@ class DisplayTab(QWidget):
         self._settings.set('display.sharpen_downscale', sharpen)
 
         # Interaction
-        self._settings.set('input.interaction_mode', self.interaction_mode_check.isChecked())
+        self._settings.set(
+            'input.interaction_mode',
+            True if self._is_mc_profile else self.interaction_mode_check.isChecked(),
+        )
 
         # Cursor Halo Shape
         shape_names = [

@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-08
+Last updated: 2026-05-13
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -41,6 +41,10 @@ Canonical architecture and behavior contracts for SRPSS.
 ### 4.4 Reset/import preservation
 - Preserve-on-reset keys are centralized in `core/settings/defaults.py`.
 - Reset/import logic must use that shared preservation contract.
+
+### 4.5 Persisted visualizer schema migration
+- Persisted visualizer-section migrations must be version-gated through settings metadata rather than rerunning full legacy normalization on every load forever.
+- Legacy/global visualizer keys may still be normalized for imported or foreign payloads, but the main saved settings file should be upgraded once per schema version bump and then treated as current.
 
 ## 5. Visualizer System Contract
 
@@ -99,6 +103,7 @@ Active ids:
 - GL-first rendering path with safe fallback behavior.
 - Input routing is centralized; no widget-specific ad hoc global key/mouse handlers.
 - Runtime interaction mode behavior must not break settings launch or shutdown paths.
+- In MC builds, Interaction Mode is runtime policy, not an optional session toggle: MC startup and runtime reads treat it as enabled, and MC settings/context-menu surfaces must not offer a disable path that can strand the user outside the intended interaction model.
 
 ## 9. Build Variants
 - Standard saver and MC maintain separate settings profiles.

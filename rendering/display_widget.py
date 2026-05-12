@@ -664,6 +664,8 @@ class DisplayWidget(QWidget):
         When enabled, mouse movement/clicks should not close the screensaver;
         only keyboard exit keys are honoured.
         """
+        if bool(getattr(self, "_is_mc_build", False)):
+            return True
         if not self.settings_manager:
             return False
         try:

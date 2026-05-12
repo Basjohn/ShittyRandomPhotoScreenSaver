@@ -101,6 +101,11 @@ class InputHandler(QObject):
     
     def is_interaction_mode_enabled(self) -> bool:
         """Check if Interaction Mode is enabled."""
+        try:
+            if bool(getattr(self._parent, "_is_mc_build", False)):
+                return True
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
         if self._settings_manager is None:
             return False
         try:

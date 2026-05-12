@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-05-08
+Last updated: 2026-05-13
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -592,6 +592,7 @@ This is the long-term anti-regression record for the project, not an active task
 - **Non-negotiable MC window contract:** fixes must preserve the MC surface as no normal taskbar entry, no Alt-Tab entry, and topmost/no-fall-behind. Normal-window comparisons are reference data only, not candidate fixes.
 - **Critical clue:** `S` working in Winlogon while media keys fail suggests at least one keyboard path remains alive, but media-key capture/dispatch path diverges by runtime.
 - **Constraint note:** do not casually tweak this family without heavy research; keep archived sub-fixes intact unless a replacement model is proven by runtime matrix + harness evidence.
+- **2026-05-13 mitigation landed:** MC now treats Interaction Mode as always-on policy. MC startup/runtime reads force it enabled, and the MC settings tab plus runtime context menu now disable the Interaction Mode toggle instead of allowing a self-trapping off-state. This closes the specific "turn it off and lose the recovery path" UX trap without claiming the broader U-05 focus/input family is solved.
 - **Validation needed:** first isolate the exact MC breakpoint between focused MC failure and external-focus recovery. Preview and Winlogon remain reference points, not the next active target.
 - **False suspects ruled out (2026-04-23 harness split runs):**
   - Generic app hotkey handling is not dead: focused MC harness captures `C key pressed - cycle transition requested`.

@@ -446,20 +446,7 @@ class MediaWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate media widget - stop polling (lifecycle hook)."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-        
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._update_timer = None
+        self._stop_update_timers(delete_qtimer=True)
         
         logger.debug("[LIFECYCLE] MediaWidget deactivated")
     
@@ -507,20 +494,7 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         self._enabled = False
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._update_timer = None
+        self._stop_update_timers(delete_qtimer=True)
 
         self.hide()
         logger.debug("Media widget stopped")
@@ -533,6 +507,23 @@ class MediaWidget(BaseOverlayWidget):
 
         logger.debug("Cleaning up media widget")
         self.stop()
+
+    def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._update_timer_handle = None
+
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                if delete_qtimer:
+                    self._update_timer.deleteLater()
+            except RuntimeError:
+                pass
+            self._update_timer = None
 
     def set_thread_manager(self, thread_manager) -> None:
         super().set_thread_manager(thread_manager)

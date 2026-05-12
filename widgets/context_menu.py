@@ -6,7 +6,7 @@ Provides quick access to:
 - Transition selection
 - Settings
 - Background dimming toggle
-- Hard exit mode toggle
+- Interaction Mode toggle
 - Exit
 """
 from typing import Optional, List
@@ -144,7 +144,8 @@ class ScreensaverContextMenu(QMenu):
         self._current_transition = current_transition
         self._random_enabled = random_enabled
         self._dimming_enabled = dimming_enabled
-        self._interaction_mode_enabled = interaction_mode_enabled
+        self._interaction_mode_locked = bool(is_mc_build)
+        self._interaction_mode_enabled = True if self._interaction_mode_locked else interaction_mode_enabled
         self._current_visualizer = current_visualizer
         
         self.setStyleSheet(MENU_STYLE)
@@ -224,6 +225,11 @@ class ScreensaverContextMenu(QMenu):
         self._interaction_mode_action = self.addAction("⊘  Interaction Mode")
         self._interaction_mode_action.setCheckable(True)
         self._interaction_mode_action.setChecked(self._interaction_mode_enabled)
+        if self._interaction_mode_locked:
+            self._interaction_mode_action.setEnabled(False)
+            self._interaction_mode_action.setToolTip(
+                "Media Center builds keep Interaction Mode always enabled."
+            )
         self._interaction_mode_action.triggered.connect(self._on_interaction_mode_toggled)
         
         # Always On Top toggle (MC mode only) - monochrome pin
@@ -272,6 +278,9 @@ class ScreensaverContextMenu(QMenu):
     
     def _on_interaction_mode_toggled(self) -> None:
         """Handle Interaction Mode toggle."""
+        if self._interaction_mode_locked:
+            self._interaction_mode_action.setChecked(True)
+            return
         self._interaction_mode_enabled = self._interaction_mode_action.isChecked()
         self.interaction_mode_toggled.emit(self._interaction_mode_enabled)
         logger.debug("Context menu: interaction mode toggled: %s", self._interaction_mode_enabled)
@@ -287,8 +296,8 @@ class ScreensaverContextMenu(QMenu):
     
     def update_interaction_mode_state(self, enabled: bool) -> None:
         """Update the Interaction Mode checkbox state."""
-        self._interaction_mode_enabled = enabled
-        self._interaction_mode_action.setChecked(enabled)
+        self._interaction_mode_enabled = True if self._interaction_mode_locked else enabled
+        self._interaction_mode_action.setChecked(self._interaction_mode_enabled)
     
     def _on_always_on_top_toggled(self) -> None:
         """Handle always on top toggle."""

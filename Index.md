@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-05-08
+Last updated: 2026-05-13
 
 Living map of the current SRPSS codebase.
 
@@ -43,7 +43,7 @@ Living map of the current SRPSS codebase.
 | Canonical defaults | `core/settings/default_settings.py` | Source of default values |
 | Defaults API | `core/settings/defaults.py` | Default loading + preserve-on-reset contract |
 | Settings store | `core/settings/json_store.py` | Atomic JSON persistence |
-| Settings manager | `core/settings/settings_manager.py` | Dotted API over structured roots |
+| Settings manager | `core/settings/settings_manager.py` | Dotted API over structured roots, legacy-key alias migration, and persisted visualizer schema version gating |
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
 | Technical normalization / legacy migration contract | `core/settings/visualizer_settings_contract.py` | Migrates legacy shared technical inputs into canonical per-mode visualizer settings |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |

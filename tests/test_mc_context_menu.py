@@ -56,6 +56,29 @@ class TestContextMenuMCFeatures:
         # Internal state should still update
         assert menu._always_on_top is True
 
+    def test_interaction_mode_locked_in_mc_mode(self, qtbot):
+        """MC menus should keep Interaction Mode enabled and non-toggleable."""
+        menu = ScreensaverContextMenu(is_mc_build=True, interaction_mode_enabled=False)
+        qtbot.addWidget(menu)
+
+        assert menu._interaction_mode_locked is True
+        assert menu._interaction_mode_action.isEnabled() is False
+        assert menu._interaction_mode_action.isChecked() is True
+
+    def test_interaction_mode_locked_mc_mode_does_not_emit_false(self, qtbot):
+        """MC menu should not emit a disabling toggle for Interaction Mode."""
+        menu = ScreensaverContextMenu(is_mc_build=True, interaction_mode_enabled=True)
+        qtbot.addWidget(menu)
+
+        signals_received = []
+        menu.interaction_mode_toggled.connect(lambda v: signals_received.append(v))
+
+        menu._interaction_mode_action.setChecked(False)
+        menu._on_interaction_mode_toggled()
+
+        assert signals_received == []
+        assert menu._interaction_mode_action.isChecked() is True
+
 
 class TestContextMenuSignals:
     """Tests for context menu signal emissions."""

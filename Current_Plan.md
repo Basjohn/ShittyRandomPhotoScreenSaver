@@ -13,22 +13,8 @@ This file tracks active work only. Completed implementation details belong in `D
 
 ## Active Tasks
 
-### 1. Audit Follow-Through: Startup / Cleanup / Stability (2026-05-11) — IN PROGRESS
-- Prioritize startup-speed/startup-consistency and closing/cleanup stability items from the 2026-05-11 audit before lower-signal cleanup.
-- Assessment update:
-  - `rendering/widget_manager.py` already registers `_raise_timer` with `ResourceManager` when available and stops it in `cleanup()`. The remaining gap is regression coverage, not first-pass ownership wiring.
-- First focus:
-  - T-03 / T-04 coverage is now in place for synchronous overlay re-raise order, clock timezone-label re-raise, and `_raise_timer` cleanup.
-  - V-07 is now closed: the reset-defaults toast owns its auto-dismiss timer and the early-close path is covered by targeted regression tests.
-  - V-13 is now narrowed: the highest-count overlay cleanup paths are mostly explicit stop + parent-owned timer teardown, so this is no longer a broad "all deleteLater calls are suspect" task.
-  - Risk Register P2 migration overhead note — keep an eye on settings-load migration cost if startup work touches that path.
-- If these no longer produce worthwhile active tasks, next-best audit targets should come from unresolved P1/P2 items with clear tests and bounded risk, not broad speculative rewrites.
-
-### 2. Settings Dialog IA / Terminology Follow-Through (2026-05-13) — IN PROGRESS
-- `Hard Exit` has been renamed to `Interaction Mode` across the active runtime/UI/docs surface.
-- Settings compatibility is preserved through a legacy alias migration from `input.hard_exit` to canonical `input.interaction_mode`.
-- Widgets-tab regrouping has now landed for `Clock`, `Weather`, `Media`, `Reddit`, and `Imgur`, following the Gmail bucket pattern without reopening the historical construction-flicker path.
-- Future settings-dialog regrouping should keep using `Docs/Settings_Dialog_Bucketing_Audit.md` instead of appending controls ad hoc.
+- No active implementation task is currently queued in this file.
+- Next work should be selected from unresolved audit P1/P2 items with clear tests and bounded risk, not broad speculative rewrites.
 
 ## Watchlist
 - Mute button fade-in reliability under startup event pressure.

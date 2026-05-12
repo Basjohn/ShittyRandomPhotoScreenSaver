@@ -393,29 +393,8 @@ class GmailWidget(BaseOverlayWidget):
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
     def _deactivate_impl(self) -> None:
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception:
-                pass
-            self._update_timer_handle = None
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except Exception:
-                pass
-            self._update_timer = None
-        if self._deferred_fetch_timer is not None:
-            try:
-                self._deferred_fetch_timer.stop()
-            except Exception:
-                pass
-        if self._deferred_refresh_timer is not None:
-            try:
-                self._deferred_refresh_timer.stop()
-            except Exception:
-                pass
+        self._stop_polling_timers(delete_qtimers=True)
+        self._stop_deferred_timers(delete_qtimers=False)
         self._pending_refresh_after_transition = False
         self._deferred_fetch_result = None
         self._deferred_fetch_error = None
@@ -449,33 +428,8 @@ class GmailWidget(BaseOverlayWidget):
         self._cancelled = True
         self._fetch_generation += 1
         # Explicit timer cleanup for safety (also covered by _cleanup_impl → _deactivate_impl)
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception:
-                pass
-            self._update_timer_handle = None
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except Exception:
-                pass
-            self._update_timer = None
-        if self._deferred_fetch_timer is not None:
-            try:
-                self._deferred_fetch_timer.stop()
-                self._deferred_fetch_timer.deleteLater()
-            except Exception:
-                pass
-            self._deferred_fetch_timer = None
-        if self._deferred_refresh_timer is not None:
-            try:
-                self._deferred_refresh_timer.stop()
-                self._deferred_refresh_timer.deleteLater()
-            except Exception:
-                pass
-            self._deferred_refresh_timer = None
+        self._stop_polling_timers(delete_qtimers=True)
+        self._stop_deferred_timers(delete_qtimers=True)
         self._pending_refresh_after_transition = False
         self._deferred_fetch_result = None
         self._deferred_fetch_error = None
@@ -486,6 +440,36 @@ class GmailWidget(BaseOverlayWidget):
         self._refresh_hit_rect = None
         self._clear_content_cache()
         super().cleanup()
+
+    def _stop_polling_timers(self, *, delete_qtimers: bool) -> None:
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception:
+                pass
+            self._update_timer_handle = None
+        if self._update_timer is not None:
+            try:
+                self._update_timer.stop()
+                if delete_qtimers:
+                    self._update_timer.deleteLater()
+            except Exception:
+                pass
+            self._update_timer = None
+
+    def _stop_deferred_timers(self, *, delete_qtimers: bool) -> None:
+        for attr_name in ("_deferred_fetch_timer", "_deferred_refresh_timer"):
+            timer = getattr(self, attr_name, None)
+            if timer is None:
+                continue
+            try:
+                timer.stop()
+                if delete_qtimers:
+                    timer.deleteLater()
+            except Exception:
+                pass
+            if delete_qtimers:
+                setattr(self, attr_name, None)
 
     # ------------------------------------------------------------------
     # Timer & Fetch

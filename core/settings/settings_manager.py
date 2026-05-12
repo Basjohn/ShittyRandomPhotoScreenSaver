@@ -30,6 +30,8 @@ class SettingsManager(QObject):
     # Signal emitted when settings change
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
+    _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
+    _VISUALIZER_SCHEMA_VERSION = 1
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -109,6 +111,11 @@ class SettingsManager(QObject):
 
         # Initialize defaults
         self._set_defaults()
+
+        try:
+            self._run_persisted_visualizer_schema_migrations()
+        except Exception:
+            logger.debug("Persisted visualizer schema migration failed", exc_info=True)
 
         try:
             self.validate_and_repair()
@@ -337,6 +344,44 @@ class SettingsManager(QObject):
             media = widgets.setdefault('media', {})
             media['monitor'] = '2'
 
+    def _visualizer_schema_version(self) -> int:
+        """Return the persisted visualizer schema version from metadata."""
+        try:
+            raw = self._settings.metadata().get(self._VISUALIZER_SCHEMA_METADATA_KEY, 0)
+            return int(raw)
+        except Exception:
+            return 0
+
+    def _mark_visualizer_schema_current_locked(self) -> None:
+        """Record that persisted visualizer settings match the current schema."""
+        if self._visualizer_schema_version() >= self._VISUALIZER_SCHEMA_VERSION:
+            return
+        self._settings.update_metadata(
+            **{self._VISUALIZER_SCHEMA_METADATA_KEY: self._VISUALIZER_SCHEMA_VERSION}
+        )
+
+    def _run_persisted_visualizer_schema_migrations(self) -> None:
+        """Normalize persisted visualizer settings only when schema advances."""
+        with self._lock:
+            if self._visualizer_schema_version() >= self._VISUALIZER_SCHEMA_VERSION:
+                return
+
+            widgets = self._settings.value('widgets', {})
+            if isinstance(widgets, Mapping):
+                widgets_dict = dict(widgets)
+                vis_section = widgets_dict.get('spotify_visualizer')
+                if isinstance(vis_section, Mapping) and self._visualizer_schema_version() < self._VISUALIZER_SCHEMA_VERSION:
+                    normalized_vis = normalize_visualizer_section_mapping(
+                        vis_section,
+                        apply_preset_overlay=False,
+                    )
+                    if dict(vis_section) != normalized_vis:
+                        widgets_dict['spotify_visualizer'] = normalized_vis
+                        self._settings.setValue('widgets', widgets_dict)
+
+            self._mark_visualizer_schema_current_locked()
+            self._settings.sync()
+
     def _ensure_transitions_defaults(self, default_transitions: Dict[str, Any]) -> None:
         with self._lock:
             raw_transitions = self._settings.value('transitions', None)
@@ -405,11 +450,14 @@ class SettingsManager(QObject):
                             apply_preset_overlay=False,
                             resolve_preset_indices=False,
                         )
+                        self._mark_visualizer_schema_current_locked()
                     widgets[section_name] = section_dict
                     changed = True
 
             if changed or not isinstance(raw_widgets, Mapping):
                 self._settings.setValue('widgets', widgets)
+                if isinstance(widgets.get('spotify_visualizer'), Mapping):
+                    self._mark_visualizer_schema_current_locked()
                 self._settings.sync()
 
     def get_widget_defaults(self, section: str) -> Dict[str, Any]:
@@ -935,6 +983,7 @@ class SettingsManager(QObject):
                         widgets_copy = dict(widgets)
                         widgets_copy['spotify_visualizer'] = normalized_vis
                         self._settings.setValue('widgets', widgets_copy)
+                        self._mark_visualizer_schema_current_locked()
                         widgets = widgets_copy
                         repairs['widgets.spotify_visualizer'] = "Normalized visualizer section"
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
@@ -1124,6 +1173,7 @@ class SettingsManager(QObject):
                         apply_preset_overlay=False,
                     )
                     self._settings.setValue('widgets', widgets_dict)
+                    self._mark_visualizer_schema_current_locked()
             
             self._settings.sync()
             self._cache.clear()
@@ -1242,6 +1292,7 @@ class SettingsManager(QObject):
 
         if root == "widgets":
             mapping = self._normalize_widgets_mapping(mapping)
+            self._mark_visualizer_schema_current_locked()
         self._settings.setValue(root, mapping)
         return True, old_value
 
@@ -1329,6 +1380,8 @@ class SettingsManager(QObject):
         with self._lock:
             old_value = self._settings.value(section)
             self._settings.setValue(section, mapping)
+            if section == "widgets":
+                self._mark_visualizer_schema_current_locked()
             self._invalidate_cache_for_key_locked(section)
 
             root_key = section.split('.')[0] if '.' in section else section

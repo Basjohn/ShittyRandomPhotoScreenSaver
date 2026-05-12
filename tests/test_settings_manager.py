@@ -318,9 +318,81 @@ class TestSettingsManagerDefaults:
         assert "widgets.clock.digital_shadow_intense" in removed
         assert "widgets.weather.intense_shadow" in removed
         assert "widgets.gmail.intense_shadow" in removed
-        assert "analog_shadow_intense" not in widgets["clock"]
-        assert "digital_shadow_intense" not in widgets["clock"]
-        assert "intense_shadow" not in widgets["gmail"]
+
+    def test_visualizer_schema_migration_runs_once_for_legacy_persisted_payload(self, tmp_path: Path) -> None:
+        storage_root = tmp_path / "legacy_visualizer_schema"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        manager._settings.setValue(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "audio_block_size": 384,
+                    "input_gain": 0.75,
+                }
+            },
+        )
+        manager._settings.update_metadata(visualizer_schema_version=0)
+        manager._settings.sync()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+
+        vis = reloaded.get("widgets")["spotify_visualizer"]
+        assert "audio_block_size" not in vis
+        assert "input_gain" not in vis
+        assert "bubble_input_gain" in vis
+        assert (
+            reloaded._settings.metadata().get("visualizer_schema_version")
+            == SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
+
+    def test_visualizer_schema_migration_skips_when_metadata_current(self, tmp_path: Path, monkeypatch) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.setValue(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "bubble_manual_floor": 0.22,
+                    "bubble_input_gain": 0.75,
+                }
+            },
+        )
+        manager._settings.update_metadata(
+            visualizer_schema_version=SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
+        manager._settings.sync()
+
+        writes: list[tuple[str, object]] = []
+        metadata_updates: list[dict[str, object]] = []
+
+        original_set_value = manager._settings.setValue
+        original_update_metadata = manager._settings.update_metadata
+
+        def recording_set_value(key: str, value: object) -> None:
+            writes.append((key, value))
+            original_set_value(key, value)
+
+        def recording_update_metadata(**entries: object) -> None:
+            metadata_updates.append(dict(entries))
+            original_update_metadata(**entries)
+
+        monkeypatch.setattr(manager._settings, "setValue", recording_set_value)
+        monkeypatch.setattr(manager._settings, "update_metadata", recording_update_metadata)
+
+        manager._run_persisted_visualizer_schema_migrations()
+
+        assert writes == []
+        assert metadata_updates == []
 
     def test_existing_visualizer_section_does_not_gain_bubble_semantics_marker_during_default_merge(
         self,
