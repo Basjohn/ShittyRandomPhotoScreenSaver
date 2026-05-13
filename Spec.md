@@ -111,13 +111,13 @@ Active ids:
 - Standard saver and MC maintain separate settings profiles.
 - Frozen preset resolution converges on shared ProgramData curated root.
 
-## 11. Gmail Widget Architecture
+## 10. Gmail Widget Architecture
 
-### 11.1 Availability
+### 10.1 Availability
 - Gmail widget is a normal feature and must not be hidden behind a dev-gate or CLI flag.
 - Widget factory registration, settings UI, expected-overlay checks, and rendering paths are always available; actual overlay display is controlled only by `widgets.gmail.enabled` and monitor selection.
 
-### 11.2 Backend routing
+### 10.2 Backend routing
 - Unified backend (`core/gmail/gmail_backend.py`) routes to OAuth/REST or IMAP based on config
 - OAuth mode: `core/gmail/gmail_oauth.py` (PKCE flow, DPAPI token storage)
 - IMAP mode: `core/gmail/gmail_imap.py` (App Password authentication)
@@ -125,7 +125,7 @@ Active ids:
 - Deep-link helpers: `core/gmail/gmail_deeplinks.py` owns Gmail web URL construction
 - IMAP/Gmail row links use `X-GM-THRID` decimal ids converted to lowercase hex for `#all/<thread_hex>` routes; RFC `Message-ID` search is the fallback when thread id is unavailable
 
-### 11.3 Widget contracts
+### 10.3 Widget contracts
 - Overlay widget: `widgets/gmail_widget.py` (email list, actions, paint events)
 - Widget components: `widgets/gmail_components.py` (nine-position GmailPosition enum, relative-time formatting, sender/subject cleanup helpers, email cache)
 - Settings UI: `ui/tabs/widgets_tab_gmail.py` (backend selector, credentials, widget settings, sender/subject cleanup controls)
@@ -169,7 +169,7 @@ Active ids:
 - Gmail build/release work must verify all Gmail image assets, notification sound assets, Qt multimedia dependencies, and generated/fallback asset dependencies are included in build scripts, frozen build config, resource copy steps, and installer/package outputs. Widget image lookup must not depend only on the launch cwd, because standard `.scr` launches can start outside the app directory. Frozen builds should prefer `%ProgramData%\SRPSS\sounds\tutuogg.ogg` for the default notification sound, with `resources/tutuogg.ogg` as the script/dev fallback. Build scripts must include only the default OGG, not the entire `resources` directory, so ignored local OAuth files are never bundled. Final packaged artifacts still require runtime validation.
 - Gmail must not fade into view when there is no authenticated account information and no usable cache.
 
-### 11.4 Security invariants
+### 10.4 Security invariants
 - OAuth tokens stored encrypted via DPAPI
 - API calls are metadata-only (no body/snippet content)
 - `EmailMetadata` may contain provider ids needed for links/deduping (`X-GM-THRID`, `X-GM-MSGID`, RFC `Message-ID`, IMAP UID), but must not contain bodies, snippets, or raw headers
@@ -177,7 +177,7 @@ Active ids:
 - Reddit widget controls that consume a click without producing a URL, such as the refresh spiral, must not set the central `reddit_handled` URL flag. Only a resolved Reddit URL should request the normal-build helper/exit path.
 - Reddit refresh spiral clicks must queue refresh through the existing Reddit fetch path, respect fetch-in-progress guards, and defer refresh start/result apply/cache regeneration while parent display transitions are pending or active when an existing cached pixmap can be reused. If a transition is requested after a Reddit refresh is already in flight, Reddit must suspend live refresh-spinner repainting immediately and keep result application deferred until idle.
 
-## 12. Spline Curve / DevCurve Visualizer
+## 11. Spline Curve (`devcurve`) Visualizer
 
 - `devcurve` is the runtime id for the Spline Curve visualizer.
 - Spline Curve foreground specular uses the existing specular alpha path for idle/play behavior: runtime activity fades the specular multiplier down while paused/idle and back up when playback resumes.

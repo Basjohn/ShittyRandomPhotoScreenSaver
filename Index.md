@@ -18,6 +18,8 @@ Living map of the current SRPSS codebase.
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
 | `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
+| `Docs/00_PROJECT_OVERVIEW.md` | High-level orientation to the documentation set and main runtime areas |
+| `Docs/Custom_Style_Implementation.md` | Styling/reference guardrails for shared settings-dialog and UI chrome work |
 | `Docs/10_WIDGET_GUIDELINES.md` | Canonical widget implementation guidance and integration checklist |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
@@ -72,7 +74,7 @@ Living map of the current SRPSS codebase.
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask with border-width inset so GL content stays inside the visible card boundary |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; engine config replay |
-| Spline Curve runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | DevCurve/Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
+| Spline Curve (`devcurve`) runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
 | Startup staging | `widgets/spotify_visualizer/startup_staging.py` | Extracted startup staging, lifecycle hooks, hot start, and cleanup |
 | Card paint | `widgets/spotify_visualizer/card_paint.py` | Painted-frame-shadow pixmap generation and card style |

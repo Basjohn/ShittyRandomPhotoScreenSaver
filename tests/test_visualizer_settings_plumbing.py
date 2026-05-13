@@ -250,6 +250,25 @@ class TestSettingsModelPlumbing:
         self._assert_model_matches(model)
         self._assert_serialized_matches(model.to_dict())
 
+    def test_from_settings_restores_visualizers_enabled_flag(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        persisted = {
+            "widgets.spotify_visualizer.mode": "bubble",
+            "widgets.spotify_visualizer.visualizers_enabled": False,
+        }
+
+        model = SpotifyVisualizerSettings.from_settings(_DummySettings(persisted))
+
+        assert model.visualizers_enabled is False
+
 
 class TestVisualizerPresetSelectionAuthority:
     """Guard against curated/custom cross-bleed in visualizer preset hydration."""

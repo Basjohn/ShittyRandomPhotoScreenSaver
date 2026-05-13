@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-04-25
+Last updated: 2026-05-13
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -16,6 +16,8 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Qt lifecycle through `ResourceManager`.
 - Settings through `SettingsManager`.
 - Animation through `AnimationManager`.
+- Cross-module publish/subscribe events through `EventSystem`.
+- Worker process orchestration through `ProcessSupervisor`.
 
 No shadow frameworks or parallel ownership paths.
 
@@ -62,3 +64,20 @@ No shadow frameworks or parallel ownership paths.
 - `_recreate_effect()` in `widget_effects.py` replaces effects to bust Qt's internal cache. If called mid-animation, the old animation's `valueChanged` callbacks continue manipulating the DETACHED old effect, while the new effect stays frozen at its initial value.
 - Result: widget becomes permanently invisible (opacity=0.0) or shows incorrect shadow because the animation never updates the new effect.
 - **Prevention**: Before recreating an effect, check for an active `_fade_anim` or `_shadowfade_anim` on the widget. Skip recreation if an animation is in-flight, OR reconnect the animation to the new effect.
+
+## 8. Visualizer State Isolation (R-22 Lessons)
+
+### 8.1 Runtime Arrays and Caches Are Mode-Owned
+- **Mode-specific runtime arrays, cached render-state buffers, and activation-era transient data must be cleared before a new visualizer mode or preset is allowed to commit fresh display state.**
+- R-22 showed that reset/overlay cleanup alone is not enough if previous-mode arrays, floors, or pending compute work can still mutate shared runtime state after activation changes.
+- Bar arrays, dynamic floors, AGC-like envelopes, transient buses, renderer-local history, and similar mode-owned caches must not survive a mode or preset boundary unless the new activation explicitly reuses them by contract.
+
+### 8.2 Activation Must Be Transactional
+- **Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.**
+- Do not maintain separate "hot path" and "settings path" interpretations of the target mode config.
+- Activation-id checks, generation tracking, and fresh-frame gates are not optional polish. They are part of the runtime isolation contract and must survive refactors.
+
+### 8.3 Shared Settings Must Not Reintroduce Cross-Mode Bleed
+- **Technical settings and preset-varying runtime visuals that belong to one mode must not leak back through shared/global authored keys after normalization.**
+- Legacy shared/global technical keys may be accepted as migration inputs, but normalized settings, custom snapshots, and preset payloads must store mode-owned values under the owning mode.
+- If diagnostics/logging report active visualizer state, they must reflect the resolved preset identity and the actual applied runtime/worker state, not only raw pre-normalized settings payloads.

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Tuple, TYPE_CHECKING
+from typing import Any, Callable, Dict, Mapping, Tuple, TYPE_CHECKING
 
 from core.settings.bubble_gradient_semantics import (
     CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION,
@@ -53,6 +53,411 @@ from core.settings.models._visualizer_helpers import (
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
+
+
+def _build_visualizer_model_kwargs(
+    read_value: Callable[[str, Any], Any],
+    *,
+    active_mode: str,
+    bubble_gradient_semantics_version: int,
+    active_technical: Mapping[str, Any],
+    active_visuals: Mapping[str, Any],
+    rainbow_kwargs: Mapping[str, Any],
+    preset_kwargs: Mapping[str, Any],
+    bubble_stream_constant_speed_default: float,
+    bubble_stream_speed_cap_default: float,
+    ) -> Dict[str, Any]:
+    """Build the shared constructor payload for visualizer ingestion paths."""
+
+    return {
+        "enabled": read_value("enabled", False),
+        "visualizers_enabled": read_value("visualizers_enabled", True),
+        "monitor": read_value("monitor", "ALL"),
+        "bar_count": int(active_technical["bar_count"]),
+        "ghosting_enabled": bool(read_value("spectrum_ghosting_enabled", True)),
+        "ghost_alpha": float(read_value("spectrum_ghost_alpha", 0.4)),
+        "ghost_decay": float(read_value("spectrum_ghost_decay", 0.35)),
+        "adaptive_sensitivity": bool(active_technical["adaptive_sensitivity"]),
+        "sensitivity": float(active_technical["sensitivity"]),
+        "dynamic_floor": bool(active_technical["dynamic_floor"]),
+        "manual_floor": float(active_technical["manual_floor"]),
+        "dynamic_range_enabled": bool(active_technical["dynamic_range_enabled"]),
+        "agc_strength": float(active_technical["agc_strength"]),
+        "input_gain": float(active_technical["input_gain"]),
+        "kick_lane_gain": float(active_technical["kick_lane_gain"]),
+        "transient_pulse_gain": float(active_technical["transient_pulse_gain"]),
+        "transient_clamp": float(active_technical["transient_clamp"]),
+        "bar_fill_color": active_visuals["bar_fill_color"],
+        "bar_border_color": active_visuals["bar_border_color"],
+        "bar_border_opacity": float(active_visuals["bar_border_opacity"]),
+        "mode": active_mode,
+        "osc_glow_enabled": read_value("osc_glow_enabled", True),
+        "osc_glow_intensity": float(read_value("osc_glow_intensity", 0.5)),
+        "osc_glow_reactivity": float(read_value("osc_glow_reactivity", read_value("osc_glow_size", 1.0))),
+        "osc_glow_color": read_value("osc_glow_color", [0, 200, 255, 230]),
+        "osc_reactive_glow": read_value("osc_reactive_glow", True),
+        "osc_line_amplitude": float(read_value("osc_line_amplitude", 3.0)),
+        "osc_smoothing": float(read_value("osc_smoothing", 0.7)),
+        "blob_color": read_value("blob_color", [0, 180, 255, 230]),
+        "blob_glow_color": read_value("blob_glow_color", [0, 140, 255, 180]),
+        "blob_edge_color": read_value("blob_edge_color", [100, 220, 255, 230]),
+        "blob_outline_color": read_value("blob_outline_color", [0, 0, 0, 0]),
+        "blob_pulse": float(read_value("blob_pulse", 1.0)),
+        "blob_pulse_release_ms": int(read_value("blob_pulse_release_ms", 220)),
+        "blob_width": float(read_value("blob_width", 1.0)),
+        "blob_size": float(read_value("blob_size", 1.0)),
+        "blob_glow_intensity": float(read_value("blob_glow_intensity", 0.5)),
+        "blob_reactive_glow": read_value("blob_reactive_glow", True),
+        "blob_glow_drive_mode": str(read_value("blob_glow_drive_mode", "bass")),
+        "osc_line_color": read_value("osc_line_color", [255, 255, 255, 255]),
+        "osc_line_count": int(read_value("osc_line_count", 1)),
+        "osc_line2_color": read_value("osc_line2_color", [255, 120, 50, 230]),
+        "osc_line2_glow_color": read_value("osc_line2_glow_color", [255, 120, 50, 180]),
+        "osc_line3_color": read_value("osc_line3_color", [50, 255, 120, 230]),
+        "osc_line3_glow_color": read_value("osc_line3_glow_color", [50, 255, 120, 180]),
+        "osc_line4_color": read_value("osc_line4_color", [255, 0, 150, 230]),
+        "osc_line4_glow_color": read_value("osc_line4_glow_color", [255, 0, 150, 180]),
+        "osc_line5_color": read_value("osc_line5_color", [0, 255, 200, 230]),
+        "osc_line5_glow_color": read_value("osc_line5_glow_color", [0, 255, 200, 180]),
+        "osc_line6_color": read_value("osc_line6_color", [200, 100, 255, 230]),
+        "osc_line6_glow_color": read_value("osc_line6_glow_color", [200, 100, 255, 180]),
+        "spectrum_growth": float(read_value("spectrum_growth", 1.0)),
+        "blob_growth": float(read_value("blob_growth", 2.5)),
+        "osc_speed": float(read_value("osc_speed", 1.0)),
+        "osc_line_dim": read_value("osc_line_dim", False),
+        "osc_line_offset_bias": float(read_value("osc_line_offset_bias", 0.0)),
+        "osc_vertical_shift": int(read_value("osc_vertical_shift", 0)),
+        "osc_growth": float(read_value("osc_growth", 1.0)),
+        "blob_reactive_deformation": float(read_value("blob_reactive_deformation", 1.0)),
+        "blob_constant_wobble": float(read_value("blob_constant_wobble", 1.0)),
+        "blob_reactive_wobble": float(read_value("blob_reactive_wobble", 1.0)),
+        "blob_stretch": float(read_value("blob_stretch", 0.35)),
+        "blob_stage_gain": float(read_value("blob_stage_gain", 1.0)),
+        "blob_core_scale": float(read_value("blob_core_scale", 1.0)),
+        "blob_core_floor_bias": float(read_value("blob_core_floor_bias", 0.35)),
+        "blob_stage_bias": float(read_value("blob_stage_bias", 0.0)),
+        "blob_stretch_tendency": float(read_value("blob_stretch_tendency", read_value("blob_stretch", 0.35))),
+        "blob_stretch_inner": float(read_value("blob_stretch_inner", 0.0)),
+        "blob_stretch_outer": float(read_value("blob_stretch_outer", read_value("blob_stretch", 0.35))),
+        "spectrum_render_mode": resolve_spectrum_render_mode(read_value),
+        "spectrum_unique_colors": resolve_spectrum_unique_colors(read_value),
+        "spectrum_rainbow_border": bool(read_value("spectrum_rainbow_border", False)),
+        "spectrum_border_radius": float(read_value("spectrum_border_radius", 0.0)),
+        "spectrum_link_fill_border": bool(read_value("spectrum_link_fill_border", False)),
+        "spectrum_glow_enabled": bool(read_value("spectrum_glow_enabled", False)),
+        "spectrum_glow_intensity": float(read_value("spectrum_glow_intensity", 0.55)),
+        "spectrum_glow_color": list(read_value("spectrum_glow_color", [110, 220, 255, 235])),
+        "spectrum_ghosting_enabled": bool(read_value("spectrum_ghosting_enabled", True)),
+        "spectrum_ghost_alpha": float(read_value("spectrum_ghost_alpha", 0.4)),
+        "spectrum_ghost_decay": float(read_value("spectrum_ghost_decay", 0.35)),
+        "spectrum_mirrored": bool(read_value("spectrum_mirrored", True)),
+        "spectrum_shape_nodes": list(read_value("spectrum_shape_nodes", [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]])),
+        "spectrum_notch_positions_mirrored": list(read_value("spectrum_notch_positions_mirrored", [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]])),
+        "spectrum_notch_positions_linear": _normalize_spectrum_linear_notches(
+            read_value("spectrum_notch_positions_linear", _SPECTRUM_DEFAULT_NOTCHES_LINEAR)
+        ),
+        "spectrum_lane_strengths_mirrored": _normalize_spectrum_lane_strengths(
+            read_value("spectrum_lane_strengths_mirrored", _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED),
+            _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
+        ),
+        "spectrum_lane_strengths_linear": _normalize_spectrum_lane_strengths(
+            read_value("spectrum_lane_strengths_linear", _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR),
+            _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
+        ),
+        "spectrum_wave_amplitude": float(read_value("spectrum_wave_amplitude", 0.50)),
+        "spectrum_profile_floor": float(read_value("spectrum_profile_floor", 0.12)),
+        "spectrum_drop_speed": float(read_value("spectrum_drop_speed", 1.0)),
+        "sine_wave_growth": float(read_value("sine_wave_growth", 1.0)),
+        "sine_wave_travel": int(read_value("sine_wave_travel", 0)),
+        "sine_density": float(read_value("sine_density", 1.0)),
+        "sine_displacement": float(read_value("sine_displacement", 0.0)),
+        "sine_glow_enabled": read_value("sine_glow_enabled", True),
+        "sine_glow_intensity": float(read_value("sine_glow_intensity", 0.5)),
+        "sine_glow_reactivity": float(read_value("sine_glow_reactivity", read_value("sine_glow_size", 1.0))),
+        "sine_glow_color": read_value("sine_glow_color", [0, 200, 255, 230]),
+        "sine_line_color": read_value("sine_line_color", [255, 255, 255, 255]),
+        "sine_reactive_glow": read_value("sine_reactive_glow", True),
+        "sine_ghosting_enabled": read_value("sine_ghosting_enabled", True),
+        "sine_ghost_alpha": float(read_value("sine_ghost_alpha", 0.45)),
+        "sine_ghost_decay": float(read_value("sine_ghost_decay", 0.3)),
+        "sine_ghost_line2_enabled": bool(read_value("sine_ghost_line2_enabled", True)),
+        "sine_ghost_line3_enabled": bool(read_value("sine_ghost_line3_enabled", True)),
+        "sine_ghost_line4_enabled": bool(read_value("sine_ghost_line4_enabled", True)),
+        "sine_ghost_line5_enabled": bool(read_value("sine_ghost_line5_enabled", True)),
+        "sine_ghost_line6_enabled": bool(read_value("sine_ghost_line6_enabled", True)),
+        "sine_sensitivity": float(read_value("sine_sensitivity", 1.0)),
+        "sine_smoothing": float(read_value("sine_smoothing", 0.7)),
+        "sine_speed": float(read_value("sine_speed", 1.0)),
+        "sine_line_count": int(read_value("sine_line_count", 1)),
+        "sine_line_offset_bias": float(read_value("sine_line_offset_bias", 0.0)),
+        "sine_line2_color": read_value("sine_line2_color", [255, 255, 255, 230]),
+        "sine_line2_glow_color": read_value("sine_line2_glow_color", [7, 114, 255, 180]),
+        "sine_line3_color": read_value("sine_line3_color", [255, 255, 255, 230]),
+        "sine_line3_glow_color": read_value("sine_line3_glow_color", [14, 159, 255, 180]),
+        "sine_line4_color": read_value("sine_line4_color", [255, 120, 50, 230]),
+        "sine_line4_glow_color": read_value("sine_line4_glow_color", [255, 120, 50, 180]),
+        "sine_line5_color": read_value("sine_line5_color", [50, 255, 120, 230]),
+        "sine_line5_glow_color": read_value("sine_line5_glow_color", [50, 255, 120, 180]),
+        "sine_line6_color": read_value("sine_line6_color", [255, 0, 150, 230]),
+        "sine_line6_glow_color": read_value("sine_line6_glow_color", [255, 0, 150, 180]),
+        "sine_travel_line2": int(read_value("sine_travel_line2", 0)),
+        "sine_travel_line3": int(read_value("sine_travel_line3", 0)),
+        "sine_travel_line4": int(read_value("sine_travel_line4", 0)),
+        "sine_travel_line5": int(read_value("sine_travel_line5", 0)),
+        "sine_travel_line6": int(read_value("sine_travel_line6", 0)),
+        "sine_line1_shift": float(read_value("sine_line1_shift", 0.0)),
+        "sine_line2_shift": float(read_value("sine_line2_shift", 0.0)),
+        "sine_line3_shift": float(read_value("sine_line3_shift", 0.0)),
+        "sine_line4_shift": float(read_value("sine_line4_shift", 0.0)),
+        "sine_line5_shift": float(read_value("sine_line5_shift", 0.0)),
+        "sine_line6_shift": float(read_value("sine_line6_shift", 0.0)),
+        "sine_wave_effect": float(read_value("sine_wave_effect", read_value("sine_wobble_amount", 0.0))),
+        "sine_vertical_shift": int(read_value("sine_vertical_shift", 0)),
+        "sine_card_adaptation": float(read_value("sine_card_adaptation", 0.3)),
+        "sine_micro_wobble": float(read_value("sine_micro_wobble", 0.0)),
+        "sine_crawl_amount": float(read_value("sine_crawl_amount", 0.25)),
+        "sine_width_reaction": float(read_value("sine_width_reaction", 0.0)),
+        "rainbow_enabled": rainbow_kwargs["rainbow_enabled"],
+        "rainbow_speed": rainbow_kwargs["rainbow_speed"],
+        "osc_ghosting_enabled": bool(read_value("osc_ghosting_enabled", False)),
+        "osc_ghost_intensity": float(read_value("osc_ghost_intensity", 0.4)),
+        "osc_ghost_line2_enabled": bool(read_value("osc_ghost_line2_enabled", True)),
+        "osc_ghost_line3_enabled": bool(read_value("osc_ghost_line3_enabled", True)),
+        "osc_ghost_line4_enabled": bool(read_value("osc_ghost_line4_enabled", True)),
+        "osc_ghost_line5_enabled": bool(read_value("osc_ghost_line5_enabled", True)),
+        "osc_ghost_line6_enabled": bool(read_value("osc_ghost_line6_enabled", True)),
+        "sine_heartbeat": float(read_value("sine_heartbeat", 0.0)),
+        "bubble_big_bass_pulse": float(read_value("bubble_big_bass_pulse", 0.5)),
+        "bubble_small_freq_pulse": float(read_value("bubble_small_freq_pulse", 0.5)),
+        "bubble_stream_direction": str(read_value("bubble_stream_direction", "up")),
+        "bubble_stream_constant_speed": float(read_value("bubble_stream_constant_speed", read_value("bubble_stream_speed", bubble_stream_constant_speed_default))),
+        "bubble_stream_speed_cap": float(read_value("bubble_stream_speed_cap", read_value("bubble_stream_speed", bubble_stream_speed_cap_default))),
+        "bubble_stream_reactivity": float(read_value("bubble_stream_reactivity", 0.5)),
+        "bubble_rotation_amount": float(read_value("bubble_rotation_amount", 0.5)),
+        "bubble_drift_amount": float(read_value("bubble_drift_amount", 0.5)),
+        "bubble_drift_speed": float(read_value("bubble_drift_speed", 0.5)),
+        "bubble_drift_frequency": float(read_value("bubble_drift_frequency", 0.5)),
+        "bubble_drift_direction": str(read_value("bubble_drift_direction", "random")),
+        "bubble_big_count": int(read_value("bubble_big_count", 8)),
+        "bubble_small_count": int(read_value("bubble_small_count", 25)),
+        "bubble_surface_reach": float(read_value("bubble_surface_reach", 0.6)),
+        "bubble_bounce_big_pct": int(read_value("bubble_bounce_big_pct", 70)),
+        "bubble_bounce_small_pct": int(read_value("bubble_bounce_small_pct", 30)),
+        "bubble_bounce_big_speed": float(read_value("bubble_bounce_big_speed", 0.8)),
+        "bubble_bounce_small_speed": float(read_value("bubble_bounce_small_speed", 0.5)),
+        "bubble_bounce_same_only": bool(read_value("bubble_bounce_same_only", False)),
+        "bubble_collision_pop_mode": str(read_value("bubble_collision_pop_mode", "off")).strip().lower(),
+        "bubble_outline_color": read_value("bubble_outline_color", [255, 255, 255, 230]),
+        "bubble_specular_color": read_value("bubble_specular_color", [255, 255, 255, 255]),
+        "bubble_gradient_light": read_value("bubble_gradient_light", [210, 170, 120, 255]),
+        "bubble_gradient_dark": read_value("bubble_gradient_dark", [80, 60, 50, 255]),
+        "bubble_pop_color": read_value("bubble_pop_color", [255, 255, 255, 180]),
+        "bubble_specular_direction": normalize_bubble_specular_direction(read_value("bubble_specular_direction", "top_left")),
+        "bubble_gradient_direction": resolve_bubble_gradient_direction(
+            read_value("bubble_gradient_direction", "top"),
+            semantics_version=bubble_gradient_semantics_version,
+            default="top",
+        ),
+        "bubble_big_size_max": float(read_value("bubble_big_size_max", 0.038)),
+        "bubble_small_size_max": float(read_value("bubble_small_size_max", 0.018)),
+        "bubble_big_contraction_bias": float(read_value("bubble_big_contraction_bias", 1.0)),
+        "bubble_big_size_clamp": float(read_value("bubble_big_size_clamp", 4.0)),
+        "bubble_big_specular_max_size": float(read_value("bubble_big_specular_max_size", 2.5)),
+        "bubble_growth": float(read_value("bubble_growth", 3.0)),
+        "devcurve_growth": float(read_value("devcurve_growth", 3.0)),
+        "bubble_trail_strength": float(read_value("bubble_trail_strength", 0.0)),
+        "bubble_tail_opacity": float(read_value("bubble_tail_opacity", 0.0)),
+        "bubble_ghosting_enabled": bool(read_value("bubble_ghosting_enabled", False)),
+        "bubble_ghost_alpha": float(read_value("bubble_ghost_alpha", 0.0)),
+        "bubble_ghost_decay": float(read_value("bubble_ghost_decay", 0.4)),
+        "blob_glow_reactivity": float(read_value("blob_glow_reactivity", 1.0)),
+        "blob_glow_max_size": float(read_value("blob_glow_max_size", 1.0)),
+        "blob_ghosting_enabled": bool(read_value("blob_ghosting_enabled", False)),
+        "blob_ghost_alpha": float(read_value("blob_ghost_alpha", 0.4)),
+        "blob_ghost_decay": float(read_value("blob_ghost_decay", 0.3)),
+        "blob_shaper_enabled": bool(read_value("blob_shaper_enabled", False)),
+        "blob_shape_base_nodes": list(read_value("blob_shape_base_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
+        "blob_shape_reaction_nodes": list(read_value("blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
+        "blob_shape_energy_nodes": list(read_value("blob_shape_energy_nodes", [])),
+        "blob_shaper_base_strength": float(read_value("blob_shaper_base_strength", 0.5)),
+        "blob_shaper_react_strength": float(read_value("blob_shaper_react_strength", 0.5)),
+        "blob_shaper_idle_motion": float(read_value("blob_shaper_idle_motion", 0.18)),
+        "blob_shaper_audio_motion": float(read_value("blob_shaper_audio_motion", 1.20)),
+        "blob_topology": str(read_value("blob_topology", "circle")),
+        "blob_ring_thickness": float(read_value("blob_ring_thickness", 0.3)),
+        "blob_inward_liquid_enabled": bool(read_value("blob_inward_liquid_enabled", False)),
+        "blob_inward_liquid_reactivity": float(read_value("blob_inward_liquid_reactivity", 1.0)),
+        "blob_inward_liquid_max_size": float(read_value("blob_inward_liquid_max_size", 0.28)),
+        "blob_inward_liquid_color": read_value("blob_inward_liquid_color", [170, 225, 255, 190]),
+        "devcurve_active_layer": str(read_value("devcurve_active_layer", "bass")),
+        "devcurve_layer_bass_shape_nodes": list(read_value("devcurve_layer_bass_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
+        "devcurve_layer_vocals_shape_nodes": list(read_value("devcurve_layer_vocals_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
+        "devcurve_layer_mids_shape_nodes": list(read_value("devcurve_layer_mids_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
+        "devcurve_layer_transients_shape_nodes": list(read_value("devcurve_layer_transients_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
+        "devcurve_base_level": float(read_value("devcurve_base_level", 0.58)),
+        "devcurve_motion_power": float(read_value("devcurve_motion_power", 1.0)),
+        "devcurve_idle_motion": float(read_value("devcurve_idle_motion", 0.20)),
+        "devcurve_idle_speed": float(read_value("devcurve_idle_speed", 0.60)),
+        "devcurve_smoothness": float(read_value("devcurve_smoothness", 0.55)),
+        "devcurve_layer_bass_enabled": bool(read_value("devcurve_layer_bass_enabled", True)),
+        "devcurve_layer_bass_color": read_value("devcurve_layer_bass_color", [82, 167, 255, 230]),
+        "devcurve_layer_bass_alpha": float(read_value("devcurve_layer_bass_alpha", 0.55)),
+        "devcurve_layer_bass_power": float(read_value("devcurve_layer_bass_power", 1.0)),
+        "devcurve_layer_bass_offset": float(read_value("devcurve_layer_bass_offset", 0.0)),
+        "devcurve_layer_bass_outline_color": read_value("devcurve_layer_bass_outline_color", [255, 255, 255, 255]),
+        "devcurve_layer_bass_outline_width": float(read_value("devcurve_layer_bass_outline_width", 0.006)),
+        "devcurve_layer_bass_order": int(read_value("devcurve_layer_bass_order", 1)),
+        "devcurve_layer_vocals_enabled": bool(read_value("devcurve_layer_vocals_enabled", True)),
+        "devcurve_layer_vocals_color": read_value("devcurve_layer_vocals_color", [136, 190, 255, 220]),
+        "devcurve_layer_vocals_alpha": float(read_value("devcurve_layer_vocals_alpha", 0.42)),
+        "devcurve_layer_vocals_power": float(read_value("devcurve_layer_vocals_power", 1.0)),
+        "devcurve_layer_vocals_offset": float(read_value("devcurve_layer_vocals_offset", -0.01)),
+        "devcurve_layer_vocals_outline_color": read_value("devcurve_layer_vocals_outline_color", [255, 255, 255, 255]),
+        "devcurve_layer_vocals_outline_width": float(read_value("devcurve_layer_vocals_outline_width", 0.006)),
+        "devcurve_layer_vocals_order": int(read_value("devcurve_layer_vocals_order", 2)),
+        "devcurve_layer_mids_enabled": bool(read_value("devcurve_layer_mids_enabled", True)),
+        "devcurve_layer_mids_color": read_value("devcurve_layer_mids_color", [100, 145, 255, 220]),
+        "devcurve_layer_mids_alpha": float(read_value("devcurve_layer_mids_alpha", 0.46)),
+        "devcurve_layer_mids_power": float(read_value("devcurve_layer_mids_power", 1.0)),
+        "devcurve_layer_mids_offset": float(read_value("devcurve_layer_mids_offset", 0.01)),
+        "devcurve_layer_mids_outline_color": read_value("devcurve_layer_mids_outline_color", [255, 255, 255, 255]),
+        "devcurve_layer_mids_outline_width": float(read_value("devcurve_layer_mids_outline_width", 0.006)),
+        "devcurve_layer_mids_order": int(read_value("devcurve_layer_mids_order", 3)),
+        "devcurve_layer_transients_enabled": bool(read_value("devcurve_layer_transients_enabled", True)),
+        "devcurve_layer_transients_color": read_value("devcurve_layer_transients_color", [215, 240, 255, 240]),
+        "devcurve_layer_transients_alpha": float(read_value("devcurve_layer_transients_alpha", 0.66)),
+        "devcurve_layer_transients_power": float(read_value("devcurve_layer_transients_power", 1.15)),
+        "devcurve_layer_transients_offset": float(read_value("devcurve_layer_transients_offset", 0.0)),
+        "devcurve_layer_transients_outline_color": read_value("devcurve_layer_transients_outline_color", [255, 255, 255, 255]),
+        "devcurve_layer_transients_outline_width": float(read_value("devcurve_layer_transients_outline_width", 0.006)),
+        "devcurve_layer_transients_order": int(read_value("devcurve_layer_transients_order", 4)),
+        "devcurve_ghosting_enabled": bool(read_value("devcurve_ghosting_enabled", False)),
+        "devcurve_ghost_alpha": float(read_value("devcurve_ghost_alpha", 0.0)),
+        "devcurve_ghost_decay": float(read_value("devcurve_ghost_decay", 0.4)),
+        "devcurve_foreground_shadow_enabled": bool(read_value("devcurve_foreground_shadow_enabled", False)),
+        "devcurve_foreground_shadow_alpha": float(read_value("devcurve_foreground_shadow_alpha", 0.36)),
+        "devcurve_foreground_shadow_darken": float(read_value("devcurve_foreground_shadow_darken", 0.42)),
+        "devcurve_foreground_shadow_offset": float(read_value("devcurve_foreground_shadow_offset", 0.10)),
+        "devcurve_foreground_specular_enabled": bool(read_value("devcurve_foreground_specular_enabled", False)),
+        "devcurve_foreground_specular_alpha": float(read_value("devcurve_foreground_specular_alpha", 0.78)),
+        "devcurve_foreground_specular_width": float(read_value("devcurve_foreground_specular_width", 0.022)),
+        "devcurve_foreground_specular_offset": float(read_value("devcurve_foreground_specular_offset", 0.028)),
+        "devcurve_foreground_specular_crest_bias": float(read_value("devcurve_foreground_specular_crest_bias", 1.05)),
+        "sine_line_dim": bool(read_value("sine_line_dim", False)),
+        **preset_kwargs,
+    }
+
+
+def _build_settings_readers(
+    settings: "SettingsManager",
+    *,
+    prefix: str,
+) -> Tuple[Callable[[str, Any], Any], Callable[[str, str, Any], Any]]:
+    """Build the SettingsManager-backed key readers for visualizer ingestion."""
+
+    get = settings.get
+    sentinel = object()
+
+    def _get(key: str, default: Any) -> Any:
+        return get(f"{prefix}.{key}", default)
+
+    def _mode_value(mode: str, key: str, fallback: Any) -> Any:
+        raw = get(f"{prefix}.{mode}_{key}", sentinel)
+        if raw is sentinel:
+            return fallback
+        return raw
+
+    return _get, _mode_value
+
+
+def _build_mapping_readers(
+    raw: Mapping[str, Any],
+    *,
+    prefix: str,
+    active_mode: str,
+) -> Tuple[
+    Callable[[str, Any], Any],
+    Callable[[str, Any], Any],
+    Callable[[str, str, Any], Any],
+]:
+    """Build section/dotted/mode-aware readers for mapping ingestion."""
+
+    def _get(key: str, default: Any) -> Any:
+        dotted = f"{prefix}.{key}"
+        # Accept both dotted (full key) and plain key inside section mapping.
+        if dotted in raw:
+            return raw.get(dotted, default)
+        return raw.get(key, default)
+
+    def _get_mode_value(base_key: str, default: Any) -> Any:
+        sentinel = object()
+        for prefix_token in get_setting_prefixes(str(active_mode)):
+            value = _get(f"{prefix_token}{base_key}", sentinel)
+            if value is not sentinel:
+                return value
+        if active_mode:
+            value = _get(f"{active_mode}_{base_key}", sentinel)
+            if value is not sentinel:
+                return value
+        return _get(base_key, default)
+
+    def _get_per_mode_value(mode: str, base_key: str, default: Any) -> Any:
+        sentinel = object()
+        seen: set[str] = set()
+        candidates = [f"{mode}_{base_key}"]
+        candidates.extend(f"{token}{base_key}" for token in get_setting_prefixes(mode))
+        for candidate in candidates:
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            value = _get(candidate, sentinel)
+            if value is not sentinel:
+                return value
+        return default
+
+    return _get, _get_mode_value, _get_per_mode_value
+
+
+def _coerce_preset_index(raw: Any, *, default: int = 0) -> int:
+    """Return a safe integer preset index from persisted mapping data."""
+
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+def _resolve_mapping_preset_kwargs(
+    raw: Mapping[str, Any],
+    *,
+    prefix: str,
+    resolve_preset_indices: bool,
+) -> Dict[str, int]:
+    """Resolve per-mode preset indices from a persisted visualizer mapping."""
+
+    if resolve_preset_indices:
+        return resolve_all_preset_indices_from_mapping(raw, prefix=prefix)
+
+    return {
+        get_preset_key(mode_id): _coerce_preset_index(
+            raw.get(
+                get_preset_key(mode_id),
+                raw.get(f"{prefix}.{get_preset_key(mode_id)}", 0),
+            )
+        )
+        for mode_id in VISUALIZER_MODE_IDS
+    }
+
+
+def _serialize_outline_rgb(color_value: Any) -> list[int]:
+    """Serialize an outline color as RGB with forced full alpha."""
+
+    return [
+        int(color_value[0]),
+        int(color_value[1]),
+        int(color_value[2]),
+        255,
+    ]
 
 
 
@@ -435,6 +840,23 @@ class SpotifyVisualizerSettings:
     preset_devcurve: int = field(default_factory=lambda: get_missing_preset_fallback_index("devcurve"))
 
     def __post_init__(self):
+        self._apply_core_visual_defaults()
+        self._apply_blob_defaults()
+        self._apply_oscilloscope_defaults()
+        self._apply_sine_defaults()
+        self._apply_bubble_defaults()
+        self._apply_devcurve_defaults()
+
+    def _apply_list_default(self, attr: str, value: list[int]) -> None:
+        if getattr(self, attr) is None:
+            setattr(self, attr, list(value))
+
+    def _ensure_non_empty_nodes(self, attr: str, default_nodes: list[list[float]]) -> None:
+        value = getattr(self, attr)
+        if not isinstance(value, list) or not value:
+            setattr(self, attr, deepcopy(default_nodes))
+
+    def _apply_core_visual_defaults(self) -> None:
         if self.osc_glow_color is None:
             self.osc_glow_color = [0, 200, 255, 230]
         if self.bar_fill_color is None:
@@ -454,91 +876,72 @@ class SpotifyVisualizerSettings:
             except Exception:
                 mode_opacity = float(self.bar_border_opacity)
             setattr(self, opacity_attr, mode_opacity)
-        if self.blob_color is None:
-            self.blob_color = [0, 180, 255, 230]
-        if self.blob_glow_color is None:
-            self.blob_glow_color = [0, 140, 255, 180]
-        if self.blob_edge_color is None:
-            self.blob_edge_color = [100, 220, 255, 230]
-        if self.blob_outline_color is None:
-            self.blob_outline_color = [0, 0, 0, 0]
-        if self.blob_inward_liquid_color is None:
-            self.blob_inward_liquid_color = [170, 225, 255, 190]
+ 
+    def _apply_blob_defaults(self) -> None:
+        self._apply_list_default("blob_color", [0, 180, 255, 230])
+        self._apply_list_default("blob_glow_color", [0, 140, 255, 180])
+        self._apply_list_default("blob_edge_color", [100, 220, 255, 230])
+        self._apply_list_default("blob_outline_color", [0, 0, 0, 0])
+        self._apply_list_default("blob_inward_liquid_color", [170, 225, 255, 190])
         self.blob_glow_drive_mode = (
             "vocal" if str(self.blob_glow_drive_mode).strip().lower() == "vocal" else "bass"
         )
-        if self.osc_line_color is None:
-            self.osc_line_color = [255, 255, 255, 255]
-        if self.osc_line2_color is None:
-            self.osc_line2_color = [255, 120, 50, 230]
-        if self.osc_line2_glow_color is None:
-            self.osc_line2_glow_color = [255, 120, 50, 180]
-        if self.osc_line3_color is None:
-            self.osc_line3_color = [50, 255, 120, 230]
-        if self.osc_line3_glow_color is None:
-            self.osc_line3_glow_color = [50, 255, 120, 180]
-        if self.osc_line4_color is None:
-            self.osc_line4_color = [255, 0, 150, 230]
-        if self.osc_line4_glow_color is None:
-            self.osc_line4_glow_color = [255, 0, 150, 180]
-        if self.osc_line5_color is None:
-            self.osc_line5_color = [0, 255, 200, 230]
-        if self.osc_line5_glow_color is None:
-            self.osc_line5_glow_color = [0, 255, 200, 180]
-        if self.osc_line6_color is None:
-            self.osc_line6_color = [200, 100, 255, 230]
-        if self.osc_line6_glow_color is None:
-            self.osc_line6_glow_color = [200, 100, 255, 180]
-        if self.sine_glow_color is None:
-            self.sine_glow_color = [0, 200, 255, 230]
-        if self.sine_line_color is None:
-            self.sine_line_color = [255, 255, 255, 255]
-        if self.sine_line2_color is None:
-            self.sine_line2_color = [255, 255, 255, 230]
-        if self.sine_line2_glow_color is None:
-            self.sine_line2_glow_color = [7, 114, 255, 180]
-        if self.sine_line3_color is None:
-            self.sine_line3_color = [255, 255, 255, 230]
-        if self.sine_line3_glow_color is None:
-            self.sine_line3_glow_color = [14, 159, 255, 180]
-        if self.sine_line4_color is None:
-            self.sine_line4_color = [255, 120, 50, 230]
-        if self.sine_line4_glow_color is None:
-            self.sine_line4_glow_color = [255, 120, 50, 180]
-        if self.sine_line5_color is None:
-            self.sine_line5_color = [50, 255, 120, 230]
-        if self.sine_line5_glow_color is None:
-            self.sine_line5_glow_color = [50, 255, 120, 180]
-        if self.sine_line6_color is None:
-            self.sine_line6_color = [255, 0, 150, 230]
-        if self.sine_line6_glow_color is None:
-            self.sine_line6_glow_color = [255, 0, 150, 180]
-        if self.bubble_outline_color is None:
-            self.bubble_outline_color = [255, 255, 255, 230]
-        if self.bubble_specular_color is None:
-            self.bubble_specular_color = [255, 255, 255, 255]
-        if self.bubble_gradient_light is None:
-            self.bubble_gradient_light = [210, 170, 120, 255]
-        if self.bubble_gradient_dark is None:
-            self.bubble_gradient_dark = [80, 60, 50, 255]
-        if self.bubble_pop_color is None:
-            self.bubble_pop_color = [255, 255, 255, 180]
-        if self.devcurve_layer_bass_color is None:
-            self.devcurve_layer_bass_color = [82, 167, 255, 230]
-        if self.devcurve_layer_vocals_color is None:
-            self.devcurve_layer_vocals_color = [136, 190, 255, 220]
-        if self.devcurve_layer_mids_color is None:
-            self.devcurve_layer_mids_color = [100, 145, 255, 220]
-        if self.devcurve_layer_transients_color is None:
-            self.devcurve_layer_transients_color = [215, 240, 255, 240]
-        if self.devcurve_layer_bass_outline_color is None:
-            self.devcurve_layer_bass_outline_color = [255, 255, 255, 255]
-        if self.devcurve_layer_vocals_outline_color is None:
-            self.devcurve_layer_vocals_outline_color = [255, 255, 255, 255]
-        if self.devcurve_layer_mids_outline_color is None:
-            self.devcurve_layer_mids_outline_color = [255, 255, 255, 255]
-        if self.devcurve_layer_transients_outline_color is None:
-            self.devcurve_layer_transients_outline_color = [255, 255, 255, 255]
+
+    def _apply_oscilloscope_defaults(self) -> None:
+        for attr, value in (
+            ("osc_line_color", [255, 255, 255, 255]),
+            ("osc_line2_color", [255, 120, 50, 230]),
+            ("osc_line2_glow_color", [255, 120, 50, 180]),
+            ("osc_line3_color", [50, 255, 120, 230]),
+            ("osc_line3_glow_color", [50, 255, 120, 180]),
+            ("osc_line4_color", [255, 0, 150, 230]),
+            ("osc_line4_glow_color", [255, 0, 150, 180]),
+            ("osc_line5_color", [0, 255, 200, 230]),
+            ("osc_line5_glow_color", [0, 255, 200, 180]),
+            ("osc_line6_color", [200, 100, 255, 230]),
+            ("osc_line6_glow_color", [200, 100, 255, 180]),
+        ):
+            self._apply_list_default(attr, value)
+
+    def _apply_sine_defaults(self) -> None:
+        for attr, value in (
+            ("sine_glow_color", [0, 200, 255, 230]),
+            ("sine_line_color", [255, 255, 255, 255]),
+            ("sine_line2_color", [255, 255, 255, 230]),
+            ("sine_line2_glow_color", [7, 114, 255, 180]),
+            ("sine_line3_color", [255, 255, 255, 230]),
+            ("sine_line3_glow_color", [14, 159, 255, 180]),
+            ("sine_line4_color", [255, 120, 50, 230]),
+            ("sine_line4_glow_color", [255, 120, 50, 180]),
+            ("sine_line5_color", [50, 255, 120, 230]),
+            ("sine_line5_glow_color", [50, 255, 120, 180]),
+            ("sine_line6_color", [255, 0, 150, 230]),
+            ("sine_line6_glow_color", [255, 0, 150, 180]),
+        ):
+            self._apply_list_default(attr, value)
+
+    def _apply_bubble_defaults(self) -> None:
+        for attr, value in (
+            ("bubble_outline_color", [255, 255, 255, 230]),
+            ("bubble_specular_color", [255, 255, 255, 255]),
+            ("bubble_gradient_light", [210, 170, 120, 255]),
+            ("bubble_gradient_dark", [80, 60, 50, 255]),
+            ("bubble_pop_color", [255, 255, 255, 180]),
+        ):
+            self._apply_list_default(attr, value)
+
+    def _apply_devcurve_defaults(self) -> None:
+        for attr, value in (
+            ("devcurve_layer_bass_color", [82, 167, 255, 230]),
+            ("devcurve_layer_vocals_color", [136, 190, 255, 220]),
+            ("devcurve_layer_mids_color", [100, 145, 255, 220]),
+            ("devcurve_layer_transients_color", [215, 240, 255, 240]),
+            ("devcurve_layer_bass_outline_color", [255, 255, 255, 255]),
+            ("devcurve_layer_vocals_outline_color", [255, 255, 255, 255]),
+            ("devcurve_layer_mids_outline_color", [255, 255, 255, 255]),
+            ("devcurve_layer_transients_outline_color", [255, 255, 255, 255]),
+        ):
+            self._apply_list_default(attr, value)
         self.devcurve_active_layer = (
             str(self.devcurve_active_layer).strip().lower()
             if str(self.devcurve_active_layer).strip().lower() in {"bass", "vocals", "mids", "transients"}
@@ -567,14 +970,14 @@ class SpotifyVisualizerSettings:
         self.devcurve_foreground_specular_width = max(0.002, min(0.120, float(self.devcurve_foreground_specular_width)))
         self.devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(self.devcurve_foreground_specular_offset)))
         self.devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(self.devcurve_foreground_specular_crest_bias)))
-        if not isinstance(self.devcurve_layer_bass_shape_nodes, list) or not self.devcurve_layer_bass_shape_nodes:
-            self.devcurve_layer_bass_shape_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
-        if not isinstance(self.devcurve_layer_vocals_shape_nodes, list) or not self.devcurve_layer_vocals_shape_nodes:
-            self.devcurve_layer_vocals_shape_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
-        if not isinstance(self.devcurve_layer_mids_shape_nodes, list) or not self.devcurve_layer_mids_shape_nodes:
-            self.devcurve_layer_mids_shape_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
-        if not isinstance(self.devcurve_layer_transients_shape_nodes, list) or not self.devcurve_layer_transients_shape_nodes:
-            self.devcurve_layer_transients_shape_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+        default_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+        for attr in (
+            "devcurve_layer_bass_shape_nodes",
+            "devcurve_layer_vocals_shape_nodes",
+            "devcurve_layer_mids_shape_nodes",
+            "devcurve_layer_transients_shape_nodes",
+        ):
+            self._ensure_non_empty_nodes(attr, default_nodes)
         _order_pairs = [
             ("devcurve_layer_bass_order", int(self.devcurve_layer_bass_order)),
             ("devcurve_layer_vocals_order", int(self.devcurve_layer_vocals_order)),
@@ -589,20 +992,13 @@ class SpotifyVisualizerSettings:
     def from_settings(cls, settings: "SettingsManager", prefix: str = "widgets.spotify_visualizer") -> "SpotifyVisualizerSettings":
         """Load Spotify visualizer settings from SettingsManager."""
         get = settings.get
+        _get, _mode_value = _build_settings_readers(settings, prefix=prefix)
+
         try:
-            bubble_gradient_semantics_version = int(get(f"{prefix}.bubble_gradient_semantics_version", 0))
+            bubble_gradient_semantics_version = int(_get("bubble_gradient_semantics_version", 0))
         except (TypeError, ValueError):
             bubble_gradient_semantics_version = 0
         _defaults_model = cls()
-
-        sentinel = object()
-
-        def _mode_value(mode: str, key: str, fallback: Any) -> Any:
-            attr = f"{prefix}.{mode}_{key}"
-            raw = get(attr, sentinel)
-            if raw is sentinel:
-                return fallback
-            return raw
 
         _mode_kwargs = _build_live_visualizer_mode_kwargs(_mode_value, _defaults_model)
         _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_mode_value, _defaults_model)
@@ -620,320 +1016,22 @@ class SpotifyVisualizerSettings:
             lambda key, default: _mode_value(
                 _active_mode,
                 key,
-                get(f"{prefix}.{key}", default),
+                _get(key, default),
             )
         )
 
         return cls(
-            enabled=get(f"{prefix}.enabled", False),
-            monitor=get(f"{prefix}.monitor", "ALL"),
-            bar_count=int(_active_technical["bar_count"]),
-            ghosting_enabled=bool(get(f"{prefix}.spectrum_ghosting_enabled", True)),
-            ghost_alpha=float(get(f"{prefix}.spectrum_ghost_alpha", 0.4)),
-            ghost_decay=float(get(f"{prefix}.spectrum_ghost_decay", 0.35)),
-            adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
-            sensitivity=float(_active_technical["sensitivity"]),
-            dynamic_floor=bool(_active_technical["dynamic_floor"]),
-            manual_floor=float(_active_technical["manual_floor"]),
-            dynamic_range_enabled=bool(_active_technical["dynamic_range_enabled"]),
-            agc_strength=float(_active_technical["agc_strength"]),
-            input_gain=float(_active_technical["input_gain"]),
-            kick_lane_gain=float(_active_technical["kick_lane_gain"]),
-            transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
-            transient_clamp=float(_active_technical["transient_clamp"]),
-            bar_fill_color=_active_visuals["bar_fill_color"],
-            bar_border_color=_active_visuals["bar_border_color"],
-            bar_border_opacity=float(_active_visuals["bar_border_opacity"]),
-            mode=_active_mode,
-            osc_glow_enabled=get(f"{prefix}.osc_glow_enabled", True),
-            osc_glow_intensity=float(get(f"{prefix}.osc_glow_intensity", 0.5)),
-            osc_glow_reactivity=float(get(f"{prefix}.osc_glow_reactivity", get(f"{prefix}.osc_glow_size", 1.0))),
-            osc_glow_color=get(f"{prefix}.osc_glow_color", [0, 200, 255, 230]),
-            osc_reactive_glow=get(f"{prefix}.osc_reactive_glow", True),
-            osc_line_amplitude=float(
-                get(f"{prefix}.osc_line_amplitude", 3.0)
-            ),
-            osc_smoothing=float(get(f"{prefix}.osc_smoothing", 0.7)),
-            blob_color=get(f"{prefix}.blob_color", [0, 180, 255, 230]),
-            blob_glow_color=get(f"{prefix}.blob_glow_color", [0, 140, 255, 180]),
-            blob_edge_color=get(f"{prefix}.blob_edge_color", [100, 220, 255, 230]),
-            blob_outline_color=get(f"{prefix}.blob_outline_color", [0, 0, 0, 0]),
-            blob_pulse=float(get(f"{prefix}.blob_pulse", 1.0)),
-            blob_pulse_release_ms=int(get(f"{prefix}.blob_pulse_release_ms", 220)),
-            blob_width=float(get(f"{prefix}.blob_width", 1.0)),
-            blob_size=float(get(f"{prefix}.blob_size", 1.0)),
-            blob_glow_intensity=float(get(f"{prefix}.blob_glow_intensity", 0.5)),
-            blob_reactive_glow=get(f"{prefix}.blob_reactive_glow", True),
-            blob_glow_drive_mode=str(get(f"{prefix}.blob_glow_drive_mode", "bass")),
-            osc_line_color=get(f"{prefix}.osc_line_color", [255, 255, 255, 255]),
-            osc_line_count=int(get(f"{prefix}.osc_line_count", 1)),
-            osc_line2_color=get(f"{prefix}.osc_line2_color", [255, 120, 50, 230]),
-            osc_line2_glow_color=get(f"{prefix}.osc_line2_glow_color", [255, 120, 50, 180]),
-            osc_line3_color=get(f"{prefix}.osc_line3_color", [50, 255, 120, 230]),
-            osc_line3_glow_color=get(f"{prefix}.osc_line3_glow_color", [50, 255, 120, 180]),
-            osc_line4_color=get(f"{prefix}.osc_line4_color", [255, 0, 150, 230]),
-            osc_line4_glow_color=get(f"{prefix}.osc_line4_glow_color", [255, 0, 150, 180]),
-            osc_line5_color=get(f"{prefix}.osc_line5_color", [0, 255, 200, 230]),
-            osc_line5_glow_color=get(f"{prefix}.osc_line5_glow_color", [0, 255, 200, 180]),
-            osc_line6_color=get(f"{prefix}.osc_line6_color", [200, 100, 255, 230]),
-            osc_line6_glow_color=get(f"{prefix}.osc_line6_glow_color", [200, 100, 255, 180]),
-            spectrum_growth=float(get(f"{prefix}.spectrum_growth", 1.0)),
-            blob_growth=float(get(f"{prefix}.blob_growth", 2.5)),
-            osc_speed=float(get(f"{prefix}.osc_speed", 1.0)),
-            osc_line_dim=get(f"{prefix}.osc_line_dim", False),
-            osc_line_offset_bias=float(get(f"{prefix}.osc_line_offset_bias", 0.0)),
-            osc_vertical_shift=get(f"{prefix}.osc_vertical_shift", False),
-            osc_growth=float(get(f"{prefix}.osc_growth", 1.0)),
-            blob_reactive_deformation=float(get(f"{prefix}.blob_reactive_deformation", 1.0)),
-            blob_constant_wobble=float(get(f"{prefix}.blob_constant_wobble", 1.0)),
-            blob_reactive_wobble=float(get(f"{prefix}.blob_reactive_wobble", 1.0)),
-            blob_stretch=float(get(f"{prefix}.blob_stretch", 0.35)),
-            blob_stage_gain=float(get(f"{prefix}.blob_stage_gain", 1.0)),
-            blob_core_scale=float(get(f"{prefix}.blob_core_scale", 1.0)),
-            blob_core_floor_bias=float(get(f"{prefix}.blob_core_floor_bias", 0.35)),
-            blob_stage_bias=float(get(f"{prefix}.blob_stage_bias", 0.0)),
-            blob_stretch_tendency=float(get(f"{prefix}.blob_stretch_tendency", get(f"{prefix}.blob_stretch", 0.35))),
-            blob_stretch_inner=float(get(f"{prefix}.blob_stretch_inner", 0.0)),
-            blob_stretch_outer=float(get(f"{prefix}.blob_stretch_outer", get(f"{prefix}.blob_stretch", 0.35))),
-            spectrum_render_mode=resolve_spectrum_render_mode(
-                lambda key, default=None: get(f"{prefix}.{key}", default)
-            ),
-            spectrum_unique_colors=resolve_spectrum_unique_colors(
-                lambda key, default=None: get(f"{prefix}.{key}", default)
-            ),
-            spectrum_rainbow_border=bool(get(f"{prefix}.spectrum_rainbow_border", False)),
-            spectrum_border_radius=float(get(f"{prefix}.spectrum_border_radius", 0.0)),
-            spectrum_link_fill_border=bool(get(f"{prefix}.spectrum_link_fill_border", False)),
-            spectrum_glow_enabled=bool(get(f"{prefix}.spectrum_glow_enabled", False)),
-            spectrum_glow_intensity=float(get(f"{prefix}.spectrum_glow_intensity", 0.55)),
-            spectrum_glow_color=list(get(f"{prefix}.spectrum_glow_color", [110, 220, 255, 235])),
-            spectrum_ghosting_enabled=bool(get(f"{prefix}.spectrum_ghosting_enabled", True)),
-            spectrum_ghost_alpha=float(get(f"{prefix}.spectrum_ghost_alpha", 0.4)),
-            spectrum_ghost_decay=float(get(f"{prefix}.spectrum_ghost_decay", 0.35)),
-            spectrum_mirrored=bool(get(f"{prefix}.spectrum_mirrored", True)),
-            spectrum_shape_nodes=list(
-                get(
-                    f"{prefix}.spectrum_shape_nodes",
-                    [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]],
-                )
-            ),
-            spectrum_notch_positions_mirrored=list(
-                get(
-                    f"{prefix}.spectrum_notch_positions_mirrored",
-                    [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]],
-                )
-            ),
-            spectrum_notch_positions_linear=_normalize_spectrum_linear_notches(
-                get(
-                    f"{prefix}.spectrum_notch_positions_linear",
-                    _SPECTRUM_DEFAULT_NOTCHES_LINEAR,
-                )
-            ),
-            spectrum_lane_strengths_mirrored=_normalize_spectrum_lane_strengths(
-                get(f"{prefix}.spectrum_lane_strengths_mirrored", _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED),
-                _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
-            ),
-            spectrum_lane_strengths_linear=_normalize_spectrum_lane_strengths(
-                get(f"{prefix}.spectrum_lane_strengths_linear", _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR),
-                _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
-            ),
-            spectrum_wave_amplitude=float(get(f"{prefix}.spectrum_wave_amplitude", 0.50)),
-            spectrum_profile_floor=float(get(f"{prefix}.spectrum_profile_floor", 0.12)),
-            spectrum_drop_speed=float(get(f"{prefix}.spectrum_drop_speed", 1.0)),
-            sine_wave_growth=float(get(f"{prefix}.sine_wave_growth", 1.0)),
-            sine_wave_travel=int(get(f"{prefix}.sine_wave_travel", 0)),
-            sine_density=float(get(f"{prefix}.sine_density", 1.0)),
-            sine_displacement=float(get(f"{prefix}.sine_displacement", 0.0)),
-            sine_glow_enabled=get(f"{prefix}.sine_glow_enabled", True),
-            sine_glow_intensity=float(get(f"{prefix}.sine_glow_intensity", 0.5)),
-            sine_glow_reactivity=float(get(f"{prefix}.sine_glow_reactivity", get(f"{prefix}.sine_glow_size", 1.0))),
-            sine_glow_color=get(f"{prefix}.sine_glow_color", [0, 200, 255, 230]),
-            sine_line_color=get(f"{prefix}.sine_line_color", [255, 255, 255, 255]),
-            sine_reactive_glow=get(f"{prefix}.sine_reactive_glow", True),
-            sine_ghosting_enabled=get(f"{prefix}.sine_ghosting_enabled", True),
-            sine_ghost_alpha=float(get(f"{prefix}.sine_ghost_alpha", 0.45)),
-            sine_ghost_decay=float(get(f"{prefix}.sine_ghost_decay", 0.3)),
-            sine_ghost_line2_enabled=bool(get(f"{prefix}.sine_ghost_line2_enabled", True)),
-            sine_ghost_line3_enabled=bool(get(f"{prefix}.sine_ghost_line3_enabled", True)),
-            sine_ghost_line4_enabled=bool(get(f"{prefix}.sine_ghost_line4_enabled", True)),
-            sine_ghost_line5_enabled=bool(get(f"{prefix}.sine_ghost_line5_enabled", True)),
-            sine_ghost_line6_enabled=bool(get(f"{prefix}.sine_ghost_line6_enabled", True)),
-            sine_sensitivity=float(get(f"{prefix}.sine_sensitivity", 1.0)),
-            sine_smoothing=float(get(f"{prefix}.sine_smoothing", 0.7)),
-            sine_speed=float(get(f"{prefix}.sine_speed", 1.0)),
-            sine_line_count=int(get(f"{prefix}.sine_line_count", 1)),
-            sine_line_offset_bias=float(get(f"{prefix}.sine_line_offset_bias", 0.0)),
-            sine_line2_color=get(f"{prefix}.sine_line2_color", [255, 255, 255, 230]),
-            sine_line2_glow_color=get(f"{prefix}.sine_line2_glow_color", [7, 114, 255, 180]),
-            sine_line3_color=get(f"{prefix}.sine_line3_color", [255, 255, 255, 230]),
-            sine_line3_glow_color=get(f"{prefix}.sine_line3_glow_color", [14, 159, 255, 180]),
-            sine_line4_color=get(f"{prefix}.sine_line4_color", [255, 120, 50, 230]),
-            sine_line4_glow_color=get(f"{prefix}.sine_line4_glow_color", [255, 120, 50, 180]),
-            sine_line5_color=get(f"{prefix}.sine_line5_color", [50, 255, 120, 230]),
-            sine_line5_glow_color=get(f"{prefix}.sine_line5_glow_color", [50, 255, 120, 180]),
-            sine_line6_color=get(f"{prefix}.sine_line6_color", [255, 0, 150, 230]),
-            sine_line6_glow_color=get(f"{prefix}.sine_line6_glow_color", [255, 0, 150, 180]),
-            sine_travel_line2=int(get(f"{prefix}.sine_travel_line2", 0)),
-            sine_travel_line3=int(get(f"{prefix}.sine_travel_line3", 0)),
-            sine_travel_line4=int(get(f"{prefix}.sine_travel_line4", 0)),
-            sine_travel_line5=int(get(f"{prefix}.sine_travel_line5", 0)),
-            sine_travel_line6=int(get(f"{prefix}.sine_travel_line6", 0)),
-            sine_line1_shift=float(get(f"{prefix}.sine_line1_shift", 0.0)),
-            sine_line2_shift=float(get(f"{prefix}.sine_line2_shift", 0.0)),
-            sine_line3_shift=float(get(f"{prefix}.sine_line3_shift", 0.0)),
-            sine_line4_shift=float(get(f"{prefix}.sine_line4_shift", 0.0)),
-            sine_line5_shift=float(get(f"{prefix}.sine_line5_shift", 0.0)),
-            sine_line6_shift=float(get(f"{prefix}.sine_line6_shift", 0.0)),
-            sine_wave_effect=float(get(f"{prefix}.sine_wave_effect", get(f"{prefix}.sine_wobble_amount", 0.0))),
-            sine_vertical_shift=int(get(f"{prefix}.sine_vertical_shift", 0)),
-            sine_micro_wobble=float(get(f"{prefix}.sine_micro_wobble", 0.0)),
-            sine_crawl_amount=float(get(f"{prefix}.sine_crawl_amount", 0.25)),
-            sine_width_reaction=float(get(f"{prefix}.sine_width_reaction", 0.0)),
-            sine_card_adaptation=float(get(f"{prefix}.sine_card_adaptation", 0.3)),
-            rainbow_enabled=_rainbow_kwargs["rainbow_enabled"],
-            rainbow_speed=_rainbow_kwargs["rainbow_speed"],
-            osc_ghosting_enabled=bool(get(f"{prefix}.osc_ghosting_enabled", False)),
-            osc_ghost_intensity=float(get(f"{prefix}.osc_ghost_intensity", 0.4)),
-            osc_ghost_line2_enabled=bool(get(f"{prefix}.osc_ghost_line2_enabled", True)),
-            osc_ghost_line3_enabled=bool(get(f"{prefix}.osc_ghost_line3_enabled", True)),
-            osc_ghost_line4_enabled=bool(get(f"{prefix}.osc_ghost_line4_enabled", True)),
-            osc_ghost_line5_enabled=bool(get(f"{prefix}.osc_ghost_line5_enabled", True)),
-            osc_ghost_line6_enabled=bool(get(f"{prefix}.osc_ghost_line6_enabled", True)),
-            sine_heartbeat=float(get(f"{prefix}.sine_heartbeat", 0.0)),
-            # Bubble
-            bubble_big_bass_pulse=float(get(f"{prefix}.bubble_big_bass_pulse", 0.5)),
-            bubble_small_freq_pulse=float(get(f"{prefix}.bubble_small_freq_pulse", 0.5)),
-            bubble_stream_direction=str(get(f"{prefix}.bubble_stream_direction", "up")),
-            bubble_stream_constant_speed=float(
-                get(
-                    f"{prefix}.bubble_stream_constant_speed",
-                    get(f"{prefix}.bubble_stream_speed", 0.5),
-                )
-            ),
-            bubble_stream_speed_cap=float(
-                get(
-                    f"{prefix}.bubble_stream_speed_cap",
-                    get(f"{prefix}.bubble_stream_speed", 2.0),
-                )
-            ),
-            bubble_stream_reactivity=float(get(f"{prefix}.bubble_stream_reactivity", 0.5)),
-            bubble_rotation_amount=float(get(f"{prefix}.bubble_rotation_amount", 0.5)),
-            bubble_drift_amount=float(get(f"{prefix}.bubble_drift_amount", 0.5)),
-            bubble_drift_speed=float(get(f"{prefix}.bubble_drift_speed", 0.5)),
-            bubble_drift_frequency=float(get(f"{prefix}.bubble_drift_frequency", 0.5)),
-            bubble_drift_direction=str(get(f"{prefix}.bubble_drift_direction", "random")),
-            bubble_big_count=int(get(f"{prefix}.bubble_big_count", 8)),
-            bubble_small_count=int(get(f"{prefix}.bubble_small_count", 25)),
-            bubble_surface_reach=float(get(f"{prefix}.bubble_surface_reach", 0.6)),
-            bubble_bounce_big_pct=int(get(f"{prefix}.bubble_bounce_big_pct", 70)),
-            bubble_bounce_small_pct=int(get(f"{prefix}.bubble_bounce_small_pct", 30)),
-                bubble_bounce_big_speed=float(get(f"{prefix}.bubble_bounce_big_speed", 0.8)),
-                bubble_bounce_small_speed=float(get(f"{prefix}.bubble_bounce_small_speed", 0.5)),
-                bubble_bounce_same_only=bool(get(f"{prefix}.bubble_bounce_same_only", False)),
-                bubble_collision_pop_mode=str(get(f"{prefix}.bubble_collision_pop_mode", "off")).strip().lower(),
-            bubble_outline_color=get(f"{prefix}.bubble_outline_color", [255, 255, 255, 230]),
-            bubble_specular_color=get(f"{prefix}.bubble_specular_color", [255, 255, 255, 255]),
-            bubble_gradient_light=get(f"{prefix}.bubble_gradient_light", [210, 170, 120, 255]),
-            bubble_gradient_dark=get(f"{prefix}.bubble_gradient_dark", [80, 60, 50, 255]),
-            bubble_pop_color=get(f"{prefix}.bubble_pop_color", [255, 255, 255, 180]),
-            bubble_specular_direction=normalize_bubble_specular_direction(
-                get(f"{prefix}.bubble_specular_direction", "top_left")
-            ),
-            bubble_gradient_direction=resolve_bubble_gradient_direction(
-                get(f"{prefix}.bubble_gradient_direction", "top"),
-                semantics_version=bubble_gradient_semantics_version,
-                default="top",
-            ),
-            bubble_big_size_max=float(get(f"{prefix}.bubble_big_size_max", 0.038)),
-            bubble_small_size_max=float(get(f"{prefix}.bubble_small_size_max", 0.018)),
-            bubble_big_contraction_bias=float(get(f"{prefix}.bubble_big_contraction_bias", 1.0)),
-            bubble_big_size_clamp=float(get(f"{prefix}.bubble_big_size_clamp", 4.0)),
-            bubble_big_specular_max_size=float(get(f"{prefix}.bubble_big_specular_max_size", 2.5)),
-            bubble_growth=float(get(f"{prefix}.bubble_growth", 3.0)),
-            devcurve_growth=float(get(f"{prefix}.devcurve_growth", 3.0)),
-            bubble_trail_strength=float(get(f"{prefix}.bubble_trail_strength", 0.0)),
-            bubble_tail_opacity=float(get(f"{prefix}.bubble_tail_opacity", 0.0)),
-            bubble_ghosting_enabled=bool(get(f"{prefix}.bubble_ghosting_enabled", False)),
-            bubble_ghost_alpha=float(get(f"{prefix}.bubble_ghost_alpha", 0.0)),
-            bubble_ghost_decay=float(get(f"{prefix}.bubble_ghost_decay", 0.4)),
-            blob_glow_reactivity=float(get(f"{prefix}.blob_glow_reactivity", 1.0)),
-            blob_glow_max_size=float(get(f"{prefix}.blob_glow_max_size", 1.0)),
-            blob_ghosting_enabled=bool(get(f"{prefix}.blob_ghosting_enabled", False)),
-            blob_ghost_alpha=float(get(f"{prefix}.blob_ghost_alpha", 0.4)),
-            blob_ghost_decay=float(get(f"{prefix}.blob_ghost_decay", 0.3)),
-            blob_shaper_enabled=bool(get(f"{prefix}.blob_shaper_enabled", False)),
-            blob_shape_base_nodes=list(get(f"{prefix}.blob_shape_base_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
-            blob_shape_reaction_nodes=list(get(f"{prefix}.blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
-            blob_shape_energy_nodes=list(get(f"{prefix}.blob_shape_energy_nodes", [])),
-            blob_shaper_base_strength=float(get(f"{prefix}.blob_shaper_base_strength", 0.5)),
-            blob_shaper_react_strength=float(get(f"{prefix}.blob_shaper_react_strength", 0.5)),
-            blob_shaper_idle_motion=float(get(f"{prefix}.blob_shaper_idle_motion", 0.18)),
-            blob_shaper_audio_motion=float(get(f"{prefix}.blob_shaper_audio_motion", 1.20)),
-            blob_topology=str(get(f"{prefix}.blob_topology", "circle")),
-            blob_ring_thickness=float(get(f"{prefix}.blob_ring_thickness", 0.3)),
-            blob_inward_liquid_enabled=bool(get(f"{prefix}.blob_inward_liquid_enabled", False)),
-            blob_inward_liquid_reactivity=float(get(f"{prefix}.blob_inward_liquid_reactivity", 1.0)),
-            blob_inward_liquid_max_size=float(get(f"{prefix}.blob_inward_liquid_max_size", 0.28)),
-            blob_inward_liquid_color=get(f"{prefix}.blob_inward_liquid_color", [170, 225, 255, 190]),
-            # Dev Curve
-            devcurve_active_layer=str(get(f"{prefix}.devcurve_active_layer", "bass")),
-            devcurve_layer_bass_shape_nodes=list(get(f"{prefix}.devcurve_layer_bass_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_vocals_shape_nodes=list(get(f"{prefix}.devcurve_layer_vocals_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_mids_shape_nodes=list(get(f"{prefix}.devcurve_layer_mids_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_transients_shape_nodes=list(get(f"{prefix}.devcurve_layer_transients_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_base_level=float(get(f"{prefix}.devcurve_base_level", 0.58)),
-            devcurve_motion_power=float(get(f"{prefix}.devcurve_motion_power", 1.0)),
-            devcurve_idle_motion=float(get(f"{prefix}.devcurve_idle_motion", 0.20)),
-            devcurve_idle_speed=float(get(f"{prefix}.devcurve_idle_speed", 0.60)),
-            devcurve_smoothness=float(get(f"{prefix}.devcurve_smoothness", 0.55)),
-            devcurve_layer_bass_enabled=bool(get(f"{prefix}.devcurve_layer_bass_enabled", True)),
-            devcurve_layer_bass_color=get(f"{prefix}.devcurve_layer_bass_color", [82, 167, 255, 230]),
-            devcurve_layer_bass_alpha=float(get(f"{prefix}.devcurve_layer_bass_alpha", 0.55)),
-            devcurve_layer_bass_power=float(get(f"{prefix}.devcurve_layer_bass_power", 1.0)),
-            devcurve_layer_bass_offset=float(get(f"{prefix}.devcurve_layer_bass_offset", 0.0)),
-            devcurve_layer_bass_outline_color=get(f"{prefix}.devcurve_layer_bass_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_bass_outline_width=float(get(f"{prefix}.devcurve_layer_bass_outline_width", 0.006)),
-            devcurve_layer_bass_order=int(get(f"{prefix}.devcurve_layer_bass_order", 1)),
-            devcurve_layer_vocals_enabled=bool(get(f"{prefix}.devcurve_layer_vocals_enabled", True)),
-            devcurve_layer_vocals_color=get(f"{prefix}.devcurve_layer_vocals_color", [136, 190, 255, 220]),
-            devcurve_layer_vocals_alpha=float(get(f"{prefix}.devcurve_layer_vocals_alpha", 0.42)),
-            devcurve_layer_vocals_power=float(get(f"{prefix}.devcurve_layer_vocals_power", 1.0)),
-            devcurve_layer_vocals_offset=float(get(f"{prefix}.devcurve_layer_vocals_offset", -0.01)),
-            devcurve_layer_vocals_outline_color=get(f"{prefix}.devcurve_layer_vocals_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_vocals_outline_width=float(get(f"{prefix}.devcurve_layer_vocals_outline_width", 0.006)),
-            devcurve_layer_vocals_order=int(get(f"{prefix}.devcurve_layer_vocals_order", 2)),
-            devcurve_layer_mids_enabled=bool(get(f"{prefix}.devcurve_layer_mids_enabled", True)),
-            devcurve_layer_mids_color=get(f"{prefix}.devcurve_layer_mids_color", [100, 145, 255, 220]),
-            devcurve_layer_mids_alpha=float(get(f"{prefix}.devcurve_layer_mids_alpha", 0.46)),
-            devcurve_layer_mids_power=float(get(f"{prefix}.devcurve_layer_mids_power", 1.0)),
-            devcurve_layer_mids_offset=float(get(f"{prefix}.devcurve_layer_mids_offset", 0.01)),
-            devcurve_layer_mids_outline_color=get(f"{prefix}.devcurve_layer_mids_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_mids_outline_width=float(get(f"{prefix}.devcurve_layer_mids_outline_width", 0.006)),
-            devcurve_layer_mids_order=int(get(f"{prefix}.devcurve_layer_mids_order", 3)),
-            devcurve_layer_transients_enabled=bool(get(f"{prefix}.devcurve_layer_transients_enabled", True)),
-            devcurve_layer_transients_color=get(f"{prefix}.devcurve_layer_transients_color", [215, 240, 255, 240]),
-            devcurve_layer_transients_alpha=float(get(f"{prefix}.devcurve_layer_transients_alpha", 0.66)),
-            devcurve_layer_transients_power=float(get(f"{prefix}.devcurve_layer_transients_power", 1.15)),
-            devcurve_layer_transients_offset=float(get(f"{prefix}.devcurve_layer_transients_offset", 0.0)),
-            devcurve_layer_transients_outline_color=get(f"{prefix}.devcurve_layer_transients_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_transients_outline_width=float(get(f"{prefix}.devcurve_layer_transients_outline_width", 0.006)),
-            devcurve_layer_transients_order=int(get(f"{prefix}.devcurve_layer_transients_order", 4)),
-            devcurve_ghosting_enabled=bool(get(f"{prefix}.devcurve_ghosting_enabled", False)),
-            devcurve_ghost_alpha=float(get(f"{prefix}.devcurve_ghost_alpha", 0.0)),
-            devcurve_ghost_decay=float(get(f"{prefix}.devcurve_ghost_decay", 0.4)),
-            devcurve_foreground_shadow_enabled=bool(get(f"{prefix}.devcurve_foreground_shadow_enabled", False)),
-            devcurve_foreground_shadow_alpha=float(get(f"{prefix}.devcurve_foreground_shadow_alpha", 0.36)),
-            devcurve_foreground_shadow_darken=float(get(f"{prefix}.devcurve_foreground_shadow_darken", 0.42)),
-            devcurve_foreground_shadow_offset=float(get(f"{prefix}.devcurve_foreground_shadow_offset", 0.10)),
-            devcurve_foreground_specular_enabled=bool(get(f"{prefix}.devcurve_foreground_specular_enabled", False)),
-            devcurve_foreground_specular_alpha=float(get(f"{prefix}.devcurve_foreground_specular_alpha", 0.78)),
-            devcurve_foreground_specular_width=float(get(f"{prefix}.devcurve_foreground_specular_width", 0.022)),
-            devcurve_foreground_specular_offset=float(get(f"{prefix}.devcurve_foreground_specular_offset", 0.028)),
-            devcurve_foreground_specular_crest_bias=float(get(f"{prefix}.devcurve_foreground_specular_crest_bias", 1.05)),
-            sine_line_dim=bool(get(f"{prefix}.sine_line_dim", False)),
-            **_preset_kwargs,
-            **_mode_kwargs,
-            **_mode_visual_kwargs,
+            **_build_visualizer_model_kwargs(
+                _get,
+                active_mode=_active_mode,
+                bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+                active_technical=_active_technical,
+                active_visuals=_active_visuals,
+                rainbow_kwargs=_rainbow_kwargs,
+                preset_kwargs={**_preset_kwargs, **_mode_kwargs, **_mode_visual_kwargs},
+                bubble_stream_constant_speed_default=0.5,
+                bubble_stream_speed_cap_default=2.0,
+            )
         )
 
     @classmethod
@@ -963,58 +1061,20 @@ class SpotifyVisualizerSettings:
 
             _preset_idx = resolve_preset_index_from_mapping(str(_mode), _raw, prefix=prefix)
             _raw = apply_preset_to_config(str(_mode), _preset_idx, _raw)
-
-        def _get(key: str, default: Any) -> Any:
-            dotted = f"{prefix}.{key}"
-            # accept both dotted (full key) and plain key inside section mapping
-            if dotted in _raw:
-                return _raw.get(dotted, default)
-            return _raw.get(key, default)
-
-        def _get_mode_value(base_key: str, default: Any) -> Any:
-            sentinel = object()
-            for prefix_token in get_setting_prefixes(str(_mode)):
-                value = _get(f"{prefix_token}{base_key}", sentinel)
-                if value is not sentinel:
-                    return value
-            if _mode:
-                value = _get(f"{_mode}_{base_key}", sentinel)
-                if value is not sentinel:
-                    return value
-            return _get(base_key, default)
-
-        def _get_per_mode_value(mode: str, base_key: str, default: Any) -> Any:
-            sentinel = object()
-            seen: set[str] = set()
-            candidates = [f"{mode}_{base_key}"]
-            candidates.extend(f"{token}{base_key}" for token in get_setting_prefixes(mode))
-            for candidate in candidates:
-                if candidate in seen:
-                    continue
-                seen.add(candidate)
-                value = _get(candidate, sentinel)
-                if value is not sentinel:
-                    return value
-            return default
+        _get, _get_mode_value, _get_per_mode_value = _build_mapping_readers(
+            _raw,
+            prefix=prefix,
+            active_mode=str(_mode),
+        )
 
         _defaults_model = cls()
         _mode_kwargs = _build_live_visualizer_mode_kwargs(_get_per_mode_value, _defaults_model)
         _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_get_per_mode_value, _defaults_model)
-        if resolve_preset_indices:
-            _preset_kwargs = resolve_all_preset_indices_from_mapping(_raw, prefix=prefix)
-        else:
-            def _coerce_preset_idx(raw: Any) -> int:
-                try:
-                    return int(raw)
-                except (TypeError, ValueError):
-                    return 0
-
-            _preset_kwargs = {
-                get_preset_key(mode_id): _coerce_preset_idx(
-                    _raw.get(get_preset_key(mode_id), _raw.get(f"{prefix}.{get_preset_key(mode_id)}", 0))
-                )
-                for mode_id in VISUALIZER_MODE_IDS
-            }
+        _preset_kwargs = _resolve_mapping_preset_kwargs(
+            _raw,
+            prefix=prefix,
+            resolve_preset_indices=resolve_preset_indices,
+        )
         _active_technical = _resolve_active_mode_technical_state(
             _mode,
             _mode_kwargs,
@@ -1028,297 +1088,17 @@ class SpotifyVisualizerSettings:
         )
 
         return cls(
-            enabled=_get("enabled", False),
-            visualizers_enabled=_get("visualizers_enabled", True),
-            monitor=_get("monitor", "ALL"),
-            bar_count=int(_active_technical["bar_count"]),
-            ghosting_enabled=bool(_get("spectrum_ghosting_enabled", True)),
-            ghost_alpha=float(_get("spectrum_ghost_alpha", 0.4)),
-            ghost_decay=float(_get("spectrum_ghost_decay", 0.35)),
-            adaptive_sensitivity=bool(_active_technical["adaptive_sensitivity"]),
-            sensitivity=float(_active_technical["sensitivity"]),
-            dynamic_floor=bool(_active_technical["dynamic_floor"]),
-            manual_floor=float(_active_technical["manual_floor"]),
-            dynamic_range_enabled=bool(_active_technical["dynamic_range_enabled"]),
-            agc_strength=float(_active_technical["agc_strength"]),
-            input_gain=float(_active_technical["input_gain"]),
-            kick_lane_gain=float(_active_technical["kick_lane_gain"]),
-            transient_pulse_gain=float(_active_technical["transient_pulse_gain"]),
-            transient_clamp=float(_active_technical["transient_clamp"]),
-            bar_fill_color=_active_visuals["bar_fill_color"],
-            bar_border_color=_active_visuals["bar_border_color"],
-            bar_border_opacity=float(_active_visuals["bar_border_opacity"]),
-            mode=coerce_visualizer_mode_id(str(_get("mode", "bubble"))),
-            osc_glow_enabled=_get("osc_glow_enabled", True),
-            osc_glow_intensity=float(_get("osc_glow_intensity", 0.5)),
-            osc_glow_reactivity=float(_get("osc_glow_reactivity", _get("osc_glow_size", 1.0))),
-            osc_glow_color=_get("osc_glow_color", [0, 200, 255, 230]),
-            osc_reactive_glow=_get("osc_reactive_glow", True),
-            osc_line_amplitude=float(
-                _get("osc_line_amplitude", 3.0)
-            ),
-            osc_smoothing=float(_get("osc_smoothing", 0.7)),
-            blob_color=_get("blob_color", [0, 180, 255, 230]),
-            blob_glow_color=_get("blob_glow_color", [0, 140, 255, 180]),
-            blob_edge_color=_get("blob_edge_color", [100, 220, 255, 230]),
-            blob_outline_color=_get("blob_outline_color", [0, 0, 0, 0]),
-            blob_pulse=float(_get("blob_pulse", 1.0)),
-            blob_pulse_release_ms=int(_get("blob_pulse_release_ms", 220)),
-            blob_width=float(_get("blob_width", 1.0)),
-            blob_size=float(_get("blob_size", 1.0)),
-            blob_glow_intensity=float(_get("blob_glow_intensity", 0.5)),
-            blob_reactive_glow=_get("blob_reactive_glow", True),
-            blob_glow_drive_mode=str(_get("blob_glow_drive_mode", "bass")),
-            osc_line_color=_get("osc_line_color", [255, 255, 255, 255]),
-            osc_line_count=int(_get("osc_line_count", 1)),
-            osc_line2_color=_get("osc_line2_color", [255, 120, 50, 230]),
-            osc_line2_glow_color=_get("osc_line2_glow_color", [255, 120, 50, 180]),
-            osc_line3_color=_get("osc_line3_color", [50, 255, 120, 230]),
-            osc_line3_glow_color=_get("osc_line3_glow_color", [50, 255, 120, 180]),
-            osc_line4_color=_get("osc_line4_color", [255, 0, 150, 230]),
-            osc_line4_glow_color=_get("osc_line4_glow_color", [255, 0, 150, 180]),
-            osc_line5_color=_get("osc_line5_color", [0, 255, 200, 230]),
-            osc_line5_glow_color=_get("osc_line5_glow_color", [0, 255, 200, 180]),
-            osc_line6_color=_get("osc_line6_color", [200, 100, 255, 230]),
-            osc_line6_glow_color=_get("osc_line6_glow_color", [200, 100, 255, 180]),
-            spectrum_growth=float(_get("spectrum_growth", 1.0)),
-            blob_growth=float(_get("blob_growth", 2.5)),
-            osc_speed=float(_get("osc_speed", 1.0)),
-            osc_line_dim=_get("osc_line_dim", False),
-            osc_line_offset_bias=float(_get("osc_line_offset_bias", 0.0)),
-            osc_vertical_shift=int(_get("osc_vertical_shift", 0)),
-            osc_growth=float(_get("osc_growth", 1.0)),
-            blob_reactive_deformation=float(_get("blob_reactive_deformation", 1.0)),
-            blob_constant_wobble=float(_get("blob_constant_wobble", 1.0)),
-            blob_reactive_wobble=float(_get("blob_reactive_wobble", 1.0)),
-            blob_stretch=float(_get("blob_stretch", 0.35)),
-            blob_stage_gain=float(_get("blob_stage_gain", 1.0)),
-            blob_core_scale=float(_get("blob_core_scale", 1.0)),
-            blob_core_floor_bias=float(_get("blob_core_floor_bias", 0.35)),
-            blob_stage_bias=float(_get("blob_stage_bias", 0.0)),
-            blob_stretch_tendency=float(_get("blob_stretch_tendency", _get("blob_stretch", 0.35))),
-            blob_stretch_inner=float(_get("blob_stretch_inner", 0.0)),
-            blob_stretch_outer=float(_get("blob_stretch_outer", _get("blob_stretch", 0.35))),
-            spectrum_render_mode=resolve_spectrum_render_mode(_get),
-            spectrum_unique_colors=resolve_spectrum_unique_colors(_get),
-            spectrum_rainbow_border=bool(_get("spectrum_rainbow_border", False)),
-            spectrum_border_radius=float(_get("spectrum_border_radius", 0.0)),
-            spectrum_link_fill_border=bool(_get("spectrum_link_fill_border", False)),
-            spectrum_glow_enabled=bool(_get("spectrum_glow_enabled", False)),
-            spectrum_glow_intensity=float(_get("spectrum_glow_intensity", 0.55)),
-            spectrum_glow_color=list(_get("spectrum_glow_color", [110, 220, 255, 235])),
-            spectrum_ghosting_enabled=bool(_get("spectrum_ghosting_enabled", True)),
-            spectrum_ghost_alpha=float(_get("spectrum_ghost_alpha", 0.4)),
-            spectrum_ghost_decay=float(_get("spectrum_ghost_decay", 0.35)),
-            spectrum_mirrored=bool(_get("spectrum_mirrored", True)),
-            spectrum_shape_nodes=list(
-                _get("spectrum_shape_nodes", [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]])
-            ),
-            spectrum_notch_positions_mirrored=list(
-                _get("spectrum_notch_positions_mirrored", [[0.0, "Mid"], [0.30, "Vocal"], [0.65, "Low-Mid"], [1.0, "Bass"]])
-            ),
-            spectrum_notch_positions_linear=_normalize_spectrum_linear_notches(
-                _get("spectrum_notch_positions_linear", _SPECTRUM_DEFAULT_NOTCHES_LINEAR)
-            ),
-            spectrum_lane_strengths_mirrored=_normalize_spectrum_lane_strengths(
-                _get("spectrum_lane_strengths_mirrored", _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED),
-                _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED,
-            ),
-            spectrum_lane_strengths_linear=_normalize_spectrum_lane_strengths(
-                _get("spectrum_lane_strengths_linear", _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR),
-                _SPECTRUM_DEFAULT_LANE_STRENGTHS_LINEAR,
-            ),
-            spectrum_wave_amplitude=float(_get("spectrum_wave_amplitude", 0.50)),
-            spectrum_profile_floor=float(_get("spectrum_profile_floor", 0.12)),
-            spectrum_drop_speed=float(_get("spectrum_drop_speed", 1.0)),
-            sine_wave_growth=float(_get("sine_wave_growth", 1.0)),
-            sine_wave_travel=int(_get("sine_wave_travel", 0)),
-            sine_density=float(_get("sine_density", 1.0)),
-            sine_displacement=float(_get("sine_displacement", 0.0)),
-            sine_glow_enabled=_get("sine_glow_enabled", True),
-            sine_glow_intensity=float(_get("sine_glow_intensity", 0.5)),
-            sine_glow_reactivity=float(_get("sine_glow_reactivity", _get("sine_glow_size", 1.0))),
-            sine_glow_color=_get("sine_glow_color", [0, 200, 255, 230]),
-            sine_line_color=_get("sine_line_color", [255, 255, 255, 255]),
-            sine_reactive_glow=_get("sine_reactive_glow", True),
-            sine_ghosting_enabled=_get("sine_ghosting_enabled", True),
-            sine_ghost_alpha=float(_get("sine_ghost_alpha", 0.45)),
-            sine_ghost_decay=float(_get("sine_ghost_decay", 0.3)),
-            sine_ghost_line2_enabled=bool(_get("sine_ghost_line2_enabled", True)),
-            sine_ghost_line3_enabled=bool(_get("sine_ghost_line3_enabled", True)),
-            sine_ghost_line4_enabled=bool(_get("sine_ghost_line4_enabled", True)),
-            sine_ghost_line5_enabled=bool(_get("sine_ghost_line5_enabled", True)),
-            sine_ghost_line6_enabled=bool(_get("sine_ghost_line6_enabled", True)),
-            sine_sensitivity=float(_get("sine_sensitivity", 1.0)),
-            sine_smoothing=float(_get("sine_smoothing", 0.7)),
-            sine_speed=float(_get("sine_speed", 1.0)),
-            sine_line_count=int(_get("sine_line_count", 1)),
-            sine_line_offset_bias=float(_get("sine_line_offset_bias", 0.0)),
-            sine_line2_color=_get("sine_line2_color", [255, 255, 255, 230]),
-            sine_line2_glow_color=_get("sine_line2_glow_color", [7, 114, 255, 180]),
-            sine_line3_color=_get("sine_line3_color", [255, 255, 255, 230]),
-            sine_line3_glow_color=_get("sine_line3_glow_color", [14, 159, 255, 180]),
-            sine_line4_color=_get("sine_line4_color", [255, 120, 50, 230]),
-            sine_line4_glow_color=_get("sine_line4_glow_color", [255, 120, 50, 180]),
-            sine_line5_color=_get("sine_line5_color", [50, 255, 120, 230]),
-            sine_line5_glow_color=_get("sine_line5_glow_color", [50, 255, 120, 180]),
-            sine_line6_color=_get("sine_line6_color", [255, 0, 150, 230]),
-            sine_line6_glow_color=_get("sine_line6_glow_color", [255, 0, 150, 180]),
-            sine_travel_line2=int(_get("sine_travel_line2", 0)),
-            sine_travel_line3=int(_get("sine_travel_line3", 0)),
-            sine_travel_line4=int(_get("sine_travel_line4", 0)),
-            sine_travel_line5=int(_get("sine_travel_line5", 0)),
-            sine_travel_line6=int(_get("sine_travel_line6", 0)),
-            sine_line1_shift=float(_get("sine_line1_shift", 0.0)),
-            sine_line2_shift=float(_get("sine_line2_shift", 0.0)),
-            sine_line3_shift=float(_get("sine_line3_shift", 0.0)),
-            sine_line4_shift=float(_get("sine_line4_shift", 0.0)),
-            sine_line5_shift=float(_get("sine_line5_shift", 0.0)),
-            sine_line6_shift=float(_get("sine_line6_shift", 0.0)),
-            sine_wave_effect=float(_get("sine_wave_effect", _get("sine_wobble_amount", 0.0))),
-            sine_vertical_shift=int(_get("sine_vertical_shift", 0)),
-            sine_card_adaptation=float(_get("sine_card_adaptation", 0.3)),
-            sine_micro_wobble=float(_get("sine_micro_wobble", 0.0)),
-            sine_crawl_amount=float(_get("sine_crawl_amount", 0.25)),
-            sine_width_reaction=float(_get("sine_width_reaction", 0.0)),
-            rainbow_enabled=_rainbow_kwargs["rainbow_enabled"],
-            rainbow_speed=_rainbow_kwargs["rainbow_speed"],
-            osc_ghosting_enabled=bool(_get("osc_ghosting_enabled", False)),
-            osc_ghost_intensity=float(_get("osc_ghost_intensity", 0.4)),
-            osc_ghost_line2_enabled=bool(_get("osc_ghost_line2_enabled", True)),
-            osc_ghost_line3_enabled=bool(_get("osc_ghost_line3_enabled", True)),
-            osc_ghost_line4_enabled=bool(_get("osc_ghost_line4_enabled", True)),
-            osc_ghost_line5_enabled=bool(_get("osc_ghost_line5_enabled", True)),
-            osc_ghost_line6_enabled=bool(_get("osc_ghost_line6_enabled", True)),
-            sine_heartbeat=float(_get("sine_heartbeat", 0.0)),
-            # Bubble
-            bubble_big_bass_pulse=float(_get("bubble_big_bass_pulse", 0.5)),
-            bubble_small_freq_pulse=float(_get("bubble_small_freq_pulse", 0.5)),
-            bubble_stream_direction=str(_get("bubble_stream_direction", "up")),
-            bubble_stream_constant_speed=float(
-                _get("bubble_stream_constant_speed", _get("bubble_stream_speed", 0.6))
-            ),
-            bubble_stream_speed_cap=float(
-                _get("bubble_stream_speed_cap", _get("bubble_stream_speed", 1.0))
-            ),
-            bubble_stream_reactivity=float(_get("bubble_stream_reactivity", 0.5)),
-            bubble_rotation_amount=float(_get("bubble_rotation_amount", 0.5)),
-            bubble_drift_amount=float(_get("bubble_drift_amount", 0.5)),
-            bubble_drift_speed=float(_get("bubble_drift_speed", 0.5)),
-            bubble_drift_frequency=float(_get("bubble_drift_frequency", 0.5)),
-            bubble_drift_direction=str(_get("bubble_drift_direction", "random")),
-            bubble_big_count=int(_get("bubble_big_count", 8)),
-            bubble_small_count=int(_get("bubble_small_count", 25)),
-            bubble_surface_reach=float(_get("bubble_surface_reach", 0.6)),
-            bubble_bounce_big_pct=int(_get("bubble_bounce_big_pct", 70)),
-            bubble_bounce_small_pct=int(_get("bubble_bounce_small_pct", 30)),
-                bubble_bounce_big_speed=float(_get("bubble_bounce_big_speed", 0.8)),
-                bubble_bounce_small_speed=float(_get("bubble_bounce_small_speed", 0.5)),
-                bubble_bounce_same_only=bool(_get("bubble_bounce_same_only", False)),
-                bubble_collision_pop_mode=str(_get("bubble_collision_pop_mode", "off")).strip().lower(),
-            bubble_outline_color=_get("bubble_outline_color", [255, 255, 255, 230]),
-            bubble_specular_color=_get("bubble_specular_color", [255, 255, 255, 255]),
-            bubble_gradient_light=_get("bubble_gradient_light", [210, 170, 120, 255]),
-            bubble_gradient_dark=_get("bubble_gradient_dark", [80, 60, 50, 255]),
-            bubble_pop_color=_get("bubble_pop_color", [255, 255, 255, 180]),
-            bubble_specular_direction=normalize_bubble_specular_direction(
-                _get("bubble_specular_direction", "top_left"),
-            ),
-            bubble_gradient_direction=resolve_bubble_gradient_direction(
-                _get("bubble_gradient_direction", "top"),
-                semantics_version=bubble_gradient_semantics_version,
-                default="top",
-            ),
-            bubble_big_size_max=float(_get("bubble_big_size_max", 0.038)),
-            bubble_small_size_max=float(_get("bubble_small_size_max", 0.018)),
-            bubble_big_contraction_bias=float(_get("bubble_big_contraction_bias", 1.0)),
-            bubble_big_size_clamp=float(_get("bubble_big_size_clamp", 4.0)),
-            bubble_big_specular_max_size=float(_get("bubble_big_specular_max_size", 2.5)),
-            bubble_growth=float(_get("bubble_growth", 3.0)),
-            devcurve_growth=float(_get("devcurve_growth", 3.0)),
-            bubble_trail_strength=float(_get("bubble_trail_strength", 0.0)),
-            bubble_tail_opacity=float(_get("bubble_tail_opacity", 0.0)),
-            bubble_ghosting_enabled=bool(_get("bubble_ghosting_enabled", False)),
-            bubble_ghost_alpha=float(_get("bubble_ghost_alpha", 0.0)),
-            bubble_ghost_decay=float(_get("bubble_ghost_decay", 0.4)),
-            blob_glow_reactivity=float(_get("blob_glow_reactivity", 1.0)),
-            blob_glow_max_size=float(_get("blob_glow_max_size", 1.0)),
-            blob_ghosting_enabled=bool(_get("blob_ghosting_enabled", False)),
-            blob_ghost_alpha=float(_get("blob_ghost_alpha", 0.4)),
-            blob_ghost_decay=float(_get("blob_ghost_decay", 0.3)),
-            blob_shaper_enabled=bool(_get("blob_shaper_enabled", False)),
-            blob_shape_base_nodes=list(_get("blob_shape_base_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
-            blob_shape_reaction_nodes=list(_get("blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
-            blob_shape_energy_nodes=list(_get("blob_shape_energy_nodes", [])),
-            blob_shaper_base_strength=float(_get("blob_shaper_base_strength", 0.5)),
-            blob_shaper_react_strength=float(_get("blob_shaper_react_strength", 0.5)),
-            blob_shaper_idle_motion=float(_get("blob_shaper_idle_motion", 0.18)),
-            blob_shaper_audio_motion=float(_get("blob_shaper_audio_motion", 1.20)),
-            blob_topology=str(_get("blob_topology", "circle")),
-            blob_ring_thickness=float(_get("blob_ring_thickness", 0.3)),
-            blob_inward_liquid_enabled=bool(_get("blob_inward_liquid_enabled", False)),
-            blob_inward_liquid_reactivity=float(_get("blob_inward_liquid_reactivity", 1.0)),
-            blob_inward_liquid_max_size=float(_get("blob_inward_liquid_max_size", 0.28)),
-            blob_inward_liquid_color=_get("blob_inward_liquid_color", [170, 225, 255, 190]),
-            # Dev Curve
-            devcurve_active_layer=str(_get("devcurve_active_layer", "bass")),
-            devcurve_layer_bass_shape_nodes=list(_get("devcurve_layer_bass_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_vocals_shape_nodes=list(_get("devcurve_layer_vocals_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_mids_shape_nodes=list(_get("devcurve_layer_mids_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_layer_transients_shape_nodes=list(_get("devcurve_layer_transients_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
-            devcurve_base_level=float(_get("devcurve_base_level", 0.58)),
-            devcurve_motion_power=float(_get("devcurve_motion_power", 1.0)),
-            devcurve_idle_motion=float(_get("devcurve_idle_motion", 0.20)),
-            devcurve_idle_speed=float(_get("devcurve_idle_speed", 0.60)),
-            devcurve_smoothness=float(_get("devcurve_smoothness", 0.55)),
-            devcurve_layer_bass_enabled=bool(_get("devcurve_layer_bass_enabled", True)),
-            devcurve_layer_bass_color=_get("devcurve_layer_bass_color", [82, 167, 255, 230]),
-            devcurve_layer_bass_alpha=float(_get("devcurve_layer_bass_alpha", 0.55)),
-            devcurve_layer_bass_power=float(_get("devcurve_layer_bass_power", 1.0)),
-            devcurve_layer_bass_offset=float(_get("devcurve_layer_bass_offset", 0.0)),
-            devcurve_layer_bass_outline_color=_get("devcurve_layer_bass_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_bass_outline_width=float(_get("devcurve_layer_bass_outline_width", 0.006)),
-            devcurve_layer_bass_order=int(_get("devcurve_layer_bass_order", 1)),
-            devcurve_layer_vocals_enabled=bool(_get("devcurve_layer_vocals_enabled", True)),
-            devcurve_layer_vocals_color=_get("devcurve_layer_vocals_color", [136, 190, 255, 220]),
-            devcurve_layer_vocals_alpha=float(_get("devcurve_layer_vocals_alpha", 0.42)),
-            devcurve_layer_vocals_power=float(_get("devcurve_layer_vocals_power", 1.0)),
-            devcurve_layer_vocals_offset=float(_get("devcurve_layer_vocals_offset", -0.01)),
-            devcurve_layer_vocals_outline_color=_get("devcurve_layer_vocals_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_vocals_outline_width=float(_get("devcurve_layer_vocals_outline_width", 0.006)),
-            devcurve_layer_vocals_order=int(_get("devcurve_layer_vocals_order", 2)),
-            devcurve_layer_mids_enabled=bool(_get("devcurve_layer_mids_enabled", True)),
-            devcurve_layer_mids_color=_get("devcurve_layer_mids_color", [100, 145, 255, 220]),
-            devcurve_layer_mids_alpha=float(_get("devcurve_layer_mids_alpha", 0.46)),
-            devcurve_layer_mids_power=float(_get("devcurve_layer_mids_power", 1.0)),
-            devcurve_layer_mids_offset=float(_get("devcurve_layer_mids_offset", 0.01)),
-            devcurve_layer_mids_outline_color=_get("devcurve_layer_mids_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_mids_outline_width=float(_get("devcurve_layer_mids_outline_width", 0.006)),
-            devcurve_layer_mids_order=int(_get("devcurve_layer_mids_order", 3)),
-            devcurve_layer_transients_enabled=bool(_get("devcurve_layer_transients_enabled", True)),
-            devcurve_layer_transients_color=_get("devcurve_layer_transients_color", [215, 240, 255, 240]),
-            devcurve_layer_transients_alpha=float(_get("devcurve_layer_transients_alpha", 0.66)),
-            devcurve_layer_transients_power=float(_get("devcurve_layer_transients_power", 1.15)),
-            devcurve_layer_transients_offset=float(_get("devcurve_layer_transients_offset", 0.0)),
-            devcurve_layer_transients_outline_color=_get("devcurve_layer_transients_outline_color", [255, 255, 255, 255]),
-            devcurve_layer_transients_outline_width=float(_get("devcurve_layer_transients_outline_width", 0.006)),
-            devcurve_layer_transients_order=int(_get("devcurve_layer_transients_order", 4)),
-            devcurve_ghosting_enabled=bool(_get("devcurve_ghosting_enabled", False)),
-            devcurve_ghost_alpha=float(_get("devcurve_ghost_alpha", 0.0)),
-            devcurve_ghost_decay=float(_get("devcurve_ghost_decay", 0.4)),
-            devcurve_foreground_shadow_enabled=bool(_get("devcurve_foreground_shadow_enabled", False)),
-            devcurve_foreground_shadow_alpha=float(_get("devcurve_foreground_shadow_alpha", 0.36)),
-            devcurve_foreground_shadow_darken=float(_get("devcurve_foreground_shadow_darken", 0.42)),
-            devcurve_foreground_shadow_offset=float(_get("devcurve_foreground_shadow_offset", 0.10)),
-            devcurve_foreground_specular_enabled=bool(_get("devcurve_foreground_specular_enabled", False)),
-            devcurve_foreground_specular_alpha=float(_get("devcurve_foreground_specular_alpha", 0.78)),
-            devcurve_foreground_specular_width=float(_get("devcurve_foreground_specular_width", 0.022)),
-            devcurve_foreground_specular_offset=float(_get("devcurve_foreground_specular_offset", 0.028)),
-            devcurve_foreground_specular_crest_bias=float(_get("devcurve_foreground_specular_crest_bias", 1.05)),
-            sine_line_dim=bool(_get("sine_line_dim", False)),
-            **_preset_kwargs,
-            **_mode_kwargs,
-            **_mode_visual_kwargs,
+            **_build_visualizer_model_kwargs(
+                _get,
+                active_mode=_mode,
+                bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+                active_technical=_active_technical,
+                active_visuals=_active_visuals,
+                rainbow_kwargs=_rainbow_kwargs,
+                preset_kwargs={**_preset_kwargs, **_mode_kwargs, **_mode_visual_kwargs},
+                bubble_stream_constant_speed_default=0.6,
+                bubble_stream_speed_cap_default=1.0,
+            )
         )
 
     def to_dict(self, prefix: str = "widgets.spotify_visualizer") -> Dict[str, Any]:
@@ -1516,7 +1296,54 @@ class SpotifyVisualizerSettings:
             f"{prefix}.blob_inward_liquid_reactivity": float(self.blob_inward_liquid_reactivity),
             f"{prefix}.blob_inward_liquid_max_size": float(self.blob_inward_liquid_max_size),
             f"{prefix}.blob_inward_liquid_color": list(self.blob_inward_liquid_color),
-            # Dev Curve
+            f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
+        }
+        data.update(self._serialize_devcurve_settings(prefix))
+        data.update(self._serialize_preset_indices(prefix))
+        data.update(self._serialize_per_mode_technical_settings(prefix))
+        data.update(self._serialize_transient_mix_settings(prefix))
+
+        return data
+
+    def _serialize_preset_indices(self, prefix: str) -> Dict[str, int]:
+        return {
+            f"{prefix}.{get_preset_key(mode_id)}": int(getattr(self, get_preset_key(mode_id)))
+            for mode_id in VISUALIZER_MODE_IDS
+        }
+
+    def _serialize_transient_mix_settings(self, prefix: str) -> Dict[str, float]:
+        return {
+            f"{prefix}.spectrum_lane_transient_mix": float(self.spectrum_lane_transient_mix),
+            f"{prefix}.bubble_transient_mix_bass": float(self.bubble_transient_mix_bass),
+            f"{prefix}.bubble_transient_mix_vocal": float(self.bubble_transient_mix_vocal),
+            f"{prefix}.blob_transient_mix_bass": float(self.blob_transient_mix_bass),
+            f"{prefix}.blob_transient_mix_vocal": float(self.blob_transient_mix_vocal),
+            f"{prefix}.sine_wave_transient_width_mix": float(self.sine_wave_transient_width_mix),
+            f"{prefix}.oscilloscope_transient_width_mix": float(self.oscilloscope_transient_width_mix),
+        }
+
+    def _serialize_per_mode_technical_settings(self, prefix: str) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        for mode_name in PER_MODE_TECHNICAL_MODES:
+            data[f"{prefix}.{mode_name}_bar_fill_color"] = list(getattr(self, f"{mode_name}_bar_fill_color"))
+            data[f"{prefix}.{mode_name}_bar_border_color"] = list(getattr(self, f"{mode_name}_bar_border_color"))
+            data[f"{prefix}.{mode_name}_bar_border_opacity"] = float(getattr(self, f"{mode_name}_bar_border_opacity"))
+            data[f"{prefix}.{mode_name}_dynamic_floor"] = bool(getattr(self, f"{mode_name}_dynamic_floor"))
+            data[f"{prefix}.{mode_name}_manual_floor"] = float(getattr(self, f"{mode_name}_manual_floor"))
+            data[f"{prefix}.{mode_name}_dynamic_range_enabled"] = bool(getattr(self, f"{mode_name}_dynamic_range_enabled"))
+            data[f"{prefix}.{mode_name}_agc_strength"] = float(getattr(self, f"{mode_name}_agc_strength"))
+            data[f"{prefix}.{mode_name}_input_gain"] = float(getattr(self, f"{mode_name}_input_gain"))
+            data[f"{prefix}.{mode_name}_kick_lane_gain"] = float(getattr(self, f"{mode_name}_kick_lane_gain"))
+            data[f"{prefix}.{mode_name}_transient_pulse_gain"] = float(getattr(self, f"{mode_name}_transient_pulse_gain"))
+            data[f"{prefix}.{mode_name}_transient_clamp"] = float(getattr(self, f"{mode_name}_transient_clamp"))
+            data[f"{prefix}.{mode_name}_audio_block_size"] = int(getattr(self, f"{mode_name}_audio_block_size"))
+            data[f"{prefix}.{mode_name}_adaptive_sensitivity"] = bool(getattr(self, f"{mode_name}_adaptive_sensitivity"))
+            data[f"{prefix}.{mode_name}_sensitivity"] = float(getattr(self, f"{mode_name}_sensitivity"))
+            data[f"{prefix}.{mode_name}_bar_count"] = int(getattr(self, f"{mode_name}_bar_count"))
+        return data
+
+    def _serialize_devcurve_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.devcurve_active_layer": str(self.devcurve_active_layer),
             f"{prefix}.devcurve_layer_bass_shape_nodes": list(self.devcurve_layer_bass_shape_nodes),
             f"{prefix}.devcurve_layer_vocals_shape_nodes": list(self.devcurve_layer_vocals_shape_nodes),
@@ -1532,7 +1359,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_layer_bass_alpha": float(self.devcurve_layer_bass_alpha),
             f"{prefix}.devcurve_layer_bass_power": float(self.devcurve_layer_bass_power),
             f"{prefix}.devcurve_layer_bass_offset": float(self.devcurve_layer_bass_offset),
-            f"{prefix}.devcurve_layer_bass_outline_color": [int(self.devcurve_layer_bass_outline_color[0]), int(self.devcurve_layer_bass_outline_color[1]), int(self.devcurve_layer_bass_outline_color[2]), 255],
+            f"{prefix}.devcurve_layer_bass_outline_color": _serialize_outline_rgb(self.devcurve_layer_bass_outline_color),
             f"{prefix}.devcurve_layer_bass_outline_width": float(self.devcurve_layer_bass_outline_width),
             f"{prefix}.devcurve_layer_bass_order": int(self.devcurve_layer_bass_order),
             f"{prefix}.devcurve_layer_vocals_enabled": bool(self.devcurve_layer_vocals_enabled),
@@ -1540,7 +1367,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_layer_vocals_alpha": float(self.devcurve_layer_vocals_alpha),
             f"{prefix}.devcurve_layer_vocals_power": float(self.devcurve_layer_vocals_power),
             f"{prefix}.devcurve_layer_vocals_offset": float(self.devcurve_layer_vocals_offset),
-            f"{prefix}.devcurve_layer_vocals_outline_color": [int(self.devcurve_layer_vocals_outline_color[0]), int(self.devcurve_layer_vocals_outline_color[1]), int(self.devcurve_layer_vocals_outline_color[2]), 255],
+            f"{prefix}.devcurve_layer_vocals_outline_color": _serialize_outline_rgb(self.devcurve_layer_vocals_outline_color),
             f"{prefix}.devcurve_layer_vocals_outline_width": float(self.devcurve_layer_vocals_outline_width),
             f"{prefix}.devcurve_layer_vocals_order": int(self.devcurve_layer_vocals_order),
             f"{prefix}.devcurve_layer_mids_enabled": bool(self.devcurve_layer_mids_enabled),
@@ -1548,7 +1375,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_layer_mids_alpha": float(self.devcurve_layer_mids_alpha),
             f"{prefix}.devcurve_layer_mids_power": float(self.devcurve_layer_mids_power),
             f"{prefix}.devcurve_layer_mids_offset": float(self.devcurve_layer_mids_offset),
-            f"{prefix}.devcurve_layer_mids_outline_color": [int(self.devcurve_layer_mids_outline_color[0]), int(self.devcurve_layer_mids_outline_color[1]), int(self.devcurve_layer_mids_outline_color[2]), 255],
+            f"{prefix}.devcurve_layer_mids_outline_color": _serialize_outline_rgb(self.devcurve_layer_mids_outline_color),
             f"{prefix}.devcurve_layer_mids_outline_width": float(self.devcurve_layer_mids_outline_width),
             f"{prefix}.devcurve_layer_mids_order": int(self.devcurve_layer_mids_order),
             f"{prefix}.devcurve_layer_transients_enabled": bool(self.devcurve_layer_transients_enabled),
@@ -1556,7 +1383,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_layer_transients_alpha": float(self.devcurve_layer_transients_alpha),
             f"{prefix}.devcurve_layer_transients_power": float(self.devcurve_layer_transients_power),
             f"{prefix}.devcurve_layer_transients_offset": float(self.devcurve_layer_transients_offset),
-            f"{prefix}.devcurve_layer_transients_outline_color": [int(self.devcurve_layer_transients_outline_color[0]), int(self.devcurve_layer_transients_outline_color[1]), int(self.devcurve_layer_transients_outline_color[2]), 255],
+            f"{prefix}.devcurve_layer_transients_outline_color": _serialize_outline_rgb(self.devcurve_layer_transients_outline_color),
             f"{prefix}.devcurve_layer_transients_outline_width": float(self.devcurve_layer_transients_outline_width),
             f"{prefix}.devcurve_layer_transients_order": int(self.devcurve_layer_transients_order),
             f"{prefix}.devcurve_ghosting_enabled": self.devcurve_ghosting_enabled,
@@ -1571,38 +1398,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.devcurve_foreground_specular_width": float(self.devcurve_foreground_specular_width),
             f"{prefix}.devcurve_foreground_specular_offset": float(self.devcurve_foreground_specular_offset),
             f"{prefix}.devcurve_foreground_specular_crest_bias": float(self.devcurve_foreground_specular_crest_bias),
-            f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
-            **{
-                f"{prefix}.{get_preset_key(mode_id)}": int(getattr(self, get_preset_key(mode_id)))
-                for mode_id in VISUALIZER_MODE_IDS
-            },
         }
-
-        for _mode in PER_MODE_TECHNICAL_MODES:
-            data[f"{prefix}.{_mode}_bar_fill_color"] = list(getattr(self, f"{_mode}_bar_fill_color"))
-            data[f"{prefix}.{_mode}_bar_border_color"] = list(getattr(self, f"{_mode}_bar_border_color"))
-            data[f"{prefix}.{_mode}_bar_border_opacity"] = float(getattr(self, f"{_mode}_bar_border_opacity"))
-            data[f"{prefix}.{_mode}_dynamic_floor"] = bool(getattr(self, f"{_mode}_dynamic_floor"))
-            data[f"{prefix}.{_mode}_manual_floor"] = float(getattr(self, f"{_mode}_manual_floor"))
-            data[f"{prefix}.{_mode}_dynamic_range_enabled"] = bool(getattr(self, f"{_mode}_dynamic_range_enabled"))
-            data[f"{prefix}.{_mode}_agc_strength"] = float(getattr(self, f"{_mode}_agc_strength"))
-            data[f"{prefix}.{_mode}_input_gain"] = float(getattr(self, f"{_mode}_input_gain"))
-            data[f"{prefix}.{_mode}_kick_lane_gain"] = float(getattr(self, f"{_mode}_kick_lane_gain"))
-            data[f"{prefix}.{_mode}_transient_pulse_gain"] = float(getattr(self, f"{_mode}_transient_pulse_gain"))
-            data[f"{prefix}.{_mode}_transient_clamp"] = float(getattr(self, f"{_mode}_transient_clamp"))
-            data[f"{prefix}.{_mode}_audio_block_size"] = int(getattr(self, f"{_mode}_audio_block_size"))
-            data[f"{prefix}.{_mode}_adaptive_sensitivity"] = bool(getattr(self, f"{_mode}_adaptive_sensitivity"))
-            data[f"{prefix}.{_mode}_sensitivity"] = float(getattr(self, f"{_mode}_sensitivity"))
-            data[f"{prefix}.{_mode}_bar_count"] = int(getattr(self, f"{_mode}_bar_count"))
-        data[f"{prefix}.spectrum_lane_transient_mix"] = float(self.spectrum_lane_transient_mix)
-        data[f"{prefix}.bubble_transient_mix_bass"] = float(self.bubble_transient_mix_bass)
-        data[f"{prefix}.bubble_transient_mix_vocal"] = float(self.bubble_transient_mix_vocal)
-        data[f"{prefix}.blob_transient_mix_bass"] = float(self.blob_transient_mix_bass)
-        data[f"{prefix}.blob_transient_mix_vocal"] = float(self.blob_transient_mix_vocal)
-        data[f"{prefix}.sine_wave_transient_width_mix"] = float(self.sine_wave_transient_width_mix)
-        data[f"{prefix}.oscilloscope_transient_width_mix"] = float(self.oscilloscope_transient_width_mix)
-
-        return data
 
     @staticmethod
     def _normalize_mode_name(mode: str) -> str:

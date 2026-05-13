@@ -295,6 +295,15 @@ class _FakeEngine:
         self._latest_generation_with_waveform = self._generation_id - 1
 
 
+def _patch_shared_engine(monkeypatch, provider: Callable[..., object]) -> None:
+    """Patch both widget-local and extracted beat-engine resolution seams."""
+
+    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", provider)
+    import widgets.spotify_visualizer.beat_engine as beat_engine_mod
+
+    monkeypatch.setattr(beat_engine_mod, "get_shared_spotify_beat_engine", provider)
+
+
 @pytest.mark.qt
 def test_resize_bar_buffers_reuses_existing_engine_and_reconfigures_bar_count(qt_app, qtbot, monkeypatch):
     parent = QWidget()
@@ -758,10 +767,12 @@ def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatc
     widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
+    widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
     assert widget._waiting_for_fresh_engine_frame is True
-    assert widget._pending_engine_generation == fake_engine.get_generation_id()
+    assert widget._pending_engine_generation == widget._mode_teardown_target_generation
+    assert fake_engine.get_latest_generation_with_frame() < widget._pending_engine_generation
 
     parent.reset_pushes()
     widget._on_tick()
@@ -777,17 +788,48 @@ def test_mode_switch_waits_for_fresh_engine_generation(qt_app, qtbot, monkeypatc
 
 
 @pytest.mark.qt
+def test_fresh_engine_frame_gate_blocks_gpu_push_after_mode_reset(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget._spotify_playing = True
+    widget.start()
+    qt_app.processEvents()
+    widget._engine = fake_engine
+
+    widget._prepare_engine_for_mode_reset()
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert widget._pending_engine_generation == widget._mode_teardown_target_generation
+    assert fake_engine.get_latest_generation_with_frame() < widget._pending_engine_generation
+
+    parent.reset_pushes()
+    widget._on_tick()
+
+    assert parent.frames == []
+    assert widget._waiting_for_fresh_engine_frame is True
+
+    fake_engine.publish_frame([0.66] * widget._bar_count)
+    widget._on_tick()
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert parent.frames, "GPU push should stay blocked until a fresh post-reset engine frame publishes"
+
+
+@pytest.mark.qt
 def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=8)
     fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
@@ -795,16 +837,19 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
     widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
+    widget._engine = fake_engine
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
     parent.reset_pushes()
-    fake_engine._latest_generation_with_frame = fake_engine.get_generation_id()
+    assert widget._pending_engine_generation == widget._mode_teardown_target_generation
+    fake_engine._latest_generation_with_frame = widget._pending_engine_generation
+    fake_engine._latest_generation_with_waveform = widget._pending_engine_generation - 1
     widget._on_tick()
 
     assert widget._waiting_for_fresh_engine_frame is True
     assert parent.frames == []
 
-    fake_engine.publish_waveform_only()
+    fake_engine._latest_generation_with_waveform = widget._pending_engine_generation
     widget._on_tick()
 
     assert widget._waiting_for_fresh_engine_frame is False
@@ -1815,11 +1860,7 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
 
     fake_engine = _FakeEngine(bar_count=8)
     fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
@@ -1827,6 +1868,7 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
     widget._spotify_playing = True
     widget.start()
     qt_app.processEvents()
+    widget._engine = fake_engine
 
     modes = [
         VisualizerMode.OSCILLOSCOPE,
@@ -1839,6 +1881,7 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
     for idx, mode in enumerate(modes):
         parent.reset_pushes()
         widget.set_visualization_mode(mode)
+        widget._engine = fake_engine
 
         assert widget._waiting_for_fresh_engine_frame is True
         widget._on_tick()
@@ -1859,11 +1902,7 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
 
     fake_engine = _FakeEngine()
 
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     widget = SpotifyVisualizerWidget(parent=None, bar_count=12)
     qtbot.addWidget(widget)
@@ -1911,8 +1950,10 @@ def test_blob_crossover_waits_for_fresh_engine_frame(qt_app, qtbot, monkeypatch)
     widget.set_visualization_mode(VisualizerMode.SPECTRUM)
     widget.start()
     qt_app.processEvents()
+    widget._engine = fake_engine
 
     widget.set_visualization_mode(VisualizerMode.BLOB)
+    widget._engine = fake_engine
     widget._reset_engine_state(reason="test_crossover")
     widget._track_engine_generation(fake_engine)
 
@@ -1995,7 +2036,7 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
     widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
     qtbot.addWidget(widget)
 
-    monkeypatch.setattr(vis_mod, "is_perf_metrics_enabled", lambda: True)
+    monkeypatch.setattr(vis_mod, "is_perf_metrics_enabled", lambda: True, raising=False)
     # Also patch the extracted tick_helpers module where log_perf_snapshot now lives
     import widgets.spotify_visualizer.tick_helpers as _th_mod
     monkeypatch.setattr(_th_mod, "is_perf_metrics_enabled", lambda: True)
@@ -2334,7 +2375,7 @@ def test_spotify_visualizer_secondary_stage_defers_hot_start_until_triggered(qt_
             return _FakeTimer()
 
     fake_engine = _FakeEngine(bar_count=14)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=14)
     vis.set_thread_manager(_FakeThreadManager())
@@ -2384,7 +2425,7 @@ def test_spotify_visualizer_self_registers_secondary_stage_when_parent_supports_
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=12)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=12)
     vis.set_anchor_media_widget(anchor)
@@ -2417,7 +2458,7 @@ def test_spotify_visualizer_first_fresh_frame_finishes_staged_reveal(qt_app, qtb
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2452,7 +2493,7 @@ def test_spotify_visualizer_anchor_visibility_can_release_secondary_stage(qt_app
     anchor = QWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2489,7 +2530,7 @@ def test_spotify_visualizer_anchor_sync_respects_parent_secondary_stage_deadline
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2534,7 +2575,7 @@ def test_spotify_visualizer_secondary_stage_prewarms_overlay_before_reveal(qt_ap
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2542,7 +2583,9 @@ def test_spotify_visualizer_secondary_stage_prewarms_overlay_before_reveal(qt_ap
     monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
 
     prewarm_calls: list[str] = []
-    monkeypatch.setattr(vis, "_prewarm_parent_overlay", lambda: prewarm_calls.append("prewarm"))
+    import widgets.spotify_visualizer.startup_staging as startup_staging_mod
+
+    monkeypatch.setattr(startup_staging_mod, "prewarm_parent_overlay", lambda widget: prewarm_calls.append("prewarm"))
 
     vis.start()
     vis.begin_spotify_secondary_stage()
@@ -2564,7 +2607,7 @@ def test_spotify_visualizer_fresh_frame_waits_for_minimum_reveal_delay(qt_app, q
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2601,7 +2644,7 @@ def test_spotify_visualizer_fresh_frame_schedules_ready_driven_reveal_after_min_
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2663,7 +2706,7 @@ def test_spotify_visualizer_fallback_reveal_waits_for_playing_state_when_startup
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2709,7 +2752,7 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2808,7 +2851,7 @@ def test_spotify_visualizer_defers_wake_until_staged_hot_start(qt_app, qtbot, mo
     anchor = QWidget(parent)
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2861,7 +2904,7 @@ def test_spotify_visualizer_start_seeds_playback_from_anchor_cache(qt_app, qtbot
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
@@ -2896,7 +2939,7 @@ def test_spotify_visualizer_start_requests_media_refresh_when_anchor_cache_missi
     anchor.show()
 
     fake_engine = _FakeEngine(bar_count=10)
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", lambda *_: fake_engine)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)

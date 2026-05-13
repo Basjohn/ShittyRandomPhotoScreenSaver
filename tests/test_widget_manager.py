@@ -517,6 +517,44 @@ class TestStartupCoordination:
         manager.register_spotify_secondary_fade(lambda: None)
         assert scheduled == [1234]
 
+    def test_startup_staging_fires_secondary_reveal_through_coordinator(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+
+        class _Widget:
+            def __init__(self):
+                self.begin_calls = 0
+                self.sync_calls = 0
+                self._spotify_secondary_stage_registered = False
+                self._anchor_media = None
+
+            def objectName(self):
+                return "spotify_visualizer"
+
+            def begin_spotify_secondary_stage(self):
+                self.begin_calls += 1
+
+            def sync_visibility_with_anchor(self):
+                self.sync_calls += 1
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        widget = _Widget()
+
+        starters = []
+        monkeypatch.setattr(manager, "register_spotify_secondary_fade", lambda starter: starters.append(starter))
+
+        manager._register_spotify_secondary_fade(widget)
+
+        assert widget._spotify_secondary_stage_registered is True
+        assert len(starters) == 1
+        assert widget.begin_calls == 0
+        assert widget.sync_calls == 0
+
+        starters[0]()
+
+        assert widget.begin_calls == 1
+        assert widget.sync_calls == 0
+
     def test_reset_fade_coordination_clears_spotify_overlay_prewarm_flags(self):
         from rendering.widget_manager import WidgetManager
 
