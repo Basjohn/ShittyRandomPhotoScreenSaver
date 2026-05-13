@@ -1,5 +1,7 @@
 """Tests for Spotify visualizer mode transition logic."""
 
+import pytest
+
 
 def test_on_mode_fade_out_complete_clears_bar_arrays_before_prepare_engine_reset(monkeypatch):
     """Prove the old-mode display bars cannot survive into prepare_engine_for_mode_reset()."""
@@ -167,8 +169,31 @@ def test_prepare_engine_for_mode_reset_does_not_call_replay_engine_config():
 
 
 def test_stale_activation_frame_cannot_commit_display_bars_after_mode_reset():
-    """Prove an old activation cannot write bars after a mode reset."""
+    """Prove an old activation/generation cannot write bars after a mode reset."""
     from widgets.spotify_visualizer.mode_transition import reset_mode_owned_runtime_state
+    from widgets.spotify_visualizer.tick_pipeline import consume_engine_bars
+
+    class FakeEngine:
+        def __init__(self):
+            self._latest_generation_with_frame = 4
+            self._generation_id = 4
+            self._activation_id = 2
+            self._smoothed = [0.9, 0.8, 0.7, 0.6]
+
+        def tick(self):
+            return None
+
+        def get_latest_generation_with_frame(self):
+            return self._latest_generation_with_frame
+
+        def get_activation_id(self):
+            return self._activation_id
+
+        def get_smoothed_bars(self):
+            return list(self._smoothed)
+
+        def get_generation_id(self):
+            return self._generation_id
 
     class FakeWidget:
         _bar_count = 4
@@ -186,27 +211,47 @@ def test_stale_activation_frame_cannot_commit_display_bars_after_mode_reset():
         _visual_bars_source_activation = 2
         _per_bar_energy_source_generation = 2
         _per_bar_energy_source_activation = 2
+        _has_pushed_first_frame = False
+        _last_gpu_geom = None
+        _last_gpu_fade_sent = -1.0
+        _bubble_simulation = None
+        _spotify_playing = True
+        _vis_mode_str = "spectrum"
+        _waiting_for_fresh_engine_frame = True
+        _pending_engine_generation = 5
+        _pending_engine_activation_id = 3
+        _latency_pending_probe = []
+        _engine = FakeEngine()
+
+        def _log_audio_latency_metrics(self, engine, now_ts, force_reason=None):
+            return None
 
     widget = FakeWidget()
 
-    # Simulate mode reset (advances to activation 3)
     reset_mode_owned_runtime_state(widget, reason="mode_reset")
 
-    # All source fields should be -1 after reset
     assert widget._display_bars_source_activation == -1
     assert widget._target_bars_source_activation == -1
     assert widget._visual_bars_source_activation == -1
     assert widget._per_bar_energy_source_activation == -1
 
-    # Simulate a stale frame from activation 2 trying to commit
-    # In a real implementation, this would be rejected by checking the source activation
-    # against the current engine activation before writing bars
+    changed, any_nonzero = consume_engine_bars(widget, now_ts=100.0)
 
-    # The test proves that after reset, source fields are -1
-    # Any write should update them to the current activation
-    # If a stale write occurs, it would set them back to the old activation
-    # which would be detectable in logs via the RENDER_STATE snapshot
+    assert changed is False
+    assert any_nonzero is False
+    assert widget._display_bars == [0.0, 0.0, 0.0, 0.0]
+    assert widget._display_bars_source_activation == -1
+    assert widget._waiting_for_fresh_engine_frame is True
 
-    # For now, this test verifies the reset clears source fields
-    # The actual rejection logic would be in the tick pipeline when writing bars
+    widget._engine._latest_generation_with_frame = 5
+    widget._engine._generation_id = 5
+    widget._engine._activation_id = 3
 
+    changed, any_nonzero = consume_engine_bars(widget, now_ts=101.0)
+
+    assert changed is True
+    assert any_nonzero is True
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._display_bars == pytest.approx([0.9, 0.8, 0.7, 0.6])
+    assert widget._display_bars_source_generation == 5
+    assert widget._display_bars_source_activation == 3

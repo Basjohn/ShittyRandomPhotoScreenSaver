@@ -21,10 +21,15 @@ from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
 from widgets.spotify_visualizer.blob_pockets import (
     advance_blob_pocket_state,
     make_blob_pocket_state,
-    reset_blob_pocket_state,
 )
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
+)
+from widgets.spotify_visualizer.overlay_state import (
+    apply_state_handoff,
+    request_mode_reset as request_overlay_mode_reset,
+    reset_blob_state as reset_overlay_blob_state,
+    reset_mode_state as reset_overlay_mode_state,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
@@ -429,110 +434,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
     def request_mode_reset(self, mode: str) -> None:
         """Schedule a manual reset for ``mode`` prior to the next frame push."""
-
-        if not mode:
-            return
-        normalized = mode.lower()
-        valid_modes = {
-            'spectrum',
-            'oscilloscope',
-            'blob',
-            'sine_wave',
-            'bubble',
-            'devcurve',
-        }
-        if normalized not in valid_modes:
-            return
-        self._pending_mode_resets.add(normalized)
+        request_overlay_mode_reset(self, mode)
 
     def _reset_mode_state(self, mode: str, *, reason: str) -> None:
         """Cold-reset per-mode accumulators so the next frame behaves like a fresh start."""
-
-        mode_key = mode.lower() if mode else 'spectrum'
-        self._accumulated_time = 0.0
-        self._last_time_ts = 0.0
-        self._peaks = []
-        self._last_peak_ts = 0.0
-
-        # Reset every mode bucket, not only the incoming mode. Runtime mode
-        # switches and preset hops share one overlay object, while settings
-        # round-trips recreate it. Clearing all transient buckets preserves
-        # that restart-like isolation without changing authored settings.
-        self.reset_blob_state()
-        self._waveform = []
-        self._prev_waveform = []
-        self._ghost_waveform_ring = []
-        self._ghost_ring_idx = 0
-        self._waveform_count = 0
-        self._line_smoothed_bass = 0.0
-        self._line_smoothed_mid = 0.0
-        self._line_smoothed_high = 0.0
-        self._line_kick_event_strength = 0.0
-        self._line_snare_event_strength = 0.0
-        self._line_kick_event_envelope = 0.0
-        self._line_snare_event_envelope = 0.0
-        self._sine_peak_bass = 0.0
-        self._sine_peak_mid = 0.0
-        self._sine_peak_high = 0.0
-        self._sine_peak_hold_remaining = 0.0
-        self._bubble_pos_data = []
-        self._bubble_extra_data = []
-        self._bubble_trail_data = []
-        self._bubble_count = 0
-        self._devcurve_curve_bass = []
-        self._devcurve_curve_vocals = []
-        self._devcurve_curve_mids = []
-        self._devcurve_curve_transients = []
-        self._devcurve_sample_count = 0
-        self._devcurve_foreground_layer_id = -1
-        self._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
-        self._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
-        self._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
-        self._last_vis_mode = None
-
-        logger.info(
-            "[SPOTIFY_VIS][OVERLAY][RESET] mode=%s reason=%s",
-            mode_key,
-            reason,
-        )
-        self._last_reset_mode = mode_key
-        self._last_reset_reason = reason
-        try:
-            self._last_reset_ts = time.time()
-        except Exception:
-            self._last_reset_ts = 0.0
+        reset_overlay_mode_state(self, mode, reason=reason)
 
     def reset_blob_state(self) -> None:
-        if not hasattr(self, "_blob_smoothed_energy"):
-            self._blob_smoothed_energy = 0.0
-        else:
-            self._blob_smoothed_energy = 0.0
-        self._blob_glow_energy = 0.0
-        self._blob_raw_bass_energy = 0.0
-        self._blob_raw_mid_energy = 0.0
-        self._blob_raw_high_energy = 0.0
-        self._blob_raw_overall_energy = 0.0
-        self._blob_live_bass_energy = 0.0
-        self._blob_live_mid_energy = 0.0
-        self._blob_live_high_energy = 0.0
-        self._blob_live_overall_energy = 0.0
-        self._blob_peak_energy = 0.0
-        self._blob_peak_bass = 0.0
-        self._blob_peak_mid = 0.0
-        self._blob_peak_high = 0.0
-        self._blob_peak_overall = 0.0
-        self._blob_peak_hold_remaining = 0.0
-        self._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
-        self._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
-        self._blob_stage_progress_ready = False
-        self._blob_seed_pending = True
-        self._blob_kick_event_strength = 0.0
-        self._blob_snare_event_strength = 0.0
-        self._blob_kick_event_envelope = 0.0
-        self._blob_snare_event_envelope = 0.0
-        self._blob_pocket_state = reset_blob_pocket_state(getattr(self, "_blob_pocket_state", None))
-        self._blob_diag_last_ts = 0.0
-        self._blob_diag_last_sig = None
+        reset_overlay_blob_state(self)
 
     # ------------------------------------------------------------------
     # Public API
@@ -765,33 +674,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ``SpotifyVisualizerWidget``.
         """
 
-        if not visible:
-            self.clear_overlay_buffer()
+        if not apply_state_handoff(
+            self,
+            visible=visible,
+            vis_mode=vis_mode,
+            activation_id=activation_id,
+            engine_generation=engine_generation,
+            latest_frame_generation=latest_frame_generation,
+            latest_waveform_generation=latest_waveform_generation,
+            floor_snapshot=floor_snapshot,
+            border_width_px=border_width_px,
+        ):
             return
-
-        self._activation_id = activation_id
-        self._engine_generation = engine_generation
-        self._latest_frame_generation = latest_frame_generation
-        self._latest_waveform_generation = latest_waveform_generation
-        self._apply_floor_snapshot(floor_snapshot)
-
-        # Set active visualizer mode
-        prev_mode = self._vis_mode
-        from core.settings.visualizer_mode_registry import is_mode_active, get_default_visualizer_mode_id
-        requested_mode = vis_mode if is_mode_active(vis_mode) else get_default_visualizer_mode_id()
-        self._vis_mode = requested_mode
-        manual_reset = False
-        if requested_mode in self._pending_mode_resets:
-            manual_reset = True
-            self._pending_mode_resets.discard(requested_mode)
-        if prev_mode != self._vis_mode or manual_reset:
-            reason = "mode_change" if prev_mode != self._vis_mode else "manual_reset"
-            self._reset_mode_state(self._vis_mode, reason=reason)
-            self._last_vis_mode = self._vis_mode
-        try:
-            self._border_width_px = max(0.0, float(border_width_px))
-        except Exception:
-            self._border_width_px = 0.0
 
         try:
             self._sine_density = float(sine_density)

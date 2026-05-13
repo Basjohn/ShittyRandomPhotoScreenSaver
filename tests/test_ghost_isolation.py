@@ -1142,6 +1142,16 @@ class TestSpectrumGlowUniforms:
 
 class TestOverlayModeResetIsolation:
     @pytest.mark.qt
+    def test_request_mode_reset_ignores_unknown_modes(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+
+        overlay.request_mode_reset("not_a_real_mode")
+
+        assert overlay._pending_mode_resets == set()
+
+    @pytest.mark.qt
     def test_spectrum_mode_change_clears_shared_peak_history(self, qt_app):
         from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
@@ -1168,7 +1178,7 @@ class TestOverlayModeResetIsolation:
         assert overlay._last_peak_ts > 0.0
 
     @pytest.mark.qt
-    def test_non_spectrum_modes_do_not_mutate_spectrum_peak_history(self, qt_app):
+    def test_non_spectrum_mode_change_clears_spectrum_peak_history(self, qt_app):
         from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
         overlay = SpotifyBarsGLOverlay(None)
@@ -1186,13 +1196,14 @@ class TestOverlayModeResetIsolation:
             fade=1.0,
             playing=True,
             visible=True,
-            vis_mode="blob",
-            energy_bands=SimpleNamespace(bass=0.2, mid=0.1, high=0.05, overall=0.18),
+            vis_mode="devcurve",
+            devcurve_sample_count=4,
+            devcurve_curve_bass=[0.2, 0.3, 0.2, 0.1],
         )
 
-        assert overlay._vis_mode == "blob"
-        assert overlay._peaks == pytest.approx([0.6, 0.4, 0.2])
-        assert overlay._last_peak_ts == pytest.approx(42.0)
+        assert overlay._vis_mode == "devcurve"
+        assert overlay._peaks == []
+        assert overlay._last_peak_ts == pytest.approx(0.0)
 
     @pytest.mark.qt
     def test_line_mode_reset_clears_waveform_count_and_buffers(self, qt_app):
@@ -1257,6 +1268,52 @@ class TestOverlayModeResetIsolation:
         assert overlay._line_snare_event_strength == pytest.approx(0.0)
         assert overlay._line_kick_event_envelope == pytest.approx(0.0)
         assert overlay._line_snare_event_envelope == pytest.approx(0.0)
+
+    @pytest.mark.qt
+    def test_manual_overlay_reset_clears_mode_runtime_and_tracks_generation_handoff(self, qt_app):
+        from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+
+        overlay = SpotifyBarsGLOverlay(None)
+        overlay._vis_mode = "devcurve"
+        overlay._waveform = [0.4] * 8
+        overlay._prev_waveform = [0.2] * 8
+        overlay._bubble_count = 5
+        overlay._blob_smoothed_energy = 0.9
+        overlay._line_kick_event_strength = 0.8
+
+        overlay.request_mode_reset("devcurve")
+        overlay.set_state(
+            rect=QRect(0, 0, 320, 180),
+            bars=[0.2, 0.3, 0.4],
+            bar_count=3,
+            segments=4,
+            fill_color=QColor(255, 255, 255),
+            border_color=QColor(255, 255, 255),
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode="devcurve",
+            devcurve_sample_count=4,
+            devcurve_curve_bass=[0.2, 0.3, 0.4, 0.3],
+            activation_id=11,
+            engine_generation=17,
+            latest_frame_generation=17,
+            latest_waveform_generation=16,
+            border_width_px=3.5,
+        )
+
+        assert overlay._vis_mode == "devcurve"
+        assert overlay._last_reset_mode == "devcurve"
+        assert overlay._last_reset_reason == "manual_reset"
+        assert overlay._pending_mode_resets == set()
+        assert overlay._waveform == []
+        assert overlay._prev_waveform == []
+        assert overlay._bubble_count == 0
+        assert overlay._activation_id == 11
+        assert overlay._engine_generation == 17
+        assert overlay._latest_frame_generation == 17
+        assert overlay._latest_waveform_generation == 16
+        assert overlay._border_width_px == pytest.approx(3.5)
 
 
 # ===========================================================================

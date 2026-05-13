@@ -592,122 +592,49 @@ class SpotifyVisualizerWidget(QWidget):
     # ------------------------------------------------------------------
 
     def set_thread_manager(self, thread_manager: ThreadManager) -> None:
-        self._thread_manager = thread_manager
-        try:
-            engine = get_shared_spotify_beat_engine(self._bar_count)
-            self._engine = engine
-            engine.set_thread_manager(thread_manager)
-            self._replay_engine_config(engine)
-            self._bind_engine_aliases(engine)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import set_thread_manager
+
+        set_thread_manager(self, thread_manager)
 
     def set_process_supervisor(self, supervisor: Optional[ProcessSupervisor]) -> None:
-        """Set the ProcessSupervisor for worker integration."""
-        self._process_supervisor = supervisor
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-            if engine is not None:
-                engine.set_process_supervisor(supervisor)
-                logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to set ProcessSupervisor on beat engine", exc_info=True)
-        if self._enabled:
-            self._ensure_tick_source()
+        from widgets.spotify_visualizer.runtime_config import set_process_supervisor
+
+        set_process_supervisor(self, supervisor)
 
     def apply_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
-        """Public hook for tests/UI to set floor config on the widget."""
-        self._last_floor_config = (bool(dynamic_enabled), float(manual_floor))
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-        if engine is not None:
-            try:
-                engine.set_floor_config(dynamic_enabled, manual_floor)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to push floor config via apply_floor_config", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_floor_config
+
+        apply_floor_config(self, dynamic_enabled, manual_floor)
 
     # Backwards-compat alias for legacy callers/tests
     def set_floor_config(self, dynamic_enabled: bool, manual_floor: float) -> None:
         self.apply_floor_config(dynamic_enabled, manual_floor)
 
     def apply_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
-        """Public hook for tests/UI to set sensitivity config on the widget."""
-        self._last_sensitivity_config = (bool(recommended), float(sensitivity))
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            engine = None
-        if engine is not None:
-            try:
-                engine.set_sensitivity_config(recommended, sensitivity)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to push sensitivity config via apply_sensitivity_config", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_sensitivity_config
+
+        apply_sensitivity_config(self, recommended, sensitivity)
 
     def _apply_energy_boost(self, boost: float) -> None:
-        try:
-            value = float(boost)
-        except Exception as exc:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-            value = 1.0
-        if abs(value - self._last_energy_boost) <= 1e-4:
-            return
-        self._last_energy_boost = value
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as exc:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-            engine = None
-        if engine is None:
-            return
-        try:
-            engine.set_energy_boost(value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to push energy boost config", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_energy_boost
+
+        apply_energy_boost(self, boost)
 
     def _apply_input_gain(self, gain: float) -> None:
-        """Forward pre-FFT input gain (virtual volume) to the audio worker."""
-        try:
-            value = float(gain)
-        except Exception as exc:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-            value = 1.0
-        if abs(value - self._last_input_gain) <= 1e-4:
-            return
-        self._last_input_gain = value
-        try:
-            engine = self._engine or get_shared_spotify_beat_engine(self._bar_count)
-        except Exception as exc:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-            engine = None
-        if engine is None:
-            return
-        try:
-            engine.set_input_gain(value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to push input gain config", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_input_gain
+
+        apply_input_gain(self, gain)
 
     def _apply_agc_strength(self, value: float) -> None:
-        """Forward AGC strength to the audio worker."""
-        try:
-            engine = self._engine
-        except Exception as exc:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-            engine = None
-        if engine is None:
-            return
-        try:
-            engine.set_agc_strength(value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to push agc strength config", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_agc_strength
+
+        apply_agc_strength(self, value)
 
     @staticmethod
     def _compute_energy_boost(enabled: bool) -> float:
-        """Map dynamic range flag to a safe energy boost multiplier."""
-        return 1.18 if enabled else 0.85
+        from widgets.spotify_visualizer.runtime_config import compute_energy_boost
+
+        return compute_energy_boost(enabled)
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         self.apply_sensitivity_config(recommended, sensitivity)
@@ -771,128 +698,37 @@ class SpotifyVisualizerWidget(QWidget):
         return self._vis_mode.name.lower()
 
     def set_settings_model(self, model: SpotifyVisualizerSettings, *, apply_now: bool = True) -> None:
-        if model is None:
-            return
-        try:
-            snapshot = copy.deepcopy(model)
-        except Exception:
-            snapshot = model
-        self._settings_model = snapshot
-        self._technical_config_cache = self._build_technical_cache(snapshot)
-        target_mode = self._vis_mode
-        try:
-            mode_name = str(getattr(snapshot, "mode", "") or "").lower()
-            target_mode = {
-                "spectrum": VisualizerMode.SPECTRUM,
-                "oscilloscope": VisualizerMode.OSCILLOSCOPE,
-                "blob": VisualizerMode.BLOB,
-                "sine_wave": VisualizerMode.SINE_WAVE,
-                "bubble": VisualizerMode.BUBBLE,
-                "devcurve": VisualizerMode.DEVCURVE,
-            }.get(mode_name, self._vis_mode)
-        except Exception:
-            target_mode = self._vis_mode
-        if apply_now:
-            self._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
+        from widgets.spotify_visualizer.activation_runtime import set_settings_model
+
+        set_settings_model(self, model, apply_now=apply_now)
 
     def _extract_technical_config_from_kwargs(
         self,
         mode_key: str,
         kwargs: Dict[str, Any],
     ) -> Dict[str, Any]:
-        extracted: Dict[str, Any] = {}
-        shared_keys = (
-            "bar_count",
-            "dynamic_floor",
-            "manual_floor",
-            "adaptive_sensitivity",
-            "sensitivity",
-            "audio_block_size",
-            "dynamic_range_enabled",
-            "agc_strength",
-            "input_gain",
-            "kick_lane_gain",
-            "transient_pulse_gain",
-            "transient_clamp",
-        )
-        mode_specific_keys = {
-            "spectrum": ("spectrum_lane_transient_mix",),
-            "bubble": ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"),
-            "blob": ("blob_transient_mix_bass", "blob_transient_mix_vocal"),
-            "sine_wave": ("sine_wave_transient_width_mix",),
-            "oscilloscope": ("oscilloscope_transient_width_mix",),
-        }.get(mode_key, ())
+        from widgets.spotify_visualizer.technical_config import extract_technical_config_from_kwargs
 
-        for key in shared_keys:
-            prefixed_key = f"{mode_key}_{key}"
-            if prefixed_key in kwargs:
-                extracted[key] = kwargs[prefixed_key]
-            elif key in kwargs:
-                extracted[key] = kwargs[key]
-
-        for key in mode_specific_keys:
-            if key in kwargs:
-                extracted[key] = kwargs[key]
-
-        return extracted
+        return extract_technical_config_from_kwargs(self, mode_key, kwargs)
 
     def _replace_runtime_technical_overrides(
         self,
         mode_key: str,
         kwargs: Dict[str, Any],
     ) -> bool:
-        overrides = self._extract_technical_config_from_kwargs(mode_key, kwargs)
-        if not overrides:
-            return False
-        current: Dict[str, Any] = {}
-        if self._settings_model is not None:
-            try:
-                current = self._build_technical_cache(self._settings_model).get(mode_key, {})
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to rebuild technical cache for mode=%s", mode_key, exc_info=True)
-        if not current:
-            current = dict(self._technical_config_cache.get(mode_key, {}))
-        current.update(overrides)
-        self._technical_config_cache[mode_key] = current
-        return True
+        from widgets.spotify_visualizer.technical_config import replace_runtime_technical_overrides
+
+        return replace_runtime_technical_overrides(self, mode_key, kwargs)
 
     def _map_mode_key_to_enum(self, mode_key: str) -> VisualizerMode:
-        return {
-            "spectrum": VisualizerMode.SPECTRUM,
-            "oscilloscope": VisualizerMode.OSCILLOSCOPE,
-            "blob": VisualizerMode.BLOB,
-            "sine_wave": VisualizerMode.SINE_WAVE,
-            "bubble": VisualizerMode.BUBBLE,
-            "devcurve": VisualizerMode.DEVCURVE,
-        }.get(str(mode_key).lower(), VisualizerMode.SPECTRUM)
+        from widgets.spotify_visualizer.technical_config import map_mode_key_to_enum
+
+        return map_mode_key_to_enum(mode_key)
 
     def _sync_active_mode_legacy_ghost_bridge(self, mode: VisualizerMode) -> None:
-        """Keep the legacy shared ghost bridge aligned with the active mode."""
-        mode_key = mode.name.lower()
-        if mode_key == "spectrum":
-            self._ghosting_enabled = bool(self._spectrum_ghosting_enabled)
-            self._ghost_alpha = float(self._spectrum_ghost_alpha)
-            self._ghost_decay_rate = float(self._spectrum_ghost_decay)
-        elif mode_key == "blob":
-            self._ghosting_enabled = bool(self._blob_ghosting_enabled)
-            self._ghost_alpha = float(self._blob_ghost_alpha)
-            self._ghost_decay_rate = float(self._blob_ghost_decay)
-        elif mode_key == "sine_wave":
-            self._ghosting_enabled = bool(self._sine_ghosting_enabled)
-            self._ghost_alpha = float(self._sine_ghost_alpha)
-            self._ghost_decay_rate = float(self._sine_ghost_decay)
-        elif mode_key == "bubble":
-            self._ghosting_enabled = bool(self._bubble_ghosting_enabled)
-            self._ghost_alpha = float(self._bubble_ghost_alpha)
-            self._ghost_decay_rate = float(self._bubble_ghost_decay)
-        elif mode_key == "devcurve":
-            self._ghosting_enabled = bool(self._devcurve_ghosting_enabled)
-            self._ghost_alpha = float(self._devcurve_ghost_alpha)
-            self._ghost_decay_rate = float(self._devcurve_ghost_decay)
-        elif mode_key == "oscilloscope":
-            self._ghosting_enabled = bool(self._osc_ghosting_enabled)
-            self._ghost_alpha = float(self._osc_ghost_intensity)
-            self._ghost_decay_rate = float(getattr(self, "_peak_decay_per_sec", 0.4))
+        from widgets.spotify_visualizer.technical_config import sync_active_mode_legacy_ghost_bridge
+
+        sync_active_mode_legacy_ghost_bridge(self, mode)
 
     def _log_live_activation_state(
         self,
@@ -901,52 +737,9 @@ class SpotifyVisualizerWidget(QWidget):
         *,
         reason: str,
     ) -> None:
-        try:
-            mode_key = mode.name.lower()
-            technical_cache = dict(self._technical_config_cache.get(mode_key, {}))
-            engine = self._engine
-            worker = getattr(engine, "_audio_worker", None) if engine is not None else None
-            overlay = getattr(self.parent(), "_spotify_bars_overlay", None) if self.parent() is not None else None
-            logger.info(
-                (
-                    "[SPOTIFY_VIS][LIVE] reason=%s mode=%s preset_index=%d preset_kind=%s preset_name=%s "
-                    "preset_path=%s cache_manual=%.3f worker_manual=%.3f worker_dynamic=%s worker_sensitivity=%.3f "
-                    "worker_recommended=%s worker_block=%d worker_input_gain=%.3f worker_agc=%.3f "
-                    "widget_fill=%s widget_border=%s widget_border_opacity=%.3f "
-                    "widget_ghost=%s widget_ghost_alpha=%.3f widget_ghost_decay=%.3f "
-                    "overlay_fill=%s overlay_border=%s overlay_peak_decay=%.3f "
-                    "engine_generation=%s engine_activation=%s overlay_activation=%s overlay_generation=%s"
-                ),
-                reason,
-                mode_key,
-                int(payload.preset_index),
-                "custom" if payload.is_custom else "curated",
-                payload.preset_name,
-                payload.preset_path or "<custom>",
-                float(technical_cache.get("manual_floor", 0.12)),
-                float(getattr(worker, "_manual_floor", 0.12) if worker is not None else 0.12),
-                bool(getattr(worker, "_use_dynamic_floor", True) if worker is not None else True),
-                float(getattr(worker, "_user_sensitivity", 1.0) if worker is not None else 1.0),
-                bool(getattr(worker, "_use_recommended", True) if worker is not None else True),
-                int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0),
-                float(getattr(worker, "_input_gain", 1.0) if worker is not None else 1.0),
-                float(getattr(worker, "_agc_strength", 0.5) if worker is not None else 0.5),
-                self._bar_fill_color.getRgb(),
-                self._bar_border_color.getRgb(),
-                float(self._bar_border_color.alphaF()),
-                bool(self._ghosting_enabled),
-                float(self._ghost_alpha),
-                float(self._ghost_decay_rate),
-                getattr(overlay, "_fill_color", None).getRgb() if overlay is not None and getattr(overlay, "_fill_color", None) is not None else None,
-                getattr(overlay, "_border_color", None).getRgb() if overlay is not None and getattr(overlay, "_border_color", None) is not None else None,
-                float(getattr(overlay, "_peak_decay_per_sec", 0.0) if overlay is not None else 0.0),
-                getattr(engine, "get_generation_id", lambda: None)(),
-                getattr(engine, "get_activation_id", lambda: None)(),
-                getattr(overlay, "_activation_id", None),
-                getattr(overlay, "_engine_generation", None),
-            )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to log live activation state", exc_info=True)
+        from widgets.spotify_visualizer.activation_runtime import log_live_activation_state
+
+        log_live_activation_state(self, mode, payload, reason=reason)
 
     def _log_active_render_state_snapshot(self, *, reason: str) -> None:
         """Log active-mode render state snapshot for bleed diagnosis."""
@@ -1089,275 +882,56 @@ class SpotifyVisualizerWidget(QWidget):
         force_runtime_reset: bool = False,
     ) -> None:
         """Apply one canonical resolved activation payload to the live widget."""
-        try:
-            snapshot = copy.deepcopy(model)
-        except Exception:
-            snapshot = model
-        self._settings_model = snapshot
-        self._technical_config_cache = self._build_technical_cache(snapshot)
+        from widgets.spotify_visualizer.activation_runtime import apply_resolved_activation_payload
 
-        vm = self._map_mode_key_to_enum(payload.mode)
-        mode_changed = vm != self._vis_mode
-        if mode_changed:
-            self._vis_mode = vm
-
-        from rendering.spotify_widget_creators import apply_spotify_vis_model_config
-        apply_spotify_vis_model_config(self, snapshot, apply_mode=False)
-        self._sync_active_mode_legacy_ghost_bridge(vm)
-
-        self._last_gpu_geom = None
-        self._last_gpu_fade_sent = -1.0
-        self._has_pushed_first_frame = False
-        self._mode_transition_apply_height_on_resume = True
-        if self._mode_transition_phase == 0:
-            self._apply_pending_mode_transition_layout()
-
-        self._apply_technical_config_for_mode(vm, reason=f"{reason}:activation_payload")
-
-        if force_runtime_reset or mode_changed:
-            self._waiting_for_fresh_engine_frame = True
-            self._waiting_for_fresh_frame = True
-            self._reset_mode_owned_runtime_state(reason=reason)
-            self._clear_gl_overlay()
-            self._prepare_engine_for_mode_reset()
-            self._clear_runtime_bar_state()
-
-        self._log_live_activation_state(vm, payload, reason=reason)
+        apply_resolved_activation_payload(
+            self,
+            model,
+            payload,
+            reason=reason,
+            force_runtime_reset=force_runtime_reset,
+        )
 
     def _build_technical_cache(self, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:
-        cache: Dict[str, Dict[str, Any]] = {}
-        for mode_key in PER_MODE_TECHNICAL_MODES:
-            try:
-                cache[mode_key] = {
-                    "bar_count": model.resolve_bar_count(mode_key),
-                    "dynamic_floor": model.resolve_dynamic_floor(mode_key),
-                    "manual_floor": model.resolve_manual_floor(mode_key),
-                    "adaptive_sensitivity": model.resolve_adaptive_sensitivity(mode_key),
-                    "sensitivity": model.resolve_sensitivity(mode_key),
-                    "audio_block_size": model.resolve_audio_block_size(mode_key),
-                    "dynamic_range_enabled": model.resolve_dynamic_range_enabled(mode_key),
-                    "agc_strength": model.resolve_agc_strength(mode_key),
-                    "input_gain": model.resolve_input_gain(mode_key),
-                    "kick_lane_gain": model.resolve_kick_lane_gain(mode_key),
-                    "transient_pulse_gain": model.resolve_transient_pulse_gain(mode_key),
-                    "transient_clamp": model.resolve_transient_clamp(mode_key),
-                }
-                if mode_key == "spectrum":
-                    cache[mode_key]["spectrum_lane_transient_mix"] = model.resolve_spectrum_lane_transient_mix()
-                elif mode_key == "bubble":
-                    cache[mode_key]["bubble_transient_mix_bass"] = model.resolve_bubble_transient_mix_bass()
-                    cache[mode_key]["bubble_transient_mix_vocal"] = model.resolve_bubble_transient_mix_vocal()
-                elif mode_key == "blob":
-                    cache[mode_key]["blob_transient_mix_bass"] = model.resolve_blob_transient_mix_bass()
-                    cache[mode_key]["blob_transient_mix_vocal"] = model.resolve_blob_transient_mix_vocal()
-                elif mode_key == "sine_wave":
-                    cache[mode_key]["sine_wave_transient_width_mix"] = model.resolve_sine_wave_transient_width_mix()
-                elif mode_key == "oscilloscope":
-                    cache[mode_key]["oscilloscope_transient_width_mix"] = model.resolve_oscilloscope_transient_width_mix()
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to cache technical config for mode=%s", mode_key, exc_info=True)
-        return cache
+        from widgets.spotify_visualizer.technical_config import build_technical_cache
+
+        return build_technical_cache(self, model)
 
     def _get_mode_technical_config(self, mode: VisualizerMode) -> Optional[Dict[str, Any]]:
-        if not self._technical_config_cache:
-            return None
-        mode_key = mode.name.lower()
-        return self._technical_config_cache.get(mode_key)
+        from widgets.spotify_visualizer.technical_config import get_mode_technical_config
+
+        return get_mode_technical_config(self, mode)
 
     def _apply_technical_config_for_mode(self, mode: VisualizerMode, *, reason: str) -> None:
-        config = self._get_mode_technical_config(mode)
-        if config is None:
-            return
-        try:
-            target_bars = int(config.get("bar_count", self._bar_count))
-        except Exception:
-            target_bars = self._bar_count
-        if target_bars != self._bar_count:
-            self._resize_bar_buffers(target_bars)
+        from widgets.spotify_visualizer.technical_config import apply_technical_config_for_mode
 
-        dynamic_floor = bool(config.get("dynamic_floor", True))
-        manual_floor = float(config.get("manual_floor", 0.12))
-        adaptive = bool(config.get("adaptive_sensitivity", True))
-        sensitivity = float(config.get("sensitivity", 1.0))
-        audio_block_size = int(config.get("audio_block_size", 0) or 0)
-        dynamic_range_enabled = bool(config.get("dynamic_range_enabled", False))
-        energy_boost = self._compute_energy_boost(dynamic_range_enabled)
-        agc_strength = max(0.0, min(1.0, float(config.get("agc_strength", 0.5))))
-        input_gain = max(0.05, min(2.0, float(config.get("input_gain", 1.0))))
-
-        self._use_raw_energy = False
-        # Transient bus controls from config
-        self._kick_lane_gain = max(0.0, min(2.0, float(config.get("kick_lane_gain", 1.0))))
-        self._transient_pulse_gain = max(0.0, min(3.0, float(config.get("transient_pulse_gain", 1.0))))
-        self._transient_clamp = max(0.0, min(3.0, float(config.get("transient_clamp", 1.5))))
-        self._spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
-        self._bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
-        self._bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
-        self._blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
-        self._blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
-        self._sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
-        self._osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
-        self.apply_floor_config(dynamic_floor, manual_floor)
-        self.apply_sensitivity_config(adaptive, sensitivity)
-        self._apply_audio_block_size(audio_block_size)
-        self._apply_energy_boost(energy_boost)
-        self._apply_agc_strength(agc_strength)
-        self._apply_input_gain(input_gain)
-        # Propagate kick lane gain to audio worker
-        if self._engine is not None:
-            aw = getattr(self._engine, '_audio_worker', None)
-            if aw is not None:
-                aw._kick_lane_gain = self._kick_lane_gain
-                aw._spectrum_lane_transient_mix = self._spectrum_lane_transient_mix
-        # Propagate transient mix attrs to GL overlay
-        parent = self.parent()
-        overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
-        if overlay is not None:
-            overlay._blob_transient_mix_bass = self._blob_transient_mix_bass
-            overlay._blob_transient_mix_vocal = self._blob_transient_mix_vocal
-            overlay._transient_clamp = self._transient_clamp
-            overlay._sine_wave_transient_width_mix = self._sine_wave_transient_width_mix
-            overlay._osc_transient_width_mix = self._osc_transient_width_mix
-
-        try:
-            from os import getenv
-
-            if getenv('SRPSS_VIZ_DIAGNOSTICS', 'false').lower() == 'true':
-                logger.info(
-                    "[SPOTIFY_VIS][TECHNICAL] mode=%s reason=%s bar_count=%d dyn_floor=%s manual_floor=%.2f adaptive=%s sensitivity=%.2f block=%d dyn_range=%s energy_boost=%.2f",
-                    mode.name,
-                    reason,
-                    self._bar_count,
-                    dynamic_floor,
-                    manual_floor,
-                    adaptive,
-                    sensitivity,
-                    audio_block_size,
-                    dynamic_range_enabled,
-                    energy_boost,
-                )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to log technical config", exc_info=True)
+        apply_technical_config_for_mode(self, mode, reason=reason)
 
     def _apply_full_runtime_config_for_mode(self, mode: VisualizerMode, *, reason: str) -> None:
         """Replay the same target-mode config used by a settings refresh."""
+        from widgets.spotify_visualizer.activation_runtime import apply_full_runtime_config_for_mode
 
-        wm = getattr(self, '_widget_manager', None)
-        sm = getattr(wm, '_settings_manager', None) if wm is not None else None
-        if sm is None:
-            return
-
-        mode_str = mode.name.lower()
-        try:
-            cfg = sm.get('widgets', {}) or {}
-            vis_cfg = dict(cfg.get('spotify_visualizer', {}) or {})
-            payload = resolve_visualizer_activation_payload(vis_cfg, mode=mode_str)
-            model = SpotifyVisualizerSettings.from_mapping(
-                payload.resolved_config,
-                apply_preset_overlay=False,
-                resolve_preset_indices=False,
-            )
-            self.apply_resolved_activation_payload(
-                model,
-                payload,
-                reason=reason,
-                force_runtime_reset=False,
-            )
-            logger.debug("[SPOTIFY_VIS] Applied full runtime config for mode=%s reason=%s", mode_str, reason)
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Failed to apply full runtime config for mode=%s reason=%s",
-                mode_str,
-                reason,
-                exc_info=True,
-            )
+        apply_full_runtime_config_for_mode(self, mode, reason=reason)
 
     def _clear_runtime_bar_state(self) -> None:
-        count = max(1, int(getattr(self, "_bar_count", 1) or 1))
-        self._display_bars = [0.0] * count
-        self._target_bars = [0.0] * count
-        self._per_bar_energy = [0.0] * count
-        self._visual_bars = [0.0] * count
-        self._last_update_ts = -1.0
-        self._last_smooth_ts = 0.0
+        from widgets.spotify_visualizer.runtime_config import clear_runtime_bar_state
+
+        clear_runtime_bar_state(self)
 
     def _apply_audio_block_size(self, block_size: int) -> None:
-        try:
-            value = max(0, int(block_size))
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            value = 0
-        if value == self._last_audio_block_size:
-            return
-        self._last_audio_block_size = value
-        engine = self._engine
-        if engine is None:
-            try:
-                engine = get_shared_spotify_beat_engine(self._bar_count)
-                self._engine = engine
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to resolve beat engine for block size", exc_info=True)
-                engine = None
-        worker = getattr(engine, "_audio_worker", None) if engine is not None else None
-        if worker is None or not hasattr(worker, "set_audio_block_size"):
-            return
-        try:
-            worker.set_audio_block_size(value)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to push audio block size", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import apply_audio_block_size
+
+        apply_audio_block_size(self, block_size)
 
     def _resize_bar_buffers(self, new_bar_count: int) -> None:
-        new_count = max(1, int(new_bar_count))
-        if new_count == self._bar_count:
-            return
-        was_enabled = self._enabled
-        engine = self._engine
-        self._bar_count = new_count
-        self._display_bars = [0.0] * new_count
-        self._target_bars = [0.0] * new_count
-        self._per_bar_energy = [0.0] * new_count
-        self._visual_bars = [0.0] * new_count
-        self._geom_cache_rect = None
-        self._geom_cache_bar_count = new_count
-        self._geom_bar_x = []
-        self._geom_seg_y = []
-        self._geom_bar_width = 0
-        self._geom_seg_height = 0
-        self._last_gpu_geom = None
-        self._last_gpu_fade_sent = -1.0
-        self._has_pushed_first_frame = False
-        self._waiting_for_fresh_engine_frame = True
-        self._waiting_for_fresh_frame = True
-        try:
-            if engine is None:
-                engine = get_shared_spotify_beat_engine(new_count)
-            else:
-                engine.reconfigure_bar_count(new_count)
-            self._engine = engine
-            if self._thread_manager is not None:
-                engine.set_thread_manager(self._thread_manager)
-            if self._process_supervisor is not None:
-                engine.set_process_supervisor(self._process_supervisor)
-            self._bind_engine_aliases(engine)
-            if was_enabled:
-                engine.acquire()
-                self._replay_engine_config(engine)
-                if self._should_capture_audio_now():
-                    engine.ensure_started()
-                else:
-                    engine.set_playback_state(False)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to resize beat engine", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import resize_bar_buffers
+
+        resize_bar_buffers(self, new_bar_count)
 
     def _bind_engine_aliases(self, engine: Optional[_SpotifyBeatEngine]) -> None:
-        if engine is None:
-            return
-        try:
-            self._bars_buffer = engine._audio_buffer  # type: ignore[attr-defined]
-            self._audio_worker = engine._audio_worker  # type: ignore[attr-defined]
-            self._bars_result_buffer = engine._bars_result_buffer  # type: ignore[attr-defined]
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to bind beat engine aliases", exc_info=True)
+        from widgets.spotify_visualizer.runtime_config import bind_engine_aliases
+
+        bind_engine_aliases(self, engine)
 
     def get_preferred_height(self) -> int:
         """Return the ideal card height for the current visualizer mode."""

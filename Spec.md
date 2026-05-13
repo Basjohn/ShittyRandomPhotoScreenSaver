@@ -71,6 +71,7 @@ Active ids:
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
+- Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
 
 ### 5.4 Mode isolation

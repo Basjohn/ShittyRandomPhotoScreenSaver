@@ -69,6 +69,38 @@ def _build_visualizer_model_kwargs(
     ) -> Dict[str, Any]:
     """Build the shared constructor payload for visualizer ingestion paths."""
 
+    data = _build_visualizer_core_kwargs(
+        read_value,
+        active_mode=active_mode,
+        active_technical=active_technical,
+        active_visuals=active_visuals,
+        rainbow_kwargs=rainbow_kwargs,
+    )
+    data.update(_build_visualizer_osc_blob_kwargs(read_value))
+    data.update(_build_visualizer_spectrum_kwargs(read_value))
+    data.update(_build_visualizer_sine_kwargs(read_value))
+    data.update(
+        _build_visualizer_bubble_kwargs(
+            read_value,
+            bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+            bubble_stream_constant_speed_default=bubble_stream_constant_speed_default,
+            bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
+        )
+    )
+    data.update(_build_visualizer_blob_shape_kwargs(read_value))
+    data.update(_build_visualizer_devcurve_kwargs(read_value))
+    data.update(preset_kwargs)
+    return data
+
+
+def _build_visualizer_core_kwargs(
+    read_value: Callable[[str, Any], Any],
+    *,
+    active_mode: str,
+    active_technical: Mapping[str, Any],
+    active_visuals: Mapping[str, Any],
+    rainbow_kwargs: Mapping[str, Any],
+) -> Dict[str, Any]:
     return {
         "enabled": read_value("enabled", False),
         "visualizers_enabled": read_value("visualizers_enabled", True),
@@ -91,6 +123,16 @@ def _build_visualizer_model_kwargs(
         "bar_border_color": active_visuals["bar_border_color"],
         "bar_border_opacity": float(active_visuals["bar_border_opacity"]),
         "mode": active_mode,
+        "rainbow_enabled": rainbow_kwargs["rainbow_enabled"],
+        "rainbow_speed": rainbow_kwargs["rainbow_speed"],
+        "sine_line_dim": bool(read_value("sine_line_dim", False)),
+    }
+
+
+def _build_visualizer_osc_blob_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return {
         "osc_glow_enabled": read_value("osc_glow_enabled", True),
         "osc_glow_intensity": float(read_value("osc_glow_intensity", 0.5)),
         "osc_glow_reactivity": float(read_value("osc_glow_reactivity", read_value("osc_glow_size", 1.0))),
@@ -139,6 +181,13 @@ def _build_visualizer_model_kwargs(
         "blob_stretch_tendency": float(read_value("blob_stretch_tendency", read_value("blob_stretch", 0.35))),
         "blob_stretch_inner": float(read_value("blob_stretch_inner", 0.0)),
         "blob_stretch_outer": float(read_value("blob_stretch_outer", read_value("blob_stretch", 0.35))),
+    }
+
+
+def _build_visualizer_spectrum_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return {
         "spectrum_render_mode": resolve_spectrum_render_mode(read_value),
         "spectrum_unique_colors": resolve_spectrum_unique_colors(read_value),
         "spectrum_rainbow_border": bool(read_value("spectrum_rainbow_border", False)),
@@ -167,6 +216,13 @@ def _build_visualizer_model_kwargs(
         "spectrum_wave_amplitude": float(read_value("spectrum_wave_amplitude", 0.50)),
         "spectrum_profile_floor": float(read_value("spectrum_profile_floor", 0.12)),
         "spectrum_drop_speed": float(read_value("spectrum_drop_speed", 1.0)),
+    }
+
+
+def _build_visualizer_sine_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return {
         "sine_wave_growth": float(read_value("sine_wave_growth", 1.0)),
         "sine_wave_travel": int(read_value("sine_wave_travel", 0)),
         "sine_density": float(read_value("sine_density", 1.0)),
@@ -217,8 +273,6 @@ def _build_visualizer_model_kwargs(
         "sine_micro_wobble": float(read_value("sine_micro_wobble", 0.0)),
         "sine_crawl_amount": float(read_value("sine_crawl_amount", 0.25)),
         "sine_width_reaction": float(read_value("sine_width_reaction", 0.0)),
-        "rainbow_enabled": rainbow_kwargs["rainbow_enabled"],
-        "rainbow_speed": rainbow_kwargs["rainbow_speed"],
         "osc_ghosting_enabled": bool(read_value("osc_ghosting_enabled", False)),
         "osc_ghost_intensity": float(read_value("osc_ghost_intensity", 0.4)),
         "osc_ghost_line2_enabled": bool(read_value("osc_ghost_line2_enabled", True)),
@@ -227,6 +281,17 @@ def _build_visualizer_model_kwargs(
         "osc_ghost_line5_enabled": bool(read_value("osc_ghost_line5_enabled", True)),
         "osc_ghost_line6_enabled": bool(read_value("osc_ghost_line6_enabled", True)),
         "sine_heartbeat": float(read_value("sine_heartbeat", 0.0)),
+    }
+
+
+def _build_visualizer_bubble_kwargs(
+    read_value: Callable[[str, Any], Any],
+    *,
+    bubble_gradient_semantics_version: int,
+    bubble_stream_constant_speed_default: float,
+    bubble_stream_speed_cap_default: float,
+) -> Dict[str, Any]:
+    return {
         "bubble_big_bass_pulse": float(read_value("bubble_big_bass_pulse", 0.5)),
         "bubble_small_freq_pulse": float(read_value("bubble_small_freq_pulse", 0.5)),
         "bubble_stream_direction": str(read_value("bubble_stream_direction", "up")),
@@ -275,6 +340,13 @@ def _build_visualizer_model_kwargs(
         "blob_ghosting_enabled": bool(read_value("blob_ghosting_enabled", False)),
         "blob_ghost_alpha": float(read_value("blob_ghost_alpha", 0.4)),
         "blob_ghost_decay": float(read_value("blob_ghost_decay", 0.3)),
+    }
+
+
+def _build_visualizer_blob_shape_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return {
         "blob_shaper_enabled": bool(read_value("blob_shaper_enabled", False)),
         "blob_shape_base_nodes": list(read_value("blob_shape_base_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
         "blob_shape_reaction_nodes": list(read_value("blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])),
@@ -289,6 +361,13 @@ def _build_visualizer_model_kwargs(
         "blob_inward_liquid_reactivity": float(read_value("blob_inward_liquid_reactivity", 1.0)),
         "blob_inward_liquid_max_size": float(read_value("blob_inward_liquid_max_size", 0.28)),
         "blob_inward_liquid_color": read_value("blob_inward_liquid_color", [170, 225, 255, 190]),
+    }
+
+
+def _build_visualizer_devcurve_kwargs(
+    read_value: Callable[[str, Any], Any],
+) -> Dict[str, Any]:
+    return {
         "devcurve_active_layer": str(read_value("devcurve_active_layer", "bass")),
         "devcurve_layer_bass_shape_nodes": list(read_value("devcurve_layer_bass_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
         "devcurve_layer_vocals_shape_nodes": list(read_value("devcurve_layer_vocals_shape_nodes", [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])),
@@ -343,8 +422,6 @@ def _build_visualizer_model_kwargs(
         "devcurve_foreground_specular_width": float(read_value("devcurve_foreground_specular_width", 0.022)),
         "devcurve_foreground_specular_offset": float(read_value("devcurve_foreground_specular_offset", 0.028)),
         "devcurve_foreground_specular_crest_bias": float(read_value("devcurve_foreground_specular_crest_bias", 1.05)),
-        "sine_line_dim": bool(read_value("sine_line_dim", False)),
-        **preset_kwargs,
     }
 
 
@@ -1103,11 +1180,32 @@ class SpotifyVisualizerSettings:
 
     def to_dict(self, prefix: str = "widgets.spotify_visualizer") -> Dict[str, Any]:
         """Convert to dictionary for saving."""
-        data = {
+        data = self._serialize_core_settings(prefix)
+        data.update(self._serialize_osc_blob_settings(prefix))
+        data.update(self._serialize_spectrum_settings(prefix))
+        data.update(self._serialize_sine_settings(prefix))
+        data.update(self._serialize_bubble_settings(prefix))
+        data.update(self._serialize_blob_shape_settings(prefix))
+        data.update(self._serialize_devcurve_settings(prefix))
+        data.update(self._serialize_preset_indices(prefix))
+        data.update(self._serialize_per_mode_technical_settings(prefix))
+        data.update(self._serialize_transient_mix_settings(prefix))
+
+        return data
+
+    def _serialize_core_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.enabled": self.enabled,
             f"{prefix}.visualizers_enabled": self.visualizers_enabled,
             f"{prefix}.monitor": self.monitor,
             f"{prefix}.mode": self.mode,
+            f"{prefix}.rainbow_enabled": self.rainbow_enabled,
+            f"{prefix}.rainbow_speed": float(self.rainbow_speed),
+            f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
+        }
+
+    def _serialize_osc_blob_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.osc_glow_enabled": self.osc_glow_enabled,
             f"{prefix}.osc_glow_intensity": float(self.osc_glow_intensity),
             f"{prefix}.osc_glow_reactivity": float(self.osc_glow_reactivity),
@@ -1156,6 +1254,10 @@ class SpotifyVisualizerSettings:
             f"{prefix}.blob_stretch_tendency": float(self.blob_stretch_tendency),
             f"{prefix}.blob_stretch_inner": float(self.blob_stretch_inner),
             f"{prefix}.blob_stretch_outer": float(self.blob_stretch_outer),
+        }
+
+    def _serialize_spectrum_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.spectrum_render_mode": str(self.spectrum_render_mode),
             f"{prefix}.spectrum_unique_colors": self.spectrum_unique_colors,
             f"{prefix}.spectrum_rainbow_border": self.spectrum_rainbow_border,
@@ -1176,6 +1278,10 @@ class SpotifyVisualizerSettings:
             f"{prefix}.spectrum_wave_amplitude": float(self.spectrum_wave_amplitude),
             f"{prefix}.spectrum_profile_floor": float(self.spectrum_profile_floor),
             f"{prefix}.spectrum_drop_speed": float(self.spectrum_drop_speed),
+        }
+
+    def _serialize_sine_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.sine_wave_growth": float(self.sine_wave_growth),
             f"{prefix}.sine_wave_travel": int(self.sine_wave_travel),
             f"{prefix}.sine_density": float(self.sine_density),
@@ -1226,8 +1332,6 @@ class SpotifyVisualizerSettings:
             f"{prefix}.sine_micro_wobble": float(self.sine_micro_wobble),
             f"{prefix}.sine_crawl_amount": float(self.sine_crawl_amount),
             f"{prefix}.sine_width_reaction": float(self.sine_width_reaction),
-            f"{prefix}.rainbow_enabled": self.rainbow_enabled,
-            f"{prefix}.rainbow_speed": float(self.rainbow_speed),
             f"{prefix}.osc_ghosting_enabled": self.osc_ghosting_enabled,
             f"{prefix}.osc_ghost_intensity": float(self.osc_ghost_intensity),
             f"{prefix}.osc_ghost_line2_enabled": self.osc_ghost_line2_enabled,
@@ -1236,7 +1340,10 @@ class SpotifyVisualizerSettings:
             f"{prefix}.osc_ghost_line5_enabled": self.osc_ghost_line5_enabled,
             f"{prefix}.osc_ghost_line6_enabled": self.osc_ghost_line6_enabled,
             f"{prefix}.sine_heartbeat": float(self.sine_heartbeat),
-            # Bubble
+        }
+
+    def _serialize_bubble_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.bubble_big_bass_pulse": float(self.bubble_big_bass_pulse),
             f"{prefix}.bubble_small_freq_pulse": float(self.bubble_small_freq_pulse),
             f"{prefix}.bubble_stream_direction": self.bubble_stream_direction,
@@ -1282,6 +1389,10 @@ class SpotifyVisualizerSettings:
             f"{prefix}.blob_ghosting_enabled": bool(self.blob_ghosting_enabled),
             f"{prefix}.blob_ghost_alpha": float(self.blob_ghost_alpha),
             f"{prefix}.blob_ghost_decay": float(self.blob_ghost_decay),
+        }
+
+    def _serialize_blob_shape_settings(self, prefix: str) -> Dict[str, Any]:
+        return {
             f"{prefix}.blob_shaper_enabled": bool(self.blob_shaper_enabled),
             f"{prefix}.blob_shape_base_nodes": self.blob_shape_base_nodes,
             f"{prefix}.blob_shape_reaction_nodes": self.blob_shape_reaction_nodes,
@@ -1296,14 +1407,7 @@ class SpotifyVisualizerSettings:
             f"{prefix}.blob_inward_liquid_reactivity": float(self.blob_inward_liquid_reactivity),
             f"{prefix}.blob_inward_liquid_max_size": float(self.blob_inward_liquid_max_size),
             f"{prefix}.blob_inward_liquid_color": list(self.blob_inward_liquid_color),
-            f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
         }
-        data.update(self._serialize_devcurve_settings(prefix))
-        data.update(self._serialize_preset_indices(prefix))
-        data.update(self._serialize_per_mode_technical_settings(prefix))
-        data.update(self._serialize_transient_mix_settings(prefix))
-
-        return data
 
     def _serialize_preset_indices(self, prefix: str) -> Dict[str, int]:
         return {

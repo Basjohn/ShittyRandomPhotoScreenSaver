@@ -184,10 +184,14 @@ def test_shared_beat_engine_registry_reconfigures_single_engine_across_bar_count
 class _FakeEngine:
     def __init__(self, bar_count: int = 16) -> None:
         self._audio_buffer = object()
-        self._audio_worker = object()
+        self._audio_worker = SimpleNamespace(_kick_lane_gain=1.0)
         self._bars_result_buffer = object()
         self.last_floor_config = (True, 0.12)
         self.last_sensitivity_config = (True, 1.0)
+        self.last_energy_boost = None
+        self.last_input_gain = None
+        self.last_agc_strength = None
+        self.process_supervisor = None
         self.thread_manager = None
         self.acquired = 0
         self.started = 0
@@ -211,6 +215,18 @@ class _FakeEngine:
 
     def set_thread_manager(self, thread_manager) -> None:
         self.thread_manager = thread_manager
+
+    def set_process_supervisor(self, supervisor) -> None:
+        self.process_supervisor = supervisor
+
+    def set_energy_boost(self, boost: float) -> None:
+        self.last_energy_boost = float(boost)
+
+    def set_input_gain(self, gain: float) -> None:
+        self.last_input_gain = float(gain)
+
+    def set_agc_strength(self, value: float) -> None:
+        self.last_agc_strength = float(value)
 
     def acquire(self) -> None:
         self.acquired += 1
@@ -300,8 +316,10 @@ def _patch_shared_engine(monkeypatch, provider: Callable[..., object]) -> None:
 
     monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", provider)
     import widgets.spotify_visualizer.beat_engine as beat_engine_mod
+    import widgets.spotify_visualizer.runtime_config as runtime_config_mod
 
     monkeypatch.setattr(beat_engine_mod, "get_shared_spotify_beat_engine", provider)
+    monkeypatch.setattr(runtime_config_mod, "get_shared_spotify_beat_engine", provider)
 
 
 @pytest.mark.qt
@@ -327,6 +345,43 @@ def test_resize_bar_buffers_reuses_existing_engine_and_reconfigures_bar_count(qt
     assert vis._engine is engine_36
     assert engine_36.reconfigure_calls == [40]
     assert engine_40.acquired == 0
+
+
+@pytest.mark.qt
+def test_runtime_config_bridge_forwards_engine_and_worker_updates(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=24)
+    block_sizes: list[int] = []
+    engine._audio_worker = SimpleNamespace(
+        _kick_lane_gain=1.0,
+        set_audio_block_size=lambda value: block_sizes.append(int(value)),
+    )
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    thread_manager = object()
+    supervisor = object()
+
+    vis.set_thread_manager(thread_manager)
+    vis.set_process_supervisor(supervisor)
+    vis.apply_floor_config(False, 0.44)
+    vis.apply_sensitivity_config(False, 1.7)
+    vis._apply_energy_boost(1.33)
+    vis._apply_input_gain(1.25)
+    vis._apply_agc_strength(0.4)
+    vis._apply_audio_block_size(256)
+
+    assert vis._engine is engine
+    assert engine.thread_manager is thread_manager
+    assert engine.process_supervisor is supervisor
+    assert engine.last_floor_config == (False, 0.44)
+    assert engine.last_sensitivity_config == (False, 1.7)
+    assert engine.last_energy_boost == pytest.approx(1.33)
+    assert engine.last_input_gain == pytest.approx(1.25)
+    assert engine.last_agc_strength == pytest.approx(0.4)
+    assert block_sizes == [256]
 
 
 class _OverlayStub:

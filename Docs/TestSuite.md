@@ -47,6 +47,10 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, and architecture-split engine-resolution regression coverage.
+- `tests/test_spotify_visualizer_mode_transition.py`
+  Mode-fade-out reset ordering, runtime bar-array zeroing before engine prepare, no hidden `_replay_engine_config()` reintroduction, and stale activation/generation rejection before display-bar authority returns.
+- `tests/test_ghost_isolation.py`
+  Overlay per-mode state isolation, manual reset bookkeeping, mode-switch cold-reset behavior, and ghost/runtime buckets staying mode-local rather than bleeding across visualizer modes.
 - `tests/test_devcurve_builder_contract.py`
   Spline Curve builder structure contracts such as bucket composition, scaffold usage, and canonical default-color helper usage.
 - `tests/test_mute_button_widget.py`
@@ -84,6 +88,7 @@ When changing visualizer settings/contracts, include tests for:
 - runtime bridge kwargs transport,
 - preset repair/reindex behavior,
 - mode-prefix compatibility for future/unknown-style payload prefixes.
+- reset-order / stale-generation gating when touching mode-reset, activation, or overlay-handoff code.
 - **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
 
 ## 4.1 Gmail Test Expectations

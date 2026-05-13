@@ -7,6 +7,37 @@ but do not belong in `Docs/Historical_Bugs.md`.
 
 ## 2026-05-13
 
+### Spotify GL Overlay State-Handoff Extraction
+- **Area:** Spotify visualizer GL overlay state/reset hardening
+- **Files:** `widgets/spotify_visualizer/overlay_state.py`, `widgets/spotify_bars_gl_overlay.py`, `tests/test_ghost_isolation.py`, `tests/test_spotify_visualizer_mode_transition.py`
+- **Issue:** `SpotifyBarsGLOverlay.set_state()` still mixed visibility early-return, activation/generation capture, mode-reset bookkeeping, border-width storage, and the large per-mode payload application in one monolithic entrypoint. That made the highest-risk visualizer file harder to audit without touching the first-frame / bleed-sensitive render path.
+- **Fix:** extracted the non-shader state side into `overlay_state.py` so manual reset scheduling, cold-reset bookkeeping, activation/generation/frame metadata capture, floor snapshot handoff, invisible-frame early return, and border-width storage are centralized behind thin overlay wrappers. `paintGL()` stencil math and first-frame authority were intentionally left untouched.
+- **Regression coverage:**
+  - `tests/test_ghost_isolation.py`
+  - `tests/test_spotify_visualizer_mode_transition.py`
+  - `tests/test_stencil_mask_alignment.py`
+  - synthetic bleed-family subset from `tests/test_spotify_visualizer_widget.py`
+- **Log note:** post-change review of `logs/screensaver_spotify_vis.log` stayed free of first-bar / bleed / first-frame / error markers; only a latency warning remained visible from the user's multi-swap runs.
+
+### Visualizer Settings/Activation/Runtime Residue Reduction
+- **Area:** Spotify visualizer structural hardening
+- **Files:** `core/settings/models/_spotify_visualizer.py`, `widgets/spotify_visualizer/technical_config.py`, `widgets/spotify_visualizer/activation_runtime.py`, `widgets/spotify_visualizer/runtime_config.py`, `widgets/spotify_visualizer_widget.py`
+- **Issue:** large settings/activation/technical-config blocks were still concentrated in monolithic seams, making future visualizer work riskier and harder to audit. That kind of coordinator bloat raises the chance of accidentally reopening the historical bleed / fresh-frame / startup regressions.
+- **Fix:** extracted dedicated helper ownership for:
+  - visualizer settings ingestion/serialization groupings in `_spotify_visualizer.py`,
+  - per-mode technical cache/override/engine-application logic in `technical_config.py`,
+  - settings-model apply and canonical activation-payload replay in `activation_runtime.py`,
+  - shared beat-engine/thread/process/audio-block/runtime-bar-state coordination in `runtime_config.py`.
+- **Regression coverage:**
+  - `tests/test_visualizer_settings_plumbing.py`
+  - `tests/test_spotify_visualizer_widget.py`
+  - synthetic-audio / bleed-focused checks:
+    - `test_runtime_switch_paths_reset_all_bleed_state_for_all_modes`
+    - `test_mode_switch_synthetic_audio_matches_fresh_worker_after_reset`
+    - `test_widget_manager_preset_cycle_discards_real_engine_bleed_state`
+    - `test_mode_switch_discards_stale_audio_buffer_before_next_frame`
+- **Risk note:** these extractions intentionally avoided `widgets/spotify_bars_gl_overlay.py` and did not alter first-frame authority gates. If a future runtime issue appears, compare against this split before assuming the GL layer regressed.
+
 ### Mute Button Secondary-Stage Late-Anchor Recovery
 - **Area:** Spotify secondary-stage startup / mute button reveal
 - **Files:** `widgets/mute_button_widget.py`, `tests/test_mute_button_widget.py`
