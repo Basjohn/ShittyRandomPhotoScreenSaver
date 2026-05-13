@@ -118,6 +118,38 @@ def test_media_header_expands_into_artwork_gap_before_eliding(qt_app) -> None:
         widget.deleteLater()
 
 
+def test_media_layout_deferred_update_position_skips_invalid_widget(monkeypatch) -> None:
+    from widgets import media_layout
+
+    callbacks = []
+    widget = SimpleNamespace(_update_position=lambda: (_ for _ in ()).throw(AssertionError("should not run")))
+
+    monkeypatch.setattr(media_layout.QTimer, "singleShot", lambda _ms, cb: callbacks.append(cb))
+    monkeypatch.setattr(media_layout.Shiboken, "isValid", lambda _widget: False)
+
+    media_layout._defer_update_position(widget)
+
+    assert len(callbacks) == 1
+    callbacks[0]()
+
+
+def test_media_layout_deferred_update_position_runs_when_widget_still_valid(monkeypatch) -> None:
+    from widgets import media_layout
+
+    callbacks = []
+    calls = []
+    widget = SimpleNamespace(_update_position=lambda: calls.append("updated"))
+
+    monkeypatch.setattr(media_layout.QTimer, "singleShot", lambda _ms, cb: callbacks.append(cb))
+    monkeypatch.setattr(media_layout.Shiboken, "isValid", lambda _widget: True)
+
+    media_layout._defer_update_position(widget)
+
+    assert len(callbacks) == 1
+    callbacks[0]()
+    assert calls == ["updated"]
+
+
 def test_media_header_fits_spotify_in_runtime_geometry_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

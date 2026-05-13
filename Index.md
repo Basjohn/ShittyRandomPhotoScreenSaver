@@ -16,6 +16,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
 | `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
+| `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
 

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRect, QTimer
 from PySide6.QtGui import QFont, QFontMetrics
+from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
 from widgets.base_overlay_widget import OverlayPosition, BaseOverlayWidget
@@ -19,6 +20,24 @@ if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+
+
+def _defer_update_position(widget) -> None:
+    """Retry position update on the next tick if the widget still exists."""
+
+    def _retry() -> None:
+        try:
+            if Shiboken is not None and not Shiboken.isValid(widget):
+                return
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            return
+        try:
+            widget._update_position()
+        except RuntimeError:
+            return
+
+    QTimer.singleShot(16, _retry)
 
 
 def compute_controls_layout(widget):
@@ -125,7 +144,7 @@ def update_position(widget) -> None:
     """
     # Guard against positioning before widget has valid size
     if widget.width() <= 0 or widget.height() <= 0:
-        QTimer.singleShot(16, widget._update_position)
+        _defer_update_position(widget)
         return
     
     # Sync MediaPosition to OverlayPosition for base class
