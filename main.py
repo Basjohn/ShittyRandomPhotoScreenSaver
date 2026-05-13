@@ -540,15 +540,8 @@ def main():
     logger.info("ShittyRandomPhotoScreenSaver Starting")
     logger.info("=" * 60)
     
-    # Cleanup pycache on startup (script mode only)
-    if is_script_mode():
-        logger.info("Running in script mode - cleaning pycache on startup")
-        project_root = Path(__file__).parent
-        removed = cleanup_pycache(project_root)
-        if removed > 0:
-            logger.info(f"Removed {removed} __pycache__ directories")
-        else:
-            logger.debug("No __pycache__ directories found")
+    # Startup should not pay the recursive pycache-cleanup cost in script mode.
+    # Exit cleanup is still retained for local developer hygiene.
     
     # Parse command-line arguments
     mode, preview_hwnd = parse_screensaver_args()

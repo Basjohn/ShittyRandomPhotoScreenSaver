@@ -6,6 +6,7 @@ center-out frequency mapping, reactive smoothing, and adaptive normalization.
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import List, Mapping, Optional, TYPE_CHECKING
@@ -21,6 +22,15 @@ if TYPE_CHECKING:
     from widgets.spotify_visualizer_widget import SpotifyVisualizerAudioWorker
 
 logger = get_logger(__name__)
+
+def _should_emit_bars_snapshot(worker: "SpotifyVisualizerAudioWorker", now: float) -> bool:
+    """Return True when the periodic BARS snapshot should actually be emitted."""
+    if not is_viz_diagnostics_enabled() or not logger.isEnabledFor(logging.INFO):
+        return False
+    last_snapshot = getattr(worker, "_bars_log_last_ts", 0.0)
+    min_interval = max(1.0, float(getattr(worker, "_bars_log_interval", 5.0) or 5.0))
+    return now <= 0.0 or (now - last_snapshot) >= min_interval
+
 
 _SPECTRUM_DEFAULT_LANE_STRENGTHS_MIRRORED = {
     "Mid": 0.60,
@@ -411,12 +421,7 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         now = 0.0
-    last_snapshot = getattr(worker, "_bars_log_last_ts", 0.0)
-    min_interval = max(1.0, float(getattr(worker, "_bars_log_interval", 5.0) or 5.0))
-    if (
-        now <= 0.0
-        or (now - last_snapshot) >= min_interval
-    ) and is_viz_diagnostics_enabled():
+    if _should_emit_bars_snapshot(worker, now):
         bar_str = " ".join(f"{v:.2f}" for v in arr)
         logger.info(
             "[SPOTIFY_VIS][BARS] raw_bass=%.3f bar_count=%d bars=[%s]",
@@ -888,6 +893,11 @@ def maybe_log_floor_state(
     expansion: float,
 ) -> None:
     """Throttled logging for noise-floor diagnostics."""
+    if not (is_perf_metrics_enabled() and is_viz_diagnostics_enabled()):
+        return
+    if not logger.isEnabledFor(logging.INFO):
+        return
+
     try:
         now = time.time()
     except Exception as e:
@@ -928,9 +938,6 @@ def maybe_log_floor_state(
     if not state_changed and last_ts and (now - last_ts) < throttle:
         return
     if state_changed and last_ts and (now - last_ts) < 1.5:
-        return
-
-    if not (is_perf_metrics_enabled() and is_viz_diagnostics_enabled()):
         return
 
     try:

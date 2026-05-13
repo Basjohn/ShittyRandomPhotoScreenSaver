@@ -130,13 +130,22 @@ class GmailImapClient:
                 recent_ids.reverse()
 
                 results: List[EmailMetadata] = []
+                failed_ids: List[str] = []
                 for mid in recent_ids:
                     try:
                         meta = self._fetch_message_metadata(conn, mid)
                         if meta:
                             results.append(meta)
                     except Exception as exc:
+                        failed_ids.append(
+                            mid.decode("ascii", errors="replace") if isinstance(mid, bytes) else str(mid)
+                        )
                         logger.warning("[GMAIL_IMAP] Failed to fetch msg %s: %s", mid, exc)
+
+                if failed_ids:
+                    raise RuntimeError(
+                        "IMAP partial fetch failure for UIDs: " + ", ".join(failed_ids)
+                    )
 
                 return results
             except imaplib.IMAP4.error as exc:

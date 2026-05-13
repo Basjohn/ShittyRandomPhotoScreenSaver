@@ -848,39 +848,44 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
 
+def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Update *extra* with the cross-mode visual fields every GPU path understands."""
+    extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
+    extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
+    extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
+    extra['spectrum_rainbow_border'] = getattr(widget, '_spectrum_rainbow_border', False)
+    extra['spectrum_glow_enabled'] = getattr(widget, '_spectrum_glow_enabled', False)
+    extra['spectrum_glow_intensity'] = getattr(widget, '_spectrum_glow_intensity', 0.55)
+    extra['spectrum_glow_color'] = getattr(widget, '_spectrum_glow_color', None)
+    extra['spectrum_ghosting_enabled'] = getattr(widget, '_spectrum_ghosting_enabled', True)
+    extra['spectrum_ghost_alpha'] = getattr(widget, '_spectrum_ghost_alpha', 0.4)
+    extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
+    extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
+    extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
+    extra['osc_ghost_line2_enabled'] = getattr(widget, '_osc_ghost_line2_enabled', True)
+    extra['osc_ghost_line3_enabled'] = getattr(widget, '_osc_ghost_line3_enabled', True)
+    extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)
+    extra['blob_ghost_alpha'] = getattr(widget, '_blob_ghost_alpha', 0.4)
+    extra['blob_ghost_decay'] = getattr(widget, '_blob_ghost_decay', 0.3)
+    extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
+    extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
+    extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
+    extra['sine_ghost_line2_enabled'] = getattr(widget, '_sine_ghost_line2_enabled', True)
+    extra['sine_ghost_line3_enabled'] = getattr(widget, '_sine_ghost_line3_enabled', True)
+    extra['bubble_ghosting_enabled'] = getattr(widget, '_bubble_ghosting_enabled', False)
+    extra['bubble_ghost_alpha'] = getattr(widget, '_bubble_ghost_alpha', 0.0)
+    extra['bubble_ghost_decay'] = getattr(widget, '_bubble_ghost_decay', 0.4)
+    extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
+    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
+    extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
+    extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
+
+
 def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
     """Return cross-mode visual extras that all GPU paths understand."""
-    return {
-        'rainbow_enabled': getattr(widget, '_rainbow_enabled', False),
-        'rainbow_speed': getattr(widget, '_rainbow_speed', 0.5),
-        'rainbow_per_bar': getattr(widget, '_rainbow_per_bar', False),
-        'spectrum_rainbow_border': getattr(widget, '_spectrum_rainbow_border', False),
-        'spectrum_glow_enabled': getattr(widget, '_spectrum_glow_enabled', False),
-        'spectrum_glow_intensity': getattr(widget, '_spectrum_glow_intensity', 0.55),
-        'spectrum_glow_color': getattr(widget, '_spectrum_glow_color', None),
-        'spectrum_ghosting_enabled': getattr(widget, '_spectrum_ghosting_enabled', True),
-        'spectrum_ghost_alpha': getattr(widget, '_spectrum_ghost_alpha', 0.4),
-        'spectrum_ghost_decay': getattr(widget, '_spectrum_ghost_decay', 0.4),
-        'osc_ghosting_enabled': getattr(widget, '_osc_ghosting_enabled', False),
-        'osc_ghost_intensity': getattr(widget, '_osc_ghost_intensity', 0.4),
-        'osc_ghost_line2_enabled': getattr(widget, '_osc_ghost_line2_enabled', True),
-        'osc_ghost_line3_enabled': getattr(widget, '_osc_ghost_line3_enabled', True),
-        'blob_ghosting_enabled': getattr(widget, '_blob_ghosting_enabled', False),
-        'blob_ghost_alpha': getattr(widget, '_blob_ghost_alpha', 0.4),
-        'blob_ghost_decay': getattr(widget, '_blob_ghost_decay', 0.3),
-        'sine_ghosting_enabled': getattr(widget, '_sine_ghosting_enabled', True),
-        'sine_ghost_alpha': getattr(widget, '_sine_ghost_alpha', 0.45),
-        'sine_ghost_decay': getattr(widget, '_sine_ghost_decay', 0.3),
-        'sine_ghost_line2_enabled': getattr(widget, '_sine_ghost_line2_enabled', True),
-        'sine_ghost_line3_enabled': getattr(widget, '_sine_ghost_line3_enabled', True),
-        'bubble_ghosting_enabled': getattr(widget, '_bubble_ghosting_enabled', False),
-        'bubble_ghost_alpha': getattr(widget, '_bubble_ghost_alpha', 0.0),
-        'bubble_ghost_decay': getattr(widget, '_bubble_ghost_decay', 0.4),
-        'sine_heartbeat': getattr(widget, '_sine_heartbeat', 0.0),
-        'heartbeat_intensity': getattr(widget, '_heartbeat_intensity', 0.0),
-        'sine_density': getattr(widget, '_sine_density', 1.0),
-        'sine_displacement': getattr(widget, '_sine_displacement', 0.0),
-    }
+    extra: Dict[str, Any] = {}
+    _populate_shared_visualizer_extras(extra, widget)
+    return extra
 
 
 def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
@@ -1126,10 +1131,18 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
     """Build the mode-local GPU extras payload for the compositor overlay."""
+    if mode_str == 'spectrum':
+        extra = getattr(widget, '_spectrum_gpu_push_extras', None)
+        if not isinstance(extra, dict):
+            extra = {}
+            widget._spectrum_gpu_push_extras = extra
+        extra.clear()
+        _populate_shared_visualizer_extras(extra, widget)
+        _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
+        return extra
+
     extra = _build_shared_visualizer_extras(widget)
     _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
-    if mode_str == 'spectrum':
-        return extra
     if mode_str in {'sine_wave', 'oscilloscope'}:
         _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
     elif mode_str == 'blob':

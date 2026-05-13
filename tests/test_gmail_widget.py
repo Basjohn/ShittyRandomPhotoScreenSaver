@@ -196,6 +196,41 @@ def test_gmail_fetch_error_keeps_displayed_cache_visible(qt_app):
         widget.cleanup()
 
 
+def test_gmail_empty_fetch_keeps_displayed_cache_visible(qt_app):
+    """An empty live fetch must not replace valid cached/read content."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    updates = []
+    try:
+        email = EmailMetadata(
+            id="cached_msg",
+            thread_id="cached_thread",
+            sender="Sender",
+            subject="Cached Subject",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=False,
+        )
+        widget._emails = [email]
+        widget._rebuild_display_rows()
+        widget._has_displayed_valid_data = True
+        widget._last_error = None
+        widget.update = lambda *args, **kwargs: updates.append("update")  # type: ignore[method-assign]
+
+        widget._on_emails_fetched([], 0)
+
+        assert widget._last_error is None
+        assert [item.id for item in widget._emails] == ["cached_msg"]
+        assert len(widget._display_rows) == 1
+        assert updates == []
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_cache_max_age_is_two_weeks():
     """Disk cache should remain valid for up to two weeks as a fallback surface."""
     from widgets.gmail_widget import CACHE_MAX_AGE_HOURS
@@ -219,6 +254,41 @@ def test_gmail_error_state_height_exceeds_single_row_height(qt_app):
         row_height = widget.minimumHeight()
 
         assert error_height > row_height
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_empty_state_paints_below_header(qt_app):
+    """Worst-case empty-state copy must render below the header frame area."""
+    from widgets.gmail_widget import GmailWidget
+
+    class FakePainter:
+        def __init__(self):
+            self.rect = None
+            self.flags = None
+            self.text = None
+
+        def setFont(self, *_args, **_kwargs):
+            return None
+
+        def setPen(self, *_args, **_kwargs):
+            return None
+
+        def drawText(self, rect, flags, text):
+            self.rect = rect
+            self.flags = flags
+            self.text = text
+
+    widget = GmailWidget()
+    try:
+        widget.resize(600, 180)
+        painter = FakePainter()
+
+        widget._paint_empty_state(painter)
+
+        assert painter.text == "No unread emails"
+        assert painter.rect is not None
+        assert painter.rect.top() >= widget._header_bottom_y()
     finally:
         widget.cleanup()
 

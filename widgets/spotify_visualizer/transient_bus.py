@@ -21,6 +21,7 @@ No external dependencies beyond numpy (already required by audio_worker).
 """
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass
 from typing import List
@@ -250,7 +251,11 @@ class TransientBus:
 
         result = self.snapshot()
 
-        if is_viz_diagnostics_enabled() and self._frame_count % 120 == 1:
+        if (
+            is_viz_diagnostics_enabled()
+            and logger.isEnabledFor(logging.DEBUG)
+            and self._frame_count % 120 == 1
+        ):
             logger.debug(
                 "[SPOTIFY_VIS][TRANSIENT] bass=%.3f mid=%.3f high=%.3f "
                 "flux=%.3f/%.3f/%.3f thresh=%.3f/%.3f/%.3f onset=%s(%s,%.2f)",

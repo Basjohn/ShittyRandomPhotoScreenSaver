@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Sequence, Optional, Set
 
+import logging
 import numpy as np
 import time
 from PySide6.QtCore import Qt, QRect
@@ -1229,21 +1230,18 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
         self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
 
-        if is_viz_diagnostics_enabled() and self._vis_mode in ('oscilloscope', 'sine_wave', 'spectrum'):
+        if (
+            is_viz_diagnostics_enabled()
+            and logger.isEnabledFor(logging.DEBUG)
+            and self._vis_mode in ('oscilloscope', 'sine_wave', 'spectrum')
+        ):
             now_diag = time.time()
-            def _energy_bucket(value: float, step: float = 0.08) -> float:
-                try:
-                    bucketed = round(float(value) / step) * step
-                    return round(bucketed, 2)
-                except Exception:
-                    return 0.0
-
             if self._vis_mode == 'spectrum':
                 diag_sig = (
                     self._vis_mode,
                     int(self._spectrum_glow_enabled),
                     round(float(self._spectrum_glow_intensity), 3),
-                    tuple(int(c) for c in self._spectrum_glow_color.getRgb()),
+                    int(self._spectrum_glow_color.rgba()),
                     int(self._bar_count),
                 )
             else:
@@ -1262,12 +1260,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 or diag_sig != self._glow_diag_last_sig
             ):
                 if self._vis_mode == 'spectrum':
+                    glow_color = tuple(int(c) for c in self._spectrum_glow_color.getRgb())
                     logger.debug(
                         "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f color=%s bar_count=%d energy_b=%.3f energy_m=%.3f energy_h=%.3f energy_o=%.3f",
                         self._vis_mode,
                         self._spectrum_glow_enabled,
                         self._spectrum_glow_intensity,
-                        tuple(int(c) for c in self._spectrum_glow_color.getRgb()),
+                        glow_color,
                         int(self._bar_count),
                         float(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
                         float(getattr(self._energy_bands, 'mid', 0.0) or 0.0),

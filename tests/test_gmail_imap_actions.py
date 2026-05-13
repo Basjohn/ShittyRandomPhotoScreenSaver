@@ -1,5 +1,7 @@
 """Focused tests for Gmail IMAP action helpers."""
 
+import pytest
+
 
 class FakeImapActionConn:
     def __init__(self):
@@ -161,6 +163,50 @@ def test_imap_list_messages_preserves_recent_uid_order(monkeypatch) -> None:
 
     assert [message.subject for message in messages] == ["Message 10", "Message 9"]
     assert conn.fetch_uids == ["10", "9"]
+    assert conn.logged_out is True
+
+
+def test_imap_list_messages_raises_on_partial_fetch_failure(monkeypatch) -> None:
+    from core.gmail.gmail_imap import GmailImapClient
+
+    class FakeListConn:
+        def __init__(self):
+            self.logged_out = False
+
+        def capability(self):
+            return "OK", [b""]
+
+        def select(self, mailbox, readonly=True):
+            assert mailbox == '"INBOX"'
+            assert readonly is True
+            return "OK", [b""]
+
+        def uid(self, command, *args):
+            if command == "SEARCH":
+                return "OK", [b"1 2"]
+            if command == "FETCH":
+                uid = args[0].decode("ascii") if isinstance(args[0], bytes) else str(args[0])
+                if uid == "2":
+                    headers = (
+                        b"From: fake_sender@example.com\r\n"
+                        b"Subject: Message 2\r\n"
+                        b"Date: Tue, 14 Jan 2025 12:00:00 +0000\r\n"
+                        b"Message-ID: <fake-2@example.com>\r\n\r\n"
+                    )
+                    return "OK", [(b"2 (FLAGS (\\Seen))", headers)]
+                raise RuntimeError("System Error")
+            raise AssertionError(f"unexpected command {command}")
+
+        def logout(self):
+            self.logged_out = True
+
+    conn = FakeListConn()
+    client = GmailImapClient("fake@example.com", "fake_app_password")
+    monkeypatch.setattr(client, "_connect", lambda: conn)
+
+    with pytest.raises(RuntimeError, match="partial fetch failure"):
+        client.list_messages(label_ids=["INBOX"], max_results=2)
+
     assert conn.logged_out is True
 
 

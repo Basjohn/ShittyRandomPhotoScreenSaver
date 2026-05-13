@@ -10,6 +10,8 @@ from utils.lockfree import TripleBuffer
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key
 from core.settings.visualizer_presets import get_custom_preset_index
+from widgets.spotify_visualizer import bar_computation
+from widgets.spotify_visualizer import config_applier
 from widgets.spotify_visualizer import mode_transition
 from widgets.spotify_visualizer import tick_helpers
 from widgets.spotify_visualizer import tick_pipeline
@@ -263,6 +265,110 @@ def test_latency_logging_skips_disabled_widget(monkeypatch):
     tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=5.0, force_reason=None)
 
     assert calls == []
+
+
+def test_latency_logging_suppresses_pre_ready_startup_warning(monkeypatch):
+    engine = SimpleNamespace(
+        _last_audio_ts=5.0,
+        _last_smooth_ts=-1.0,
+        get_generation_id=lambda: 8,
+        get_latest_generation_with_frame=lambda: 7,
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _latency_audio_ready=False,
+        _latency_activation_started_ts=10.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="bubble",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
+
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=15.0, force_reason=None)
+
+    assert calls == []
+    assert widget._latency_audio_ready is False
+
+
+def test_latency_logging_warns_once_current_activation_is_ready(monkeypatch):
+    engine = SimpleNamespace(
+        _last_audio_ts=0.0,
+        _last_smooth_ts=14.9,
+        get_generation_id=lambda: 8,
+        get_latest_generation_with_frame=lambda: 8,
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _latency_audio_ready=False,
+        _latency_activation_started_ts=10.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="bubble",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
+
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=15.0, force_reason=None)
+
+    assert widget._latency_audio_ready is True
+    assert calls == [("warning", "[SPOTIFY_VIS][LATENCY] lag_ms=100.0 mode=bubble transition_phase=0 pending=<none>")]
+
+
+def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
+    engine = SimpleNamespace(
+        _last_audio_ts=5.0,
+        _last_smooth_ts=-1.0,
+        get_generation_id=lambda: 8,
+        get_latest_generation_with_frame=lambda: 7,
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _latency_audio_ready=False,
+        _latency_activation_started_ts=10.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="bubble",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
+
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=15.0, force_reason="transition_start")
+
+    assert widget._latency_audio_ready is False
+    assert calls == [("error", "[!!!!][SPOTIFY_VIS][LATENCY] lag_ms=10000.0 mode=bubble transition_phase=0 pending=<none> trigger=transition_start")]
+
+
+def test_bars_snapshot_gate_skips_emit_when_logger_info_disabled(monkeypatch):
+    worker = SimpleNamespace(
+        _bars_log_last_ts=0.0,
+        _bars_log_interval=5.0,
+    )
+    monkeypatch.setattr(bar_computation, "is_viz_diagnostics_enabled", lambda: True)
+    monkeypatch.setattr(bar_computation.logger, "isEnabledFor", lambda level: False)
+
+    assert bar_computation._should_emit_bars_snapshot(worker, now=10.0) is False
 
 
 def test_stop_legacy_clears_latency_probe_state():
@@ -522,6 +628,29 @@ def test_runtime_config_bridge_forwards_engine_and_worker_updates(qt_app, qtbot,
     assert block_sizes == [256]
 
 
+@pytest.mark.qt
+def test_spectrum_gpu_push_extras_dict_is_reused(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=24)
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    widget._engine = engine
+    widget._heartbeat_intensity = 0.25
+
+    first = config_applier.build_gpu_push_extra_kwargs(widget, "spectrum", engine)
+    first_id = id(first)
+    assert first["heartbeat_intensity"] == pytest.approx(0.25)
+
+    widget._heartbeat_intensity = 0.75
+    second = config_applier.build_gpu_push_extra_kwargs(widget, "spectrum", engine)
+
+    assert id(second) == first_id
+    assert second["heartbeat_intensity"] == pytest.approx(0.75)
+
+
 class _OverlayStub:
     def __init__(self) -> None:
         self.reset_requests: list[str] = []
@@ -776,6 +905,102 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     assert sim_settings["bubble_bounce_small_speed"] == pytest.approx(0.42)
     assert sim_settings["bubble_bounce_same_only"] is True
     assert sim_settings["bubble_collision_pop_mode"] == "one"
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_reads_pre_agc_snapshot_once_per_tick(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    pre_agc_calls = {"count": 0}
+
+    def _pre_agc_snapshot():
+        pre_agc_calls["count"] += 1
+        return SimpleNamespace(bass=0.61, mid=0.41, high=0.21, overall=0.51)
+
+    fake_engine.get_pre_agc_energy_bands = _pre_agc_snapshot
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert pre_agc_calls["count"] == 1
+
+
+@pytest.mark.qt
+def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.21, mid=0.31, high=0.41, overall=0.51)
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+    first_call = widget._thread_manager.calls[-1]
+    first_energy = first_call["args"][1]
+    first_settings = first_call["args"][2]
+    first_pulse = first_call["args"][3]
+
+    widget._bubble_compute_pending = False
+    widget._bubble_stream_constant_speed = 0.83
+    widget._bubble_big_bass_pulse = 0.92
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+    second_call = widget._thread_manager.calls[-1]
+
+    assert second_call["args"][1] is first_energy
+    assert second_call["args"][2] is first_settings
+    assert second_call["args"][3] is first_pulse
+    assert second_call["args"][2]["bubble_stream_constant_speed"] == pytest.approx(0.83)
+    assert second_call["args"][3]["big_bass_pulse"] == pytest.approx(0.92)
 
 
 def test_beat_engine_playback_state_strict_worker_lifecycle():

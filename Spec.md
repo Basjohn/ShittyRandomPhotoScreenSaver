@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -77,6 +77,7 @@ Active ids:
 - Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
 - Live audio block-size changes are capture-rebind boundaries: when mode-owned technical config changes the preferred block size at runtime, the active audio worker must restart capture instead of waiting for a full runtime rebuild or settings-dialog restart.
 - Visualizer tick ownership is split by phase: the dedicated recurring timer owns steady runtime cadence, while AnimationManager assistance is transition-scoped only and must hand control cleanly back to the dedicated timer when the transition ends.
+- Visualizer latency warnings are activation-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation. Explicit probe-triggered latency requests may still log before readiness so reset/transition investigations remain visible.
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.
@@ -86,6 +87,7 @@ Active ids:
 - Preset-varying runtime visuals that affect activation or renderer state, including bar fill/border styling and legacy ghost controls, are mode-owned too. They must not travel through shared/global authored keys after normalization.
 - Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
 - Live diagnostics for visualizer activation must report the resolved preset identity and the actual applied worker/widget technical state, not only raw settings payloads.
+- High-frequency visualizer diagnostics (`BARS`, `FLOOR`, `TRANSIENT`, `DEVCURVE`, `GLOW`) must build their detailed payloads only on actual emit paths; guardrail warnings such as `LATENCY`, `FIRST_FRAME_GUARD`, and `MODE_RESET_ASSERT` stay loud.
 
 ### 5.5 Runtime card/shadow contract
 - Runtime overlay card shadows are painter-owned, not `QGraphicsDropShadowEffect`-owned.
@@ -155,6 +157,8 @@ Active ids:
 - Gmail row text columns must remain stable across visible rows: timestamp, sender, and subject slots should use shared widths so shorter senders leave blank space instead of moving the subject start position; the sender/subject boundary is user-adjustable via `gmail.sender_column_width`
 - Gmail IMAP Inbox listing must preserve the active mailbox order returned from the selected label instead of over-fetching and date-sorting in the widget. Runtime evidence showed the over-fetch/date-sort mitigation mismatched Gmail's visible Inbox.
 - Gmail cached mail must be stored and loaded in the same backend order used for visible display, so startup cache display does not visibly reorder a few seconds later when the live fetch completes.
+- Gmail live fetches that come back empty must not displace valid cached or already-displayed mail. When Gmail has valid visible content, an empty live result is treated as non-authoritative and the existing display remains in place.
+- Gmail IMAP partial per-message fetch failures must also be treated as non-authoritative. A degraded partial result must not overwrite a fuller cached/already-displayed list or poison the cache with a truncated mailbox snapshot.
 - Gmail sender casing may apply conservative display capitalization for visual consistency, but must preserve established mixed/all-caps brand tokens such as `PayPal`, `ChatGPT`, `FNB`, and `AI`
 - Gmail date display modes are `relative`, `numeric`, and `words`. Relative uses age labels such as `Yesterday`, `Last Week`, `Last Month`, and `Two Years Ago`; numeric uses numbered dates; words uses calendar labels such as `April 16th`.
 - Gmail thread/duplicate display may collapse truly identical or Gmail-threaded entries only when `gmail.group_threads` is enabled. It defaults to off until grouping semantics match Gmail well enough in runtime, and read/unread groups must remain separate.
@@ -173,6 +177,7 @@ Active ids:
 - Future shared URL opening work may try to prefer a browser window on the lowest-index monitor, but must fall back to current behavior and must not add brittle or always-running browser automation.
 - Gmail build/release work must verify all Gmail image assets, notification sound assets, Qt multimedia dependencies, and generated/fallback asset dependencies are included in build scripts, frozen build config, resource copy steps, and installer/package outputs. Widget image lookup must not depend only on the launch cwd, because standard `.scr` launches can start outside the app directory. Frozen builds should prefer `%ProgramData%\SRPSS\sounds\tutuogg.ogg` for the default notification sound, with `resources/tutuogg.ogg` as the script/dev fallback. Build scripts must include only the default OGG, not the entire `resources` directory, so ignored local OAuth files are never bundled. Final packaged artifacts still require runtime validation.
 - Gmail must not fade into view when there is no authenticated account information and no usable cache.
+- Gmail worst-case empty-state copy such as `No unread emails` is a fallback-only surface and must render in the content area below the header frame, not centered across the entire card.
 
 ### 10.4 Security invariants
 - OAuth tokens stored encrypted via DPAPI

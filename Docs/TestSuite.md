@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -46,7 +46,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_spotify_visualizer_widget.py`
-  Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics, and architecture-split engine-resolution regression coverage.
+  Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), Spectrum GPU extras reuse, and architecture-split engine-resolution regression coverage.
 - `tests/test_spotify_visualizer_mode_transition.py`
   Mode-fade-out reset ordering, runtime bar-array zeroing before engine prepare, no hidden `_replay_engine_config()` reintroduction, and stale activation/generation rejection before display-bar authority returns.
 - `tests/test_ghost_isolation.py`
@@ -60,7 +60,9 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_weather_widget.py`
   Weather retry timer cleanup and retry timeout state handling.
 - `tests/test_gmail_widget.py`
-  Gmail cache/fallback behavior, transition-aware refresh deferral, timer cleanup, grouping formatting, and stable-content caching rules.
+  Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, transition-aware refresh deferral, timer cleanup, grouping formatting, and stable-content caching rules.
+- `tests/test_gmail_imap_actions.py`
+  Gmail IMAP UID action helpers, mailbox order preservation, and partial-fetch failure rejection so truncated IMAP snapshots cannot overwrite valid Gmail display/cache state.
 - `tests/test_settings_dialog.py`
   Settings-dialog destructive flows such as reset-defaults completion/auto-close behavior.
 - `tests/test_widgets_tab.py`

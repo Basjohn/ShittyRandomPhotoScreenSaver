@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 This file tracks active work only. Completed implementation details belong in `Docs/Historical_Bugs.md` or the relevant reference docs, not here.
 
@@ -33,8 +33,11 @@ Core value: the remaining user-visible risk is runtime hot-path cost and mislead
   - `tests/test_frame_timing_workload.py -k "slide_with_visualizer_load"`,
   - post-change vis log review for persistent spikes versus transition/settings-boundary spikes.
 - Current focus:
-  - classify which spikes are steady-runtime versus settings-boundary or transition-boundary,
-  - investigate persistent `~42–80ms` spikes that remain after the timer/tick-source cleanup,
+  - keep the landed latency-readiness gate intact so startup-only pre-capture noise does not emit fake Bubble latency warnings,
+  - keep the landed hot-diagnostic emit-only gates intact: `BARS`, `FLOOR`, `TRANSIENT`, `DEVCURVE`, and throttled `GLOW`,
+  - keep the landed Spectrum pure-upgrade path intact: shared GPU extras dict reuse for steady-state `spectrum` pushes,
+  - investigate persistent non-transition `spectrum` spikes that remain after the timer/tick-source cleanup, Bubble dispatch-allocation reduction, and diagnostic-overhead cuts,
+  - treat Bubble startup latency as an observability issue unless fresh logs show it persisting after the activation is audio-ready,
   - treat the transition handoff itself as green unless fresh logs show new first-frame or post-transition stalls.
 
 2. `widgets/spotify_bars_gl_overlay.py` structural hardening — active under explicit first-frame/bleed guardrails.
@@ -111,7 +114,7 @@ Core value: highest future feature payoff, especially for eventual new widgets/t
 ## Watchlist
 - Gmail/OAuth is not an active blocker for planning purposes. The threading/test seam is closed enough; do not hold the larger architecture queue on manual Gmail validation.
 - The stale live capture block-size regression is now fixed and confirmed in logs: live mode switches renegotiate `128` for `spectrum` and `256` for `devcurve` without waiting for a settings-dialog restart.
-- Fresh logs do not show a new first-bar / bleed / stale-generation failure. The transition handoff/timer-cadence regression is resolved enough to move on. The remaining visualizer risk is performance/observability: repeated steady-runtime tick spikes plus some settings-boundary latency noise in logs.
+- Fresh logs do not show a new first-bar / bleed / stale-generation failure. The transition handoff/timer-cadence regression is resolved enough to move on. The remaining visualizer risk is performance/observability: repeated steady-runtime `spectrum`-leaning tick spikes plus some settings-boundary latency noise in logs.
 - The overlay cold-reset path should preserve guardrails even if the GL object is reused. If a reused overlay ever reintroduces stale activation/generation state, the new first-frame guard warning should make that visible immediately in logs.
 
 ## Deferred / Not Active

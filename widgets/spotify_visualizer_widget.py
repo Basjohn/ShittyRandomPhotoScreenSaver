@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Callable
 import copy
+import time
 
 from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPixmap
@@ -291,6 +292,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._latency_last_signature: Optional[
             tuple[str, float, str, int, Optional[str], Optional[str]]
         ] = None
+        self._latency_audio_ready: bool = False
+        self._latency_activation_started_ts: float = time.time()
         self._last_transition_running: bool = False
 
         # Bubble visualizer
@@ -346,6 +349,48 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_count: int = 0
         self._bubble_compute_pending: bool = False  # coalescing flag
         self._bubble_last_tick_ts: float = 0.0
+        self._bubble_dispatch_energy_snapshot: Dict[str, float] = {
+            "bass": 0.0,
+            "mid": 0.0,
+            "high": 0.0,
+            "overall": 0.0,
+            "smooth_mid": 0.0,
+            "smooth_high": 0.0,
+        }
+        self._bubble_dispatch_settings: Dict[str, Any] = {
+            "bubble_big_count": self._bubble_big_count,
+            "bubble_small_count": self._bubble_small_count,
+            "bubble_surface_reach": self._bubble_surface_reach,
+            "bubble_stream_direction": self._bubble_stream_direction,
+            "bubble_stream_constant_speed": self._bubble_stream_constant_speed,
+            "bubble_stream_speed_cap": self._bubble_stream_speed_cap,
+            "bubble_stream_reactivity": self._bubble_stream_reactivity,
+            "bubble_rotation_amount": self._bubble_rotation_amount,
+            "bubble_drift_amount": self._bubble_drift_amount,
+            "bubble_drift_speed": self._bubble_drift_speed,
+            "bubble_drift_frequency": self._bubble_drift_frequency,
+            "bubble_drift_direction": self._bubble_drift_direction,
+            "bubble_big_size_max": self._bubble_big_size_max,
+            "bubble_small_size_max": self._bubble_small_size_max,
+            "bubble_trail_strength": self._bubble_trail_strength,
+            "bubble_bounce_big_pct": self._bubble_bounce_big_pct,
+            "bubble_bounce_small_pct": self._bubble_bounce_small_pct,
+            "bubble_bounce_big_speed": self._bubble_bounce_big_speed,
+            "bubble_bounce_small_speed": self._bubble_bounce_small_speed,
+            "bubble_bounce_same_only": self._bubble_bounce_same_only,
+            "bubble_collision_pop_mode": self._bubble_collision_pop_mode,
+            "_event_scheduler": None,
+        }
+        self._bubble_dispatch_pulse_params: Dict[str, float] = {
+            "bass": 0.0,
+            "mid_high": 0.0,
+            "big_bass_pulse": self._bubble_big_bass_pulse,
+            "small_freq_pulse": self._bubble_small_freq_pulse,
+            "big_specular_max_size": self._bubble_big_specular_max_size,
+            "big_contraction_bias": self._bubble_big_contraction_bias,
+            "big_size_clamp": self._bubble_big_size_clamp,
+        }
+        self._bubble_sim_task_id: str = f"bubble_sim_{id(self)}"
 
         # Behavioural gating
         self._spotify_playing: bool = False
@@ -454,6 +499,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._idle_max_fps: float = 100.0
         self._target_timer_interval_ms: int = 16
         self._current_timer_interval_ms: int = 16
+        self._spectrum_gpu_push_extras: Dict[str, Any] = {}
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
         # Reset/fresh-frame handoff tracking must exist from construction so
@@ -1639,6 +1685,8 @@ class SpotifyVisualizerWidget(QWidget):
         self._latency_pending_probe.clear()
         self._latency_last_signature = None
         self._latency_last_log_ts = 0.0
+        self._latency_audio_ready = False
+        self._latency_activation_started_ts = time.time()
 
     def _log_audio_latency_metrics(
         self,

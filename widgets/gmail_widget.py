@@ -773,6 +773,11 @@ class GmailWidget(BaseOverlayWidget):
         ):
             logger.debug("[GMAIL] Fetched mail unchanged; skipping cache write and repaint")
             return
+        if not display_emails and self._has_displayed_valid_data and self._emails:
+            logger.warning(
+                "[GMAIL] Empty fetch result received; keeping cached/displayed content visible"
+            )
+            return
         self._emails = display_emails
         self._last_error = None
         self._rebuild_display_rows()
@@ -1251,13 +1256,18 @@ class GmailWidget(BaseOverlayWidget):
         margins = self.contentsMargins()
         rect = self.rect().adjusted(
             margins.left() + self._content_padding_left,
-            0,
+            self._header_bottom_y() + 8,
             -(margins.right() + self._content_padding_right),
-            0,
+            -max(12, margins.bottom()),
         )
         msg = "No unread emails"
+        painter.setFont(QFont(self._font_family, max(8, int(self._font_size)), QFont.Weight.Normal))
         painter.setPen(self._text_color.darker(120))
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, msg)
+        painter.drawText(
+            rect,
+            int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap),
+            msg,
+        )
 
     def _paint_error_state(self, painter: QPainter) -> None:
         margins = self.contentsMargins()

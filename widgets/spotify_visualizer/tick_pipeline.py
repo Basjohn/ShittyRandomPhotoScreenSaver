@@ -8,6 +8,7 @@ Phase 2 of the Visualizer Architecture Split.
 """
 from __future__ import annotations
 
+import logging
 import math
 import time
 from typing import Any, Optional
@@ -311,7 +312,7 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
         + (target_specular_activity - current_specular_activity) * blend
     )
 
-    if is_viz_diagnostics_enabled():
+    if is_viz_diagnostics_enabled() and logger.isEnabledFor(logging.DEBUG):
         last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
         if now_ts - last_diag >= 0.80:
             e = frame.get("energies", {}) if isinstance(frame.get("energies", {}), dict) else {}
@@ -356,7 +357,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     # under hot floor pressure, especially after preset/custom transitions.
     if widget._engine:
         eb_pulse = widget._engine.get_pre_agc_energy_bands()
-        eb_smooth = widget._engine.get_pre_agc_energy_bands()
+        eb_smooth = eb_pulse
     else:
         eb_pulse = None
         eb_smooth = None
@@ -368,20 +369,30 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     widget._bubble_last_tick_ts = now_ts
     dt_bubble = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
     # Keep bubble alive during pause: low-energy synthetic idle motion.
+    eb_snap = getattr(widget, "_bubble_dispatch_energy_snapshot", None)
+    if not isinstance(eb_snap, dict):
+        eb_snap = {
+            "bass": 0.0,
+            "mid": 0.0,
+            "high": 0.0,
+            "overall": 0.0,
+            "smooth_mid": 0.0,
+            "smooth_high": 0.0,
+        }
+        widget._bubble_dispatch_energy_snapshot = eb_snap
+
     if not widget._spotify_playing:
         dt_bubble *= _IDLE_BUBBLE_DT_SCALE
         idle_phase = now_ts
         idle_bass = 0.015 + 0.008 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
         idle_mid = 0.013 + 0.006 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
         idle_high = 0.010 + 0.004 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
-        eb_snap = {
-            'bass': idle_bass,
-            'mid': idle_mid,
-            'high': idle_high,
-            'overall': 0.015,
-            'smooth_mid': idle_mid,
-            'smooth_high': idle_high,
-        }
+        eb_snap["bass"] = idle_bass
+        eb_snap["mid"] = idle_mid
+        eb_snap["high"] = idle_high
+        eb_snap["overall"] = 0.015
+        eb_snap["smooth_mid"] = idle_mid
+        eb_snap["smooth_high"] = idle_high
     else:
         # Mix transient bass into pulse bass for immediate kick response
         _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
@@ -394,15 +405,18 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
         _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
         _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
-        eb_snap = {
-            'bass': _mixed_bass,
-            'mid': _mixed_mid,
-            'high': getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0,
-            'overall': getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
-            'smooth_mid': getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
-            'smooth_high': getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
-        }
-    sim_settings = {
+        eb_snap["bass"] = _mixed_bass
+        eb_snap["mid"] = _mixed_mid
+        eb_snap["high"] = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
+        eb_snap["overall"] = getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0
+        eb_snap["smooth_mid"] = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
+        eb_snap["smooth_high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
+
+    sim_settings = getattr(widget, "_bubble_dispatch_settings", None)
+    if not isinstance(sim_settings, dict):
+        sim_settings = {}
+        widget._bubble_dispatch_settings = sim_settings
+    sim_settings.update({
         "bubble_big_count": widget._bubble_big_count,
         "bubble_small_count": widget._bubble_small_count,
         "bubble_surface_reach": widget._bubble_surface_reach,
@@ -425,8 +439,13 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_bounce_same_only": widget._bubble_bounce_same_only,
         "bubble_collision_pop_mode": getattr(widget, "_bubble_collision_pop_mode", "off"),
         "_event_scheduler": _event_scheduler,
-    }
-    pulse_params = {
+    })
+
+    pulse_params = getattr(widget, "_bubble_dispatch_pulse_params", None)
+    if not isinstance(pulse_params, dict):
+        pulse_params = {}
+        widget._bubble_dispatch_pulse_params = pulse_params
+    pulse_params.update({
         'bass': eb_snap['bass'],
         'mid_high': (eb_snap['mid'] + eb_snap['high']) * 0.5,
         'big_bass_pulse': widget._bubble_big_bass_pulse,
@@ -434,12 +453,12 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_specular_max_size': widget._bubble_big_specular_max_size,
         'big_contraction_bias': widget._bubble_big_contraction_bias,
         'big_size_clamp': widget._bubble_big_size_clamp,
-    }
+    })
     widget._thread_manager.submit_compute_task(
         widget._bubble_compute_worker,
         dt_bubble, eb_snap, sim_settings, pulse_params,
         callback=widget._bubble_compute_done,
-        task_id=f"bubble_sim_{id(widget)}",
+        task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
     )
 
 
@@ -815,6 +834,39 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
 # Audio latency metrics
 # ------------------------------------------------------------------
 
+def _ensure_latency_logging_ready(
+    widget: Any,
+    engine: Optional[Any],
+    *,
+    last_audio_ts: float,
+) -> bool:
+    """Return True once the current activation has seen live audio or a fresh engine frame."""
+    if bool(getattr(widget, "_latency_audio_ready", False)):
+        return True
+    if engine is None:
+        return False
+
+    activation_started_ts = float(getattr(widget, "_latency_activation_started_ts", 0.0) or 0.0)
+    has_live_audio = last_audio_ts > 0.0 and (
+        activation_started_ts <= 0.0 or last_audio_ts >= (activation_started_ts - 0.05)
+    )
+
+    try:
+        current_generation = int(engine.get_generation_id())
+    except Exception:
+        current_generation = -1
+    try:
+        latest_frame_generation = int(engine.get_latest_generation_with_frame())
+    except Exception:
+        latest_frame_generation = -1
+
+    has_current_frame = current_generation >= 0 and latest_frame_generation >= current_generation
+    if has_live_audio or has_current_frame:
+        widget._latency_audio_ready = True
+
+    return bool(getattr(widget, "_latency_audio_ready", False))
+
+
 def log_audio_latency_metrics(
     widget: Any,
     engine: Optional[Any],
@@ -834,6 +886,9 @@ def log_audio_latency_metrics(
         return
 
     force_logging = bool(force_reason)
+    ready = _ensure_latency_logging_ready(widget, engine, last_audio_ts=last_audio_ts)
+    if not ready and not force_logging:
+        return
     if (
         not force_logging
         and (now_ts - widget._latency_last_log_ts) < widget._latency_log_interval

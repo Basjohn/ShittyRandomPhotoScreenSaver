@@ -20,6 +20,11 @@ def reset_engine_state(widget: Any, *, reason: str) -> None:
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
 
     try:
+        widget._reset_latency_diagnostics()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics during engine reset", exc_info=True)
+
+    try:
         engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -59,6 +64,10 @@ def reset_engine_state(widget: Any, *, reason: str) -> None:
 
 def reset_runtime_activation_state(widget: Any, *, reason: str = "activation") -> None:
     """Cold-reset visualizer runtime state after a mode or preset activation."""
+    try:
+        widget._reset_latency_diagnostics()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics during runtime activation reset", exc_info=True)
     widget._waiting_for_fresh_engine_frame = True
     widget._waiting_for_fresh_frame = True
     widget._reset_mode_owned_runtime_state(reason=reason)
