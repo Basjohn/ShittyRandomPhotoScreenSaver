@@ -8,6 +8,10 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from PySide6.QtCore import QRect
+
+from widgets.spotify_visualizer.overlay_mask import compute_painted_card_mask_uniforms
+
 
 def _rounded_rect_sdf(px: float, py: float, cx: float, cy: float, hw: float, hh: float, radius: float) -> float:
     """Python port of the GLSL roundedRectSDF used in the mask shader."""
@@ -139,6 +143,42 @@ def compute_mask_boundary(config: CardConfig) -> set[tuple[int, int]]:
         config.border_width / 2.0,
         config.radius,
         config.dpr,
+    )
+
+
+def test_overlay_mask_helper_matches_painted_card_contract():
+    cfg = CardConfig(300, 150, shrink_r=20, shrink_b=16, radius=8.0, dpr=1.5, border_width=3.0)
+    rect = QRect(0, 0, cfg.widget_w, cfg.widget_h)
+
+    uniforms = compute_painted_card_mask_uniforms(
+        rect,
+        dpr=cfg.dpr,
+        border_width_px=cfg.border_width,
+        shrink_right=cfg.shrink_r,
+        shrink_bottom=cfg.shrink_b,
+        radius_extra=int(cfg.radius - 8.0),
+    )
+
+    card_w = cfg.card_w
+    card_h = cfg.card_h
+    inset = 1.0 * cfg.dpr
+    extra = cfg.border_width * 0.5 * cfg.dpr
+    assert math.isclose(uniforms.rect_x_px, inset + extra)
+    assert math.isclose(
+        uniforms.rect_y_px,
+        (cfg.widget_h - card_h) * cfg.dpr + inset + extra,
+    )
+    assert math.isclose(
+        uniforms.rect_w_px,
+        max(1.0, (card_w - 2.0) * cfg.dpr - 2.0 * extra),
+    )
+    assert math.isclose(
+        uniforms.rect_h_px,
+        max(1.0, (card_h - 2.0) * cfg.dpr - 2.0 * extra),
+    )
+    assert math.isclose(
+        uniforms.radius_px,
+        max(0.0, (cfg.radius - 1.0 - cfg.border_width * 0.5) * cfg.dpr),
     )
 
 

@@ -323,7 +323,39 @@ class SpotifyVisualizerAudioWorker(QObject):
             value = 0
         if value < 0:
             value = 0
+        previous = self._preferred_block_size
+        if value == previous:
+            return
         self._preferred_block_size = value
+        if not self._running or self._backend is None:
+            return
+
+        backend_cfg = getattr(self._backend, "_config", None)
+        if backend_cfg is not None:
+            try:
+                backend_cfg.block_size = value
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to update backend block-size config before restart",
+                    exc_info=True,
+                )
+
+        logger.info(
+            "[SPOTIFY_VIS] Audio block size changed while running (%d -> %d); restarting capture",
+            previous,
+            value,
+        )
+        restarted = self.restart_capture()
+        if restarted:
+            logger.info(
+                "[SPOTIFY_VIS] Audio capture restarted for block size change (preferred=%d)",
+                value,
+            )
+        else:
+            logger.warning(
+                "[SPOTIFY_VIS] Audio capture restart failed after block size change (preferred=%d)",
+                value,
+            )
 
     def set_curved_profile(self, enabled: bool) -> None:
         """Deprecated — curved profile is now always active. Kept as no-op for compat."""

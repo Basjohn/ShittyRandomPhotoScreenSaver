@@ -172,6 +172,46 @@ def test_sensitivity_config_api_exists(np_module):
     worker.set_sensitivity_config(recommended=False, sensitivity=2.5)
 
 
+def test_audio_worker_block_size_change_restarts_running_capture(np_module):
+    worker = _make_audio_worker(np_module)
+    backend = SimpleNamespace(_config=SimpleNamespace(block_size=256), restarts=0)
+
+    def _restart():
+        backend.restarts += 1
+        return True
+
+    backend.restart = _restart
+    worker._backend = backend  # type: ignore[attr-defined]
+    worker._running = True  # type: ignore[attr-defined]
+    worker._preferred_block_size = 256  # type: ignore[attr-defined]
+
+    worker.set_audio_block_size(128)
+
+    assert worker._preferred_block_size == 128  # type: ignore[attr-defined]
+    assert backend._config.block_size == 128
+    assert backend.restarts == 1
+
+
+def test_audio_worker_block_size_noop_does_not_restart_capture(np_module):
+    worker = _make_audio_worker(np_module)
+    backend = SimpleNamespace(_config=SimpleNamespace(block_size=256), restarts=0)
+
+    def _restart():
+        backend.restarts += 1
+        return True
+
+    backend.restart = _restart
+    worker._backend = backend  # type: ignore[attr-defined]
+    worker._running = True  # type: ignore[attr-defined]
+    worker._preferred_block_size = 256  # type: ignore[attr-defined]
+
+    worker.set_audio_block_size(256)
+
+    assert worker._preferred_block_size == 256  # type: ignore[attr-defined]
+    assert backend._config.block_size == 256
+    assert backend.restarts == 0
+
+
 def test_shared_beat_engine_registry_reconfigures_single_engine_across_bar_counts():
     registry = BeatEngineRegistry()
     engine = registry.get_engine(36)

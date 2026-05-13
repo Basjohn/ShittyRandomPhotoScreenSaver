@@ -31,6 +31,9 @@ from widgets.spotify_visualizer.overlay_state import (
     reset_blob_state as reset_overlay_blob_state,
     reset_mode_state as reset_overlay_mode_state,
 )
+from widgets.spotify_visualizer.overlay_mask import (
+    compute_painted_card_mask_uniforms,
+)
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
@@ -1791,79 +1794,69 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # the visible card by card_shrink_right/bottom pixels. A rounded-rect
         # stencil mask clips GL fragments to the card boundary without
         # changing content scale or authored mode behavior.
-        stencil_active = False
-        if self._painted_frame_shadow_enabled:
-            try:
-                dpr = self._get_dpr()
-                shrink_r = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"])
-                shrink_b = int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"])
-                card_w = max(1, rect.width() - shrink_r)
-                card_h = max(1, rect.height() - shrink_b)
-                radius = float(8 + int(PAINTED_FRAME_SHADOW_TUNING.get("radius_extra", 0)))
-
-                # 1) Clear stencil, disable color writes
-                gl.glEnable(gl.GL_STENCIL_TEST)
-                gl.glStencilMask(0xFF)
-                gl.glClear(gl.GL_STENCIL_BUFFER_BIT)
-                gl.glColorMask(False, False, False, False)
-                gl.glStencilFunc(gl.GL_ALWAYS, 1, 0xFF)
-                gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_REPLACE)
-
-                # 2) Draw mask: write stencil=1 inside rounded rect
-                if self._gl_mask_program and self._gl_vao:
-                    gl.glUseProgram(self._gl_mask_program)
-                    loc_rect = gl.glGetUniformLocation(self._gl_mask_program, "u_card_rect")
-                    loc_radius = gl.glGetUniformLocation(self._gl_mask_program, "u_radius")
-                    # card_rect in framebuffer pixels (GL bottom-left origin).
-                    # _painted_frame_shadow_card_rect is QRectF(0,0,card_w,card_h)
-                    # in Qt widget coords (top-left origin). In GL the card sits
-                    # at the top of the framebuffer, so its bottom-left corner
-                    # is at y = (widget_h - card_h)*dpr + inset.
-                    #
-                    # _ensure_painted_frame_shadow_pixmap() insets the card by
-                    # 1 logical px on all sides via .adjusted(1.0, 1.0, -1.0, -1.0).
-                    # We apply the same inset here so the mask matches the
-                    # visible painted frame exactly and does not bleed into the
-                    # 1-px gap between card edge and shadow spread.
-                    #
-                    # Additionally, the card border is drawn with a pen centred
-                    # on the card path.  The visualizer must stay inside the
-                    # inner edge of that stroke, so we inset by border_width/2.
-                    inset = 1.0 * dpr
-                    extra = max(0.0, float(self._border_width_px) * 0.5 * dpr)
-                    mask_x = float(inset + extra)
-                    mask_y = float((rect.height() - card_h) * dpr + inset + extra)
-                    mask_w = max(1.0, (card_w - 2.0) * dpr - 2.0 * extra)
-                    mask_h = max(1.0, (card_h - 2.0) * dpr - 2.0 * extra)
-                    gl.glUniform4f(
-                        loc_rect,
-                        mask_x,
-                        mask_y,
-                        float(mask_w),
-                        float(mask_h),
-                    )
-                    gl.glUniform1f(loc_radius, float(max(0.0, (radius - 1.0 - self._border_width_px * 0.5) * dpr)))
-                    gl.glBindVertexArray(self._gl_vao)
-                    gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
-                    gl.glBindVertexArray(0)
-                    gl.glUseProgram(0)
-
-                # 3) Enable color writes, only draw where stencil==1
-                gl.glColorMask(True, True, True, True)
-                gl.glStencilFunc(gl.GL_EQUAL, 1, 0xFF)
-                gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP)
-                stencil_active = True
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Stencil mask setup failed: %s", e)
+        stencil_active = self._begin_painted_card_stencil_clip(rect)
 
         try:
             self._render_with_shader(rect, fade)
         finally:
-            if stencil_active:
-                gl.glDisable(gl.GL_STENCIL_TEST)
-                gl.glStencilMask(0x00)
+            self._end_painted_card_stencil_clip(stencil_active)
 
         self.update()
+
+    def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
+        if not self._painted_frame_shadow_enabled:
+            return False
+        try:
+            gl.glEnable(gl.GL_STENCIL_TEST)
+            gl.glStencilMask(0xFF)
+            gl.glClear(gl.GL_STENCIL_BUFFER_BIT)
+            gl.glColorMask(False, False, False, False)
+            gl.glStencilFunc(gl.GL_ALWAYS, 1, 0xFF)
+            gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_REPLACE)
+
+            if self._gl_mask_program and self._gl_vao:
+                self._draw_painted_card_stencil_mask(rect)
+
+            gl.glColorMask(True, True, True, True)
+            gl.glStencilFunc(gl.GL_EQUAL, 1, 0xFF)
+            gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP)
+            return True
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Stencil mask setup failed: %s", e)
+            return False
+
+    def _draw_painted_card_stencil_mask(self, rect: QRect) -> None:
+        dpr = self._get_dpr()
+        uniforms = compute_painted_card_mask_uniforms(
+            rect,
+            dpr=dpr,
+            border_width_px=self._border_width_px,
+            shrink_right=int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_right"]),
+            shrink_bottom=int(PAINTED_FRAME_SHADOW_TUNING["card_shrink_bottom"]),
+            radius_extra=int(PAINTED_FRAME_SHADOW_TUNING.get("radius_extra", 0)),
+        )
+
+        gl.glUseProgram(self._gl_mask_program)
+        loc_rect = gl.glGetUniformLocation(self._gl_mask_program, "u_card_rect")
+        loc_radius = gl.glGetUniformLocation(self._gl_mask_program, "u_radius")
+        gl.glUniform4f(
+            loc_rect,
+            uniforms.rect_x_px,
+            uniforms.rect_y_px,
+            uniforms.rect_w_px,
+            uniforms.rect_h_px,
+        )
+        gl.glUniform1f(loc_radius, uniforms.radius_px)
+        gl.glBindVertexArray(self._gl_vao)
+        gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
+        gl.glBindVertexArray(0)
+        gl.glUseProgram(0)
+
+    def _end_painted_card_stencil_clip(self, stencil_active: bool) -> None:
+        if not stencil_active:
+            return
+        gl.glDisable(gl.GL_STENCIL_TEST)
+        gl.glStencilMask(0x00)
 
     def _filter_stage_progress(
         self,

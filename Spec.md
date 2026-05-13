@@ -71,8 +71,10 @@ Active ids:
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
+- Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
 - Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
+- Live audio block-size changes are capture-rebind boundaries: when mode-owned technical config changes the preferred block size at runtime, the active audio worker must restart capture instead of waiting for a full runtime rebuild or settings-dialog restart.
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.

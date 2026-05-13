@@ -50,10 +50,11 @@ Core value: reduces future startup/mode-switch/activation churn while keeping th
     - startup staging still reveals through manager/coordinator ownership,
     - fresh-engine-frame gate still blocks stale post-reset pushes.
   - progress note:
-    - the startup-staging-through-coordinator guard is now in `tests/test_widget_manager.py`, and the fresh-frame / waveform / crossover gating guards in `tests/test_spotify_visualizer_widget.py` now target the real reset-generation contract instead of stale pre-split monkeypatch assumptions.
-    - the runtime technical-config bridge has now been extracted into `widgets/spotify_visualizer/technical_config.py`, reducing widget-coordinator residue without touching startup ownership, fresh-frame gating, or GL first-frame behavior.
-    - resolved activation/replay ownership is now partly extracted into `widgets/spotify_visualizer/activation_runtime.py`, so settings-model apply and canonical activation-payload replay are no longer embedded entirely in the widget coordinator.
-    - shared engine/runtime config forwarding is now partly extracted into `widgets/spotify_visualizer/runtime_config.py`, covering thread/process propagation, floor/sensitivity/energy/input/AGC pushes, audio block-size forwarding, runtime bar-state clearing, and beat-engine bar-count reconfiguration without entering the GL first-frame authority path.
+  - the startup-staging-through-coordinator guard is now in `tests/test_widget_manager.py`, and the fresh-frame / waveform / crossover gating guards in `tests/test_spotify_visualizer_widget.py` now target the real reset-generation contract instead of stale pre-split monkeypatch assumptions.
+  - the runtime technical-config bridge has now been extracted into `widgets/spotify_visualizer/technical_config.py`, reducing widget-coordinator residue without touching startup ownership, fresh-frame gating, or GL first-frame behavior.
+  - resolved activation/replay ownership is now partly extracted into `widgets/spotify_visualizer/activation_runtime.py`, so settings-model apply and canonical activation-payload replay are no longer embedded entirely in the widget coordinator.
+  - shared engine/runtime config forwarding is now partly extracted into `widgets/spotify_visualizer/runtime_config.py`, covering thread/process propagation, floor/sensitivity/energy/input/AGC pushes, audio block-size forwarding, runtime bar-state clearing, and beat-engine bar-count reconfiguration without entering the GL first-frame authority path.
+  - a concrete live-runtime regression was also identified and fixed here: mode-owned audio block-size changes were reaching the worker config path but not the live capture stream, so `devcurve -> spectrum` could keep running on the stale negotiated block size until a settings-dialog restart. `SpotifyVisualizerAudioWorker.set_audio_block_size()` now restarts capture when the preferred block changes while running.
 
 3. `widgets/spotify_bars_gl_overlay.py` structural hardening — now active under explicit first-frame/bleed guardrails.
 Core value: highest-value remaining runtime-coordinator cleanup, because the GL overlay still carries a large mixed state/reset/render seam that future visualizer work will keep paying for.
@@ -71,6 +72,7 @@ Core value: highest-value remaining runtime-coordinator cleanup, because the GL 
 - Progress note:
   - the first active slice is now in place: overlay mode-reset scheduling, per-mode cold-reset bookkeeping, activation/generation/frame metadata capture, floor snapshot handoff, invisible-frame early return, and border-width storage now flow through `widgets/spotify_visualizer/overlay_state.py`, while `widgets/spotify_bars_gl_overlay.py` keeps the same public entrypoints as thin wrappers.
   - regression coverage now includes a real stale activation/generation rejection test in `tests/test_spotify_visualizer_mode_transition.py` and explicit manual overlay-reset bookkeeping checks in `tests/test_ghost_isolation.py`.
+  - the next render-side slice is now in place too: painted-card stencil setup/teardown and rounded-rect mask uniform generation are no longer inlined entirely inside `paintGL()`. `widgets/spotify_visualizer/overlay_mask.py` now owns the mask uniform math, while `widgets/spotify_bars_gl_overlay.py` keeps explicit begin/draw/end stencil helpers around the same geometry contract.
 
 4. Visualizer test maintainability follow-through — do this alongside or immediately after Tasks 1, 2, and 3.
 Core value: makes the future architecture work cheaper instead of letting the biggest test files become their own blocker.
@@ -97,6 +99,7 @@ Core value: highest future feature payoff, especially for eventual new widgets/t
 
 ## Watchlist
 - Gmail/OAuth is not an active blocker for planning purposes. The threading/test seam is closed enough; do not hold the larger architecture queue on manual Gmail validation.
+- Latest visualizer logs were not healthy on the latency side: `devcurve -> spectrum` showed severe lag and a stale live capture block size that only normalized after a settings-dialog full restart. The block-size live-rebind fix is now in place, but post-fix log review still needs to confirm that mode switches negotiate the intended capture block immediately and that latency/tick-dt spikes materially improve.
 
 ## Deferred / Not Active
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.

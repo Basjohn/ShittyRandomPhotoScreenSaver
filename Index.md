@@ -73,6 +73,7 @@ Living map of the current SRPSS codebase.
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask with border-width inset so GL content stays inside the visible card boundary |
+| Overlay stencil mask | `widgets/spotify_visualizer/overlay_mask.py` | Shared painted-card stencil uniform math for the GL overlay render path, preserving the rounded-rect border-inset clipping contract |
 | Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, and invisible-frame early return without touching first-frame shader authority |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; engine config replay |
 | Spline Curve (`devcurve`) runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
@@ -83,7 +84,7 @@ Living map of the current SRPSS codebase.
 | Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking |
 | Technical config | `widgets/spotify_visualizer/technical_config.py` | Per-mode technical cache building, runtime override replacement, mode→engine/overlay technical application |
 | Activation runtime | `widgets/spotify_visualizer/activation_runtime.py` | Settings-model apply, resolved activation payload application, and full-runtime mode replay without touching first-frame authority gates |
-| Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator |
+| Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator; live audio-block changes now flow through the worker's capture-restart seam instead of waiting for a full runtime rebuild |
 
 ## Rendering System
 

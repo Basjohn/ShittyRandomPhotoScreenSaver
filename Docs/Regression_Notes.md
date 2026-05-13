@@ -7,6 +7,16 @@ but do not belong in `Docs/Historical_Bugs.md`.
 
 ## 2026-05-13
 
+### Live Audio Block-Size Rebind on Mode Switch
+- **Area:** Spotify visualizer live runtime config / capture restart
+- **Files:** `widgets/spotify_visualizer/audio_worker.py`, `tests/test_spotify_visualizer_widget.py`
+- **Issue:** mode-owned technical config changes could push a new `audio_block_size` into the live visualizer worker without restarting the already-running capture stream. In practice this left runs like `devcurve -> spectrum` on the stale negotiated block size until a full settings-dialog restart rebuilt audio capture, which matched the "hot/pinned until settings open/close" failure shape in logs.
+- **Fix:** `SpotifyVisualizerAudioWorker.set_audio_block_size()` now treats a real preferred-block change as a live capture rebind boundary: it updates the backend config, restarts capture when already running, and logs the restart clearly so future log review can see whether the live switch really took effect.
+- **Regression coverage:**
+  - `test_audio_worker_block_size_change_restarts_running_capture`
+  - `test_audio_worker_block_size_noop_does_not_restart_capture`
+- **Log note:** future log review should specifically check that a live mode switch negotiates the requested block size immediately, instead of only after a settings-dialog restart.
+
 ### Spotify GL Overlay State-Handoff Extraction
 - **Area:** Spotify visualizer GL overlay state/reset hardening
 - **Files:** `widgets/spotify_visualizer/overlay_state.py`, `widgets/spotify_bars_gl_overlay.py`, `tests/test_ghost_isolation.py`, `tests/test_spotify_visualizer_mode_transition.py`
@@ -18,6 +28,19 @@ but do not belong in `Docs/Historical_Bugs.md`.
   - `tests/test_stencil_mask_alignment.py`
   - synthetic bleed-family subset from `tests/test_spotify_visualizer_widget.py`
 - **Log note:** post-change review of `logs/screensaver_spotify_vis.log` stayed free of first-bar / bleed / first-frame / error markers; only a latency warning remained visible from the user's multi-swap runs.
+
+### Spotify GL Overlay Stencil-Path Extraction
+- **Area:** Spotify visualizer GL overlay render-side hardening
+- **Files:** `widgets/spotify_visualizer/overlay_mask.py`, `widgets/spotify_bars_gl_overlay.py`, `tests/test_stencil_mask_alignment.py`
+- **Issue:** the painted-card stencil clip path was still fully inlined in `paintGL()`, mixing GL state transitions, mask uniform math, and shader draw setup inside the main render method. That made the most fragile card-boundary path harder to audit without risking accidental math drift.
+- **Fix:** extracted the rounded-rect mask uniform math into `overlay_mask.py` and split `paintGL()` into explicit begin/draw/end stencil helpers while preserving the exact inset, border-width, and radius contract.
+- **Regression coverage:**
+  - `tests/test_stencil_mask_alignment.py`
+  - `tests/test_visualizer_overlay_kwargs.py`
+  - `tests/test_ghost_isolation.py`
+  - `tests/test_spotify_visualizer_mode_transition.py`
+  - synthetic bleed-family subset from `tests/test_spotify_visualizer_widget.py`
+- **Risk note:** this still does not alter first-frame authority or shader content behavior; it only makes the stencil path explicit so future risky work has a narrower seam.
 
 ### Visualizer Settings/Activation/Runtime Residue Reduction
 - **Area:** Spotify visualizer structural hardening
