@@ -76,6 +76,16 @@ Core value: the remaining user-visible risk is runtime hot-path cost and mislead
   - fresh logs still show repeated tick spikes and repeat full overlay shader setup after recreation,
   - the vis log still needed hot-path tightening because `GLOW` / `FLOOR` were effectively re-emitting on volatile energy deltas.
   - first-frame / fresh-generation consistency now needs explicit anomaly warnings, not just raw state dumps, so mismatches become obvious in the vis log instead of requiring manual correlation.
+- Progress note:
+  - hot-path `GLOW` / `FLOOR` diagnostics are now bucketed/throttled more aggressively so the vis log is parseable again,
+  - `screensaver_spotify_vis.log` now leaves a blank line between records and keeps `[!!!!]` guardrail warnings visually distinct, so Notepad/grep review is less error-prone,
+  - `FIRST_FRAME_GUARD` now ignores the staged zero-bars/no-source-yet case, so it should stop warning on healthy cold pushes before real display authority exists,
+  - runtime mode/preset clears now preserve the GL overlay object while still blanking/hiding it, requesting a cold overlay reset, and waiting for the fresh-generation handoff before first visible bar authority returns,
+  - explicit `[SPOTIFY_VIS][FIRST_FRAME_GUARD]` warnings now fire if a first visible push ever lands with mismatched overlay activation/generation or unresolved fresh-frame flags.
+  - settings-open responsiveness is now part of the same near-term investigation: the latest logs show `Widgets`-heavy opens can still take `~3.2–3.4s` to instantiate while lighter follow-up opens are back near `115–185ms`, which points more at cold persisted heavy-tab construction than at a visualizer-mode-specific stall.
+  - an attempted workaround that overrode persisted top-level tab restoration was removed because it caused incorrect restored tab/scroll behavior and hidden-state churn. The current safer guard is narrower: `Widgets` is now excluded from background hydration so it cannot freeze the visible shell or mutate bucket-heavy state off-screen.
+  - the first-frame warning is now narrower too: `waiting_frame_after_push` on its own is no longer treated as a guardrail failure, so the vis log only escalates when waiting flags combine with generation/activation/source mismatches instead of screaming on healthy staged reveals.
+  - `WidgetsTab` now has a settings-dialog-only lazy section mode: the persisted Widgets subtab is built first, Defaults stays cheap and always available, and unvisited heavy sections (notably Weather/Gmail) are left unconstructed until the user actually enters them. Saves from a lazy session preserve persisted config for unbuilt sections instead of rewriting them from missing UI state.
 
 4. `widgets/spotify_bars_gl_overlay.py` structural hardening — active under explicit first-frame/bleed guardrails, but now behind perf follow-up.
 Core value: highest-value remaining runtime-coordinator cleanup, because the GL overlay still carries a large mixed state/reset/render seam that future visualizer work will keep paying for.

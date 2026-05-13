@@ -1683,6 +1683,104 @@ def test_gpu_payload_carries_activation_generation_snapshot(qt_app, qtbot, np_mo
 
 
 @pytest.mark.qt
+def test_first_frame_guard_warning_emits_on_overlay_generation_mismatch(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.25] * 6
+    widget._display_bars_source_generation = 12
+    widget._display_bars_source_activation = 12
+
+    warnings: list[str] = []
+
+    def _capture_warning(msg, *args, **kwargs):
+        try:
+            warnings.append(msg % args if args else str(msg))
+        except Exception:
+            warnings.append(str(msg))
+
+    monkeypatch.setattr(tick_pipeline.logger, "warning", _capture_warning)
+
+    tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
+
+    assert any("[SPOTIFY_VIS][FIRST_FRAME_GUARD]" in message for message in warnings)
+    assert any("overlay_generation_mismatch" in message for message in warnings)
+
+
+@pytest.mark.qt
+def test_first_frame_guard_does_not_warn_for_normal_waiting_frame_only(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.25] * 6
+    widget._display_bars_source_generation = 12
+    widget._display_bars_source_activation = 12
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    overlay = type("Overlay", (), {"_activation_id": 12, "_engine_generation": 12})()
+    parent._spotify_bars_overlay = overlay
+
+    warnings: list[str] = []
+
+    def _capture_warning(msg, *args, **kwargs):
+        try:
+            warnings.append(msg % args if args else str(msg))
+        except Exception:
+            warnings.append(str(msg))
+
+    monkeypatch.setattr(tick_pipeline.logger, "warning", _capture_warning)
+
+    tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
+
+    assert warnings == []
+
+
+@pytest.mark.qt
+def test_first_frame_guard_does_not_warn_for_zero_data_staged_push(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.0] * 6
+    widget._display_bars_source_generation = -1
+    widget._display_bars_source_activation = 12
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    overlay = type("Overlay", (), {"_activation_id": 99, "_engine_generation": None})()
+    parent._spotify_bars_overlay = overlay
+
+    warnings: list[str] = []
+
+    def _capture_warning(msg, *args, **kwargs):
+        try:
+            warnings.append(msg % args if args else str(msg))
+        except Exception:
+            warnings.append(str(msg))
+
+    monkeypatch.setattr(tick_pipeline.logger, "warning", _capture_warning)
+
+    tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
+
+    assert warnings == []
+
+
+@pytest.mark.qt
 def test_mode_switch_synthetic_audio_matches_fresh_worker_after_reset(qt_app, qtbot, np_module):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)

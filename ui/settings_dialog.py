@@ -473,6 +473,9 @@ class SettingsDialog(QDialog):
         self._styled_tabs: set[int] = set()
         self._background_build_scheduled = False
         self._background_tab_queue: list[int] = []
+        self._background_hydration_started = False
+        self._background_hydration_delay_ms = 1500
+        self._background_hydration_step_delay_ms = 150
         self._acrylic_applied = False
         cache = get_settings_dialog_cache()
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
@@ -683,6 +686,10 @@ class SettingsDialog(QDialog):
                 self._settings,
                 parent=self.content_stack,
                 widget_defaults=cache.widget_defaults,
+                lazy_sections=True,
+                initial_view_state=dict(
+                    self._tab_state_cache.get("widgets", {}).get("view_state", {})
+                ) if isinstance(self._tab_state_cache.get("widgets", {}).get("view_state", {}), dict) else None,
             ),
             "accessibility": lambda: AccessibilityTab(self._settings, parent=self.content_stack),
             "about": self._create_about_tab,
@@ -786,19 +793,34 @@ class SettingsDialog(QDialog):
         return widget
 
     def _hydrate_remaining_tabs_async(self) -> None:
-        # Diagnostic toggle for U-04 isolation:
-        # excludes Widgets from immediate background hydration to avoid
-        # heavy constructor-side work before first stable paint.
+        # Widgets is intentionally excluded from background hydration.
+        # Its constructor is large enough that hidden/off-screen builds can
+        # stall the visible shell and confuse persisted subtab/bucket state
+        # restoration. Build it only when explicitly selected or restored
+        # as the active top-level tab.
         remaining = [
             i
             for i in range(len(self._tab_keys))
             if i not in self._built_tab_indices
-            and (not self._skip_widgets_hydration or self._tab_key_for_index(i) != "widgets")
+            and self._tab_key_for_index(i) != "widgets"
         ]
         if not remaining:
             return
         self._background_tab_queue.extend(remaining)
-        self._schedule_next_background_build()
+        if self.isVisible():
+            self._start_background_tab_hydration()
+
+    def _start_background_tab_hydration(self) -> None:
+        if self._background_hydration_started or not self._background_tab_queue:
+            return
+        self._background_hydration_started = True
+        hydration_start = time.perf_counter()
+
+        def _run():
+            self._log_perf_event("SettingsDialog.background_hydration_delay", hydration_start)
+            self._schedule_next_background_build()
+
+        QTimer.singleShot(self._background_hydration_delay_ms, _run)
 
     def _schedule_next_background_build(self) -> None:
         if self._background_build_scheduled or not self._background_tab_queue:
@@ -813,7 +835,7 @@ class SettingsDialog(QDialog):
             self._ensure_tab_built(index)
             self._schedule_next_background_build()
 
-        QTimer.singleShot(0, _run)
+        QTimer.singleShot(self._background_hydration_step_delay_ms, _run)
 
     def _style_tab_widget(self, widget: Optional[QWidget]) -> None:
         if widget is None:
@@ -1597,18 +1619,22 @@ class SettingsDialog(QDialog):
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
     
     def showEvent(self, event):
+        show_start = time.perf_counter()
         super().showEvent(event)
         # Clear the construction-time activation guard so the window can
         # receive focus normally now that it has visible content.
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, False)
+        self._start_background_tab_hydration()
         # Enable Windows acrylic blur-behind on first show
         if not self._acrylic_applied:
             self._acrylic_applied = True
+            blur_start = time.perf_counter()
             try:
                 from core.windows.dwm_blur import enable_acrylic_blur
                 enable_acrylic_blur(int(self.winId()))
             except Exception:
                 logger.debug("Acrylic blur not available", exc_info=True)
+            self._log_perf_event("SettingsDialog.showEvent.blur", blur_start)
         # Reset cached width so images rescale on every show
         try:
             self._about_last_card_width = 0
@@ -1620,6 +1646,7 @@ class SettingsDialog(QDialog):
             QTimer.singleShot(0, self._update_about_header_images)
         except Exception as e:
             logger.debug("[SETTINGS] Exception suppressed: %s", e)
+        self._log_perf_event("SettingsDialog.showEvent.total", show_start)
     
     def moveEvent(self, event):
         """Handle move event to save geometry."""

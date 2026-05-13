@@ -227,6 +227,13 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
+class SpacedLogFormatter(logging.Formatter):
+    """Formatter that inserts a blank line between records for scan-heavy logs."""
+
+    def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
+        return super().format(record) + "\n"
+
+
 class DeduplicatingRotatingFileHandler(RotatingFileHandler):
     """Rotating file handler that suppresses consecutive duplicate log lines.
     
@@ -835,6 +842,10 @@ def setup_logging(
         '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
     )
+    spaced_formatter = SpacedLogFormatter(
+        '%(asctime)s - %(name)-30s - %(levelname)-8s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     
     # File handler with rotation and deduplication (1MB cap with line-by-line
     # duplicate suppression keeps logs small and readable).
@@ -915,7 +926,7 @@ def setup_logging(
         backupCount=5,
         encoding='utf-8',
     )
-    spotify_vis_handler.setFormatter(formatter)
+    spotify_vis_handler.setFormatter(spaced_formatter)
     spotify_vis_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
     spotify_vis_handler.addFilter(SpotifyVisLogFilter())
     root_logger.addHandler(spotify_vis_handler)

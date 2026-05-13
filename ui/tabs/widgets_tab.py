@@ -143,6 +143,8 @@ class WidgetsTab(QWidget):
         settings: SettingsManager,
         parent: Optional[QWidget] = None,
         widget_defaults: Optional[Dict[str, Any]] = None,
+        lazy_sections: bool = False,
+        initial_view_state: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize widgets tab.
@@ -155,10 +157,14 @@ class WidgetsTab(QWidget):
         
         self._settings = settings
         self._provided_widget_defaults = widget_defaults
+        self._lazy_sections = bool(lazy_sections)
+        self._initial_view_state = dict(initial_view_state) if isinstance(initial_view_state, dict) else {}
         self._widget_defaults = self._load_widget_defaults()
         self._current_subtab = 0
         self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
+        self._subtab_content_built: set[int] = set()
+        self._subtab_host_layouts: list[QVBoxLayout | None] = []
         self._global_card_border_width = int(self._widget_default('global', 'card_border_width_px', 3))
         self._clock_color = self._color_from_default('clock', 'color', [255, 255, 255, 230])
         self._weather_color = self._color_from_default('weather', 'color', [255, 255, 255, 230])
@@ -518,6 +524,100 @@ class WidgetsTab(QWidget):
         idx = combo.findData(data)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+
+    def _resolve_initial_subtab_id(self) -> int:
+        """Resolve the first Widgets subtab to build/show."""
+        state = self._initial_view_state if isinstance(self._initial_view_state, dict) else {}
+        if not state:
+            raw_state = self._settings.get('ui.tab_state', {})
+            if isinstance(raw_state, dict):
+                widgets_state = raw_state.get('widgets', {})
+                if isinstance(widgets_state, dict):
+                    candidate = widgets_state.get('view_state')
+                    if isinstance(candidate, dict):
+                        state = candidate
+        subtab = state.get("subtab", 0)
+        try:
+            subtab_id = int(subtab)
+        except (TypeError, ValueError):
+            subtab_id = 0
+        if subtab_id < 0:
+            subtab_id = 0
+        return subtab_id
+
+    def _create_subtab_host(self) -> tuple[QWidget, QVBoxLayout]:
+        host = QWidget()
+        host_layout = QVBoxLayout(host)
+        host_layout.setContentsMargins(0, 0, 0, 0)
+        host_layout.setSpacing(0)
+        return host, host_layout
+
+    def _build_lazy_subtab_content(self, subtab_id: int) -> None:
+        """Build the requested subtab section only when needed."""
+        if subtab_id in self._subtab_content_built:
+            return
+        if subtab_id < 0 or subtab_id >= len(getattr(self, "_subtab_containers", [])):
+            return
+
+        from ui.tabs.widgets_tab_clock import build_clock_ui
+        from ui.tabs.widgets_tab_weather import build_weather_ui
+        from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
+        from ui.tabs.widgets_tab_reddit import build_reddit_ui
+        from ui.tabs.widgets_tab_gmail import build_gmail_ui
+
+        host_layout = self._subtab_host_layouts[subtab_id] if subtab_id < len(self._subtab_host_layouts) else None
+        if host_layout is None:
+            return
+
+        build_start = time.perf_counter()
+
+        def _mount(widget: QWidget) -> None:
+            host_layout.addWidget(widget)
+
+        if subtab_id == 0 and not hasattr(self, "_clocks_container"):
+            self._clocks_container = build_clock_ui(self, host_layout)
+            _mount(self._clocks_container)
+            self._subtab_content_built.add(0)
+        elif subtab_id == 1 and not hasattr(self, "_weather_container"):
+            self._weather_container = build_weather_ui(self, host_layout)
+            _mount(self._weather_container)
+            self._subtab_content_built.add(1)
+        elif subtab_id in (2, 3):
+            if not hasattr(self, "_media_container"):
+                media_layout = self._subtab_host_layouts[2] if len(self._subtab_host_layouts) > 2 else host_layout
+                if media_layout is not None:
+                    self._media_container = build_media_ui(self, media_layout)
+                    media_layout.addWidget(self._media_container)
+            if not hasattr(self, "_visualizers_container"):
+                vis_layout = self._subtab_host_layouts[3] if len(self._subtab_host_layouts) > 3 else host_layout
+                if vis_layout is not None:
+                    self._visualizers_container = build_visualizers_ui(self, vis_layout)
+                    vis_layout.addWidget(self._visualizers_container)
+            self._subtab_content_built.update({2, 3})
+        elif subtab_id == 4 and not hasattr(self, "_reddit_container"):
+            self._reddit_container = build_reddit_ui(self, host_layout)
+            _mount(self._reddit_container)
+            self._subtab_content_built.add(4)
+        elif hasattr(self, "_btn_imgur") and subtab_id == 6 and not hasattr(self, "_imgur_container"):
+            from ui.tabs.widgets_tab_imgur import build_imgur_ui
+
+            self._imgur_container = build_imgur_ui(self, host_layout)
+            _mount(self._imgur_container)
+            self._subtab_content_built.add(6)
+        elif (not hasattr(self, "_btn_imgur") and subtab_id == 6) or (hasattr(self, "_btn_imgur") and subtab_id == 7):
+            if not hasattr(self, "_defaults_container"):
+                self._defaults_container = self._build_defaults_section()
+                _mount(self._defaults_container)
+            self._subtab_content_built.add(subtab_id)
+        elif ((hasattr(self, "_btn_imgur") and subtab_id == 5) or (not hasattr(self, "_btn_imgur") and subtab_id == 5)) and not hasattr(self, "_gmail_container"):
+            self._gmail_container = build_gmail_ui(self, host_layout)
+            _mount(self._gmail_container)
+            self._subtab_content_built.add(5)
+
+        if is_perf_metrics_enabled():
+            self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
+
+        self._load_settings()
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""
@@ -607,55 +707,74 @@ class WidgetsTab(QWidget):
         self._subtab_group.idClicked.connect(self._on_subtab_changed)
         self._btn_clocks.setChecked(True)
 
-        # --- Per-widget sections (delegated to extraction modules) ---
-        from ui.tabs.widgets_tab_clock import build_clock_ui
-        from ui.tabs.widgets_tab_weather import build_weather_ui
-        from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
-        from ui.tabs.widgets_tab_reddit import build_reddit_ui
+        self._subtab_containers = []
+        self._subtab_host_layouts = []
+        if self._lazy_sections:
+            for _idx, _btn in enumerate(buttons):
+                host, host_layout = self._create_subtab_host()
+                self._subtab_containers.append(host)
+                self._subtab_host_layouts.append(host_layout)
+                layout.addWidget(host)
+            layout.addStretch()
+            initial_subtab = min(self._resolve_initial_subtab_id(), len(self._subtab_containers) - 1)
+            defaults_index = len(self._subtab_containers) - 1
+            self._build_lazy_subtab_content(defaults_index)
+            if initial_subtab != defaults_index:
+                self._build_lazy_subtab_content(initial_subtab)
+            self._btn_clocks.setChecked(initial_subtab == 0)
+            if 0 <= initial_subtab < len(buttons):
+                buttons[initial_subtab].setChecked(True)
+            self._on_subtab_changed(initial_subtab)
+        else:
+            # --- Per-widget sections (delegated to extraction modules) ---
+            from ui.tabs.widgets_tab_clock import build_clock_ui
+            from ui.tabs.widgets_tab_weather import build_weather_ui
+            from ui.tabs.widgets_tab_media import build_media_ui, build_visualizers_ui
+            from ui.tabs.widgets_tab_reddit import build_reddit_ui
 
-        section_start = time.perf_counter()
-        self._clocks_container = build_clock_ui(self, layout)
-        self._perf_log("build_clock_ui", section_start)
-        layout.addWidget(self._clocks_container)
-
-        section_start = time.perf_counter()
-        self._weather_container = build_weather_ui(self, layout)
-        self._perf_log("build_weather_ui", section_start)
-        layout.addWidget(self._weather_container)
-
-        section_start = time.perf_counter()
-        self._media_container = build_media_ui(self, layout)
-        self._perf_log("build_media_ui", section_start)
-        layout.addWidget(self._media_container)
-
-        section_start = time.perf_counter()
-        self._visualizers_container = build_visualizers_ui(self, layout)
-        self._perf_log("build_visualizers_ui", section_start)
-        layout.addWidget(self._visualizers_container)
-
-        section_start = time.perf_counter()
-        self._reddit_container = build_reddit_ui(self, layout)
-        self._perf_log("build_reddit_ui", section_start)
-        layout.addWidget(self._reddit_container)
-
-        from ui.tabs.widgets_tab_gmail import build_gmail_ui
-        section_start = time.perf_counter()
-        self._gmail_container = build_gmail_ui(self, layout)
-        self._perf_log("build_gmail_ui", section_start)
-        layout.addWidget(self._gmail_container)
-
-        self._defaults_container = self._build_defaults_section()
-        layout.addWidget(self._defaults_container)
-
-        # Imgur widget group - gated by SRPSS_ENABLE_DEV
-        if dev_features_enabled:
-            from ui.tabs.widgets_tab_imgur import build_imgur_ui
             section_start = time.perf_counter()
-            self._imgur_container = build_imgur_ui(self, layout)
-            self._perf_log("build_imgur_ui", section_start)
-            layout.addWidget(self._imgur_container)
+            self._clocks_container = build_clock_ui(self, layout)
+            self._perf_log("build_clock_ui", section_start)
+            layout.addWidget(self._clocks_container)
 
-        layout.addStretch()
+            section_start = time.perf_counter()
+            self._weather_container = build_weather_ui(self, layout)
+            self._perf_log("build_weather_ui", section_start)
+            layout.addWidget(self._weather_container)
+
+            section_start = time.perf_counter()
+            self._media_container = build_media_ui(self, layout)
+            self._perf_log("build_media_ui", section_start)
+            layout.addWidget(self._media_container)
+
+            section_start = time.perf_counter()
+            self._visualizers_container = build_visualizers_ui(self, layout)
+            self._perf_log("build_visualizers_ui", section_start)
+            layout.addWidget(self._visualizers_container)
+
+            section_start = time.perf_counter()
+            self._reddit_container = build_reddit_ui(self, layout)
+            self._perf_log("build_reddit_ui", section_start)
+            layout.addWidget(self._reddit_container)
+
+            from ui.tabs.widgets_tab_gmail import build_gmail_ui
+            section_start = time.perf_counter()
+            self._gmail_container = build_gmail_ui(self, layout)
+            self._perf_log("build_gmail_ui", section_start)
+            layout.addWidget(self._gmail_container)
+
+            self._defaults_container = self._build_defaults_section()
+            layout.addWidget(self._defaults_container)
+
+            # Imgur widget group - gated by SRPSS_ENABLE_DEV
+            if dev_features_enabled:
+                from ui.tabs.widgets_tab_imgur import build_imgur_ui
+                section_start = time.perf_counter()
+                self._imgur_container = build_imgur_ui(self, layout)
+                self._perf_log("build_imgur_ui", section_start)
+                layout.addWidget(self._imgur_container)
+
+            layout.addStretch()
 
         # Set scroll area widget and add to main layout
         scroll.setWidget(content)
@@ -674,24 +793,26 @@ class WidgetsTab(QWidget):
             + SLIDER_STYLE
         )
 
-        # Default to "Clocks" subtab
-        self._subtab_containers: list[QWidget | None] = [
-            self._clocks_container,
-            self._weather_container,
-            self._media_container,
-            self._visualizers_container,
-            self._reddit_container,
-        ]
-        self._subtab_containers.append(self._gmail_container)
-        if dev_features_enabled:
-            self._subtab_containers.append(self._imgur_container)
-        self._subtab_containers.append(self._defaults_container)
-
-        self._on_subtab_changed(0)
+        if not self._lazy_sections:
+            # Default to "Clocks" subtab
+            self._subtab_containers = [
+                self._clocks_container,
+                self._weather_container,
+                self._media_container,
+                self._visualizers_container,
+                self._reddit_container,
+            ]
+            self._subtab_containers.append(self._gmail_container)
+            if dev_features_enabled:
+                self._subtab_containers.append(self._imgur_container)
+            self._subtab_containers.append(self._defaults_container)
+            self._on_subtab_changed(0)
         self._perf_log("_setup_ui_sections", perf_scope)
 
     def _on_subtab_changed(self, subtab_id: int) -> None:
         """Show/hide widget sections based on selected subtab."""
+        if self._lazy_sections:
+            self._build_lazy_subtab_content(int(subtab_id))
         prev = self._current_subtab
         # Save outgoing subtab scroll position
         sa = getattr(self, '_scroll_area', None)
@@ -961,13 +1082,19 @@ class WidgetsTab(QWidget):
             if hasattr(self, 'card_border_width_spin'):
                 self.card_border_width_spin.setValue(border_width)
 
-            # Delegate per-widget loading to extraction modules
-            load_clock_settings(self, widgets)
-            load_weather_settings(self, widgets)
-            load_media_settings(self, widgets)
-            load_reddit_settings(self, widgets)
-            load_gmail_settings(self, widgets)
-            load_imgur_settings(self, widgets)
+            # Delegate per-widget loading only for sections that exist.
+            if hasattr(self, 'clock_enabled'):
+                load_clock_settings(self, widgets)
+            if hasattr(self, 'weather_enabled'):
+                load_weather_settings(self, widgets)
+            if hasattr(self, 'media_enabled') and hasattr(self, 'vis_enabled_checkbox'):
+                load_media_settings(self, widgets)
+            if hasattr(self, 'reddit_enabled'):
+                load_reddit_settings(self, widgets)
+            if hasattr(self, 'gmail_enabled'):
+                load_gmail_settings(self, widgets)
+            if hasattr(self, 'imgur_enabled'):
+                load_imgur_settings(self, widgets)
 
         finally:
             for w in blockers:
@@ -1421,19 +1548,41 @@ class WidgetsTab(QWidget):
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
-        # Delegate per-widget saving to extraction modules
-        clock_config, clock2_config, clock3_config = save_clock_settings(self)
-        weather_config = save_weather_settings(self)
-        media_config, spotify_vis_config = save_media_settings(self)
-        reddit_config, reddit2_config = save_reddit_settings(self)
-        if hasattr(self, 'gmail_enabled'):
-            gmail_config = save_gmail_settings(self)
-        else:
-            gmail_config = None
-
         existing_widgets = self._settings.get('widgets', {})
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
+
+        # Delegate per-widget saving to extraction modules only for sections
+        # that actually exist in this lazy-load session. Unbuilt sections keep
+        # their existing persisted config untouched.
+        if hasattr(self, 'clock_enabled'):
+            clock_config, clock2_config, clock3_config = save_clock_settings(self)
+        else:
+            clock_config = dict(existing_widgets.get('clock', {})) if isinstance(existing_widgets.get('clock', {}), dict) else {}
+            clock2_config = dict(existing_widgets.get('clock2', {})) if isinstance(existing_widgets.get('clock2', {}), dict) else {}
+            clock3_config = dict(existing_widgets.get('clock3', {})) if isinstance(existing_widgets.get('clock3', {}), dict) else {}
+
+        if hasattr(self, 'weather_enabled'):
+            weather_config = save_weather_settings(self)
+        else:
+            weather_config = dict(existing_widgets.get('weather', {})) if isinstance(existing_widgets.get('weather', {}), dict) else {}
+
+        if hasattr(self, 'media_enabled') and hasattr(self, 'vis_enabled_checkbox'):
+            media_config, spotify_vis_config = save_media_settings(self)
+        else:
+            media_config = dict(existing_widgets.get('media', {})) if isinstance(existing_widgets.get('media', {}), dict) else {}
+            spotify_vis_config = dict(existing_widgets.get('spotify_visualizer', {})) if isinstance(existing_widgets.get('spotify_visualizer', {}), dict) else {}
+
+        if hasattr(self, 'reddit_enabled'):
+            reddit_config, reddit2_config = save_reddit_settings(self)
+        else:
+            reddit_config = dict(existing_widgets.get('reddit', {})) if isinstance(existing_widgets.get('reddit', {}), dict) else {}
+            reddit2_config = dict(existing_widgets.get('reddit2', {})) if isinstance(existing_widgets.get('reddit2', {}), dict) else {}
+
+        if hasattr(self, 'gmail_enabled'):
+            gmail_config = save_gmail_settings(self)
+        else:
+            gmail_config = existing_widgets.get('gmail', None)
 
         # Merge current-mode visualizer settings into the existing config so
         # that other modes' persisted keys are preserved across save cycles.
@@ -1492,7 +1641,7 @@ class WidgetsTab(QWidget):
             self._settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
         # Imgur config - only save if dev features enabled
-        imgur_config = save_imgur_settings(self)
+        imgur_config = save_imgur_settings(self) if hasattr(self, 'imgur_enabled') else existing_widgets.get('imgur', None)
         if imgur_config is not None:
             existing_widgets['imgur'] = imgur_config
 

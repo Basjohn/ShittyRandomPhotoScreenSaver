@@ -51,6 +51,53 @@ class TestWidgetsTab:
         assert tab._settings is settings_manager
         tab.deleteLater()
 
+    def test_lazy_widgets_tab_builds_persisted_subtab_first(self, qt_app, settings_manager):
+        """Lazy settings-dialog mode should build only the requested subtab first."""
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab": 1},
+        )
+        try:
+            assert hasattr(tab, "weather_enabled")
+            assert hasattr(tab, "widget_shadows_enabled")
+            assert not hasattr(tab, "clock_enabled")
+
+            tab._on_subtab_changed(0)
+            qt_app.processEvents()
+
+            assert hasattr(tab, "clock_enabled")
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_widgets_tab_save_preserves_unbuilt_section_config(self, qt_app, settings_manager):
+        """Saving a built lazy section must not clobber config for sections never constructed."""
+        settings_manager.set("widgets", {
+            "clock": {"enabled": True, "position": "Top Right"},
+            "weather": {"enabled": True, "location": "Johannesburg", "position": "Top Left"},
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab": 0},
+        )
+        try:
+            assert hasattr(tab, "clock_enabled")
+            assert not hasattr(tab, "weather_enabled")
+
+            tab.clock_enabled.setChecked(False)
+            tab._save_settings_now()
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg.get("clock", {}).get("enabled") is False
+            assert widgets_cfg.get("weather", {}).get("location") == "Johannesburg"
+            assert widgets_cfg.get("weather", {}).get("position") == "Top Left"
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_default_values(self, qt_app, tmp_path):
         """Default widget settings match canonical SettingsManager defaults."""
         mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)

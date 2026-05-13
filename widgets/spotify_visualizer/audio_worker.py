@@ -104,6 +104,7 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_floor_log_last_mode",
     "_floor_log_last_applied",
     "_floor_log_last_manual",
+    "_floor_log_last_applied_bucket",
     "_recommended_sensitivity_multiplier",
     "_last_sensitivity_config",
     "_last_floor_config",
@@ -257,6 +258,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._floor_log_last_mode: Optional[str] = None
         self._floor_log_last_applied: float = -1.0
         self._floor_log_last_manual: float = -1.0
+        self._floor_log_last_applied_bucket: float = -1.0
         # Recommended-mode tuning uses a fixed manual-equivalent sensitivity multiplier.
         self._recommended_sensitivity_multiplier: float = 0.285
         
@@ -726,6 +728,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             "_floor_log_last_mode",
             "_floor_log_last_applied",
             "_floor_log_last_manual",
+            "_floor_log_last_applied_bucket",
             "_bars_log_last_ts",
         )
         for name in runtime_attrs:

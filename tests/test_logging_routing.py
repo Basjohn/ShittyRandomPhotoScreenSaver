@@ -14,6 +14,7 @@ from core.logging.logger import (
     NonPerfFilter,
     NonSpotifyFilter,
     PerfLogFilter,
+    SpacedLogFormatter,
     SpotifyVisLogFilter,
     SpotifyVolLogFilter,
     VerboseLogFilter,
@@ -424,3 +425,25 @@ def test_logging_routing_integration(qtbot):
         logger.removeHandler(main_handler)
         logger.removeHandler(perf_handler)
         logger.removeHandler(spotify_handler)
+
+
+def test_spaced_log_formatter_adds_blank_line_between_records():
+    """Visualizer log formatter should leave a blank line between records."""
+    formatter = SpacedLogFormatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    record = logging.LogRecord(
+        name="test.spotify",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="[SPOTIFY_VIS] Example",
+        args=(),
+        exc_info=None,
+    )
+
+    formatted = formatter.format(record)
+
+    assert formatted.endswith("\n")
+    assert "[SPOTIFY_VIS] Example" in formatted

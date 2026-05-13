@@ -230,6 +230,44 @@ def test_settings_dialog_switch_tab_does_not_schedule_shell_shadow_refresh():
     assert "_schedule_shell_shadow_refresh()" not in source
 
 
+def test_settings_dialog_background_hydration_defers_until_show_and_uses_delays():
+    """Remaining tab hydration should not compete with first dialog interaction."""
+    hydrate_source = inspect.getsource(SettingsDialog._hydrate_remaining_tabs_async)
+    start_source = inspect.getsource(SettingsDialog._start_background_tab_hydration)
+    schedule_source = inspect.getsource(SettingsDialog._schedule_next_background_build)
+    show_source = inspect.getsource(SettingsDialog.showEvent)
+
+    assert "self.isVisible()" in hydrate_source
+    assert "_start_background_tab_hydration()" in show_source
+    assert "self._background_hydration_delay_ms" in start_source
+    assert "self._background_hydration_step_delay_ms" in schedule_source
+    assert "QTimer.singleShot(0, _run)" not in schedule_source
+
+
+def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager, animation_manager):
+    """Persisted top-level tab selection should remain authoritative."""
+    settings_manager.set('ui.last_tab_index', 3)
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    assert dialog._initial_tab_index == 3
+    assert dialog.content_stack.currentIndex() == 3
+    assert dialog.widgets_tab_btn.isChecked() is True
+
+
+def test_settings_dialog_background_hydration_skips_widgets_tab_build():
+    """Widgets tab should not be built off-screen during background hydration."""
+    source = inspect.getsource(SettingsDialog._hydrate_remaining_tabs_async)
+    assert 'self._tab_key_for_index(i) != "widgets"' in source
+
+
+def test_settings_dialog_builds_widgets_tab_in_lazy_mode():
+    """Settings dialog should opt WidgetsTab into lazy section construction."""
+    source = inspect.getsource(SettingsDialog._setup_ui)
+    assert "lazy_sections=True" in source
+    assert 'self._tab_state_cache.get("widgets", {}).get("view_state", {})' in source
+
+
 def test_settings_dialog_theme_loaded(qapp, settings_manager, animation_manager):
     """Test dialog has stylesheet applied."""
     dialog = SettingsDialog(settings_manager, animation_manager)

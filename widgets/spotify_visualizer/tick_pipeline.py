@@ -751,24 +751,40 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
         display_max = max(getattr(widget, "_display_bars", []) or [0.0])
     except Exception:
         display_max = 0.0
+    staged_zero_data = (
+        display_max <= 0.01
+        and display_source_generation < 0
+        and not waiting_engine
+    )
+
+    if staged_zero_data:
+        return
 
     problems: list[str] = []
     if waiting_engine:
         problems.append("waiting_engine_after_push")
-    if waiting_frame:
-        problems.append("waiting_frame_after_push")
     if display_max > 0.01 and display_source_generation < 0:
         problems.append("display_missing_source_generation")
     if display_source_generation >= 0 and overlay_generation != display_source_generation:
         problems.append("overlay_generation_mismatch")
     if display_source_activation >= 0 and overlay_activation != display_source_activation:
         problems.append("overlay_activation_mismatch")
+    if (
+        waiting_frame
+        and (
+            waiting_engine
+            or display_source_generation < 0
+            or overlay_generation != display_source_generation
+            or overlay_activation != display_source_activation
+        )
+    ):
+        problems.append("waiting_frame_after_push")
 
     if not problems:
         return
 
     logger.warning(
-        "[SPOTIFY_VIS][FIRST_FRAME_GUARD] mode=%s problems=%s display_max=%.3f "
+        "[!!!!][SPOTIFY_VIS][FIRST_FRAME_GUARD] mode=%s problems=%s display_max=%.3f "
         "display_source_generation=%s display_source_activation=%s "
         "overlay_generation=%s overlay_activation=%s waiting_engine=%s waiting_frame=%s",
         mode,
@@ -834,8 +850,11 @@ def log_audio_latency_metrics(
     widget._latency_last_signature = signature
 
     trigger_suffix = f" trigger={force_reason}" if force_reason else ""
+    prefix = "[SPOTIFY_VIS][LATENCY]"
+    if level == "error":
+        prefix = "[!!!!][SPOTIFY_VIS][LATENCY]"
     msg = (
-        "[SPOTIFY_VIS][LATENCY] lag_ms=%.1f mode=%s transition_phase=%d pending=%s%s"
+        f"{prefix} lag_ms=%.1f mode=%s transition_phase=%d pending=%s%s"
         % (lag_ms, mode, phase, pending_mode or "<none>", trigger_suffix)
     )
     if level == "error":
