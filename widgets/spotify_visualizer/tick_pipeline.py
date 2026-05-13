@@ -749,6 +749,8 @@ def log_audio_latency_metrics(
     """Emit viz-only latency diagnostics when enabled via --viz."""
     if engine is None or not is_viz_logging_enabled():
         return
+    if not bool(getattr(widget, "_enabled", False)):
+        return
 
     last_audio_ts = float(getattr(engine, "_last_audio_ts", 0.0) or 0.0)
     last_smooth_ts = float(getattr(engine, "_last_smooth_ts", -1.0) or -1.0)

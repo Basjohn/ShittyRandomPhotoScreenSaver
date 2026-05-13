@@ -212,6 +212,81 @@ def test_audio_worker_block_size_noop_does_not_restart_capture(np_module):
     assert backend.restarts == 0
 
 
+def test_latency_logging_skips_disabled_widget(monkeypatch):
+    engine = SimpleNamespace(_last_audio_ts=1.0, _last_smooth_ts=1.0)
+    widget = SimpleNamespace(
+        _enabled=False,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="spectrum",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        tick_pipeline.logger,
+        "error",
+        lambda msg: calls.append(("error", msg)),
+    )
+    monkeypatch.setattr(
+        tick_pipeline.logger,
+        "warning",
+        lambda msg: calls.append(("warning", msg)),
+    )
+
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=5.0, force_reason=None)
+
+    assert calls == []
+
+
+def test_stop_legacy_clears_latency_probe_state():
+    timer_stopped: list[bool] = []
+
+    class _Timer:
+        def stop(self):
+            timer_stopped.append(True)
+
+    engine = SimpleNamespace(release=lambda: None)
+    widget = SimpleNamespace(
+        _enabled=True,
+        _latency_pending_probe=["mode_switch"],
+        _latency_last_signature=("error", 123.4, "spectrum", 0, None, None),
+        _latency_last_log_ts=99.0,
+        _startup_secondary_stage_pending=False,
+        _startup_hot_start_started=False,
+        _startup_wake_deferred=False,
+        _startup_require_playing_before_reveal=False,
+        _startup_reveal_pending=False,
+        _startup_reveal_token=3,
+        _startup_reveal_ready_token=3,
+        _bar_count=35,
+        _engine=engine,
+        _bars_timer=_Timer(),
+        _using_animation_ticks=True,
+        detach_from_animation_manager=lambda: None,
+        _log_perf_snapshot=lambda reset=False: None,
+        hide=lambda: None,
+        _reset_latency_diagnostics=lambda: (
+            widget._latency_pending_probe.clear(),
+            setattr(widget, "_latency_last_signature", None),
+            setattr(widget, "_latency_last_log_ts", 0.0),
+        ),
+    )
+
+    from widgets.spotify_visualizer import startup_staging
+
+    startup_staging.stop_legacy(widget)
+
+    assert widget._enabled is False
+    assert widget._latency_pending_probe == []
+    assert widget._latency_last_signature is None
+    assert widget._latency_last_log_ts == 0.0
+    assert timer_stopped == [True]
+
+
 def test_shared_beat_engine_registry_reconfigures_single_engine_across_bar_counts():
     registry = BeatEngineRegistry()
     engine = registry.get_engine(36)

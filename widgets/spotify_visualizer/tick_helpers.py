@@ -116,9 +116,20 @@ def log_tick_spike(widget: Any, dt: float, transition_ctx: Dict[str, Any]) -> No
     name = transition_ctx.get("name")
     elapsed = transition_ctx.get("elapsed")
     idle_age = transition_ctx.get("idle_age")
+    mode = str(getattr(widget, "_vis_mode_str", "unknown") or "unknown")
+    phase = int(getattr(widget, "_mode_transition_phase", 0) or 0)
+    pending = getattr(widget, "_mode_transition_pending", None)
+    pending_mode = getattr(pending, "name", None) if pending is not None else None
+    waiting_engine = bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
+    waiting_frame = bool(getattr(widget, "_waiting_for_fresh_frame", False))
     logger.warning(
-        "[PERF] [SPOTIFY_VIS] Tick dt spike %.2fms (running=%s name=%s elapsed=%s idle_age=%s)",
+        "[PERF] [SPOTIFY_VIS] Tick dt spike_ms=%.2f mode=%s phase=%d pending=%s waiting_engine=%s waiting_frame=%s transition_running=%s transition_name=%s transition_elapsed=%s idle_age=%s",
         dt * 1000.0,
+        mode,
+        phase,
+        pending_mode or "<none>",
+        waiting_engine,
+        waiting_frame,
         running,
         name or "<none>",
         f"{elapsed:.2f}" if isinstance(elapsed, (int, float)) else "<n/a>",

@@ -1259,12 +1259,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     round(float(getattr(self._energy_bands, 'overall', 0.0) or 0.0), 3),
                 )
             if (
-                (now_diag - self._glow_diag_last_ts) >= 0.5
+                (now_diag - self._glow_diag_last_ts) >= 2.0
                 or diag_sig != self._glow_diag_last_sig
             ):
                 if self._vis_mode == 'spectrum':
-                    logger.info(
-                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f color=%s bar_count=%d energy(b=%.3f m=%.3f h=%.3f o=%.3f)",
+                    logger.debug(
+                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f color=%s bar_count=%d energy_b=%.3f energy_m=%.3f energy_h=%.3f energy_o=%.3f",
                         self._vis_mode,
                         self._spectrum_glow_enabled,
                         self._spectrum_glow_intensity,
@@ -1276,8 +1276,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                         float(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
                     )
                 else:
-                    logger.info(
-                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f reactivity=%.3f reactive=%s lines=%d ghost2=%s ghost3=%s energy(b=%.3f m=%.3f h=%.3f o=%.3f)",
+                    logger.debug(
+                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f reactivity=%.3f reactive=%s lines=%d ghost2=%s ghost3=%s energy_b=%.3f energy_m=%.3f energy_h=%.3f energy_o=%.3f",
                         self._vis_mode,
                         self._glow_enabled,
                         self._glow_intensity,
@@ -2529,7 +2529,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
                 self._gl_programs[mode] = prog
                 self._gl_uniforms[mode] = uniforms
-                logger.debug("[SPOTIFY_VIS] Compiled shader program: %s", mode)
 
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to compile %s shader", mode, exc_info=True)
@@ -2601,7 +2600,6 @@ void main() {
                 _gl.glDeleteShader(fs_mask)
                 if _gl.glGetProgramiv(prog_mask, _gl.GL_LINK_STATUS):
                     self._gl_mask_program = prog_mask
-                    logger.debug("[SPOTIFY_VIS] Mask shader compiled")
                 else:
                     info = _gl.glGetProgramInfoLog(prog_mask)
                     logger.warning("[SPOTIFY_VIS] Mask program link failed: %s", info)

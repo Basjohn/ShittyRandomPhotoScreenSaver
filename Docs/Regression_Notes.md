@@ -17,6 +17,16 @@ but do not belong in `Docs/Historical_Bugs.md`.
   - `test_audio_worker_block_size_noop_does_not_restart_capture`
 - **Log note:** future log review should specifically check that a live mode switch negotiates the requested block size immediately, instead of only after a settings-dialog restart.
 
+### Lifecycle-Aware Visualizer Latency Diagnostics
+- **Area:** Spotify visualizer latency observability during stop/settings teardown
+- **Files:** `widgets/spotify_visualizer/tick_pipeline.py`, `widgets/spotify_visualizer/startup_staging.py`, `widgets/spotify_visualizer_widget.py`, `tests/test_spotify_visualizer_widget.py`
+- **Issue:** visualizer latency logs could treat settings-dialog teardown gaps as live runtime stalls, emitting scary multi-second `[SPOTIFY_VIS][LATENCY]` errors even after the widget had effectively stopped. That made the logs overstate one class of problem and obscured the remaining real runtime spikes.
+- **Fix:** latency diagnostics now refuse to log once the widget is not live, and stop/deactivate paths clear pending latency probes and signatures so a new run starts with a clean diagnostic ledger.
+- **Regression coverage:**
+  - `test_latency_logging_skips_disabled_widget`
+  - `test_stop_legacy_clears_latency_probe_state`
+- **Log note:** after this change, remaining latency warnings should be treated as real runtime pressure unless proven otherwise, because the settings-dialog teardown gap is no longer expected to emit live latency errors.
+
 ### Spotify GL Overlay State-Handoff Extraction
 - **Area:** Spotify visualizer GL overlay state/reset hardening
 - **Files:** `widgets/spotify_visualizer/overlay_state.py`, `widgets/spotify_bars_gl_overlay.py`, `tests/test_ghost_isolation.py`, `tests/test_spotify_visualizer_mode_transition.py`

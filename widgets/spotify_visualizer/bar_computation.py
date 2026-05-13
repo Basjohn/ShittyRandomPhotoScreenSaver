@@ -418,7 +418,12 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         or (now - last_snapshot) >= min_interval
     ) and is_viz_diagnostics_enabled():
         bar_str = " ".join(f"{v:.2f}" for v in arr)
-        logger.info("[SPOTIFY_VIS][BARS] raw_bass=%.3f Bars=[%s]", float(raw_bass), bar_str)
+        logger.info(
+            "[SPOTIFY_VIS][BARS] raw_bass=%.3f bar_count=%d bars=[%s]",
+            float(raw_bass),
+            int(bands),
+            bar_str,
+        )
         try:
             worker._bars_log_last_ts = now
         except Exception as e:

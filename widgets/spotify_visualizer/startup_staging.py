@@ -297,6 +297,11 @@ def deactivate_impl(widget: Any) -> None:
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
 
     try:
+        widget._reset_latency_diagnostics()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics on deactivate", exc_info=True)
+
+    try:
         engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
@@ -352,6 +357,10 @@ def stop_legacy(widget: Any) -> None:
     if not widget._enabled:
         return
     widget._enabled = False
+    try:
+        widget._reset_latency_diagnostics()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to reset latency diagnostics on stop", exc_info=True)
     widget._startup_secondary_stage_pending = False
     widget._startup_hot_start_started = False
     widget._startup_wake_deferred = False

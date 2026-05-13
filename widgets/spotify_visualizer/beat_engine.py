@@ -513,8 +513,6 @@ class _SpotifyBeatEngine(QObject):
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:
-            if is_perf_metrics_enabled() and is_viz_diagnostics_enabled():
-                logger.debug("[PERF] FFT task submitted")
             tm.submit_compute_task(_job, callback=_on_result)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)

@@ -1607,6 +1607,11 @@ class SpotifyVisualizerWidget(QWidget):
         if reason not in self._latency_pending_probe:
             self._latency_pending_probe.append(reason)
 
+    def _reset_latency_diagnostics(self) -> None:
+        self._latency_pending_probe.clear()
+        self._latency_last_signature = None
+        self._latency_last_log_ts = 0.0
+
     def _log_audio_latency_metrics(
         self,
         engine: _SpotifyBeatEngine | None,
