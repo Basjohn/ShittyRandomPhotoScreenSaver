@@ -481,6 +481,29 @@ class TestSettingsManagerDefaults:
         assert writes == []
         assert metadata_updates == []
 
+    def test_visualizer_section_normalization_is_idempotent_for_canonical_payload(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from core.settings.defaults import get_default_settings
+        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+        manager = _make_manager(tmp_path)
+        canonical_source = get_default_settings()["widgets"]["spotify_visualizer"]
+
+        first_pass = normalize_visualizer_section_mapping(
+            canonical_source,
+            apply_preset_overlay=False,
+        )
+        manager.set("widgets.spotify_visualizer", first_pass)
+
+        second_pass = normalize_visualizer_section_mapping(
+            manager.get("widgets.spotify_visualizer"),
+            apply_preset_overlay=False,
+        )
+
+        assert second_pass == first_pass
+
     def test_existing_visualizer_section_does_not_gain_bubble_semantics_marker_during_default_merge(
         self,
         tmp_path: Path,

@@ -32,6 +32,7 @@ If a task touches architecture, settings, visualizers, Qt focus/effects, Gmail w
 - Qt object lifecycle goes through `ResourceManager`.
 - Settings read/write/migration goes through `SettingsManager` and canonical defaults.
 - Animations route through `AnimationManager`.
+- Cross-module publish/subscribe events go through `EventSystem`.
 - Worker process orchestration goes through `ProcessSupervisor`.
 
 ## Settings safety

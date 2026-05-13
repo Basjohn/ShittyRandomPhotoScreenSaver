@@ -41,10 +41,14 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`
   Preset repair/reindex behavior, SST export/import roundtrip, and canonical visualizer snapshot integrity.
+- `tests/test_gmail_oauth.py`
+  Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, fresh-frame reveal gating, parent deadline coordination, and activation/reset runtime contracts.
+- `tests/test_devcurve_builder_contract.py`
+  Spline Curve builder structure contracts such as bucket composition, scaffold usage, and canonical default-color helper usage.
 - `tests/test_mute_button_widget.py`
   Mute button secondary-stage gating, late-anchor recovery, and centralized deadline respect.
 - `tests/test_media_widget_runtime_methods.py`

@@ -18,8 +18,10 @@ Living map of the current SRPSS codebase.
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
 | `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
+| `Docs/10_WIDGET_GUIDELINES.md` | Canonical widget implementation guidance and integration checklist |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
+| `Docs/Transition_Change_Checklist.md` | Required sweep for adding or changing transitions |
 
 ## Entry Points
 
@@ -36,6 +38,7 @@ Living map of the current SRPSS codebase.
 | ResourceManager | `core/resources/manager.py` |
 | SettingsManager | `core/settings/settings_manager.py` |
 | AnimationManager | `core/animation/animator.py` |
+| EventSystem | `core/events/event_system.py` |
 | ProcessSupervisor | `core/process/supervisor.py` |
 
 ## Settings and Persistence
@@ -51,6 +54,13 @@ Living map of the current SRPSS codebase.
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files |
+
+## Performance and Observability
+
+| Module | File | Role |
+|---|---|---|
+| Frame budget / GC controller | `core/performance/frame_budget.py` | Frame pacing and GC budget helpers for render/runtime hot paths |
+| Widget perf profiler | `core/performance/widget_profiler.py` | Widget paint/timer metrics sampling and perf log emission |
 
 ## Visualizer System
 
@@ -76,6 +86,7 @@ Living map of the current SRPSS codebase.
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
+| Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface |
 | Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil-mask inset |

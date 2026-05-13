@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import urlencode, parse_qs, urlparse
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, QCoreApplication
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
@@ -102,6 +102,7 @@ class GmailOAuthManager(QObject):
         self._pkce_verifier: Optional[str] = None
         self._state: Optional[str] = None
         self._redirect_uri: Optional[str] = None
+        self._thread_manager: Optional[ThreadManager] = None
 
         app_data = get_app_data_dir()
 
@@ -278,7 +279,7 @@ class GmailOAuthManager(QObject):
                                 b"</body></html>"
                             )
                             # Submit token exchange as IO task (not on UI thread)
-                            ThreadManager.instance().submit_io_task(manager._exchange_code, code)
+                            manager._get_thread_manager().submit_io_task(manager._exchange_code, code)
                         else:
                             self.wfile.write(
                                 b"<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
@@ -318,6 +319,20 @@ class GmailOAuthManager(QObject):
             raise GmailConfigError("Could not find an available port for OAuth callback server")
         self._auth_thread = threading.Thread(target=self._auth_server.serve_forever, daemon=True)
         self._auth_thread.start()
+
+    def _get_thread_manager(self) -> ThreadManager:
+        """Return the owned ThreadManager used for OAuth network work."""
+        manager = self._thread_manager
+        if manager is None:
+            manager = ThreadManager()
+            self._thread_manager = manager
+            app = QCoreApplication.instance()
+            if app is not None:
+                try:
+                    app.aboutToQuit.connect(lambda m=manager: m.shutdown(wait=False))
+                except Exception as exc:
+                    logger.debug("[GMAIL_OAUTH] Failed to attach ThreadManager shutdown hook: %s", exc)
+        return manager
         logger.info("[GMAIL_OAUTH] Callback server started on %s", self._redirect_uri)
 
     def _stop_callback_server(self) -> None:

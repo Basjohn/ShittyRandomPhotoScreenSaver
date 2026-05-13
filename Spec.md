@@ -20,6 +20,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Qt object lifecycle uses `ResourceManager`.
 - Settings read/write/migration uses `SettingsManager`.
 - Animations route through `AnimationManager`.
+- Cross-module publish/subscribe events use `EventSystem`.
 - Worker process orchestration uses `ProcessSupervisor`.
 
 ## 4. Settings Architecture
@@ -135,6 +136,7 @@ Active ids:
 - Gmail settings construction must not synchronously load backend/auth credential state. The initial backend-specific UI should be derived from the combo/defaults, with credential/auth refresh queued after construction.
 - Styled combo boxes must not force popup-view creation during settings construction; popup view styling belongs on popup open, not in constructors.
 - Gmail IMAP Save & Test must not block the settings UI. Test supplied credentials on the IO pool first, save credentials only after a successful test, and return all UI label/button/popup updates to the UI thread.
+- Gmail OAuth code exchange must also stay off the UI thread. The callback server may acknowledge the browser request immediately, but token exchange/network work must go through a real `ThreadManager` IO task and marshal Qt signal/UI updates back to the UI thread.
 - Gmail user-facing settings UI defaults must be read from canonical widget defaults; missing Gmail defaults should fail loudly in tests instead of quietly introducing new hardcoded fallback drift.
 - Settings-dialog cached widget defaults must be treated as an optimization only. WidgetsTab must merge cached defaults with fresh canonical defaults, and cache invalidation must include both `defaults.py` and `default_settings.py` so new Gmail defaults are not hidden by stale cache data.
 - Gmail visual settings must keep geometry and hit rects aligned: display, position, single `gmail.width`, Media-style margins, header frame, and row click targets must be derived from measured widget layout. Gmail must not expose custom per-side padding controls unless the whole widget family gains the same concept.

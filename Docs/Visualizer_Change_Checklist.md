@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-04-23
+Last updated: 2026-05-13
 
 Use this checklist whenever a visualizer setting is introduced, removed, renamed, split, or significantly retuned.
 
@@ -15,10 +15,11 @@ Use this checklist whenever a visualizer setting is introduced, removed, renamed
 
 ## 3. Defaults and Model
 - Update `core/settings/default_settings.py`.
-- Update model serialization paths in `core/settings/models.py`:
-  - `from_settings`
-  - `from_mapping`
-  - `to_dict`
+- Update the relevant serialization paths under `core/settings/models/`:
+  - mode/widget-owned model classes,
+  - `from_settings`,
+  - `from_mapping`,
+  - `to_dict`.
 
 ## 4. Normalization and Contracts
 - Update any impacted contracts:
@@ -56,3 +57,16 @@ Refresh related docs in the same change:
 
 ## 9. Closure Rule
 - For visual/timing-sensitive behavior changes, require runtime verification in addition to passing tests.
+
+## 10. New Dev-Gated Mode Checklist
+When introducing or changing a dev-gated visualizer mode, update all of these seams together:
+- `core/dev_gates.py`
+  Add the gate flag, import-time argv parsing, and `force_gate(...)` plumbing for tests.
+- `main.py`
+  Register the CLI compatibility flag or real gate flag so startup parsing stays aligned.
+- `core/settings/visualizer_mode_registry.py`
+  Add the mode descriptor, label, key prefix, and gate ownership so settings/UI/runtime all agree on the identity.
+- Runtime renderer path
+  Wire the mode into the relevant runtime seams such as `widgets/spotify_visualizer_widget.py`, `widgets/spotify_bars_gl_overlay.py`, `widgets/spotify_visualizer/config_applier.py`, and any mode-specific renderer or shader loader.
+- Tests and docs
+  Update `Docs/TestSuite.md`, add/expand coverage for registry/plumbing/runtime contracts, and refresh `Spec.md` / `Index.md` if the mode becomes part of the canonical product surface.

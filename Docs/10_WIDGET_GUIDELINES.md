@@ -1,6 +1,6 @@
 # Widget Guidelines
 
-Last updated: 2026-04-23
+Last updated: 2026-05-13
 
 Canonical implementation guidelines for overlay widgets.
 
@@ -47,3 +47,47 @@ When adding/changing a widget, verify:
 - startup fade/stage behavior,
 - dependent visibility + positioning,
 - focused tests for lifecycle and behavior regressions.
+
+## 9. New Widget Integration Checklist
+Use this when adding a new widget family such as a future Steam widget. The goal is to touch the real ownership seams once, not scatter one-off glue.
+
+1. Runtime widget implementation
+- Add the widget runtime module under `widgets/`.
+- Reuse `BaseOverlayWidget` when the widget is a framed overlay card; only diverge when the runtime truly requires it.
+
+2. Factory registration
+- Add or extend the widget factory in `rendering/widget_factories.py`.
+- Inject `ThreadManager` / `ProcessSupervisor` only through the established factory and manager seams.
+
+3. Setup orchestration
+- Register creation, expected-overlay tracking, and parent-attribute binding in `rendering/widget_setup_all.py`.
+- If the widget has complex dependent anchoring or staged startup, wire that through `rendering/widget_manager.py` rather than adding a private startup path.
+
+4. Positioning and dependent geometry
+- Add positioning support in `rendering/widget_positioner.py`.
+- If the widget depends on another widget's geometry, follow the shared anchor/dependent-visibility contract instead of inventing ad hoc coordinate math.
+
+5. Effects, fade, and invalidation
+- Ensure the widget participates in the shared overlay fade/effect lifecycle through `rendering/widget_manager.py` and `rendering/widget_effects.py` when appropriate.
+- Do not add private focus/effect hacks to paper over stale shadow or fade bugs.
+
+6. Input routing
+- Add hit testing and click/URL routing in `rendering/input_handler.py` only if the widget is interactive.
+- Keep non-URL controls separate from real URL opens so helper/exit behavior is not triggered accidentally.
+
+7. Settings defaults and persistence
+- Add canonical defaults in `core/settings/default_settings.py`.
+- If the widget uses typed settings models, extend the relevant model in `core/settings/models/` and keep `from_settings`, `from_mapping`, and `to_dict` symmetric.
+- If the widget is intentionally following an existing flat-dict exception, document that exception explicitly instead of silently creating a second pattern.
+
+8. Settings UI
+- Add the settings builder/load/save wiring in `ui/tabs/widgets_tab.py` and the relevant `ui/tabs/widgets_tab_*.py` helper module.
+- Respect settings-dialog flicker guardrails: no constructor-time show/hide churn, no broad update disabling, and preserve bucket-state persistence if the widget uses buckets.
+
+9. Display/runtime integration
+- Update `rendering/display_widget.py` only when the widget needs display-level callbacks, transition-aware busy checks, or top-level runtime references.
+- Keep routine widget creation out of `DisplayWidget` when `WidgetManager`/factory/setup seams already own it.
+
+10. Documentation and tests
+- Refresh `Spec.md`, `Index.md`, and `Docs/TestSuite.md` when the widget changes live contracts or adds regression coverage.
+- Add focused lifecycle, settings, and interaction tests before broad runtime/manual validation.
