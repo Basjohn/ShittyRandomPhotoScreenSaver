@@ -447,6 +447,7 @@ class MediaWidget(BaseOverlayWidget):
     def _deactivate_impl(self) -> None:
         """Deactivate media widget - stop polling (lifecycle hook)."""
         self._stop_update_timers(delete_qtimer=True)
+        self._clear_pending_state_timer()
         
         logger.debug("[LIFECYCLE] MediaWidget deactivated")
     
@@ -495,6 +496,7 @@ class MediaWidget(BaseOverlayWidget):
 
         self._enabled = False
         self._stop_update_timers(delete_qtimer=True)
+        self._clear_pending_state_timer()
 
         self.hide()
         logger.debug("Media widget stopped")
@@ -524,6 +526,17 @@ class MediaWidget(BaseOverlayWidget):
             except RuntimeError:
                 pass
             self._update_timer = None
+
+    def _clear_pending_state_timer(self) -> None:
+        timer = self._pending_state_timer
+        if timer is not None:
+            try:
+                timer.stop()
+                timer.deleteLater()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        self._pending_state_timer = None
+        self._pending_state_override = None
 
     def set_thread_manager(self, thread_manager) -> None:
         super().set_thread_manager(thread_manager)
@@ -798,11 +811,12 @@ class MediaWidget(BaseOverlayWidget):
                     self._last_track_identity = self._compute_track_identity(optimistic)
                     # Emit media update for visualizer and other listeners
                     self._emit_media_update(optimistic)
-                    # Only repaint controls if they're visible and state changed
+                    # Only refresh controls if they're visible and state changed.
+                    # Use update() so the optimistic feedback coalesces with the
+                    # normal event loop rather than forcing an immediate paint.
                     if self._show_controls and self.isVisible():
                         self._invalidate_controls_layout()
-                        # Use repaint() for immediate feedback on media key (rare event)
-                        self.repaint()
+                        self.update()
                     logger.info("[MEDIA_WIDGET] Optimistic play/pause applied: state=%s", optimistic.state)
                 except Exception:
                     logger.debug("[MEDIA] play_pause optimistic update failed", exc_info=True)
@@ -818,15 +832,7 @@ class MediaWidget(BaseOverlayWidget):
         self._handle_control_feedback("play", source, force_refresh=not refresh_requested)
 
     def _apply_pending_state_override(self, state: MediaPlaybackState) -> None:
-        timer = self._pending_state_timer
-        if timer is not None:
-            try:
-                timer.stop()
-                timer.deleteLater()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-            self._pending_state_timer = None
-
+        self._clear_pending_state_timer()
         self._pending_state_override = state
 
         try:

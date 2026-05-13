@@ -252,6 +252,43 @@ def test_weather_cleanup(qapp, parent_widget):
         weather.cleanup()
         assert weather.is_running() is False
         assert weather._update_timer is None
+        assert weather._retry_timer is None
+
+
+def test_weather_retry_timer_is_cleared_on_cleanup(qapp, parent_widget):
+    """Retry timer should not survive cleanup/destruction paths."""
+    weather = WeatherWidget(parent=parent_widget)
+
+    weather._enabled = True
+    weather._schedule_retry(delay_ms=60_000)
+
+    assert weather._retry_timer is not None
+    assert weather._retry_timer.isActive() is True
+
+    weather.cleanup()
+
+    assert weather._retry_timer is None
+
+
+def test_weather_retry_timeout_fetches_only_when_enabled(qapp, parent_widget):
+    """Retry timeout should no-op once the widget is no longer enabled."""
+    weather = WeatherWidget(parent=parent_widget)
+    calls = []
+
+    weather._fetch_weather = lambda: calls.append("fetch")  # type: ignore[method-assign]
+
+    weather._enabled = False
+    weather._retry_timer = object()  # placeholder so we prove it gets cleared
+    weather._on_retry_timeout()
+
+    assert weather._retry_timer is None
+    assert calls == []
+
+    weather._retry_timer = object()
+    weather._enabled = True
+    weather._on_retry_timeout()
+
+    assert calls == ["fetch"]
 
 
 def test_weather_error_handling(qapp, parent_widget):

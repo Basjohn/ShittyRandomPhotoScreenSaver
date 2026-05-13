@@ -150,6 +150,61 @@ def test_media_layout_deferred_update_position_runs_when_widget_still_valid(monk
     assert calls == ["updated"]
 
 
+def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
+    widget = MediaWidget()
+    registrations = []
+    try:
+        widget._enabled = True
+        widget._thread_manager = None
+        widget._safe_update = lambda: None
+        widget._refresh = lambda: None
+        widget._register_resource = lambda resource, description: registrations.append((resource, description))
+
+        widget._apply_pending_state_override(MediaPlaybackState.PLAYING)
+
+        assert widget._pending_state_timer is not None
+        assert len(registrations) == 1
+        assert registrations[0][0] is widget._pending_state_timer
+        assert registrations[0][1] == "pending state debounce timer"
+
+        widget.stop()
+
+        assert widget._pending_state_timer is None
+        assert widget._pending_state_override is None
+    finally:
+        widget.deleteLater()
+
+
+def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget._enabled = True
+        widget._show_controls = True
+        widget._controller = SimpleNamespace(play_pause=lambda: None)
+        widget._last_info = MediaTrackInfo(
+            title="Song",
+            artist="Artist",
+            state=MediaPlaybackState.PLAYING,
+        )
+        widget._emit_media_update = lambda info: None  # type: ignore[method-assign]
+        widget._invalidate_controls_layout = lambda: None  # type: ignore[method-assign]
+        widget._apply_pending_state_override = lambda state: None  # type: ignore[method-assign]
+        widget._handle_control_feedback = lambda *args, **kwargs: None  # type: ignore[method-assign]
+        widget.isVisible = lambda: True  # type: ignore[method-assign]
+
+        updates = []
+        repaints = []
+        widget.update = lambda: updates.append("update")  # type: ignore[method-assign]
+        widget.repaint = lambda: repaints.append("repaint")  # type: ignore[method-assign]
+
+        widget.play_pause()
+
+        assert updates == ["update"]
+        assert repaints == []
+    finally:
+        widget.deleteLater()
+
+
 def test_media_header_fits_spotify_in_runtime_geometry_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

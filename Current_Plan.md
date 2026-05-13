@@ -13,22 +13,7 @@ This file tracks active work only. Completed implementation details belong in `D
 
 ## Active Tasks
 
-1. `V-04` — Add the deleted-widget validity guard to `widgets/media_layout.py` deferred position nudge.
-Core value: small bounded closure/stability fix for a classic post-destruction timer callback hazard.
-
-2. `V-03` — Register the remaining `MediaWidget` raw `QTimer(self)` fallback with `ResourceManager`, or prove the current parent-owned path is intentionally exempt and safe.
-Core value: lifecycle/closure correctness with low implementation risk.
-
-3. `T-05` / `V-01` follow-through — add/finish lifecycle coverage for Weather retry timer cleanup and Gmail fallback timer teardown behavior.
-Core value: converts timer-heavy widget cleanup from assumption to regression signal without broad runtime rewrites.
-
-4. `V-11` — Review `MediaWidget` synchronous `repaint()` calls and downgrade to `update()` only if runtime responsiveness remains acceptable.
-Core value: modest performance/input-path improvement, but only if it does not reduce visible feedback quality.
-
-5. `T-01` / Imgur raise workaround — add the missing regression test first, then investigate whether the explicit `raise_()` workaround can be normalized back through overlay-manager ownership without reopening focus/Z-order regressions.
-Core value: expandability and overlay-system correctness.
-
-6. Structural follow-through — last priority only, and only after the lower-risk items above.
+1. Structural follow-through — last priority only, and only after the lower-risk items above.
 Core value: long-term expandability/maintainability, not near-term stability.
 - This item is already partially complete and the older audit wording is stale:
   - `core/settings/models.py` has already been split into the `core/settings/models/` package.
@@ -46,6 +31,7 @@ Core value: long-term expandability/maintainability, not near-term stability.
 - Settings cache stale-read behavior after section/root writes.
 
 ## Deferred / Not Active
+- Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - `card_height.py` centralization is not active work. Revisit only if a focused sizing bug justifies it.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
 

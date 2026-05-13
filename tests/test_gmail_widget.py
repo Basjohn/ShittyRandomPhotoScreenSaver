@@ -96,6 +96,53 @@ def test_gmail_widget_cleanup_no_leaks(qt_app):
         pytest.skip(f"Cleanup test skipped: {e}")
 
 
+def test_gmail_fallback_refresh_timer_is_cleared_on_cleanup(qt_app, monkeypatch):
+    """Fallback poll timer should be torn down cleanly when Gmail is cleaned up."""
+    from widgets import gmail_widget as gmail_module
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        monkeypatch.setattr(
+            gmail_module,
+            "create_overlay_timer",
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("fallback")),
+        )
+
+        widget._schedule_timer()
+
+        assert widget._update_timer is not None
+        assert widget._update_timer.isActive() is True
+
+        widget.cleanup()
+
+        assert widget._update_timer is None
+    finally:
+        widget.deleteLater()
+
+
+def test_gmail_deferred_timers_are_cleared_on_cleanup(qt_app):
+    """Deferred Gmail timers should not survive widget cleanup."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget._pending_refresh_after_transition = True
+        widget._schedule_deferred_refresh()
+        widget._deferred_fetch_result = ([], 0, None)
+        widget._schedule_deferred_fetch_flush()
+
+        assert widget._deferred_refresh_timer is not None
+        assert widget._deferred_fetch_timer is not None
+
+        widget.cleanup()
+
+        assert widget._deferred_refresh_timer is None
+        assert widget._deferred_fetch_timer is None
+    finally:
+        widget.deleteLater()
+
+
 def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
     """Gmail should stay hidden when there is no account information and no cache."""
     from widgets.gmail_widget import GmailWidget
