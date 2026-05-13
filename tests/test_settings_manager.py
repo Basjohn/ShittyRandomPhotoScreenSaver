@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 import uuid
+import json
 from pathlib import Path
 
 import pytest
@@ -139,6 +140,92 @@ class TestSettingsManagerCacheInvalidation:
         manager.set_section("transitions", {"type": "Slide"})
 
         assert manager.get("transitions.type") == "Slide"
+
+    def test_clear_purges_cached_values(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("test.key", "value")
+        assert manager.get("test.key") == "value"
+
+        manager.clear()
+
+        assert manager.get("test.key", "fallback") == "fallback"
+
+    def test_cleanup_obsolete_settings_clears_cached_retired_widget_shadow_keys(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set(
+            "widgets",
+            {
+                "gmail": {
+                    "enabled": True,
+                    "intense_shadow": True,
+                }
+            },
+        )
+        assert manager.get("widgets.gmail.intense_shadow") is True
+
+        removed = manager.cleanup_obsolete_settings()
+
+        assert "widgets.gmail.intense_shadow" in removed
+        assert manager.get("widgets.gmail.intense_shadow", "missing") == "missing"
+
+    def test_cleanup_legacy_global_preset_state_clears_cached_legacy_keys(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.setValue("preset", "legacy-value")
+        assert manager.get("preset") == "legacy-value"
+
+        removed = manager.cleanup_legacy_global_preset_state()
+
+        assert "preset" in removed
+        assert manager.get("preset", "missing") == "missing"
+
+    def test_import_from_sst_replace_mode_clears_stale_settings(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("display.mode", "fill")
+        manager.set("widgets", {"clock": {"enabled": True}, "gmail": {"enabled": True}})
+        assert manager.get("widgets.gmail.enabled") is True
+
+        snapshot_path = tmp_path / "replace_import.sst"
+        snapshot_payload = {
+            "snapshot": {
+                "display": {"mode": "fit"},
+                "widgets": {"clock": {"enabled": False}},
+            }
+        }
+        snapshot_path.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+
+        assert manager.import_from_sst(str(snapshot_path), merge=False) is True
+
+        assert manager.get("display.mode") == "fit"
+        assert manager.get("widgets.clock.enabled") is False
+        assert manager.get("widgets.gmail.enabled", "missing") == "missing"
+
+    def test_preview_import_from_sst_replace_mode_reports_removed_sections(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("widgets", {"clock": {"enabled": True}, "gmail": {"enabled": True}})
+
+        snapshot_path = tmp_path / "replace_preview.sst"
+        snapshot_payload = {
+            "snapshot": {
+                "widgets": {"clock": {"enabled": False}},
+            }
+        }
+        snapshot_path.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+
+        diffs = manager.preview_import_from_sst(str(snapshot_path), merge=False)
+
+        assert "widgets" in diffs
+        old_widgets, new_widgets = diffs["widgets"]
+        assert old_widgets["gmail"]["enabled"] is True
+        assert "gmail" not in new_widgets
 
 
 class TestSettingsManagerChangeNotifications:

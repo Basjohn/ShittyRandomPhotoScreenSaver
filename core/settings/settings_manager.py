@@ -637,6 +637,7 @@ class SettingsManager(QObject):
                     self._settings.remove(key)
                     removed.append(key)
             if removed:
+                self._clear_cache_locked()
                 self._settings.sync()
                 logger.info("Removed legacy global preset keys: %s", removed)
         return removed
@@ -675,6 +676,7 @@ class SettingsManager(QObject):
                 if widgets_changed:
                     self._settings.setValue("widgets", widgets_copy)
             if removed:
+                self._clear_cache_locked()
                 self._settings.sync()
                 logger.info("Cleaned up %d obsolete settings: %s", len(removed), removed)
         return removed
@@ -754,6 +756,12 @@ class SettingsManager(QObject):
                 keys_to_remove.append(cache_key)
         for cache_key in keys_to_remove:
             self._cache.pop(cache_key, None)
+
+    def _clear_cache_locked(self) -> None:
+        """Clear the in-memory settings cache after bulk store mutations."""
+        if not self._cache_enabled:
+            return
+        self._cache.clear()
 
     def set_many(self, values: Mapping[str, Any]) -> None:
         """Set multiple settings in one call."""
@@ -1007,6 +1015,7 @@ class SettingsManager(QObject):
                 repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
             
             if repairs:
+                self._clear_cache_locked()
                 self._settings.sync()
                 logger.info(f"Settings validation repaired {len(repairs)} issues: {list(repairs.keys())}")
             else:
@@ -1220,6 +1229,7 @@ class SettingsManager(QObject):
         """Clear all settings (use with caution)."""
         with self._lock:
             self._settings.clear()
+            self._clear_cache_locked()
         logger.warning("All settings cleared")
 
     # ------------------------------------------------------------------

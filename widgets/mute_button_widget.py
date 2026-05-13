@@ -9,6 +9,7 @@ when interaction mode is active.
 """
 from __future__ import annotations
 
+import time
 from typing import Optional
 
 from PySide6.QtCore import Qt, QRectF, QPointF
@@ -102,6 +103,13 @@ class MuteButtonWidget(QWidget):
             getattr(self, "_spotify_secondary_stage_registered", False)
             and not self._spotify_secondary_stage_started
         ):
+            if (
+                self._enabled
+                and self._available
+                and self._anchor_is_visible()
+                and self._is_parent_secondary_stage_ready()
+            ):
+                self.begin_spotify_secondary_stage()
             return
         sync_anchor_dependent_visibility(
             self,
@@ -116,6 +124,41 @@ class MuteButtonWidget(QWidget):
         """Refresh geometry/state after the anchor-driven visibility decision."""
         self.update_position()
         self.poll_mute_state()
+
+    def _anchor_is_visible(self) -> bool:
+        """Return True when the media anchor exists and is visible."""
+        anchor = self._anchor_media
+        if anchor is None:
+            return False
+        try:
+            return bool(anchor.isVisible())
+        except Exception:
+            return False
+
+    def _is_parent_secondary_stage_ready(self) -> bool:
+        """Mirror the centralized Spotify secondary-stage readiness contract."""
+        parent = self.parent()
+        if parent is None:
+            return True
+        try:
+            overlay_expected = getattr(parent, "_overlay_fade_expected", set()) or set()
+        except Exception:
+            overlay_expected = set()
+        try:
+            overlay_started = bool(getattr(parent, "_overlay_fade_started", False))
+        except Exception:
+            overlay_started = False
+        if overlay_expected and not overlay_started:
+            return False
+        try:
+            not_before_ts = float(
+                getattr(parent, "_spotify_secondary_not_before_ts", 0.0) or 0.0
+            )
+        except Exception:
+            not_before_ts = 0.0
+        if not_before_ts <= 0.0:
+            return not overlay_expected
+        return time.monotonic() >= not_before_ts
 
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         """Fade the widget in using a lightweight opacity effect.

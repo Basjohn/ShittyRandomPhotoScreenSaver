@@ -97,6 +97,7 @@ Active ids:
 ## 7. Startup Staging Contract
 - Startup timing policy source: `rendering/overlay_startup_policy.py`.
 - Spotify-related secondary-stage widgets must wait for anchor/position readiness before reveal.
+- Spotify-related secondary-stage widgets must also recover cleanly if their first secondary-stage starter fires before the media anchor becomes visible; later anchor visibility sync must be allowed to release the staged reveal once the centralized manager deadline is satisfied.
 - Mute button follows secondary-stage reveal contract.
 
 ## 8. Rendering and Input Contract

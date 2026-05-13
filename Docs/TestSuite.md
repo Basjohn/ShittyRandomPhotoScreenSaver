@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-04
+Last updated: 2026-05-13
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -31,6 +31,44 @@ pytest tests/test_visualizer_presets.py::TestVisualizerPresetRepair -q
 - Rendering/compositor fallback and transition lifecycle.
 - Input routing and runtime interaction-mode behavior.
 - Gmail widget OAuth flow, DPAPI token storage, and backend routing.
+
+## 3.1 Regression Test Inventory
+Keep these regression-focused files discoverable and up to date when their bug family changes:
+
+- `tests/test_settings_manager.py`
+  Settings cache invalidation, section/root writes, legacy alias migration, visualizer schema version-gating, reset-to-defaults profile overrides, SST replace-import semantics, and bulk-mutation stale-cache prevention.
+- `tests/test_settings_defaults_parity.py`
+  Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
+- `tests/test_visualizer_presets.py`
+  Preset repair/reindex behavior, SST export/import roundtrip, and canonical visualizer snapshot integrity.
+- `tests/test_widget_manager.py`
+  Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
+- `tests/test_spotify_visualizer_widget.py`
+  Secondary-stage startup ownership, fresh-frame reveal gating, parent deadline coordination, and activation/reset runtime contracts.
+- `tests/test_mute_button_widget.py`
+  Mute button secondary-stage gating, late-anchor recovery, and centralized deadline respect.
+- `tests/test_media_widget_runtime_methods.py`
+  Media deferred callbacks, pending-state timer cleanup, and optimistic media-control repaint/update behavior.
+- `tests/test_weather_widget.py`
+  Weather retry timer cleanup and retry timeout state handling.
+- `tests/test_gmail_widget.py`
+  Gmail cache/fallback behavior, transition-aware refresh deferral, timer cleanup, grouping formatting, and stable-content caching rules.
+- `tests/test_settings_dialog.py`
+  Settings-dialog destructive flows such as reset-defaults completion/auto-close behavior.
+- `tests/test_widgets_tab.py`
+  Widgets-tab bucketing persistence/default-collapsed behavior and visualizer/settings tab integration paths.
+- `tests/test_flicker_fix_integration.py`
+  R-18 settings startup flicker/taskbar ghost regression guard.
+- `tests/test_display_tab.py`
+  Display-tab interaction-mode settings behavior, including MC lock-on policy expectations.
+- `tests/test_mc_context_menu.py`
+  MC context-menu interaction-mode contract and safe disable-path prevention.
+- `tests/test_mc_entrypoint_contract.py`
+  MC startup policy contract, especially forced interaction-mode behavior.
+- `tests/test_dimming_and_interaction_fixes.py`
+  Interaction/dimming regression coverage across recent runtime fixes.
+- `tests/test_stencil_mask_alignment.py`
+  GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 
 ## 4. Visualizer Test Expectations
 When changing visualizer settings/contracts, include tests for:

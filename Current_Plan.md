@@ -25,10 +25,7 @@ Core value: long-term expandability/maintainability, not near-term stability.
 - `widgets/spotify_bars_gl_overlay.py` prewarm `repaint()` review (`V-12`) is explicitly barred from accidental implementation. Treat it as dangerous by default because it risks reopening the first-bar / prewarm visualizer bug family.
 
 ## Watchlist
-- Mute button fade-in reliability under startup event pressure.
 - Transition random mode actual distribution vs expected uniform over long runtime.
-- Settings destructive-flow checks: reset/import when touching settings architecture.
-- Settings cache stale-read behavior after section/root writes.
 
 ## Deferred / Not Active
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.

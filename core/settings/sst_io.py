@@ -146,6 +146,8 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
 
     try:
         with mgr._lock:
+            if not merge:
+                mgr._settings.clear()
             for section_key, section_value in normalized_root.items():
                 if section_key == "preset":
                     # Retired global preset marker key.
@@ -210,7 +212,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
                     mgr._settings.setValue(section_key, coerced)
 
             mgr._settings.sync()
-            mgr._cache.clear()
+            mgr._clear_cache_locked()
 
         mgr.settings_changed.emit('*', None)
         logger.info("Imported settings snapshot from %s", path)

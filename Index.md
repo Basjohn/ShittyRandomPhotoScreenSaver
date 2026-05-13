@@ -12,6 +12,7 @@ Living map of the current SRPSS codebase.
 | `Current_Plan.md` | Active short-term work and validation |
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
+| `Docs/Regression_Notes.md` | Smaller resolved regression notes and follow-up hardening items |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
