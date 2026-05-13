@@ -100,9 +100,10 @@ def handle_mode_cycle_state_reset(widget: Any) -> None:
 
 
 def clear_gl_overlay(widget: Any) -> None:
-    """Destroy the GL bars overlay when visualizer hides."""
-    widget._request_overlay_mode_reset(reason="clear_gl_overlay")
-    widget._destroy_parent_overlay(reason="clear_gl_overlay")
+    """Cold-clear the GL bars overlay runtime state without rebuilding GL."""
+    from widgets.spotify_visualizer.media_bridge import clear_parent_overlay_runtime
+
+    clear_parent_overlay_runtime(widget, reason="clear_gl_overlay")
 
 
 def is_media_state_stale(widget: Any) -> bool:

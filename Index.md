@@ -75,6 +75,7 @@ Living map of the current SRPSS codebase.
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, and painted-card rounded-rect stencil mask with border-width inset so GL content stays inside the visible card boundary |
 | Overlay stencil mask | `widgets/spotify_visualizer/overlay_mask.py` | Shared painted-card stencil uniform math for the GL overlay render path, preserving the rounded-rect border-inset clipping contract |
 | Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, and invisible-frame early return without touching first-frame shader authority |
+| Overlay lifecycle bridge | `widgets/spotify_visualizer/media_bridge.py` / `widgets/spotify_visualizer/engine_lifecycle.py` | Runtime overlay clear/destroy policy: mode and preset resets preserve the GL overlay object where possible, while cleanup/teardown still destroys it |
 | Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; engine config replay |
 | Spline Curve (`devcurve`) runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | Spline Curve runtime curves, specular slots, and idle/play specular alpha activity multiplier |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |

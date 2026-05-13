@@ -719,6 +719,7 @@ def push_gpu_frame(
                 log_render(reason="after_first_overlay_push")
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to log render state after first overlay push", exc_info=True)
+        _warn_on_first_frame_guard_mismatch(widget, parent)
 
     if used_gpu:
         widget._has_pushed_first_frame = True
@@ -734,6 +735,52 @@ def push_gpu_frame(
             widget.update()
         widget._on_first_frame_after_cold_start()
     return used_gpu
+
+
+def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
+    """Emit an explicit warning when first-push guardrail state looks wrong."""
+    overlay = getattr(parent, "_spotify_bars_overlay", None) if parent is not None else None
+    overlay_activation = getattr(overlay, "_activation_id", None) if overlay is not None else None
+    overlay_generation = getattr(overlay, "_engine_generation", None) if overlay is not None else None
+    display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
+    display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
+    waiting_engine = bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
+    waiting_frame = bool(getattr(widget, "_waiting_for_fresh_frame", False))
+    mode = str(getattr(widget, "_vis_mode_str", "unknown") or "unknown")
+    try:
+        display_max = max(getattr(widget, "_display_bars", []) or [0.0])
+    except Exception:
+        display_max = 0.0
+
+    problems: list[str] = []
+    if waiting_engine:
+        problems.append("waiting_engine_after_push")
+    if waiting_frame:
+        problems.append("waiting_frame_after_push")
+    if display_max > 0.01 and display_source_generation < 0:
+        problems.append("display_missing_source_generation")
+    if display_source_generation >= 0 and overlay_generation != display_source_generation:
+        problems.append("overlay_generation_mismatch")
+    if display_source_activation >= 0 and overlay_activation != display_source_activation:
+        problems.append("overlay_activation_mismatch")
+
+    if not problems:
+        return
+
+    logger.warning(
+        "[SPOTIFY_VIS][FIRST_FRAME_GUARD] mode=%s problems=%s display_max=%.3f "
+        "display_source_generation=%s display_source_activation=%s "
+        "overlay_generation=%s overlay_activation=%s waiting_engine=%s waiting_frame=%s",
+        mode,
+        ",".join(problems),
+        display_max,
+        display_source_generation,
+        display_source_activation,
+        overlay_generation,
+        overlay_activation,
+        waiting_engine,
+        waiting_frame,
+    )
 
 
 # ------------------------------------------------------------------

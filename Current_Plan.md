@@ -56,7 +56,28 @@ Core value: reduces future startup/mode-switch/activation churn while keeping th
   - shared engine/runtime config forwarding is now partly extracted into `widgets/spotify_visualizer/runtime_config.py`, covering thread/process propagation, floor/sensitivity/energy/input/AGC pushes, audio block-size forwarding, runtime bar-state clearing, and beat-engine bar-count reconfiguration without entering the GL first-frame authority path.
   - a concrete live-runtime regression was also identified and fixed here: mode-owned audio block-size changes were reaching the worker config path but not the live capture stream, so `devcurve -> spectrum` could keep running on the stale negotiated block size until a settings-dialog restart. `SpotifyVisualizerAudioWorker.set_audio_block_size()` now restarts capture when the preferred block changes while running.
 
-3. `widgets/spotify_bars_gl_overlay.py` structural hardening — now active under explicit first-frame/bleed guardrails.
+3. Visualizer perf / latency follow-up — now the next active implementation priority.
+Core value: the remaining user-visible risk is runtime hot-path cost and misleading diagnostics during heavy swaps / overlay recreation.
+- Why this moved ahead of the next overlay slice:
+  - fresh logs keep the stale block-size fix green, but still show real `spectrum` and `devcurve` spikes,
+  - the vis log was still flooding on hot-path `GLOW` / `FLOOR` emitters, which makes real regressions harder to spot,
+  - repeated overlay recreation / shader-pipeline bring-up remains visible around mode switches and restart boundaries.
+- Scope:
+  - keep the recently fixed live block-size renegotiation path intact,
+  - investigate overlay recreation / shader recompile churn during mode switches and restarts,
+  - investigate the remaining real `48–110ms` spikes plus the `~320ms` stall during settings-open teardown,
+  - keep improving log signal so hot-path issues are parseable in Notepad and grep without deleting the high-value first-frame / bleed probes.
+- Implementation guardrails:
+  - do not weaken first-frame / fresh-generation / activation gates for the sake of throughput,
+  - do not solve perf by removing visual features, fades, glow, or overlays,
+  - prefer throttling / summarizing diagnostics over deleting the probes we rely on for bleed and first-frame regressions.
+- Immediate evidence:
+  - fresh logs confirm the old stale capture block-size mismatch is fixed,
+  - fresh logs still show repeated tick spikes and repeat full overlay shader setup after recreation,
+  - the vis log still needed hot-path tightening because `GLOW` / `FLOOR` were effectively re-emitting on volatile energy deltas.
+  - first-frame / fresh-generation consistency now needs explicit anomaly warnings, not just raw state dumps, so mismatches become obvious in the vis log instead of requiring manual correlation.
+
+4. `widgets/spotify_bars_gl_overlay.py` structural hardening — active under explicit first-frame/bleed guardrails, but now behind perf follow-up.
 Core value: highest-value remaining runtime-coordinator cleanup, because the GL overlay still carries a large mixed state/reset/render seam that future visualizer work will keep paying for.
 - Implementation guardrails:
   - preserve the reset sequence described in `Docs/spotify_visualizer_bleed_first_frame_refactor_guardrails.md`,
@@ -74,22 +95,6 @@ Core value: highest-value remaining runtime-coordinator cleanup, because the GL 
   - regression coverage now includes a real stale activation/generation rejection test in `tests/test_spotify_visualizer_mode_transition.py` and explicit manual overlay-reset bookkeeping checks in `tests/test_ghost_isolation.py`.
   - the next render-side slice is now in place too: painted-card stencil setup/teardown and rounded-rect mask uniform generation are no longer inlined entirely inside `paintGL()`. `widgets/spotify_visualizer/overlay_mask.py` now owns the mask uniform math, while `widgets/spotify_bars_gl_overlay.py` keeps explicit begin/draw/end stencil helpers around the same geometry contract.
   - next recommended slice inside this task: extract the non-shader first-frame authority / overlay-frame commit seam into a dedicated helper while preserving generation+activation gating, then validate with the existing synthetic bleed-family tests plus post-change log review.
-
-4. Visualizer perf / latency follow-up — now an explicit near-term task, not just a watch item.
-Core value: the remaining user-visible risk is no longer stale block-size carryover; it is runtime hot-path cost and misleading diagnostics during heavy swaps / overlay recreation.
-- Scope:
-  - keep the recently fixed live block-size renegotiation path intact,
-  - investigate overlay recreation / shader recompile churn during mode switches and restarts,
-  - investigate the remaining real 48–110ms tick spikes under load,
-  - improve log signal so hot-path issues are parseable without drowning the vis log in per-frame chatter.
-- Implementation guardrails:
-  - do not weaken first-frame / fresh-generation / activation gates for the sake of throughput,
-  - do not solve perf by removing visual features, fades, glow, or overlays,
-  - prefer throttling / summarizing diagnostics over deleting the high-value probes we rely on for bleed and first-frame regressions.
-- Immediate evidence:
-  - fresh logs confirm the old stale capture block-size mismatch is fixed,
-  - fresh logs still show repeated tick spikes and repeat full overlay shader setup after recreation,
-  - the vis log remains too noisy in hot paths unless diagnostic emitters are tightened.
 
 5. Visualizer test maintainability follow-through — do this alongside or immediately after Tasks 1, 2, 3, and 4.
 Core value: makes the future architecture work cheaper instead of letting the biggest test files become their own blocker.
@@ -117,7 +122,8 @@ Core value: highest future feature payoff, especially for eventual new widgets/t
 ## Watchlist
 - Gmail/OAuth is not an active blocker for planning purposes. The threading/test seam is closed enough; do not hold the larger architecture queue on manual Gmail validation.
 - The stale live capture block-size regression is now fixed and confirmed in logs: live mode switches renegotiate `128` for `spectrum` and `256` for `devcurve` without waiting for a settings-dialog restart.
-- Fresh logs do not show a new first-bar / bleed / stale-generation failure. The remaining visualizer risk is performance/observability: repeated tick spikes, overlay recreation cost, and log volume in hot paths.
+- Fresh logs do not show a new first-bar / bleed / stale-generation failure. The remaining visualizer risk is performance/observability: repeated tick spikes, overlay recreation cost, a `~320ms` settings-open stall on the live `spectrum` path, and log volume in hot paths.
+- The overlay cold-reset path should preserve guardrails even if the GL object is reused. If a reused overlay ever reintroduces stale activation/generation state, the new first-frame guard warning should make that visible immediately in logs.
 
 ## Deferred / Not Active
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.

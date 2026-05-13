@@ -2437,7 +2437,65 @@ def test_cold_reset_ignores_transition_resume(qt_app, qtbot):
 
 
 @pytest.mark.qt
-def test_clear_gl_overlay_destroys_overlay(qt_app, qtbot):
+def test_clear_gl_overlay_preserves_overlay_instance_and_clears_runtime_state(qt_app, qtbot):
+    class _PixelShiftStub:
+        def __init__(self) -> None:
+            self.unregistered: list[QWidget] = []
+
+        def unregister_widget(self, widget: QWidget) -> None:
+            self.unregistered.append(widget)
+
+    class _OverlayStub(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.hide_calls = 0
+            self.clear_calls = 0
+            self.cleanup_calls = 0
+            self.delete_calls = 0
+            self.reset_requests: list[str] = []
+
+        def hide(self) -> None:  # type: ignore[override]
+            self.hide_calls += 1
+
+        def clear_overlay_buffer(self) -> None:
+            self.clear_calls += 1
+
+        def cleanup_gl(self) -> None:
+            self.cleanup_calls += 1
+
+        def request_mode_reset(self, mode: str) -> None:
+            self.reset_requests.append(mode)
+
+        def deleteLater(self) -> None:  # type: ignore[override]
+            self.delete_calls += 1
+
+    class _OverlayParent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self._spotify_bars_overlay = _OverlayStub()
+            self._pixel_shift_manager = _PixelShiftStub()
+
+    parent = _OverlayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    widget.setGraphicsEffect(QGraphicsDropShadowEffect(widget))
+    widget._vis_mode = VisualizerMode.SPECTRUM
+
+    widget._clear_gl_overlay()
+
+    stub: _OverlayStub = parent._spotify_bars_overlay  # type: ignore[assignment]
+    assert stub.hide_calls == 1
+    assert stub.clear_calls == 1
+    assert stub.cleanup_calls == 0
+    assert stub.delete_calls == 0
+    assert stub.reset_requests == ["spectrum"]
+    assert parent._pixel_shift_manager.unregistered == []
+
+
+@pytest.mark.qt
+def test_destroy_parent_overlay_still_destroys_overlay(qt_app, qtbot):
     class _PixelShiftStub:
         def __init__(self) -> None:
             self.unregistered: list[QWidget] = []
@@ -2454,6 +2512,9 @@ def test_clear_gl_overlay_destroys_overlay(qt_app, qtbot):
 
         def hide(self) -> None:  # type: ignore[override]
             self.hide_calls += 1
+
+        def clear_overlay_buffer(self) -> None:
+            pass
 
         def cleanup_gl(self) -> None:
             self.cleanup_calls += 1
@@ -2472,9 +2533,8 @@ def test_clear_gl_overlay_destroys_overlay(qt_app, qtbot):
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     qtbot.addWidget(widget)
-    widget.setGraphicsEffect(QGraphicsDropShadowEffect(widget))
 
-    widget._clear_gl_overlay()
+    widget._destroy_parent_overlay(reason="test_cleanup")
 
     assert parent._spotify_bars_overlay is None
     stub: _OverlayStub = parent._pixel_shift_manager.unregistered[0]  # type: ignore[index]

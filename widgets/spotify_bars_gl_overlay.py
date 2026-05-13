@@ -1231,6 +1231,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         if is_viz_diagnostics_enabled() and self._vis_mode in ('oscilloscope', 'sine_wave', 'spectrum'):
             now_diag = time.time()
+            def _energy_bucket(value: float, step: float = 0.08) -> float:
+                try:
+                    bucketed = round(float(value) / step) * step
+                    return round(bucketed, 2)
+                except Exception:
+                    return 0.0
+
             if self._vis_mode == 'spectrum':
                 diag_sig = (
                     self._vis_mode,
@@ -1238,10 +1245,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     round(float(self._spectrum_glow_intensity), 3),
                     tuple(int(c) for c in self._spectrum_glow_color.getRgb()),
                     int(self._bar_count),
-                    round(float(getattr(self._energy_bands, 'bass', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'mid', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'high', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'overall', 0.0) or 0.0), 3),
+                    _energy_bucket(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'mid', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'high', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
                 )
             else:
                 diag_sig = (
@@ -1253,13 +1260,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                     int(self._line_count),
                     int(self._osc_ghost_line2_enabled),
                     int(self._osc_ghost_line3_enabled),
-                    round(float(getattr(self._energy_bands, 'bass', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'mid', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'high', 0.0) or 0.0), 3),
-                    round(float(getattr(self._energy_bands, 'overall', 0.0) or 0.0), 3),
+                    _energy_bucket(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'mid', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'high', 0.0) or 0.0),
+                    _energy_bucket(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
                 )
             if (
-                (now_diag - self._glow_diag_last_ts) >= 2.0
+                (now_diag - self._glow_diag_last_ts) >= 4.0
                 or diag_sig != self._glow_diag_last_sig
             ):
                 if self._vis_mode == 'spectrum':

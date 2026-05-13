@@ -1690,9 +1690,9 @@ class SpotifyVisualizerWidget(QWidget):
             self._waiting_for_fresh_engine_frame = True
             self._waiting_for_fresh_frame = True
             if reset_runtime:
-                # Direct mode changes must be as cold as a settings restart:
-                # destroy the GL overlay, clear widget-owned mode envelopes,
-                # then reset the shared engine without replacing it.
+                # Direct mode changes must still be cold resets: blank/hide the
+                # GL overlay, clear widget-owned mode envelopes, then reset the
+                # shared engine without replacing it.
                 try:
                     self._reset_mode_owned_runtime_state(reason="mode_switch")
                     self._clear_gl_overlay()

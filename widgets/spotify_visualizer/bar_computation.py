@@ -906,13 +906,34 @@ def maybe_log_floor_state(
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return True
 
+    last_bass = getattr(worker, "_floor_log_last_bass_bucket", -1.0)
+    last_mid = getattr(worker, "_floor_log_last_mid_bucket", -1.0)
+    last_treble = getattr(worker, "_floor_log_last_treble_bucket", -1.0)
+    last_expansion = getattr(worker, "_floor_log_last_expansion_bucket", -1.0)
+
+    def _bucket(value: float, step: float) -> float:
+        try:
+            return round(round(float(value) / step) * step, 2)
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            return 0.0
+
+    bass_bucket = _bucket(raw_bass, 0.25)
+    mid_bucket = _bucket(raw_mid, 0.25)
+    treble_bucket = _bucket(raw_treble, 0.10)
+    expansion_bucket = _bucket(expansion, 0.25)
+
     state_changed = (
         last_mode != mode
         or _changed(applied_floor, last_applied)
         or _changed(manual_floor, last_manual)
+        or bass_bucket != last_bass
+        or mid_bucket != last_mid
+        or treble_bucket != last_treble
+        or expansion_bucket != last_expansion
     )
 
-    throttle = 5.0
+    throttle = 8.0
     if not state_changed and last_ts and (now - last_ts) < throttle:
         return
 
@@ -939,6 +960,10 @@ def maybe_log_floor_state(
             worker._floor_log_last_mode = mode
             worker._floor_log_last_applied = applied_floor
             worker._floor_log_last_manual = manual_floor
+            worker._floor_log_last_bass_bucket = bass_bucket
+            worker._floor_log_last_mid_bucket = mid_bucket
+            worker._floor_log_last_treble_bucket = treble_bucket
+            worker._floor_log_last_expansion_bucket = expansion_bucket
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 

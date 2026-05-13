@@ -244,6 +244,57 @@ def destroy_parent_overlay(widget: Any, *, reason: str) -> None:
     widget._waiting_for_fresh_frame = True
 
 
+def clear_parent_overlay_runtime(widget: Any, *, reason: str) -> None:
+    """Blank and hide the GL bars overlay without destroying the GL object.
+
+    This preserves the expensive GL/shader setup across mode and preset
+    resets while still forcing the same cold runtime handoff before the next
+    visible frame can commit.
+    """
+    parent = widget.parent()
+    if parent is None:
+        logger.warning("[SPOTIFY_VIS] Overlay clear requested without parent (reason=%s)", reason)
+        return
+
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    if overlay is None:
+        logger.debug("[SPOTIFY_VIS] No overlay to clear (reason=%s)", reason)
+        return
+
+    logger.debug(
+        "[SPOTIFY_VIS] Clearing SpotifyBarsGLOverlay runtime state (reason=%s id=%s)",
+        reason,
+        hex(id(overlay)),
+    )
+
+    try:
+        if hasattr(overlay, "request_mode_reset"):
+            overlay.request_mode_reset(widget._vis_mode_str)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to request overlay mode reset during clear", exc_info=True)
+
+    try:
+        overlay.hide()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to hide overlay during clear", exc_info=True)
+
+    try:
+        if hasattr(overlay, "clear_overlay_buffer"):
+            overlay.clear_overlay_buffer()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to blank overlay buffer during clear", exc_info=True)
+
+    try:
+        overlay.update()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to schedule overlay update during clear", exc_info=True)
+
+    widget._pending_shadow_cache_invalidation = True
+    widget._invalidate_shadow_cache_if_needed()
+    widget._shadow_config_missing = True
+    widget._waiting_for_fresh_frame = True
+
+
 def request_overlay_mode_reset(widget: Any, *, mode: Optional[str] = None, reason: str = "widget_reset") -> None:
     """Ask the GL overlay (if present) to cold-reset its per-mode state."""
 
