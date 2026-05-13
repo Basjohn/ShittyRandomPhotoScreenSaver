@@ -452,6 +452,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._transition_spinup_window: float = 2.0
         self._idle_fps_boost_delay: float = 5.0
         self._idle_max_fps: float = 100.0
+        self._target_timer_interval_ms: int = 16
         self._current_timer_interval_ms: int = 16
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
@@ -463,6 +464,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._last_engine_generation_seen: int = -1
         self._pending_engine_activation_id: int = -1
         self._last_engine_activation_seen: int = -1
+        self._first_overlay_push_probe_key: Optional[tuple] = None
 
         # Mode transition driven by double-click (no timers, tick-driven)
         self._mode_transition_ts: float = 0.0   # 0 = no transition active
@@ -1003,35 +1005,56 @@ class SpotifyVisualizerWidget(QWidget):
     def attach_to_animation_manager(self, animation_manager) -> None:
         # Detach from any previous manager first to avoid stacking listeners.
         if self._animation_manager is not None and self._anim_listener_id is not None:
-            try:
-                if hasattr(self._animation_manager, "remove_tick_listener"):
-                    self._animation_manager.remove_tick_listener(self._anim_listener_id)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to remove previous AnimationManager listener", exc_info=True)
+            self._disable_animation_tick_listener()
 
         self._animation_manager = animation_manager
-        self._anim_listener_id = None
+        self._using_animation_ticks = False
 
-        # NOTE: We keep the dedicated _bars_timer running even when attached to
-        # AnimationManager. The AnimationManager only ticks during active transitions,
-        # so the dedicated timer ensures continuous visualizer updates between transitions.
-        # The _on_tick method's FPS cap via _last_update_ts handles deduplication of
-        # the actual GPU push, so double-ticking is not a performance issue.
+        # The dedicated recurring timer owns steady-state runtime. The
+        # AnimationManager listener is attached only while a transition is
+        # active so compositor-aligned motion stays smooth without keeping a
+        # second no-op tick source alive all session long.
+        self._ensure_tick_source()
+
+    def _enable_animation_tick_listener(self) -> None:
+        if self._animation_manager is None or self._anim_listener_id is not None:
+            return
 
         try:
             def _tick_listener(dt: float) -> None:
                 if not self._enabled:
                     return
+                parent = self.parent()
+                running = False
+                if parent is not None:
+                    if hasattr(parent, "get_transition_snapshot"):
+                        try:
+                            snapshot = parent.get_transition_snapshot()
+                            running = bool(snapshot.get("running", False)) if isinstance(snapshot, dict) else False
+                        except Exception:
+                            logger.debug("[SPOTIFY_VIS] Failed to read transition snapshot", exc_info=True)
+                            running = False
+                    elif hasattr(parent, "has_running_transition"):
+                        try:
+                            running = bool(parent.has_running_transition())
+                        except Exception:
+                            logger.debug("[SPOTIFY_VIS] Failed to query transition state", exc_info=True)
+                            running = False
+                if not running:
+                    self._disable_animation_tick_listener()
+                    self._pause_timer_during_transition(False)
+                    return
                 self._on_tick()
 
-            listener_id = animation_manager.add_tick_listener(_tick_listener)
+            listener_id = self._animation_manager.add_tick_listener(_tick_listener)
             self._anim_listener_id = listener_id
+            self._using_animation_ticks = True
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
-        finally:
-            self._ensure_tick_source()
+            self._anim_listener_id = None
+            self._using_animation_ticks = False
 
-    def detach_from_animation_manager(self) -> None:
+    def _disable_animation_tick_listener(self) -> None:
         am = self._animation_manager
         listener_id = self._anim_listener_id
         if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
@@ -1039,8 +1062,12 @@ class SpotifyVisualizerWidget(QWidget):
                 am.remove_tick_listener(listener_id)
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
-        self._animation_manager = None
         self._anim_listener_id = None
+        self._using_animation_ticks = False
+
+    def detach_from_animation_manager(self) -> None:
+        self._disable_animation_tick_listener()
+        self._animation_manager = None
         self._ensure_tick_source()
 
     def _bubble_compute_worker(self, dt: float, eb_snap: dict,
@@ -1112,6 +1139,7 @@ class SpotifyVisualizerWidget(QWidget):
         if self._thread_manager is not None and self._bars_timer is None:
             try:
                 self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
+                self._target_timer_interval_ms = 16
                 self._current_timer_interval_ms = 16
             except Exception:
                 logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)

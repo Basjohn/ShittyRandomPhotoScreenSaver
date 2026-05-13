@@ -65,10 +65,19 @@ def resolve_max_fps(widget: Any, transition_ctx: Dict[str, Any]) -> float:
 def update_timer_interval(widget: Any, max_fps: float) -> None:
     """Retune the ThreadManager recurring timer interval if needed."""
     interval_ms = max(4, int(round(1000.0 / max_fps)))
-    if interval_ms == widget._current_timer_interval_ms:
+    current_target = int(
+        getattr(
+            widget,
+            "_target_timer_interval_ms",
+            getattr(widget, "_current_timer_interval_ms", interval_ms),
+        )
+    )
+    if interval_ms == current_target:
         return
-    widget._current_timer_interval_ms = interval_ms
+    widget._target_timer_interval_ms = interval_ms
     # Add a tiny jitter so we don't align perfectly with compositor vsync.
+    # Store the *target* interval separately from the jittered live interval
+    # so we do not keep re-setting the timer every tick for the same cadence.
     jitter = random.randint(0, 2) if interval_ms >= 8 else 0
     new_interval = interval_ms + jitter
     timer = widget._bars_timer
@@ -98,7 +107,16 @@ def pause_timer_during_transition(widget: Any, is_transition_active: bool) -> No
             # Transition active with AnimationManager - pause dedicated timer
             if timer.isActive():
                 timer.stop()
+        elif is_transition_active and getattr(widget, "_animation_manager", None) is not None:
+            enable_listener = getattr(widget, "_enable_animation_tick_listener", None)
+            if callable(enable_listener):
+                enable_listener()
+            if getattr(widget, "_using_animation_ticks", False) and timer.isActive():
+                timer.stop()
         else:
+            disable_listener = getattr(widget, "_disable_animation_tick_listener", None)
+            if callable(disable_listener):
+                disable_listener()
             # No transition or no AnimationManager - ensure timer is running
             if not timer.isActive() and widget._enabled:
                 timer.start()

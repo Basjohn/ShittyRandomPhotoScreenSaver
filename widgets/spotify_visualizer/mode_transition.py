@@ -242,6 +242,7 @@ def reset_visualizer_state(
     widget._last_engine_generation_seen = -1
     widget._pending_engine_activation_id = -1
     widget._last_engine_activation_seen = -1
+    widget._first_overlay_push_probe_key = None
     widget._request_overlay_mode_reset(reason="widget_reset_state")
     if clear_overlay:
         widget._clear_gl_overlay()

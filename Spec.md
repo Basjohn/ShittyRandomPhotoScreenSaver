@@ -76,6 +76,7 @@ Active ids:
 - Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.
 - Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
 - Live audio block-size changes are capture-rebind boundaries: when mode-owned technical config changes the preferred block size at runtime, the active audio worker must restart capture instead of waiting for a full runtime rebuild or settings-dialog restart.
+- Visualizer tick ownership is split by phase: the dedicated recurring timer owns steady runtime cadence, while AnimationManager assistance is transition-scoped only and must hand control cleanly back to the dedicated timer when the transition ends.
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.

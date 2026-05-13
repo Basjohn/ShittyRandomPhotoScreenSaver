@@ -657,13 +657,24 @@ def push_gpu_frame(
     from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
     extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
 
+    first_frame_probe_key = None
     if first_frame:
-        log_render = getattr(widget, "_log_active_render_state_snapshot", None)
-        if callable(log_render):
-            try:
-                log_render(reason="before_first_overlay_push")
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to log render state before first overlay push", exc_info=True)
+        first_frame_probe_key = (
+            str(mode_str or "unknown"),
+            int(getattr(widget, "_display_bars_source_generation", -1) or -1),
+            int(getattr(widget, "_display_bars_source_activation", -1) or -1),
+            int(getattr(widget, "_pending_engine_generation", -1) or -1),
+            int(getattr(widget, "_pending_engine_activation_id", -1) or -1),
+            int(getattr(widget, "_bar_count", 0) or 0),
+        )
+        if getattr(widget, "_first_overlay_push_probe_key", None) != first_frame_probe_key:
+            log_render = getattr(widget, "_log_active_render_state_snapshot", None)
+            if callable(log_render):
+                try:
+                    log_render(reason="before_first_overlay_push")
+                except Exception:
+                    logger.debug("[SPOTIFY_VIS] Failed to log render state before first overlay push", exc_info=True)
+            widget._first_overlay_push_probe_key = first_frame_probe_key
 
     if (
         mode_str == 'sine_wave'
@@ -723,6 +734,7 @@ def push_gpu_frame(
 
     if used_gpu:
         widget._has_pushed_first_frame = True
+        widget._first_overlay_push_probe_key = None
         try:
             if current_geom is None:
                 current_geom = widget.geometry()

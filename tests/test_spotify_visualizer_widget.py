@@ -11,6 +11,7 @@ from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key
 from core.settings.visualizer_presets import get_custom_preset_index
 from widgets.spotify_visualizer import mode_transition
+from widgets.spotify_visualizer import tick_helpers
 from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerAudioWorker,
@@ -210,6 +211,28 @@ def test_audio_worker_block_size_noop_does_not_restart_capture(np_module):
     assert worker._preferred_block_size == 256  # type: ignore[attr-defined]
     assert backend._config.block_size == 256
     assert backend.restarts == 0
+
+
+def test_update_timer_interval_does_not_thrash_same_target_when_actual_is_jittered():
+    class _Timer:
+        def __init__(self):
+            self.calls: list[int] = []
+
+        def setInterval(self, interval: int):
+            self.calls.append(interval)
+
+    timer = _Timer()
+    widget = SimpleNamespace(
+        _bars_timer=timer,
+        _target_timer_interval_ms=11,
+        _current_timer_interval_ms=13,
+    )
+
+    tick_helpers.update_timer_interval(widget, 90.0)
+
+    assert timer.calls == []
+    assert widget._target_timer_interval_ms == 11
+    assert widget._current_timer_interval_ms == 13
 
 
 def test_latency_logging_skips_disabled_widget(monkeypatch):
@@ -1778,6 +1801,126 @@ def test_first_frame_guard_does_not_warn_for_zero_data_staged_push(qt_app, qtbot
     tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
 
     assert warnings == []
+
+
+@pytest.mark.qt
+def test_before_first_overlay_push_logs_once_per_source_signature(qt_app, qtbot):
+    class _NotReadyParent(_FakeDisplayParent):
+        def push_spotify_visualizer_frame(self, *_, **kwargs):
+            self.frames.append(kwargs)
+            return False
+
+    parent = _NotReadyParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SINE_WAVE
+    widget._display_bars = [0.25] * 6
+    widget._display_bars_source_generation = 12
+    widget._display_bars_source_activation = 34
+    widget._pending_engine_generation = 12
+    widget._pending_engine_activation_id = 34
+
+    reasons: list[str] = []
+
+    def _capture_render_state(*, reason: str):
+        reasons.append(reason)
+
+    widget._log_active_render_state_snapshot = _capture_render_state  # type: ignore[method-assign]
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is False
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is False
+
+    assert reasons == ["before_first_overlay_push"]
+    assert widget._first_overlay_push_probe_key is not None
+
+    widget._display_bars_source_generation = 13
+    widget._pending_engine_generation = 13
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is False
+    assert reasons == ["before_first_overlay_push", "before_first_overlay_push"]
+
+
+@pytest.mark.qt
+def test_animation_manager_listener_is_transition_scoped_and_resumes_timer_after_transition(qt_app, qtbot, monkeypatch):
+    class _FakeAnimationManager:
+        def __init__(self):
+            self.listener = None
+            self.removed = None
+
+        def add_tick_listener(self, callback):
+            self.listener = callback
+            return 77
+
+        def remove_tick_listener(self, callback_id: int) -> None:
+            self.removed = callback_id
+
+    class _TransitionParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.running = False
+
+        def get_transition_snapshot(self):
+            return {"running": self.running}
+
+    parent = _TransitionParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    widget._enabled = True
+    widget._bars_timer = None
+
+    class _Timer:
+        def __init__(self):
+            self.active = True
+            self.start_calls = 0
+            self.stop_calls = 0
+
+        def isActive(self):
+            return self.active
+
+        def start(self):
+            self.active = True
+            self.start_calls += 1
+
+        def stop(self):
+            self.active = False
+            self.stop_calls += 1
+
+    timer = _Timer()
+    widget._bars_timer = timer
+
+    ticks: list[str] = []
+    monkeypatch.setattr(widget, "_on_tick", lambda: ticks.append("tick"))
+
+    manager = _FakeAnimationManager()
+    widget.attach_to_animation_manager(manager)
+
+    assert widget._using_animation_ticks is False
+    assert manager.listener is None
+
+    tick_helpers.pause_timer_during_transition(widget, True)
+    assert widget._using_animation_ticks is True
+    assert manager.listener is not None
+    assert timer.stop_calls == 1
+    assert timer.isActive() is False
+
+    parent.running = True
+    manager.listener(0.016)
+    assert ticks == ["tick"]
+
+    parent.running = False
+    manager.listener(0.016)
+
+    assert widget._using_animation_ticks is False
+    assert manager.removed == 77
+    assert timer.start_calls == 1
+    assert timer.isActive() is True
+
+    widget.detach_from_animation_manager()
 
 
 @pytest.mark.qt
