@@ -67,6 +67,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   MC startup policy contract, especially forced interaction-mode behavior.
 - `tests/test_dimming_and_interaction_fixes.py`
   Interaction/dimming regression coverage across recent runtime fixes.
+- `tests/test_transition_distribution.py`
+  Transition random-pool parity, enabled-pool selection, and approximate long-run uniformity for engine-driven random transition choice.
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 
@@ -87,7 +89,7 @@ When changing Gmail widget OAuth/backend, include tests for:
 - OAuth token storage with mocked file system,
 - REST API client methods with mocked requests (list_messages, mark_as_read, archive_message),
 - GmailPosition enum values and string parsing,
-- Dev gate logic (is_gmail_enabled, force_gate),
+- Explicit non-dev-gated contract checks: Gmail feature paths should remain available without `is_gmail_enabled` / `force_gate` style gating helpers,
 - Settings roundtrip and structure validation,
 - Widget instantiation with Qt app fixture.
 - **Critical**: All Gmail tests must use fake/mock credentials and never make real Google API calls.

@@ -36,3 +36,12 @@ but do not belong in `Docs/Historical_Bugs.md`.
 - **Regression coverage:**
   - `test_import_from_sst_replace_mode_clears_stale_settings`
   - `test_preview_import_from_sst_replace_mode_reports_removed_sections`
+
+### Transition Random Pool Parity and Uniformity
+- **Area:** engine-driven random transition selection
+- **Files:** `engine/screensaver_engine.py`, `tests/test_transition_distribution.py`
+- **Issue:** the engine's real random-transition chooser had drifted from the broader transition contract: `Burn` existed in defaults/factory/UI expectations but was omitted from the engine's actual random pool, making it effectively dead in normal random mode. There was also no automated guard proving long-run transition choice stayed approximately uniform across the enabled pool.
+- **Fix:** restore `Burn` to the engine random pool and add a deterministic statistical regression test over many draws.
+- **Regression coverage:**
+  - `test_random_transition_pool_can_select_burn_when_hw_accel_enabled`
+  - `test_random_transition_distribution_is_approximately_uniform_for_enabled_pool`
