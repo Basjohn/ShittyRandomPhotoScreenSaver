@@ -310,6 +310,98 @@ class TestSettingsModelPlumbing:
             assert model.resolve_audio_block_size("bubble") == 256
             assert model.bubble_stream_direction == "left"
 
+    def test_devcurve_active_mode_visual_and_technical_state_match_between_mapping_and_settings(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        payload = {
+            "mode": "devcurve",
+            "bar_fill_color": [1, 2, 3, 4],
+            "bar_border_color": [5, 6, 7, 8],
+            "bar_border_opacity": 0.22,
+            "devcurve_bar_fill_color": [21, 22, 23, 24],
+            "devcurve_bar_border_color": [25, 26, 27, 28],
+            "devcurve_bar_border_opacity": 0.81,
+            "devcurve_manual_floor": 0.19,
+            "devcurve_audio_block_size": 256,
+            "devcurve_sensitivity": 0.73,
+            "devcurve_adaptive_sensitivity": False,
+            "devcurve_active_layer": "mids",
+            "devcurve_layer_mids_color": [90, 120, 200, 210],
+            "devcurve_layer_mids_outline_color": [9, 8, 7, 6],
+            "devcurve_foreground_specular_alpha": 0.61,
+        }
+
+        from_mapping = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+        persisted = from_mapping.to_dict()
+        from_settings = SpotifyVisualizerSettings.from_settings(_DummySettings(persisted))
+
+        for model in (from_mapping, from_settings):
+            assert model.mode == "devcurve"
+            assert model.bar_fill_color == [21, 22, 23, 24]
+            assert model.bar_border_color == [25, 26, 27, 28]
+            assert model.bar_border_opacity == pytest.approx(0.81)
+            assert model.manual_floor == pytest.approx(0.19)
+            assert model.resolve_manual_floor("devcurve") == pytest.approx(0.19)
+            assert model.adaptive_sensitivity is False
+            assert model.sensitivity == pytest.approx(0.73)
+            assert model.resolve_audio_block_size("devcurve") == 256
+            assert model.devcurve_active_layer == "mids"
+            assert model.devcurve_layer_mids_color == [90, 120, 200, 210]
+            assert model.devcurve_layer_mids_outline_color == [9, 8, 7, 255]
+            assert model.devcurve_foreground_specular_alpha == pytest.approx(0.61)
+
+    def test_spectrum_active_mode_visual_and_technical_state_match_between_mapping_and_settings(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        payload = {
+            "mode": "spectrum",
+            "bar_fill_color": [1, 2, 3, 4],
+            "bar_border_color": [5, 6, 7, 8],
+            "bar_border_opacity": 0.44,
+            "spectrum_bar_fill_color": [31, 32, 33, 34],
+            "spectrum_bar_border_color": [35, 36, 37, 38],
+            "spectrum_bar_border_opacity": 0.92,
+            "spectrum_manual_floor": 0.16,
+            "spectrum_audio_block_size": 512,
+            "spectrum_sensitivity": 0.67,
+            "spectrum_adaptive_sensitivity": False,
+            "spectrum_render_mode": "bars",
+            "spectrum_unique_colors": False,
+            "spectrum_drop_speed": 1.85,
+        }
+
+        from_mapping = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+        persisted = from_mapping.to_dict()
+        from_settings = SpotifyVisualizerSettings.from_settings(_DummySettings(persisted))
+
+        for model in (from_mapping, from_settings):
+            assert model.mode == "spectrum"
+            assert model.bar_fill_color == [31, 32, 33, 34]
+            assert model.bar_border_color == [35, 36, 37, 38]
+            assert model.bar_border_opacity == pytest.approx(0.92)
+            assert model.manual_floor == pytest.approx(0.16)
+            assert model.resolve_manual_floor("spectrum") == pytest.approx(0.16)
+            assert model.adaptive_sensitivity is False
+            assert model.sensitivity == pytest.approx(0.67)
+            assert model.resolve_audio_block_size("spectrum") == 512
+            assert model.spectrum_render_mode == "bars"
+            assert model.spectrum_unique_colors is False
+            assert model.spectrum_drop_speed == pytest.approx(1.85)
+
 
 class TestVisualizerPresetSelectionAuthority:
     """Guard against curated/custom cross-bleed in visualizer preset hydration."""
@@ -1053,9 +1145,10 @@ class TestCreateTimeRefreshParity:
         from rendering import spotify_widget_creators as creators
 
         class FakeVisualizer:
-            def __init__(self, parent, bar_count):
+            def __init__(self, parent, bar_count, initial_mode=None):
                 self.parent = parent
                 self.bar_count = bar_count
+                self.initial_mode = initial_mode
                 self.bar_colors = None
 
             def set_settings_model(self, model):
@@ -1349,8 +1442,9 @@ class TestDisplayFramePush:
         from rendering import display_image_ops
 
         class FakeOverlay:
-            def __init__(self, parent):
+            def __init__(self, parent, initial_mode=None):
                 self.parent = parent
+                self.initial_mode = initial_mode
                 self.last_kwargs = None
 
             def setObjectName(self, *_args):
@@ -2371,7 +2465,7 @@ class TestVisualizerModeBinding:
                 self.vis_mode_combo = _Combo()
 
             def _default_str(self, *_args):
-                return "spectrum"
+                return "bubble"
 
             def _config_str(self, _section, config, key, default):
                 return config.get(key, default)
@@ -2380,7 +2474,7 @@ class TestVisualizerModeBinding:
         initialize_visualizer_mode_combo(tab)
         load_visualizer_mode_selection(tab, {"mode": "not_a_real_mode"})
 
-        assert tab.vis_mode_combo.currentData() == "spectrum"
+        assert tab.vis_mode_combo.currentData() == "bubble"
 
     def test_load_visualizer_rainbow_state_uses_registry_modes_and_active_selection(self):
         from ui.tabs.media.visualizer_mode_binding import (

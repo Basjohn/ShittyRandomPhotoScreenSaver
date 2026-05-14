@@ -32,6 +32,8 @@ No shadow frameworks or parallel ownership paths.
 - Internal ids remain stable even when user-facing labels change.
 - Shared seams stay explicit and neutral.
 - Reindex logic is index/filename normalization, not creative payload rewriting.
+- `core/settings/models/_spotify_visualizer.py` is the grouped field-spec source of truth for visualizer settings ingestion/persistence. When a settings family changes, update its defaults/build specs/serializer specs together and preserve ordered grouped merges for `from_settings()`, `from_mapping()`, and `to_dict()`.
+- Do not reintroduce bespoke entry-point-specific field families or fallback paths once a visualizer settings group has been centralized.
 
 ## 5. UI/UX Safety
 - Do not remove custom styling to hide runtime issues.

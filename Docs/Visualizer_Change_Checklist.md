@@ -20,6 +20,7 @@ Use this checklist whenever a visualizer setting is introduced, removed, renamed
   - `from_settings`,
   - `from_mapping`,
   - `to_dict`.
+- If the change touches `core/settings/models/_spotify_visualizer.py`, update the grouped field-spec/default/build/serialize maps together and preserve ordered grouped section merges. Do not add a new handwritten one-off family if an existing grouped seam can own it.
 
 ## 4. Normalization and Contracts
 - Update any impacted contracts:
@@ -42,6 +43,7 @@ Use this checklist whenever a visualizer setting is introduced, removed, renamed
 ## 7. Tests
 Add/update coverage for:
 - settings/model round-trip,
+- active-mode parity between `from_mapping()` and `from_settings()` for the changed family when applicable,
 - normalization behavior,
 - runtime bridge transport,
 - preset repair/reindex contract,

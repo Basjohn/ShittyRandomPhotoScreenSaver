@@ -59,6 +59,8 @@ Never add shadow frameworks, duplicate managers, or parallel ownership paths.
 - Shared seams must remain neutral and explicit.
 - Mode-owned behavior belongs to mode-owned code.
 - Reindex logic normalizes index/filename numbering only; do not rewrite creative payload intent.
+- `core/settings/models/_spotify_visualizer.py` is the grouped field-spec source of truth for visualizer settings ingestion/persistence. Update defaults/build specs/serializer specs together and preserve ordered grouped merges so `from_settings()`, `from_mapping()`, and `to_dict()` stay one contract.
+- Do not reintroduce bespoke entry-point-specific field families or fallback paths once a visualizer settings group has been centralized.
 - Visualizer setting changes require the visualizer change checklist sweep.
 
 ## Qt / UI / rendering rules

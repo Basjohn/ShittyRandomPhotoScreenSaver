@@ -47,6 +47,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), Spectrum GPU extras reuse, and architecture-split engine-resolution regression coverage.
+- `tests/test_visualizer_settings_plumbing.py`
+  Visualizer settings-model round-trip coverage, active-mode parity between `from_mapping()` and `from_settings()` for Bubble/Spectrum/Spline, curated-vs-custom preset authority, grouped build/serialize field-family contracts, and legacy migration normalization.
 - `tests/test_spotify_visualizer_mode_transition.py`
   Mode-fade-out reset ordering, runtime bar-array zeroing before engine prepare, no hidden `_replay_engine_config()` reintroduction, and stale activation/generation rejection before display-bar authority returns.
 - `tests/test_ghost_isolation.py`
@@ -87,6 +89,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 ## 4. Visualizer Test Expectations
 When changing visualizer settings/contracts, include tests for:
 - model serialization round-trip,
+- active-mode parity between `from_mapping()` and `from_settings()` for the touched mode family when constructor/build seams move,
 - normalization contracts,
 - legacy shared-technical migration into per-mode keys without re-emitting shared keys,
 - runtime bridge kwargs transport,

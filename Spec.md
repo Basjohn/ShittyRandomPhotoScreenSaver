@@ -68,6 +68,7 @@ Active ids:
 ### 5.3 Shared seams
 - Mapping normalization: `visualizer_settings_snapshot.py`
 - Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
+- Settings-model field-spec source of truth: `core/settings/models/_spotify_visualizer.py`; grouped build specs, serializer specs, defaults, and ordered build/serialize section merges must be updated together so `from_settings()`, `from_mapping()`, and `to_dict()` remain one contract instead of drifting per entry point
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
@@ -87,6 +88,7 @@ Active ids:
 - Technical settings are mode-owned at runtime and in canonical persistence. Shared/global technical keys are legacy migration inputs only and must not remain in normalized settings, custom snapshots, or preset payloads.
 - Preset-varying runtime visuals that affect activation or renderer state, including bar fill/border styling and legacy ghost controls, are mode-owned too. They must not travel through shared/global authored keys after normalization.
 - Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
+- Visualizer settings-model refactors must preserve ordered grouped section merges for both constructor assembly and persistence serialization. Do not reintroduce bespoke handwritten field families or entry-point-specific fallback paths once a group has been centralized.
 - Live diagnostics for visualizer activation must report the resolved preset identity and the actual applied worker/widget technical state, not only raw settings payloads.
 - High-frequency visualizer diagnostics (`BARS`, `FLOOR`, `TRANSIENT`, `DEVCURVE`, `GLOW`) must build their detailed payloads only on actual emit paths; guardrail warnings such as `LATENCY`, `FIRST_FRAME_GUARD`, and `MODE_RESET_ASSERT` stay loud.
 

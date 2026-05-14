@@ -45,6 +45,7 @@ Suggested commands:
 ```powershell
 rg -n "resolve_visualizer_activation_payload|_get_mode_technical_config|GMAIL_SIGNAL_BLOCK_ATTRS|widgets\.shadows\.enabled" core widgets ui rendering
 rg -n "ThreadManager|ResourceManager|SettingsManager|AnimationManager|ProcessSupervisor" core Spec.md Index.md
+rg -n "_spotify_visualizer|from_settings|from_mapping|to_dict|Visualizer settings model" core Spec.md Index.md Docs/Guardrails.md Docs/Visualizer_Change_Checklist.md
 ```
 
 ### 4. Remove completed work from the active plan
