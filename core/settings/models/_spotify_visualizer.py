@@ -55,6 +55,135 @@ if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
 
 
+_PER_MODE_TECHNICAL_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+    "bar_fill_color": list,
+    "bar_border_color": list,
+    "bar_border_opacity": float,
+    "dynamic_floor": bool,
+    "manual_floor": float,
+    "dynamic_range_enabled": bool,
+    "agc_strength": float,
+    "input_gain": float,
+    "kick_lane_gain": float,
+    "transient_pulse_gain": float,
+    "transient_clamp": float,
+    "audio_block_size": int,
+    "adaptive_sensitivity": bool,
+    "sensitivity": float,
+    "bar_count": int,
+}
+
+_PER_MODE_RESOLVERS: Dict[str, Callable[[Any], Any]] = {
+    "dynamic_floor": bool,
+    "manual_floor": float,
+    "dynamic_range_enabled": bool,
+    "agc_strength": float,
+    "input_gain": float,
+    "kick_lane_gain": lambda value: float(value if value is not None else 1.0),
+    "transient_pulse_gain": lambda value: float(value if value is not None else 1.0),
+    "transient_clamp": lambda value: float(value if value is not None else 1.5),
+    "audio_block_size": int,
+    "adaptive_sensitivity": bool,
+    "sensitivity": float,
+    "bar_count": int,
+    "bar_fill_color": list,
+    "bar_border_color": list,
+    "bar_border_opacity": float,
+}
+
+_CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+    "enabled": bool,
+    "visualizers_enabled": bool,
+    "monitor": str,
+    "mode": str,
+    "rainbow_enabled": bool,
+    "rainbow_speed": float,
+    "sine_line_dim": bool,
+}
+
+_TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+    "spectrum_lane_transient_mix": float,
+    "bubble_transient_mix_bass": float,
+    "bubble_transient_mix_vocal": float,
+    "blob_transient_mix_bass": float,
+    "blob_transient_mix_vocal": float,
+    "sine_wave_transient_width_mix": float,
+    "oscilloscope_transient_width_mix": float,
+}
+
+_BLOB_SHAPE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+    "blob_shaper_enabled": bool,
+    "blob_shape_base_nodes": lambda value: value,
+    "blob_shape_reaction_nodes": lambda value: value,
+    "blob_shape_energy_nodes": list,
+    "blob_shaper_base_strength": float,
+    "blob_shaper_react_strength": float,
+    "blob_shaper_idle_motion": float,
+    "blob_shaper_audio_motion": float,
+    "blob_topology": str,
+    "blob_ring_thickness": float,
+    "blob_inward_liquid_enabled": bool,
+    "blob_inward_liquid_reactivity": float,
+    "blob_inward_liquid_max_size": float,
+    "blob_inward_liquid_color": list,
+}
+
+_OSCILLOSCOPE_COLOR_DEFAULTS: Dict[str, list[int]] = {
+    "osc_line_color": [255, 255, 255, 255],
+    "osc_line2_color": [255, 120, 50, 230],
+    "osc_line2_glow_color": [255, 120, 50, 180],
+    "osc_line3_color": [50, 255, 120, 230],
+    "osc_line3_glow_color": [50, 255, 120, 180],
+    "osc_line4_color": [255, 0, 150, 230],
+    "osc_line4_glow_color": [255, 0, 150, 180],
+    "osc_line5_color": [0, 255, 200, 230],
+    "osc_line5_glow_color": [0, 255, 200, 180],
+    "osc_line6_color": [200, 100, 255, 230],
+    "osc_line6_glow_color": [200, 100, 255, 180],
+}
+
+_SINE_COLOR_DEFAULTS: Dict[str, list[int]] = {
+    "sine_glow_color": [0, 200, 255, 230],
+    "sine_line_color": [255, 255, 255, 255],
+    "sine_line2_color": [255, 255, 255, 230],
+    "sine_line2_glow_color": [7, 114, 255, 180],
+    "sine_line3_color": [255, 255, 255, 230],
+    "sine_line3_glow_color": [14, 159, 255, 180],
+    "sine_line4_color": [255, 120, 50, 230],
+    "sine_line4_glow_color": [255, 120, 50, 180],
+    "sine_line5_color": [50, 255, 120, 230],
+    "sine_line5_glow_color": [50, 255, 120, 180],
+    "sine_line6_color": [255, 0, 150, 230],
+    "sine_line6_glow_color": [255, 0, 150, 180],
+}
+
+_BUBBLE_COLOR_DEFAULTS: Dict[str, list[int]] = {
+    "bubble_outline_color": [255, 255, 255, 230],
+    "bubble_specular_color": [255, 255, 255, 255],
+    "bubble_gradient_light": [210, 170, 120, 255],
+    "bubble_gradient_dark": [80, 60, 50, 255],
+    "bubble_pop_color": [255, 255, 255, 180],
+}
+
+_DEVCURVE_COLOR_DEFAULTS: Dict[str, list[int]] = {
+    "devcurve_layer_bass_color": [82, 167, 255, 230],
+    "devcurve_layer_vocals_color": [136, 190, 255, 220],
+    "devcurve_layer_mids_color": [100, 145, 255, 220],
+    "devcurve_layer_transients_color": [215, 240, 255, 240],
+    "devcurve_layer_bass_outline_color": [255, 255, 255, 255],
+    "devcurve_layer_vocals_outline_color": [255, 255, 255, 255],
+    "devcurve_layer_mids_outline_color": [255, 255, 255, 255],
+    "devcurve_layer_transients_outline_color": [255, 255, 255, 255],
+}
+
+_DEVCURVE_DEFAULT_SHAPE_NODES: list[list[float]] = [
+    [0.0, 0.58],
+    [0.35, 0.64],
+    [0.70, 0.52],
+    [1.0, 0.60],
+]
+
+
 def _build_visualizer_model_kwargs(
     read_value: Callable[[str, Any], Any],
     *,
@@ -537,6 +666,40 @@ def _serialize_outline_rgb(color_value: Any) -> list[int]:
     ]
 
 
+def _serialize_prefixed_fields(
+    source: Any,
+    prefix: str,
+    field_serializers: Mapping[str, Callable[[Any], Any]],
+) -> Dict[str, Any]:
+    """Serialize a mapping of field names under the given prefix."""
+
+    return {
+        f"{prefix}.{field_name}": serializer(getattr(source, field_name))
+        for field_name, serializer in field_serializers.items()
+    }
+
+
+def _serialize_attr_map(
+    source: Any,
+    key_prefix: str,
+    attr_serializers: Mapping[str, Callable[[Any], Any]],
+) -> Dict[str, Any]:
+    """Serialize explicit attribute names under the given key prefix."""
+
+    return {
+        f"{key_prefix}.{attr_name}": serializer(getattr(source, attr_name))
+        for attr_name, serializer in attr_serializers.items()
+    }
+
+
+def _apply_list_defaults(target: Any, defaults: Mapping[str, list[int]]) -> None:
+    """Apply list-valued defaults to missing attributes on the target."""
+
+    for attr, value in defaults.items():
+        if getattr(target, attr) is None:
+            setattr(target, attr, list(value))
+
+
 
 @dataclass
 class SpotifyVisualizerSettings:
@@ -965,60 +1128,16 @@ class SpotifyVisualizerSettings:
         )
 
     def _apply_oscilloscope_defaults(self) -> None:
-        for attr, value in (
-            ("osc_line_color", [255, 255, 255, 255]),
-            ("osc_line2_color", [255, 120, 50, 230]),
-            ("osc_line2_glow_color", [255, 120, 50, 180]),
-            ("osc_line3_color", [50, 255, 120, 230]),
-            ("osc_line3_glow_color", [50, 255, 120, 180]),
-            ("osc_line4_color", [255, 0, 150, 230]),
-            ("osc_line4_glow_color", [255, 0, 150, 180]),
-            ("osc_line5_color", [0, 255, 200, 230]),
-            ("osc_line5_glow_color", [0, 255, 200, 180]),
-            ("osc_line6_color", [200, 100, 255, 230]),
-            ("osc_line6_glow_color", [200, 100, 255, 180]),
-        ):
-            self._apply_list_default(attr, value)
+        _apply_list_defaults(self, _OSCILLOSCOPE_COLOR_DEFAULTS)
 
     def _apply_sine_defaults(self) -> None:
-        for attr, value in (
-            ("sine_glow_color", [0, 200, 255, 230]),
-            ("sine_line_color", [255, 255, 255, 255]),
-            ("sine_line2_color", [255, 255, 255, 230]),
-            ("sine_line2_glow_color", [7, 114, 255, 180]),
-            ("sine_line3_color", [255, 255, 255, 230]),
-            ("sine_line3_glow_color", [14, 159, 255, 180]),
-            ("sine_line4_color", [255, 120, 50, 230]),
-            ("sine_line4_glow_color", [255, 120, 50, 180]),
-            ("sine_line5_color", [50, 255, 120, 230]),
-            ("sine_line5_glow_color", [50, 255, 120, 180]),
-            ("sine_line6_color", [255, 0, 150, 230]),
-            ("sine_line6_glow_color", [255, 0, 150, 180]),
-        ):
-            self._apply_list_default(attr, value)
+        _apply_list_defaults(self, _SINE_COLOR_DEFAULTS)
 
     def _apply_bubble_defaults(self) -> None:
-        for attr, value in (
-            ("bubble_outline_color", [255, 255, 255, 230]),
-            ("bubble_specular_color", [255, 255, 255, 255]),
-            ("bubble_gradient_light", [210, 170, 120, 255]),
-            ("bubble_gradient_dark", [80, 60, 50, 255]),
-            ("bubble_pop_color", [255, 255, 255, 180]),
-        ):
-            self._apply_list_default(attr, value)
+        _apply_list_defaults(self, _BUBBLE_COLOR_DEFAULTS)
 
     def _apply_devcurve_defaults(self) -> None:
-        for attr, value in (
-            ("devcurve_layer_bass_color", [82, 167, 255, 230]),
-            ("devcurve_layer_vocals_color", [136, 190, 255, 220]),
-            ("devcurve_layer_mids_color", [100, 145, 255, 220]),
-            ("devcurve_layer_transients_color", [215, 240, 255, 240]),
-            ("devcurve_layer_bass_outline_color", [255, 255, 255, 255]),
-            ("devcurve_layer_vocals_outline_color", [255, 255, 255, 255]),
-            ("devcurve_layer_mids_outline_color", [255, 255, 255, 255]),
-            ("devcurve_layer_transients_outline_color", [255, 255, 255, 255]),
-        ):
-            self._apply_list_default(attr, value)
+        _apply_list_defaults(self, _DEVCURVE_COLOR_DEFAULTS)
         self.devcurve_active_layer = (
             str(self.devcurve_active_layer).strip().lower()
             if str(self.devcurve_active_layer).strip().lower() in {"bass", "vocals", "mids", "transients"}
@@ -1054,7 +1173,7 @@ class SpotifyVisualizerSettings:
             "devcurve_layer_mids_shape_nodes",
             "devcurve_layer_transients_shape_nodes",
         ):
-            self._ensure_non_empty_nodes(attr, default_nodes)
+            self._ensure_non_empty_nodes(attr, _DEVCURVE_DEFAULT_SHAPE_NODES)
         _order_pairs = [
             ("devcurve_layer_bass_order", int(self.devcurve_layer_bass_order)),
             ("devcurve_layer_vocals_order", int(self.devcurve_layer_vocals_order)),
@@ -1066,6 +1185,48 @@ class SpotifyVisualizerSettings:
             setattr(self, attr_name, idx)
 
     @classmethod
+    def _build_constructor_kwargs_from_mode_state(
+        cls,
+        read_value: Callable[[str, Any], Any],
+        per_mode_value_reader: Callable[[str, str, Any], Any],
+        active_mode_value_reader: Callable[[str, Any], Any],
+        *,
+        active_mode: str,
+        preset_kwargs: Mapping[str, Any],
+        bubble_gradient_semantics_version: int,
+        bubble_stream_constant_speed_default: float,
+        bubble_stream_speed_cap_default: float,
+    ) -> Dict[str, Any]:
+        """Assemble constructor kwargs from shared active-mode reader state."""
+
+        defaults_model = cls()
+        mode_kwargs = _build_live_visualizer_mode_kwargs(per_mode_value_reader, defaults_model)
+        mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(
+            per_mode_value_reader,
+            defaults_model,
+        )
+        active_technical = _resolve_active_mode_technical_state(
+            active_mode,
+            mode_kwargs,
+        )
+        active_visuals = _resolve_active_mode_shared_visual_state(
+            active_mode,
+            mode_visual_kwargs,
+        )
+        rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(active_mode_value_reader)
+        return _build_visualizer_model_kwargs(
+            read_value,
+            active_mode=active_mode,
+            bubble_gradient_semantics_version=bubble_gradient_semantics_version,
+            active_technical=active_technical,
+            active_visuals=active_visuals,
+            rainbow_kwargs=rainbow_kwargs,
+            preset_kwargs={**preset_kwargs, **mode_kwargs, **mode_visual_kwargs},
+            bubble_stream_constant_speed_default=bubble_stream_constant_speed_default,
+            bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
+        )
+
+    @classmethod
     def from_settings(cls, settings: "SettingsManager", prefix: str = "widgets.spotify_visualizer") -> "SpotifyVisualizerSettings":
         """Load Spotify visualizer settings from SettingsManager."""
         get = settings.get
@@ -1075,37 +1236,21 @@ class SpotifyVisualizerSettings:
             bubble_gradient_semantics_version = int(_get("bubble_gradient_semantics_version", 0))
         except (TypeError, ValueError):
             bubble_gradient_semantics_version = 0
-        _defaults_model = cls()
-
-        _mode_kwargs = _build_live_visualizer_mode_kwargs(_mode_value, _defaults_model)
-        _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_mode_value, _defaults_model)
         _preset_kwargs = resolve_all_preset_indices_from_getter(get, prefix=prefix)
         _active_mode = coerce_visualizer_mode_id(str(get(f"{prefix}.mode", "bubble")))
-        _active_technical = _resolve_active_mode_technical_state(
-            _active_mode,
-            _mode_kwargs,
-        )
-        _active_visuals = _resolve_active_mode_shared_visual_state(
-            _active_mode,
-            _mode_visual_kwargs,
-        )
-        _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
-            lambda key, default: _mode_value(
-                _active_mode,
-                key,
-                _get(key, default),
-            )
-        )
 
         return cls(
-            **_build_visualizer_model_kwargs(
+            **cls._build_constructor_kwargs_from_mode_state(
                 _get,
+                lambda mode, key, default: _mode_value(mode, key, default),
+                lambda key, default: _mode_value(
+                    _active_mode,
+                    key,
+                    _get(key, default),
+                ),
                 active_mode=_active_mode,
+                preset_kwargs=_preset_kwargs,
                 bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-                active_technical=_active_technical,
-                active_visuals=_active_visuals,
-                rainbow_kwargs=_rainbow_kwargs,
-                preset_kwargs={**_preset_kwargs, **_mode_kwargs, **_mode_visual_kwargs},
                 bubble_stream_constant_speed_default=0.5,
                 bubble_stream_speed_cap_default=2.0,
             )
@@ -1144,35 +1289,20 @@ class SpotifyVisualizerSettings:
             active_mode=str(_mode),
         )
 
-        _defaults_model = cls()
-        _mode_kwargs = _build_live_visualizer_mode_kwargs(_get_per_mode_value, _defaults_model)
-        _mode_visual_kwargs = _build_live_visualizer_mode_shared_visual_kwargs(_get_per_mode_value, _defaults_model)
         _preset_kwargs = _resolve_mapping_preset_kwargs(
             _raw,
             prefix=prefix,
             resolve_preset_indices=resolve_preset_indices,
         )
-        _active_technical = _resolve_active_mode_technical_state(
-            _mode,
-            _mode_kwargs,
-        )
-        _active_visuals = _resolve_active_mode_shared_visual_state(
-            _mode,
-            _mode_visual_kwargs,
-        )
-        _rainbow_kwargs = resolve_visualizer_active_mode_rainbow_state(
-            lambda key, default: _get_mode_value(key, default)
-        )
 
         return cls(
-            **_build_visualizer_model_kwargs(
+            **cls._build_constructor_kwargs_from_mode_state(
                 _get,
+                lambda mode, key, default: _get_per_mode_value(mode, key, default),
+                lambda key, default: _get_mode_value(key, default),
                 active_mode=_mode,
+                preset_kwargs=_preset_kwargs,
                 bubble_gradient_semantics_version=bubble_gradient_semantics_version,
-                active_technical=_active_technical,
-                active_visuals=_active_visuals,
-                rainbow_kwargs=_rainbow_kwargs,
-                preset_kwargs={**_preset_kwargs, **_mode_kwargs, **_mode_visual_kwargs},
                 bubble_stream_constant_speed_default=0.6,
                 bubble_stream_speed_cap_default=1.0,
             )
@@ -1194,15 +1324,7 @@ class SpotifyVisualizerSettings:
         return data
 
     def _serialize_core_settings(self, prefix: str) -> Dict[str, Any]:
-        return {
-            f"{prefix}.enabled": self.enabled,
-            f"{prefix}.visualizers_enabled": self.visualizers_enabled,
-            f"{prefix}.monitor": self.monitor,
-            f"{prefix}.mode": self.mode,
-            f"{prefix}.rainbow_enabled": self.rainbow_enabled,
-            f"{prefix}.rainbow_speed": float(self.rainbow_speed),
-            f"{prefix}.sine_line_dim": bool(self.sine_line_dim),
-        }
+        return _serialize_prefixed_fields(self, prefix, _CORE_SETTINGS_SERIALIZERS)
 
     def _serialize_osc_blob_settings(self, prefix: str) -> Dict[str, Any]:
         return {
@@ -1392,22 +1514,7 @@ class SpotifyVisualizerSettings:
         }
 
     def _serialize_blob_shape_settings(self, prefix: str) -> Dict[str, Any]:
-        return {
-            f"{prefix}.blob_shaper_enabled": bool(self.blob_shaper_enabled),
-            f"{prefix}.blob_shape_base_nodes": self.blob_shape_base_nodes,
-            f"{prefix}.blob_shape_reaction_nodes": self.blob_shape_reaction_nodes,
-            f"{prefix}.blob_shape_energy_nodes": list(self.blob_shape_energy_nodes),
-            f"{prefix}.blob_shaper_base_strength": float(self.blob_shaper_base_strength),
-            f"{prefix}.blob_shaper_react_strength": float(self.blob_shaper_react_strength),
-            f"{prefix}.blob_shaper_idle_motion": float(self.blob_shaper_idle_motion),
-            f"{prefix}.blob_shaper_audio_motion": float(self.blob_shaper_audio_motion),
-            f"{prefix}.blob_topology": str(self.blob_topology),
-            f"{prefix}.blob_ring_thickness": float(self.blob_ring_thickness),
-            f"{prefix}.blob_inward_liquid_enabled": bool(self.blob_inward_liquid_enabled),
-            f"{prefix}.blob_inward_liquid_reactivity": float(self.blob_inward_liquid_reactivity),
-            f"{prefix}.blob_inward_liquid_max_size": float(self.blob_inward_liquid_max_size),
-            f"{prefix}.blob_inward_liquid_color": list(self.blob_inward_liquid_color),
-        }
+        return _serialize_prefixed_fields(self, prefix, _BLOB_SHAPE_SERIALIZERS)
 
     def _serialize_preset_indices(self, prefix: str) -> Dict[str, int]:
         return {
@@ -1416,34 +1523,21 @@ class SpotifyVisualizerSettings:
         }
 
     def _serialize_transient_mix_settings(self, prefix: str) -> Dict[str, float]:
-        return {
-            f"{prefix}.spectrum_lane_transient_mix": float(self.spectrum_lane_transient_mix),
-            f"{prefix}.bubble_transient_mix_bass": float(self.bubble_transient_mix_bass),
-            f"{prefix}.bubble_transient_mix_vocal": float(self.bubble_transient_mix_vocal),
-            f"{prefix}.blob_transient_mix_bass": float(self.blob_transient_mix_bass),
-            f"{prefix}.blob_transient_mix_vocal": float(self.blob_transient_mix_vocal),
-            f"{prefix}.sine_wave_transient_width_mix": float(self.sine_wave_transient_width_mix),
-            f"{prefix}.oscilloscope_transient_width_mix": float(self.oscilloscope_transient_width_mix),
-        }
+        return _serialize_prefixed_fields(self, prefix, _TRANSIENT_MIX_SERIALIZERS)
 
     def _serialize_per_mode_technical_settings(self, prefix: str) -> Dict[str, Any]:
         data: Dict[str, Any] = {}
         for mode_name in PER_MODE_TECHNICAL_MODES:
-            data[f"{prefix}.{mode_name}_bar_fill_color"] = list(getattr(self, f"{mode_name}_bar_fill_color"))
-            data[f"{prefix}.{mode_name}_bar_border_color"] = list(getattr(self, f"{mode_name}_bar_border_color"))
-            data[f"{prefix}.{mode_name}_bar_border_opacity"] = float(getattr(self, f"{mode_name}_bar_border_opacity"))
-            data[f"{prefix}.{mode_name}_dynamic_floor"] = bool(getattr(self, f"{mode_name}_dynamic_floor"))
-            data[f"{prefix}.{mode_name}_manual_floor"] = float(getattr(self, f"{mode_name}_manual_floor"))
-            data[f"{prefix}.{mode_name}_dynamic_range_enabled"] = bool(getattr(self, f"{mode_name}_dynamic_range_enabled"))
-            data[f"{prefix}.{mode_name}_agc_strength"] = float(getattr(self, f"{mode_name}_agc_strength"))
-            data[f"{prefix}.{mode_name}_input_gain"] = float(getattr(self, f"{mode_name}_input_gain"))
-            data[f"{prefix}.{mode_name}_kick_lane_gain"] = float(getattr(self, f"{mode_name}_kick_lane_gain"))
-            data[f"{prefix}.{mode_name}_transient_pulse_gain"] = float(getattr(self, f"{mode_name}_transient_pulse_gain"))
-            data[f"{prefix}.{mode_name}_transient_clamp"] = float(getattr(self, f"{mode_name}_transient_clamp"))
-            data[f"{prefix}.{mode_name}_audio_block_size"] = int(getattr(self, f"{mode_name}_audio_block_size"))
-            data[f"{prefix}.{mode_name}_adaptive_sensitivity"] = bool(getattr(self, f"{mode_name}_adaptive_sensitivity"))
-            data[f"{prefix}.{mode_name}_sensitivity"] = float(getattr(self, f"{mode_name}_sensitivity"))
-            data[f"{prefix}.{mode_name}_bar_count"] = int(getattr(self, f"{mode_name}_bar_count"))
+            data.update(
+                _serialize_attr_map(
+                    self,
+                    prefix,
+                    {
+                        f"{mode_name}_{suffix}": serializer
+                        for suffix, serializer in _PER_MODE_TECHNICAL_SERIALIZERS.items()
+                    },
+                )
+            )
         return data
 
     def _serialize_devcurve_settings(self, prefix: str) -> Dict[str, Any]:
@@ -1515,50 +1609,57 @@ class SpotifyVisualizerSettings:
         normalized = self._normalize_mode_name(mode)
         return f"{normalized}_{base_key}"
 
+    def _resolve_mode_value(self, mode: str, base_key: str) -> Any:
+        return getattr(self, self._mode_attr_name(mode, base_key))
+
+    def _resolve_mode_value_with(self, mode: str, base_key: str) -> Any:
+        resolver = _PER_MODE_RESOLVERS[base_key]
+        return resolver(self._resolve_mode_value(mode, base_key))
+
     def resolve_dynamic_floor(self, mode: str) -> bool:
-        return bool(getattr(self, self._mode_attr_name(mode, "dynamic_floor")))
+        return self._resolve_mode_value_with(mode, "dynamic_floor")
 
     def resolve_manual_floor(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "manual_floor")))
+        return self._resolve_mode_value_with(mode, "manual_floor")
 
     def resolve_dynamic_range_enabled(self, mode: str) -> bool:
-        return bool(getattr(self, self._mode_attr_name(mode, "dynamic_range_enabled")))
+        return self._resolve_mode_value_with(mode, "dynamic_range_enabled")
 
     def resolve_agc_strength(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "agc_strength")))
+        return self._resolve_mode_value_with(mode, "agc_strength")
 
     def resolve_input_gain(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "input_gain")))
+        return self._resolve_mode_value_with(mode, "input_gain")
 
     def resolve_kick_lane_gain(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "kick_lane_gain"), 1.0))
+        return self._resolve_mode_value_with(mode, "kick_lane_gain")
 
     def resolve_transient_pulse_gain(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "transient_pulse_gain"), 1.0))
+        return self._resolve_mode_value_with(mode, "transient_pulse_gain")
 
     def resolve_transient_clamp(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "transient_clamp"), 1.5))
+        return self._resolve_mode_value_with(mode, "transient_clamp")
 
     def resolve_audio_block_size(self, mode: str) -> int:
-        return int(getattr(self, self._mode_attr_name(mode, "audio_block_size")))
+        return self._resolve_mode_value_with(mode, "audio_block_size")
 
     def resolve_adaptive_sensitivity(self, mode: str) -> bool:
-        return bool(getattr(self, self._mode_attr_name(mode, "adaptive_sensitivity")))
+        return self._resolve_mode_value_with(mode, "adaptive_sensitivity")
 
     def resolve_sensitivity(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "sensitivity")))
+        return self._resolve_mode_value_with(mode, "sensitivity")
 
     def resolve_bar_count(self, mode: str) -> int:
-        return int(getattr(self, self._mode_attr_name(mode, "bar_count")))
+        return self._resolve_mode_value_with(mode, "bar_count")
 
     def resolve_bar_fill_color(self, mode: str) -> list:
-        return list(getattr(self, self._mode_attr_name(mode, "bar_fill_color")))
+        return self._resolve_mode_value_with(mode, "bar_fill_color")
 
     def resolve_bar_border_color(self, mode: str) -> list:
-        return list(getattr(self, self._mode_attr_name(mode, "bar_border_color")))
+        return self._resolve_mode_value_with(mode, "bar_border_color")
 
     def resolve_bar_border_opacity(self, mode: str) -> float:
-        return float(getattr(self, self._mode_attr_name(mode, "bar_border_opacity")))
+        return self._resolve_mode_value_with(mode, "bar_border_opacity")
 
     def resolve_spectrum_lane_transient_mix(self) -> float:
         return float(self.spectrum_lane_transient_mix)

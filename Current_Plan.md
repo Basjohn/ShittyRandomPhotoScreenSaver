@@ -25,6 +25,9 @@ Core value: best long-term payoff-to-risk ratio among the remaining structural i
   - keep `normalize_visualizer_section_mapping(...)` reaching the full canonical model path,
   - prefer extracting tightly-scoped helpers/data groupings over renaming or API churn.
 - Detailed next slices:
+  - keep the landed shared constructor-state helper intact so `from_settings()` and `from_mapping()` no longer carry separate active-mode/preset assembly logic,
+  - keep the landed shared per-mode technical serialization/resolution maps intact so mode technical additions do not need separate serializer and resolver edits,
+  - keep the landed shared default-list maps plus core/blob-shape/transient serializer helpers intact so small settings-group changes stop being hand-maintained in multiple spots,
   - consolidate the remaining split serializer/build paths so `from_settings()`, `from_mapping()`, and `to_dict()` stop carrying subtly separate field group knowledge,
   - isolate mode-family data groups explicitly:
     - spectrum/osc/blob,

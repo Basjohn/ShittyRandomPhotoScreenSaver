@@ -269,6 +269,47 @@ class TestSettingsModelPlumbing:
 
         assert model.visualizers_enabled is False
 
+    def test_active_mode_visual_and_technical_state_match_between_mapping_and_settings(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        class _DummySettings:
+            def __init__(self, data):
+                self._data = data
+
+            def get(self, key, default=None):
+                return self._data.get(key, default)
+
+        payload = {
+            "mode": "bubble",
+            "bar_fill_color": [1, 2, 3, 4],
+            "bar_border_color": [5, 6, 7, 8],
+            "bar_border_opacity": 0.31,
+            "bubble_bar_fill_color": [11, 12, 13, 14],
+            "bubble_bar_border_color": [15, 16, 17, 18],
+            "bubble_bar_border_opacity": 0.74,
+            "bubble_manual_floor": 0.27,
+            "bubble_audio_block_size": 256,
+            "bubble_sensitivity": 0.44,
+            "bubble_adaptive_sensitivity": False,
+            "bubble_stream_direction": "left",
+        }
+
+        from_mapping = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
+        persisted = from_mapping.to_dict()
+        from_settings = SpotifyVisualizerSettings.from_settings(_DummySettings(persisted))
+
+        for model in (from_mapping, from_settings):
+            assert model.mode == "bubble"
+            assert model.bar_fill_color == [11, 12, 13, 14]
+            assert model.bar_border_color == [15, 16, 17, 18]
+            assert model.bar_border_opacity == pytest.approx(0.74)
+            assert model.manual_floor == pytest.approx(0.27)
+            assert model.resolve_manual_floor("bubble") == pytest.approx(0.27)
+            assert model.adaptive_sensitivity is False
+            assert model.sensitivity == pytest.approx(0.44)
+            assert model.resolve_audio_block_size("bubble") == 256
+            assert model.bubble_stream_direction == "left"
+
 
 class TestVisualizerPresetSelectionAuthority:
     """Guard against curated/custom cross-bleed in visualizer preset hydration."""
