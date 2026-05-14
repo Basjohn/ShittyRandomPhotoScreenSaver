@@ -18,6 +18,53 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _begin_mode_transition_request(widget: Any, target_mode: Any, *, request_kind: str) -> bool:
+    if widget._mode_transition_phase != 0:
+        return False
+    if target_mode == widget._vis_mode:
+        return False
+    widget._mode_transition_pending = target_mode
+    widget._mode_transition_phase = 1
+    widget._mode_transition_ts = time.time()
+    logger.info(
+        "[SPOTIFY_VIS] Mode %s requested: %s -> %s",
+        request_kind,
+        widget._vis_mode.name,
+        target_mode.name,
+    )
+    return True
+
+
+def activate_visualization_mode(
+    widget: Any,
+    mode: Any,
+    *,
+    reset_runtime: bool = True,
+) -> None:
+    """Apply a target mode using the canonical direct-switch ordering contract."""
+    if mode == widget._vis_mode:
+        return
+    widget._vis_mode = mode
+    try:
+        widget._apply_full_runtime_config_for_mode(mode, reason="mode_switch")
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to apply runtime config on mode switch", exc_info=True)
+    widget._last_gpu_geom = None
+    widget._last_gpu_fade_sent = -1.0
+    widget._has_pushed_first_frame = False
+    widget._waiting_for_fresh_engine_frame = True
+    widget._waiting_for_fresh_frame = True
+    if reset_runtime:
+        try:
+            reset_mode_owned_runtime_state(widget, reason="mode_switch")
+            widget._clear_gl_overlay()
+            prepare_engine_for_mode_reset(widget)
+            widget._clear_runtime_bar_state()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
+    logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+
+
 def resolve_shared_widget_fade_in_duration_ms() -> int:
     """Return the canonical shared overlay fade-in duration."""
 
@@ -36,9 +83,6 @@ def cycle_mode(widget: Any) -> bool:
     """
     from widgets.spotify_visualizer.audio_worker import VisualizerMode
 
-    if widget._mode_transition_phase != 0:
-        return False
-
     from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
 
     _CYCLE_MODES = []
@@ -54,11 +98,7 @@ def cycle_mode(widget: Any) -> bool:
     except ValueError:
         idx = -1
     next_mode = _CYCLE_MODES[(idx + 1) % len(_CYCLE_MODES)]
-    widget._mode_transition_pending = next_mode
-    widget._mode_transition_phase = 1  # start fade-out
-    widget._mode_transition_ts = time.time()
-    logger.info("[SPOTIFY_VIS] Mode cycle requested: %s -> %s", widget._vis_mode.name, next_mode.name)
-    return True
+    return _begin_mode_transition_request(widget, next_mode, request_kind="cycle")
 
 
 def switch_to_mode(widget: Any, mode_id: str) -> bool:
@@ -70,22 +110,30 @@ def switch_to_mode(widget: Any, mode_id: str) -> bool:
     """
     from widgets.spotify_visualizer.audio_worker import VisualizerMode
 
-    if widget._mode_transition_phase != 0:
-        return False
-
     target_enum = getattr(VisualizerMode, mode_id.upper(), None)
     if target_enum is None:
         logger.warning("[SPOTIFY_VIS] Unknown mode_id for switch: %s", mode_id)
         return False
+    return _begin_mode_transition_request(widget, target_enum, request_kind="switch")
 
-    if target_enum == widget._vis_mode:
-        return False
 
-    widget._mode_transition_pending = target_enum
-    widget._mode_transition_phase = 1
-    widget._mode_transition_ts = time.time()
-    logger.info("[SPOTIFY_VIS] Mode switch requested: %s -> %s", widget._vis_mode.name, target_enum.name)
-    return True
+def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> None:
+    pending = getattr(widget, "_mode_transition_pending", None)
+    if pending is None:
+        return
+    try:
+        setattr(widget, "_mode_transition_resume_ts", resume_ts)
+    except Exception:
+        setattr(widget, "_mode_transition_resume_ts", 0.0)
+    activate_visualization_mode(widget, pending, reset_runtime=False)
+    widget._mode_transition_pending = None
+
+    apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
+    if callable(apply_full):
+        try:
+            apply_full(widget._vis_mode, reason="mode_fade_out_complete")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
 
 
 def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:
@@ -531,23 +579,7 @@ def on_mode_fade_out_complete(widget: Any) -> None:
     ):
         return
     widget._clear_gl_overlay()
-    pending = getattr(widget, "_mode_transition_pending", None)
-    if pending is not None:
-        try:
-            setattr(widget, "_mode_transition_resume_ts", time.time())
-        except Exception:
-            setattr(widget, "_mode_transition_resume_ts", 0.0)
-        try:
-            widget.set_visualization_mode(pending, reset_runtime=False)
-        except TypeError:
-            widget.set_visualization_mode(pending)
-        widget._mode_transition_pending = None
-    apply_full = getattr(widget, "_apply_full_runtime_config_for_mode", None)
-    if callable(apply_full):
-        try:
-            apply_full(widget._vis_mode, reason="mode_fade_out_complete")
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
+    _activate_pending_mode_after_fade_out(widget, resume_ts=time.time())
     widget._mode_transition_phase = 3
     widget._mode_teardown_state = 'waiting_bars'
     widget._mode_teardown_block_until_ready = True

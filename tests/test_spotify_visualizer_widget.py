@@ -578,7 +578,7 @@ def test_resize_bar_buffers_reuses_existing_engine_and_reconfigures_bar_count(qt
     def _fake_get_engine(count: int):
         return engine_36 if int(count) == 36 else engine_40
 
-    monkeypatch.setattr(vis_mod, "get_shared_spotify_beat_engine", _fake_get_engine)
+    _patch_shared_engine(monkeypatch, _fake_get_engine)
 
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=36)
     vis._enabled = True
@@ -589,6 +589,84 @@ def test_resize_bar_buffers_reuses_existing_engine_and_reconfigures_bar_count(qt
     assert vis._engine is engine_36
     assert engine_36.reconfigure_calls == [40]
     assert engine_40.acquired == 0
+
+
+@pytest.mark.qt
+def test_resize_bar_buffers_applies_authoritative_technical_config_when_ready(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    engine = _FakeEngine(bar_count=8)
+    engine._audio_worker = SimpleNamespace()
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=8, initial_mode="bubble")
+    vis._enabled = True
+    vis._settings_model = object()
+    vis._technical_config_cache = {
+        "bubble": {
+            "bar_count": 24,
+            "dynamic_floor": False,
+            "manual_floor": 0.41,
+            "adaptive_sensitivity": False,
+            "sensitivity": 0.72,
+            "audio_block_size": 256,
+            "dynamic_range_enabled": False,
+            "agc_strength": 0.5,
+            "input_gain": 1.0,
+            "kick_lane_gain": 1.0,
+            "transient_pulse_gain": 1.0,
+            "transient_clamp": 1.5,
+            "bubble_transient_mix_bass": 0.75,
+            "bubble_transient_mix_vocal": 0.25,
+        }
+    }
+    vis._spotify_playing = True
+    vis._engine = engine
+
+    vis._resize_bar_buffers(24)
+
+    assert vis._engine is engine
+    assert engine.reconfigure_calls == [24]
+    assert vis._last_floor_config == (False, pytest.approx(0.41))
+    assert vis._last_sensitivity_config == (False, pytest.approx(0.72))
+    assert vis._last_audio_block_size == 256
+    assert engine.started == 1
+
+
+@pytest.mark.qt
+def test_runtime_config_setters_remain_noop_safe_when_engine_resolution_fails(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    import widgets.spotify_visualizer.runtime_config as runtime_config_mod
+
+    monkeypatch.setattr(
+        runtime_config_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: (_ for _ in ()).throw(RuntimeError("no engine")),
+    )
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    vis._engine = None
+    ensure_calls: list[bool] = []
+    vis._enabled = True
+    monkeypatch.setattr(vis, "_ensure_tick_source", lambda: ensure_calls.append(True))
+
+    vis.set_process_supervisor(object())
+    vis.apply_floor_config(False, 0.55)
+    vis.apply_sensitivity_config(False, 1.25)
+    vis._apply_energy_boost(1.4)
+    vis._apply_input_gain(1.15)
+    vis._apply_audio_block_size(512)
+
+    assert ensure_calls == [True]
+    assert vis._last_floor_config == (False, pytest.approx(0.55))
+    assert vis._last_sensitivity_config == (False, pytest.approx(1.25))
+    assert vis._last_energy_boost == pytest.approx(1.4)
+    assert vis._last_input_gain == pytest.approx(1.15)
+    assert vis._last_audio_block_size == 512
 
 
 @pytest.mark.qt
@@ -2906,21 +2984,21 @@ def test_apply_vis_mode_config_same_mode_skips_cold_reset(qt_app, qtbot, monkeyp
 
 
 @pytest.mark.qt
-def test_set_visualization_mode_requests_single_overlay_reset(qt_app, qtbot, monkeypatch):
+def test_set_visualization_mode_requests_single_overlay_clear(qt_app, qtbot, monkeypatch):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
     qtbot.addWidget(widget)
 
-    reset_requests = {"count": 0}
+    clear_calls = {"count": 0}
 
-    def _patched_request_overlay_mode_reset(*args, **kwargs):
-        reset_requests["count"] += 1
+    def _patched_clear_gl_overlay(*args, **kwargs):
+        clear_calls["count"] += 1
 
-    monkeypatch.setattr(widget, "_request_overlay_mode_reset", _patched_request_overlay_mode_reset)
+    monkeypatch.setattr(widget, "_clear_gl_overlay", _patched_clear_gl_overlay)
     monkeypatch.setattr(widget, "_prepare_engine_for_mode_reset", lambda: None)
 
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert reset_requests["count"] == 1
+    assert clear_calls["count"] == 1
 
 
 @pytest.mark.qt

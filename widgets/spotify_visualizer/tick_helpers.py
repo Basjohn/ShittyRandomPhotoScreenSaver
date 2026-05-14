@@ -26,6 +26,92 @@ logger = get_logger(__name__)
 # Transition context & FPS helpers
 # ------------------------------------------------------------------
 
+def _parent_transition_running(widget: Any) -> bool:
+    parent = widget.parent()
+    if parent is None:
+        return False
+    if hasattr(parent, "get_transition_snapshot"):
+        try:
+            snapshot = parent.get_transition_snapshot()
+            return bool(snapshot.get("running", False)) if isinstance(snapshot, dict) else False
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to read transition snapshot", exc_info=True)
+            return False
+    if hasattr(parent, "has_running_transition"):
+        try:
+            return bool(parent.has_running_transition())
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to query transition state", exc_info=True)
+            return False
+    return False
+
+
+def attach_to_animation_manager(widget: Any, animation_manager: Any) -> None:
+    """Attach a new AnimationManager without enabling transition ticks yet."""
+    if widget._animation_manager is not None and widget._anim_listener_id is not None:
+        disable_animation_tick_listener(widget)
+    widget._animation_manager = animation_manager
+    widget._using_animation_ticks = False
+    ensure_tick_source(widget)
+
+
+def enable_animation_tick_listener(widget: Any) -> None:
+    """Attach transition-scoped AnimationManager ticking."""
+    if widget._animation_manager is None or widget._anim_listener_id is not None:
+        return
+
+    try:
+        def _tick_listener(dt: float) -> None:
+            if not widget._enabled:
+                return
+            if not _parent_transition_running(widget):
+                disable_animation_tick_listener(widget)
+                pause_timer_during_transition(widget, False)
+                return
+            widget._on_tick()
+
+        listener_id = widget._animation_manager.add_tick_listener(_tick_listener)
+        widget._anim_listener_id = listener_id
+        widget._using_animation_ticks = True
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
+        widget._anim_listener_id = None
+        widget._using_animation_ticks = False
+
+
+def disable_animation_tick_listener(widget: Any) -> None:
+    """Detach transition-scoped AnimationManager ticking."""
+    am = widget._animation_manager
+    listener_id = widget._anim_listener_id
+    if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
+        try:
+            am.remove_tick_listener(listener_id)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
+    widget._anim_listener_id = None
+    widget._using_animation_ticks = False
+
+
+def detach_from_animation_manager(widget: Any) -> None:
+    """Fully detach from AnimationManager and keep steady timer ownership."""
+    disable_animation_tick_listener(widget)
+    widget._animation_manager = None
+    ensure_tick_source(widget)
+
+
+def ensure_tick_source(widget: Any) -> None:
+    """Ensure the steady recurring timer exists when the visualizer is enabled."""
+    if not widget._enabled:
+        return
+    if widget._thread_manager is not None and widget._bars_timer is None:
+        try:
+            widget._bars_timer = widget._thread_manager.schedule_recurring(16, widget._on_tick)
+            widget._target_timer_interval_ms = 16
+            widget._current_timer_interval_ms = 16
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
+            widget._bars_timer = None
+
 def get_transition_context(widget: Any, parent: Optional[QWidget]) -> Dict[str, Any]:
     """Return lightweight transition metrics from the parent DisplayWidget."""
     ctx: Dict[str, Any] = {
@@ -108,15 +194,11 @@ def pause_timer_during_transition(widget: Any, is_transition_active: bool) -> No
             if timer.isActive():
                 timer.stop()
         elif is_transition_active and getattr(widget, "_animation_manager", None) is not None:
-            enable_listener = getattr(widget, "_enable_animation_tick_listener", None)
-            if callable(enable_listener):
-                enable_listener()
+            enable_animation_tick_listener(widget)
             if getattr(widget, "_using_animation_ticks", False) and timer.isActive():
                 timer.stop()
         else:
-            disable_listener = getattr(widget, "_disable_animation_tick_listener", None)
-            if callable(disable_listener):
-                disable_listener()
+            disable_animation_tick_listener(widget)
             # No transition or no AnimationManager - ensure timer is running
             if not timer.isActive() and widget._enabled:
                 timer.start()

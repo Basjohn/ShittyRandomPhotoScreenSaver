@@ -120,6 +120,10 @@ Core value: reduces future startup/mode-switch/activation churn while keeping th
   4. Slice D only if it still produces a meaningful simplification after A–C.
 - Progress note:
   - Slice A is now partly landed: authoritative settings-model seeding and startup/thread-manager handoff share one explicit runtime helper, with regression coverage for deferred replay, same-mode replay, and authoritative technical application on attach.
+  - Slice B is now partly landed: extracted runtime-config helpers own engine resolution, dependency rebinding, and authoritative replay fallback for external setters and bar-buffer resize, with targeted no-op-safety and authoritative-resize parity coverage.
+  - Slice C is now partly landed: `mode_transition.py` owns shared transition-request stamping and pending-mode activation-after-fade sequencing, with targeted parity coverage proving cycle/switch share one contract and fade-out completion still uses the no-runtime-reset activation path before authoritative target config replay.
+  - Slice C now also owns the direct mode-activation contract: `set_visualization_mode(...)` delegates to one extracted helper that applies target runtime config, invalidates first-frame state, and runs the cold-reset sequence only when requested, with targeted parity coverage around overlay clear and stale-frame reset safety.
+  - Slice D is now meaningfully landed: `tick_helpers.py` owns AnimationManager listener lifecycle and recurring-timer creation, so cadence policy and tick-source bookkeeping live in one seam while the existing transition-handoff parity test stays green.
   - treat Task 2 as parity-first refactor work. Every extraction should either prove strict behavioral parity or land with a small explicit improvement plus targeted regression coverage that demonstrates it.
 - Required validation:
   - targeted `tests/test_spotify_visualizer_widget.py` startup/activation/first-frame subsets,

@@ -1065,72 +1065,24 @@ class SpotifyVisualizerWidget(QWidget):
             logger.debug("[SPOTIFY_VIS] Card height set: %d -> %d (mode=%s)", current, h, mode)
 
     def attach_to_animation_manager(self, animation_manager) -> None:
-        # Detach from any previous manager first to avoid stacking listeners.
-        if self._animation_manager is not None and self._anim_listener_id is not None:
-            self._disable_animation_tick_listener()
+        from widgets.spotify_visualizer.tick_helpers import attach_to_animation_manager
 
-        self._animation_manager = animation_manager
-        self._using_animation_ticks = False
-
-        # The dedicated recurring timer owns steady-state runtime. The
-        # AnimationManager listener is attached only while a transition is
-        # active so compositor-aligned motion stays smooth without keeping a
-        # second no-op tick source alive all session long.
-        self._ensure_tick_source()
+        attach_to_animation_manager(self, animation_manager)
 
     def _enable_animation_tick_listener(self) -> None:
-        if self._animation_manager is None or self._anim_listener_id is not None:
-            return
+        from widgets.spotify_visualizer.tick_helpers import enable_animation_tick_listener
 
-        try:
-            def _tick_listener(dt: float) -> None:
-                if not self._enabled:
-                    return
-                parent = self.parent()
-                running = False
-                if parent is not None:
-                    if hasattr(parent, "get_transition_snapshot"):
-                        try:
-                            snapshot = parent.get_transition_snapshot()
-                            running = bool(snapshot.get("running", False)) if isinstance(snapshot, dict) else False
-                        except Exception:
-                            logger.debug("[SPOTIFY_VIS] Failed to read transition snapshot", exc_info=True)
-                            running = False
-                    elif hasattr(parent, "has_running_transition"):
-                        try:
-                            running = bool(parent.has_running_transition())
-                        except Exception:
-                            logger.debug("[SPOTIFY_VIS] Failed to query transition state", exc_info=True)
-                            running = False
-                if not running:
-                    self._disable_animation_tick_listener()
-                    self._pause_timer_during_transition(False)
-                    return
-                self._on_tick()
-
-            listener_id = self._animation_manager.add_tick_listener(_tick_listener)
-            self._anim_listener_id = listener_id
-            self._using_animation_ticks = True
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to attach to AnimationManager", exc_info=True)
-            self._anim_listener_id = None
-            self._using_animation_ticks = False
+        enable_animation_tick_listener(self)
 
     def _disable_animation_tick_listener(self) -> None:
-        am = self._animation_manager
-        listener_id = self._anim_listener_id
-        if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
-            try:
-                am.remove_tick_listener(listener_id)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager", exc_info=True)
-        self._anim_listener_id = None
-        self._using_animation_ticks = False
+        from widgets.spotify_visualizer.tick_helpers import disable_animation_tick_listener
+
+        disable_animation_tick_listener(self)
 
     def detach_from_animation_manager(self) -> None:
-        self._disable_animation_tick_listener()
-        self._animation_manager = None
-        self._ensure_tick_source()
+        from widgets.spotify_visualizer.tick_helpers import detach_from_animation_manager
+
+        detach_from_animation_manager(self)
 
     def _bubble_compute_worker(self, dt: float, eb_snap: dict,
                                sim_settings: dict, pulse_params: dict):
@@ -1187,25 +1139,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_count = count
 
     def _ensure_tick_source(self) -> None:
-        """Ensure the visualizer has a tick source for continuous updates.
-        
-        This method ensures the dedicated _bars_timer is running when the
-        visualizer is enabled and no AnimationManager tick listener is active.
-        The timer provides continuous 60Hz updates between transitions.
-        """
-        if not self._enabled:
-            return
-        
-        # If we have an AnimationManager listener, we're covered during transitions
-        # but still need the dedicated timer for between-transition updates
-        if self._thread_manager is not None and self._bars_timer is None:
-            try:
-                self._bars_timer = self._thread_manager.schedule_recurring(16, self._on_tick)
-                self._target_timer_interval_ms = 16
-                self._current_timer_interval_ms = 16
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to create tick source timer", exc_info=True)
-                self._bars_timer = None
+        """Delegates to widgets.spotify_visualizer.tick_helpers."""
+        from widgets.spotify_visualizer.tick_helpers import ensure_tick_source
+
+        ensure_tick_source(self)
 
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
@@ -1769,30 +1706,9 @@ class SpotifyVisualizerWidget(QWidget):
 
     def set_visualization_mode(self, mode: VisualizerMode, *, reset_runtime: bool = True) -> None:
         """Set the visualization display mode."""
-        if mode != self._vis_mode:
-            self._vis_mode = mode
-            try:
-                self._apply_full_runtime_config_for_mode(mode, reason="mode_switch")
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to apply runtime config on mode switch", exc_info=True)
-            # Invalidate cached GPU geometry so the next tick forces a push
-            self._last_gpu_geom = None
-            self._last_gpu_fade_sent = -1.0
-            self._has_pushed_first_frame = False
-            self._waiting_for_fresh_engine_frame = True
-            self._waiting_for_fresh_frame = True
-            if reset_runtime:
-                # Direct mode changes must still be cold resets: blank/hide the
-                # GL overlay, clear widget-owned mode envelopes, then reset the
-                # shared engine without replacing it.
-                try:
-                    self._reset_mode_owned_runtime_state(reason="mode_switch")
-                    self._clear_gl_overlay()
-                    self._prepare_engine_for_mode_reset()
-                    self._clear_runtime_bar_state()
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to prepare engine on mode switch", exc_info=True)
-            logger.debug("[SPOTIFY_VIS] Visualization mode changed to %s", mode.name)
+        from widgets.spotify_visualizer.mode_transition import activate_visualization_mode
+
+        activate_visualization_mode(self, mode, reset_runtime=reset_runtime)
 
     def get_visualization_mode(self) -> VisualizerMode:
         """Get the current visualization display mode."""

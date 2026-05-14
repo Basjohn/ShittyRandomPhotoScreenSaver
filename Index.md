@@ -72,7 +72,7 @@ Living map of the current SRPSS codebase.
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, canonical default-mode fallback, and key-prefix ownership |
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
-| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, steady-runtime tick cadence stays on the dedicated recurring timer while AnimationManager help is attached only during active transitions, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, and ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist |
+| Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, and ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, and deferred warmup of remaining visualizer mode programs |
 | Overlay stencil mask | `widgets/spotify_visualizer/overlay_mask.py` | Shared painted-card stencil uniform math for the GL overlay render path, preserving the rounded-rect border-inset clipping contract |
 | Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, and invisible-frame early return without touching first-frame shader authority |
@@ -86,7 +86,8 @@ Living map of the current SRPSS codebase.
 | Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking |
 | Technical config | `widgets/spotify_visualizer/technical_config.py` | Per-mode technical cache building, runtime override replacement, mode→engine/overlay technical application |
 | Activation runtime | `widgets/spotify_visualizer/activation_runtime.py` | Settings-model apply, resolved activation payload application, and full-runtime mode replay without touching first-frame authority gates |
-| Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator; live audio-block changes now flow through the worker's capture-restart seam instead of waiting for a full runtime rebuild, and early ThreadManager hookup defers authoritative engine replay until startup activation has seeded mode-owned technical config |
+| Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator; live audio-block changes now flow through the worker's capture-restart seam instead of waiting for a full runtime rebuild, early ThreadManager hookup defers authoritative engine replay until startup activation has seeded mode-owned technical config, and external runtime setters plus bar-buffer resize now resolve/rebind engine dependencies and prefer authoritative replay when that contract is ready |
+| Mode transition | `widgets/spotify_visualizer/mode_transition.py` | Visualizer fade/reset sequencing, direct mode-activation ordering, pending-mode activation after fade-out, teardown readiness, and cold-reset runtime-state clearing while preserving first-frame and preset-application guardrails |
 
 ## Rendering System
 
@@ -165,3 +166,4 @@ Living map of the current SRPSS codebase.
 | `--fresh` | Clear runtime logs at startup |
 | `-devblob` | Enable blob mode gate |
 | `--devcurve` | Compatibility no-op alias |
+| Tick helpers | `widgets/spotify_visualizer/tick_helpers.py` | Transition context, FPS retuning, steady-timer ownership, AnimationManager tick-listener lifecycle, geometry cache, visual smoothing, and perf snapshot logging |

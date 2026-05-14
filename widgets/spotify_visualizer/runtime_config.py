@@ -30,54 +30,100 @@ def _has_authoritative_replay_contract(widget) -> bool:
     return mode_key in cache
 
 
-def set_thread_manager(widget, thread_manager: ThreadManager) -> None:
-    widget._thread_manager = thread_manager
+def _resolve_engine(widget, *, allow_create: bool, failure_context: str) -> Optional[_SpotifyBeatEngine]:
+    engine = getattr(widget, "_engine", None)
+    if engine is not None or not allow_create:
+        return engine
     try:
         engine = get_shared_spotify_beat_engine(widget._bar_count)
         widget._engine = engine
-        engine.set_thread_manager(thread_manager)
-        if _has_authoritative_replay_contract(widget):
-            from widgets.spotify_visualizer.activation_runtime import (
-                apply_authoritative_runtime_handoff,
-            )
-
-            apply_authoritative_runtime_handoff(
-                widget,
-                widget._vis_mode,
-                reason="thread_manager_attach",
-                replay_engine=True,
-            )
-        bind_engine_aliases(widget, engine)
+        return engine
     except Exception:
         logger.debug(
-            "[SPOTIFY_VIS] Failed to propagate ThreadManager to shared beat engine",
+            "[SPOTIFY_VIS] Failed to resolve beat engine for %s",
+            failure_context,
             exc_info=True,
         )
+        return None
+
+
+def _bind_runtime_dependencies(widget, engine: Optional[_SpotifyBeatEngine]) -> None:
+    if engine is None:
+        return
+    try:
+        thread_manager = getattr(widget, "_thread_manager", None)
+        if thread_manager is not None:
+            engine.set_thread_manager(thread_manager)
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to bind ThreadManager to beat engine",
+            exc_info=True,
+        )
+    try:
+        supervisor = getattr(widget, "_process_supervisor", None)
+        if supervisor is not None:
+            engine.set_process_supervisor(supervisor)
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to bind ProcessSupervisor to beat engine",
+            exc_info=True,
+        )
+    bind_engine_aliases(widget, engine)
+
+
+def _apply_runtime_replay(widget, engine: Optional[_SpotifyBeatEngine], *, reason: str) -> None:
+    if engine is None:
+        return
+    if _has_authoritative_replay_contract(widget):
+        from widgets.spotify_visualizer.activation_runtime import (
+            apply_authoritative_runtime_handoff,
+        )
+
+        apply_authoritative_runtime_handoff(
+            widget,
+            widget._vis_mode,
+            reason=reason,
+            replay_engine=True,
+        )
+        return
+    widget._replay_engine_config(engine)
+
+
+def set_thread_manager(widget, thread_manager: ThreadManager) -> None:
+    widget._thread_manager = thread_manager
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="thread_manager_attach",
+    )
+    if engine is None:
+        return
+    _bind_runtime_dependencies(widget, engine)
+    if _has_authoritative_replay_contract(widget):
+        _apply_runtime_replay(widget, engine, reason="thread_manager_attach")
 
 
 def set_process_supervisor(widget, supervisor: Optional[ProcessSupervisor]) -> None:
     widget._process_supervisor = supervisor
-    try:
-        engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-        if engine is not None:
-            engine.set_process_supervisor(supervisor)
-            logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
-    except Exception:
-        logger.debug(
-            "[SPOTIFY_VIS] Failed to set ProcessSupervisor on beat engine",
-            exc_info=True,
-        )
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="process_supervisor_attach",
+    )
+    _bind_runtime_dependencies(widget, engine)
+    if engine is not None:
+        logger.debug("[SPOTIFY_VIS] ProcessSupervisor set on beat engine")
     if widget._enabled:
         widget._ensure_tick_source()
 
 
 def apply_floor_config(widget, dynamic_enabled: bool, manual_floor: float) -> None:
     widget._last_floor_config = (bool(dynamic_enabled), float(manual_floor))
-    try:
-        engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-    except Exception as exc:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-        engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="floor_config",
+    )
     if engine is not None:
         try:
             engine.set_floor_config(dynamic_enabled, manual_floor)
@@ -90,11 +136,11 @@ def apply_floor_config(widget, dynamic_enabled: bool, manual_floor: float) -> No
 
 def apply_sensitivity_config(widget, recommended: bool, sensitivity: float) -> None:
     widget._last_sensitivity_config = (bool(recommended), float(sensitivity))
-    try:
-        engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-    except Exception as exc:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-        engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="sensitivity_config",
+    )
     if engine is not None:
         try:
             engine.set_sensitivity_config(recommended, sensitivity)
@@ -114,11 +160,11 @@ def apply_energy_boost(widget, boost: float) -> None:
     if abs(value - widget._last_energy_boost) <= 1e-4:
         return
     widget._last_energy_boost = value
-    try:
-        engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-    except Exception as exc:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-        engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="energy_boost",
+    )
     if engine is None:
         return
     try:
@@ -136,11 +182,11 @@ def apply_input_gain(widget, gain: float) -> None:
     if abs(value - widget._last_input_gain) <= 1e-4:
         return
     widget._last_input_gain = value
-    try:
-        engine = widget._engine or get_shared_spotify_beat_engine(widget._bar_count)
-    except Exception as exc:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-        engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="input_gain",
+    )
     if engine is None:
         return
     try:
@@ -150,11 +196,11 @@ def apply_input_gain(widget, gain: float) -> None:
 
 
 def apply_agc_strength(widget, value: float) -> None:
-    try:
-        engine = widget._engine
-    except Exception as exc:
-        logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
-        engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=False,
+        failure_context="agc_strength",
+    )
     if engine is None:
         return
     try:
@@ -186,17 +232,11 @@ def apply_audio_block_size(widget, block_size: int) -> None:
     if value == widget._last_audio_block_size:
         return
     widget._last_audio_block_size = value
-    engine = widget._engine
-    if engine is None:
-        try:
-            engine = get_shared_spotify_beat_engine(widget._bar_count)
-            widget._engine = engine
-        except Exception:
-            logger.debug(
-                "[SPOTIFY_VIS] Failed to resolve beat engine for block size",
-                exc_info=True,
-            )
-            engine = None
+    engine = _resolve_engine(
+        widget,
+        allow_create=True,
+        failure_context="audio_block_size",
+    )
     worker = getattr(engine, "_audio_worker", None) if engine is not None else None
     if worker is None or not hasattr(worker, "set_audio_block_size"):
         return
@@ -230,18 +270,20 @@ def resize_bar_buffers(widget, new_bar_count: int) -> None:
     widget._waiting_for_fresh_frame = True
     try:
         if engine is None:
-            engine = get_shared_spotify_beat_engine(new_count)
+            engine = _resolve_engine(
+                widget,
+                allow_create=True,
+                failure_context="bar_buffer_resize",
+            )
         else:
             engine.reconfigure_bar_count(new_count)
-        widget._engine = engine
-        if widget._thread_manager is not None:
-            engine.set_thread_manager(widget._thread_manager)
-        if widget._process_supervisor is not None:
-            engine.set_process_supervisor(widget._process_supervisor)
-        bind_engine_aliases(widget, engine)
+            widget._engine = engine
+        if engine is None:
+            return
+        _bind_runtime_dependencies(widget, engine)
         if was_enabled:
             engine.acquire()
-            widget._replay_engine_config(engine)
+            _apply_runtime_replay(widget, engine, reason="bar_buffer_resize")
             if widget._should_capture_audio_now():
                 engine.ensure_started()
             else:

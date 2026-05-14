@@ -3,6 +3,154 @@
 import pytest
 
 
+def test_begin_mode_transition_request_reuses_same_contract_for_cycle_and_switch(monkeypatch):
+    """Cycle and direct switch should stamp the same pending/phase/timestamp contract."""
+    from widgets.spotify_visualizer import mode_transition
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    timestamps = iter((123.0, 456.0))
+    monkeypatch.setattr(mode_transition.time, "time", lambda: next(timestamps))
+
+    class FakeCycleWidget:
+        _mode_transition_phase = 0
+        _mode_transition_pending = None
+        _vis_mode = VisualizerMode.SPECTRUM
+        _mode_transition_ts = 0.0
+
+    class FakeSwitchWidget:
+        _mode_transition_phase = 0
+        _mode_transition_pending = None
+        _vis_mode = VisualizerMode.SPECTRUM
+        _mode_transition_ts = 0.0
+
+    cycle_widget = FakeCycleWidget()
+    switch_widget = FakeSwitchWidget()
+
+    assert mode_transition._begin_mode_transition_request(
+        cycle_widget,
+        VisualizerMode.BUBBLE,
+        request_kind="cycle",
+    ) is True
+    assert mode_transition._begin_mode_transition_request(
+        switch_widget,
+        VisualizerMode.OSCILLOSCOPE,
+        request_kind="switch",
+    ) is True
+
+    assert cycle_widget._mode_transition_phase == 1
+    assert cycle_widget._mode_transition_pending is VisualizerMode.BUBBLE
+    assert cycle_widget._mode_transition_ts == pytest.approx(123.0)
+
+    assert switch_widget._mode_transition_phase == 1
+    assert switch_widget._mode_transition_pending is VisualizerMode.OSCILLOSCOPE
+    assert switch_widget._mode_transition_ts == pytest.approx(456.0)
+
+
+def test_activate_pending_mode_after_fade_out_applies_runtime_config_without_runtime_reset():
+    """Fade-out completion must activate through the no-reset path and keep target config replay explicit."""
+    from widgets.spotify_visualizer import mode_transition
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    calls = []
+
+    class FakeWidget:
+        _mode_transition_pending = VisualizerMode.BUBBLE
+        _vis_mode = VisualizerMode.SPECTRUM
+        _mode_transition_resume_ts = 0.0
+        _last_gpu_geom = object()
+        _last_gpu_fade_sent = 0.5
+        _has_pushed_first_frame = True
+        _waiting_for_fresh_engine_frame = False
+        _waiting_for_fresh_frame = False
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            calls.append(("apply_full", mode, reason))
+
+        def _clear_gl_overlay(self):
+            calls.append(("clear_overlay",))
+
+        def _clear_runtime_bar_state(self):
+            calls.append(("clear_runtime_bars",))
+
+    widget = FakeWidget()
+
+    original_reset = mode_transition.reset_mode_owned_runtime_state
+    original_prepare = mode_transition.prepare_engine_for_mode_reset
+    try:
+        mode_transition.reset_mode_owned_runtime_state = lambda w, reason="mode_switch": calls.append(("reset_mode_owned", reason))
+        mode_transition.prepare_engine_for_mode_reset = lambda w: calls.append(("prepare_engine",))
+
+        mode_transition._activate_pending_mode_after_fade_out(widget, resume_ts=321.5)
+    finally:
+        mode_transition.reset_mode_owned_runtime_state = original_reset
+        mode_transition.prepare_engine_for_mode_reset = original_prepare
+
+    assert widget._mode_transition_pending is None
+    assert widget._mode_transition_resume_ts == pytest.approx(321.5)
+    assert widget._vis_mode is VisualizerMode.BUBBLE
+    assert calls == [
+        ("apply_full", VisualizerMode.BUBBLE, "mode_switch"),
+        ("apply_full", VisualizerMode.BUBBLE, "mode_fade_out_complete"),
+    ]
+
+
+def test_activate_visualization_mode_runs_cold_reset_sequence_only_when_requested():
+    """Direct mode activation must keep the same reset ordering contract."""
+    from widgets.spotify_visualizer import mode_transition
+    from widgets.spotify_visualizer.audio_worker import VisualizerMode
+
+    calls = []
+
+    class FakeWidget:
+        _vis_mode = VisualizerMode.SPECTRUM
+        _last_gpu_geom = object()
+        _last_gpu_fade_sent = 0.7
+        _has_pushed_first_frame = True
+        _waiting_for_fresh_engine_frame = False
+        _waiting_for_fresh_frame = False
+
+        def _apply_full_runtime_config_for_mode(self, mode, reason):
+            calls.append(("apply_full", mode, reason))
+
+        def _clear_gl_overlay(self):
+            calls.append(("clear_overlay",))
+
+        def _clear_runtime_bar_state(self):
+            calls.append(("clear_runtime_bars",))
+
+    widget = FakeWidget()
+
+    original_reset = mode_transition.reset_mode_owned_runtime_state
+    original_prepare = mode_transition.prepare_engine_for_mode_reset
+    try:
+        mode_transition.reset_mode_owned_runtime_state = lambda w, reason="mode_switch": calls.append(("reset_mode_owned", reason))
+        mode_transition.prepare_engine_for_mode_reset = lambda w: calls.append(("prepare_engine",))
+
+        mode_transition.activate_visualization_mode(widget, VisualizerMode.BUBBLE, reset_runtime=True)
+    finally:
+        mode_transition.reset_mode_owned_runtime_state = original_reset
+        mode_transition.prepare_engine_for_mode_reset = original_prepare
+
+    assert widget._vis_mode is VisualizerMode.BUBBLE
+    assert widget._last_gpu_geom is None
+    assert widget._last_gpu_fade_sent == -1.0
+    assert widget._has_pushed_first_frame is False
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert widget._waiting_for_fresh_frame is True
+    assert calls == [
+        ("apply_full", VisualizerMode.BUBBLE, "mode_switch"),
+        ("reset_mode_owned", "mode_switch"),
+        ("clear_overlay",),
+        ("prepare_engine",),
+        ("clear_runtime_bars",),
+    ]
+
+    calls.clear()
+    widget._vis_mode = VisualizerMode.BUBBLE
+    mode_transition.activate_visualization_mode(widget, VisualizerMode.BUBBLE, reset_runtime=True)
+    assert calls == []
+
+
 def test_on_mode_fade_out_complete_clears_bar_arrays_before_prepare_engine_reset(monkeypatch):
     """Prove the old-mode display bars cannot survive into prepare_engine_for_mode_reset()."""
     from widgets.spotify_visualizer import mode_transition
