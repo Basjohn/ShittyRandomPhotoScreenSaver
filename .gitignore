@@ -129,12 +129,18 @@ MyReuseableUtilityModules/
 
 # Agent scratch notes / temporary plans
 /agent.md
+/AGENTS.md
 /AGENT.md
+/CLAUDE.md
+/GEMINI.md
 /agent-*.md
 /codex-*.md
 /tmp_*.md
 /temp_*.md
 /temp_search.txt
+
+# Repo-local agent / assistant metadata should stay private
+/.agents/
 
 # Extra Python/tooling caches
 .tox/
