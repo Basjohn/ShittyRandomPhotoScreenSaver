@@ -72,6 +72,7 @@ Active ids:
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
+- Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`
 - Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
 - Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.

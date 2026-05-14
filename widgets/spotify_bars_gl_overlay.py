@@ -36,6 +36,14 @@ from widgets.spotify_visualizer.overlay_state import (
 from widgets.spotify_visualizer.overlay_mask import (
     compute_painted_card_mask_uniforms,
 )
+from widgets.spotify_visualizer.overlay_diagnostics import (
+    maybe_log_blob_diagnostics,
+    maybe_log_glow_diagnostics,
+    maybe_log_sine_idle_state,
+)
+from widgets.spotify_visualizer.overlay_uniforms import (
+    upload_common_uniforms,
+)
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
@@ -1248,67 +1256,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
         self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
 
-        if (
-            is_viz_diagnostics_enabled()
-            and logger.isEnabledFor(logging.DEBUG)
-            and self._vis_mode in ('oscilloscope', 'sine_wave', 'spectrum')
-        ):
-            now_diag = time.time()
-            if self._vis_mode == 'spectrum':
-                diag_sig = (
-                    self._vis_mode,
-                    int(self._spectrum_glow_enabled),
-                    round(float(self._spectrum_glow_intensity), 3),
-                    int(self._spectrum_glow_color.rgba()),
-                    int(self._bar_count),
-                )
-            else:
-                diag_sig = (
-                    self._vis_mode,
-                    int(self._glow_enabled),
-                    round(float(self._glow_intensity), 3),
-                    round(float(self._glow_reactivity), 3),
-                    int(self._reactive_glow),
-                    int(self._line_count),
-                    int(self._osc_ghost_line2_enabled),
-                    int(self._osc_ghost_line3_enabled),
-                )
-            if (
-                (now_diag - self._glow_diag_last_ts) >= 12.0
-                or diag_sig != self._glow_diag_last_sig
-            ):
-                if self._vis_mode == 'spectrum':
-                    glow_color = tuple(int(c) for c in self._spectrum_glow_color.getRgb())
-                    logger.debug(
-                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f color=%s bar_count=%d energy_b=%.3f energy_m=%.3f energy_h=%.3f energy_o=%.3f",
-                        self._vis_mode,
-                        self._spectrum_glow_enabled,
-                        self._spectrum_glow_intensity,
-                        glow_color,
-                        int(self._bar_count),
-                        float(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'mid', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'high', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
-                    )
-                else:
-                    logger.debug(
-                        "[SPOTIFY_VIS][GLOW] mode=%s enabled=%s intensity=%.3f reactivity=%.3f reactive=%s lines=%d ghost2=%s ghost3=%s energy_b=%.3f energy_m=%.3f energy_h=%.3f energy_o=%.3f",
-                        self._vis_mode,
-                        self._glow_enabled,
-                        self._glow_intensity,
-                        self._glow_reactivity,
-                        self._reactive_glow,
-                        int(self._line_count),
-                        self._osc_ghost_line2_enabled,
-                        self._osc_ghost_line3_enabled,
-                        float(getattr(self._energy_bands, 'bass', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'mid', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'high', 0.0) or 0.0),
-                        float(getattr(self._energy_bands, 'overall', 0.0) or 0.0),
-                    )
-                self._glow_diag_last_ts = now_diag
-                self._glow_diag_last_sig = diag_sig
+        maybe_log_glow_diagnostics(self, logger)
 
         # Bubble settings
         self._bubble_count = max(0, min(110, int(bubble_count)))
@@ -1602,30 +1550,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._fade = 1.0
         self._playing = bool(playing)
-        if (
-            is_viz_diagnostics_enabled()
-            and self._vis_mode == 'sine_wave'
-            and not self._playing
-        ):
-            now_diag = time.time()
-            if now_diag - self._last_sine_idle_diag_ts >= 0.9:
-                logger.debug(
-                    (
-                        "[SPOTIFY_VIS][SINE][IDLE_STATE] t=%.3f dt=%.4f speed=%.3f "
-                        "travel=(%d,%d,%d,%d,%d,%d) line_count=%d"
-                    ),
-                    float(self._accumulated_time),
-                    float(dt_seconds),
-                    float(self._line_speed),
-                    int(self._sine_wave_travel),
-                    int(self._sine_travel_line2),
-                    int(self._sine_travel_line3),
-                    int(self._sine_travel_line4),
-                    int(self._sine_travel_line5),
-                    int(self._sine_travel_line6),
-                    int(self._line_count),
-                )
-                self._last_sine_idle_diag_ts = now_diag
+        maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
         _geom_start = time.time()
         if not clamped:
@@ -2056,75 +1981,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         stage_filtered: tuple[float, float, float],
         prev_stage_filtered: tuple[float, float, float],
     ) -> None:
-        if not is_viz_diagnostics_enabled() or self._vis_mode != 'blob':
-            return
-        now_ts = time.time()
-        hitch_clamped = dt_seconds > (blob_dt + 0.020)
-        energy_jump = abs(raw_e - prev_smoothed) > 0.18 or abs(smoothed_e - prev_smoothed) > 0.14
-        stage_jump = max(
-            abs(cur - prev) for cur, prev in zip(stage_filtered, prev_stage_filtered)
-        ) > 0.20
-        hot_event = kick_raw > 0.55 or snare_raw > 0.55
-        sig = (
-            round(raw_e, 2),
-            round(smoothed_e, 2),
-            round(self._blob_kick_event_strength, 2),
-            round(self._blob_snare_event_strength, 2),
-            tuple(round(v, 2) for v in stage_filtered),
+        maybe_log_blob_diagnostics(
+            self,
+            logger,
+            dt_seconds=dt_seconds,
+            blob_dt=blob_dt,
+            kick_raw=kick_raw,
+            snare_raw=snare_raw,
+            raw_live=raw_live,
+            filtered_live=filtered_live,
+            prev_smoothed=prev_smoothed,
+            raw_e=raw_e,
+            smoothed_e=smoothed_e,
+            stage_raw=stage_raw,
+            stage_filtered=stage_filtered,
+            prev_stage_filtered=prev_stage_filtered,
         )
-        should_log = hitch_clamped or energy_jump or stage_jump or hot_event
-        if not should_log and (now_ts - self._blob_diag_last_ts) < 0.75:
-            return
-        if not should_log and sig == self._blob_diag_last_sig:
-            return
-        logger.debug(
-            (
-                "[SPOTIFY_VIS][BLOB] dt=%.3f blob_dt=%.3f kick=%.2f/%.2f "
-                "snare=%.2f/%.2f base=(%.3f,%.3f,%.3f,%.3f) "
-                "trans=(%.3f,%.3f,%.3f) raw_live=(%.3f,%.3f,%.3f,%.3f) "
-                "live=(%.3f,%.3f,%.3f,%.3f) smooth=%.3f->%.3f "
-                "stage_raw=(%.2f,%.2f,%.2f) stage_filt=(%.2f,%.2f,%.2f) "
-                "stage_prev=(%.2f,%.2f,%.2f) flags[hitch=%s energy=%s stage=%s hot=%s]"
-            ),
-            dt_seconds,
-            blob_dt,
-            kick_raw,
-            self._blob_kick_event_strength,
-            snare_raw,
-            self._blob_snare_event_strength,
-            float(getattr(self, '_blob_diag_base_bass', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_base_mid', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_base_high', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_base_overall', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_transient_bass', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_transient_mid', 0.0) or 0.0),
-            float(getattr(self, '_blob_diag_transient_high', 0.0) or 0.0),
-            raw_live[0],
-            raw_live[1],
-            raw_live[2],
-            raw_live[3],
-            filtered_live[0],
-            filtered_live[1],
-            filtered_live[2],
-            filtered_live[3],
-            prev_smoothed,
-            smoothed_e,
-            stage_raw[0],
-            stage_raw[1],
-            stage_raw[2],
-            stage_filtered[0],
-            stage_filtered[1],
-            stage_filtered[2],
-            prev_stage_filtered[0],
-            prev_stage_filtered[1],
-            prev_stage_filtered[2],
-            hitch_clamped,
-            energy_jump,
-            stage_jump,
-            hot_event,
-        )
-        self._blob_diag_last_ts = now_ts
-        self._blob_diag_last_sig = sig
 
     def _compute_blob_live_bands(self, energy_bands) -> tuple[float, float, float, float]:
         """Return Blob's live deformation bands after transient and scheduler help."""
@@ -2854,74 +2726,7 @@ void main() {
             _gl.glUseProgram(prog)
             _gl.glBindVertexArray(self._gl_vao)
 
-            # --- Common uniforms (all modes) ---
-            loc = u.get("u_resolution", -1)
-            if loc >= 0:
-                _gl.glUniform2f(loc, float(width), float(height))
-
-            loc = u.get("u_dpr", -1)
-            if loc >= 0:
-                _gl.glUniform1f(loc, self._get_dpr())
-
-            loc = u.get("u_fade", -1)
-            if loc >= 0:
-                _gl.glUniform1f(loc, float(max(0.0, min(1.0, fade))))
-
-            loc = u.get("u_time", -1)
-            if loc >= 0:
-                _gl.glUniform1f(loc, float(self._accumulated_time))
-
-            loc = u.get("u_border_width", -1)
-            if loc >= 0:
-                _gl.glUniform1f(loc, float(max(0.0, self._border_width_px)))
-
-            # --- Rainbow per-bar flag (spectrum only) ---
-            loc_pb = u.get("u_rainbow_per_bar", -1)
-            if loc_pb >= 0:
-                _gl.glUniform1i(loc_pb, 1 if self._rainbow_per_bar else 0)
-
-            # --- Rainbow border flag (spectrum only) ---
-            loc_rb = u.get("u_rainbow_border", -1)
-            if loc_rb >= 0:
-                _gl.glUniform1i(loc_rb, 1 if self._spectrum_rainbow_border else 0)
-
-            # --- Rainbow hue offset (all modes) ---
-            loc = u.get("u_rainbow_hue_offset", -1)
-            # Log per-mode when rainbow is active so we can confirm loc is valid
-            _rainbow_logged_mode = getattr(self, '_rainbow_logged_mode', None)
-            if self._rainbow_enabled and _rainbow_logged_mode != mode:
-                hue_val = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
-                logger.info(
-                    "[SPOTIFY_VIS] Rainbow ACTIVE: enabled=%s per_bar=%s speed=%.2f loc=%d pb_loc=%d mode=%s "
-                    "accum_time=%.2f hue=%.4f",
-                    self._rainbow_enabled, self._rainbow_per_bar, self._rainbow_speed, loc, loc_pb, mode,
-                    self._accumulated_time, hue_val,
-                )
-                self._rainbow_logged_mode = mode
-            if not self._rainbow_enabled:
-                self._rainbow_logged_mode = None
-            if loc >= 0:
-                if self._rainbow_enabled:
-                    # Continuous hue rotation: fract() keeps it in 0..1.
-                    # Remap 0..1 to 0.002..1.002 then fract() so hue_offset
-                    # never hits the shader's <= 0.001 dead-zone guard, which
-                    # would cause a single-frame white flash at the wrap point.
-                    raw = (self._accumulated_time * self._rainbow_speed * 0.1) % 1.0
-                    hue_offset = (raw + 0.002) % 1.0 if raw < 0.001 else raw
-                    _gl.glUniform1f(loc, float(hue_offset))
-                elif self._rainbow_per_bar and mode == 'spectrum':
-                    # Per-bar unique colours: needs a non-zero hue offset to cycle
-                    # even when global rainbow is off. Use a slow independent cycle.
-                    raw = (self._accumulated_time * 0.05) % 1.0
-                    hue_offset = (raw + 0.002) % 1.0 if raw < 0.001 else raw
-                    _gl.glUniform1f(loc, float(hue_offset))
-                else:
-                    _gl.glUniform1f(loc, 0.0)
-            elif self._rainbow_enabled:
-                logger.warning(
-                    "[SPOTIFY_VIS] Rainbow BROKEN: u_rainbow_hue_offset loc=-1 for mode=%s "
-                    "(uniform missing or optimized out in shader)", mode,
-                )
+            upload_common_uniforms(_gl, u, self, mode, width, height, fade, logger)
 
             # --- Per-mode uniforms (dispatched to renderer modules) ---
             from widgets.spotify_visualizer.renderers import upload_mode_uniforms
