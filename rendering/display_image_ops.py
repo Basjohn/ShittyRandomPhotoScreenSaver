@@ -468,6 +468,15 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
         return False
 
     try:
+        # Keep deferred shader warmup aligned with the real startup mode rather than
+        # the overlay's historical internal default.
+        startup_mode = str(getattr(vis, "_vis_mode_str", "") or "").strip().lower()
+        if startup_mode:
+            setattr(overlay, "_vis_mode", startup_mode)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to seed overlay startup mode before prewarm", exc_info=True)
+
+    try:
         from widgets.spotify_visualizer.shaders import preload_fragment_shaders
 
         # Prime the shared shader-source cache before the GL widget asks for
@@ -500,7 +509,14 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
     overlay = getattr(widget, "_spotify_bars_overlay", None)
     if overlay is None or not isinstance(overlay, SpotifyBarsGLOverlay):
         try:
-            overlay = SpotifyBarsGLOverlay(widget)
+            initial_mode = None
+            try:
+                vis = getattr(widget, "spotify_visualizer_widget", None)
+                if vis is not None:
+                    initial_mode = str(getattr(vis, "_vis_mode_str", "") or "").strip().lower() or None
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to read visualizer mode for overlay init", exc_info=True)
+            overlay = SpotifyBarsGLOverlay(widget, initial_mode=initial_mode)
             overlay.setObjectName("spotify_bars_gl_overlay")
             widget._spotify_bars_overlay = overlay
             if widget._resource_manager is not None:

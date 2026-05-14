@@ -36,6 +36,8 @@ Core value: the remaining user-visible risk is runtime hot-path cost and mislead
   - keep the landed latency-readiness gate intact so startup-only pre-capture noise does not emit fake Bubble latency warnings,
   - keep the landed hot-diagnostic emit-only gates intact: `BARS`, `FLOOR`, `TRANSIENT`, `DEVCURVE`, and throttled `GLOW`,
   - keep the landed Spectrum pure-upgrade path intact: shared GPU extras dict reuse for steady-state `spectrum` pushes,
+  - keep the landed startup warmup shape intact: transition GL startup compiles only the minimal subset first, while Spotify visualizer GL startup compiles the resolved startup mode first and warms the rest incrementally,
+  - keep the landed resolved-startup-mode construction contract intact so widget/overlay cold construction does not leak legacy `spectrum` assumptions before activation,
   - investigate persistent non-transition `spectrum` spikes that remain after the timer/tick-source cleanup, Bubble dispatch-allocation reduction, and diagnostic-overhead cuts,
   - treat Bubble startup latency as an observability issue unless fresh logs show it persisting after the activation is audio-ready,
   - treat the transition handoff itself as green unless fresh logs show new first-frame or post-transition stalls.

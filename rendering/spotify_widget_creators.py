@@ -448,7 +448,11 @@ def create_spotify_visualizer_widget(
             bar_count = int(model.resolve_bar_count(str(model.mode)))
         except Exception:
             bar_count = int(model.bar_count)
-        vis = SpotifyVisualizerWidget(mgr._parent, bar_count=bar_count)
+        vis = SpotifyVisualizerWidget(
+            mgr._parent,
+            bar_count=bar_count,
+            initial_mode=activation_payload.mode,
+        )
 
         mgr._log_spotify_vis_config(
             "create",

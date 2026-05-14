@@ -107,6 +107,8 @@ Active ids:
 - Spotify-related secondary-stage widgets must wait for anchor/position readiness before reveal.
 - Spotify-related secondary-stage widgets must also recover cleanly if their first secondary-stage starter fires before the media anchor becomes visible; later anchor visibility sync must be allowed to release the staged reveal once the centralized manager deadline is satisfied.
 - Mute button follows secondary-stage reveal contract.
+- Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime and then warm the remaining transition programs incrementally. Spotify visualizer GL startup should compile the resolved startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining mode programs incrementally afterward.
+- Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
 
 ## 8. Rendering and Input Contract
 - GL-first rendering path with safe fallback behavior.

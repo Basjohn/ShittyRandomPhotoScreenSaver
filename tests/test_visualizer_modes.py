@@ -35,23 +35,34 @@ class TestVisualizerModeEnum:
         assert VisualizerMode.SPECTRUM.value == 1
 
     def test_visualizer_mode_count(self):
-        """Verify all 7 visualizer modes exist."""
+        """Verify the current visualizer mode set exists."""
         from widgets.spotify_visualizer_widget import VisualizerMode
         modes = list(VisualizerMode)
-        assert len(modes) == 5
+        assert len(modes) == 6
         assert modes[0] == VisualizerMode.SPECTRUM
-        expected = {"SPECTRUM", "OSCILLOSCOPE", "BLOB", "SINE_WAVE", "BUBBLE"}
+        expected = {"SPECTRUM", "OSCILLOSCOPE", "BLOB", "SINE_WAVE", "BUBBLE", "DEVCURVE"}
         assert {m.name for m in modes} == expected
+
+    def test_registry_default_mode_id_matches_canonical_default(self):
+        """Verify the shared default-mode helper stays aligned with product defaults."""
+        from core.settings.visualizer_mode_registry import get_default_visualizer_mode_id
+        assert get_default_visualizer_mode_id() == "bubble"
 
 
 class TestVisualizerWidgetModes:
     """Tests for visualization mode on SpotifyVisualizerWidget."""
 
-    def test_widget_default_mode_is_spectrum(self, qt_app):
-        """Verify default visualization mode is SPECTRUM."""
+    def test_widget_default_mode_is_bubble(self, qt_app):
+        """Verify cold widget construction follows the canonical default mode."""
         from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
         widget = SpotifyVisualizerWidget(bar_count=15)
-        assert widget.get_visualization_mode() == VisualizerMode.SPECTRUM
+        assert widget.get_visualization_mode() == VisualizerMode.BUBBLE
+
+    def test_widget_honors_initial_mode_seed(self, qt_app):
+        """Verify constructor seeding can override the cold default safely."""
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget, VisualizerMode
+        widget = SpotifyVisualizerWidget(bar_count=15, initial_mode="devcurve")
+        assert widget.get_visualization_mode() == VisualizerMode.DEVCURVE
 
     def test_widget_has_get_visualization_mode(self, qt_app):
         """Verify widget has get_visualization_mode method."""

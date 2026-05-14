@@ -9,6 +9,7 @@ from __future__ import annotations
 import ctypes
 import time
 from typing import TYPE_CHECKING
+from PySide6.QtCore import QTimer
 
 try:
     from OpenGL import GL as gl  # type: ignore[import]
@@ -27,6 +28,83 @@ if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+
+
+def _transition_program_specs() -> list[tuple[str, str, str]]:
+    return [
+        (GLProgramCache.RAINDROPS, "raindrops_program", "raindrops_uniforms"),
+        (GLProgramCache.WARP, "warp_program", "warp_uniforms"),
+        (GLProgramCache.DIFFUSE, "diffuse_program", "diffuse_uniforms"),
+        (GLProgramCache.BLOCK_FLIP, "blockflip_program", "blockflip_uniforms"),
+        (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
+        (GLProgramCache.SLIDE, "slide_program", "slide_uniforms"),
+        (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
+        (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
+        (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
+        (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
+        (GLProgramCache.BURN, "burn_program", "burn_uniforms"),
+    ]
+
+
+def startup_transition_program_specs() -> list[tuple[str, str, str]]:
+    """Return the small shader subset worth paying for on cold startup."""
+    return [
+        (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
+    ]
+
+
+def deferred_transition_program_specs() -> list[tuple[str, str, str]]:
+    startup_names = {name for name, _, _ in startup_transition_program_specs()}
+    return [spec for spec in _transition_program_specs() if spec[0] not in startup_names]
+
+
+def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
+    cache = get_program_cache()
+    program_id = cache.get_program(program_name)
+    if program_id is None:
+        return False
+    setattr(widget._gl_pipeline, program_attr, program_id)
+    setattr(widget._gl_pipeline, uniforms_attr, cache.get_uniforms(program_name))
+    return True
+
+
+def _warm_next_transition_program(widget) -> None:
+    if getattr(widget, "_gl_disabled_for_session", False):
+        return
+    queue = getattr(widget, "_startup_transition_warm_queue", None)
+    if not queue:
+        return
+    try:
+        widget.makeCurrent()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to make context current for deferred shader warmup", exc_info=True)
+        return
+    try:
+        while queue:
+            program_name, program_attr, uniforms_attr = queue.pop(0)
+            if getattr(widget._gl_pipeline, program_attr, 0):
+                continue
+            if _compile_transition_program(widget, program_name, program_attr, uniforms_attr):
+                break
+            logger.debug("[GL COMPOSITOR] Deferred compile failed for %s", program_name)
+    finally:
+        try:
+            widget.doneCurrent()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred shader warmup", exc_info=True)
+
+    if queue:
+        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
+
+
+def schedule_deferred_transition_program_warmup(widget) -> None:
+    if getattr(widget, "_startup_transition_warm_queue", None):
+        return
+    remaining = deferred_transition_program_specs()
+    if not remaining:
+        return
+    widget._startup_transition_warm_queue = list(remaining)
+    QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
 
 
 def handle_initializeGL(widget) -> None:  # type: ignore[override]
@@ -141,31 +219,14 @@ def init_gl_pipeline(widget) -> None:
         widget._gl_pipeline.u_spec_dir_loc = gl.glGetUniformLocation(program, "u_specDir")
         widget._gl_pipeline.u_axis_mode_loc = gl.glGetUniformLocation(program, "u_axisMode")
 
-        # Compile all shader programs via centralized cache
-        cache = get_program_cache()
-        programs_to_compile = [
-            (GLProgramCache.RAINDROPS, "raindrops_program", "raindrops_uniforms"),
-            (GLProgramCache.WARP, "warp_program", "warp_uniforms"),
-            (GLProgramCache.DIFFUSE, "diffuse_program", "diffuse_uniforms"),
-            (GLProgramCache.BLOCK_FLIP, "blockflip_program", "blockflip_uniforms"),
-            (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
-            (GLProgramCache.SLIDE, "slide_program", "slide_uniforms"),
-            (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
-            (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
-            (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
-            (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
-            (GLProgramCache.BURN, "burn_program", "burn_uniforms"),
-        ]
-        
-        for program_name, program_attr, uniforms_attr in programs_to_compile:
-            program_id = cache.get_program(program_name)
-            if program_id is None:
+        # Compile only the minimal startup subset now, then warm the rest
+        # incrementally after the compositor is live.
+        for program_name, program_attr, uniforms_attr in startup_transition_program_specs():
+            if not _compile_transition_program(widget, program_name, program_attr, uniforms_attr):
                 logger.debug("[GL SHADER] Failed to compile %s shader", program_name)
                 widget._gl_disabled_for_session = True
                 widget._use_shaders = False
                 return
-            setattr(widget._gl_pipeline, program_attr, program_id)
-            setattr(widget._gl_pipeline, uniforms_attr, cache.get_uniforms(program_name))
 
         # NOTE: Shuffle and Claws shader initialization removed - these transitions are retired.
 
@@ -197,6 +258,7 @@ def init_gl_pipeline(widget) -> None:
             logger.warning("[PERF] [GL COMPOSITOR] Shader pipeline init took %.2fms", _pipeline_elapsed)
         else:
             logger.info("[GL COMPOSITOR] Shader pipeline initialized (%.1fms)", _pipeline_elapsed)
+        schedule_deferred_transition_program_warmup(widget)
     except Exception:
         logger.debug("[GL SHADER] Failed to initialize shader pipeline", exc_info=True)
         widget._gl_disabled_for_session = True
@@ -205,6 +267,10 @@ def init_gl_pipeline(widget) -> None:
 def cleanup_gl_pipeline(widget) -> None:
     if gl is None or widget._gl_pipeline is None:
         return
+    try:
+        widget._startup_transition_warm_queue = []
+    except Exception:
+        pass
 
     try:
         is_valid = getattr(widget, "isValid", None)

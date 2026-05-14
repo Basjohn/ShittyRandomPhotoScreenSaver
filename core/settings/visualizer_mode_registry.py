@@ -60,7 +60,22 @@ def get_visualizer_mode_descriptor(mode_id: str) -> VisualizerModeDescriptor:
 
 
 def get_default_visualizer_mode_id() -> str:
-    """Return the first active (non-gated) mode as the fallback."""
+    """Return the canonical default active mode id."""
+    try:
+        from core.settings.default_settings import DEFAULT_SETTINGS
+
+        configured = str(DEFAULT_SETTINGS.get("widgets.spotify_visualizer.mode", "") or "").strip().lower()
+        if not configured:
+            widgets = DEFAULT_SETTINGS.get("widgets")
+            if isinstance(widgets, dict):
+                spotify_vis = widgets.get("spotify_visualizer")
+                if isinstance(spotify_vis, dict):
+                    configured = str(spotify_vis.get("mode", "") or "").strip().lower()
+        if configured in VISUALIZER_MODE_IDS and is_mode_active(configured):
+            return configured
+    except Exception:
+        pass
+
     active = _active_descriptors()
     return active[0].mode_id if active else "spectrum"
 

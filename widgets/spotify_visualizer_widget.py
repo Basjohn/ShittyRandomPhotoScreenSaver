@@ -18,6 +18,7 @@ from core.settings.visualizer_presets import (
     VisualizerActivationPayload,
     resolve_visualizer_activation_payload,
 )
+from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -47,7 +48,12 @@ class SpotifyVisualizerWidget(QWidget):
     SpotifyVisualizerAudioWorker.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None, bar_count: int = 32) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        bar_count: int = 32,
+        initial_mode: VisualizerMode | str | None = None,
+    ) -> None:
         super().__init__(parent)
 
         self._bar_count = max(1, int(bar_count))
@@ -145,7 +151,17 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_drop_speed: float = 1.0
 
         # Visualization mode (Spectrum, Waveform, Abstract)
-        self._vis_mode: VisualizerMode = VisualizerMode.SPECTRUM
+        _initial_mode_id = coerce_visualizer_mode_id(
+            initial_mode.name.lower() if isinstance(initial_mode, VisualizerMode) else initial_mode
+        )
+        self._vis_mode: VisualizerMode = {
+            "spectrum": VisualizerMode.SPECTRUM,
+            "oscilloscope": VisualizerMode.OSCILLOSCOPE,
+            "sine_wave": VisualizerMode.SINE_WAVE,
+            "blob": VisualizerMode.BLOB,
+            "bubble": VisualizerMode.BUBBLE,
+            "devcurve": VisualizerMode.DEVCURVE,
+        }.get(_initial_mode_id, VisualizerMode.BUBBLE)
 
         # Oscilloscope settings
         self._osc_glow_enabled: bool = True

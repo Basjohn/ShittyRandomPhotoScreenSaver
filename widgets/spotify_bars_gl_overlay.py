@@ -5,7 +5,7 @@ from typing import List, Sequence, Optional, Set
 import logging
 import numpy as np
 import time
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QRect, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -14,6 +14,7 @@ from core.logging.logger import (
     is_perf_metrics_enabled,
     is_viz_diagnostics_enabled,
 )
+from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
@@ -80,6 +81,21 @@ def _uniform_lookup_name(uniform_name: str) -> str:
     return uniform_name
 
 
+def prioritized_visualizer_compile_order(active_mode: str, available_modes: Sequence[str]) -> List[str]:
+    ordered: List[str] = []
+    seen: Set[str] = set()
+    active = str(active_mode or "").strip()
+    if active and active in available_modes:
+        ordered.append(active)
+        seen.add(active)
+    for mode in available_modes:
+        if mode in seen:
+            continue
+        ordered.append(mode)
+        seen.add(mode)
+    return ordered
+
+
 class SpotifyBarsGLOverlay(QOpenGLWidget):
     """Small GL surface that renders the Spotify bar field.
 
@@ -89,7 +105,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     this class is responsible only for the bar geometry.
     """
 
-    def __init__(self, parent=None) -> None:  # type: ignore[override]
+    def __init__(self, parent=None, initial_mode: str | None = None) -> None:  # type: ignore[override]
         super().__init__(parent)
         self._painted_frame_shadow_enabled: bool = True
 
@@ -125,7 +141,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._playing: bool = False
         
         # Active visualization mode
-        self._vis_mode: str = 'spectrum'
+        self._vis_mode: str = coerce_visualizer_mode_id(initial_mode)
         self._activation_id: int | None = None
         self._engine_generation: int | None = None
         self._latest_frame_generation: int | None = None
@@ -413,6 +429,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         from typing import Dict as _Dict, Any as _Any
         self._gl_programs: _Dict[str, _Any] = {}  # mode -> program id
         self._gl_uniforms: _Dict[str, _Dict[str, _Any]] = {}  # mode -> {name: loc}
+        self._gl_program_warm_queue: List[str] = []
+        self._gl_program_warm_timer: Optional[QTimer] = None
         self._gl_vao = None
         self._gl_vbo = None
         # ResourceManager resource IDs for GL handles (for cleanup tracking)
@@ -2412,124 +2430,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             info = _gl.glGetShaderInfoLog(vs)
             raise RuntimeError(f"Vertex shader compile failed: {info}")
 
-        # Compile each mode's fragment shader into its own program
-        for mode, fs_source in frag_sources.items():
-            try:
-                fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
-                _gl.glShaderSource(fs, fs_source)
-                _gl.glCompileShader(fs)
-                if not _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS):
-                    info = _gl.glGetShaderInfoLog(fs)
-                    logger.warning("[SPOTIFY_VIS] %s frag shader compile failed: %s", mode, info)
-                    _gl.glDeleteShader(fs)
-                    continue
-
-                prog = _gl.glCreateProgram()
-                _gl.glAttachShader(prog, vs)
-                _gl.glAttachShader(prog, fs)
-                _gl.glLinkProgram(prog)
-                _gl.glDeleteShader(fs)
-
-                if not _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS):
-                    info = _gl.glGetProgramInfoLog(prog)
-                    logger.warning("[SPOTIFY_VIS] %s program link failed: %s", mode, info)
-                    _gl.glDeleteProgram(prog)
-                    continue
-
-                # Query all uniform locations for this program.
-                # glGetUniformLocation returns -1 for uniforms not in the shader,
-                # which is harmless — the set call is simply a no-op.
-                uniforms = {}
-                for uname in (
-                    "u_resolution", "u_dpr", "u_fade", "u_time",
-                    "u_border_width",
-                    "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",
-                    "u_bars", "u_peaks",
-                    "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
-                    "u_waveform", "u_waveform_count",
-                    "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
-                    "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity",
-                    "u_glow_color", "u_reactive_glow",
-                    "u_sensitivity", "u_smoothing",
-                    "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
-                    "u_blob_inward_liquid_color",
-                    "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
-                    "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_glow_energy", "u_blob_peak_energy",
-                    "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
-                    "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
-                    "u_blob_stretch_tendency", "u_blob_stretch_inner", "u_blob_stretch_outer",
-                    "u_blob_inward_liquid_enabled", "u_blob_inward_liquid_reactivity", "u_blob_inward_liquid_max_size",
-                    "u_blob_stage_progress_override",
-                    "u_osc_speed", "u_osc_line_dim",
-                    "u_osc_line_offset_bias",
-                    "u_osc_vertical_shift",
-                    "u_sine_speed", "u_sine_line_dim",
-                    "u_sine_line_offset_bias",
-                    "u_sine_vertical_shift",
-                    "u_sine_travel",
-                    "u_card_adaptation",
-                    "u_sine_travel_line2", "u_sine_travel_line3",
-                    "u_sine_travel_line4", "u_sine_travel_line5", "u_sine_travel_line6",
-                    "u_wave_effect", "u_micro_wobble", "u_crawl_amount", "u_width_reaction",
-                    "u_sine_density", "u_sine_displacement",
-                    "u_line_color", "u_line_count",
-                    "u_line2_color", "u_line2_glow_color",
-                    "u_line3_color", "u_line3_glow_color",
-                    "u_line4_color", "u_line4_glow_color",
-                    "u_line5_color", "u_line5_glow_color",
-                    "u_line6_color", "u_line6_glow_color",
-                    "u_slanted", "u_border_radius",
-                    "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
-                    "u_rainbow_hue_offset", "u_rainbow_per_bar", "u_rainbow_border",
-                    "u_prev_waveform", "u_osc_ghost_alpha",
-                    "u_ghost_line2_enabled", "u_ghost_line3_enabled",
-                    "u_ghost_line4_enabled", "u_ghost_line5_enabled", "u_ghost_line6_enabled",
-                    "u_heartbeat", "u_heartbeat_intensity",
-                    # Bubble mode uniforms
-                    "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
-                    "u_bubbles_trail", "u_trail_strength", "u_tail_opacity",
-                    "u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color",
-                    "u_gradient_light", "u_gradient_dark", "u_pop_color",
-                    "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
-                    "u_sine_line4_shift", "u_sine_line5_shift", "u_sine_line6_shift",
-                    "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
-                    # Blob Shaper uniforms
-                    "u_blob_shaper_enabled", "u_blob_shaper_base_strength",
-                    "u_blob_shaper_react_strength",
-                    "u_blob_ring_mode", "u_blob_ring_thickness",
-                    "u_blob_base_profile", "u_blob_react_profile", "u_blob_runtime_profile",
-                    "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
-                    "u_blob_energy_treble", "u_blob_energy_transient",
-                    "u_blob_shaper_bass_energy", "u_blob_shaper_mid_energy",
-                    "u_blob_shaper_high_energy", "u_blob_shaper_overall_energy",
-                ):
-                    uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
-
-                # IMPORTANT: always include renderer-declared uniforms so new
-                # modes (for example DEVCURVE) cannot silently compile yet fail to
-                # upload mode-specific state because the lookup table omitted
-                # their uniform names.
-                try:
-                    from widgets.spotify_visualizer.renderers import get_all_uniform_names
-
-                    for uname in get_all_uniform_names(mode):
-                        if not uname or uname in uniforms:
-                            continue
-                        uniforms[uname] = _gl.glGetUniformLocation(
-                            prog, _uniform_lookup_name(uname)
-                        )
-                except Exception:
-                    logger.debug(
-                        "[SPOTIFY_VIS] Failed to query renderer uniform names for %s",
-                        mode,
-                        exc_info=True,
-                    )
-
-                self._gl_programs[mode] = prog
-                self._gl_uniforms[mode] = uniforms
-
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to compile %s shader", mode, exc_info=True)
+        compile_order = prioritized_visualizer_compile_order(self._vis_mode, list(frag_sources.keys()))
+        active_mode = compile_order[0] if compile_order else self._vis_mode
+        if active_mode and active_mode in frag_sources:
+            self._compile_gl_mode_program(active_mode, frag_sources[active_mode], vs, _gl)
 
         _gl.glDeleteShader(vs)
 
@@ -2610,14 +2514,6 @@ void main() {
             from core.resources.manager import ResourceManager
             from OpenGL import GL as _gl_mod
             rm = ResourceManager()
-            for mode, prog in self._gl_programs.items():
-                rid = rm.register_gl_handle(
-                    prog, "program",
-                    lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
-                    description=f"SpotifyBarsGLOverlay {mode} shader",
-                    group="spotify_vis_gl",
-                )
-                self._gl_program_rids[mode] = rid
             self._gl_vao_rid = rm.register_gl_handle(
                 vao, "vao",
                 lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
@@ -2637,9 +2533,178 @@ void main() {
             self._gl_vbo_rid = None
 
         logger.info(
-            "[SPOTIFY_VIS] Multi-shader pipeline ready: %s",
+            "[SPOTIFY_VIS] Startup shader ready: active_mode=%s compiled=%s pending=%s",
+            self._vis_mode,
             ", ".join(sorted(self._gl_programs.keys())),
+            ", ".join(mode for mode in compile_order[1:] if mode not in self._gl_programs),
         )
+        self._schedule_gl_program_warmup_queue([mode for mode in compile_order[1:] if mode in frag_sources])
+
+    def _compile_gl_mode_program(self, mode: str, fs_source: str, vs: int, _gl) -> bool:
+        if mode in self._gl_programs:
+            return True
+        try:
+            fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
+            _gl.glShaderSource(fs, fs_source)
+            _gl.glCompileShader(fs)
+            if not _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS):
+                info = _gl.glGetShaderInfoLog(fs)
+                logger.warning("[SPOTIFY_VIS] %s frag shader compile failed: %s", mode, info)
+                _gl.glDeleteShader(fs)
+                return False
+
+            prog = _gl.glCreateProgram()
+            _gl.glAttachShader(prog, vs)
+            _gl.glAttachShader(prog, fs)
+            _gl.glLinkProgram(prog)
+            _gl.glDeleteShader(fs)
+
+            if not _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS):
+                info = _gl.glGetProgramInfoLog(prog)
+                logger.warning("[SPOTIFY_VIS] %s program link failed: %s", mode, info)
+                _gl.glDeleteProgram(prog)
+                return False
+
+            uniforms = {}
+            for uname in (
+                "u_resolution", "u_dpr", "u_fade", "u_time",
+                "u_border_width",
+                "u_bar_count", "u_segments", "u_bar_height_scale", "u_single_piece",
+                "u_bars", "u_peaks",
+                "u_fill_color", "u_border_color", "u_playing", "u_ghost_alpha",
+                "u_waveform", "u_waveform_count",
+                "u_overall_energy", "u_bass_energy", "u_mid_energy", "u_high_energy",
+                "u_glow_enabled", "u_glow_intensity", "u_glow_size", "u_glow_reactivity",
+                "u_glow_color", "u_reactive_glow",
+                "u_sensitivity", "u_smoothing",
+                "u_blob_color", "u_blob_glow_color", "u_blob_edge_color", "u_blob_outline_color",
+                "u_blob_inward_liquid_color",
+                "u_blob_pulse", "u_blob_width", "u_blob_size", "u_blob_glow_intensity", "u_blob_glow_reactivity", "u_blob_glow_max_size",
+                "u_blob_reactive_glow", "u_blob_smoothed_energy", "u_blob_glow_energy", "u_blob_peak_energy",
+                "u_blob_peak_bass", "u_blob_peak_mid", "u_blob_peak_high", "u_blob_peak_overall",
+                "u_blob_reactive_deformation", "u_blob_stage_gain", "u_blob_core_scale", "u_blob_core_floor_bias", "u_blob_stage_bias", "u_blob_constant_wobble", "u_blob_reactive_wobble",
+                "u_blob_stretch_tendency", "u_blob_stretch_inner", "u_blob_stretch_outer",
+                "u_blob_inward_liquid_enabled", "u_blob_inward_liquid_reactivity", "u_blob_inward_liquid_max_size",
+                "u_blob_stage_progress_override",
+                "u_osc_speed", "u_osc_line_dim",
+                "u_osc_line_offset_bias",
+                "u_osc_vertical_shift",
+                "u_sine_speed", "u_sine_line_dim",
+                "u_sine_line_offset_bias",
+                "u_sine_vertical_shift",
+                "u_sine_travel",
+                "u_card_adaptation",
+                "u_sine_travel_line2", "u_sine_travel_line3",
+                "u_sine_travel_line4", "u_sine_travel_line5", "u_sine_travel_line6",
+                "u_wave_effect", "u_micro_wobble", "u_crawl_amount", "u_width_reaction",
+                "u_sine_density", "u_sine_displacement",
+                "u_line_color", "u_line_count",
+                "u_line2_color", "u_line2_glow_color",
+                "u_line3_color", "u_line3_glow_color",
+                "u_line4_color", "u_line4_glow_color",
+                "u_line5_color", "u_line5_glow_color",
+                "u_line6_color", "u_line6_glow_color",
+                "u_slanted", "u_border_radius",
+                "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
+                "u_rainbow_hue_offset", "u_rainbow_per_bar", "u_rainbow_border",
+                "u_prev_waveform", "u_osc_ghost_alpha",
+                "u_ghost_line2_enabled", "u_ghost_line3_enabled",
+                "u_ghost_line4_enabled", "u_ghost_line5_enabled", "u_ghost_line6_enabled",
+                "u_heartbeat", "u_heartbeat_intensity",
+                "u_bubble_count", "u_bubbles_pos", "u_bubbles_extra",
+                "u_bubbles_trail", "u_trail_strength", "u_tail_opacity",
+                "u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color",
+                "u_gradient_light", "u_gradient_dark", "u_pop_color",
+                "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
+                "u_sine_line4_shift", "u_sine_line5_shift", "u_sine_line6_shift",
+                "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
+                "u_blob_shaper_enabled", "u_blob_shaper_base_strength",
+                "u_blob_shaper_react_strength",
+                "u_blob_ring_mode", "u_blob_ring_thickness",
+                "u_blob_base_profile", "u_blob_react_profile", "u_blob_runtime_profile",
+                "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
+                "u_blob_energy_treble", "u_blob_energy_transient",
+                "u_blob_shaper_bass_energy", "u_blob_shaper_mid_energy",
+                "u_blob_shaper_high_energy", "u_blob_shaper_overall_energy",
+            ):
+                uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
+
+            try:
+                from widgets.spotify_visualizer.renderers import get_all_uniform_names
+                for uname in get_all_uniform_names(mode):
+                    if not uname or uname in uniforms:
+                        continue
+                    uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to query renderer uniform names for %s", mode, exc_info=True)
+
+            self._gl_programs[mode] = prog
+            self._gl_uniforms[mode] = uniforms
+            if self._gl_program is None:
+                self._gl_program = prog
+            self._register_gl_program_handle(mode, prog)
+            return True
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to compile %s shader", mode, exc_info=True)
+            return False
+
+    def _register_gl_program_handle(self, mode: str, prog: int) -> None:
+        try:
+            from core.resources.manager import ResourceManager
+            from OpenGL import GL as _gl_mod
+
+            rm = ResourceManager()
+            rid = rm.register_gl_handle(
+                prog, "program",
+                lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
+                description=f"SpotifyBarsGLOverlay {mode} shader",
+                group="spotify_vis_gl",
+            )
+            self._gl_program_rids[mode] = rid
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Failed to register %s GL handle: %s", mode, e)
+
+    def _warm_next_gl_program(self) -> None:
+        if self._gl_disabled or not self._gl_program_warm_queue:
+            return
+        if not self._gl_state.is_ready():
+            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
+            return
+        from OpenGL import GL as _gl
+        from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
+        try:
+            self.makeCurrent()
+            vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
+            _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
+            _gl.glCompileShader(vs)
+            if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
+                info = _gl.glGetShaderInfoLog(vs)
+                raise RuntimeError(f"Vertex shader compile failed: {info}")
+            mode = self._gl_program_warm_queue.pop(0)
+            fs_source = load_fragment_shader(mode)
+            if fs_source:
+                self._compile_gl_mode_program(mode, fs_source, vs, _gl)
+            _gl.glDeleteShader(vs)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Deferred program warmup failed", exc_info=True)
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] doneCurrent failed after deferred shader warmup", exc_info=True)
+        if self._gl_program_warm_queue:
+            self._schedule_gl_program_warmup_queue(self._gl_program_warm_queue)
+
+    def _schedule_gl_program_warmup_queue(self, modes: Sequence[str]) -> None:
+        queue = [mode for mode in modes if mode not in self._gl_programs]
+        self._gl_program_warm_queue = queue
+        if not queue:
+            return
+        if self._gl_program_warm_timer is None:
+            self._gl_program_warm_timer = QTimer(self)
+            self._gl_program_warm_timer.setSingleShot(True)
+            self._gl_program_warm_timer.timeout.connect(self._warm_next_gl_program)
+        self._gl_program_warm_timer.start(140)
 
     def cleanup_gl(self) -> None:
         """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks."""
@@ -2658,6 +2723,12 @@ void main() {
                 logger.debug("[SPOTIFY_VIS] Failed to make GL context current for cleanup: %s", e)
 
         try:
+            if self._gl_program_warm_timer is not None:
+                try:
+                    self._gl_program_warm_timer.stop()
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", e)
+            self._gl_program_warm_queue = []
             for mode, prog in list(self._gl_programs.items()):
                 try:
                     if ctx_acquired:
@@ -2744,6 +2815,22 @@ void main() {
 
         mode = self._vis_mode
         prog = self._gl_programs.get(mode)
+        if prog is None:
+            try:
+                from OpenGL import GL as _gl
+                from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
+
+                fs_source = load_fragment_shader(mode)
+                if fs_source:
+                    vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
+                    _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
+                    _gl.glCompileShader(vs)
+                    if _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
+                        self._compile_gl_mode_program(mode, fs_source, vs, _gl)
+                    _gl.glDeleteShader(vs)
+                    prog = self._gl_programs.get(mode)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to lazily compile mode shader for %s", mode, exc_info=True)
         if prog is None:
             logger.warning(
                 "[SPOTIFY_VIS] Mode '%s' shader unavailable; GL-only visualizer skipping frame",

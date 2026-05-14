@@ -81,6 +81,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Transition random-pool parity, enabled-pool selection, and approximate long-run uniformity for engine-driven random transition choice.
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
+- `tests/test_startup_shader_warmup.py`
+  Startup shader/program warmup policy: minimal transition startup subset and active-mode-first visualizer shader compile ordering.
 
 ## 4. Visualizer Test Expectations
 When changing visualizer settings/contracts, include tests for:
