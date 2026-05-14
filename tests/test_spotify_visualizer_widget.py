@@ -657,6 +657,73 @@ def test_set_thread_manager_defers_authoritative_replay_until_settings_model_rea
 
 
 @pytest.mark.qt
+def test_set_thread_manager_applies_authoritative_technical_config_when_ready(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=8)
+    engine._audio_worker = SimpleNamespace()
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=8, initial_mode="bubble")
+    vis._settings_model = object()
+    vis._technical_config_cache = {
+        "bubble": {
+            "bar_count": 24,
+            "dynamic_floor": False,
+            "manual_floor": 0.29,
+            "adaptive_sensitivity": False,
+            "sensitivity": 0.63,
+            "audio_block_size": 256,
+            "dynamic_range_enabled": False,
+            "agc_strength": 0.5,
+            "input_gain": 1.0,
+            "kick_lane_gain": 1.0,
+            "transient_pulse_gain": 1.0,
+            "transient_clamp": 1.5,
+            "bubble_transient_mix_bass": 0.75,
+            "bubble_transient_mix_vocal": 0.25,
+        }
+    }
+
+    vis.set_thread_manager(object())
+
+    assert vis._bar_count == 24
+    assert vis._last_floor_config[0] is False
+    assert vis._last_floor_config[1] == pytest.approx(0.29)
+    assert vis._last_sensitivity_config[0] is False
+    assert vis._last_sensitivity_config[1] == pytest.approx(0.63)
+    assert vis._last_audio_block_size == 256
+
+
+@pytest.mark.qt
+def test_set_settings_model_replays_engine_when_authoritative_engine_exists(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=8)
+    engine._audio_worker = SimpleNamespace()
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8, initial_mode="oscilloscope")
+    widget._engine = engine
+    replay_calls: list[object] = []
+    monkeypatch.setattr(widget, "_replay_engine_config", lambda replay_engine: replay_calls.append(replay_engine))
+
+    model = SpotifyVisualizerSettings(
+        mode="oscilloscope",
+        bar_count=8,
+        oscilloscope_bar_count=24,
+        oscilloscope_dynamic_floor=False,
+        oscilloscope_manual_floor=0.21,
+    )
+
+    widget.set_settings_model(model)
+
+    assert replay_calls == [engine]
+
+
+@pytest.mark.qt
 def test_spectrum_gpu_push_extras_dict_is_reused(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)

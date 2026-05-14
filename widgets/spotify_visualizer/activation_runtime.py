@@ -20,6 +20,55 @@ from widgets.spotify_visualizer.audio_worker import VisualizerMode
 logger = get_logger(__name__)
 
 
+def _snapshot_settings_model(model: SpotifyVisualizerSettings) -> SpotifyVisualizerSettings:
+    try:
+        return copy.deepcopy(model)
+    except Exception:
+        return model
+
+
+def _store_authoritative_settings_model(
+    widget: Any,
+    model: SpotifyVisualizerSettings,
+) -> SpotifyVisualizerSettings:
+    snapshot = _snapshot_settings_model(model)
+    widget._settings_model = snapshot
+    widget._technical_config_cache = widget._build_technical_cache(snapshot)
+    return snapshot
+
+
+def _resolve_target_mode_from_model(
+    widget: Any,
+    model: SpotifyVisualizerSettings,
+) -> VisualizerMode:
+    try:
+        mode_name = str(getattr(model, "mode", "") or "").lower()
+        return widget._map_mode_key_to_enum(mode_name)
+    except Exception:
+        return widget._vis_mode
+
+
+def apply_authoritative_runtime_handoff(
+    widget: Any,
+    mode: VisualizerMode,
+    *,
+    reason: str,
+    replay_engine: bool,
+) -> None:
+    config = widget._get_mode_technical_config(mode)
+    if config is None:
+        return
+    widget._apply_technical_config_for_mode(mode, reason=reason)
+    if not replay_engine:
+        return
+    if mode != getattr(widget, "_vis_mode", mode):
+        return
+    engine = getattr(widget, "_engine", None)
+    if engine is None:
+        return
+    widget._replay_engine_config(engine)
+
+
 def set_settings_model(
     widget: Any,
     model: SpotifyVisualizerSettings,
@@ -28,20 +77,15 @@ def set_settings_model(
 ) -> None:
     if model is None:
         return
-    try:
-        snapshot = copy.deepcopy(model)
-    except Exception:
-        snapshot = model
-    widget._settings_model = snapshot
-    widget._technical_config_cache = widget._build_technical_cache(snapshot)
-    target_mode = widget._vis_mode
-    try:
-        mode_name = str(getattr(snapshot, "mode", "") or "").lower()
-        target_mode = widget._map_mode_key_to_enum(mode_name)
-    except Exception:
-        target_mode = widget._vis_mode
+    snapshot = _store_authoritative_settings_model(widget, model)
+    target_mode = _resolve_target_mode_from_model(widget, snapshot)
     if apply_now:
-        widget._apply_technical_config_for_mode(target_mode, reason="settings_model_update")
+        apply_authoritative_runtime_handoff(
+            widget,
+            target_mode,
+            reason="settings_model_update",
+            replay_engine=True,
+        )
 
 
 def log_live_activation_state(
@@ -107,12 +151,7 @@ def apply_resolved_activation_payload(
     reason: str,
     force_runtime_reset: bool = False,
 ) -> None:
-    try:
-        snapshot = copy.deepcopy(model)
-    except Exception:
-        snapshot = model
-    widget._settings_model = snapshot
-    widget._technical_config_cache = widget._build_technical_cache(snapshot)
+    snapshot = _store_authoritative_settings_model(widget, model)
 
     vm = widget._map_mode_key_to_enum(payload.mode)
     mode_changed = vm != widget._vis_mode
@@ -131,7 +170,12 @@ def apply_resolved_activation_payload(
     if widget._mode_transition_phase == 0:
         widget._apply_pending_mode_transition_layout()
 
-    widget._apply_technical_config_for_mode(vm, reason=f"{reason}:activation_payload")
+    apply_authoritative_runtime_handoff(
+        widget,
+        vm,
+        reason=f"{reason}:activation_payload",
+        replay_engine=not (force_runtime_reset or mode_changed),
+    )
 
     if force_runtime_reset or mode_changed:
         widget._waiting_for_fresh_engine_frame = True

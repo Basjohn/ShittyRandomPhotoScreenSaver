@@ -119,6 +119,7 @@ Core value: reduces future startup/mode-switch/activation churn while keeping th
   3. Slice C,
   4. Slice D only if it still produces a meaningful simplification after A–C.
 - Progress note:
+  - Slice A is now partly landed: authoritative settings-model seeding and startup/thread-manager handoff share one explicit runtime helper, with regression coverage for deferred replay, same-mode replay, and authoritative technical application on attach.
   - treat Task 2 as parity-first refactor work. Every extraction should either prove strict behavioral parity or land with a small explicit improvement plus targeted regression coverage that demonstrates it.
 - Required validation:
   - targeted `tests/test_spotify_visualizer_widget.py` startup/activation/first-frame subsets,

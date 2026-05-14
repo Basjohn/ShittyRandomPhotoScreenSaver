@@ -37,7 +37,16 @@ def set_thread_manager(widget, thread_manager: ThreadManager) -> None:
         widget._engine = engine
         engine.set_thread_manager(thread_manager)
         if _has_authoritative_replay_contract(widget):
-            widget._replay_engine_config(engine)
+            from widgets.spotify_visualizer.activation_runtime import (
+                apply_authoritative_runtime_handoff,
+            )
+
+            apply_authoritative_runtime_handoff(
+                widget,
+                widget._vis_mode,
+                reason="thread_manager_attach",
+                replay_engine=True,
+            )
         bind_engine_aliases(widget, engine)
     except Exception:
         logger.debug(
