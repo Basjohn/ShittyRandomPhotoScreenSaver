@@ -142,6 +142,94 @@ Core value: biggest long-term fragility reduction inside the visualizer stack, b
   - preserve settings/preset application truth through the existing resolved payload path,
   - keep `set_state(...)` and overlay activation/generation storage fully covered,
   - split only with targeted guard tests already in place or added first.
+- Execution shape:
+  - do this as a bounded multi-slice extraction, not a rewrite,
+  - every slice must end in a green parity gate before the next one starts,
+  - if any slice introduces first-bar / first-frame / preset-drift uncertainty, stop and investigate before continuing,
+  - do not mix startup/perf experiments into the same patch as overlay authority extractions.
+- Slice order:
+  - Slice 3A — render-state snapshot + diagnostics seam:
+    - isolate render-state snapshot/logging payload construction from `paintGL()` and first-push probes,
+    - move only passive snapshot/diagnostic assembly, not authority decisions,
+    - target result: `paintGL()` stops owning large inline diagnostic payload assembly.
+  - Slice 3B — per-mode uniform/upload preparation seam:
+    - isolate mode-neutral GL uniform binding preparation from raw draw execution,
+    - keep mode-owned values authored where they are today, but move shared upload sequencing out of the monolith,
+    - target result: one explicit seam for “what data is uploaded” versus “how the draw call is executed”.
+  - Slice 3C — mode-owned renderer dispatch seam:
+    - isolate the per-mode branch dispatch from the shared GL frame lifecycle,
+    - keep Spectrum / Osc / Blob / Sine / Bubble / Devcurve render behavior unchanged,
+    - target result: the overlay owns a small shared frame shell plus clearly bounded mode render branches.
+  - Slice 3D — shared GL frame lifecycle shell:
+    - isolate context prep, fade/time accumulation, clip/stencil begin-end, and final draw envelope around the mode dispatch,
+    - do not move first-frame guard decisions into a second owner,
+    - target result: a small `paintGL()` shell with explicit staging order.
+  - Slice 3E — optional startup/deferred warmup follow-through only if needed:
+    - only revisit startup shader/program warmup here if a prior overlay slice reveals duplicated startup truth,
+    - do not turn this into a startup-optimization detour unless logs justify it.
+- Stop/go gates after each slice:
+  - stop immediately if any of these regress:
+    - unbalanced `before_first_overlay_push` / `after_first_overlay_push`,
+    - new `FIRST_FRAME_GUARD`,
+    - startup replay miss or wrong startup shader mode truth,
+    - preset activation drift,
+    - stale generation/activation writing bars after reset.
+  - only continue to the next slice when:
+    - targeted tests are green,
+    - the relevant synthetic bleed-family subset is green,
+    - no newly introduced log warning path is obviously noisy or misleading,
+    - the extracted seam has an actual production caller and no dead helper residue.
+- Required parity matrix for Task 3:
+  - startup truth parity:
+    - resolved startup mode still seeds shader warmup truth,
+    - no `No technical config available for mode=...`,
+    - first startup `before_first_overlay_push` / `after_first_overlay_push` pair remains healthy.
+  - first-bar / first-frame authority parity:
+    - `_waiting_for_fresh_engine_frame` and generation/activation matching remain authoritative,
+    - overlay activation/generation stored from `set_state(...)` still match engine/display source truth,
+    - no new early visible bars before fresh engine frame readiness.
+  - preset/settings drift parity:
+    - CLEAR-then-APPLY preset semantics remain intact through resolved payload application,
+    - no overlay-local fallback cache becomes a second truth for technical or visual state,
+    - active-mode technical replay still comes from authoritative config, not stale overlay fields.
+  - transition/runtime continuity parity:
+    - transition-end recovery remains alive,
+    - overlay cold-reset reuse continues to blank/hide until fresh activation/generation handoff,
+    - no visible bleed across rapid mode switches or preset cycles.
+  - visual fidelity/reactivity parity:
+    - no FPS reduction,
+    - no smoothing increase,
+    - no reduction in transient response,
+    - no change to authored mode look unless explicitly intended and documented.
+- Required tests and synthetics before and during Task 3:
+  - must keep green before any overlay slice lands:
+    - `tests/test_spotify_visualizer_mode_transition.py`
+    - `tests/test_stencil_mask_alignment.py`
+    - `tests/test_startup_shader_warmup.py`
+    - the relevant `tests/test_visualizer_settings_plumbing.py` startup/activation checks
+  - must run after any slice that touches first-frame, reset, or transport order:
+    - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
+  - must run after any slice that touches overlay kwargs/state transport:
+    - `tests/test_visualizer_overlay_kwargs.py`
+    - `tests/test_ghost_isolation.py` targeted overlay subsets only
+  - must run after any slice that touches startup/warmup truth:
+    - `tests/test_startup_shader_warmup.py`
+    - startup log sweep for `Startup shader ready`, `before_first_overlay_push`, `after_first_overlay_push`, and any startup replay miss
+  - must run after any slice that touches mode-specific render dispatch:
+    - targeted `tests/test_visualizer_reactivity_quality.py` subsets for touched modes,
+    - relevant `tests/test_line4_6_pipeline_trace.py` and `tests/test_blob_shaper_plumbing.py` subsets when osc/blob paths are involved.
+- Logging acceptance for Task 3:
+  - vis log must remain structurally readable,
+  - `[!!!!]`, `FIRST_FRAME_GUARD`, `MODE_RESET_ASSERT`, and real latency/perf warnings stay loud,
+  - no new spammy periodic diagnostic family should be introduced during the split,
+  - if a slice adds temporary diagnostics, remove or downgrade them before calling the slice complete.
+- Documentation obligations for Task 3:
+  - update `Index.md` whenever overlay ownership moves between `spotify_bars_gl_overlay.py`, `overlay_state.py`, `overlay_mask.py`, or any new extracted helper,
+  - update `Spec.md` if a new overlay execution contract becomes canonical,
+  - update `Docs/Visualizer_Change_Checklist.md` if the split creates a new required touchpoint for future visualizer changes,
+  - record any real regression narrative in `Docs/Historical_Bugs.md`, not here.
+- Progress note:
+  - do not start Task 3 by splitting mode-owned math wholesale. Start with the passive/shared seams (`3A`, then `3B`) so the risky authority shell stays small and observable before any deeper dispatch extraction.
 
 4. Expandability groundwork — highest cross-project future payoff after the main visualizer residue tracks are healthier.
 Core value: best architecture payoff outside the fragile visualizer runtime itself.
