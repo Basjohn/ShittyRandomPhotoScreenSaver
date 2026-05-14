@@ -44,6 +44,10 @@ from widgets.spotify_visualizer.overlay_diagnostics import (
 from widgets.spotify_visualizer.overlay_uniforms import (
     upload_common_uniforms,
 )
+from widgets.spotify_visualizer.overlay_render_dispatch import (
+    dispatch_mode_uniforms,
+    resolve_mode_program,
+)
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
@@ -2686,32 +2690,6 @@ void main() {
             return False
 
         mode = self._vis_mode
-        prog = self._gl_programs.get(mode)
-        if prog is None:
-            try:
-                from OpenGL import GL as _gl
-                from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
-
-                fs_source = load_fragment_shader(mode)
-                if fs_source:
-                    vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
-                    _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
-                    _gl.glCompileShader(vs)
-                    if _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
-                        self._compile_gl_mode_program(mode, fs_source, vs, _gl)
-                    _gl.glDeleteShader(vs)
-                    prog = self._gl_programs.get(mode)
-            except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to lazily compile mode shader for %s", mode, exc_info=True)
-        if prog is None:
-            logger.warning(
-                "[SPOTIFY_VIS] Mode '%s' shader unavailable; GL-only visualizer skipping frame",
-                mode,
-            )
-            return False
-
-        u = self._gl_uniforms.get(mode, {})
-
         width = rect.width()
         height = rect.height()
         if width <= 0 or height <= 0:
@@ -2723,14 +2701,18 @@ void main() {
         try:
             from OpenGL import GL as _gl
 
+            prog = resolve_mode_program(self, _gl, mode, logger)
+            if prog is None:
+                return False
+
+            u = self._gl_uniforms.get(mode, {})
+
             _gl.glUseProgram(prog)
             _gl.glBindVertexArray(self._gl_vao)
 
             upload_common_uniforms(_gl, u, self, mode, width, height, fade, logger)
 
-            # --- Per-mode uniforms (dispatched to renderer modules) ---
-            from widgets.spotify_visualizer.renderers import upload_mode_uniforms
-            if not upload_mode_uniforms(mode, _gl, u, self):
+            if not dispatch_mode_uniforms(_gl, mode, u, self):
                 _gl.glBindVertexArray(0)
                 _gl.glUseProgram(0)
                 return False

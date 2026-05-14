@@ -231,6 +231,7 @@ Core value: biggest long-term fragility reduction inside the visualizer stack, b
 - Progress note:
   - Slice 3A is now partly landed: passive overlay diagnostics (Glow / Blob / Sine idle) live in a dedicated helper seam with narrow gating tests, keeping the first overlay cut observational-only and out of render authority.
   - Slice 3B is now partly landed: shared common uniform upload and rainbow hue/logging prep live in a dedicated helper seam, keeping the second overlay cut transport-only and out of mode-owned renderer math.
+  - Slice 3C is now partly landed: mode-program resolution and renderer-owned uniform dispatch live in a dedicated helper seam, keeping the third overlay cut in the dispatch boundary without moving draw-envelope or first-frame authority code.
   - do not start Task 3 by splitting mode-owned math wholesale. Start with the passive/shared seams (`3A`, then `3B`) so the risky authority shell stays small and observable before any deeper dispatch extraction.
 
 4. Expandability groundwork — highest cross-project future payoff after the main visualizer residue tracks are healthier.
