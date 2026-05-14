@@ -48,6 +48,11 @@ from widgets.spotify_visualizer.overlay_render_dispatch import (
     dispatch_mode_uniforms,
     resolve_mode_program,
 )
+from widgets.spotify_visualizer.overlay_frame_shell import (
+    clear_overlay_backbuffer,
+    render_overlay_frame,
+    resolve_frame_fade,
+)
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.base_overlay_widget import (
     PAINTED_FRAME_SHADOW_TUNING,
@@ -1716,35 +1721,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Always clear the backing buffer so stale frames do not linger when
         # the overlay is disabled between mode switches.
-        try:
-            gl.glDisable(gl.GL_SCISSOR_TEST)
-            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        clear_overlay_backbuffer(gl, logger)
 
-        if not self._enabled:
+        fade = resolve_frame_fade(self, logger)
+        if fade is None:
             return
 
-        try:
-            fade = float(self._fade)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-            fade = 0.0
-        if fade <= 0.0:
-            return
-
-        # --- Painted-card GL stencil mask clipping ---
-        # When painted card shadows are enabled the widget is larger than
-        # the visible card by card_shrink_right/bottom pixels. A rounded-rect
-        # stencil mask clips GL fragments to the card boundary without
-        # changing content scale or authored mode behavior.
-        stencil_active = self._begin_painted_card_stencil_clip(rect)
-
-        try:
-            self._render_with_shader(rect, fade)
-        finally:
-            self._end_painted_card_stencil_clip(stencil_active)
+        render_overlay_frame(self, rect, fade, self._render_with_shader)
 
         self.update()
 

@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 Use this checklist whenever a visualizer setting is introduced, removed, renamed, split, or significantly retuned.
 
@@ -59,6 +59,10 @@ Refresh related docs in the same change:
 
 ## 9. Closure Rule
 - For visual/timing-sensitive behavior changes, require runtime verification in addition to passing tests.
+- If the change can affect first-bar / first-frame authority or preset/settings drift, explicitly keep the R-22 family closure checks in view:
+  - run the targeted `tests/test_spotify_visualizer_widget.py` first-frame / stale-reset subset,
+  - keep `tests/test_spotify_visualizer_mode_transition.py` and `tests/test_ghost_isolation.py -k "TestOverlayModeResetIsolation"` green,
+  - sweep logs for `FIRST_FRAME_GUARD`, `before_first_overlay_push`, `after_first_overlay_push`, `MODE_RESET_ASSERT`, and `No technical config available`.
 
 ## 10. New Dev-Gated Mode Checklist
 When introducing or changing a dev-gated visualizer mode, update all of these seams together:

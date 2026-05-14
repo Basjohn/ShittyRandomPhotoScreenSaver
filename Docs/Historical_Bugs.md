@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-05-13
+Last updated: 2026-05-14
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -321,6 +321,22 @@ This is the long-term anti-regression record for the project, not an active task
   - First non-zero display bars have `display_source_generation` and `display_source_activation` matching current `engine_generation` and `engine_activation`
   - Overlay generation/activation match engine generation/activation
   - No stale activation detected
+- **Keep-closed checks:**
+  - Targeted tests:
+    - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
+    - `tests/test_spotify_visualizer_mode_transition.py`
+    - `tests/test_ghost_isolation.py -k "TestOverlayModeResetIsolation"`
+  - Log markers to grep during runtime validation:
+    - `FIRST_FRAME_GUARD`
+    - `before_first_overlay_push`
+    - `after_first_overlay_push`
+    - `MODE_RESET_ASSERT`
+    - `No technical config available`
+  - Healthy sign pattern:
+    - no `FIRST_FRAME_GUARD`
+    - balanced `before_first_overlay_push` / `after_first_overlay_push`
+    - no replay-miss line such as `No technical config available for mode=...`
+    - no reset checkpoints showing non-zero stale display bars before fresh-frame acceptance
 - **Takeaways:**
   - Runtime state that can cause visual bleed must be cleared explicitly during mode transitions
   - Source tracking is valuable for diagnosing state bleed issues in logs
@@ -1345,13 +1361,11 @@ Lines 4-6 shift `bind_setting_signal` updaters in `ui/tabs/media/sine_wave_build
   - Do not attempt rect-shrink or QPainter-clip approaches for this bug family again.
   - The mask inset must account for both the 1-px painted-frame shadow inset (`inset=1.0`) AND the centred card border width (`border_width/2`).
 
-<a id="R-22"></a>
-### [R-22] 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Awaiting Validation)
+<a id="A-06"></a>
+### [A-06] 2026-05-06 — Visualizer Runtime Mode/Preset Bleed Survived Audio Resets (Archived Investigation; superseded by R-22)
 
-- [ ] COMPLETELY FUCKED
-- [x] ACTIVE
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- This archived investigation was superseded by the resolved [R-22](#R-22) entry above.
+- Keep it only as preserved root-cause history from the in-flight investigation period.
 
 - **Symptoms:** Runtime switches between visualizer modes or presets could leave the target mode visually corrupted even when the target settings were logged as applied. Two clear examples were Spline/DevCurve -> Spectrum becoming blown out and uniform, and Spectrum -> Spline/DevCurve becoming flat with weak reactivity. Opening settings and returning could make the same target mode look normal, which proved runtime hot activation was not equivalent to the settings refresh/restart path.
 

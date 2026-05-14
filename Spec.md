@@ -74,6 +74,7 @@ Active ids:
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
 - Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`
 - Mode-program resolution and renderer-owned uniform dispatch: `widgets/spotify_visualizer/overlay_render_dispatch.py`
+- Shared GL frame shell for backbuffer clear, fade gating, and stencil-wrapped render execution: `widgets/spotify_visualizer/overlay_frame_shell.py`
 - Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
 - Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.

@@ -53,6 +53,11 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Mode-fade-out reset ordering, runtime bar-array zeroing before engine prepare, no hidden `_replay_engine_config()` reintroduction, and stale activation/generation rejection before display-bar authority returns.
 - `tests/test_ghost_isolation.py`
   Overlay per-mode state isolation, manual reset bookkeeping, mode-switch cold-reset behavior, and ghost/runtime buckets staying mode-local rather than bleeding across visualizer modes.
+- R-22 closure family
+  For first-bar / first-frame / preset-drift watch work, treat this trio plus runtime log grep as the standing closure set:
+  - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
+  - `tests/test_spotify_visualizer_mode_transition.py`
+  - `tests/test_ghost_isolation.py -k "TestOverlayModeResetIsolation"`
 - `tests/test_devcurve_builder_contract.py`
   Spline Curve builder structure contracts such as bucket composition, scaffold usage, and canonical default-color helper usage.
 - `tests/test_mute_button_widget.py`
