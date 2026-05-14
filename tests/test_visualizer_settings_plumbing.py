@@ -1135,9 +1135,10 @@ class TestCreateTimeRefreshParity:
         from rendering import spotify_widget_creators as creators
 
         class FakeVisualizer:
-            def __init__(self, parent, bar_count):
+            def __init__(self, parent, bar_count, initial_mode=None):
                 self.parent = parent
                 self.bar_count = bar_count
+                self.initial_mode = initial_mode
 
             def set_settings_model(self, model):
                 self.model = model
@@ -1220,6 +1221,86 @@ class TestCreateTimeRefreshParity:
             baseline.resolve_manual_floor("bubble")
         )
         assert vis.model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
+
+    def test_create_spotify_visualizer_widget_applies_activation_before_thread_manager(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+                self.call_order = []
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+                self.activation_payload = activation_payload
+                self.call_order.append("activation_payload")
+
+            def set_thread_manager(self, thread_manager):
+                self.thread_manager = thread_manager
+                self.call_order.append("thread_manager")
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+                self._widgets = {}
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        vis = creators.create_spotify_visualizer_widget(
+            FakeManager(),
+            {
+                "media": {"monitor": "ALL"},
+                "spotify_visualizer": {
+                    "enabled": True,
+                    "mode": "bubble",
+                    "preset_bubble": 0,
+                },
+            },
+            shadows_config={},
+            screen_index=0,
+            thread_manager=object(),
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None
+        assert vis.call_order.index("activation_payload") < vis.call_order.index("thread_manager")
 
 
 class TestDisplayFramePush:

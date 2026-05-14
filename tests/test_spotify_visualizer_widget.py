@@ -629,6 +629,34 @@ def test_runtime_config_bridge_forwards_engine_and_worker_updates(qt_app, qtbot,
 
 
 @pytest.mark.qt
+def test_set_thread_manager_defers_authoritative_replay_until_settings_model_ready(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=24)
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=24, initial_mode="bubble")
+    replay_calls: list[object] = []
+    monkeypatch.setattr(vis, "_replay_engine_config", lambda replay_engine: replay_calls.append(replay_engine))
+
+    first_thread_manager = object()
+    vis.set_thread_manager(first_thread_manager)
+
+    assert engine.thread_manager is first_thread_manager
+    assert replay_calls == []
+
+    vis._settings_model = object()
+    vis._technical_config_cache = {"bubble": {}}
+
+    second_thread_manager = object()
+    vis.set_thread_manager(second_thread_manager)
+
+    assert engine.thread_manager is second_thread_manager
+    assert replay_calls == [engine]
+
+
+@pytest.mark.qt
 def test_spectrum_gpu_push_extras_dict_is_reused(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)

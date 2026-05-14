@@ -14,13 +14,30 @@ from widgets.spotify_visualizer.beat_engine import (
 logger = get_logger(__name__)
 
 
+def _has_authoritative_replay_contract(widget) -> bool:
+    """Return True when engine replay can read authoritative mode config safely."""
+    model = getattr(widget, "_settings_model", None)
+    if model is None:
+        return False
+    cache = getattr(widget, "_technical_config_cache", None)
+    if not isinstance(cache, dict) or not cache:
+        return False
+    mode = getattr(widget, "_vis_mode", None)
+    try:
+        mode_key = str(mode.name).lower()
+    except Exception:
+        return False
+    return mode_key in cache
+
+
 def set_thread_manager(widget, thread_manager: ThreadManager) -> None:
     widget._thread_manager = thread_manager
     try:
         engine = get_shared_spotify_beat_engine(widget._bar_count)
         widget._engine = engine
         engine.set_thread_manager(thread_manager)
-        widget._replay_engine_config(engine)
+        if _has_authoritative_replay_contract(widget):
+            widget._replay_engine_config(engine)
         bind_engine_aliases(widget, engine)
     except Exception:
         logger.debug(

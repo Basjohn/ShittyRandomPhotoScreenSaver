@@ -468,13 +468,6 @@ def create_spotify_visualizer_widget(
                 media_monitor_sel,
             )
 
-        # ThreadManager for animation tick scheduling
-        if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
-            try:
-                vis.set_thread_manager(thread_manager)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
         # Anchor geometry to media widget
         try:
             vis.set_anchor_media_widget(media_widget)
@@ -527,6 +520,15 @@ def create_spotify_visualizer_widget(
                     logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             try:
                 apply_spotify_vis_model_config(vis, model)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+        # ThreadManager propagation may need to replay authoritative technical
+        # config into the shared engine, so wire it only after the startup
+        # activation payload/settings model have been applied.
+        if thread_manager is not None and hasattr(vis, 'set_thread_manager'):
+            try:
+                vis.set_thread_manager(thread_manager)
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
