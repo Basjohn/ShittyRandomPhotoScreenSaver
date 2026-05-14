@@ -62,10 +62,64 @@ Core value: reduces future startup/mode-switch/activation churn while keeping th
   - preserve Sine paused-idle behavior and the existing startup ownership contract,
   - keep preset/runtime activation flow unified through the current resolved payload path.
 - Detailed next slices:
-  - extract remaining activation/config replay helpers that are still mixed into the coordinator without touching GL authority or mode-owned render math,
-  - make startup and settings-refresh application order explicit in one place so thread-manager hookup, activation payload, and technical replay cannot silently drift again,
-  - reduce direct coordinator knowledge of per-mode technical settings in favor of the existing extracted helpers,
+  - Slice A — startup/authoritative config handoff:
+    - tighten the ordering seam across `set_settings_model(...)`, `apply_resolved_activation_payload(...)`, `set_thread_manager(...)`, `_replay_engine_config(...)`, and `_apply_full_runtime_config_for_mode(...)`,
+    - likely home: extend the existing `activation_runtime.py` / `runtime_config.py` seams rather than inventing a new parallel manager,
+    - goal: one explicit authoritative startup/settings-refresh sequence so thread-manager hookup, resolved payload application, and technical replay cannot silently reorder again.
+  - Slice B — external runtime input surface:
+    - reduce coordinator-local knowledge inside `set_thread_manager(...)`, `set_process_supervisor(...)`, `apply_floor_config(...)`, `apply_sensitivity_config(...)`, `apply_vis_mode_config(...)`, `_apply_audio_block_size(...)`, `_resize_bar_buffers(...)`, and `_bind_engine_aliases(...)`,
+    - keep mode-owned technical interpretation in the existing extracted helpers rather than letting the widget coordinator continue to be the fallback owner.
+  - Slice C — mode-cycle / reset orchestration residue:
+    - reduce the remaining glue surface around `_cycle_mode(...)`, `switch_to_mode(...)`, `_reset_visualizer_state(...)`, `_prepare_engine_for_mode_reset(...)`, `_on_mode_cycle_requested(...)`, `_on_mode_fade_out_complete(...)`, and `_check_mode_teardown_ready(...)`,
+    - preserve the current `mode_transition.py` ownership and only move coordinator-local sequencing glue that is still duplicative or implicit.
+  - Slice D — startup/tick ownership boundary cleanup:
+    - keep steady-timer ownership, transition-scoped AnimationManager assistance, and startup reveal gating exactly as-is,
+    - only extract the remaining coordinator bookkeeping around `_ensure_tick_source(...)`, `_enable_animation_tick_listener(...)`, `_disable_animation_tick_listener(...)`, and startup phase bridge accessors if it improves explicit ownership without moving first-frame authority.
   - only touch first-frame/overlay authority code if logs or tests make it necessary again.
+- Required parity or improvement matrix before each slice can land:
+  - startup authority parity:
+    - `create_spotify_visualizer_widget` still applies resolved activation before authoritative technical replay,
+    - no `No technical config available for mode=...` startup replay miss reappears,
+    - startup mode truth stays aligned with shader warmup truth.
+  - preset/settings drift parity:
+    - curated CLEAR-then-APPLY semantics remain intact,
+    - no second post-overlay merge phase appears,
+    - active-mode technical/visual state matches between `from_mapping()` and `from_settings()` for touched families.
+  - first-bar / first-frame authority parity:
+    - `_waiting_for_fresh_engine_frame`, activation/source-generation tracking, and first-overlay push guards remain intact,
+    - no regression in balanced `before_first_overlay_push` / `after_first_overlay_push` behavior,
+    - no new `FIRST_FRAME_GUARD` warnings in affected startup/mode-switch runs.
+  - transition/runtime continuity parity:
+    - the visualizer must not die after transition end,
+    - transition-scoped AnimationManager assistance must still hand control back to the steady timer cleanly,
+    - no regression in steady runtime cadence or mode-switch recovery.
+- Required tests/asserts/synthetics for Task 2:
+  - keep targeted `tests/test_spotify_visualizer_widget.py` parity coverage green for:
+    - startup authority ordering,
+    - mode-switch stale-frame blocking,
+    - preset-cycle bleed/state discard,
+    - transition-end timer handoff,
+    - latency readiness gating when touched.
+  - keep `tests/test_spotify_visualizer_mode_transition.py` green for:
+    - fade-out reset ordering,
+    - engine prepare/reset ordering,
+    - stale activation/generation rejection.
+  - keep the synthetic bleed-family subset runnable whenever reset/replay ordering changes:
+    - `runtime_switch_paths_reset_all_bleed_state_for_all_modes`
+    - `mode_switch_synthetic_audio_matches_fresh_worker_after_reset`
+    - `widget_manager_preset_cycle_discards_real_engine_bleed_state`
+    - `mode_switch_discards_stale_audio_buffer_before_next_frame`
+  - add slice-local asserts/tests whenever extraction changes a sequencing contract:
+    - startup replay should defer until authoritative model/cache exists,
+    - external setter helpers should remain no-op safe when dependencies are absent,
+    - transition listeners should attach/detach with explicit phase ownership.
+- Preferred execution order inside Task 2:
+  1. Slice A,
+  2. Slice B,
+  3. Slice C,
+  4. Slice D only if it still produces a meaningful simplification after A–C.
+- Progress note:
+  - treat Task 2 as parity-first refactor work. Every extraction should either prove strict behavioral parity or land with a small explicit improvement plus targeted regression coverage that demonstrates it.
 - Required validation:
   - targeted `tests/test_spotify_visualizer_widget.py` startup/activation/first-frame subsets,
   - `tests/test_spotify_visualizer_mode_transition.py`,
