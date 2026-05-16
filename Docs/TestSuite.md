@@ -45,6 +45,10 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
+- `tests/test_widget_descriptors.py`
+  Canonical factory-backed widget descriptor metadata, inheritance kwargs, and config-injection contracts.
+- `tests/test_widget_manager_refresh.py`
+  Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), Spectrum GPU extras reuse, and architecture-split engine-resolution regression coverage.
 - `tests/test_visualizer_settings_plumbing.py`

@@ -12,6 +12,7 @@ from widgets.media_widget import MediaPosition
 from widgets.clock_widget import ClockPosition
 from widgets.weather_widget import WeatherPosition
 from widgets.reddit_widget import RedditPosition
+from rendering.widget_descriptors import get_factory_widget_descriptors
 
 
 class _FakeSignal:
@@ -547,3 +548,61 @@ def test_reddit_widgets_support_inheritance_and_limit():
     assert widget2.text_color == (tuple([255, 255, 255, 255]), None)
     assert widget2.raised is True
     assert widget2.started is True
+
+
+def test_factory_widget_descriptors_cover_factory_backed_widget_families():
+    descriptors = get_factory_widget_descriptors()
+    descriptor_names = [descriptor.settings_key for descriptor in descriptors]
+
+    assert descriptor_names == [
+        "clock",
+        "clock2",
+        "clock3",
+        "weather",
+        "media",
+        "reddit",
+        "reddit2",
+        "imgur",
+        "gmail",
+    ]
+
+    gmail = next(descriptor for descriptor in descriptors if descriptor.settings_key == "gmail")
+    reddit2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "reddit2")
+    clock2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "clock2")
+
+    assert gmail.inject_shadows_into_config is True
+    assert reddit2.base_settings_key == "reddit"
+    assert reddit2.base_settings_kwarg == "base_reddit_settings"
+    assert clock2.base_settings_key == "clock"
+    assert clock2.overlay_name == "clock2"
+
+
+def test_setup_all_widgets_routes_gmail_through_descriptor_shadow_injection(monkeypatch):
+    manager = _create_manager()
+    settings = _StubSettingsManager({
+        "gmail": {
+            "enabled": True,
+            "monitor": "ALL",
+        },
+        "shadows": {
+            "enabled": True,
+            "blur_radius": 19,
+        },
+    })
+
+    captured: dict = {}
+
+    class _StubGmailWidget(_BaseStubWidget):
+        def set_thread_manager(self, *_args, **_kwargs):
+            return
+
+    def _fake_create(self, parent, config):
+        captured["config"] = dict(config)
+        return _StubGmailWidget()
+
+    monkeypatch.setattr("rendering.widget_factories.GmailWidgetFactory.create", _fake_create)
+
+    created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+
+    assert "gmail_widget" in created
+    assert captured["config"]["_shadows_config"] == {"enabled": True, "blur_radius": 19}

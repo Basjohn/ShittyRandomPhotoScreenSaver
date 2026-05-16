@@ -99,6 +99,8 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
+| Widget descriptor registry | `rendering/widget_descriptors.py` | Canonical factory-backed widget family metadata: stable widget ids, parent attributes, factory routing, startup-stage intent, inheritance kwargs, and config injection such as Gmail shadow plumbing |
+| Widget setup orchestration | `rendering/widget_setup_all.py` | Shared descriptor-driven creation/reuse/expected-overlay flow for factory-backed widgets plus the remaining Spotify-dependent setup path |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
 | Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths |

@@ -6,6 +6,7 @@ Canonical implementation guidelines for overlay widgets.
 
 ## 1. Ownership and Lifecycle
 - Widget creation/destruction is coordinated through `rendering/widget_manager.py`.
+- Factory-backed widget family metadata is centralized through `rendering/widget_descriptors.py`.
 - Qt object cleanup follows `ResourceManager` conventions.
 - Widget startup/fade behavior must align with shared startup/fade policy.
 
@@ -58,9 +59,10 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 2. Factory registration
 - Add or extend the widget factory in `rendering/widget_factories.py`.
 - Inject `ThreadManager` / `ProcessSupervisor` only through the established factory and manager seams.
+- Add or extend the widget descriptor in `rendering/widget_descriptors.py` so identity, reuse, factory routing, and startup-stage intent are not duplicated elsewhere.
 
 3. Setup orchestration
-- Register creation, expected-overlay tracking, and parent-attribute binding in `rendering/widget_setup_all.py`.
+- Register creation, expected-overlay tracking, and parent-attribute binding through the descriptor-driven path in `rendering/widget_setup_all.py`.
 - If the widget has complex dependent anchoring or staged startup, wire that through `rendering/widget_manager.py` rather than adding a private startup path.
 
 4. Positioning and dependent geometry

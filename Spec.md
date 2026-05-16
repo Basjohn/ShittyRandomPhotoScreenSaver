@@ -14,6 +14,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - `ScreensaverEngine` owns source cycling, transition scheduling, and display lifecycle.
 - `DisplayWidget` is the fullscreen rendering presenter.
 - `WidgetManager` owns overlay widget lifecycle and staged startup coordination.
+- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches.
 
 ## 3. Centralized Ownership Contracts
 - Async business work uses `ThreadManager`.
@@ -117,17 +118,24 @@ Active ids:
 - Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime and then warm the remaining transition programs incrementally. Spotify visualizer GL startup should compile the resolved startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining mode programs incrementally afterward.
 - Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
 
-## 8. Rendering and Input Contract
+## 8. Widget Descriptor / Registry Contract
+- `rendering/widget_descriptors.py` is the canonical registry for factory-backed overlay widgets.
+- Descriptor metadata must own at least widget identity, parent attribute name, factory routing, startup-stage intent, environment gating, and any shared setup extras such as base-settings inheritance or shadow-config injection.
+- `rendering/widget_setup_all.py` may orchestrate creation, reuse, expected-overlay tracking, and ThreadManager injection, but it must not reintroduce handwritten per-family registration truth that duplicates descriptor metadata.
+- Keep stable widget ids and settings keys. New widget families should extend the descriptor registry instead of adding another ad hoc setup branch unless the runtime truly requires a special-case path (for example, Spotify-dependent secondary-stage widgets).
+- Descriptor refactors are parity-first: monitor gating, expected-overlay truth, reuse behavior, factory kwargs, and startup-stage ownership must remain unchanged unless a deliberate migration is documented.
+
+## 9. Rendering and Input Contract
 - GL-first rendering path with safe fallback behavior.
 - Input routing is centralized; no widget-specific ad hoc global key/mouse handlers.
 - Runtime interaction mode behavior must not break settings launch or shutdown paths.
 - In MC builds, Interaction Mode is runtime policy, not an optional session toggle: MC startup and runtime reads treat it as enabled, and MC settings/context-menu surfaces must not offer a disable path that can strand the user outside the intended interaction model.
 
-## 9. Build Variants
+## 10. Build Variants
 - Standard saver and MC maintain separate settings profiles.
 - Frozen preset resolution converges on shared ProgramData curated root.
 
-## 10. Gmail Widget Architecture
+## 11. Gmail Widget Architecture
 
 ### 10.1 Availability
 - Gmail widget is a normal feature and must not be hidden behind a dev-gate or CLI flag.
@@ -196,14 +204,14 @@ Active ids:
 - Reddit widget controls that consume a click without producing a URL, such as the refresh spiral, must not set the central `reddit_handled` URL flag. Only a resolved Reddit URL should request the normal-build helper/exit path.
 - Reddit refresh spiral clicks must queue refresh through the existing Reddit fetch path, respect fetch-in-progress guards, and defer refresh start/result apply/cache regeneration while parent display transitions are pending or active when an existing cached pixmap can be reused. If a transition is requested after a Reddit refresh is already in flight, Reddit must suspend live refresh-spinner repainting immediately and keep result application deferred until idle.
 
-## 11. Spline Curve (`devcurve`) Visualizer
+## 12. Spline Curve (`devcurve`) Visualizer
 
 - `devcurve` is the runtime id for the Spline Curve visualizer.
 - Spline Curve foreground specular uses the existing specular alpha path for idle/play behavior: runtime activity fades the specular multiplier down while paused/idle and back up when playback resumes.
 - The idle specular fade must not introduce a new shader shape mode, full-width blob chaining, or preset value enforcement. Authored preset alpha remains the base value; runtime activity only multiplies it.
 - No credential leakage in tests (all mocked with fake data)
 
-## 12. Documentation Contract
+## 13. Documentation Contract
 - `Index.md`: module map.
 - `Current_Plan.md`: active priorities only.
 - `Docs/Guardrails.md`: policy/rules.

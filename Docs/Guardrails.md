@@ -40,6 +40,11 @@ No shadow frameworks or parallel ownership paths.
 - Fix startup/focus/visibility bugs at root cause.
 - Respect staged startup contracts for dependent overlay widgets.
 
+## 5.1 Widget Registry Safety
+- `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.
+- Do not add new handwritten setup branches in `rendering/widget_setup_all.py` for ordinary factory-backed widgets when the descriptor registry can own the same truth.
+- When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
+
 ## 6. Testing and Validation
 - Add automated regression coverage for changed contracts.
 - Do not treat tests alone as sufficient for visual/timing-sensitive bug closure.

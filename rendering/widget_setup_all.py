@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
+from rendering.widget_descriptors import get_factory_widget_descriptors
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
@@ -73,8 +74,6 @@ def setup_all_widgets(
     border_width = _resolve_card_border_width(widgets_config)
     BaseOverlayWidget.set_global_border_width(border_width)
 
-    base_clock_settings = widgets_config.get('clock', {}) if isinstance(widgets_config, dict) else {}
-    base_reddit_settings = widgets_config.get('reddit', {}) if isinstance(widgets_config, dict) else {}
     shadows_config = widgets_config.get('shadows', {}) if isinstance(widgets_config, dict) else {}
 
     # Reset fade coordination
@@ -89,12 +88,6 @@ def setup_all_widgets(
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             return True
-
-    # Get factory instances
-    clock_factory = mgr._factory_registry.get_factory("clock")
-    weather_factory = mgr._factory_registry.get_factory("weather")
-    media_factory = mgr._factory_registry.get_factory("media")
-    reddit_factory = mgr._factory_registry.get_factory("reddit")
 
     # Helper to (re)register widgets created in prior sessions
     def _reuse_existing_widget(attr_name: str, registry_name: str) -> Optional[QWidget]:
@@ -138,156 +131,46 @@ def setup_all_widgets(
         except Exception as exc:
             logger.warning("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
 
-    # Create clock widgets via factory
-    for settings_key, attr_name, default_pos, default_size in [
-        ('clock', 'clock_widget', 'Top Right', 48),
-        ('clock2', 'clock2_widget', 'Bottom Right', 32),
-        ('clock3', 'clock3_widget', 'Bottom Left', 32),
-    ]:
-        clock_settings = widgets_config.get(settings_key, {})
-        monitor_sel = clock_settings.get('monitor', 'ALL')
+    for descriptor in get_factory_widget_descriptors():
+        if not descriptor.is_enabled_in_environment():
+            continue
+
+        widget_settings = widgets_config.get(descriptor.settings_key, {})
+        monitor_sel = widget_settings.get('monitor', 'ALL')
         show_on_this = _show_on_this_monitor(monitor_sel)
-        logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: monitor_sel={monitor_sel}, screen_index={screen_index}, show_on_this={show_on_this}")
+        logger.debug(
+            "[WIDGET_MANAGER] Descriptor %s: monitor_sel=%s, screen_index=%s, show_on_this=%s",
+            descriptor.settings_key,
+            monitor_sel,
+            screen_index,
+            show_on_this,
+        )
         if not show_on_this:
-            logger.debug(f"[WIDGET_MANAGER] Clock {settings_key}: SKIPPING - not showing on this monitor")
             continue
 
-        if SettingsManager.to_bool(clock_settings.get('enabled', False), False):
-            mgr.add_expected_overlay(settings_key)
+        if SettingsManager.to_bool(widget_settings.get('enabled', False), False):
+            mgr.add_expected_overlay(descriptor.settings_key)
 
-        clock_settings['_default_position'] = default_pos
-        clock_settings['_default_font_size'] = default_size
-
-        widget = _reuse_existing_widget(attr_name, settings_key)
-        if widget is None and clock_factory:
-            widget = clock_factory.create(
-                mgr._parent, clock_settings,
-                settings_key=settings_key,
-                base_clock_settings=base_clock_settings if settings_key != 'clock' else None,
-                shadows_config=shadows_config,
-                overlay_name=settings_key,
-            )
-            if widget:
-                mgr.register_widget(settings_key, widget)
-                created[attr_name] = widget
-                mgr._bind_parent_attribute(attr_name, widget)
-
-        if widget is not None:
-            _ensure_thread_manager(widget, settings_key)
-
-    # Create weather widget via factory
-    weather_settings = widgets_config.get('weather', {})
-    monitor_sel = weather_settings.get('monitor', 'ALL')
-    if _show_on_this_monitor(monitor_sel):
-        if SettingsManager.to_bool(weather_settings.get('enabled', False), False):
-            mgr.add_expected_overlay("weather")
-
-        widget = _reuse_existing_widget('weather_widget', 'weather')
-        if widget is None and weather_factory:
-            widget = weather_factory.create(
-                mgr._parent, weather_settings,
-                shadows_config=shadows_config,
-            )
-            if widget:
-                mgr.register_widget("weather", widget)
-                created['weather_widget'] = widget
-                mgr._bind_parent_attribute('weather_widget', widget)
-
-        if widget is not None:
-            _ensure_thread_manager(widget, 'weather')
-
-    # Create media widget via factory
-    media_settings = widgets_config.get('media', {})
-    monitor_sel = media_settings.get('monitor', 'ALL')
-    if _show_on_this_monitor(monitor_sel):
-        if SettingsManager.to_bool(media_settings.get('enabled', False), False):
-            mgr.add_expected_overlay("media")
-
-        media_widget = _reuse_existing_widget('media_widget', 'media')
-        if media_widget is None and media_factory:
-            media_widget = media_factory.create(
-                mgr._parent, media_settings,
-                shadows_config=shadows_config,
-            )
-            if media_widget:
-                mgr.register_widget("media", media_widget)
-                created['media_widget'] = media_widget
-                mgr._bind_parent_attribute('media_widget', media_widget)
-
-        if media_widget is not None:
-            _ensure_thread_manager(media_widget, 'media')
-
-    # Create reddit widgets via factory (reddit2 inherits styling from reddit1)
-    for settings_key, attr_name in [('reddit', 'reddit_widget'), ('reddit2', 'reddit2_widget')]:
-        reddit_settings = widgets_config.get(settings_key, {})
-        monitor_sel = reddit_settings.get('monitor', 'ALL')
-        if not _show_on_this_monitor(monitor_sel):
-            continue
-
-        if SettingsManager.to_bool(reddit_settings.get('enabled', False), False):
-            mgr.add_expected_overlay(settings_key)
-
-        widget = _reuse_existing_widget(attr_name, settings_key)
-        if widget is None and reddit_factory:
-            widget = reddit_factory.create(
-                mgr._parent, reddit_settings,
-                settings_key=settings_key,
-                base_reddit_settings=base_reddit_settings if settings_key == 'reddit2' else None,
-                shadows_config=shadows_config,
-            )
-            if widget:
-                mgr.register_widget(settings_key, widget)
-                created[attr_name] = widget
-                mgr._bind_parent_attribute(attr_name, widget)
-
-        if widget is not None:
-            _ensure_thread_manager(widget, settings_key)
-
-    # Create Imgur widget via factory (gated by SRPSS_ENABLE_DEV)
-    import os
-    dev_features_enabled = os.getenv('SRPSS_ENABLE_DEV', 'false').lower() == 'true'
-
-    if dev_features_enabled:
-        imgur_factory = mgr._factory_registry.get_factory("imgur")
-        imgur_settings = widgets_config.get('imgur', {})
-        monitor_sel = imgur_settings.get('monitor', 'ALL')
-        if _show_on_this_monitor(monitor_sel):
-            if SettingsManager.to_bool(imgur_settings.get('enabled', False), False):
-                mgr.add_expected_overlay("imgur")
-
-            widget = _reuse_existing_widget('imgur_widget', 'imgur')
-            if widget is None and imgur_factory:
-                widget = imgur_factory.create(
-                    mgr._parent, imgur_settings,
+        widget = _reuse_existing_widget(descriptor.attr_name, descriptor.settings_key)
+        if widget is None:
+            factory = mgr._factory_registry.get_factory(descriptor.factory_name)
+            if factory:
+                factory_config = descriptor.build_widget_config(
+                    widget_settings,
+                    shadows_config=shadows_config,
                 )
+                factory_kwargs = descriptor.build_factory_kwargs(
+                    widgets_config=widgets_config,
+                    shadows_config=shadows_config,
+                )
+                widget = factory.create(mgr._parent, factory_config, **factory_kwargs)
                 if widget:
-                    mgr.register_widget("imgur", widget)
-                    created['imgur_widget'] = widget
-                    mgr._bind_parent_attribute('imgur_widget', widget)
-
-            if widget is not None:
-                _ensure_thread_manager(widget, 'imgur')
-
-    # Create Gmail widget via factory
-    gmail_factory = mgr._factory_registry.get_factory("gmail")
-    gmail_settings = widgets_config.get('gmail', {})
-    monitor_sel = gmail_settings.get('monitor', 'ALL')
-    if _show_on_this_monitor(monitor_sel):
-        if SettingsManager.to_bool(gmail_settings.get('enabled', False), False):
-            mgr.add_expected_overlay("gmail")
-
-        widget = _reuse_existing_widget('gmail_widget', 'gmail')
-        if widget is None and gmail_factory:
-            gmail_settings_with_shadow = dict(gmail_settings) if isinstance(gmail_settings, dict) else {}
-            gmail_settings_with_shadow['_shadows_config'] = shadows_config
-            widget = gmail_factory.create(mgr._parent, gmail_settings_with_shadow)
-            if widget:
-                mgr.register_widget("gmail", widget)
-                created['gmail_widget'] = widget
-                mgr._bind_parent_attribute('gmail_widget', widget)
+                    mgr.register_widget(descriptor.settings_key, widget)
+                    created[descriptor.attr_name] = widget
+                    mgr._bind_parent_attribute(descriptor.attr_name, widget)
 
         if widget is not None:
-            _ensure_thread_manager(widget, 'gmail')
+            _ensure_thread_manager(widget, descriptor.settings_key)
 
     # Create Spotify widgets (require media widget) - still use direct methods
     # as they have complex media widget anchoring logic

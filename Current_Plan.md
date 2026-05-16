@@ -21,7 +21,8 @@ Core value: highest cross-project payoff now that the risky visualizer structura
   - it is the strongest audit-derived architectural improvement that is not just cleanup.
 - Implementation shape:
   - establish a canonical descriptor surface for widget identity, enablement, startup category, factory ownership, settings-tab ownership, and runtime capabilities,
-  - migrate existing widget registration call sites onto the descriptor path without changing user-facing behavior,
+  - landed first slice: factory-backed widget family metadata now lives in `rendering/widget_descriptors.py`, and `rendering/widget_setup_all.py` consumes that registry for clock/weather/media/reddit/imgur/gmail parity,
+  - next slice: extend descriptor ownership into settings-tab ownership / capabilities instead of only runtime setup metadata,
   - keep legacy settings keys and widget ids stable,
   - avoid parallel registries; one descriptor layer should become the source of truth.
 - Required validation:
