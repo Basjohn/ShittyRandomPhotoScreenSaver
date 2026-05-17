@@ -46,11 +46,22 @@ No shadow frameworks or parallel ownership paths.
 - When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
 - `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
+- `WidgetsTab` preview/save truth for standard widget families should prefer descriptor-owned stack-preview/settings-composition metadata over handwritten per-widget UI reads. If a widget field must stay special-cased, document why the descriptor contract could not express it.
 
 ## 5.2 Service-Backed Widget Safety
 - Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.
 - Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, or spinner suspend/resume logic into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
 - Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
+
+## 5.3 Future Custom Layout Edit Mode Safety
+- If a custom widget layout edit mode is introduced later, it must extend the descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
+- Edit mode must pause transitions and visualizer activity while active.
+- Dragging must support explicit snapping; do not rely on freehand placement only.
+- Optional resize in that mode is acceptable only through descriptor-owned widget-logical controls. `Ctrl + wheel` must map to safe authored size axes for that widget, not a blind global scale transform.
+- Any widget that supports edit-mode resize must keep a clear settings-side size reset affordance for recovery.
+- Treat DPR and multi-monitor portability as a first-class constraint. Validate whether saved positions should be stored as logical/grid coordinates instead of brittle raw pixels before rollout.
+- Keep the current runtime positioning system as the fallback path. A future `CUSTOM` slot should stay unavailable/greyed out until the user has actually saved custom coordinates.
+- Prefer safe edit shells/bounds during editing if live widget behavior would introduce churn, network work, or rendering instability.
 
 ## 6. Testing and Validation
 - Add automated regression coverage for changed contracts.

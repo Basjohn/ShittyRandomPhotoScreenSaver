@@ -12,6 +12,19 @@ import os
 from typing import Any, Callable, Dict, Mapping
 
 
+STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
+    "Top Left",
+    "Top Center",
+    "Top Right",
+    "Middle Left",
+    "Center",
+    "Middle Right",
+    "Bottom Left",
+    "Bottom Center",
+    "Bottom Right",
+)
+
+
 @dataclass(frozen=True)
 class FactoryWidgetDescriptor:
     """Descriptor for a factory-backed overlay widget family."""
@@ -277,6 +290,11 @@ class WidgetRuntimeDescriptor:
     service_backed: bool = False
     anchor_dependent: bool = False
     live_refresh_handler: str | None = None
+    position_option_labels: tuple[str, ...] = STANDARD_POSITION_OPTION_LABELS
+    supports_layout_edit_mode: bool = False
+    supports_custom_position_slot: bool = False
+    supports_layout_resize_edit: bool = False
+    requires_size_reset_affordance: bool = False
     dev_feature_env: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
@@ -294,18 +312,30 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_section_id="clock",
         settings_prefixes=("widgets.clock",),
         startup_stage="primary",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock2",
         settings_section_id="clock",
         settings_prefixes=("widgets.clock2",),
         startup_stage="primary",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock3",
         settings_section_id="clock",
         settings_prefixes=("widgets.clock3",),
         startup_stage="primary",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="weather",
@@ -313,6 +343,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_prefixes=("widgets.weather",),
         startup_stage="primary",
         service_backed=True,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="media",
@@ -321,6 +355,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="primary",
         service_backed=True,
         live_refresh_handler="_refresh_media_config",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit",
@@ -329,6 +367,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="primary",
         service_backed=True,
         live_refresh_handler="_refresh_reddit_configs",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
@@ -337,6 +379,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="primary",
         service_backed=True,
         live_refresh_handler="_refresh_reddit_configs",
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
@@ -344,6 +390,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_prefixes=("widgets.gmail",),
         startup_stage="primary",
         service_backed=True,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="imgur",
@@ -351,6 +401,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_prefixes=("widgets.imgur",),
         startup_stage="primary",
         service_backed=True,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetRuntimeDescriptor(
@@ -414,3 +468,196 @@ def get_live_refresh_handlers() -> tuple[str, ...]:
         if descriptor.live_refresh_handler and descriptor.live_refresh_handler not in handlers:
             handlers.append(descriptor.live_refresh_handler)
     return tuple(handlers)
+
+
+def get_widget_runtime_descriptor(widget_id: str) -> WidgetRuntimeDescriptor | None:
+    """Return the canonical runtime descriptor for one widget id."""
+
+    for descriptor in get_widget_runtime_descriptors():
+        if descriptor.widget_id == widget_id:
+            return descriptor
+    return None
+
+
+def get_widget_position_option_labels(widget_id: str) -> tuple[str, ...]:
+    """Return the canonical settings position labels for a widget family."""
+
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return STANDARD_POSITION_OPTION_LABELS
+    return descriptor.position_option_labels
+
+
+@dataclass(frozen=True)
+class WidgetPreviewFieldDescriptor:
+    """Descriptor for one settings-preview field read from WidgetsTab controls."""
+
+    key: str
+    attr_name: str
+    reader: str = "raw"
+    fallback: Any = None
+
+
+def _read_preview_attr(owner: Any, field: WidgetPreviewFieldDescriptor) -> Any:
+    widget = getattr(owner, field.attr_name, None)
+    if widget is None:
+        return field.fallback
+    try:
+        if field.reader == "checked":
+            return bool(widget.isChecked())
+        if field.reader == "value":
+            return widget.value()
+        if field.reader == "current_text":
+            return widget.currentText()
+        if field.reader == "current_text_int":
+            return int(widget.currentText())
+        if field.reader == "clock_display_mode":
+            return "analog" if bool(widget.isChecked()) else "digital"
+        return widget
+    except Exception:
+        return field.fallback
+
+
+@dataclass(frozen=True)
+class WidgetStackPreviewDescriptor:
+    """Descriptor for stack-preview ownership in WidgetsTab."""
+
+    widget_id: str
+    widget_type_key: str
+    status_attr_name: str
+    position_attr_name: str
+    monitor_attr_name: str
+    fields: tuple[WidgetPreviewFieldDescriptor, ...]
+
+    def build_preview_section(self, owner: Any) -> Dict[str, Any]:
+        return {
+            field.key: _read_preview_attr(owner, field)
+            for field in self.fields
+        }
+
+
+WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
+    WidgetStackPreviewDescriptor(
+        widget_id="clock",
+        widget_type_key="clock",
+        status_attr_name="clock_stack_status",
+        position_attr_name="clock_position",
+        monitor_attr_name="clock_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "clock_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("display_mode", "clock_analog_mode", "clock_display_mode", "digital"),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
+            WidgetPreviewFieldDescriptor("monitor", "clock_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "clock_font_size", "value", 48),
+            WidgetPreviewFieldDescriptor("show_seconds", "clock_seconds", "checked", False),
+            WidgetPreviewFieldDescriptor("show_timezone_label", "clock_show_tz", "checked", False),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="clock2",
+        widget_type_key="clock2",
+        status_attr_name="clock2_stack_status",
+        position_attr_name="clock_position",
+        monitor_attr_name="clock2_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "clock2_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
+            WidgetPreviewFieldDescriptor("monitor", "clock2_monitor_combo", "current_text", "ALL"),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="clock3",
+        widget_type_key="clock3",
+        status_attr_name="clock3_stack_status",
+        position_attr_name="clock_position",
+        monitor_attr_name="clock3_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "clock3_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "clock_position", "current_text", "Top Right"),
+            WidgetPreviewFieldDescriptor("monitor", "clock3_monitor_combo", "current_text", "ALL"),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="weather",
+        widget_type_key="weather",
+        status_attr_name="weather_stack_status",
+        position_attr_name="weather_position",
+        monitor_attr_name="weather_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "weather_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "weather_position", "current_text", "Top Left"),
+            WidgetPreviewFieldDescriptor("monitor", "weather_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "weather_font_size", "value", 18),
+            WidgetPreviewFieldDescriptor("show_forecast", "weather_show_forecast", "checked", False),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="media",
+        widget_type_key="media",
+        status_attr_name="media_stack_status",
+        position_attr_name="media_position",
+        monitor_attr_name="media_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "media_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "media_position", "current_text", "Bottom Right"),
+            WidgetPreviewFieldDescriptor("monitor", "media_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "media_font_size", "value", 14),
+            WidgetPreviewFieldDescriptor("artwork_size", "media_artwork_size", "value", 80),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="reddit",
+        widget_type_key="reddit",
+        status_attr_name="reddit_stack_status",
+        position_attr_name="reddit_position",
+        monitor_attr_name="reddit_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "reddit_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "reddit_position", "current_text", "Bottom Right"),
+            WidgetPreviewFieldDescriptor("monitor", "reddit_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "reddit_font_size", "value", 18),
+            WidgetPreviewFieldDescriptor("limit", "reddit_items", "current_text_int", 10),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="reddit2",
+        widget_type_key="reddit2",
+        status_attr_name="reddit2_stack_status",
+        position_attr_name="reddit2_position",
+        monitor_attr_name="reddit2_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "reddit2_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "reddit2_position", "current_text", "Top Left"),
+            WidgetPreviewFieldDescriptor("monitor", "reddit2_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("limit", "reddit2_items", "current_text_int", 4),
+        ),
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="gmail",
+        widget_type_key="gmail",
+        status_attr_name="gmail_stack_status",
+        position_attr_name="gmail_position",
+        monitor_attr_name="gmail_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "gmail_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "gmail_position", "current_text", "Top Left"),
+            WidgetPreviewFieldDescriptor("monitor", "gmail_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("limit", "gmail_limit", "value", 5),
+        ),
+    ),
+)
+
+
+def get_widget_stack_preview_descriptors() -> tuple[WidgetStackPreviewDescriptor, ...]:
+    """Return canonical WidgetsTab stack-preview descriptors."""
+
+    return WIDGET_STACK_PREVIEW_DESCRIPTORS
+
+
+def build_widget_stack_preview_config(owner: Any) -> Dict[str, Dict[str, Any]]:
+    """Build the descriptor-owned WidgetsTab stack-preview config mapping."""
+
+    return {
+        descriptor.widget_id: descriptor.build_preview_section(owner)
+        for descriptor in get_widget_stack_preview_descriptors()
+    }

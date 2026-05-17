@@ -67,7 +67,10 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 
 4. Runtime capability ownership
 - Extend the runtime descriptor metadata in `rendering/widget_descriptors.py` for startup stage, anchor dependence, service-backed status, settings-section ownership, and live-refresh routing.
+- Extend the descriptor-owned preview/settings metadata there too when a standard widget family participates in `WidgetsTab` preview/save composition; do not leave a second handwritten `_build_current_widgets_config()` truth behind for those same fields.
 - If a widget family already has a descriptor-owned live refresh handler, do not add a parallel handwritten prefix route in `rendering/widget_manager.py`.
+- Position-option ownership belongs there too. If a widget exposes the standard settings position chooser, consume descriptor-owned labels/capabilities instead of retyping the same 9-grid list in each settings builder.
+- If a widget may eventually participate in custom edit-mode resize, record that as descriptor-owned capability metadata and keep the size change tied to real widget-owned logical controls, with a clear settings-side reset affordance.
 
 4.1 Service-backed lifecycle mechanics
 - For service-backed widgets such as Gmail, Reddit, and Weather-style overlays, reuse `widgets/service_widget_runtime.py` for parent transition probes, deferred single-shot timers, deferred refresh/result staging, spinner suspend/resume, and timer-stop cleanup where that contract matches.

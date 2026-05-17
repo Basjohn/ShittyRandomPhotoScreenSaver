@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -251,11 +252,7 @@ def build_clock_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Position
     position_row = _aligned_row(layout_layout, "Position:")
     tab.clock_position = StyledComboBox()
-    tab.clock_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right"
-    ])
+    tab.clock_position.addItems(list(get_widget_position_option_labels("clock")))
     tab.clock_position.currentTextChanged.connect(tab._save_settings)
     tab.clock_position.currentTextChanged.connect(tab._update_stack_status)
     tab.clock_position.setMinimumWidth(150)

@@ -46,13 +46,13 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_widget_descriptors.py`
-  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, runtime capability ownership, inheritance kwargs, config-injection contracts, and live-refresh handler routing.
+  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, runtime capability ownership, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
   Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, and timer-stop cleanup.
 - `tests/test_widgets_tab.py`
-  Descriptor-driven WidgetsTab section order, lazy-section build parity, bucket-state persistence, and visualizer/settings integration paths.
+  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, lazy-section build parity, bucket-state persistence, and visualizer/settings integration paths.
 - `tests/test_widget_manager.py`
   Descriptor-driven live settings routing parity, expected-overlay coordination, secondary-stage starter ownership, and manager cleanup behavior.
 - `tests/test_spotify_visualizer_widget.py`

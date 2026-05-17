@@ -24,7 +24,9 @@ Core value: highest cross-project payoff now that the risky visualizer structura
   - landed first slice: factory-backed widget family metadata now lives in `rendering/widget_descriptors.py`, and `rendering/widget_setup_all.py` consumes that registry for clock/weather/media/reddit/imgur/gmail parity,
   - landed second slice: `WidgetsTab` section order, labels, dev gating, and builder routing now consume the descriptor registry instead of a handwritten subtab family list,
   - landed third slice: runtime capability metadata and live settings-refresh ownership now live in `rendering/widget_descriptors.py`, and `WidgetManager` consumes descriptor-owned handler routing instead of handwritten settings-prefix checks,
-  - next slice: expand descriptor capability metadata into the shared async/service-backed widget contract so scheduling/deferred-apply/cache-first mechanics can reuse the same ownership surface,
+  - landed fourth slice: descriptor-owned settings position options and future layout-edit capability metadata now live in `rendering/widget_descriptors.py`, and widget settings builders consume that registry instead of hardcoded 9-grid position lists,
+  - landed fifth slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
+  - next slice: keep deriving settings composition and future expandability metadata from descriptors where that reduces duplicated widget-specific UI/runtime truth without flattening legitimate special cases,
   - keep legacy settings keys and widget ids stable,
   - avoid parallel registries; one descriptor layer should become the source of truth.
 - Required validation:
@@ -102,6 +104,18 @@ Core value: supporting work that pays off once Tasks 1–4 are in motion.
 - The overlay cold-reset path should preserve guardrails even if the GL object is reused. If a reused overlay ever reintroduces stale activation/generation state, the first-frame guard warning should make that visible immediately in logs.
 
 ## Deferred / Not Active
+- Future custom widget edit mode is intentionally not active yet, but the guarded direction is now recorded:
+  - enter/exit from the context menu,
+  - temporarily replace live widgets with safe edit shells/bounds instead of full animated runtime behavior where needed,
+  - pause transitions and visualizer work during edit mode,
+  - support snapping/dragging while editing,
+  - optional resize can be part of that mode if it stays descriptor-owned and widget-logical: `Ctrl + mouse wheel` should adjust widget-owned size axes rather than applying a blind global scale transform,
+  - any widget that participates in edit-mode resize must also expose a clear settings-side size reset affordance for recovery,
+  - save edited positions into a `CUSTOM` slot while preserving the current normal descriptor/grid positioning system as the fallback path,
+  - keep `CUSTOM` greyed out/unavailable until real saved coordinates exist,
+  - restore widgets with fade-in on edit completion,
+  - validate DPR/multi-monitor adaptability explicitly before rollout; do not store brittle raw-pixel assumptions if a more portable logical/grid representation is viable,
+  - do not force resize on widgets whose authored layout cannot safely express it through stable logical controls.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - `card_height.py` centralization is not active work. Revisit only if a focused sizing bug justifies it.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.

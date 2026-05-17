@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import get_widget_position_option_labels
 from widgets.timezone_utils import get_local_timezone
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
@@ -180,11 +181,7 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Position
     weather_pos_row = _aligned_row(source_layout, "Position:")
     tab.weather_position = StyledComboBox()
-    tab.weather_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right"
-    ])
+    tab.weather_position.addItems(list(get_widget_position_option_labels("weather")))
     tab.weather_position.currentTextChanged.connect(tab._save_settings)
     tab.weather_position.currentTextChanged.connect(tab._update_stack_status)
     tab.weather_position.setMinimumWidth(150)

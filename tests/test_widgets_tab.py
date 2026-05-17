@@ -26,6 +26,7 @@ from core.settings.visualizer_mode_registry import (
 )
 from core.settings.visualizer_presets import MODE_KEY_PREFIXES
 from rendering.widget_descriptors import get_widget_settings_section_descriptors
+from rendering.widget_descriptors import get_widget_position_option_labels
 
 
 def _find_toggle(container, text: str) -> QToolButton | None:
@@ -148,6 +149,21 @@ class TestWidgetsTab:
         assert tab.widget_header_shadows_enabled.isChecked() is True
 
         tab.deleteLater()
+
+    def test_widgets_tab_position_combos_follow_descriptor_position_options(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            def _combo_items(combo):
+                return [combo.itemText(i) for i in range(combo.count())]
+
+            assert _combo_items(tab.clock_position) == list(get_widget_position_option_labels("clock"))
+            assert _combo_items(tab.weather_position) == list(get_widget_position_option_labels("weather"))
+            assert _combo_items(tab.media_position) == list(get_widget_position_option_labels("media"))
+            assert _combo_items(tab.reddit_position) == list(get_widget_position_option_labels("reddit"))
+            assert _combo_items(tab.reddit2_position) == list(get_widget_position_option_labels("reddit2"))
+            assert _combo_items(tab.gmail_position) == list(get_widget_position_option_labels("gmail"))
+        finally:
+            tab.deleteLater()
 
 
     def test_widgets_tab_saves_and_roundtrips(self, qt_app, widgets_tab):
@@ -1403,6 +1419,28 @@ def test_widget_bucket_toggles_default_closed(qt_app, settings_manager):
             toggle = _find_toggle(container, text)
             assert toggle is not None, f"Missing bucket toggle: {text}"
             assert toggle.isChecked() is False
+    finally:
+        tab.deleteLater()
+
+
+def test_build_current_widgets_config_uses_live_clock_preview_fields(qt_app, settings_manager):
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab.clock_enabled.setChecked(True)
+        tab.clock_analog_mode.setChecked(True)
+        tab.clock_show_tz.setChecked(True)
+        tab.clock_position.setCurrentText("Bottom Left")
+        tab.clock_monitor_combo.setCurrentText("ALL")
+        tab.clock_font_size.setValue(52)
+
+        built = tab._build_current_widgets_config()["clock"]
+
+        assert built["enabled"] is True
+        assert built["display_mode"] == "analog"
+        assert built["show_timezone_label"] is True
+        assert built["position"] == "Bottom Left"
+        assert built["monitor"] == "ALL"
+        assert built["font_size"] == 52
     finally:
         tab.deleteLater()
 

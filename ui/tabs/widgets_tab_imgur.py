@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -179,11 +180,7 @@ def build_imgur_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Position
     imgur_pos_row = _aligned_row(layout_layout, "Position:")
     tab.imgur_position = StyledComboBox()
-    tab.imgur_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right",
-    ])
+    tab.imgur_position.addItems(list(get_widget_position_option_labels("imgur")))
     tab.imgur_position.setToolTip("Screen position for the Imgur widget")
     tab.imgur_position.currentTextChanged.connect(tab._save_settings)
     tab.imgur_position.setMinimumWidth(150)

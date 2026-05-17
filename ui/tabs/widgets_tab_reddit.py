@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -186,11 +187,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Position
     reddit_pos_row = _aligned_row(layout_layout, "Position:")
     tab.reddit_position = StyledComboBox()
-    tab.reddit_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right",
-    ])
+    tab.reddit_position.addItems(list(get_widget_position_option_labels("reddit")))
     tab.reddit_position.setToolTip("Screen position for the Reddit widget (9-grid layout)")
     tab.reddit_position.currentTextChanged.connect(tab._save_settings)
     tab.reddit_position.currentTextChanged.connect(tab._update_stack_status)
@@ -382,11 +379,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     reddit2_pos_row = _aligned_row(secondary_layout, "Position:")
     tab.reddit2_position = StyledComboBox()
-    tab.reddit2_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right",
-    ])
+    tab.reddit2_position.addItems(list(get_widget_position_option_labels("reddit2")))
     tab.reddit2_position.currentTextChanged.connect(tab._save_settings)
     tab.reddit2_position.currentTextChanged.connect(tab._update_stack_status)
     tab.reddit2_position.setMinimumWidth(150)

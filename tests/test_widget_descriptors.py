@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from rendering.widget_descriptors import (
+    build_widget_stack_preview_config,
     get_factory_widget_descriptors,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_position_option_labels,
     get_widget_runtime_descriptors,
+    get_widget_stack_preview_descriptors,
     get_widget_settings_section_descriptors,
 )
 
@@ -70,6 +73,35 @@ def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
     assert reddit2.settings_section_id == "reddit"
     assert reddit2.live_refresh_handler == "_refresh_reddit_configs"
     assert gmail.service_backed is True
+    assert gmail.supports_layout_edit_mode is True
+    assert gmail.supports_custom_position_slot is True
+    assert gmail.supports_layout_resize_edit is True
+    assert gmail.requires_size_reset_affordance is True
+
+
+def test_widget_position_option_labels_follow_runtime_descriptor_contract():
+    assert get_widget_position_option_labels("gmail") == (
+        "Top Left",
+        "Top Center",
+        "Top Right",
+        "Middle Left",
+        "Center",
+        "Middle Right",
+        "Bottom Left",
+        "Bottom Center",
+        "Bottom Right",
+    )
+    assert get_widget_position_option_labels("unknown-widget") == (
+        "Top Left",
+        "Top Center",
+        "Top Right",
+        "Middle Left",
+        "Center",
+        "Middle Right",
+        "Bottom Left",
+        "Bottom Center",
+        "Bottom Right",
+    )
 
 
 def test_live_refresh_handlers_follow_runtime_descriptors():
@@ -81,3 +113,39 @@ def test_live_refresh_handlers_follow_runtime_descriptors():
     assert get_live_refresh_handlers_for_settings_key("widgets.reddit2.limit") == (
         "_refresh_reddit_configs",
     )
+
+
+def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():
+    descriptors = get_widget_stack_preview_descriptors()
+    clock = next(item for item in descriptors if item.widget_id == "clock")
+
+    assert clock.position_attr_name == "clock_position"
+    assert clock.monitor_attr_name == "clock_monitor_combo"
+    assert {field.key for field in clock.fields} >= {
+        "enabled",
+        "display_mode",
+        "show_timezone_label",
+    }
+
+
+def test_build_widget_stack_preview_config_reads_live_clock_controls(qt_app, settings_manager):
+    from ui.tabs.widgets_tab import WidgetsTab
+
+    tab = WidgetsTab(settings_manager)
+    try:
+        tab.clock_enabled.setChecked(True)
+        tab.clock_analog_mode.setChecked(True)
+        tab.clock_show_tz.setChecked(True)
+        tab.clock_position.setCurrentText("Bottom Left")
+        tab.clock_monitor_combo.setCurrentText("ALL")
+        tab.clock_font_size.setValue(64)
+
+        config = build_widget_stack_preview_config(tab)
+
+        assert config["clock"]["enabled"] is True
+        assert config["clock"]["display_mode"] == "analog"
+        assert config["clock"]["show_timezone_label"] is True
+        assert config["clock"]["position"] == "Bottom Left"
+        assert config["clock"]["font_size"] == 64
+    finally:
+        tab.deleteLater()

@@ -46,7 +46,11 @@ from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     get_preset_slider_attr,
 )
-from rendering.widget_descriptors import get_widget_settings_section_descriptors
+from rendering.widget_descriptors import (
+    build_widget_stack_preview_config,
+    get_widget_settings_section_descriptors,
+    get_widget_stack_preview_descriptors,
+)
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
     TOOLTIP_STYLE,
@@ -1832,28 +1836,19 @@ class WidgetsTab(QWidget):
         try:
             # Build current settings from UI state (not saved yet)
             widgets_config = self._build_current_widgets_config()
-            
-            # Define widget status label mappings
-            status_mappings = [
-                (WidgetType.CLOCK, 'clock_stack_status', 'clock_position', 'clock_monitor_combo'),
-                (WidgetType.WEATHER, 'weather_stack_status', 'weather_position', 'weather_monitor_combo'),
-                (WidgetType.MEDIA, 'media_stack_status', 'media_position', 'media_monitor_combo'),
-                (WidgetType.REDDIT, 'reddit_stack_status', 'reddit_position', 'reddit_monitor_combo'),
-                (WidgetType.REDDIT2, 'reddit2_stack_status', 'reddit2_position', 'reddit2_monitor_combo'),
-                (WidgetType.GMAIL, 'gmail_stack_status', 'gmail_position', 'gmail_monitor_combo'),
-            ]
-            
-            for widget_type, status_attr, pos_attr, mon_attr in status_mappings:
-                status_label = getattr(self, status_attr, None)
-                pos_combo = getattr(self, pos_attr, None)
-                mon_combo = getattr(self, mon_attr, None)
+
+            for descriptor in get_widget_stack_preview_descriptors():
+                status_label = getattr(self, descriptor.status_attr_name, None)
+                pos_combo = getattr(self, descriptor.position_attr_name, None)
+                mon_combo = getattr(self, descriptor.monitor_attr_name, None)
                 
                 if status_label is None or pos_combo is None or mon_combo is None:
                     continue
                 
                 position = pos_combo.currentText()
                 monitor = mon_combo.currentText()
-                
+                widget_type = WidgetType(descriptor.widget_type_key)
+
                 can_stack, message = get_position_status_for_widget(
                     widgets_config, widget_type, position, monitor
                 )
@@ -1881,86 +1876,7 @@ class WidgetsTab(QWidget):
         This creates a config dict that mirrors what would be saved,
         but from current UI values (before save).
         """
-        config = {}
-        
-        # Clock
-        config['clock'] = {
-            'enabled': getattr(self, 'clock_enabled', None) and self.clock_enabled.isChecked(),
-            'mode': getattr(self, 'clock_mode_combo', None) and self.clock_mode_combo.currentText() or 'Digital',
-            'position': getattr(self, 'clock_position', None) and self.clock_position.currentText() or 'Top Right',
-            'monitor': getattr(self, 'clock_monitor_combo', None) and self.clock_monitor_combo.currentText() or 'ALL',
-            'font_size': getattr(self, 'clock_font_size', None) and self.clock_font_size.value() or 48,
-            'show_seconds': getattr(self, 'clock_seconds', None) and self.clock_seconds.isChecked(),
-            'show_timezone_label': getattr(self, 'clock_show_tz_label', None) and self.clock_show_tz_label.isChecked(),
-        }
-        
-        # Clock 2
-        config['clock2'] = {
-            'enabled': getattr(self, 'clock2_enabled', None) and self.clock2_enabled.isChecked(),
-            'monitor': getattr(self, 'clock2_monitor_combo', None) and self.clock2_monitor_combo.currentText() or 'ALL',
-        }
-        
-        # Clock 3
-        config['clock3'] = {
-            'enabled': getattr(self, 'clock3_enabled', None) and self.clock3_enabled.isChecked(),
-            'monitor': getattr(self, 'clock3_monitor_combo', None) and self.clock3_monitor_combo.currentText() or 'ALL',
-        }
-        
-        # Weather
-        config['weather'] = {
-            'enabled': getattr(self, 'weather_enabled', None) and self.weather_enabled.isChecked(),
-            'position': getattr(self, 'weather_position', None) and self.weather_position.currentText() or 'Top Left',
-            'monitor': getattr(self, 'weather_monitor_combo', None) and self.weather_monitor_combo.currentText() or 'ALL',
-            'font_size': getattr(self, 'weather_font_size', None) and self.weather_font_size.value() or 18,
-            'show_forecast': getattr(self, 'weather_show_forecast', None) and self.weather_show_forecast.isChecked(),
-        }
-        
-        # Media
-        config['media'] = {
-            'enabled': getattr(self, 'media_enabled', None) and self.media_enabled.isChecked(),
-            'position': getattr(self, 'media_position', None) and self.media_position.currentText() or 'Bottom Right',
-            'monitor': getattr(self, 'media_monitor_combo', None) and self.media_monitor_combo.currentText() or 'ALL',
-            'font_size': getattr(self, 'media_font_size', None) and self.media_font_size.value() or 14,
-            'artwork_size': getattr(self, 'media_artwork_size', None) and self.media_artwork_size.value() or 80,
-        }
-        
-        # Reddit
-        reddit_limit = 10
-        reddit_items_combo = getattr(self, 'reddit_items', None)
-        if reddit_items_combo is not None:
-            try:
-                reddit_limit = int(reddit_items_combo.currentText())
-            except Exception as e:
-                logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-                reddit_limit = 10
-        config['reddit'] = {
-            'enabled': getattr(self, 'reddit_enabled', None) and self.reddit_enabled.isChecked(),
-            'position': getattr(self, 'reddit_position', None) and self.reddit_position.currentText() or 'Bottom Right',
-            'monitor': getattr(self, 'reddit_monitor_combo', None) and self.reddit_monitor_combo.currentText() or 'ALL',
-            'font_size': getattr(self, 'reddit_font_size', None) and self.reddit_font_size.value() or 18,
-            'limit': reddit_limit,
-        }
-        
-        # Reddit 2
-        config['reddit2'] = {
-            'enabled': getattr(self, 'reddit2_enabled', None) and self.reddit2_enabled.isChecked(),
-            'position': getattr(self, 'reddit2_position', None) and self.reddit2_position.currentText() or 'Top Left',
-            'monitor': getattr(self, 'reddit2_monitor_combo', None) and self.reddit2_monitor_combo.currentText() or 'ALL',
-            'limit': 4,
-        }
-        try:
-            if hasattr(self, 'reddit2_items'):
-                config['reddit2']['limit'] = int(self.reddit2_items.currentText())
-        except Exception as e:
-            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
-        
-        # Gmail
-        config['gmail'] = {
-            'enabled': getattr(self, 'gmail_enabled', None) and self.gmail_enabled.isChecked(),
-            'position': getattr(self, 'gmail_position', None) and self.gmail_position.currentText() or 'Top Left',
-            'monitor': getattr(self, 'gmail_monitor_combo', None) and self.gmail_monitor_combo.currentText() or 'ALL',
-            'limit': getattr(self, 'gmail_limit', None) and self.gmail_limit.value() or 5,
-        }
+        config = build_widget_stack_preview_config(self)
 
         # Spotify Visualizer
         stored_widgets = self._settings.get("widgets", {}) or {}

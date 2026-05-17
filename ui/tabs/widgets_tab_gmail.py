@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from rendering.widget_descriptors import get_widget_position_option_labels
 from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
 from ui.styled_popup import ColorSwatchButton, StyledPopup
@@ -663,11 +664,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Position
     pos_row = _aligned_row(layout_inner, "Position:")
     tab.gmail_position = StyledComboBox()
-    tab.gmail_position.addItems([
-        "Top Left", "Top Center", "Top Right",
-        "Middle Left", "Center", "Middle Right",
-        "Bottom Left", "Bottom Center", "Bottom Right",
-    ])
+    tab.gmail_position.addItems(list(get_widget_position_option_labels("gmail")))
     tab.gmail_position.currentTextChanged.connect(tab._save_settings)
     tab.gmail_position.currentTextChanged.connect(tab._update_stack_status)
     tab.gmail_position.setMinimumWidth(150)
