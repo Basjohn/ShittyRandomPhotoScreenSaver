@@ -125,6 +125,31 @@ def test_analog_clock_framed_metrics_reduce_timezone_size_and_keep_extra_gap(qtb
     )
 
 
+def test_analog_clock_framed_metrics_keep_larger_outer_ring_margin_than_unframed(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_display_mode("analog")
+    clock.resize(320, 360)
+
+    clock.set_show_background(True)
+    framed_metrics = clock._compute_analog_layout_metrics()
+    assert framed_metrics is not None
+
+    clock.set_show_background(False)
+    unframed_metrics = clock._compute_analog_layout_metrics()
+    assert unframed_metrics is not None
+
+    framed_outer_margin = framed_metrics.card_radius - framed_metrics.numeral_outer_radius
+    unframed_outer_margin = unframed_metrics.card_radius - unframed_metrics.numeral_outer_radius
+
+    assert framed_outer_margin > unframed_outer_margin
+
+
 def test_analog_clock_unframed_metrics_use_tighter_numeral_shadow_offset(qtbot):
     parent = QWidget()
     parent.resize(800, 600)

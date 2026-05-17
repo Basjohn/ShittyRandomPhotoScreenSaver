@@ -102,7 +102,7 @@ Active ids:
 - `widgets.shadows.enabled`, `widgets.shadows.text_enabled`, and `widgets.shadows.header_enabled` are the runtime shadow controls for framed widgets.
 - Framed widgets that use the painted shadow path must explicitly clear transparent backing regions before repainting cached shadow output so stale shadow pixels cannot accumulate in the gutter.
 - Direct `QWidget` implementations that do not inherit `BaseOverlayWidget` but need framed-card parity, such as the Spotify visualizer, must mirror the same painted-frame contract explicitly rather than assuming inheritance.
-- Analog clock cache/paint geometry should stay explicit and shared: the analogue card ring is intentionally larger than the inner face, the numerals intentionally smaller than the old digital-proportional fallback, and numeral placement uses an authored optical layout map rather than plain text centering so wide Roman numerals such as `VIII` remain visually balanced across future resizing work.
+- Analog clock cache/paint geometry should stay explicit and shared: the analogue card ring is intentionally larger than the inner face, framed mode keeps extra outer-ring breathing room between numerals and the card edge, the numerals are intentionally smaller than the old digital-proportional fallback, and numeral placement uses an authored optical layout map rather than plain text centering so wide Roman numerals such as `VIII` remain visually balanced across future resizing work.
 
 ## 6. Preset Architecture Contract
 - Authored curated source: `presets/visualizer_modes/`.

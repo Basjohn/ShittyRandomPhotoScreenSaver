@@ -137,7 +137,7 @@ Living map of the current SRPSS codebase.
 | Shadow tuning | `core/settings/shadow_tuning.py` | Canonical `shadowtuning.json` defaults for card, text, header, control, icon, and Spotify volume-slider painted shadows |
 | Volume slider | `widgets/spotify_volume_widget.py` | Spotify volume overlay anchored to the media card, with local canonical flush-timer reset ownership, provider retargeting, deferred Core Audio writes, and painted-frame/track shadow rendering |
 | Visualizer parity | `widgets/spotify_visualizer_widget.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering |
-| Analog clock geometry | `widgets/clock_widget.py` | Shared analogue face/card/numeral layout metrics, authored optical Roman-numeral placement map, and below-face timezone spacing contract |
+| Analog clock geometry | `widgets/clock_widget.py` | Shared analogue face/card/numeral layout metrics, authored optical Roman-numeral placement map, framed outer-ring breathing-room contract, and below-face timezone spacing contract |
 
 ## Source Ingestion
 
