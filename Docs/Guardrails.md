@@ -45,9 +45,12 @@ No shadow frameworks or parallel ownership paths.
 - Do not add new handwritten setup branches in `rendering/widget_setup_all.py` for ordinary factory-backed widgets when the descriptor registry can own the same truth.
 - When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
+- `ui/tabs/widgets_tab.py` should also prefer descriptor-owned standard-section signal-block target collection during load-time population instead of re-scanning standard section attr names inline. Keep Gmail-only and other genuinely special signal-block groups explicit only where the descriptor layer would not improve clarity.
 - `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
 - Descriptor-owned service-runtime contract participation also belongs in `rendering/widget_descriptors.py`. Do not widen shared service-backed behavior based only on `service_backed=True` when the finer-grained contract can be recorded explicitly.
 - `WidgetsTab` preview/save truth for standard widget families should prefer descriptor-owned stack-preview/settings-composition metadata over handwritten per-widget UI reads. If a widget field must stay special-cased, document why the descriptor contract could not express it.
+- `WidgetsTab` should also prefer descriptor-owned application of standard saved section payloads once persisted-key ownership already lives in the descriptor registry. Keep special persistence merges, such as visualizer mode-preserving save behavior, explicit rather than hiding them in a generic helper.
+- Do not leave the Defaults section as a half-special inline branch once descriptor-owned section metadata can express it. Shared widget shadow toggles and card-border-width persistence should travel through the same descriptor-owned build/load/save path as the other standard sections.
 
 ## 5.2 Service-Backed Widget Safety
 - Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.

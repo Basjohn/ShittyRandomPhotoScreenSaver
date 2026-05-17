@@ -34,6 +34,13 @@ Use this checklist whenever a visualizer setting is introduced, removed, renamed
   - `widgets/spotify_visualizer_widget.py`
   - `widgets/spotify_bars_gl_overlay.py`
   - relevant renderer module
+- If the change touches visualizer card height or card geometry ownership, explicitly assess:
+  - `widgets/spotify_visualizer/card_height.py`
+  - `widgets/spotify_visualizer/mode_transition.py`
+  - `rendering/widget_manager.py`
+  - `widgets/spotify_visualizer/overlay_mask.py`
+  - `widgets/spotify_visualizer/overlay_frame_shell.py`
+  and confirm the card-height decision does not break stencil inset math, painted-card border alignment, or perceived mode scale.
 
 ## 6. Presets and Tooling
 - Update curated preset payloads if required.
@@ -48,6 +55,7 @@ Add/update coverage for:
 - runtime bridge transport,
 - preset repair/reindex contract,
 - compatibility with future/unknown-style mode key prefixes.
+- If card height, card shell, or visualizer geometry changes are involved, keep `tests/test_stencil_mask_alignment.py` green and re-run the relevant visualizer runtime reset/first-frame subsets before sign-off.
 
 ## 8. Docs
 Refresh related docs in the same change:

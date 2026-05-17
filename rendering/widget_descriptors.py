@@ -186,6 +186,11 @@ class WidgetSettingsSectionDescriptor:
     loader_module: str | None = None
     loader_name: str | None = None
     loader_guard_attrs: tuple[str, ...] = ()
+    saver_module: str | None = None
+    saver_name: str | None = None
+    saver_guard_attrs: tuple[str, ...] = ()
+    persisted_widget_keys: tuple[str, ...] = ()
+    signal_block_attrs: tuple[str, ...] = ()
     method_name: str | None = None
     dev_feature_env: str | None = None
 
@@ -216,6 +221,19 @@ class WidgetSettingsSectionDescriptor:
             return False
         return all(hasattr(owner, attr_name) for attr_name in self.loader_guard_attrs)
 
+    def resolve_saver(self) -> Callable[..., Any] | None:
+        """Return the concrete settings-saver callable for this section, if any."""
+        if self.saver_module and self.saver_name:
+            module = import_module(self.saver_module)
+            return getattr(module, self.saver_name)
+        return None
+
+    def can_save_for_owner(self, owner: Any) -> bool:
+        """Return True when the owning tab has the controls required for this section saver."""
+        if not self.saver_guard_attrs:
+            return False
+        return all(hasattr(owner, attr_name) for attr_name in self.saver_guard_attrs)
+
 
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
     WidgetSettingsSectionDescriptor(
@@ -228,6 +246,18 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_clock",
         loader_name="load_clock_settings",
         loader_guard_attrs=("clock_enabled",),
+        saver_module="ui.tabs.widgets_tab_clock",
+        saver_name="save_clock_settings",
+        saver_guard_attrs=("clock_enabled",),
+        persisted_widget_keys=("clock", "clock2", "clock3"),
+        signal_block_attrs=(
+            "clock_enabled", "clock_format", "clock_seconds", "clock_timezone",
+            "clock_show_tz", "clock_position", "clock_font_combo", "clock_font_size",
+            "clock_margin", "clock_show_background", "clock_bg_opacity",
+            "clock_border_opacity", "clock_monitor_combo",
+            "clock2_enabled", "clock2_timezone", "clock2_monitor_combo",
+            "clock3_enabled", "clock3_timezone", "clock3_monitor_combo",
+        ),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="weather",
@@ -239,6 +269,16 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_weather",
         loader_name="load_weather_settings",
         loader_guard_attrs=("weather_enabled",),
+        saver_module="ui.tabs.widgets_tab_weather",
+        saver_name="save_weather_settings",
+        saver_guard_attrs=("weather_enabled",),
+        persisted_widget_keys=("weather",),
+        signal_block_attrs=(
+            "weather_enabled", "weather_location", "weather_position",
+            "weather_font_combo", "weather_font_size", "weather_show_forecast",
+            "weather_show_background", "weather_bg_opacity", "weather_border_opacity",
+            "weather_margin", "weather_monitor_combo",
+        ),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="media",
@@ -250,6 +290,18 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_media",
         loader_name="load_media_settings",
         loader_guard_attrs=("media_enabled", "vis_enabled_checkbox"),
+        saver_module="ui.tabs.widgets_tab_media",
+        saver_name="save_media_settings",
+        saver_guard_attrs=("media_enabled", "vis_enabled_checkbox"),
+        persisted_widget_keys=("media", "spotify_visualizer"),
+        signal_block_attrs=(
+            "media_enabled", "media_position", "media_monitor_combo",
+            "media_font_combo", "media_font_size", "media_margin",
+            "media_show_background", "media_bg_opacity", "media_border_opacity",
+            "media_artwork_size", "media_rounded_artwork",
+            "media_show_header_frame", "media_show_controls",
+            "media_spotify_volume_enabled",
+        ),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="visualizers",
@@ -269,6 +321,22 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_reddit",
         loader_name="load_reddit_settings",
         loader_guard_attrs=("reddit_enabled",),
+        saver_module="ui.tabs.widgets_tab_reddit",
+        saver_name="save_reddit_settings",
+        saver_guard_attrs=("reddit_enabled",),
+        persisted_widget_keys=("reddit", "reddit2"),
+        signal_block_attrs=(
+            "reddit_enabled", "reddit_subreddit", "reddit_items",
+            "reddit_position", "reddit_monitor_combo",
+            "reddit_font_combo", "reddit_font_size", "reddit_margin",
+            "reddit_header_logo_px_adjust",
+            "reddit_show_background", "reddit_show_separators",
+            "reddit_show_refresh_spiral",
+            "reddit_bg_opacity", "reddit_border_opacity",
+            "reddit2_enabled", "reddit2_subreddit", "reddit2_items",
+            "reddit2_position", "reddit2_monitor_combo",
+            "reddit_exit_on_click",
+        ),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="gmail",
@@ -280,6 +348,10 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_gmail",
         loader_name="load_gmail_settings",
         loader_guard_attrs=("gmail_enabled",),
+        saver_module="ui.tabs.widgets_tab_gmail",
+        saver_name="save_gmail_settings",
+        saver_guard_attrs=("gmail_enabled",),
+        persisted_widget_keys=("gmail",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="imgur",
@@ -291,6 +363,16 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         loader_module="ui.tabs.widgets_tab_imgur",
         loader_name="load_imgur_settings",
         loader_guard_attrs=("imgur_enabled",),
+        saver_module="ui.tabs.widgets_tab_imgur",
+        saver_name="save_imgur_settings",
+        saver_guard_attrs=("imgur_enabled",),
+        persisted_widget_keys=("imgur",),
+        signal_block_attrs=(
+            "imgur_enabled", "imgur_position", "imgur_monitor_combo",
+            "imgur_update_interval", "imgur_grid_rows", "imgur_grid_cols",
+            "imgur_show_background", "imgur_bg_opacity", "imgur_border_opacity",
+            "imgur_margin",
+        ),
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetSettingsSectionDescriptor(
@@ -298,7 +380,31 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         button_label="Defaults",
         button_attr_name="_btn_defaults",
         container_attr_name="_defaults_container",
-        method_name="_build_defaults_section",
+        builder_module="ui.tabs.widgets_tab_defaults",
+        builder_name="build_defaults_ui",
+        loader_module="ui.tabs.widgets_tab_defaults",
+        loader_name="load_defaults_settings",
+        loader_guard_attrs=(
+            "widget_shadows_enabled",
+            "widget_text_shadows_enabled",
+            "widget_header_shadows_enabled",
+            "card_border_width_spin",
+        ),
+        saver_module="ui.tabs.widgets_tab_defaults",
+        saver_name="save_defaults_settings",
+        saver_guard_attrs=(
+            "widget_shadows_enabled",
+            "widget_text_shadows_enabled",
+            "widget_header_shadows_enabled",
+            "card_border_width_spin",
+        ),
+        persisted_widget_keys=("shadows", "global"),
+        signal_block_attrs=(
+            "widget_shadows_enabled",
+            "widget_text_shadows_enabled",
+            "widget_header_shadows_enabled",
+            "card_border_width_spin",
+        ),
     ),
 )
 
@@ -311,6 +417,133 @@ def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDesc
         for descriptor in WIDGET_SETTINGS_SECTION_DESCRIPTORS
         if descriptor.is_enabled_in_environment()
     )
+
+
+def get_widget_section_signal_block_attrs() -> tuple[str, ...]:
+    """Return canonical WidgetsTab signal-block attrs for descriptor-owned sections."""
+
+    attrs: list[str] = []
+    for descriptor in get_widget_settings_section_descriptors():
+        for attr_name in descriptor.signal_block_attrs:
+            if attr_name not in attrs:
+                attrs.append(attr_name)
+    return tuple(attrs)
+
+
+def collect_widget_section_signal_block_targets(
+    owner: Any,
+    *,
+    extra_attr_names: tuple[str, ...] = (),
+) -> tuple[Any, ...]:
+    """Return deduplicated signal-block-capable controls for descriptor-owned sections.
+
+    `WidgetsTab` still owns genuinely special signal-block groups such as
+    Gmail-specific control buckets, but standard section signal blocking should
+    come through this descriptor-owned helper instead of repeating attribute
+    scans inline at each load site.
+    """
+
+    targets: list[Any] = []
+    seen_ids: set[int] = set()
+    attr_names = list(get_widget_section_signal_block_attrs())
+    attr_names.extend(extra_attr_names)
+
+    for attr_name in attr_names:
+        widget = getattr(owner, attr_name, None)
+        if widget is None or not hasattr(widget, "blockSignals"):
+            continue
+        widget_id = id(widget)
+        if widget_id in seen_ids:
+            continue
+        seen_ids.add(widget_id)
+        targets.append(widget)
+
+    return tuple(targets)
+
+
+def load_widget_sections(
+    owner: Any,
+    widgets_config: Mapping[str, Any],
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> None:
+    """Run descriptor-owned WidgetsTab section loaders for sections present on the owner."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    for descriptor in descriptor_iter:
+        if not descriptor.can_load_for_owner(owner):
+            continue
+        loader = descriptor.resolve_loader()
+        if loader is None:
+            continue
+        loader(owner, widgets_config)
+
+
+def collect_widget_section_save_results(
+    owner: Any,
+    existing_widgets: Mapping[str, Any],
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> Dict[str, Any]:
+    """Collect descriptor-owned WidgetsTab section save results, preserving unbuilt sections."""
+
+    results: Dict[str, Any] = {}
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+
+    for descriptor in descriptor_iter:
+        keys = descriptor.persisted_widget_keys
+        if not keys:
+            continue
+
+        if descriptor.can_save_for_owner(owner):
+            saver = descriptor.resolve_saver()
+            if saver is None:
+                continue
+            result = saver(owner)
+            if len(keys) == 1:
+                results[keys[0]] = result
+            else:
+                if not isinstance(result, tuple) or len(result) != len(keys):
+                    raise ValueError(
+                        f"Saver for section {descriptor.section_id} returned unexpected payload shape"
+                    )
+                for key_name, value in zip(keys, result):
+                    results[key_name] = value
+            continue
+
+        for key_name in keys:
+            existing_value = existing_widgets.get(key_name, {})
+            if isinstance(existing_value, Mapping):
+                results[key_name] = dict(existing_value)
+            else:
+                results[key_name] = existing_value
+
+    return results
+
+
+def apply_widget_section_save_results(
+    widgets_config: Dict[str, Any],
+    section_results: Mapping[str, Any],
+    *,
+    exclude_keys: tuple[str, ...] = (),
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> Dict[str, Any]:
+    """Apply descriptor-owned save results back into a widgets config mapping.
+
+    This keeps standard section persistence ownership aligned with the same
+    descriptor registry that already owns the build/load/save routing. Callers
+    can exclude genuinely special keys, such as visualizer payloads that still
+    need custom merge semantics.
+    """
+
+    exclude = set(exclude_keys)
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+
+    for descriptor in descriptor_iter:
+        for key_name in descriptor.persisted_widget_keys:
+            if key_name in exclude or key_name not in section_results:
+                continue
+            widgets_config[key_name] = section_results[key_name]
+
+    return widgets_config
 
 
 @dataclass(frozen=True)
@@ -630,6 +863,56 @@ class WidgetStackPreviewDescriptor:
         }
 
 
+@dataclass(frozen=True)
+class WidgetStackStatusTarget:
+    """Resolved WidgetsTab stack-status target for one descriptor-owned widget."""
+
+    widget_type_key: str
+    status_label: Any
+    position_value: str
+    monitor_value: str
+
+
+@dataclass(frozen=True)
+class WidgetDefaultInitDescriptor:
+    """Descriptor for one standard WidgetsTab default-backed attribute."""
+
+    attr_name: str
+    section: str
+    key: str
+    value_kind: str
+    fallback: Any
+
+
+WIDGET_DEFAULT_INIT_DESCRIPTORS: tuple[WidgetDefaultInitDescriptor, ...] = (
+    WidgetDefaultInitDescriptor("_global_card_border_width", "global", "card_border_width_px", "int", 3),
+    WidgetDefaultInitDescriptor("_clock_color", "clock", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_weather_color", "weather", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_clock_border_color", "clock", "border_color", "color", [128, 128, 128, 255]),
+    WidgetDefaultInitDescriptor("_clock_bg_color", "clock", "bg_color", "color", [64, 64, 64, 255]),
+    WidgetDefaultInitDescriptor("_weather_bg_color", "weather", "bg_color", "color", [64, 64, 64, 255]),
+    WidgetDefaultInitDescriptor("_weather_border_color", "weather", "border_color", "color", [128, 128, 128, 255]),
+    WidgetDefaultInitDescriptor("_media_color", "media", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_media_bg_color", "media", "bg_color", "color", [64, 64, 64, 255]),
+    WidgetDefaultInitDescriptor("_media_border_color", "media", "border_color", "color", [128, 128, 128, 255]),
+    WidgetDefaultInitDescriptor("_media_volume_fill_color", "media", "spotify_volume_fill_color", "color", [66, 66, 66, 255]),
+    WidgetDefaultInitDescriptor("_spotify_vis_fill_color", "spotify_visualizer", "bar_fill_color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_spotify_vis_border_color", "spotify_visualizer", "bar_border_color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_reddit_color", "reddit", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_reddit_bg_color", "reddit", "bg_color", "color", [64, 64, 64, 255]),
+    WidgetDefaultInitDescriptor("_reddit_border_color", "reddit", "border_color", "color", [128, 128, 128, 255]),
+    WidgetDefaultInitDescriptor("_gmail_color", "gmail", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_gmail_bg_color", "gmail", "bg_color", "color", [35, 35, 35, 255]),
+    WidgetDefaultInitDescriptor("_gmail_border_color", "gmail", "border_color", "color", [255, 255, 255, 255]),
+    WidgetDefaultInitDescriptor("_gmail_separator_color", "gmail", "separator_color", "color", [200, 200, 200, 40]),
+    WidgetDefaultInitDescriptor("_gmail_boundary_separator_color", "gmail", "boundary_separator_color", "color", [180, 180, 180, 80]),
+    WidgetDefaultInitDescriptor("_imgur_color", "imgur", "color", "color", [255, 255, 255, 230]),
+    WidgetDefaultInitDescriptor("_imgur_bg_color", "imgur", "bg_color", "color", [35, 35, 35, 255]),
+    WidgetDefaultInitDescriptor("_imgur_border_color", "imgur", "border_color", "color", [255, 255, 255, 255]),
+    WidgetDefaultInitDescriptor("_media_artwork_size", "media", "artwork_size", "int", 200),
+)
+
+
 WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
     WidgetStackPreviewDescriptor(
         widget_id="clock",
@@ -748,6 +1031,12 @@ def get_widget_stack_preview_descriptors() -> tuple[WidgetStackPreviewDescriptor
     return WIDGET_STACK_PREVIEW_DESCRIPTORS
 
 
+def get_widget_default_init_descriptors() -> tuple[WidgetDefaultInitDescriptor, ...]:
+    """Return canonical WidgetsTab default-backed attribute descriptors."""
+
+    return WIDGET_DEFAULT_INIT_DESCRIPTORS
+
+
 def build_widget_stack_preview_config(owner: Any) -> Dict[str, Dict[str, Any]]:
     """Build the descriptor-owned WidgetsTab stack-preview config mapping."""
 
@@ -755,3 +1044,24 @@ def build_widget_stack_preview_config(owner: Any) -> Dict[str, Dict[str, Any]]:
         descriptor.widget_id: descriptor.build_preview_section(owner)
         for descriptor in get_widget_stack_preview_descriptors()
     }
+
+
+def collect_widget_stack_status_targets(owner: Any) -> tuple[WidgetStackStatusTarget, ...]:
+    """Return descriptor-owned stack-status targets present on the owner."""
+
+    targets: list[WidgetStackStatusTarget] = []
+    for descriptor in get_widget_stack_preview_descriptors():
+        status_label = getattr(owner, descriptor.status_attr_name, None)
+        pos_combo = getattr(owner, descriptor.position_attr_name, None)
+        mon_combo = getattr(owner, descriptor.monitor_attr_name, None)
+        if status_label is None or pos_combo is None or mon_combo is None:
+            continue
+        targets.append(
+            WidgetStackStatusTarget(
+                widget_type_key=descriptor.widget_type_key,
+                status_label=status_label,
+                position_value=pos_combo.currentText(),
+                monitor_value=mon_combo.currentText(),
+            )
+        )
+    return tuple(targets)

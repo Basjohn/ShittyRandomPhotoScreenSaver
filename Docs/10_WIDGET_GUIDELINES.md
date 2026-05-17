@@ -97,6 +97,9 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 9. Settings UI
 - Add the settings builder/load/save wiring in `ui/tabs/widgets_tab.py` and the relevant `ui/tabs/widgets_tab_*.py` helper module.
 - Extend the descriptor-owned WidgetsTab section registry in `rendering/widget_descriptors.py` so section order, labels, gating, and builder routing stay centralized.
+- If the widget adds ordinary load-time signal-blocked controls, extend descriptor-owned standard-section signal-block metadata/helpers instead of retyping attr scans inside `ui/tabs/widgets_tab.py`.
+- If the widget participates in standard section save/load ownership, prefer descriptor-owned persisted-key application helpers instead of reassigning those saved payloads manually inside `ui/tabs/widgets_tab.py`.
+- If the work touches shared widget defaults UI, keep the Defaults section on the same descriptor-owned builder/load/save path rather than growing a separate inline special-case subsection.
 - Respect settings-dialog flicker guardrails: no constructor-time show/hide churn, no broad update disabling, and preserve bucket-state persistence if the widget uses buckets.
 
 10. Display/runtime integration

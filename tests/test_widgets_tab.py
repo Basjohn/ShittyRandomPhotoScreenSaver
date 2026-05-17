@@ -254,6 +254,168 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_widgets_tab_load_settings_uses_descriptor_signal_block_helper(self, qt_app, settings_manager, monkeypatch):
+        tab = WidgetsTab(settings_manager)
+        try:
+            calls: list[tuple[object, tuple[str, ...]]] = []
+
+            def _fake_collect(owner, *, extra_attr_names=()):
+                calls.append((owner, tuple(extra_attr_names)))
+                return ()
+
+            monkeypatch.setattr(
+                "ui.tabs.widgets_tab.collect_widget_section_signal_block_targets",
+                _fake_collect,
+            )
+
+            tab._load_settings()
+
+            assert len(calls) == 1
+            owner, extra_attr_names = calls[0]
+            assert owner is tab
+            assert "gmail_enabled" in extra_attr_names
+            assert "card_border_width_spin" not in extra_attr_names
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_save_settings_uses_descriptor_saver_routing(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            settings_manager.set("widgets", {
+                "clock": {"enabled": True},
+                "clock2": {"enabled": False},
+                "clock3": {"enabled": False},
+            })
+            calls: list[str] = []
+
+            def _clock_saver(owner):
+                assert owner is tab
+                calls.append("clock")
+                return (
+                    {"enabled": False},
+                    {"enabled": True},
+                    {"enabled": True},
+                )
+
+            tab._widget_section_descriptors = (
+                SimpleNamespace(
+                    section_id="clock",
+                    persisted_widget_keys=("clock", "clock2", "clock3"),
+                    can_save_for_owner=lambda owner: True,
+                    resolve_saver=lambda: _clock_saver,
+                ),
+                SimpleNamespace(
+                    section_id="defaults",
+                    persisted_widget_keys=(),
+                    can_save_for_owner=lambda owner: False,
+                    resolve_saver=lambda: None,
+                ),
+            )
+
+            tab._save_settings_now()
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert calls == ["clock"]
+            assert widgets_cfg["clock"]["enabled"] is False
+            assert widgets_cfg["clock2"]["enabled"] is True
+            assert widgets_cfg["clock3"]["enabled"] is True
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_save_settings_uses_descriptor_apply_helper(self, qt_app, settings_manager, monkeypatch):
+        tab = WidgetsTab(settings_manager)
+        try:
+            calls: list[tuple[object, object, tuple[str, ...]]] = []
+
+            def _fake_apply(widgets_config, section_results, *, exclude_keys=(), descriptors=None):
+                calls.append((widgets_config, section_results, tuple(exclude_keys)))
+                return widgets_config
+
+            monkeypatch.setattr(
+                "ui.tabs.widgets_tab.apply_widget_section_save_results",
+                _fake_apply,
+            )
+
+            tab._save_settings_now()
+
+            assert len(calls) == 1
+            widgets_config, section_results, exclude_keys = calls[0]
+            assert isinstance(widgets_config, dict)
+            assert isinstance(section_results, dict)
+            assert exclude_keys == ("spotify_visualizer",)
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_defaults_section_uses_descriptor_load_and_save_paths(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            settings_manager.set("widgets", {
+                "shadows": {
+                    "enabled": False,
+                    "text_enabled": False,
+                    "header_enabled": True,
+                },
+                "global": {
+                    "card_border_width_px": 6,
+                },
+            })
+
+            tab._load_settings()
+
+            assert tab.widget_shadows_enabled.isChecked() is False
+            assert tab.widget_text_shadows_enabled.isChecked() is False
+            assert tab.widget_header_shadows_enabled.isChecked() is True
+            assert tab.card_border_width_spin.value() == 6
+
+            tab.widget_shadows_enabled.setChecked(True)
+            tab.widget_text_shadows_enabled.setChecked(True)
+            tab.widget_header_shadows_enabled.setChecked(False)
+            tab.card_border_width_spin.setValue(4)
+            tab._save_settings_now()
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["shadows"] == {
+                "enabled": True,
+                "text_enabled": True,
+                "header_enabled": False,
+            }
+            assert widgets_cfg["global"]["card_border_width_px"] == 4
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_update_stack_status_uses_descriptor_status_targets(self, qt_app, settings_manager, monkeypatch):
+        tab = WidgetsTab(settings_manager)
+        try:
+            calls: list[object] = []
+
+            def _fake_collect(owner):
+                calls.append(owner)
+                return ()
+
+            monkeypatch.setattr(
+                "ui.tabs.widgets_tab.collect_widget_stack_status_targets",
+                _fake_collect,
+            )
+
+            tab._update_stack_status()
+
+            assert calls == [tab]
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_initializes_standard_default_attrs_from_descriptor_metadata(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            assert isinstance(tab._global_card_border_width, int)
+            assert isinstance(tab._clock_color, QColor)
+            assert isinstance(tab._weather_color, QColor)
+            assert isinstance(tab._media_color, QColor)
+            assert isinstance(tab._reddit_color, QColor)
+            assert isinstance(tab._gmail_color, QColor)
+            assert isinstance(tab._imgur_color, QColor)
+        finally:
+            tab.deleteLater()
+
     def test_sine_wave_swatch_persistence(self, qt_app, settings_manager):
         """Glow + line swatch selections persist through save/load and update buttons."""
 

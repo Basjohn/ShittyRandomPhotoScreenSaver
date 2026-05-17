@@ -4,6 +4,7 @@ Clock widget for screensaver overlay.
 Displays current time with configurable format, position, and styling.
 """
 from typing import Optional, Union, TYPE_CHECKING
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 import math
@@ -73,6 +74,19 @@ class ClockWidget(BaseOverlayWidget):
     # Override defaults for clock
     DEFAULT_FONT_SIZE = 48
     DIGITAL_TZ_GAP = 20
+    ANALOG_NUMERAL_SCALE = 0.80
+    ANALOG_CARD_RING_SCALE = 1.30
+    ANALOG_FRAMED_NUMERAL_SCALE = 0.72
+    ANALOG_FRAMED_CARD_RING_SCALE = 1.43
+    ANALOG_FRAMED_TIMEZONE_SCALE = 0.80
+    ANALOG_FRAMED_TIMEZONE_GAP_PX = 24
+    ANALOG_UNFRAMED_TIMEZONE_GAP_PX = 20
+    ANALOG_NUMERAL_RADIAL_COMPRESS = 0.02
+
+    @dataclass(frozen=True)
+    class _AnalogNumeralPlacement:
+        radial_offset_em: float = 0.0
+        tangential_offset_em: float = 0.0
     
     def __init__(self, parent: Optional[QWidget] = None,
                  time_format: TimeFormat = TimeFormat.TWELVE_HOUR,
@@ -1001,31 +1015,21 @@ class ClockWidget(BaseOverlayWidget):
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
 
-            left_pad, top_pad, bottom_margin, tz_font_size = self._compute_analog_padding()
-            if self._show_background:
-                rect = self.contentsRect()
-            else:
-                rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
-            side = min(rect.width(), rect.height())
-            if side <= 0:
+            metrics = self._compute_analog_layout_metrics()
+            if metrics is None:
                 return
 
-            center_x = rect.x() + rect.width() // 2
-            center_y = rect.y() + rect.height() // 2
+            center_x = metrics.center_x
+            center_y = metrics.center_y
+            radius = metrics.radius
+            numeral_height = metrics.numeral_height
 
-            numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-            numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
+            numeral_font = QFont(self._font_family, metrics.numeral_pt, QFont.Weight.Black)
             painter.setFont(numeral_font)
             numeral_metrics = painter.fontMetrics()
-            numeral_height = numeral_metrics.height()
-
-            numeral_clearance = numeral_height + max(6, numeral_height // 3)
-            radius = side // 2 - numeral_clearance
-            if radius <= 0:
-                return
 
             if self._show_background:
-                self._draw_analog_background_card(painter, center_x, center_y, side // 2 - 2)
+                self._draw_analog_background_card(painter, center_x, center_y, metrics.card_radius)
 
             drop_offset = 3
             marker_len = max(6, radius // 10)
@@ -1089,28 +1093,34 @@ class ClockWidget(BaseOverlayWidget):
                     1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
                     7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII",
                 }
-                numeral_pull_in = max(2, numeral_height // 3) - 5
-                numeral_radius = radius + numeral_height - numeral_pull_in
                 painter.setFont(numeral_font)
                 for hour in range(1, 13):
                     angle = math.radians((hour / 12.0) * 360.0 - 90.0)
-                    cos_a = math.cos(angle)
-                    sin_a = math.sin(angle)
-                    tx = center_x + int(cos_a * numeral_radius)
-                    ty = center_y + int(sin_a * numeral_radius)
                     text = roman_map.get(hour, str(hour))
-                    tw = numeral_metrics.horizontalAdvance(text)
-                    th = numeral_metrics.height()
+                    draw_x, baseline_y = self._compute_analog_text_draw_origin(
+                        numeral_metrics,
+                        text,
+                        angle=angle,
+                        outer_radius=metrics.numeral_outer_radius,
+                        center_x=center_x,
+                        center_y=center_y,
+                    )
 
                     if self._analog_face_shadow:
-                        base_numeral_alpha = max(97, int(self._text_color.alpha() * 0.605))
+                        base_numeral_alpha = max(175, int(self._text_color.alpha() * 1.0))
                         numeral_shadow = QColor(0, 0, 0, _scaled_alpha(base_numeral_alpha))
+                        numeral_offset = max(2, metrics.numeral_shadow_offset_px + 1)
                         painter.setPen(QPen(numeral_shadow))
-                        numeral_offset = max(1, int(round(shadow_scale * 1.56)))
-                        painter.drawText(tx - tw // 2 + numeral_offset, ty + th // 4 + numeral_offset, text)
+                        painter.drawText(draw_x + numeral_offset, baseline_y + numeral_offset, text)
+                        secondary_shadow = QColor(0, 0, 0, max(0, int(numeral_shadow.alpha() * 0.84)))
+                        painter.setPen(QPen(secondary_shadow))
+                        painter.drawText(draw_x + 1, baseline_y + 1, text)
+                        tertiary_shadow = QColor(0, 0, 0, max(0, int(numeral_shadow.alpha() * 0.58)))
+                        painter.setPen(QPen(tertiary_shadow))
+                        painter.drawText(draw_x + 2, baseline_y + 1, text)
 
                     painter.setPen(QPen(self._text_color))
-                    painter.drawText(tx - tw // 2, ty + th // 4, text)
+                    painter.drawText(draw_x, baseline_y, text)
         finally:
             painter.end()
 
@@ -1223,30 +1233,18 @@ class ClockWidget(BaseOverlayWidget):
             def _scaled_alpha(base_alpha: int) -> int:
                 return min(255, int(round(base_alpha * opacity_scale)))
 
-            left_pad, top_pad, bottom_margin, tz_font_size = self._compute_analog_padding()
-            if self._show_background:
-                rect = self.contentsRect()
-            else:
-                rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
-            side = min(rect.width(), rect.height())
-            if side <= 0:
+            metrics = self._compute_analog_layout_metrics()
+            if metrics is None:
                 fb_painter.end()
                 return
 
-            center_x = rect.x() + rect.width() // 2
-            center_y = rect.y() + rect.height() // 2
+            center_x = metrics.center_x
+            center_y = metrics.center_y
+            radius = metrics.radius
+            numeral_height = metrics.numeral_height
 
-            numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-            numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
+            numeral_font = QFont(self._font_family, metrics.numeral_pt, QFont.Weight.Black)
             fb_painter.setFont(numeral_font)
-            numeral_metrics = fb_painter.fontMetrics()
-            numeral_height = numeral_metrics.height()
-
-            numeral_clearance = numeral_height + max(6, numeral_height // 3)
-            radius = side // 2 - numeral_clearance
-            if radius <= 0:
-                fb_painter.end()
-                return
 
             # Helper to draw a hand with an optional bottom-right shadow.
             def _draw_hand(angle_deg: float, length: float, thickness: int, draw_shadow: bool = True) -> None:
@@ -1297,14 +1295,16 @@ class ClockWidget(BaseOverlayWidget):
 
             # Timezone abbreviation rendered below the analogue clock, centred horizontally.
             if self._show_timezone and self._timezone_abbrev:
-                tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
+                tz_font = QFont(self._font_family, metrics.tz_font_size, QFont.Weight.Bold)
                 fb_painter.setFont(tz_font)
                 tz_metrics = fb_painter.fontMetrics()
-                tz_height = tz_metrics.height()
                 text = self._timezone_abbrev
-
-                tz_y = center_y + radius + numeral_height + tz_height + 4
-                tz_x = center_x - tz_metrics.horizontalAdvance(text) // 2
+                tz_rect = tz_metrics.tightBoundingRect(text)
+                if tz_rect.isNull():
+                    tz_rect = tz_metrics.boundingRect(text)
+                desired_top = self._compute_analog_timezone_top(center_y, radius, numeral_height, metrics)
+                tz_x = int(round(center_x - (tz_rect.x() + (tz_rect.width() / 2.0))))
+                tz_y = int(round(desired_top - tz_rect.y()))
                 fb_painter.setPen(QPen(self._text_color))
                 if self._analog_face_shadow:
                     tz_shadow_offset = 3
@@ -1327,6 +1327,133 @@ class ClockWidget(BaseOverlayWidget):
             painter.drawPixmap(0, 0, frame_buffer)
         finally:
             painter.end()
+
+    @dataclass(frozen=True)
+    class _AnalogLayoutMetrics:
+        center_x: int
+        center_y: int
+        side: int
+        radius: int
+        card_radius: int
+        numeral_pt: int
+        numeral_height: int
+        numeral_outer_radius: int
+        tz_font_size: int
+        numeral_shadow_offset_px: int
+
+    _ANALOG_NUMERAL_PLACEMENTS: dict[str, _AnalogNumeralPlacement] = {
+        "I": _AnalogNumeralPlacement(radial_offset_em=0.02),
+        "II": _AnalogNumeralPlacement(radial_offset_em=0.02),
+        "III": _AnalogNumeralPlacement(radial_offset_em=0.07),
+        "IV": _AnalogNumeralPlacement(radial_offset_em=0.05),
+        "V": _AnalogNumeralPlacement(radial_offset_em=0.03),
+        "VI": _AnalogNumeralPlacement(radial_offset_em=0.05, tangential_offset_em=-0.02),
+        "VII": _AnalogNumeralPlacement(radial_offset_em=0.06, tangential_offset_em=-0.03),
+        "VIII": _AnalogNumeralPlacement(radial_offset_em=0.18, tangential_offset_em=-0.08),
+        "IX": _AnalogNumeralPlacement(radial_offset_em=0.05),
+        "X": _AnalogNumeralPlacement(radial_offset_em=0.03),
+        "XI": _AnalogNumeralPlacement(radial_offset_em=0.04, tangential_offset_em=0.02),
+        "XII": _AnalogNumeralPlacement(radial_offset_em=0.08),
+    }
+
+    def _compute_analog_layout_metrics(self) -> Optional["_AnalogLayoutMetrics"]:
+        """Return shared analogue geometry metrics for the face, card, and numerals."""
+        left_pad, top_pad, bottom_margin, tz_font_size = self._compute_analog_padding()
+        if self._show_background:
+            rect = self.contentsRect()
+        else:
+            rect = self.rect().adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
+
+        side = min(rect.width(), rect.height())
+        if side <= 0:
+            return None
+
+        center_x = rect.x() + rect.width() // 2
+        center_y = rect.y() + rect.height() // 2
+        card_radius = max(1, side // 2 - 2)
+
+        base_numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
+        numeral_scale = self.ANALOG_FRAMED_NUMERAL_SCALE if self._show_background else self.ANALOG_NUMERAL_SCALE
+        numeral_pt = max(7, int(round(base_numeral_pt * numeral_scale)))
+        numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Black)
+        numeral_metrics = QFontMetrics(numeral_font)
+        numeral_height = numeral_metrics.height()
+
+        base_ring_width = numeral_height + max(6, numeral_height // 3) - 2
+        ring_scale = self.ANALOG_FRAMED_CARD_RING_SCALE if self._show_background else self.ANALOG_CARD_RING_SCALE
+        target_ring_width = max(base_ring_width + 2, int(round(base_ring_width * ring_scale)))
+        radius = max(12, card_radius - target_ring_width)
+
+        numeral_pull_in = max(2, numeral_height // 3) - 5
+        numeral_outer_radius = radius + numeral_height - numeral_pull_in
+        numeral_outer_radius = min(card_radius - max(4, numeral_height // 5), numeral_outer_radius)
+
+        base_tz_font_size = tz_font_size
+        if self._show_background:
+            tz_font_size = max(8, int(round(base_tz_font_size * self.ANALOG_FRAMED_TIMEZONE_SCALE)))
+
+        numeral_shadow_offset_px = 2 if self._show_background else 1
+
+        return self._AnalogLayoutMetrics(
+            center_x=center_x,
+            center_y=center_y,
+            side=side,
+            radius=radius,
+            card_radius=card_radius,
+            numeral_pt=numeral_pt,
+            numeral_height=numeral_height,
+            numeral_outer_radius=numeral_outer_radius,
+            tz_font_size=tz_font_size,
+            numeral_shadow_offset_px=numeral_shadow_offset_px,
+        )
+
+    def _compute_analog_text_draw_origin(
+        self,
+        metrics: QFontMetrics,
+        text: str,
+        *,
+        angle: float,
+        outer_radius: int,
+        center_x: int,
+        center_y: int,
+    ) -> tuple[int, int]:
+        """Return drawText origin using shared radial placement plus optical numeral offsets."""
+        rect = metrics.tightBoundingRect(text)
+        if rect.isNull():
+            rect = metrics.boundingRect(text)
+
+        numeral_height = max(1, rect.height())
+        radial_half_extent = (
+            abs(math.cos(angle)) * (rect.width() / 2.0)
+            + abs(math.sin(angle)) * (rect.height() / 2.0)
+        )
+        effective_radius = max(0.0, outer_radius - (radial_half_extent * self.ANALOG_NUMERAL_RADIAL_COMPRESS))
+        placement = self._ANALOG_NUMERAL_PLACEMENTS.get(text, self._AnalogNumeralPlacement())
+        effective_radius += numeral_height * placement.radial_offset_em
+
+        anchor_x = center_x + (math.cos(angle) * effective_radius)
+        anchor_y = center_y + (math.sin(angle) * effective_radius)
+        tangent_x = -math.sin(angle)
+        tangent_y = math.cos(angle)
+        tangent_offset = numeral_height * placement.tangential_offset_em
+        anchor_x += tangent_x * tangent_offset
+        anchor_y += tangent_y * tangent_offset
+
+        draw_x = int(round(anchor_x - (rect.x() + (rect.width() / 2.0))))
+        baseline_y = int(round(anchor_y - (rect.y() + (rect.height() / 2.0))))
+        return draw_x, baseline_y
+
+    def _compute_analog_timezone_top(
+        self,
+        center_y: int,
+        radius: int,
+        numeral_height: int,
+        metrics: "_AnalogLayoutMetrics",
+    ) -> int:
+        """Return desired top edge for analogue timezone text."""
+        if self._show_background:
+            return center_y + metrics.card_radius + self.ANALOG_FRAMED_TIMEZONE_GAP_PX
+        return center_y + radius + numeral_height + self.ANALOG_UNFRAMED_TIMEZONE_GAP_PX
 
     def _compute_analog_padding(self) -> tuple[int, int, int, int]:
         dpi_y = max(96, int(round(self.logicalDpiY()))) if hasattr(self, "logicalDpiY") else 96
@@ -1352,51 +1479,44 @@ class ClockWidget(BaseOverlayWidget):
         if self._display_mode != "analog" or self._show_background:
             return (0, 0)
         
-        # Get the adjusted rect used for painting
-        left_pad, top_pad, bottom_margin, _ = self._compute_analog_padding()
-        widget_rect = self.rect()
-        rect = widget_rect.adjusted(left_pad, top_pad, -left_pad, -bottom_margin)
-        side = min(rect.width(), rect.height())
-        if side <= 0:
+        metrics = self._compute_analog_layout_metrics()
+        if metrics is None:
             return (0, 0)
-        
-        center_x = rect.x() + rect.width() // 2
-        center_y = rect.y() + rect.height() // 2
         
         # If numerals are hidden, the clock face itself is the visual boundary
         if not self._show_numerals:
-            # Calculate radius without numeral clearance
-            radius = side // 2
-            # Visual boundary is at the clock face edge
-            visual_top = center_y - radius
-            visual_left = center_x - radius
+            visual_top = metrics.center_y - metrics.radius
+            visual_left = metrics.center_x - metrics.radius
             return (max(0, visual_left), max(0, visual_top))
-        
-        # With numerals: calculate offset to numeral positions
-        # Calculate numeral metrics (same as in paintEvent)
-        numeral_pt = max(8, min(int(self._font_size * 0.25), max(9, side // 18)))
-        from PySide6.QtGui import QFontMetrics, QFont
-        numeral_font = QFont(self._font_family, numeral_pt, QFont.Weight.Bold)
+
+        numeral_font = QFont(self._font_family, metrics.numeral_pt, QFont.Weight.Bold)
         numeral_metrics = QFontMetrics(numeral_font)
-        numeral_height = numeral_metrics.height()
-        
-        # Calculate radius and numeral radius (same as in paintEvent)
-        numeral_clearance = numeral_height + max(6, numeral_height // 3)
-        radius = side // 2 - numeral_clearance
-        if radius <= 0:
-            return (0, 0)
-        
-        numeral_pull_in = max(2, numeral_height // 3) - 5
-        numeral_radius = radius + numeral_height - numeral_pull_in
-        
-        # XII numeral is at angle -90°, so ty = center_y - numeral_radius
-        # Text is drawn at ty + th // 4, so top of text is at ty - th * 0.75
-        visual_top = center_y - numeral_radius - int(numeral_height * 0.75)
-        
-        # IX numeral is at angle 180°, so tx = center_x - numeral_radius
-        # Text is drawn centered, so left edge is at tx - tw/2
-        # For simplicity, use numeral_radius as the visual left offset
-        visual_left = center_x - numeral_radius - numeral_height // 2
+
+        xii_x, xii_y = self._compute_analog_text_draw_origin(
+            numeral_metrics,
+            "XII",
+            angle=math.radians(-90.0),
+            outer_radius=metrics.numeral_outer_radius,
+            center_x=metrics.center_x,
+            center_y=metrics.center_y,
+        )
+        ix_x, ix_y = self._compute_analog_text_draw_origin(
+            numeral_metrics,
+            "IX",
+            angle=math.radians(180.0),
+            outer_radius=metrics.numeral_outer_radius,
+            center_x=metrics.center_x,
+            center_y=metrics.center_y,
+        )
+        xii_rect = numeral_metrics.tightBoundingRect("XII")
+        if xii_rect.isNull():
+            xii_rect = numeral_metrics.boundingRect("XII")
+        ix_rect = numeral_metrics.tightBoundingRect("IX")
+        if ix_rect.isNull():
+            ix_rect = numeral_metrics.boundingRect("IX")
+
+        visual_top = xii_y + xii_rect.y()
+        visual_left = ix_x + ix_rect.x()
         
         return (max(0, visual_left), max(0, visual_top))
     

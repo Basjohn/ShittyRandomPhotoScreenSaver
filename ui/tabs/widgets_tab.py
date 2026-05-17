@@ -18,7 +18,7 @@ from copy import deepcopy
 from typing import Optional, Dict, Any, Mapping
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QComboBox, QCheckBox, QPushButton, QSpinBox,
+    QComboBox, QPushButton,
     QScrollArea, QButtonGroup, QGroupBox,
 )
 from PySide6.QtCore import Signal, Qt
@@ -47,9 +47,15 @@ from core.settings.visualizer_mode_registry import (
     get_preset_slider_attr,
 )
 from rendering.widget_descriptors import (
+    apply_widget_section_save_results,
     build_widget_stack_preview_config,
+    collect_widget_section_save_results,
+    collect_widget_section_signal_block_targets,
+    collect_widget_stack_status_targets,
+    get_widget_default_init_descriptors,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
+    load_widget_sections,
 )
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
@@ -61,9 +67,7 @@ from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
     SCROLL_AREA_STYLE,
     FORM_ROW_LABEL_STYLE,
-    add_aligned_row,
     NoWheelSlider,  # noqa: F401 — re-exported
-    style_group_box,
 )
 from ui.styled_popup import StyledColorPicker
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
@@ -171,41 +175,7 @@ class WidgetsTab(QWidget):
         self._scroll_area: Optional[QScrollArea] = None
         self._subtab_content_built: set[int] = set()
         self._subtab_host_layouts: list[QVBoxLayout | None] = []
-        self._global_card_border_width = int(self._widget_default('global', 'card_border_width_px', 3))
-        self._clock_color = self._color_from_default('clock', 'color', [255, 255, 255, 230])
-        self._weather_color = self._color_from_default('weather', 'color', [255, 255, 255, 230])
-        self._clock_border_color = self._color_from_default('clock', 'border_color', [128, 128, 128, 255])
-        self._clock_bg_color = self._color_from_default('clock', 'bg_color', [64, 64, 64, 255])
-        # Weather widget frame defaults mirror WeatherWidget internals
-        self._weather_bg_color = self._color_from_default('weather', 'bg_color', [64, 64, 64, 255])
-        self._weather_border_color = self._color_from_default('weather', 'border_color', [128, 128, 128, 255])
-        # Media widget frame defaults mirror other overlay widgets
-        self._media_color = self._color_from_default('media', 'color', [255, 255, 255, 230])
-        self._media_bg_color = self._color_from_default('media', 'bg_color', [64, 64, 64, 255])
-        self._media_border_color = self._color_from_default('media', 'border_color', [128, 128, 128, 255])
-        self._media_volume_fill_color = self._color_from_default('media', 'spotify_volume_fill_color', [66, 66, 66, 255])
-        # Spotify Beat Visualizer frame defaults inherit Spotify/media styling
-        self._spotify_vis_fill_color = self._color_from_default(
-            'spotify_visualizer', 'bar_fill_color', [255, 255, 255, 230]
-        )
-        self._spotify_vis_border_color = self._color_from_default(
-            'spotify_visualizer', 'bar_border_color', [255, 255, 255, 230]
-        )
-        # Reddit widget frame defaults mirror Spotify/media widget styling
-        self._reddit_color = self._color_from_default('reddit', 'color', [255, 255, 255, 230])
-        self._reddit_bg_color = self._color_from_default('reddit', 'bg_color', [64, 64, 64, 255])
-        self._reddit_border_color = self._color_from_default('reddit', 'border_color', [128, 128, 128, 255])
-        # Gmail widget colors
-        self._gmail_color = self._color_from_default('gmail', 'color', [255, 255, 255, 230])
-        self._gmail_bg_color = self._color_from_default('gmail', 'bg_color', [35, 35, 35, 255])
-        self._gmail_border_color = self._color_from_default('gmail', 'border_color', [255, 255, 255, 255])
-        self._gmail_separator_color = self._color_from_default('gmail', 'separator_color', [200, 200, 200, 40])
-        self._gmail_boundary_separator_color = self._color_from_default('gmail', 'boundary_separator_color', [180, 180, 180, 80])
-        # Imgur widget colors
-        self._imgur_color = self._color_from_default('imgur', 'color', [255, 255, 255, 230])
-        self._imgur_bg_color = self._color_from_default('imgur', 'bg_color', [35, 35, 35, 255])
-        self._imgur_border_color = self._color_from_default('imgur', 'border_color', [255, 255, 255, 255])
-        self._media_artwork_size = int(self._widget_default('media', 'artwork_size', 200))
+        self._initialize_descriptor_default_attrs()
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
         self._visualizer_tech_bucket_state: Dict[str, bool] = self._load_tech_bucket_states()
@@ -256,6 +226,29 @@ class WidgetsTab(QWidget):
         except Exception:
             logger.debug("[WIDGETS_TAB] Failed to load widget defaults", exc_info=True)
             return self._provided_widget_defaults if isinstance(self._provided_widget_defaults, dict) else {}
+
+    def _initialize_descriptor_default_attrs(self) -> None:
+        """Seed standard widget default-backed attrs from canonical descriptor metadata."""
+        for descriptor in get_widget_default_init_descriptors():
+            if descriptor.value_kind == "color":
+                value = self._color_from_default(
+                    descriptor.section,
+                    descriptor.key,
+                    descriptor.fallback,
+                )
+            elif descriptor.value_kind == "int":
+                value = self._default_int(
+                    descriptor.section,
+                    descriptor.key,
+                    descriptor.fallback,
+                )
+            else:
+                value = self._widget_default(
+                    descriptor.section,
+                    descriptor.key,
+                    descriptor.fallback,
+                )
+            setattr(self, descriptor.attr_name, value)
     
     def _widget_default(self, section: str, key: str, fallback: Any) -> Any:
         """Fetch a default value for a widget section/key combo."""
@@ -738,90 +731,6 @@ class WidgetsTab(QWidget):
             from PySide6.QtCore import QTimer
             QTimer.singleShot(0, lambda: sa.verticalScrollBar().setValue(saved))
 
-    def _build_defaults_section(self) -> QWidget:
-        """Create the Defaults subtab content styled like other groups."""
-
-        LABEL_WIDTH = 150
-
-        group = QGroupBox("Global Widget Defaults")
-        style_group_box(group)
-        content_layout = QVBoxLayout(group)
-        content_layout.setContentsMargins(18, 16, 18, 16)
-        content_layout.setSpacing(12)
-
-        # Drop shadow toggle row
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 8, 0, 8)
-        row.setSpacing(12)
-        self.widget_shadows_enabled = QCheckBox("Enable Widget Drop Shadows")
-        self.widget_shadows_enabled.setProperty("circleIndicator", True)
-        self.widget_shadows_enabled.setToolTip(
-            "Applies a subtle drop shadow to every widget card when enabled."
-        )
-        self.widget_shadows_enabled.setChecked(
-            self._default_bool('shadows', 'enabled', True)
-        )
-        self.widget_shadows_enabled.stateChanged.connect(self._save_settings)
-        row.addWidget(self.widget_shadows_enabled)
-        row.addStretch()
-        content_layout.addLayout(row)
-
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 8, 0, 8)
-        row.setSpacing(12)
-        self.widget_text_shadows_enabled = QCheckBox("Enable Widget Text Shadows")
-        self.widget_text_shadows_enabled.setProperty("circleIndicator", True)
-        self.widget_text_shadows_enabled.setToolTip(
-            "Paints widget text shadows without Qt graphics effects."
-        )
-        self.widget_text_shadows_enabled.setChecked(
-            self._default_bool('shadows', 'text_enabled', True)
-        )
-        self.widget_text_shadows_enabled.stateChanged.connect(self._save_settings)
-        row.addWidget(self.widget_text_shadows_enabled)
-        row.addStretch()
-        content_layout.addLayout(row)
-
-        row = QHBoxLayout()
-        row.setContentsMargins(0, 8, 0, 8)
-        row.setSpacing(12)
-        self.widget_header_shadows_enabled = QCheckBox("Enable Widget Header Drop Shadows")
-        self.widget_header_shadows_enabled.setProperty("circleIndicator", True)
-        self.widget_header_shadows_enabled.setToolTip(
-            "Paints header-frame drop shadows without Qt graphics effects."
-        )
-        self.widget_header_shadows_enabled.setChecked(
-            self._default_bool('shadows', 'header_enabled', True)
-        )
-        self.widget_header_shadows_enabled.stateChanged.connect(self._save_settings)
-        row.addWidget(self.widget_header_shadows_enabled)
-        row.addStretch()
-        content_layout.addLayout(row)
-
-        # Card border width row (aligned helper to keep wrap + gutter)
-        border_row, _ = add_aligned_row(
-            content_layout,
-            "Card Border Width:",
-            label_width=LABEL_WIDTH,
-            wrap=False,
-        )
-
-        self.card_border_width_spin = QSpinBox()
-        self.card_border_width_spin.setRange(0, 12)
-        self.card_border_width_spin.setValue(self._global_card_border_width)
-        self.card_border_width_spin.valueChanged.connect(
-            self._on_global_border_width_changed
-        )
-        border_row.addWidget(self.card_border_width_spin)
-
-        px_label = QLabel("px")
-        px_label.setStyleSheet(FORM_ROW_LABEL_STYLE)
-        px_label.setMinimumWidth(24)
-        border_row.addWidget(px_label)
-        border_row.addStretch()
-
-        return group
-
     def _perf_log(self, label: str, start_time: float) -> None:
         if not is_perf_metrics_enabled():
             return
@@ -899,27 +808,7 @@ class WidgetsTab(QWidget):
                 widgets = {}
 
             # Collect all widget controls that need signal blocking
-            _widget_attrs = [
-                'widget_shadows_enabled',
-                'widget_text_shadows_enabled',
-                'widget_header_shadows_enabled',
-                'card_border_width_spin',
-                'clock_enabled', 'clock_format', 'clock_seconds', 'clock_timezone',
-                'clock_show_tz', 'clock_position', 'clock_font_combo', 'clock_font_size',
-                'clock_margin', 'clock_show_background', 'clock_bg_opacity',
-                'clock_border_opacity', 'clock_monitor_combo',
-                'clock2_enabled', 'clock2_timezone', 'clock2_monitor_combo',
-                'clock3_enabled', 'clock3_timezone', 'clock3_monitor_combo',
-                'weather_enabled', 'weather_location', 'weather_position',
-                'weather_font_combo', 'weather_font_size', 'weather_show_forecast',
-                'weather_show_background', 'weather_bg_opacity', 'weather_border_opacity',
-                'weather_margin', 'weather_monitor_combo',
-                'media_enabled', 'media_position', 'media_monitor_combo',
-                'media_font_combo', 'media_font_size', 'media_margin',
-                'media_show_background', 'media_bg_opacity', 'media_border_opacity',
-                'media_artwork_size', 'media_rounded_artwork',
-                'media_show_header_frame', 'media_show_controls',
-                'media_spotify_volume_enabled',
+            _base_signal_block_attrs = (
                 'visualizers_enabled', 'vis_enabled_checkbox',
                 'vis_border_opacity', 'vis_ghost_enabled',
                 'vis_ghost_opacity_slider', 'vis_ghost_decay_slider',
@@ -935,57 +824,16 @@ class WidgetsTab(QWidget):
                 'devcurve_layer_vocals_enabled', 'devcurve_layer_vocals_alpha', 'devcurve_layer_vocals_offset',
                 'devcurve_layer_mids_enabled', 'devcurve_layer_mids_alpha', 'devcurve_layer_mids_offset',
                 'devcurve_layer_transients_enabled', 'devcurve_layer_transients_alpha', 'devcurve_layer_transients_offset',
-                'reddit_enabled', 'reddit_subreddit', 'reddit_items',
-                'reddit_position', 'reddit_monitor_combo',
-                'reddit_font_combo', 'reddit_font_size', 'reddit_margin',
-                'reddit_header_logo_px_adjust',
-                'reddit_show_background', 'reddit_show_separators',
-                'reddit_show_refresh_spiral',
-                'reddit_bg_opacity', 'reddit_border_opacity',
-                'reddit2_enabled', 'reddit2_subreddit', 'reddit2_items',
-                'reddit2_position', 'reddit2_monitor_combo',
-                'reddit_exit_on_click',
-            ]
-            _widget_attrs.extend(GMAIL_SIGNAL_BLOCK_ATTRS)
-            for attr_name in _widget_attrs:
-                w = getattr(self, attr_name, None)
-                if w is not None and hasattr(w, 'blockSignals'):
-                    w.blockSignals(True)
-                    blockers.append(w)
-
-            # Global widget shadow settings
-            shadows_config = widgets.get('shadows', {}) if isinstance(widgets, dict) else {}
-            if isinstance(shadows_config, dict):
-                shadows_enabled_raw = shadows_config.get('enabled', True)
-                enabled = SettingsManager.to_bool(shadows_enabled_raw, True)
-                self.widget_shadows_enabled.setChecked(enabled)
-                text_enabled = SettingsManager.to_bool(shadows_config.get('text_enabled', True), True)
-                self.widget_text_shadows_enabled.setChecked(text_enabled)
-                header_enabled = SettingsManager.to_bool(shadows_config.get('header_enabled', True), True)
-                self.widget_header_shadows_enabled.setChecked(header_enabled)
-            else:
-                self.widget_shadows_enabled.setChecked(True)
-                self.widget_text_shadows_enabled.setChecked(True)
-                self.widget_header_shadows_enabled.setChecked(True)
-
-            global_cfg = widgets.get('global', {}) if isinstance(widgets, dict) else {}
-            try:
-                border_width = int(global_cfg.get('card_border_width_px', self._widget_default('global', 'card_border_width_px', 3)))
-            except Exception:
-                border_width = self._widget_default('global', 'card_border_width_px', 3)
-            border_width = max(0, min(12, border_width))
-            self._global_card_border_width = border_width
-            if hasattr(self, 'card_border_width_spin'):
-                self.card_border_width_spin.setValue(border_width)
+            )
+            for widget in collect_widget_section_signal_block_targets(
+                self,
+                extra_attr_names=_base_signal_block_attrs + GMAIL_SIGNAL_BLOCK_ATTRS,
+            ):
+                widget.blockSignals(True)
+                blockers.append(widget)
 
             # Delegate per-widget loading through the canonical section descriptors.
-            for descriptor in self._widget_section_descriptors:
-                if not descriptor.can_load_for_owner(self):
-                    continue
-                loader = descriptor.resolve_loader()
-                if loader is None:
-                    continue
-                loader(self, widgets)
+            load_widget_sections(self, widgets, self._widget_section_descriptors)
 
         finally:
             for w in blockers:
@@ -1427,13 +1275,6 @@ class WidgetsTab(QWidget):
         if getattr(self, "_loading", False):
             return
 
-        from ui.tabs.widgets_tab_clock import save_clock_settings
-        from ui.tabs.widgets_tab_weather import save_weather_settings
-        from ui.tabs.widgets_tab_media import save_media_settings
-        from ui.tabs.widgets_tab_reddit import save_reddit_settings
-        from ui.tabs.widgets_tab_gmail import save_gmail_settings
-        from ui.tabs.widgets_tab_imgur import save_imgur_settings
-
         try:
             logger.debug("[WIDGETS_TAB] _save_settings_now start")
         except Exception as e:
@@ -1443,37 +1284,24 @@ class WidgetsTab(QWidget):
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
 
-        # Delegate per-widget saving to extraction modules only for sections
-        # that actually exist in this lazy-load session. Unbuilt sections keep
-        # their existing persisted config untouched.
-        if hasattr(self, 'clock_enabled'):
-            clock_config, clock2_config, clock3_config = save_clock_settings(self)
-        else:
-            clock_config = dict(existing_widgets.get('clock', {})) if isinstance(existing_widgets.get('clock', {}), dict) else {}
-            clock2_config = dict(existing_widgets.get('clock2', {})) if isinstance(existing_widgets.get('clock2', {}), dict) else {}
-            clock3_config = dict(existing_widgets.get('clock3', {})) if isinstance(existing_widgets.get('clock3', {}), dict) else {}
+        section_results = collect_widget_section_save_results(
+            self,
+            existing_widgets,
+            self._widget_section_descriptors,
+        )
+        spotify_vis_config = section_results.get('spotify_visualizer', {})
 
-        if hasattr(self, 'weather_enabled'):
-            weather_config = save_weather_settings(self)
-        else:
-            weather_config = dict(existing_widgets.get('weather', {})) if isinstance(existing_widgets.get('weather', {}), dict) else {}
+        apply_widget_section_save_results(
+            existing_widgets,
+            section_results,
+            exclude_keys=("spotify_visualizer",),
+            descriptors=self._widget_section_descriptors,
+        )
 
-        if hasattr(self, 'media_enabled') and hasattr(self, 'vis_enabled_checkbox'):
-            media_config, spotify_vis_config = save_media_settings(self)
-        else:
-            media_config = dict(existing_widgets.get('media', {})) if isinstance(existing_widgets.get('media', {}), dict) else {}
-            spotify_vis_config = dict(existing_widgets.get('spotify_visualizer', {})) if isinstance(existing_widgets.get('spotify_visualizer', {}), dict) else {}
-
-        if hasattr(self, 'reddit_enabled'):
-            reddit_config, reddit2_config = save_reddit_settings(self)
-        else:
-            reddit_config = dict(existing_widgets.get('reddit', {})) if isinstance(existing_widgets.get('reddit', {}), dict) else {}
-            reddit2_config = dict(existing_widgets.get('reddit2', {})) if isinstance(existing_widgets.get('reddit2', {}), dict) else {}
-
-        if hasattr(self, 'gmail_enabled'):
-            gmail_config = save_gmail_settings(self)
-        else:
-            gmail_config = existing_widgets.get('gmail', None)
+        clock_config = existing_widgets.get('clock', {})
+        weather_config = existing_widgets.get('weather', {})
+        media_config = existing_widgets.get('media', {})
+        reddit_config = existing_widgets.get('reddit', {})
 
         # Merge current-mode visualizer settings into the existing config so
         # that other modes' persisted keys are preserved across save cycles.
@@ -1489,36 +1317,7 @@ class WidgetsTab(QWidget):
             apply_preset_overlay=False,
         )
 
-        # Global widget shadow configuration
-        shadows_config = existing_widgets.get('shadows', {})
-        if not isinstance(shadows_config, dict):
-            shadows_config = {}
-        shadows_config['enabled'] = self.widget_shadows_enabled.isChecked()
-        shadows_config['text_enabled'] = self.widget_text_shadows_enabled.isChecked()
-        shadows_config['header_enabled'] = self.widget_header_shadows_enabled.isChecked()
-        existing_widgets['shadows'] = shadows_config
-
-        global_config = existing_widgets.get('global', {})
-        if not isinstance(global_config, dict):
-            global_config = {}
-        if hasattr(self, '_global_card_border_width'):
-            border_width = self._global_card_border_width
-        else:
-            try:
-                border_width = self._widget_default('global', 'card_border_width_px', 3)
-            except Exception:
-                border_width = 3
-        global_config['card_border_width_px'] = int(border_width)
-        existing_widgets['global'] = global_config
-
-        existing_widgets['clock'] = clock_config
-        existing_widgets['clock2'] = clock2_config
-        existing_widgets['clock3'] = clock3_config
-        existing_widgets['weather'] = weather_config
-        existing_widgets['media'] = media_config
         existing_widgets['spotify_visualizer'] = spotify_vis_config
-        existing_widgets['reddit'] = reddit_config
-        existing_widgets['reddit2'] = reddit2_config
 
         current_vis_mode = str(spotify_vis_config.get('mode', _DEFAULT_VISUALIZER_MODE) or _DEFAULT_VISUALIZER_MODE)
         current_preset_index = self._resolve_visualizer_preset_index(current_vis_mode, spotify_vis_config)
@@ -1531,22 +1330,14 @@ class WidgetsTab(QWidget):
             cache[current_vis_mode] = snapshot
             self._settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
-        # Imgur config - only save if dev features enabled
-        imgur_config = save_imgur_settings(self) if hasattr(self, 'imgur_enabled') else existing_widgets.get('imgur', None)
-        if imgur_config is not None:
-            existing_widgets['imgur'] = imgur_config
-
-        if gmail_config is not None:
-            existing_widgets['gmail'] = gmail_config
-
         try:
             logger.debug(
                 "[WIDGETS_TAB] Saving widgets config: "
                 "clock.enabled=%s, shadows=%s/%s/%s, reddit.limit=%s, reddit.enabled=%s",
                 clock_config.get('enabled'),
-                shadows_config.get('enabled'),
-                shadows_config.get('text_enabled'),
-                shadows_config.get('header_enabled'),
+                existing_widgets.get('shadows', {}).get('enabled') if isinstance(existing_widgets.get('shadows'), dict) else None,
+                existing_widgets.get('shadows', {}).get('text_enabled') if isinstance(existing_widgets.get('shadows'), dict) else None,
+                existing_widgets.get('shadows', {}).get('header_enabled') if isinstance(existing_widgets.get('shadows'), dict) else None,
                 reddit_config.get('limit'),
                 reddit_config.get('enabled'),
             )
@@ -1827,20 +1618,12 @@ class WidgetsTab(QWidget):
             # Build current settings from UI state (not saved yet)
             widgets_config = self._build_current_widgets_config()
 
-            for descriptor in get_widget_stack_preview_descriptors():
-                status_label = getattr(self, descriptor.status_attr_name, None)
-                pos_combo = getattr(self, descriptor.position_attr_name, None)
-                mon_combo = getattr(self, descriptor.monitor_attr_name, None)
-                
-                if status_label is None or pos_combo is None or mon_combo is None:
-                    continue
-                
-                position = pos_combo.currentText()
-                monitor = mon_combo.currentText()
-                widget_type = WidgetType(descriptor.widget_type_key)
+            for target in collect_widget_stack_status_targets(self):
+                status_label = target.status_label
+                widget_type = WidgetType(target.widget_type_key)
 
                 can_stack, message = get_position_status_for_widget(
-                    widgets_config, widget_type, position, monitor
+                    widgets_config, widget_type, target.position_value, target.monitor_value
                 )
                 
                 if message:

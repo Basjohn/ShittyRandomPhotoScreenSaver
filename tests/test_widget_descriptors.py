@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 from rendering.widget_descriptors import (
+    apply_widget_section_save_results,
     build_widget_stack_preview_config,
+    collect_widget_section_save_results,
+    collect_widget_section_signal_block_targets,
+    collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
+    get_widget_default_init_descriptors,
     get_service_runtime_contracts,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_section_signal_block_attrs,
     get_widget_ids_for_service_runtime_contract,
     get_widget_position_option_labels,
     get_widget_runtime_descriptors,
     get_widget_stack_preview_descriptors,
     get_widget_settings_section_descriptors,
+    load_widget_sections,
 )
 
 
@@ -69,7 +76,196 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
     assert media.loader_guard_attrs == ("media_enabled", "vis_enabled_checkbox")
     assert gmail.loader_module == "ui.tabs.widgets_tab_gmail"
     assert gmail.loader_name == "load_gmail_settings"
-    assert defaults.resolve_loader() is None
+    assert defaults.loader_module == "ui.tabs.widgets_tab_defaults"
+    assert defaults.loader_name == "load_defaults_settings"
+    assert defaults.loader_guard_attrs == (
+        "widget_shadows_enabled",
+        "widget_text_shadows_enabled",
+        "widget_header_shadows_enabled",
+        "card_border_width_spin",
+    )
+
+
+def test_widget_settings_section_descriptors_capture_saver_routing():
+    descriptors = get_widget_settings_section_descriptors()
+    clock = next(item for item in descriptors if item.section_id == "clock")
+    reddit = next(item for item in descriptors if item.section_id == "reddit")
+    defaults = next(item for item in descriptors if item.section_id == "defaults")
+
+    assert clock.saver_module == "ui.tabs.widgets_tab_clock"
+    assert clock.saver_name == "save_clock_settings"
+    assert clock.persisted_widget_keys == ("clock", "clock2", "clock3")
+    assert reddit.saver_module == "ui.tabs.widgets_tab_reddit"
+    assert reddit.saver_name == "save_reddit_settings"
+    assert reddit.persisted_widget_keys == ("reddit", "reddit2")
+    assert defaults.saver_module == "ui.tabs.widgets_tab_defaults"
+    assert defaults.saver_name == "save_defaults_settings"
+    assert defaults.persisted_widget_keys == ("shadows", "global")
+
+
+def test_widget_section_signal_block_attrs_follow_descriptor_registry():
+    attrs = get_widget_section_signal_block_attrs()
+
+    assert isinstance(attrs, tuple)
+    assert "clock_enabled" in attrs
+    assert "weather_enabled" in attrs
+    assert "media_enabled" in attrs
+    assert "reddit_enabled" in attrs
+
+
+def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_dedupes():
+    class _Owner:
+        pass
+
+    owner = _Owner()
+
+    class _Blockable:
+        def __init__(self, name: str):
+            self.name = name
+
+        def blockSignals(self, _blocked: bool) -> None:
+            return None
+
+    shared = _Blockable("shared")
+    owner.clock_enabled = shared
+    owner.weather_enabled = _Blockable("weather")
+    owner.extra = shared
+    owner.not_blockable = object()
+
+    targets = collect_widget_section_signal_block_targets(
+        owner,
+        extra_attr_names=("extra", "not_blockable"),
+    )
+
+    assert shared in targets
+    assert owner.weather_enabled in targets
+    assert owner.not_blockable not in targets
+    assert len(targets) == len({id(item) for item in targets})
+
+
+def test_load_widget_sections_runs_descriptor_owned_loaders():
+    calls: list[str] = []
+    owner = object()
+
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "can_load_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_loader": lambda self: lambda current_owner, widgets: calls.append(f"a:{widgets['x']}"),
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "can_load_for_owner": lambda self, current_owner: False,
+                "resolve_loader": lambda self: lambda current_owner, widgets: calls.append("b"),
+            },
+        )(),
+    )
+
+    from rendering import widget_descriptors as module
+
+    original = module.get_widget_settings_section_descriptors
+    module.get_widget_settings_section_descriptors = lambda: descriptors  # type: ignore[assignment]
+    try:
+        load_widget_sections(owner, {"x": 7})
+    finally:
+        module.get_widget_settings_section_descriptors = original  # type: ignore[assignment]
+
+    assert calls == ["a:7"]
+
+
+def test_collect_widget_section_save_results_runs_savers_and_preserves_unbuilt_sections():
+    owner = object()
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "clock",
+                "persisted_widget_keys": ("clock", "clock2"),
+                "can_save_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_saver": lambda self: lambda current_owner: ({"enabled": True}, {"enabled": False}),
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "weather",
+                "persisted_widget_keys": ("weather",),
+                "can_save_for_owner": lambda self, current_owner: False,
+                "resolve_saver": lambda self: None,
+            },
+        )(),
+    )
+
+    results = collect_widget_section_save_results(
+        owner,
+        {"weather": {"location": "Johannesburg"}},
+        descriptors,
+    )
+
+    assert results == {
+        "clock": {"enabled": True},
+        "clock2": {"enabled": False},
+        "weather": {"location": "Johannesburg"},
+    }
+
+
+def test_apply_widget_section_save_results_uses_descriptor_owned_persisted_keys():
+    widgets_config = {
+        "clock": {"enabled": True},
+        "spotify_visualizer": {"mode": "bubble"},
+        "weather": {"location": "Cape Town"},
+    }
+    results = {
+        "clock": {"enabled": False},
+        "clock2": {"enabled": True},
+        "spotify_visualizer": {"mode": "spectrum"},
+        "weather": {"location": "Johannesburg"},
+    }
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {"persisted_widget_keys": ("clock", "clock2")},
+        )(),
+        type(
+            "_D",
+            (),
+            {"persisted_widget_keys": ("weather", "spotify_visualizer")},
+        )(),
+    )
+
+    merged = apply_widget_section_save_results(
+        widgets_config,
+        results,
+        exclude_keys=("spotify_visualizer",),
+        descriptors=descriptors,
+    )
+
+    assert merged is widgets_config
+    assert widgets_config["clock"] == {"enabled": False}
+    assert widgets_config["clock2"] == {"enabled": True}
+    assert widgets_config["weather"] == {"location": "Johannesburg"}
+    assert widgets_config["spotify_visualizer"] == {"mode": "bubble"}
+
+
+def test_widget_default_init_descriptors_cover_standard_widgets_tab_attrs():
+    descriptors = get_widget_default_init_descriptors()
+    attr_names = {item.attr_name for item in descriptors}
+
+    assert "_global_card_border_width" in attr_names
+    assert "_clock_color" in attr_names
+    assert "_weather_color" in attr_names
+    assert "_media_color" in attr_names
+    assert "_reddit_color" in attr_names
+    assert "_gmail_color" in attr_names
+    assert "_imgur_color" in attr_names
 
 
 def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
@@ -169,6 +365,30 @@ def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():
         "display_mode",
         "show_timezone_label",
     }
+
+
+def test_collect_widget_stack_status_targets_reads_live_owner_values():
+    class _Combo:
+        def __init__(self, value: str):
+            self._value = value
+
+        def currentText(self) -> str:
+            return self._value
+
+    class _Owner:
+        pass
+
+    owner = _Owner()
+    owner.clock_stack_status = object()
+    owner.clock_position = _Combo("Bottom Left")
+    owner.clock_monitor_combo = _Combo("ALL")
+
+    targets = collect_widget_stack_status_targets(owner)
+
+    clock = next(item for item in targets if item.widget_type_key == "clock")
+    assert clock.status_label is owner.clock_stack_status
+    assert clock.position_value == "Bottom Left"
+    assert clock.monitor_value == "ALL"
 
 
 def test_build_widget_stack_preview_config_reads_live_clock_controls(qt_app, settings_manager):

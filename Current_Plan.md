@@ -2,7 +2,7 @@
 
 Last updated: 2026-05-17
 
-This file tracks active work only. Completed implementation details belong in `Docs/Historical_Bugs.md` or the relevant reference docs, not here.
+This file tracks active work only. Completed implementation details belong in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
 ## Guardrails
 - Keep this aligned with `Spec.md`, `Index.md`, `Docs/Guardrails.md`, and `Docs/Historical_Bugs.md`.
@@ -27,6 +27,12 @@ Core value: highest cross-project payoff now that the risky visualizer structura
   - landed fourth slice: descriptor-owned settings position options and future layout-edit capability metadata now live in `rendering/widget_descriptors.py`, and widget settings builders consume that registry instead of hardcoded 9-grid position lists,
   - landed fifth slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
   - landed sixth slice: `WidgetsTab` settings-load routing now comes from descriptor-owned section loader metadata instead of a handwritten per-section import/dispatch chain inside `widgets_tab.py`,
+  - landed seventh slice: `WidgetsTab` settings-save routing and unbuilt-section preservation for the standard widget families now come from descriptor-owned section saver metadata instead of a handwritten per-section save/fallback chain inside `widgets_tab.py`,
+  - landed eighth slice: `WidgetsTab` section load/save orchestration itself now runs through descriptor helpers in `rendering/widget_descriptors.py`, so the tab no longer owns the standard section dispatch loop inline,
+  - landed ninth slice: standard widget default-backed `WidgetsTab` attrs (card border width, section colors, media artwork size, and similar base settings) now initialize from descriptor-owned metadata instead of a handwritten attr block inside `widgets_tab.py`,
+  - landed tenth slice: standard section load-time signal-block target collection now comes through descriptor helpers instead of a handwritten attr scan in `widgets_tab.py`, while Gmail/visualizer-specific extras remain explicit,
+  - landed eleventh slice: standard section save-result application for persisted widget keys now comes through descriptor helpers instead of a handwritten per-key reassignment block in `widgets_tab.py`, while the visualizer’s mode-preserving persistence merge remains explicit,
+  - landed twelfth slice: the Defaults section now uses descriptor-owned builder/load/save routing too, so shared shadow toggles and card-border-width persistence no longer remain an inline `widgets_tab.py` special branch,
   - next slice: keep deriving settings composition and future expandability metadata from descriptors where that reduces duplicated widget-specific UI/runtime truth without flattening legitimate special cases,
   - keep legacy settings keys and widget ids stable,
   - avoid parallel registries; one descriptor layer should become the source of truth.
@@ -61,23 +67,13 @@ Core value: highest reuse payoff after the descriptor layer.
   - targeted widget tests for Gmail/Weather/Reddit timing and cache behavior,
   - transition deferral coverage where the shared contract touches image-change boundaries.
 
-3. Descriptor-driven widget settings composition.
-Core value: strong follow-through once descriptors exist.
-- Why this is third:
-  - it reduces drift between widget registration, settings tabs, defaults, and runtime ownership,
-  - it makes future widget additions cheaper and less error-prone.
-- Implementation shape:
-  - derive settings-tab composition and widget-facing metadata from the descriptor layer where sensible,
-  - landed first slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
-  - preserve current user-facing layout and settings keys unless a deliberate migration is planned.
-
-4. Stronger transition registry / descriptor layer.
+3. Stronger transition registry / descriptor layer.
 Core value: medium-high architecture payoff after widget descriptors.
 - Why this matters:
   - transitions still have scattered ownership around registry, startup warmup, and enabled-pool selection,
   - a stronger descriptor layer would reduce drift and make future transitions easier to add safely.
 
-5. Extension-path contract tests and targeted test maintainability.
+4. Extension-path contract tests and targeted test maintainability.
 Core value: supporting work that pays off once Tasks 1–4 are in motion.
 - Scope:
   - add extension-path tests around descriptor/registry contracts,
@@ -128,7 +124,13 @@ Core value: supporting work that pays off once Tasks 1–4 are in motion.
   - validate DPR/multi-monitor adaptability explicitly before rollout; do not store brittle raw-pixel assumptions if a more portable logical/grid representation is viable,
   - do not force resize on widgets whose authored layout cannot safely express it through stable logical controls.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
-- `card_height.py` centralization is not active work. Revisit only if a focused sizing bug justifies it.
+- `card_height.py` assessment is deferred, but now explicitly queued as future actionable work because the visualizer card sizing path still differs from peer overlay cards. When it becomes active, do it in this order:
+  - audit where card height truth currently lives across `widgets/spotify_visualizer/card_height.py`, `widgets/spotify_visualizer_widget.py`, `widgets/spotify_visualizer/mode_transition.py`, `rendering/widget_manager.py`, and the GL overlay stencil/card shell seams,
+  - decide whether visualizer card sizing should normalize toward the shared card-height behavior used by other widgets or remain intentionally special with clearer adapters,
+  - if normalization is viable, extract the minimum shared seam without changing authored visualizer amplitude, border/stencil inset math, transition behavior, or first-frame authority,
+  - if normalization is not viable, document the visualizer-specific sizing contract more explicitly and make adapter points first-class instead of implicit,
+  - treat this as parity-or-improvement work only after running `tests/test_stencil_mask_alignment.py`, relevant visualizer widget/mode-transition subsets, and runtime log sweeps for `FIRST_FRAME_GUARD`, `before_first_overlay_push`, `after_first_overlay_push`, and `MODE_RESET_ASSERT`,
+  - success means easier future card/layout work without breaking the visualizer’s stencil mask, painted-card border contract, or mode-specific perceived scale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
 
 ## Documentation Rule
