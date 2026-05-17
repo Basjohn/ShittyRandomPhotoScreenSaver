@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from rendering.widget_descriptors import (
     apply_widget_section_save_results,
+    build_widget_section_buttons,
     build_widget_stack_preview_config,
+    collect_widget_section_containers,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
+    get_default_widget_section_index,
     get_widget_default_init_descriptors,
+    get_widget_lazy_bootstrap_indices,
     get_service_runtime_contracts,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_section_index_map,
     get_widget_section_signal_block_attrs,
     get_widget_ids_for_service_runtime_contract,
     get_widget_position_option_labels,
@@ -18,7 +23,9 @@ from rendering.widget_descriptors import (
     get_widget_stack_preview_descriptors,
     get_widget_settings_section_descriptors,
     load_widget_sections,
+    resolve_widget_section_index_from_view_state,
 )
+from PySide6.QtWidgets import QButtonGroup
 
 
 def test_clock_descriptor_builds_expected_factory_kwargs():
@@ -101,6 +108,34 @@ def test_widget_settings_section_descriptors_capture_saver_routing():
     assert defaults.saver_module == "ui.tabs.widgets_tab_defaults"
     assert defaults.saver_name == "save_defaults_settings"
     assert defaults.persisted_widget_keys == ("shadows", "global")
+    assert defaults.bootstrap_in_lazy_mode is True
+
+
+def test_widget_settings_section_descriptors_expose_default_selected_section():
+    descriptors = get_widget_settings_section_descriptors()
+    default_idx = get_default_widget_section_index(descriptors)
+
+    assert descriptors[default_idx].section_id == "clock"
+
+
+def test_widget_section_index_resolution_prefers_stable_section_id():
+    descriptors = get_widget_settings_section_descriptors()
+    index_map = get_widget_section_index_map(descriptors)
+
+    assert resolve_widget_section_index_from_view_state(
+        {"subtab_id": "reddit", "subtab": 0},
+        descriptors,
+    ) == index_map["reddit"]
+
+
+def test_widget_lazy_bootstrap_indices_include_defaults_and_requested_subtab():
+    descriptors = get_widget_settings_section_descriptors()
+    index_map = get_widget_section_index_map(descriptors)
+
+    bootstrap = get_widget_lazy_bootstrap_indices(index_map["weather"], descriptors)
+
+    assert index_map["defaults"] in bootstrap
+    assert index_map["weather"] in bootstrap
 
 
 def test_widget_section_signal_block_attrs_follow_descriptor_registry():
@@ -111,6 +146,55 @@ def test_widget_section_signal_block_attrs_follow_descriptor_registry():
     assert "weather_enabled" in attrs
     assert "media_enabled" in attrs
     assert "reddit_enabled" in attrs
+
+
+def test_build_widget_section_buttons_uses_descriptor_metadata(qt_app):
+    class _Owner:
+        pass
+
+    owner = _Owner()
+    group = QButtonGroup()
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "button_label": "Clock",
+                "button_attr_name": "_btn_clock",
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "button_label": "Weather",
+                "button_attr_name": "_btn_weather",
+            },
+        )(),
+    )
+
+    buttons = build_widget_section_buttons(owner, group, "QPushButton {}", descriptors)
+
+    assert len(buttons) == 2
+    assert owner._btn_clock is buttons[0]
+    assert owner._btn_weather is buttons[1]
+    assert group.button(0) is buttons[0]
+    assert group.button(1) is buttons[1]
+
+
+def test_collect_widget_section_containers_uses_descriptor_metadata():
+    class _Owner:
+        _clock_container = "clock"
+        _weather_container = "weather"
+
+    descriptors = (
+        type("_D", (), {"container_attr_name": "_clock_container"})(),
+        type("_D", (), {"container_attr_name": "_weather_container"})(),
+    )
+
+    containers = collect_widget_section_containers(_Owner(), descriptors)
+
+    assert containers == ("clock", "weather")
 
 
 def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_dedupes():

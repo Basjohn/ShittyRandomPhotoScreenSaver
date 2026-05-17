@@ -48,14 +48,19 @@ from core.settings.visualizer_mode_registry import (
 )
 from rendering.widget_descriptors import (
     apply_widget_section_save_results,
+    build_widget_section_buttons,
     build_widget_stack_preview_config,
+    collect_widget_section_containers,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
+    get_default_widget_section_index,
     get_widget_default_init_descriptors,
+    get_widget_lazy_bootstrap_indices,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
     load_widget_sections,
+    resolve_widget_section_index_from_view_state,
 )
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
@@ -170,7 +175,7 @@ class WidgetsTab(QWidget):
         self._initial_view_state = dict(initial_view_state) if isinstance(initial_view_state, dict) else {}
         self._widget_section_descriptors = get_widget_settings_section_descriptors()
         self._widget_defaults = self._load_widget_defaults()
-        self._current_subtab = 0
+        self._current_subtab = get_default_widget_section_index(self._widget_section_descriptors)
         self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
         self._subtab_content_built: set[int] = set()
@@ -535,14 +540,7 @@ class WidgetsTab(QWidget):
                     candidate = widgets_state.get('view_state')
                     if isinstance(candidate, dict):
                         state = candidate
-        subtab = state.get("subtab", 0)
-        try:
-            subtab_id = int(subtab)
-        except (TypeError, ValueError):
-            subtab_id = 0
-        if subtab_id < 0:
-            subtab_id = 0
-        return subtab_id
+        return resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
 
     def _create_subtab_host(self) -> tuple[QWidget, QVBoxLayout]:
         host = QWidget()
@@ -621,23 +619,22 @@ class WidgetsTab(QWidget):
             " }"
         )
 
-        buttons = []
-        for descriptor in self._widget_section_descriptors:
-            btn = QPushButton(descriptor.button_label)
-            setattr(self, descriptor.button_attr_name, btn)
-            buttons.append(btn)
-        
-        for idx, btn in enumerate(buttons):
-            btn.setCheckable(True)
-            btn.setStyleSheet(button_style)
-            self._subtab_group.addButton(btn, idx)
+        buttons = build_widget_section_buttons(
+            self,
+            self._subtab_group,
+            button_style,
+            self._widget_section_descriptors,
+        )
+        for btn in buttons:
             subtab_row.addWidget(btn)
 
         subtab_row.addStretch()
         layout.addLayout(subtab_row)
 
         self._subtab_group.idClicked.connect(self._on_subtab_changed)
-        self._btn_clocks.setChecked(True)
+        default_subtab = get_default_widget_section_index(self._widget_section_descriptors)
+        if 0 <= default_subtab < len(buttons):
+            buttons[default_subtab].setChecked(True)
 
         self._subtab_containers = []
         self._subtab_host_layouts = []
@@ -648,12 +645,12 @@ class WidgetsTab(QWidget):
                 self._subtab_host_layouts.append(host_layout)
                 layout.addWidget(host)
             layout.addStretch()
-            initial_subtab = min(self._resolve_initial_subtab_id(), len(self._subtab_containers) - 1)
-            defaults_index = len(self._subtab_containers) - 1
-            self._build_lazy_subtab_content(defaults_index)
-            if initial_subtab != defaults_index:
-                self._build_lazy_subtab_content(initial_subtab)
-            self._btn_clocks.setChecked(initial_subtab == 0)
+            initial_subtab = self._resolve_initial_subtab_id()
+            for bootstrap_index in get_widget_lazy_bootstrap_indices(
+                initial_subtab,
+                self._widget_section_descriptors,
+            ):
+                self._build_lazy_subtab_content(bootstrap_index)
             if 0 <= initial_subtab < len(buttons):
                 buttons[initial_subtab].setChecked(True)
             self._on_subtab_changed(initial_subtab)
@@ -684,11 +681,10 @@ class WidgetsTab(QWidget):
         )
 
         if not self._lazy_sections:
-            self._subtab_containers = [
-                getattr(self, descriptor.container_attr_name, None)
-                for descriptor in self._widget_section_descriptors
-            ]
-            self._on_subtab_changed(0)
+            self._subtab_containers = list(
+                collect_widget_section_containers(self, self._widget_section_descriptors)
+            )
+            self._on_subtab_changed(default_subtab)
         self._perf_log("_setup_ui_sections", perf_scope)
 
     def _build_section_descriptor_content(self, descriptor, host_layout: QVBoxLayout, subtab_id: int) -> None:
@@ -759,7 +755,10 @@ class WidgetsTab(QWidget):
             pass
 
     def get_view_state(self) -> Dict[str, Any]:
-        state: Dict[str, Any] = {"subtab": int(getattr(self, "_current_subtab", 0))}
+        current_subtab = int(getattr(self, "_current_subtab", 0))
+        state: Dict[str, Any] = {"subtab": current_subtab}
+        if 0 <= current_subtab < len(self._widget_section_descriptors):
+            state["subtab_id"] = self._widget_section_descriptors[current_subtab].section_id
         # Snapshot current subtab's scroll position into cache before saving
         sa = getattr(self, "_scroll_area", None)
         if sa is not None:
@@ -781,11 +780,7 @@ class WidgetsTab(QWidget):
                     self._subtab_scroll_cache[int(k)] = int(v)
                 except (TypeError, ValueError):
                     pass
-        subtab = state.get("subtab")
-        try:
-            subtab_id = int(subtab)
-        except (TypeError, ValueError):
-            subtab_id = 0
+        subtab_id = resolve_widget_section_index_from_view_state(state, self._widget_section_descriptors)
         button = self._subtab_group.button(subtab_id)
         if button is not None:
             button.setChecked(True)

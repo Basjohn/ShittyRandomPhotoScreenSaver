@@ -11,6 +11,8 @@ from importlib import import_module
 import os
 from typing import Any, Callable, Dict, Mapping
 
+from PySide6.QtWidgets import QButtonGroup, QPushButton
+
 
 STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
     "Top Left",
@@ -191,6 +193,8 @@ class WidgetSettingsSectionDescriptor:
     saver_guard_attrs: tuple[str, ...] = ()
     persisted_widget_keys: tuple[str, ...] = ()
     signal_block_attrs: tuple[str, ...] = ()
+    bootstrap_in_lazy_mode: bool = False
+    default_selected: bool = False
     method_name: str | None = None
     dev_feature_env: str | None = None
 
@@ -258,6 +262,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "clock2_enabled", "clock2_timezone", "clock2_monitor_combo",
             "clock3_enabled", "clock3_timezone", "clock3_monitor_combo",
         ),
+        default_selected=True,
     ),
     WidgetSettingsSectionDescriptor(
         section_id="weather",
@@ -405,6 +410,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "widget_header_shadows_enabled",
             "card_border_width_spin",
         ),
+        bootstrap_in_lazy_mode=True,
     ),
 )
 
@@ -417,6 +423,116 @@ def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDesc
         for descriptor in WIDGET_SETTINGS_SECTION_DESCRIPTORS
         if descriptor.is_enabled_in_environment()
     )
+
+
+def build_widget_section_buttons(
+    owner: Any,
+    button_group: QButtonGroup,
+    button_style: str,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> tuple[QPushButton, ...]:
+    """Create descriptor-owned WidgetsTab section buttons."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    buttons: list[QPushButton] = []
+    for idx, descriptor in enumerate(descriptor_iter):
+        button = QPushButton(descriptor.button_label)
+        button.setCheckable(True)
+        button.setStyleSheet(button_style)
+        setattr(owner, descriptor.button_attr_name, button)
+        button_group.addButton(button, idx)
+        buttons.append(button)
+    return tuple(buttons)
+
+
+def get_widget_section_index_map(
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> dict[str, int]:
+    """Return section id -> subtab index mapping for the active descriptor set."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    return {
+        descriptor.section_id: idx
+        for idx, descriptor in enumerate(descriptor_iter)
+    }
+
+
+def collect_widget_section_containers(
+    owner: Any,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> tuple[Any, ...]:
+    """Collect section container widgets from an owner using descriptor metadata."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    return tuple(
+        getattr(owner, descriptor.container_attr_name, None)
+        for descriptor in descriptor_iter
+    )
+
+
+def get_default_widget_section_index(
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> int:
+    """Return the descriptor-owned default WidgetsTab section index."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    for idx, descriptor in enumerate(descriptor_iter):
+        if descriptor.default_selected:
+            return idx
+    return 0
+
+
+def resolve_widget_section_index_from_view_state(
+    state: Mapping[str, Any] | None,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> int:
+    """Resolve a WidgetsTab subtab index from persisted view state.
+
+    Prefer stable descriptor-owned ``subtab_id`` when available, while still
+    accepting the legacy numeric ``subtab`` field for compatibility.
+    """
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    if not descriptor_iter:
+        return 0
+
+    state_map = state if isinstance(state, Mapping) else {}
+    index_map = get_widget_section_index_map(descriptor_iter)
+    subtab_id = state_map.get("subtab_id")
+    if isinstance(subtab_id, str) and subtab_id in index_map:
+        return index_map[subtab_id]
+
+    subtab = state_map.get("subtab", get_default_widget_section_index(descriptor_iter))
+    try:
+        subtab_index = int(subtab)
+    except (TypeError, ValueError):
+        subtab_index = 0
+
+    if subtab_index < 0:
+        subtab_index = 0
+    if subtab_index >= len(descriptor_iter):
+        subtab_index = len(descriptor_iter) - 1
+    return subtab_index
+
+
+def get_widget_lazy_bootstrap_indices(
+    initial_index: int,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> tuple[int, ...]:
+    """Return descriptor-owned lazy-build bootstrap order.
+
+    Some sections, such as Defaults, need to exist even in lazy mode because
+    shared settings load/save/state plumbing depends on their controls.
+    """
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    ordered: list[int] = [
+        idx for idx, descriptor in enumerate(descriptor_iter)
+        if descriptor.bootstrap_in_lazy_mode
+    ]
+    if 0 <= initial_index < len(descriptor_iter) and initial_index not in ordered:
+        ordered.append(initial_index)
+    return tuple(ordered)
 
 
 def get_widget_section_signal_block_attrs() -> tuple[str, ...]:

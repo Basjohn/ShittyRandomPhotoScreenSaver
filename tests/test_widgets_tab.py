@@ -65,6 +65,7 @@ class TestWidgetsTab:
                 descriptor.button_label
                 for descriptor in get_widget_settings_section_descriptors()
             ]
+            assert tab._subtab_group.checkedId() == 0
         finally:
             tab.deleteLater()
 
@@ -84,6 +85,22 @@ class TestWidgetsTab:
             qt_app.processEvents()
 
             assert hasattr(tab, "clock_enabled")
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_widgets_tab_accepts_descriptor_owned_subtab_id_restore(self, qt_app, settings_manager):
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "reddit"},
+        )
+        try:
+            assert hasattr(tab, "reddit_enabled")
+            assert hasattr(tab, "widget_shadows_enabled")
+            assert not hasattr(tab, "clock_enabled")
+
+            view_state = tab.get_view_state()
+            assert view_state["subtab_id"] == "reddit"
         finally:
             tab.deleteLater()
 

@@ -1,8 +1,8 @@
 # Current Plan
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
-This file tracks active work only. Completed implementation details belong in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
+This file tracks active work only. Ongoing architecture truth belongs in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
 ## Guardrails
 - Keep this aligned with `Spec.md`, `Index.md`, `Docs/Guardrails.md`, and `Docs/Historical_Bugs.md`.
@@ -13,74 +13,49 @@ This file tracks active work only. Completed implementation details belong in th
 
 ## Active Tasks
 
-1. Widget descriptor / registry system.
-Core value: highest cross-project payoff now that the risky visualizer structural work is substantially landed.
-- Why this is first:
-  - it reduces multi-file surgery whenever a widget is added, renamed, gated, or moved,
-  - it gives startup policy, widget factory registration, and settings composition a shared source of truth,
-  - it is the strongest audit-derived architectural improvement that is not just cleanup.
-- Implementation shape:
-  - establish a canonical descriptor surface for widget identity, enablement, startup category, factory ownership, settings-tab ownership, and runtime capabilities,
-  - landed first slice: factory-backed widget family metadata now lives in `rendering/widget_descriptors.py`, and `rendering/widget_setup_all.py` consumes that registry for clock/weather/media/reddit/imgur/gmail parity,
-  - landed second slice: `WidgetsTab` section order, labels, dev gating, and builder routing now consume the descriptor registry instead of a handwritten subtab family list,
-  - landed third slice: runtime capability metadata and live settings-refresh ownership now live in `rendering/widget_descriptors.py`, and `WidgetManager` consumes descriptor-owned handler routing instead of handwritten settings-prefix checks,
-  - landed fourth slice: descriptor-owned settings position options and future layout-edit capability metadata now live in `rendering/widget_descriptors.py`, and widget settings builders consume that registry instead of hardcoded 9-grid position lists,
-  - landed fifth slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
-  - landed sixth slice: `WidgetsTab` settings-load routing now comes from descriptor-owned section loader metadata instead of a handwritten per-section import/dispatch chain inside `widgets_tab.py`,
-  - landed seventh slice: `WidgetsTab` settings-save routing and unbuilt-section preservation for the standard widget families now come from descriptor-owned section saver metadata instead of a handwritten per-section save/fallback chain inside `widgets_tab.py`,
-  - landed eighth slice: `WidgetsTab` section load/save orchestration itself now runs through descriptor helpers in `rendering/widget_descriptors.py`, so the tab no longer owns the standard section dispatch loop inline,
-  - landed ninth slice: standard widget default-backed `WidgetsTab` attrs (card border width, section colors, media artwork size, and similar base settings) now initialize from descriptor-owned metadata instead of a handwritten attr block inside `widgets_tab.py`,
-  - landed tenth slice: standard section load-time signal-block target collection now comes through descriptor helpers instead of a handwritten attr scan in `widgets_tab.py`, while Gmail/visualizer-specific extras remain explicit,
-  - landed eleventh slice: standard section save-result application for persisted widget keys now comes through descriptor helpers instead of a handwritten per-key reassignment block in `widgets_tab.py`, while the visualizer’s mode-preserving persistence merge remains explicit,
-  - landed twelfth slice: the Defaults section now uses descriptor-owned builder/load/save routing too, so shared shadow toggles and card-border-width persistence no longer remain an inline `widgets_tab.py` special branch,
-  - next slice: keep deriving settings composition and future expandability metadata from descriptors where that reduces duplicated widget-specific UI/runtime truth without flattening legitimate special cases,
-  - keep legacy settings keys and widget ids stable,
-  - avoid parallel registries; one descriptor layer should become the source of truth.
+1. Stronger transition registry / descriptor layer.
+Core value: next best architecture payoff after widget descriptors.
+- Goal:
+  - centralize transition identity, labels, startup-safe gating, warmup metadata, and enabled-pool selection,
+  - reduce scattered transition ownership so future transitions can be added safely with less multi-file surgery.
 - Required validation:
-  - targeted widget-manager / startup-path tests,
-  - descriptor registration tests,
-  - doc refresh in `Spec.md`, `Index.md`, and `Docs/10_WIDGET_GUIDELINES.md` if ownership moves.
+  - targeted transition registry/startup-path tests,
+  - doc refresh in `Spec.md`, `Index.md`, and `Docs/Transition_Change_Checklist.md`.
 
-2. Shared async / service-backed widget contract.
-Core value: highest reuse payoff after the descriptor layer.
-- Why this is second:
-  - Gmail, Weather, Reddit, and similar widgets still repeat fetch scheduling, cache display, retry timers, transition-aware deferral, and fetch-in-flight guards,
-  - consolidating that contract reduces repeated lifecycle fragility without changing each widget’s authored UI.
-- Implementation shape:
-  - define one shared contract for background refresh scheduling, in-flight guards, deferred apply around transitions, cache-first fallback, and timer cleanup,
-  - move only the shared lifecycle mechanics first; keep widget-owned rendering and provider logic local,
-  - landed first slice: `widgets/service_widget_runtime.py` now owns shared transition-busy probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, and timer-stop cleanup helpers,
-  - landed second slice: shared fetch-in-progress guard helpers now live in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam instead of maintaining separate begin/end fetch bookkeeping,
-  - landed third slice: shared manual-refresh request flow now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam for enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup,
-  - landed fourth slice: shared visible-fallback preservation now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam so empty/error/non-authoritative fetches do not replace already-visible trustworthy content,
-  - landed fifth slice: descriptor-owned service-runtime contract metadata now lives in `rendering/widget_descriptors.py`, so the shared service-backed lifecycle rules have a canonical ownership map instead of relying on an implied `service_backed=True` meaning,
-  - landed sixth slice: Weather startup and steady-state refresh scheduling now runs through one canonical path, removing lifecycle-entry drift between `_activate_impl()` and legacy `start()` while preserving Weather’s narrower service-runtime contract,
-  - landed seventh slice: Imgur periodic refresh timer ownership now runs through one canonical local stop/start path, and live interval changes reschedule the active timer instead of silently waiting for a later lifecycle restart,
-  - landed eighth slice: Spotify volume flush-timer reset now runs through one canonical local helper, so stop/deactivate/cleanup all clear pending volume state consistently without duplicating timer teardown branches,
-  - landed ninth slice: Media widget smart-poll timer reset and pending-state debounce reset now each run through one canonical local helper, so stop/deactivate/force-restart paths do not maintain separate teardown branches for the same local timer state,
-  - landed tenth slice: Mute button enable/disable/cleanup now run through one canonical local runtime reset path, so poll state and Spotify secondary-stage reveal state do not leak across disable/re-enable or cleanup edges,
-  - Gmail and Reddit now consume that shared transition-aware refresh/result lifecycle instead of maintaining parallel local timer/probe helpers,
-  - Weather now consumes the shared timer reuse/cleanup seam for retry scheduling without forcing Weather into the full Gmail/Reddit deferral contract prematurely,
-  - next slice: use the descriptor-owned service-runtime contract map plus these local cleanup passes to decide whether any remaining service-backed duplication deserves widening into `widgets/service_widget_runtime.py` or should stay explicitly widget-local,
-  - prefer adapting existing proven seams over inventing a new manager hierarchy.
+2. Final shared async / service-backed widget audit.
+Core value: reuse and lifecycle safety follow-through.
+- Current state:
+  - shared lifecycle helpers, fetch guards, manual refresh flow, visible-fallback preservation, and descriptor-owned service contract metadata are all landed.
+- Remaining work:
+  - use the descriptor-owned service-runtime contract map to decide whether any remaining duplicated lifecycle logic should widen into `widgets/service_widget_runtime.py`,
+  - leave widget-local behavior local when the contract is not truly shared.
 - Required validation:
-  - targeted widget tests for Gmail/Weather/Reddit timing and cache behavior,
-  - transition deferral coverage where the shared contract touches image-change boundaries.
+  - targeted widget tests for Gmail/Weather/Reddit/Imgur/Media-family lifecycle behavior,
+  - transition deferral coverage where shared service-backed behavior is touched.
 
-3. Stronger transition registry / descriptor layer.
-Core value: medium-high architecture payoff after widget descriptors.
-- Why this matters:
-  - transitions still have scattered ownership around registry, startup warmup, and enabled-pool selection,
-  - a stronger descriptor layer would reduce drift and make future transitions easier to add safely.
-
-4. Extension-path contract tests and targeted test maintainability.
-Core value: supporting work that pays off once Tasks 1–4 are in motion.
+3. Extension-path contract tests and targeted test maintainability.
+Core value: supporting hardening work.
 - Scope:
-  - add extension-path tests around descriptor/registry contracts,
-  - split oversized visualizer/settings plumbing tests only where it directly improves safety for active refactors,
-  - keep test work tied to active architecture changes rather than doing a broad cleanup campaign.
+  - add extension-path tests around descriptor/registry contracts as they stabilize,
+  - split oversized tests only where it materially improves safety for active refactors,
+  - keep test work tied to active architecture changes rather than broad cleanup.
 
 ## Recently Completed / Not Active
+- Widget descriptor base is substantially landed:
+  - factory-backed widget registry,
+  - descriptor-owned `WidgetsTab` section build/load/save routing,
+  - Defaults section migration,
+  - descriptor-owned section-id restore, lazy bootstrap, and default section selection,
+  - descriptor-owned subtab button/container plumbing for ordinary sections,
+  - runtime capability and service-contract ownership.
+- Ordinary `WidgetsTab` coordination cleanup is complete enough to retire as the main active track:
+  - remaining inline behavior is now either genuinely special (`spotify_visualizer`, Gmail-specific buckets) or plain tab-local orchestration that is not worth flattening further right now.
+- Shared service-backed widget contract is substantially landed:
+  - transition-aware deferral,
+  - fetch-in-progress guards,
+  - manual refresh flow,
+  - visible-fallback preservation,
+  - local canonical cleanup seams for Weather, Imgur, Spotify volume, Media widget, and mute button.
 - Visualizer settings-model residue reduction in `core/settings/models/_spotify_visualizer.py` is substantially landed and documented.
 - Visualizer coordinator residue reduction in `widgets/spotify_visualizer_widget.py` plus extracted seams (`activation_runtime.py`, `runtime_config.py`, `mode_transition.py`, `tick_helpers.py`) is substantially landed and documented.
 - Visualizer overlay split Task 3 slices `3A` through `3D` are substantially landed and documented:
@@ -91,7 +66,7 @@ Core value: supporting work that pays off once Tasks 1–4 are in motion.
 - Do not reopen those tracks as active work unless a concrete regression or a clearly higher-value follow-through appears.
 
 ## Watchlist
-- While any visualizer work remains active, first-bar / first-frame authority and settings/preset drift stay on the watchlist by default. Do not remove them from active watch coverage until the visualizer track is fully complete.
+- While visualizer follow-through remains possible, first-bar / first-frame authority and settings/preset drift stay on the watchlist by default. Do not remove them from active watch coverage until the visualizer track is truly cold.
 - Closure evidence to keep handy for that watch family:
   - tests:
     - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
@@ -103,9 +78,9 @@ Core value: supporting work that pays off once Tasks 1–4 are in motion.
     - `after_first_overlay_push`
     - `MODE_RESET_ASSERT`
     - `No technical config available`
-- Gmail/OAuth is not an active blocker for planning purposes. The threading/test seam is closed enough; do not hold the larger architecture queue on manual Gmail validation.
-- The stale live capture block-size regression is fixed and confirmed in logs: live mode switches renegotiate `128` for `spectrum` and `256` for `devcurve` without waiting for a settings-dialog restart.
-- Recent long-run logs do not show a new first-bar / bleed / stale-generation failure. Visualizer performance looks good enough to leave as watch work rather than the active priority, provided later runs do not show persistent settled-runtime drift.
+- Gmail/OAuth is not an active blocker for planning purposes.
+- The stale live capture block-size regression is fixed and confirmed in logs.
+- Recent long-run logs do not show a new first-bar / bleed / stale-generation failure.
 - The curated/custom preset drift family stays a standing watch item during settings-model refactors: preserve CLEAR-then-APPLY semantics and do not reintroduce a second post-overlay merge phase or entry-point-specific fallback path.
 - Startup mode truth and shader warmup are now aligned around the resolved startup mode. Keep watching for any reappearance of cold-start replay misses or legacy `spectrum` assumptions in logs.
 - The overlay cold-reset path should preserve guardrails even if the GL object is reused. If a reused overlay ever reintroduces stale activation/generation state, the first-frame guard warning should make that visible immediately in logs.
