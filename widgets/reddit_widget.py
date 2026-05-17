@@ -58,6 +58,14 @@ from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/exte
     smart_title_case as _smart_title_case,
     try_bring_reddit_window_to_front as _try_bring_reddit_window_to_front,
 )
+from widgets.service_widget_runtime import (
+    defer_refresh_if_transition,
+    defer_value_if_transition,
+    ensure_single_shot_timer,
+    parent_transition_running,
+    stop_qtimer_attr,
+    sync_refresh_spinner_for_transition,
+)
 
 logger = get_logger(__name__)
 
@@ -274,11 +282,7 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
-        if self._deferred_refresh_timer is not None:
-            try:
-                self._deferred_refresh_timer.stop()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
+        self._stop_deferred_refresh_timer(delete_qtimers=False)
         self._pending_refresh_after_transition = False
         self._deferred_posts_data = None
         self._deferred_fetch_error = None
@@ -387,11 +391,7 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._growth_timer = None
-        if self._deferred_refresh_timer is not None:
-            try:
-                self._deferred_refresh_timer.stop()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
+        self._stop_deferred_refresh_timer(delete_qtimers=False)
         self._pending_refresh_after_transition = False
         self._deferred_posts_data = None
         self._deferred_fetch_error = None
@@ -422,16 +422,17 @@ class RedditWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         self._refresh_spin_timer = None
-        try:
-            if self._deferred_refresh_timer is not None:
-                self._deferred_refresh_timer.stop()
-                self._deferred_refresh_timer.deleteLater()
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-        self._deferred_refresh_timer = None
+        self._stop_deferred_refresh_timer(delete_qtimers=True)
 
     def is_running(self) -> bool:
         return self._enabled
+
+    def _stop_deferred_refresh_timer(self, *, delete_qtimers: bool) -> None:
+        stop_qtimer_attr(
+            self,
+            "_deferred_refresh_timer",
+            delete_qtimers=delete_qtimers,
+        )
 
     # ------------------------------------------------------------------
     # External configuration (called from DisplayWidget/Settings)
@@ -874,54 +875,34 @@ class RedditWidget(BaseOverlayWidget):
             return False
 
     def _parent_transition_running(self) -> bool:
-        parent = self.parent()
-        while parent is not None:
-            try:
-                has_pending = getattr(parent, "has_transition_work_pending", None)
-                if callable(has_pending) and bool(has_pending()):
-                    return True
-                has_running = getattr(parent, "has_running_transition", None)
-                if callable(has_running) and bool(has_running()):
-                    return True
-            except Exception:
-                return False
-            parent = parent.parent() if hasattr(parent, "parent") else None
-        return False
+        return parent_transition_running(self)
 
     def on_parent_transition_work_pending(self, pending: bool) -> None:
         """Pause live refresh animation as soon as a transition is requested."""
-        if not self._refreshing:
-            return
-        transition_busy = bool(pending) or self._parent_transition_running()
-        if transition_busy:
-            self._refresh_spinner_suspended_for_transition = True
-            if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
-                self._refresh_spin_timer.stop()
-            self._update_refresh_button_region()
-            return
-        if self._refresh_spinner_suspended_for_transition:
-            self._refresh_spinner_suspended_for_transition = False
-            if self._refresh_spin_timer is not None and not self._refresh_spin_timer.isActive():
-                self._refresh_spin_timer.start()
-            self._update_refresh_button_region()
+        sync_refresh_spinner_for_transition(
+            self,
+            pending,
+            restart_callback=lambda timer: timer.start(),
+            update_callback=self._update_refresh_button_region,
+        )
 
     def _defer_refresh_if_transition(self) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._pending_refresh_after_transition = True
-        self._schedule_deferred_refresh()
-        logger.debug("[REDDIT] Deferred manual refresh until active transition finishes")
-        return True
+        return defer_refresh_if_transition(
+            self,
+            pending_attr="_pending_refresh_after_transition",
+            schedule_callback=self._schedule_deferred_refresh,
+            logger=logger,
+            log_message="[REDDIT] Deferred manual refresh until active transition finishes",
+        )
 
     def _schedule_deferred_refresh(self) -> None:
-        if self._deferred_refresh_timer is None:
-            timer = QTimer(self)
-            timer.setSingleShot(True)
-            timer.timeout.connect(self._flush_deferred_refresh)
-            self._deferred_refresh_timer = timer
-            self._register_resource(timer, "reddit deferred refresh")
-        if not self._deferred_refresh_timer.isActive():
-            self._deferred_refresh_timer.start(250)
+        ensure_single_shot_timer(
+            self,
+            attr_name="_deferred_refresh_timer",
+            delay_ms=250,
+            timeout_callback=self._flush_deferred_refresh,
+            resource_name="reddit deferred refresh",
+        )
 
     def _flush_deferred_refresh(self) -> None:
         if self._parent_transition_running():
@@ -942,20 +923,26 @@ class RedditWidget(BaseOverlayWidget):
             self._trigger_manual_refresh()
 
     def _defer_feed_apply_if_transition(self, posts_data: List[Dict[str, Any]]) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._deferred_posts_data = list(posts_data)
-        self._schedule_deferred_refresh()
-        logger.debug("[REDDIT] Deferred fetched posts apply until active transition finishes")
-        return True
+        return defer_value_if_transition(
+            self,
+            attr_name="_deferred_posts_data",
+            value=list(posts_data),
+            clear_attrs=("_deferred_fetch_error",),
+            schedule_callback=self._schedule_deferred_refresh,
+            logger=logger,
+            log_message="[REDDIT] Deferred fetched posts apply until active transition finishes",
+        )
 
     def _defer_fetch_error_if_transition(self, error: str) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._deferred_fetch_error = str(error)
-        self._schedule_deferred_refresh()
-        logger.debug("[REDDIT] Deferred fetch error apply until active transition finishes")
-        return True
+        return defer_value_if_transition(
+            self,
+            attr_name="_deferred_fetch_error",
+            value=str(error),
+            clear_attrs=("_deferred_posts_data",),
+            schedule_callback=self._schedule_deferred_refresh,
+            logger=logger,
+            log_message="[REDDIT] Deferred fetch error apply until active transition finishes",
+        )
 
     def _start_refresh_spinner(self) -> None:
         was_refreshing = self._refreshing

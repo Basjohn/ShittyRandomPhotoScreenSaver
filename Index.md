@@ -101,6 +101,7 @@ Living map of the current SRPSS codebase.
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
 | Widget descriptor registry | `rendering/widget_descriptors.py` | Canonical factory-backed widget family metadata plus WidgetsTab section and runtime-capability registry: stable widget ids, parent attributes, factory routing, startup-stage intent, inheritance kwargs, config injection such as Gmail shadow plumbing, settings-section order/label/builder ownership, service-backed/anchor-dependent capability flags, and live-refresh handler ownership |
 | Widget setup orchestration | `rendering/widget_setup_all.py` | Shared descriptor-driven creation/reuse/expected-overlay flow for factory-backed widgets plus the remaining Spotify-dependent setup path |
+| Shared service widget runtime | `widgets/service_widget_runtime.py` | Shared lifecycle helpers for service-backed overlay widgets: parent transition-busy probing, deferred single-shot timer reuse, deferred refresh/result staging, spinner suspend/resume, and timer-stop cleanup used by Gmail/Reddit/Weather slices |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
 | Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths |
@@ -121,7 +122,7 @@ Living map of the current SRPSS codebase.
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, punctuation-aware shortening, email cache |
 | Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, sender/subject cleanup controls, grouping toggle, deferred auth refresh, and Gmail-specific signal-block/visibility guardrails |
 | Settings cache | `ui/settings_dialog_cache.py` | Settings dialog cached defaults/font data; cache generation includes canonical defaults modules so Gmail defaults do not go stale |
-| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay for Gmail list rendering, backend-safe actions, row/menu hit targets, transition-aware refresh/result deferral, empty-fetch preservation of valid displayed mail, header-safe fallback layout, async cache writes, DPR-aware stable-content paint cache, grouping toggle support, and perf instrumentation |
+| Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay for Gmail list rendering, backend-safe actions, row/menu hit targets, shared transition-aware refresh/result deferral, empty-fetch preservation of valid displayed mail, header-safe fallback layout, async cache writes, DPR-aware stable-content paint cache, grouping toggle support, and perf instrumentation |
 | Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include only the notification OGG plus Qt multimedia requirements |
 
 ## Shared Shadow Path

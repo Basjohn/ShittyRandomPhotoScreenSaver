@@ -40,6 +40,10 @@ Core value: highest reuse payoff after the descriptor layer.
 - Implementation shape:
   - define one shared contract for background refresh scheduling, in-flight guards, deferred apply around transitions, cache-first fallback, and timer cleanup,
   - move only the shared lifecycle mechanics first; keep widget-owned rendering and provider logic local,
+  - landed first slice: `widgets/service_widget_runtime.py` now owns shared transition-busy probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, and timer-stop cleanup helpers,
+  - Gmail and Reddit now consume that shared transition-aware refresh/result lifecycle instead of maintaining parallel local timer/probe helpers,
+  - Weather now consumes the shared timer reuse/cleanup seam for retry scheduling without forcing Weather into the full Gmail/Reddit deferral contract prematurely,
+  - next slice: decide whether cache-first fallback and fetch-in-progress guard behavior can be widened safely across more service-backed widgets without flattening real provider differences,
   - prefer adapting existing proven seams over inventing a new manager hierarchy.
 - Required validation:
   - targeted widget tests for Gmail/Weather/Reddit timing and cache behavior,

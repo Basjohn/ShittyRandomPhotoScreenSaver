@@ -45,6 +45,14 @@ from widgets.gmail_components import (
     serialize_email_cache,
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from widgets.service_widget_runtime import (
+    defer_refresh_if_transition,
+    defer_value_if_transition,
+    ensure_single_shot_timer,
+    parent_transition_running,
+    stop_qtimer_attr,
+    sync_refresh_spinner_for_transition,
+)
 from widgets.shadow_utils import (
     ShadowFadeProfile,
     draw_pixmap_drop_shadow,
@@ -459,17 +467,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def _stop_deferred_timers(self, *, delete_qtimers: bool) -> None:
         for attr_name in ("_deferred_fetch_timer", "_deferred_refresh_timer"):
-            timer = getattr(self, attr_name, None)
-            if timer is None:
-                continue
-            try:
-                timer.stop()
-                if delete_qtimers:
-                    timer.deleteLater()
-            except Exception:
-                pass
-            if delete_qtimers:
-                setattr(self, attr_name, None)
+            stop_qtimer_attr(self, attr_name, delete_qtimers=delete_qtimers)
 
     # ------------------------------------------------------------------
     # Timer & Fetch
@@ -577,53 +575,34 @@ class GmailWidget(BaseOverlayWidget):
             self.update()
 
     def _parent_transition_running(self) -> bool:
-        parent = self.parent()
-        while parent is not None:
-            try:
-                has_pending = getattr(parent, "has_transition_work_pending", None)
-                if callable(has_pending) and bool(has_pending()):
-                    return True
-                has_running = getattr(parent, "has_running_transition", None)
-                if callable(has_running) and bool(has_running()):
-                    return True
-            except Exception:
-                return False
-            parent = parent.parent() if hasattr(parent, "parent") else None
-        return False
+        return parent_transition_running(self)
 
     def on_parent_transition_work_pending(self, pending: bool) -> None:
         """Pause live refresh animation as soon as a transition is requested."""
-        if not self._refreshing:
-            return
-        transition_busy = bool(pending) or self._parent_transition_running()
-        if transition_busy:
-            self._refresh_spinner_suspended_for_transition = True
-            if self._refresh_spin_timer is not None and self._refresh_spin_timer.isActive():
-                self._refresh_spin_timer.stop()
-            self._update_refresh_button_region()
-            return
-        if self._refresh_spinner_suspended_for_transition:
-            self._refresh_spinner_suspended_for_transition = False
-            if self._refresh_spin_timer is not None and not self._refresh_spin_timer.isActive():
-                self._refresh_spin_timer.start(80)
-            self._update_refresh_button_region()
+        sync_refresh_spinner_for_transition(
+            self,
+            pending,
+            restart_callback=lambda timer: timer.start(80),
+            update_callback=self._update_refresh_button_region,
+        )
 
     def _defer_refresh_if_transition(self) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._pending_refresh_after_transition = True
-        self._schedule_deferred_refresh()
-        logger.debug("[GMAIL] Deferred email refresh until active transition finishes")
-        return True
+        return defer_refresh_if_transition(
+            self,
+            pending_attr="_pending_refresh_after_transition",
+            schedule_callback=self._schedule_deferred_refresh,
+            logger=logger,
+            log_message="[GMAIL] Deferred email refresh until active transition finishes",
+        )
 
     def _schedule_deferred_refresh(self) -> None:
-        if self._deferred_refresh_timer is None:
-            self._deferred_refresh_timer = QTimer(self)
-            self._deferred_refresh_timer.setSingleShot(True)
-            self._deferred_refresh_timer.timeout.connect(self._flush_deferred_refresh)
-            self._register_resource(self._deferred_refresh_timer, "gmail_deferred_refresh_timer")
-        if not self._deferred_refresh_timer.isActive():
-            self._deferred_refresh_timer.start(250)
+        ensure_single_shot_timer(
+            self,
+            attr_name="_deferred_refresh_timer",
+            delay_ms=250,
+            timeout_callback=self._flush_deferred_refresh,
+            resource_name="gmail_deferred_refresh_timer",
+        )
 
     def _flush_deferred_refresh(self) -> None:
         if self._cancelled:
@@ -643,35 +622,39 @@ class GmailWidget(BaseOverlayWidget):
         unread_count: int,
         generation: Optional[int],
     ) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._deferred_fetch_result = (list(emails), int(unread_count), generation)
-        self._deferred_fetch_error = None
-        self._schedule_deferred_fetch_flush()
-        logger.debug("[GMAIL] Deferred fetched mail apply until active transition finishes")
-        return True
+        return defer_value_if_transition(
+            self,
+            attr_name="_deferred_fetch_result",
+            value=(list(emails), int(unread_count), generation),
+            clear_attrs=("_deferred_fetch_error",),
+            schedule_callback=self._schedule_deferred_fetch_flush,
+            logger=logger,
+            log_message="[GMAIL] Deferred fetched mail apply until active transition finishes",
+        )
 
     def _defer_fetch_error_if_transition(
         self,
         error_msg: str,
         generation: Optional[int],
     ) -> bool:
-        if not self._parent_transition_running():
-            return False
-        self._deferred_fetch_error = (str(error_msg), generation)
-        self._deferred_fetch_result = None
-        self._schedule_deferred_fetch_flush()
-        logger.debug("[GMAIL] Deferred fetch error display until active transition finishes")
-        return True
+        return defer_value_if_transition(
+            self,
+            attr_name="_deferred_fetch_error",
+            value=(str(error_msg), generation),
+            clear_attrs=("_deferred_fetch_result",),
+            schedule_callback=self._schedule_deferred_fetch_flush,
+            logger=logger,
+            log_message="[GMAIL] Deferred fetch error display until active transition finishes",
+        )
 
     def _schedule_deferred_fetch_flush(self) -> None:
-        if self._deferred_fetch_timer is None:
-            self._deferred_fetch_timer = QTimer(self)
-            self._deferred_fetch_timer.setSingleShot(True)
-            self._deferred_fetch_timer.timeout.connect(self._flush_deferred_fetch_result)
-            self._register_resource(self._deferred_fetch_timer, "gmail_deferred_fetch_timer")
-        if not self._deferred_fetch_timer.isActive():
-            self._deferred_fetch_timer.start(250)
+        ensure_single_shot_timer(
+            self,
+            attr_name="_deferred_fetch_timer",
+            delay_ms=250,
+            timeout_callback=self._flush_deferred_fetch_result,
+            resource_name="gmail_deferred_fetch_timer",
+        )
 
     def _flush_deferred_fetch_result(self) -> None:
         if self._cancelled:

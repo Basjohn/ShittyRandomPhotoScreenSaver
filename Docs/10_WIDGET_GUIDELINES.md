@@ -69,6 +69,10 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 - Extend the runtime descriptor metadata in `rendering/widget_descriptors.py` for startup stage, anchor dependence, service-backed status, settings-section ownership, and live-refresh routing.
 - If a widget family already has a descriptor-owned live refresh handler, do not add a parallel handwritten prefix route in `rendering/widget_manager.py`.
 
+4.1 Service-backed lifecycle mechanics
+- For service-backed widgets such as Gmail, Reddit, and Weather-style overlays, reuse `widgets/service_widget_runtime.py` for parent transition probes, deferred single-shot timers, deferred refresh/result staging, spinner suspend/resume, and timer-stop cleanup where that contract matches.
+- Do not force provider logic or authored UI into the shared helper. Keep fetch semantics, cache fallback policy, and paint/layout behavior widget-owned.
+
 5. Positioning and dependent geometry
 - Add positioning support in `rendering/widget_positioner.py`.
 - If the widget depends on another widget's geometry, follow the shared anchor/dependent-visibility contract instead of inventing ad hoc coordinate math.

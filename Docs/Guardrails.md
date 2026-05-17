@@ -47,6 +47,11 @@ No shadow frameworks or parallel ownership paths.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
 - `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
 
+## 5.2 Service-Backed Widget Safety
+- Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.
+- Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, or spinner suspend/resume logic into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
+- Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
+
 ## 6. Testing and Validation
 - Add automated regression coverage for changed contracts.
 - Do not treat tests alone as sufficient for visual/timing-sensitive bug closure.

@@ -21,6 +21,7 @@ from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from widgets.service_widget_runtime import ensure_single_shot_timer, stop_qtimer_attr
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
     WeatherDetailRow,
@@ -720,14 +721,7 @@ class WeatherWidget(BaseOverlayWidget):
                 pass
             self._update_timer = None
 
-        if self._retry_timer:
-            try:
-                self._retry_timer.stop()
-                if delete_qtimers:
-                    self._retry_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._retry_timer = None
+        stop_qtimer_attr(self, "_retry_timer", delete_qtimers=delete_qtimers)
 
         if self._icon_timer_handle is not None:
             try:
@@ -918,14 +912,13 @@ class WeatherWidget(BaseOverlayWidget):
         self._cache_time = dt
 
     def _schedule_retry(self, delay_ms: int = 5 * 60 * 1000) -> None:
-        if self._retry_timer is not None:
-            return
-        timer = QTimer(self)
-        timer.setSingleShot(True)
-        timer.timeout.connect(self._on_retry_timeout)
-        timer.start(delay_ms)
-        self._retry_timer = timer
-        self._register_resource(timer, "weather retry timer")
+        ensure_single_shot_timer(
+            self,
+            attr_name="_retry_timer",
+            delay_ms=delay_ms,
+            timeout_callback=self._on_retry_timeout,
+            resource_name="weather retry timer",
+        )
 
     def _on_retry_timeout(self) -> None:
         self._retry_timer = None

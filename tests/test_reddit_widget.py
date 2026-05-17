@@ -318,6 +318,21 @@ def test_reddit_transition_pending_parent_chain_and_spinner_suspend(qt_app, qtbo
 
 
 @pytest.mark.qt
+def test_reddit_deferred_refresh_timer_is_cleared_on_cleanup(qt_app, qtbot):  # noqa: ARG001
+    """Deferred Reddit refresh timer should not survive cleanup."""
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    widget._schedule_deferred_refresh()  # type: ignore[attr-defined]
+
+    assert widget._deferred_refresh_timer is not None  # type: ignore[attr-defined]
+    assert widget._deferred_refresh_timer.isActive() is True  # type: ignore[attr-defined]
+
+    widget.cleanup()
+
+    assert widget._deferred_refresh_timer is None  # type: ignore[attr-defined]
+
+
+@pytest.mark.qt
 def test_reddit_cache_regeneration_defers_during_transition(qt_app, qtbot):  # noqa: ARG001
     """Reddit should keep blitting an old cache instead of regenerating during transitions."""
     from PySide6.QtGui import QPixmap

@@ -270,6 +270,20 @@ def test_weather_retry_timer_is_cleared_on_cleanup(qapp, parent_widget):
     assert weather._retry_timer is None
 
 
+def test_weather_retry_timer_is_reused_while_active(qapp, parent_widget):
+    """Retry scheduling should reuse the active single-shot timer instead of recreating it."""
+    weather = WeatherWidget(parent=parent_widget)
+
+    weather._schedule_retry(delay_ms=60_000)
+    first_timer = weather._retry_timer
+
+    weather._schedule_retry(delay_ms=60_000)
+
+    assert first_timer is not None
+    assert weather._retry_timer is first_timer
+    weather.cleanup()
+
+
 def test_weather_retry_timeout_fetches_only_when_enabled(qapp, parent_widget):
     """Retry timeout should no-op once the widget is no longer enabled."""
     weather = WeatherWidget(parent=parent_widget)
