@@ -46,11 +46,13 @@ No shadow frameworks or parallel ownership paths.
 - When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
 - `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
+- Descriptor-owned service-runtime contract participation also belongs in `rendering/widget_descriptors.py`. Do not widen shared service-backed behavior based only on `service_backed=True` when the finer-grained contract can be recorded explicitly.
 - `WidgetsTab` preview/save truth for standard widget families should prefer descriptor-owned stack-preview/settings-composition metadata over handwritten per-widget UI reads. If a widget field must stay special-cased, document why the descriptor contract could not express it.
 
 ## 5.2 Service-Backed Widget Safety
 - Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.
 - Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume logic, simple fetch-in-progress begin/end guard bookkeeping, manual-refresh request flow, or visible-fallback preservation for non-authoritative empty/error results into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
+- Do not treat `service_backed=True` as enough detail by itself when broadening shared widget behavior. Extend descriptor-owned service-runtime contract metadata first so widening stays explicit and reviewable.
 - Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
 
 ## 5.3 Future Custom Layout Edit Mode Safety

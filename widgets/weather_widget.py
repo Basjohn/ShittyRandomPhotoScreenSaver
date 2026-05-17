@@ -561,23 +561,7 @@ class WeatherWidget(BaseOverlayWidget):
         if self._is_cache_valid():
             self._update_display(self._cached_data)
             self._has_displayed_valid_data = True
-        
-        # Schedule early refresh 30 seconds after startup to get fresh data
-        # Open-Meteo free tier: 10k calls/day, we make ~48/day (well within limits)
-        ThreadManager.single_shot(30 * 1000, self._fetch_weather)
-        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
-        
-        # Start periodic updates with desync jitter to prevent alignment with other widgets
-        base_interval_ms = 30 * 60 * 1000  # 30 minutes
-        # Add ±2 minute jitter to desync from other widgets and transitions
-        jitter_ms = random.randint(-2 * 60 * 1000, 2 * 60 * 1000)
-        interval_ms = base_interval_ms + jitter_ms
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] WeatherWidget: refresh interval %.1f min (jitter: %+.1f min)",
-                        interval_ms / 60000, jitter_ms / 60000)
-        handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
-        self._update_timer_handle = handle
-        self._update_timer = getattr(handle, "_timer", None)
+        self._schedule_refresh_cycle()
         
         # Fade in
         parent = self.parent()
@@ -651,20 +635,7 @@ class WeatherWidget(BaseOverlayWidget):
                     _starter()
             else:
                 _starter()
-
-            # Schedule early refresh 30 seconds after startup to get fresh data
-            # Open-Meteo free tier: 10k calls/day, we make ~50/day (well within limits)
-            ThreadManager.single_shot(30 * 1000, self._fetch_weather)
-            logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
-            
-            interval_ms = 30 * 60 * 1000
-            handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
-            self._update_timer_handle = handle
-            try:
-                self._update_timer = getattr(handle, "_timer", None)
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-                self._update_timer = None
+            self._schedule_refresh_cycle()
 
             logger.info("Weather widget started (using cached data)")
             return
@@ -673,19 +644,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._pending_first_show = True
 
         self._fetch_weather()
-        
-        # Schedule early refresh 30 seconds after startup to get fresh data
-        ThreadManager.single_shot(30 * 1000, self._fetch_weather)
-        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
-        
-        interval_ms = 30 * 60 * 1000
-        handle = create_overlay_timer(self, interval_ms, self._fetch_weather, description="WeatherWidget refresh")
-        self._update_timer_handle = handle
-        try:
-            self._update_timer = getattr(handle, "_timer", None)
-        except Exception as e:
-            logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self._update_timer = None
+        self._schedule_refresh_cycle()
 
         self._enabled = True
 
@@ -729,6 +688,41 @@ class WeatherWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[WEATHER] Exception suppressed: %s", e)
             self._icon_timer_handle = None
+
+    def _schedule_refresh_cycle(self) -> None:
+        """Schedule startup and steady-state refresh timers using one canonical policy."""
+        self._schedule_startup_refresh()
+        self._start_periodic_refresh_timer()
+
+    def _schedule_startup_refresh(self) -> None:
+        """Schedule the one-shot startup refresh used after activation/startup."""
+        # Open-Meteo free tier: 10k calls/day, our cadence stays well within that.
+        ThreadManager.single_shot(30 * 1000, self._fetch_weather)
+        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
+
+    def _start_periodic_refresh_timer(self) -> None:
+        """Start the steady-state refresh timer with small desync jitter."""
+        base_interval_ms = 30 * 60 * 1000  # 30 minutes
+        jitter_ms = random.randint(-2 * 60 * 1000, 2 * 60 * 1000)
+        interval_ms = base_interval_ms + jitter_ms
+        if is_perf_metrics_enabled():
+            logger.debug(
+                "[PERF] WeatherWidget: refresh interval %.1f min (jitter: %+.1f min)",
+                interval_ms / 60000,
+                jitter_ms / 60000,
+            )
+        handle = create_overlay_timer(
+            self,
+            interval_ms,
+            self._fetch_weather,
+            description="WeatherWidget refresh",
+        )
+        self._update_timer_handle = handle
+        try:
+            self._update_timer = getattr(handle, "_timer", None)
+        except Exception as e:
+            logger.debug("[WEATHER] Exception suppressed: %s", e)
+            self._update_timer = None
     
     def is_running(self) -> bool:
         """Check if weather widget is running."""

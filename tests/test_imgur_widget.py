@@ -169,6 +169,18 @@ class TestImgurWidget:
         """Test setting update interval."""
         widget.set_update_interval(900)  # 15 minutes
         assert widget._update_interval_sec == 900
+
+    def test_set_update_interval_restarts_live_timer(self, widget, monkeypatch):
+        """Changing the interval should reschedule the running periodic refresh timer."""
+        calls = []
+
+        monkeypatch.setattr(widget, "_stop_update_timer", lambda: calls.append("stop"))  # type: ignore[method-assign]
+        monkeypatch.setattr(widget, "_start_periodic_refresh_timer", lambda: calls.append("start"))  # type: ignore[method-assign]
+        widget._update_timer_handle = object()  # type: ignore[attr-defined]
+
+        widget.set_update_interval(900)
+
+        assert calls == ["stop", "start"]
     
     def test_set_update_interval_clamped(self, widget):
         """Test update interval is clamped."""
@@ -252,6 +264,15 @@ class TestImgurWidgetLifecycle:
         widget._cleanup_impl()
         
         assert len(widget._images) == 0
+
+    def test_deactivate_stops_periodic_timer(self, widget, monkeypatch):
+        """Deactivate should stop the periodic update timer through the canonical helper."""
+        calls = []
+        monkeypatch.setattr(widget, "_stop_update_timer", lambda: calls.append("stop"))  # type: ignore[method-assign]
+
+        widget._deactivate_impl()
+
+        assert calls == ["stop"]
 
 
 class TestImgurWidgetClickHandling:

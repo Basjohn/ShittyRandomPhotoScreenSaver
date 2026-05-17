@@ -305,6 +305,50 @@ def test_weather_retry_timeout_fetches_only_when_enabled(qapp, parent_widget):
     assert calls == ["fetch"]
 
 
+def test_weather_schedule_refresh_cycle_uses_shared_startup_and_jitter_policy(qapp, parent_widget, monkeypatch):
+    """Weather refresh scheduling should go through one canonical startup + jittered steady-state path."""
+    weather = WeatherWidget(parent=parent_widget)
+    single_shots = []
+    timer_calls = []
+
+    class _Handle:
+        def __init__(self):
+            self._timer = object()
+
+    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
+    monkeypatch.setattr("widgets.weather_widget.random.randint", lambda a, b: 60_000)
+    monkeypatch.setattr(
+        "widgets.weather_widget.create_overlay_timer",
+        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)) or _Handle(),
+    )
+
+    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+
+    assert single_shots == [(30 * 1000, weather._fetch_weather)]
+    assert timer_calls == [
+        (weather, 30 * 60 * 1000 + 60_000, weather._fetch_weather, "WeatherWidget refresh")
+    ]
+    assert weather._update_timer_handle is not None
+    assert weather._update_timer is not None
+
+
+def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, parent_widget, monkeypatch):
+    """Legacy start path should use the same canonical refresh scheduler when cache is already valid."""
+    weather = WeatherWidget(parent=parent_widget)
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
+    weather._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
+    weather._cache_time = object()
+
+    calls = []
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("scheduled"))  # type: ignore[method-assign]
+    monkeypatch.setattr(weather, "_fade_in", lambda *args, **kwargs: calls.append("fade"))  # type: ignore[method-assign]
+
+    weather.start()
+
+    assert "scheduled" in calls
+
+
 def test_weather_error_handling(qapp, parent_widget):
     """Test weather error handling."""
     weather = WeatherWidget(parent=parent_widget)

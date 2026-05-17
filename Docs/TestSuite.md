@@ -46,7 +46,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_widget_descriptors.py`
-  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, runtime capability ownership, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
+  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load routing, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
@@ -54,7 +54,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
-  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, lazy-section build parity, bucket-state persistence, and visualizer/settings integration paths.
+  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, descriptor-owned section load routing, lazy-section build parity, bucket-state persistence, and visualizer/settings integration paths.
 - `tests/test_widget_manager.py`
   Descriptor-driven live settings routing parity, expected-overlay coordination, secondary-stage starter ownership, and manager cleanup behavior.
 - `tests/test_spotify_visualizer_widget.py`
@@ -73,11 +73,15 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_devcurve_builder_contract.py`
   Spline Curve builder structure contracts such as bucket composition, scaffold usage, and canonical default-color helper usage.
 - `tests/test_mute_button_widget.py`
-  Mute button secondary-stage gating, late-anchor recovery, and centralized deadline respect.
+  Mute button secondary-stage gating, late-anchor recovery, centralized deadline respect, and canonical enable/disable/cleanup runtime reset behavior.
 - `tests/test_media_widget_runtime_methods.py`
-  Media deferred callbacks, pending-state timer cleanup, and optimistic media-control repaint/update behavior.
+  Media deferred callbacks, canonical smart-poll timer reset, pending-state debounce cleanup, and optimistic media-control repaint/update behavior.
 - `tests/test_weather_widget.py`
-  Weather retry timer cleanup, retry timer reuse, and retry timeout state handling.
+  Weather retry timer cleanup, retry timer reuse, retry timeout state handling, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
+- `tests/test_imgur_widget.py`
+  Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
+- `tests/test_spotify_volume_widget.py`
+  Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths.
 - `tests/test_gmail_widget.py`
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`

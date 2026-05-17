@@ -183,6 +183,9 @@ class WidgetSettingsSectionDescriptor:
     container_attr_name: str
     builder_module: str | None = None
     builder_name: str | None = None
+    loader_module: str | None = None
+    loader_name: str | None = None
+    loader_guard_attrs: tuple[str, ...] = ()
     method_name: str | None = None
     dev_feature_env: str | None = None
 
@@ -200,6 +203,19 @@ class WidgetSettingsSectionDescriptor:
             return getattr(module, self.builder_name)
         raise ValueError(f"Descriptor {self.section_id} has no builder")
 
+    def resolve_loader(self) -> Callable[..., Any] | None:
+        """Return the concrete settings-loader callable for this section, if any."""
+        if self.loader_module and self.loader_name:
+            module = import_module(self.loader_module)
+            return getattr(module, self.loader_name)
+        return None
+
+    def can_load_for_owner(self, owner: Any) -> bool:
+        """Return True when the owning tab has the controls required for this section loader."""
+        if not self.loader_guard_attrs:
+            return False
+        return all(hasattr(owner, attr_name) for attr_name in self.loader_guard_attrs)
+
 
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
     WidgetSettingsSectionDescriptor(
@@ -209,6 +225,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_clocks_container",
         builder_module="ui.tabs.widgets_tab_clock",
         builder_name="build_clock_ui",
+        loader_module="ui.tabs.widgets_tab_clock",
+        loader_name="load_clock_settings",
+        loader_guard_attrs=("clock_enabled",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="weather",
@@ -217,6 +236,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_weather_container",
         builder_module="ui.tabs.widgets_tab_weather",
         builder_name="build_weather_ui",
+        loader_module="ui.tabs.widgets_tab_weather",
+        loader_name="load_weather_settings",
+        loader_guard_attrs=("weather_enabled",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="media",
@@ -225,6 +247,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_media_container",
         builder_module="ui.tabs.widgets_tab_media",
         builder_name="build_media_ui",
+        loader_module="ui.tabs.widgets_tab_media",
+        loader_name="load_media_settings",
+        loader_guard_attrs=("media_enabled", "vis_enabled_checkbox"),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="visualizers",
@@ -241,6 +266,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_reddit_container",
         builder_module="ui.tabs.widgets_tab_reddit",
         builder_name="build_reddit_ui",
+        loader_module="ui.tabs.widgets_tab_reddit",
+        loader_name="load_reddit_settings",
+        loader_guard_attrs=("reddit_enabled",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="gmail",
@@ -249,6 +277,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_gmail_container",
         builder_module="ui.tabs.widgets_tab_gmail",
         builder_name="build_gmail_ui",
+        loader_module="ui.tabs.widgets_tab_gmail",
+        loader_name="load_gmail_settings",
+        loader_guard_attrs=("gmail_enabled",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="imgur",
@@ -257,6 +288,9 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_imgur_container",
         builder_module="ui.tabs.widgets_tab_imgur",
         builder_name="build_imgur_ui",
+        loader_module="ui.tabs.widgets_tab_imgur",
+        loader_name="load_imgur_settings",
+        loader_guard_attrs=("imgur_enabled",),
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetSettingsSectionDescriptor(
@@ -290,6 +324,7 @@ class WidgetRuntimeDescriptor:
     service_backed: bool = False
     anchor_dependent: bool = False
     live_refresh_handler: str | None = None
+    service_runtime_contracts: tuple[str, ...] = ()
     position_option_labels: tuple[str, ...] = STANDARD_POSITION_OPTION_LABELS
     supports_layout_edit_mode: bool = False
     supports_custom_position_slot: bool = False
@@ -304,6 +339,9 @@ class WidgetRuntimeDescriptor:
 
     def matches_settings_key(self, setting_key: str) -> bool:
         return any(setting_key.startswith(prefix) for prefix in self.settings_prefixes)
+
+    def supports_service_runtime_contract(self, contract_name: str) -> bool:
+        return contract_name in self.service_runtime_contracts
 
 
 WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
@@ -343,6 +381,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_prefixes=("widgets.weather",),
         startup_stage="primary",
         service_backed=True,
+        service_runtime_contracts=(
+            "single_shot_timer_reuse",
+            "timer_stop_cleanup",
+        ),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
@@ -367,6 +409,17 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="primary",
         service_backed=True,
         live_refresh_handler="_refresh_reddit_configs",
+        service_runtime_contracts=(
+            "transition_probe",
+            "single_shot_timer_reuse",
+            "deferred_refresh",
+            "deferred_result",
+            "spinner_suspend",
+            "fetch_guard",
+            "manual_refresh",
+            "visible_fallback",
+            "timer_stop_cleanup",
+        ),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
@@ -379,6 +432,17 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="primary",
         service_backed=True,
         live_refresh_handler="_refresh_reddit_configs",
+        service_runtime_contracts=(
+            "transition_probe",
+            "single_shot_timer_reuse",
+            "deferred_refresh",
+            "deferred_result",
+            "spinner_suspend",
+            "fetch_guard",
+            "manual_refresh",
+            "visible_fallback",
+            "timer_stop_cleanup",
+        ),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
@@ -390,6 +454,17 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         settings_prefixes=("widgets.gmail",),
         startup_stage="primary",
         service_backed=True,
+        service_runtime_contracts=(
+            "transition_probe",
+            "single_shot_timer_reuse",
+            "deferred_refresh",
+            "deferred_result",
+            "spinner_suspend",
+            "fetch_guard",
+            "manual_refresh",
+            "visible_fallback",
+            "timer_stop_cleanup",
+        ),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
@@ -477,6 +552,25 @@ def get_widget_runtime_descriptor(widget_id: str) -> WidgetRuntimeDescriptor | N
         if descriptor.widget_id == widget_id:
             return descriptor
     return None
+
+
+def get_service_runtime_contracts(widget_id: str) -> tuple[str, ...]:
+    """Return the descriptor-owned shared service-runtime contracts for a widget."""
+
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return ()
+    return descriptor.service_runtime_contracts
+
+
+def get_widget_ids_for_service_runtime_contract(contract_name: str) -> tuple[str, ...]:
+    """Return canonical widget ids that participate in one shared service-runtime contract."""
+
+    return tuple(
+        descriptor.widget_id
+        for descriptor in get_widget_runtime_descriptors()
+        if descriptor.supports_service_runtime_contract(contract_name)
+    )
 
 
 def get_widget_position_option_labels(widget_id: str) -> tuple[str, ...]:

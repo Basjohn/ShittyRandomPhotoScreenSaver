@@ -887,12 +887,7 @@ class WidgetsTab(QWidget):
         
         Delegates per-widget loading to extraction modules.
         """
-        from ui.tabs.widgets_tab_clock import load_clock_settings
-        from ui.tabs.widgets_tab_weather import load_weather_settings
-        from ui.tabs.widgets_tab_media import load_media_settings
-        from ui.tabs.widgets_tab_reddit import load_reddit_settings
-        from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS, load_gmail_settings
-        from ui.tabs.widgets_tab_imgur import load_imgur_settings
+        from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS
 
         # Block all signals during load to prevent unintended saves
         blockers = []
@@ -983,19 +978,14 @@ class WidgetsTab(QWidget):
             if hasattr(self, 'card_border_width_spin'):
                 self.card_border_width_spin.setValue(border_width)
 
-            # Delegate per-widget loading only for sections that exist.
-            if hasattr(self, 'clock_enabled'):
-                load_clock_settings(self, widgets)
-            if hasattr(self, 'weather_enabled'):
-                load_weather_settings(self, widgets)
-            if hasattr(self, 'media_enabled') and hasattr(self, 'vis_enabled_checkbox'):
-                load_media_settings(self, widgets)
-            if hasattr(self, 'reddit_enabled'):
-                load_reddit_settings(self, widgets)
-            if hasattr(self, 'gmail_enabled'):
-                load_gmail_settings(self, widgets)
-            if hasattr(self, 'imgur_enabled'):
-                load_imgur_settings(self, widgets)
+            # Delegate per-widget loading through the canonical section descriptors.
+            for descriptor in self._widget_section_descriptors:
+                if not descriptor.can_load_for_owner(self):
+                    continue
+                loader = descriptor.resolve_loader()
+                if loader is None:
+                    continue
+                loader(self, widgets)
 
         finally:
             for w in blockers:

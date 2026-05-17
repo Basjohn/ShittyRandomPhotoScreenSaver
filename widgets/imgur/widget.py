@@ -327,7 +327,7 @@ class ImgurWidget(BaseOverlayWidget):
         logger.info("[IMGUR] Fade sync requested in %.3fs", time.time() - fade_start)
         
         # Schedule periodic updates with jitter
-        self._schedule_timer()
+        self._start_periodic_refresh_timer()
         
         # Fetch fresh images in background (with gallery parsing for full-size URLs)
         logger.info("[IMGUR] Submitting background fetch...")
@@ -337,12 +337,7 @@ class ImgurWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate widget - stop fetching (lifecycle hook)."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[IMGUR] Exception suppressed: %s", e)
-            self._update_timer_handle = None
+        self._stop_update_timer()
         
         with self._state_lock:
             self._images.clear()
@@ -361,8 +356,8 @@ class ImgurWidget(BaseOverlayWidget):
         self._cached_pixmap = None
         logger.debug("[LIFECYCLE] ImgurWidget cleaned up")
     
-    def _schedule_timer(self) -> None:
-        """Schedule the update timer with jitter."""
+    def _start_periodic_refresh_timer(self) -> None:
+        """Start the steady-state refresh timer with jitter."""
         # Add ±60s jitter to desync from other widgets
         jitter_ms = random.randint(-60 * 1000, 60 * 1000)
         interval_ms = (self._update_interval_sec * 1000) + jitter_ms
@@ -375,6 +370,22 @@ class ImgurWidget(BaseOverlayWidget):
         if is_perf_metrics_enabled():
             logger.debug("[PERF] ImgurWidget: refresh interval %.1f min (jitter: %+.1f s)",
                         interval_ms / 60000, jitter_ms / 1000)
+
+    def _stop_update_timer(self) -> None:
+        """Stop the periodic update timer if it exists."""
+        if self._update_timer_handle is not None:
+            try:
+                self._update_timer_handle.stop()
+            except Exception as e:
+                logger.debug("[IMGUR] Exception suppressed: %s", e)
+            self._update_timer_handle = None
+
+    def _restart_periodic_refresh_timer_if_active(self) -> None:
+        """Reschedule the periodic refresh timer when runtime interval settings change."""
+        if self._update_timer_handle is None:
+            return
+        self._stop_update_timer()
+        self._start_periodic_refresh_timer()
     
     def _load_cached_images_sync(self) -> List[ImgurImage]:
         """Load cached images SYNCHRONOUSLY for immediate display.
@@ -1331,7 +1342,10 @@ class ImgurWidget(BaseOverlayWidget):
     def set_update_interval(self, seconds: int) -> None:
         """Set update interval in seconds."""
         seconds = max(300, min(3600, seconds))  # 5-60 minutes
+        if self._update_interval_sec == seconds:
+            return
         self._update_interval_sec = seconds
+        self._restart_periodic_refresh_timer_if_active()
     
     def set_show_header(self, show: bool) -> None:
         """Set header visibility."""

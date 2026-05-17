@@ -26,6 +26,7 @@ Core value: highest cross-project payoff now that the risky visualizer structura
   - landed third slice: runtime capability metadata and live settings-refresh ownership now live in `rendering/widget_descriptors.py`, and `WidgetManager` consumes descriptor-owned handler routing instead of handwritten settings-prefix checks,
   - landed fourth slice: descriptor-owned settings position options and future layout-edit capability metadata now live in `rendering/widget_descriptors.py`, and widget settings builders consume that registry instead of hardcoded 9-grid position lists,
   - landed fifth slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
+  - landed sixth slice: `WidgetsTab` settings-load routing now comes from descriptor-owned section loader metadata instead of a handwritten per-section import/dispatch chain inside `widgets_tab.py`,
   - next slice: keep deriving settings composition and future expandability metadata from descriptors where that reduces duplicated widget-specific UI/runtime truth without flattening legitimate special cases,
   - keep legacy settings keys and widget ids stable,
   - avoid parallel registries; one descriptor layer should become the source of truth.
@@ -46,9 +47,15 @@ Core value: highest reuse payoff after the descriptor layer.
   - landed second slice: shared fetch-in-progress guard helpers now live in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam instead of maintaining separate begin/end fetch bookkeeping,
   - landed third slice: shared manual-refresh request flow now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam for enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup,
   - landed fourth slice: shared visible-fallback preservation now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam so empty/error/non-authoritative fetches do not replace already-visible trustworthy content,
+  - landed fifth slice: descriptor-owned service-runtime contract metadata now lives in `rendering/widget_descriptors.py`, so the shared service-backed lifecycle rules have a canonical ownership map instead of relying on an implied `service_backed=True` meaning,
+  - landed sixth slice: Weather startup and steady-state refresh scheduling now runs through one canonical path, removing lifecycle-entry drift between `_activate_impl()` and legacy `start()` while preserving Weather’s narrower service-runtime contract,
+  - landed seventh slice: Imgur periodic refresh timer ownership now runs through one canonical local stop/start path, and live interval changes reschedule the active timer instead of silently waiting for a later lifecycle restart,
+  - landed eighth slice: Spotify volume flush-timer reset now runs through one canonical local helper, so stop/deactivate/cleanup all clear pending volume state consistently without duplicating timer teardown branches,
+  - landed ninth slice: Media widget smart-poll timer reset and pending-state debounce reset now each run through one canonical local helper, so stop/deactivate/force-restart paths do not maintain separate teardown branches for the same local timer state,
+  - landed tenth slice: Mute button enable/disable/cleanup now run through one canonical local runtime reset path, so poll state and Spotify secondary-stage reveal state do not leak across disable/re-enable or cleanup edges,
   - Gmail and Reddit now consume that shared transition-aware refresh/result lifecycle instead of maintaining parallel local timer/probe helpers,
   - Weather now consumes the shared timer reuse/cleanup seam for retry scheduling without forcing Weather into the full Gmail/Reddit deferral contract prematurely,
-  - next slice: decide whether descriptor capability metadata should become the ownership base for these shared service-backed lifecycle rules before widening the contract any further,
+  - next slice: use the descriptor-owned service-runtime contract map plus these local cleanup passes to decide whether any remaining service-backed duplication deserves widening into `widgets/service_widget_runtime.py` or should stay explicitly widget-local,
   - prefer adapting existing proven seams over inventing a new manager hierarchy.
 - Required validation:
   - targeted widget tests for Gmail/Weather/Reddit timing and cache behavior,

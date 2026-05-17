@@ -158,3 +158,61 @@ def test_mute_button_anchor_sync_respects_parent_secondary_stage_deadline(qt_app
         mute.deleteLater()
         anchor.deleteLater()
         parent.deleteLater()
+
+
+def test_mute_button_set_enabled_false_resets_runtime_state(qt_app):
+    mute = MuteButtonWidget()
+    try:
+        mute._available = True
+        mute._thread_manager = object()
+        mute._mute_poll_active = True
+        mute._spotify_secondary_stage_started = True
+        mute._has_faded_in = True
+        mute.show()
+
+        mute.set_enabled(False)
+
+        assert mute._enabled is False
+        assert mute._mute_poll_active is False
+        assert mute._spotify_secondary_stage_started is False
+        assert mute._has_faded_in is False
+        assert mute.isVisible() is False
+    finally:
+        mute.deleteLater()
+
+
+def test_mute_button_enable_restarts_poll_when_thread_manager_ready(qt_app, monkeypatch):
+    mute = MuteButtonWidget()
+    try:
+        mute._available = True
+        mute._thread_manager = object()
+        calls: list[str] = []
+
+        def _fake_start_poll() -> None:
+            calls.append("start")
+
+        mute._start_mute_poll = _fake_start_poll  # type: ignore[method-assign]
+
+        mute.set_enabled(True)
+
+        assert mute._enabled is True
+        assert calls == ["start"]
+    finally:
+        mute.deleteLater()
+
+
+def test_mute_button_cleanup_uses_canonical_runtime_reset(qt_app):
+    mute = MuteButtonWidget()
+    try:
+        calls: list[tuple[bool, bool]] = []
+
+        def _fake_reset_runtime_state(*, stop_poll: bool, reset_secondary_stage: bool) -> None:
+            calls.append((stop_poll, reset_secondary_stage))
+
+        mute._reset_runtime_state = _fake_reset_runtime_state  # type: ignore[method-assign]
+
+        mute.cleanup()
+
+        assert calls == [(True, True)]
+    finally:
+        mute.deleteLater()

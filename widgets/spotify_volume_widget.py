@@ -229,23 +229,13 @@ class SpotifyVolumeWidget(QWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate volume widget (lifecycle hook)."""
-        if self._flush_timer is not None:
-            try:
-                self._flush_timer.stop()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-        self._pending_volume = None
+        self._reset_flush_state(delete_timer=False)
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget deactivated")
     
     def _cleanup_impl(self) -> None:
         """Clean up volume widget resources (lifecycle hook)."""
         self._deactivate_impl()
-        if self._flush_timer is not None:
-            try:
-                self._flush_timer.deleteLater()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-            self._flush_timer = None
+        self._reset_flush_state(delete_timer=True)
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget cleaned up")
 
     # ------------------------------------------------------------------
@@ -342,12 +332,7 @@ class SpotifyVolumeWidget(QWidget):
         if not self._enabled:
             return
         self._enabled = False
-        try:
-            if self._flush_timer is not None:
-                self._flush_timer.stop()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-        self._pending_volume = None
+        self._reset_flush_state(delete_timer=False)
         try:
             self.hide()
         except Exception as e:
@@ -667,6 +652,21 @@ class SpotifyVolumeWidget(QWidget):
             )
         except Exception:
             pass
+
+    def _reset_flush_state(self, *, delete_timer: bool) -> None:
+        """Stop pending flush work and optionally destroy the debounce timer."""
+        if self._flush_timer is not None:
+            try:
+                self._flush_timer.stop()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+            if delete_timer:
+                try:
+                    self._flush_timer.deleteLater()
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                self._flush_timer = None
+        self._pending_volume = None
 
     def _apply_volume(self, level: float) -> None:
         if not Shiboken.isValid(self):

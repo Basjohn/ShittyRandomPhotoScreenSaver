@@ -74,7 +74,11 @@ class MuteButtonWidget(QWidget):
         """Enable or disable the mute button."""
         self._enabled = bool(enabled) and self._available
         if not self._enabled:
+            self._reset_runtime_state(stop_poll=True, reset_secondary_stage=True)
             self.hide()
+            return
+        if self._thread_manager is not None:
+            self._start_mute_poll()
 
     def set_thread_manager(self, tm: ThreadManager) -> None:
         """Inject the ThreadManager for async mute operations."""
@@ -265,7 +269,7 @@ class MuteButtonWidget(QWidget):
 
     def _start_mute_poll(self) -> None:
         """Start periodic mute state polling via ThreadManager."""
-        if self._mute_poll_active or not self._available:
+        if self._mute_poll_active or not self._available or not self._enabled:
             return
         tm = self._thread_manager
         if tm is None:
@@ -276,6 +280,14 @@ class MuteButtonWidget(QWidget):
     def _stop_mute_poll(self) -> None:
         """Cancel periodic mute polling."""
         self._mute_poll_active = False
+
+    def _reset_runtime_state(self, *, stop_poll: bool, reset_secondary_stage: bool) -> None:
+        """Clear local runtime state so disable/cleanup can behave like a fresh lifecycle."""
+        if stop_poll:
+            self._stop_mute_poll()
+        if reset_secondary_stage:
+            self._spotify_secondary_stage_started = False
+            self._has_faded_in = False
 
     def _schedule_next_poll(self) -> None:
         """Schedule the next poll using ThreadManager.single_shot (non-blocking)."""
@@ -299,7 +311,7 @@ class MuteButtonWidget(QWidget):
 
     def cleanup(self) -> None:
         """Stop polling and clean up resources."""
-        self._stop_mute_poll()
+        self._reset_runtime_state(stop_poll=True, reset_secondary_stage=True)
 
     # ------------------------------------------------------------------
     # Interaction (called by DisplayWidget)

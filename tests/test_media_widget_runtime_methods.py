@@ -175,6 +175,79 @@ def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monk
         widget.deleteLater()
 
 
+def test_media_reset_update_timer_state_stops_and_optionally_deletes_timer() -> None:
+    class _FakeHandle:
+        def __init__(self) -> None:
+            self.stop_calls = 0
+
+        def stop(self) -> None:
+            self.stop_calls += 1
+
+    class _FakeTimer:
+        def __init__(self) -> None:
+            self.stop_calls = 0
+            self.delete_calls = 0
+
+        def stop(self) -> None:
+            self.stop_calls += 1
+
+        def deleteLater(self) -> None:
+            self.delete_calls += 1
+
+    stub = SimpleNamespace(
+        _update_timer_handle=_FakeHandle(),
+        _update_timer=_FakeTimer(),
+    )
+
+    MediaWidget._reset_update_timer_state(stub, delete_qtimer=False)
+
+    assert stub._update_timer_handle is None
+    assert stub._update_timer is None
+
+    handle = _FakeHandle()
+    timer = _FakeTimer()
+    stub = SimpleNamespace(
+        _update_timer_handle=handle,
+        _update_timer=timer,
+    )
+
+    MediaWidget._reset_update_timer_state(stub, delete_qtimer=True)
+
+    assert handle.stop_calls == 1
+    assert timer.stop_calls == 1
+    assert timer.delete_calls == 1
+    assert stub._update_timer_handle is None
+    assert stub._update_timer is None
+
+
+def test_media_stop_timer_uses_canonical_update_timer_reset(monkeypatch) -> None:
+    stub = SimpleNamespace()
+    calls = []
+
+    def _fake_reset(*, delete_qtimer: bool) -> None:
+        calls.append(delete_qtimer)
+
+    stub._reset_update_timer_state = _fake_reset
+
+    MediaWidget._stop_timer(stub)
+
+    assert calls == [False]
+
+
+def test_media_clear_pending_state_timer_uses_canonical_reset() -> None:
+    stub = SimpleNamespace()
+    calls = []
+
+    def _fake_reset(*, delete_timer: bool) -> None:
+        calls.append(delete_timer)
+
+    stub._reset_pending_state_override = _fake_reset
+
+    MediaWidget._clear_pending_state_timer(stub)
+
+    assert calls == [True]
+
+
 def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) -> None:
     widget = MediaWidget()
     try:

@@ -1,0 +1,58 @@
+from __future__ import annotations
+
+from PySide6.QtCore import QTimer
+
+from widgets.spotify_volume_widget import SpotifyVolumeWidget
+
+
+def test_spotify_volume_reset_flush_state_stops_and_optionally_deletes_timer(qt_app):
+    widget = SpotifyVolumeWidget()
+    try:
+        timer = QTimer(widget)
+        timer.setSingleShot(True)
+        timer.start(1000)
+        widget._flush_timer = timer  # type: ignore[attr-defined]
+        widget._pending_volume = 0.5  # type: ignore[attr-defined]
+
+        widget._reset_flush_state(delete_timer=False)  # type: ignore[attr-defined]
+
+        assert widget._flush_timer is timer  # type: ignore[attr-defined]
+        assert timer.isActive() is False
+        assert widget._pending_volume is None  # type: ignore[attr-defined]
+
+        widget._pending_volume = 0.3  # type: ignore[attr-defined]
+        widget._reset_flush_state(delete_timer=True)  # type: ignore[attr-defined]
+
+        assert widget._flush_timer is None  # type: ignore[attr-defined]
+        assert widget._pending_volume is None  # type: ignore[attr-defined]
+    finally:
+        widget.deleteLater()
+
+
+def test_spotify_volume_stop_uses_canonical_flush_reset(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    calls = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_reset_flush_state", lambda **kwargs: calls.append(kwargs))  # type: ignore[method-assign]
+        monkeypatch.setattr(widget, "hide", lambda *args, **kwargs: calls.append({"hide": True}))  # type: ignore[method-assign]
+
+        widget.stop()
+
+        assert calls[0] == {"delete_timer": False}
+        assert {"hide": True} in calls
+    finally:
+        widget.deleteLater()
+
+
+def test_spotify_volume_cleanup_impl_deletes_flush_timer(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    calls = []
+    try:
+        monkeypatch.setattr(widget, "_reset_flush_state", lambda **kwargs: calls.append(kwargs))  # type: ignore[method-assign]
+
+        widget._cleanup_impl()  # type: ignore[attr-defined]
+
+        assert calls == [{"delete_timer": False}, {"delete_timer": True}]
+    finally:
+        widget.deleteLater()

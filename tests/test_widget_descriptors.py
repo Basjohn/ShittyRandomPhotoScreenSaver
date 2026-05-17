@@ -3,8 +3,10 @@ from __future__ import annotations
 from rendering.widget_descriptors import (
     build_widget_stack_preview_config,
     get_factory_widget_descriptors,
+    get_service_runtime_contracts,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_ids_for_service_runtime_contract,
     get_widget_position_option_labels,
     get_widget_runtime_descriptors,
     get_widget_stack_preview_descriptors,
@@ -56,6 +58,20 @@ def test_widget_settings_section_descriptors_default_order():
     ]
 
 
+def test_widget_settings_section_descriptors_capture_loader_routing():
+    descriptors = get_widget_settings_section_descriptors()
+    media = next(item for item in descriptors if item.section_id == "media")
+    gmail = next(item for item in descriptors if item.section_id == "gmail")
+    defaults = next(item for item in descriptors if item.section_id == "defaults")
+
+    assert media.loader_module == "ui.tabs.widgets_tab_media"
+    assert media.loader_name == "load_media_settings"
+    assert media.loader_guard_attrs == ("media_enabled", "vis_enabled_checkbox")
+    assert gmail.loader_module == "ui.tabs.widgets_tab_gmail"
+    assert gmail.loader_name == "load_gmail_settings"
+    assert defaults.resolve_loader() is None
+
+
 def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
     descriptors = get_widget_runtime_descriptors()
     runtime_ids = [descriptor.widget_id for descriptor in descriptors]
@@ -77,6 +93,33 @@ def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
     assert gmail.supports_custom_position_slot is True
     assert gmail.supports_layout_resize_edit is True
     assert gmail.requires_size_reset_affordance is True
+    assert "visible_fallback" in gmail.service_runtime_contracts
+    assert "manual_refresh" in reddit2.service_runtime_contracts
+
+
+def test_service_runtime_contract_queries_follow_descriptor_contract():
+    assert get_service_runtime_contracts("gmail") == (
+        "transition_probe",
+        "single_shot_timer_reuse",
+        "deferred_refresh",
+        "deferred_result",
+        "spinner_suspend",
+        "fetch_guard",
+        "manual_refresh",
+        "visible_fallback",
+        "timer_stop_cleanup",
+    )
+    assert get_service_runtime_contracts("weather") == (
+        "single_shot_timer_reuse",
+        "timer_stop_cleanup",
+    )
+    assert get_service_runtime_contracts("imgur") == ()
+    assert get_service_runtime_contracts("clock") == ()
+    assert get_widget_ids_for_service_runtime_contract("visible_fallback") == (
+        "reddit",
+        "reddit2",
+        "gmail",
+    )
 
 
 def test_widget_position_option_labels_follow_runtime_descriptor_contract():

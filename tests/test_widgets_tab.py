@@ -5,6 +5,7 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 roundtrips behave as expected.
 """
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 # Some CI environments install the wheel without sip stubs; guard the import.
@@ -216,6 +217,42 @@ class TestWidgetsTab:
         assert shadows_cfg.get("enabled") is False
         assert shadows_cfg.get("text_enabled") is False
         assert shadows_cfg.get("header_enabled") is True
+
+    def test_widgets_tab_load_settings_uses_descriptor_loader_routing(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            calls: list[str] = []
+
+            def _loader_a(owner, widgets):
+                assert owner is tab
+                assert isinstance(widgets, dict)
+                calls.append("a")
+
+            def _loader_b(owner, widgets):
+                assert owner is tab
+                assert isinstance(widgets, dict)
+                calls.append("b")
+
+            tab._widget_section_descriptors = (
+                SimpleNamespace(
+                    can_load_for_owner=lambda owner: True,
+                    resolve_loader=lambda: _loader_a,
+                ),
+                SimpleNamespace(
+                    can_load_for_owner=lambda owner: False,
+                    resolve_loader=lambda: _loader_b,
+                ),
+                SimpleNamespace(
+                    can_load_for_owner=lambda owner: True,
+                    resolve_loader=lambda: None,
+                ),
+            )
+
+            tab._load_settings()
+
+            assert calls == ["a"]
+        finally:
+            tab.deleteLater()
 
     def test_sine_wave_swatch_persistence(self, qt_app, settings_manager):
         """Glow + line swatch selections persist through save/load and update buttons."""

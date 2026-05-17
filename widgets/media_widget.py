@@ -510,7 +510,8 @@ class MediaWidget(BaseOverlayWidget):
         logger.debug("Cleaning up media widget")
         self.stop()
 
-    def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
+    def _reset_update_timer_state(self, *, delete_qtimer: bool) -> None:
+        """Stop smart-poll timer state and optionally destroy the backing QTimer."""
         if self._update_timer_handle is not None:
             try:
                 self._update_timer_handle.stop()
@@ -527,16 +528,24 @@ class MediaWidget(BaseOverlayWidget):
                 pass
             self._update_timer = None
 
-    def _clear_pending_state_timer(self) -> None:
+    def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
+        self._reset_update_timer_state(delete_qtimer=delete_qtimer)
+
+    def _reset_pending_state_override(self, *, delete_timer: bool) -> None:
+        """Clear optimistic playback-state override and optionally destroy its debounce timer."""
         timer = self._pending_state_timer
         if timer is not None:
             try:
                 timer.stop()
-                timer.deleteLater()
+                if delete_timer:
+                    timer.deleteLater()
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
         self._pending_state_timer = None
         self._pending_state_override = None
+
+    def _clear_pending_state_timer(self) -> None:
+        self._reset_pending_state_override(delete_timer=True)
 
     def set_thread_manager(self, thread_manager) -> None:
         super().set_thread_manager(thread_manager)
@@ -1266,13 +1275,7 @@ class MediaWidget(BaseOverlayWidget):
     
     def _stop_timer(self) -> None:
         """Stop the update timer."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-        self._update_timer_handle = None
-        self._update_timer = None
+        self._reset_update_timer_state(delete_qtimer=False)
 
     def _ensure_timer(self, *, force: bool = False) -> None:
         """Ensure update timer is running at correct interval."""
