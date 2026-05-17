@@ -25,6 +25,7 @@ from core.settings.visualizer_mode_registry import (
     iter_visualizer_mode_descriptors,
 )
 from core.settings.visualizer_presets import MODE_KEY_PREFIXES
+from rendering.widget_descriptors import get_widget_settings_section_descriptors
 
 
 def _find_toggle(container, text: str) -> QToolButton | None:
@@ -50,6 +51,20 @@ class TestWidgetsTab:
         assert tab is not None
         assert tab._settings is settings_manager
         tab.deleteLater()
+
+    def test_widgets_tab_subtab_labels_follow_descriptor_order(self, qt_app, settings_manager):
+        tab = WidgetsTab(settings_manager)
+        try:
+            labels = [
+                tab._subtab_group.button(idx).text()
+                for idx in range(len(get_widget_settings_section_descriptors()))
+            ]
+            assert labels == [
+                descriptor.button_label
+                for descriptor in get_widget_settings_section_descriptors()
+            ]
+        finally:
+            tab.deleteLater()
 
     def test_lazy_widgets_tab_builds_persisted_subtab_first(self, qt_app, settings_manager):
         """Lazy settings-dialog mode should build only the requested subtab first."""

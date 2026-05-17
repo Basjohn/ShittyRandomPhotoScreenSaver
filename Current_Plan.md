@@ -22,7 +22,9 @@ Core value: highest cross-project payoff now that the risky visualizer structura
 - Implementation shape:
   - establish a canonical descriptor surface for widget identity, enablement, startup category, factory ownership, settings-tab ownership, and runtime capabilities,
   - landed first slice: factory-backed widget family metadata now lives in `rendering/widget_descriptors.py`, and `rendering/widget_setup_all.py` consumes that registry for clock/weather/media/reddit/imgur/gmail parity,
-  - next slice: extend descriptor ownership into settings-tab ownership / capabilities instead of only runtime setup metadata,
+  - landed second slice: `WidgetsTab` section order, labels, dev gating, and builder routing now consume the descriptor registry instead of a handwritten subtab family list,
+  - landed third slice: runtime capability metadata and live settings-refresh ownership now live in `rendering/widget_descriptors.py`, and `WidgetManager` consumes descriptor-owned handler routing instead of handwritten settings-prefix checks,
+  - next slice: expand descriptor capability metadata into the shared async/service-backed widget contract so scheduling/deferred-apply/cache-first mechanics can reuse the same ownership surface,
   - keep legacy settings keys and widget ids stable,
   - avoid parallel registries; one descriptor layer should become the source of truth.
 - Required validation:

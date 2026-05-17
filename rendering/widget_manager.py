@@ -15,6 +15,10 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
+from rendering.widget_descriptors import (
+    get_live_refresh_handlers,
+    get_live_refresh_handlers_for_settings_key,
+)
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
 from widgets.media_widget import MediaWidget
@@ -727,22 +731,16 @@ class WidgetManager:
 
         if setting_key == 'widgets':
             widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
-            self._refresh_spotify_visualizer_config(widgets_payload)
-            self._refresh_media_config(widgets_payload)
-            self._refresh_reddit_configs(widgets_payload)
+            for handler_name in get_live_refresh_handlers():
+                handler = getattr(self, handler_name, None)
+                if callable(handler):
+                    handler(widgets_payload)
             return
 
-        if setting_key.startswith('widgets.spotify_visualizer'):
-            self._refresh_spotify_visualizer_config()
-            return
-
-        if setting_key.startswith('widgets.media'):
-            self._refresh_media_config()
-            return
-
-        if setting_key.startswith('widgets.reddit'):
-            self._refresh_reddit_configs()
-            return
+        for handler_name in get_live_refresh_handlers_for_settings_key(setting_key):
+            handler = getattr(self, handler_name, None)
+            if callable(handler):
+                handler()
 
     def _log_spotify_vis_config(
         self,

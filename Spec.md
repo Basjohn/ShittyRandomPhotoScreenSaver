@@ -122,6 +122,8 @@ Active ids:
 - `rendering/widget_descriptors.py` is the canonical registry for factory-backed overlay widgets.
 - Descriptor metadata must own at least widget identity, parent attribute name, factory routing, startup-stage intent, environment gating, and any shared setup extras such as base-settings inheritance or shadow-config injection.
 - `rendering/widget_setup_all.py` may orchestrate creation, reuse, expected-overlay tracking, and ThreadManager injection, but it must not reintroduce handwritten per-family registration truth that duplicates descriptor metadata.
+- `rendering/widget_descriptors.py` also owns the canonical `WidgetsTab` section registry for section order, labels, dev gating, and builder routing. `ui/tabs/widgets_tab.py` may orchestrate lazy/non-lazy mounting, but it must not keep a second handwritten family list for those same sections.
+- Runtime capability ownership also belongs in `rendering/widget_descriptors.py`: startup stage, anchor dependence, service-backed status, settings-section ownership, and live-refresh routing must not drift back into handwritten prefix checks inside `WidgetManager`.
 - Keep stable widget ids and settings keys. New widget families should extend the descriptor registry instead of adding another ad hoc setup branch unless the runtime truly requires a special-case path (for example, Spotify-dependent secondary-stage widgets).
 - Descriptor refactors are parity-first: monitor gating, expected-overlay truth, reuse behavior, factory kwargs, and startup-stage ownership must remain unchanged unless a deliberate migration is documented.
 

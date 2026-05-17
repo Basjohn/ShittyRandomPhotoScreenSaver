@@ -44,6 +44,8 @@ No shadow frameworks or parallel ownership paths.
 - `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.
 - Do not add new handwritten setup branches in `rendering/widget_setup_all.py` for ordinary factory-backed widgets when the descriptor registry can own the same truth.
 - When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
+- `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
+- `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
 
 ## 6. Testing and Validation
 - Add automated regression coverage for changed contracts.

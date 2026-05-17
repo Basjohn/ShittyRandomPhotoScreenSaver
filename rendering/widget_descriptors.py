@@ -7,8 +7,9 @@ factory routing, inheritance wiring, and startup-stage intent.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 import os
-from typing import Any, Dict, Mapping
+from typing import Any, Callable, Dict, Mapping
 
 
 @dataclass(frozen=True)
@@ -157,3 +158,259 @@ def get_factory_widget_descriptors() -> tuple[FactoryWidgetDescriptor, ...]:
     """Return the canonical registry for factory-backed overlay widgets."""
 
     return FACTORY_WIDGET_DESCRIPTORS
+
+
+@dataclass(frozen=True)
+class WidgetSettingsSectionDescriptor:
+    """Descriptor for one WidgetsTab sub-section."""
+
+    section_id: str
+    button_label: str
+    button_attr_name: str
+    container_attr_name: str
+    builder_module: str | None = None
+    builder_name: str | None = None
+    method_name: str | None = None
+    dev_feature_env: str | None = None
+
+    def is_enabled_in_environment(self) -> bool:
+        if not self.dev_feature_env:
+            return True
+        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+
+    def resolve_builder(self, owner: Any) -> Callable[..., Any]:
+        """Return the concrete builder callable for this section."""
+        if self.method_name:
+            return getattr(owner, self.method_name)
+        if self.builder_module and self.builder_name:
+            module = import_module(self.builder_module)
+            return getattr(module, self.builder_name)
+        raise ValueError(f"Descriptor {self.section_id} has no builder")
+
+
+WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
+    WidgetSettingsSectionDescriptor(
+        section_id="clock",
+        button_label="Clocks",
+        button_attr_name="_btn_clocks",
+        container_attr_name="_clocks_container",
+        builder_module="ui.tabs.widgets_tab_clock",
+        builder_name="build_clock_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="weather",
+        button_label="Weather",
+        button_attr_name="_btn_weather",
+        container_attr_name="_weather_container",
+        builder_module="ui.tabs.widgets_tab_weather",
+        builder_name="build_weather_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="media",
+        button_label="Media",
+        button_attr_name="_btn_media",
+        container_attr_name="_media_container",
+        builder_module="ui.tabs.widgets_tab_media",
+        builder_name="build_media_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="visualizers",
+        button_label="Visualizers",
+        button_attr_name="_btn_visualizers",
+        container_attr_name="_visualizers_container",
+        builder_module="ui.tabs.widgets_tab_media",
+        builder_name="build_visualizers_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="reddit",
+        button_label="Reddit",
+        button_attr_name="_btn_reddit",
+        container_attr_name="_reddit_container",
+        builder_module="ui.tabs.widgets_tab_reddit",
+        builder_name="build_reddit_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="gmail",
+        button_label="Gmail",
+        button_attr_name="_btn_gmail",
+        container_attr_name="_gmail_container",
+        builder_module="ui.tabs.widgets_tab_gmail",
+        builder_name="build_gmail_ui",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="imgur",
+        button_label="Imgur",
+        button_attr_name="_btn_imgur",
+        container_attr_name="_imgur_container",
+        builder_module="ui.tabs.widgets_tab_imgur",
+        builder_name="build_imgur_ui",
+        dev_feature_env="SRPSS_ENABLE_DEV",
+    ),
+    WidgetSettingsSectionDescriptor(
+        section_id="defaults",
+        button_label="Defaults",
+        button_attr_name="_btn_defaults",
+        container_attr_name="_defaults_container",
+        method_name="_build_defaults_section",
+    ),
+)
+
+
+def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDescriptor, ...]:
+    """Return the canonical WidgetsTab section registry for the current environment."""
+
+    return tuple(
+        descriptor
+        for descriptor in WIDGET_SETTINGS_SECTION_DESCRIPTORS
+        if descriptor.is_enabled_in_environment()
+    )
+
+
+@dataclass(frozen=True)
+class WidgetRuntimeDescriptor:
+    """Canonical runtime/capability descriptor for a widget family."""
+
+    widget_id: str
+    settings_section_id: str
+    settings_prefixes: tuple[str, ...]
+    startup_stage: str
+    service_backed: bool = False
+    anchor_dependent: bool = False
+    live_refresh_handler: str | None = None
+    dev_feature_env: str | None = None
+
+    def is_enabled_in_environment(self) -> bool:
+        if not self.dev_feature_env:
+            return True
+        return os.getenv(self.dev_feature_env, "false").lower() == "true"
+
+    def matches_settings_key(self, setting_key: str) -> bool:
+        return any(setting_key.startswith(prefix) for prefix in self.settings_prefixes)
+
+
+WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
+    WidgetRuntimeDescriptor(
+        widget_id="clock",
+        settings_section_id="clock",
+        settings_prefixes=("widgets.clock",),
+        startup_stage="primary",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="clock2",
+        settings_section_id="clock",
+        settings_prefixes=("widgets.clock2",),
+        startup_stage="primary",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="clock3",
+        settings_section_id="clock",
+        settings_prefixes=("widgets.clock3",),
+        startup_stage="primary",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="weather",
+        settings_section_id="weather",
+        settings_prefixes=("widgets.weather",),
+        startup_stage="primary",
+        service_backed=True,
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="media",
+        settings_section_id="media",
+        settings_prefixes=("widgets.media",),
+        startup_stage="primary",
+        service_backed=True,
+        live_refresh_handler="_refresh_media_config",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="reddit",
+        settings_section_id="reddit",
+        settings_prefixes=("widgets.reddit",),
+        startup_stage="primary",
+        service_backed=True,
+        live_refresh_handler="_refresh_reddit_configs",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="reddit2",
+        settings_section_id="reddit",
+        settings_prefixes=("widgets.reddit2",),
+        startup_stage="primary",
+        service_backed=True,
+        live_refresh_handler="_refresh_reddit_configs",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="gmail",
+        settings_section_id="gmail",
+        settings_prefixes=("widgets.gmail",),
+        startup_stage="primary",
+        service_backed=True,
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="imgur",
+        settings_section_id="imgur",
+        settings_prefixes=("widgets.imgur",),
+        startup_stage="primary",
+        service_backed=True,
+        dev_feature_env="SRPSS_ENABLE_DEV",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="spotify_visualizer",
+        settings_section_id="visualizers",
+        settings_prefixes=("widgets.spotify_visualizer",),
+        startup_stage="secondary",
+        anchor_dependent=True,
+        live_refresh_handler="_refresh_spotify_visualizer_config",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="spotify_volume",
+        settings_section_id="media",
+        settings_prefixes=("widgets.media",),
+        startup_stage="secondary",
+        anchor_dependent=True,
+        service_backed=True,
+        live_refresh_handler="_refresh_media_config",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="mute_button",
+        settings_section_id="media",
+        settings_prefixes=("widgets.media",),
+        startup_stage="secondary",
+        anchor_dependent=True,
+        service_backed=True,
+        live_refresh_handler="_refresh_media_config",
+    ),
+)
+
+
+def get_widget_runtime_descriptors() -> tuple[WidgetRuntimeDescriptor, ...]:
+    """Return the canonical runtime capability descriptors."""
+
+    return tuple(
+        descriptor
+        for descriptor in WIDGET_RUNTIME_DESCRIPTORS
+        if descriptor.is_enabled_in_environment()
+    )
+
+
+def get_live_refresh_handlers_for_settings_key(setting_key: str) -> tuple[str, ...]:
+    """Return deduplicated live-refresh handlers for a changed settings key."""
+
+    handlers: list[str] = []
+    for descriptor in get_widget_runtime_descriptors():
+        if not descriptor.live_refresh_handler:
+            continue
+        if not descriptor.matches_settings_key(setting_key):
+            continue
+        if descriptor.live_refresh_handler not in handlers:
+            handlers.append(descriptor.live_refresh_handler)
+    return tuple(handlers)
+
+
+def get_live_refresh_handlers() -> tuple[str, ...]:
+    """Return all deduplicated live-refresh handlers in canonical order."""
+
+    handlers: list[str] = []
+    for descriptor in get_widget_runtime_descriptors():
+        if descriptor.live_refresh_handler and descriptor.live_refresh_handler not in handlers:
+            handlers.append(descriptor.live_refresh_handler)
+    return tuple(handlers)

@@ -669,6 +669,41 @@ class TestCleanup:
         assert manager._raise_timer is None
 
 
+class TestSettingsRouting:
+    """Tests for descriptor-driven live settings routing."""
+
+    def test_handle_settings_changed_uses_descriptor_owned_handlers_for_widgets_root(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._refresh_media_config = MagicMock()
+        manager._refresh_reddit_configs = MagicMock()
+        manager._refresh_spotify_visualizer_config = MagicMock()
+
+        payload = {"media": {"enabled": True}}
+        manager._handle_settings_changed("widgets", payload)
+
+        manager._refresh_media_config.assert_called_once_with(payload)
+        manager._refresh_reddit_configs.assert_called_once_with(payload)
+        manager._refresh_spotify_visualizer_config.assert_called_once_with(payload)
+
+    def test_handle_settings_changed_routes_reddit2_through_shared_reddit_refresh(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._refresh_media_config = MagicMock()
+        manager._refresh_reddit_configs = MagicMock()
+        manager._refresh_spotify_visualizer_config = MagicMock()
+
+        manager._handle_settings_changed("widgets.reddit2.limit", 7)
+
+        manager._refresh_reddit_configs.assert_called_once_with()
+        manager._refresh_media_config.assert_not_called()
+        manager._refresh_spotify_visualizer_config.assert_not_called()
+
+
 class TestPositioning:
     """Tests for widget positioning."""
     
