@@ -73,7 +73,7 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 - If a widget may eventually participate in custom edit-mode resize, record that as descriptor-owned capability metadata and keep the size change tied to real widget-owned logical controls, with a clear settings-side reset affordance.
 
 4.1 Service-backed lifecycle mechanics
-- For service-backed widgets such as Gmail, Reddit, and Weather-style overlays, reuse `widgets/service_widget_runtime.py` for parent transition probes, deferred single-shot timers, deferred refresh/result staging, spinner suspend/resume, fetch-in-progress begin/end guards, manual-refresh request flow, and timer-stop cleanup where that contract matches.
+- For service-backed widgets such as Gmail, Reddit, and Weather-style overlays, reuse `widgets/service_widget_runtime.py` for parent transition probes, deferred single-shot timers, deferred refresh/result staging, spinner suspend/resume, fetch-in-progress begin/end guards, manual-refresh request flow, visible-fallback preservation for non-authoritative empty/error results, and timer-stop cleanup where that contract matches.
 - Do not force provider logic or authored UI into the shared helper. Keep fetch semantics, cache fallback policy, and paint/layout behavior widget-owned.
 
 5. Positioning and dependent geometry

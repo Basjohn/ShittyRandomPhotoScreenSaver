@@ -65,6 +65,7 @@ from widgets.service_widget_runtime import (
     end_fetch_guard,
     ensure_single_shot_timer,
     parent_transition_running,
+    preserve_visible_fallback,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -995,6 +996,13 @@ class RedditWidget(BaseOverlayWidget):
         
         if not posts_data:
             logger.warning("[REDDIT] Empty listing for subreddit %s", self._subreddit)
+            if preserve_visible_fallback(
+                self,
+                content_attr="_posts",
+                logger=logger,
+                log_message="[REDDIT] Empty listing received; keeping cached/displayed content visible",
+            ):
+                return
             if not self._has_displayed_valid_data:
                 try:
                     self.hide()
@@ -1043,6 +1051,13 @@ class RedditWidget(BaseOverlayWidget):
             # Edge case: Rate limited and got 0 posts
             # If we have cached posts, keep showing them
             # If not, hide and wait for next fetch attempt
+            if preserve_visible_fallback(
+                self,
+                content_attr="_posts",
+                logger=logger,
+                log_message="[REDDIT] No authoritative posts remained after filtering; keeping cached/displayed content visible",
+            ):
+                return
             if not self._has_displayed_valid_data:
                 logger.info("[REDDIT] No posts fetched (likely rate limited), hiding until next attempt")
                 try:
@@ -1163,6 +1178,13 @@ class RedditWidget(BaseOverlayWidget):
 
         # If we have never displayed valid data, remain hidden; otherwise
         # keep showing the last successful sample.
+        if preserve_visible_fallback(
+            self,
+            content_attr="_posts",
+            logger=logger if is_verbose_logging() else None,
+            log_message=f"[REDDIT] Fetch failed but keeping cached/displayed content visible: {error}",
+        ):
+            return
         if not self._has_displayed_valid_data:
             try:
                 self.hide()

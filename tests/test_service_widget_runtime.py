@@ -9,6 +9,8 @@ from widgets.service_widget_runtime import (
     defer_value_if_transition,
     end_fetch_guard,
     ensure_single_shot_timer,
+    has_visible_fallback_content,
+    preserve_visible_fallback,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -225,5 +227,34 @@ def test_trigger_manual_refresh_runs_feedback_and_stops_on_failed_queue(qt_app):
 
         assert started is False
         assert calls == ["defer", "start", "fetch", "stop"]
+    finally:
+        widget.deleteLater()
+
+
+def test_has_visible_fallback_content_requires_truthy_content_and_valid_flag(qt_app):
+    widget = _ResourceWidget()
+    try:
+        widget._has_displayed_valid_data = False  # type: ignore[attr-defined]
+        widget._items = ["visible"]  # type: ignore[attr-defined]
+        assert has_visible_fallback_content(widget, content_attr="_items") is False
+
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        assert has_visible_fallback_content(widget, content_attr="_items") is True
+
+        widget._items = []  # type: ignore[attr-defined]
+        assert has_visible_fallback_content(widget, content_attr="_items") is False
+    finally:
+        widget.deleteLater()
+
+
+def test_preserve_visible_fallback_returns_true_only_for_trustworthy_visible_content(qt_app):
+    widget = _ResourceWidget()
+    try:
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget._items = ["visible"]  # type: ignore[attr-defined]
+        assert preserve_visible_fallback(widget, content_attr="_items") is True
+
+        widget._items = []  # type: ignore[attr-defined]
+        assert preserve_visible_fallback(widget, content_attr="_items") is False
     finally:
         widget.deleteLater()

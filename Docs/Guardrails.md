@@ -50,7 +50,7 @@ No shadow frameworks or parallel ownership paths.
 
 ## 5.2 Service-Backed Widget Safety
 - Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.
-- Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume logic, simple fetch-in-progress begin/end guard bookkeeping, or manual-refresh request flow into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
+- Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume logic, simple fetch-in-progress begin/end guard bookkeeping, manual-refresh request flow, or visible-fallback preservation for non-authoritative empty/error results into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
 - Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
 
 ## 5.3 Future Custom Layout Edit Mode Safety

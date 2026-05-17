@@ -224,3 +224,43 @@ def trigger_manual_refresh(
         if logger is not None and failure_message:
             logger.debug(failure_message, exc_info=True)
         return False
+
+
+def has_visible_fallback_content(
+    widget: Any,
+    *,
+    valid_flag_attr: str = "_has_displayed_valid_data",
+    content_attr: str | None = None,
+) -> bool:
+    """Return True when the widget already has trustworthy visible content."""
+
+    if not getattr(widget, valid_flag_attr, False):
+        return False
+    if not content_attr:
+        return True
+    content = getattr(widget, content_attr, None)
+    try:
+        return bool(content)
+    except Exception:
+        return content is not None
+
+
+def preserve_visible_fallback(
+    widget: Any,
+    *,
+    content_attr: str | None = None,
+    valid_flag_attr: str = "_has_displayed_valid_data",
+    logger: Any | None = None,
+    log_message: str | None = None,
+) -> bool:
+    """Keep already-visible content when a new fetch is non-authoritative."""
+
+    if not has_visible_fallback_content(
+        widget,
+        valid_flag_attr=valid_flag_attr,
+        content_attr=content_attr,
+    ):
+        return False
+    if logger is not None and log_message:
+        logger.warning(log_message)
+    return True

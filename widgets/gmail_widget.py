@@ -52,6 +52,7 @@ from widgets.service_widget_runtime import (
     end_fetch_guard,
     ensure_single_shot_timer,
     parent_transition_running,
+    preserve_visible_fallback,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -758,10 +759,12 @@ class GmailWidget(BaseOverlayWidget):
         ):
             logger.debug("[GMAIL] Fetched mail unchanged; skipping cache write and repaint")
             return
-        if not display_emails and self._has_displayed_valid_data and self._emails:
-            logger.warning(
-                "[GMAIL] Empty fetch result received; keeping cached/displayed content visible"
-            )
+        if not display_emails and preserve_visible_fallback(
+            self,
+            content_attr="_emails",
+            logger=logger,
+            log_message="[GMAIL] Empty fetch result received; keeping cached/displayed content visible",
+        ):
             return
         self._emails = display_emails
         self._last_error = None
@@ -861,8 +864,12 @@ class GmailWidget(BaseOverlayWidget):
         self._set_refreshing(False)
         if defer_for_transition and self._defer_fetch_error_if_transition(error_msg, generation):
             return
-        if self._has_displayed_valid_data and self._emails:
-            logger.warning("[GMAIL] Fetch failed but keeping cached/displayed content visible: %s", error_msg)
+        if preserve_visible_fallback(
+            self,
+            content_attr="_emails",
+            logger=logger,
+            log_message=f"[GMAIL] Fetch failed but keeping cached/displayed content visible: {error_msg}",
+        ):
             return
         self._last_error = error_msg
         logger.warning("[GMAIL] Displaying error state: %s", error_msg)

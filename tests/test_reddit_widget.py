@@ -94,6 +94,66 @@ def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
 
 
 @pytest.mark.qt
+def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noqa: ARG001
+    """Fetch errors should not replace already-visible Reddit content."""
+
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    hide_calls = []
+    try:
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Visible post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget.hide = lambda *args, **kwargs: hide_calls.append("hide")  # type: ignore[method-assign]
+
+        widget._on_fetch_error("boom")  # type: ignore[attr-defined]
+
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert hide_calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_empty_fetch_keeps_displayed_cache_visible(qt_app, qtbot):  # noqa: ARG001
+    """An empty live fetch must not replace valid displayed Reddit content."""
+
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    hide_calls = []
+    try:
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Visible post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget.hide = lambda *args, **kwargs: hide_calls.append("hide")  # type: ignore[method-assign]
+
+        widget._on_feed_fetched([])  # type: ignore[attr-defined]
+
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert hide_calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
 def test_reddit_handle_click_row_opens_url(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     """handle_click should call QDesktopServices.openUrl for row hits."""
 

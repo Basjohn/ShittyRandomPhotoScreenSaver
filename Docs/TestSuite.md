@@ -50,7 +50,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
-  Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, shared fetch-in-progress guards, shared manual-refresh flow, and timer-stop cleanup.
+  Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, shared fetch-in-progress guards, shared manual-refresh flow, visible-fallback preservation for non-authoritative empty/error results, and timer-stop cleanup.
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
@@ -81,7 +81,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_gmail_widget.py`
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`
-  Reddit fetch/result transition deferral, spinner suspend/resume, deferred timer cleanup, cache-regeneration deferral, shared manual-refresh short-circuiting, and interactive refresh behavior.
+  Reddit fetch/result transition deferral, spinner suspend/resume, deferred timer cleanup, cache-regeneration deferral, shared manual-refresh short-circuiting, visible-content preservation on non-authoritative empty/error fetches, and interactive refresh behavior.
 - `tests/test_gmail_imap_actions.py`
   Gmail IMAP UID action helpers, mailbox order preservation, and partial-fetch failure rejection so truncated IMAP snapshots cannot overwrite valid Gmail display/cache state.
 - `tests/test_settings_dialog.py`

@@ -45,9 +45,10 @@ Core value: highest reuse payoff after the descriptor layer.
   - landed first slice: `widgets/service_widget_runtime.py` now owns shared transition-busy probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, and timer-stop cleanup helpers,
   - landed second slice: shared fetch-in-progress guard helpers now live in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam instead of maintaining separate begin/end fetch bookkeeping,
   - landed third slice: shared manual-refresh request flow now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam for enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup,
+  - landed fourth slice: shared visible-fallback preservation now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam so empty/error/non-authoritative fetches do not replace already-visible trustworthy content,
   - Gmail and Reddit now consume that shared transition-aware refresh/result lifecycle instead of maintaining parallel local timer/probe helpers,
   - Weather now consumes the shared timer reuse/cleanup seam for retry scheduling without forcing Weather into the full Gmail/Reddit deferral contract prematurely,
-  - next slice: decide whether cache-first fallback and fetch-in-progress guard behavior can be widened safely across more service-backed widgets without flattening real provider differences,
+  - next slice: decide whether descriptor capability metadata should become the ownership base for these shared service-backed lifecycle rules before widening the contract any further,
   - prefer adapting existing proven seams over inventing a new manager hierarchy.
 - Required validation:
   - targeted widget tests for Gmail/Weather/Reddit timing and cache behavior,
