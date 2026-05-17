@@ -4,11 +4,14 @@ from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget
 
 from widgets.service_widget_runtime import (
+    begin_fetch_guard,
     defer_refresh_if_transition,
     defer_value_if_transition,
+    end_fetch_guard,
     ensure_single_shot_timer,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
+    trigger_manual_refresh,
 )
 
 
@@ -148,3 +151,79 @@ def test_sync_refresh_spinner_for_transition_suspends_and_resumes(qt_app):
         stop_qtimer_attr(widget, "_refresh_spin_timer", delete_qtimers=True)
         widget.deleteLater()
         parent.deleteLater()
+
+
+def test_begin_fetch_guard_blocks_duplicate_fetches(qt_app):
+    widget = _ResourceWidget()
+    try:
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+
+        first = begin_fetch_guard(widget)
+        second = begin_fetch_guard(widget)
+
+        assert first is True
+        assert second is False
+        assert widget._fetch_in_progress is True  # type: ignore[attr-defined]
+    finally:
+        end_fetch_guard(widget)
+        widget.deleteLater()
+
+
+def test_begin_fetch_guard_respects_widget_lock(qt_app):
+    import threading
+
+    widget = _ResourceWidget()
+    try:
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+        widget._fetch_lock = threading.Lock()  # type: ignore[attr-defined]
+
+        first = begin_fetch_guard(widget, lock_attr="_fetch_lock")
+        end_fetch_guard(widget, lock_attr="_fetch_lock")
+        second = begin_fetch_guard(widget, lock_attr="_fetch_lock")
+
+        assert first is True
+        assert second is True
+        assert widget._fetch_in_progress is True  # type: ignore[attr-defined]
+    finally:
+        end_fetch_guard(widget, lock_attr="_fetch_lock")
+        widget.deleteLater()
+
+
+def test_trigger_manual_refresh_short_circuits_when_fetch_already_running(qt_app):
+    widget = _ResourceWidget()
+    calls: list[str] = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._fetch_in_progress = True  # type: ignore[attr-defined]
+
+        started = trigger_manual_refresh(
+            widget,
+            defer_refresh=lambda: calls.append("defer") or False,
+            fetch_callback=lambda: calls.append("fetch") or True,
+        )
+
+        assert started is True
+        assert calls == []
+    finally:
+        widget.deleteLater()
+
+
+def test_trigger_manual_refresh_runs_feedback_and_stops_on_failed_queue(qt_app):
+    widget = _ResourceWidget()
+    calls: list[str] = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+
+        started = trigger_manual_refresh(
+            widget,
+            defer_refresh=lambda: calls.append("defer") or False,
+            fetch_callback=lambda: calls.append("fetch") or False,
+            start_feedback=lambda: calls.append("start"),
+            stop_feedback=lambda: calls.append("stop"),
+        )
+
+        assert started is False
+        assert calls == ["defer", "start", "fetch", "stop"]
+    finally:
+        widget.deleteLater()

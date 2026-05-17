@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-14
+Last updated: 2026-05-17
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -129,6 +129,8 @@ Active ids:
 - Future custom layout/edit-mode capability metadata should extend the same descriptor layer rather than introducing a separate widget-position registry.
 - If future custom edit mode adds resize, it must remain descriptor-owned and widget-logical: `Ctrl + wheel` may adjust widget-owned size axes only where the widget can express that safely, and participating widgets must keep a settings-side size reset affordance.
 - Shared lifecycle mechanics for service-backed overlay widgets belong in `widgets/service_widget_runtime.py`: parent transition-busy probing, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume, and timer-stop cleanup should extend that seam instead of being recopied into each widget. Provider logic, authored rendering, and widget-specific data semantics stay local.
+- Shared fetch-in-progress begin/end guards for service-backed overlay widgets also belong in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract. Keep provider-specific fetch payload semantics local.
+- Shared manual-refresh request flow for service-backed overlay widgets also belongs in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract: enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup should not be recopied per widget.
 - Keep stable widget ids and settings keys. New widget families should extend the descriptor registry instead of adding another ad hoc setup branch unless the runtime truly requires a special-case path (for example, Spotify-dependent secondary-stage widgets).
 - Descriptor refactors are parity-first: monitor gating, expected-overlay truth, reuse behavior, factory kwargs, and startup-stage ownership must remain unchanged unless a deliberate migration is documented.
 

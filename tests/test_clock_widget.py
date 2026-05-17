@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 import widgets.clock_widget as clock_mod
 from widgets.clock_widget import ClockWidget
+from PySide6.QtCore import QPoint
+from PySide6.QtGui import QImage, QPainter
 from PySide6.QtWidgets import QWidget
 
 
@@ -40,6 +44,37 @@ def test_analog_clock_fade_in_uses_shared_fade_without_direct_show(qtbot, monkey
             "widget": clock,
             "duration_ms": clock_mod.ShadowFadeProfile.default_duration_ms(),
             "has_background_frame": clock._show_background,
-            "apply_shadow_on_finish": False,
+            "apply_shadow_on_finish": True,
         }
     ]
+
+
+def test_analog_clock_background_renders_circular_card(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_display_mode("analog")
+    clock.set_show_background(True)
+    clock.resize(320, 320)
+    clock._current_dt = datetime(2026, 1, 1, 12, 0, 0)
+    clock.show()
+    qtbot.waitExposed(clock)
+    qtbot.wait(20)
+
+    image = QImage(clock.size(), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(0)
+    painter = QPainter(image)
+    try:
+        clock.render(painter, QPoint(0, 0))
+    finally:
+        painter.end()
+
+    center_right = image.pixelColor(int(clock.width() * 0.72), clock.height() // 2)
+    corner = image.pixelColor(0, 0)
+
+    assert center_right.alpha() > 0
+    assert corner.alpha() == 0

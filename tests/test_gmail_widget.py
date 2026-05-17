@@ -231,6 +231,24 @@ def test_gmail_empty_fetch_keeps_displayed_cache_visible(qt_app):
         widget.cleanup()
 
 
+def test_gmail_manual_refresh_ignores_duplicate_fetch(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget._enabled = True
+        widget._fetch_in_progress = True
+        calls = []
+        widget._fetch_emails = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_cache_max_age_is_two_weeks():
     """Disk cache should remain valid for up to two weeks as a fallback surface."""
     from widgets.gmail_widget import CACHE_MAX_AGE_HOURS
@@ -623,6 +641,7 @@ def test_gmail_widget_refresh_click_forces_fetch(qt_app):
     widget = GmailWidget()
     calls = []
     try:
+        widget._enabled = True
         widget._refresh_hit_rect = QRect(100, 10, 22, 22)
         widget._fetch_emails = lambda: calls.append("fetch") or True  # type: ignore[method-assign]
 

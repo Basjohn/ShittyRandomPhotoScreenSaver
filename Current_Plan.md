@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-14
+Last updated: 2026-05-17
 
 This file tracks active work only. Completed implementation details belong in `Docs/Historical_Bugs.md` or the relevant reference docs, not here.
 
@@ -43,6 +43,8 @@ Core value: highest reuse payoff after the descriptor layer.
   - define one shared contract for background refresh scheduling, in-flight guards, deferred apply around transitions, cache-first fallback, and timer cleanup,
   - move only the shared lifecycle mechanics first; keep widget-owned rendering and provider logic local,
   - landed first slice: `widgets/service_widget_runtime.py` now owns shared transition-busy probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, and timer-stop cleanup helpers,
+  - landed second slice: shared fetch-in-progress guard helpers now live in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam instead of maintaining separate begin/end fetch bookkeeping,
+  - landed third slice: shared manual-refresh request flow now lives in `widgets/service_widget_runtime.py`, and Gmail/Reddit consume that seam for enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup,
   - Gmail and Reddit now consume that shared transition-aware refresh/result lifecycle instead of maintaining parallel local timer/probe helpers,
   - Weather now consumes the shared timer reuse/cleanup seam for retry scheduling without forcing Weather into the full Gmail/Reddit deferral contract prematurely,
   - next slice: decide whether cache-first fallback and fetch-in-progress guard behavior can be widened safely across more service-backed widgets without flattening real provider differences,
@@ -58,6 +60,7 @@ Core value: strong follow-through once descriptors exist.
   - it makes future widget additions cheaper and less error-prone.
 - Implementation shape:
   - derive settings-tab composition and widget-facing metadata from the descriptor layer where sensible,
+  - landed first slice: descriptor-owned stack-preview/settings-composition fields now drive `WidgetsTab._build_current_widgets_config()` and stack-status ownership for the standard widget families instead of handwritten per-widget UI reads,
   - preserve current user-facing layout and settings keys unless a deliberate migration is planned.
 
 4. Stronger transition registry / descriptor layer.

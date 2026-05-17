@@ -17,11 +17,13 @@ except ImportError:
 from PySide6.QtWidgets import QLabel, QWidget
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker, QPixmap
+from PySide6.QtCore import QRectF
 from shiboken6 import Shiboken
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import ShadowFadeProfile
 from widgets.clock_ticker import get_global_clock_ticker
+from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
 
@@ -1022,6 +1024,9 @@ class ClockWidget(BaseOverlayWidget):
             if radius <= 0:
                 return
 
+            if self._show_background:
+                self._draw_analog_background_card(painter, center_x, center_y, side // 2 - 2)
+
             drop_offset = 3
             marker_len = max(6, radius // 10)
             marker_lines: list[tuple[int, int, int, int]] = []
@@ -1112,6 +1117,56 @@ class ClockWidget(BaseOverlayWidget):
         self._cached_clock_face = pixmap
         self._cached_clock_face_size = (width, height)
         self._clock_face_cache_invalidated = False
+
+    def _draw_analog_background_card(
+        self,
+        painter: QPainter,
+        center_x: int,
+        center_y: int,
+        card_radius: int,
+    ) -> None:
+        """Paint the analogue clock's circular card + optional outer shadow."""
+
+        card_radius = max(1, int(card_radius))
+        card_rect = QRectF(
+            float(center_x - card_radius),
+            float(center_y - card_radius),
+            float(card_radius * 2),
+            float(card_radius * 2),
+        )
+
+        if self.uses_painted_frame_shadow():
+            tuning = PAINTED_FRAME_SHADOW_TUNING
+            offset_x = float(tuning["offset_x"])
+            offset_y = float(tuning["offset_y"])
+            steps = max(1, int(tuning["blur_steps"]))
+            spread = max(0.0, float(tuning["spread"]))
+            max_alpha = max(0, min(255, int(tuning["max_alpha"])))
+
+            painter.save()
+            painter.setPen(Qt.PenStyle.NoPen)
+            for layer in range(steps, 0, -1):
+                frac = layer / float(steps)
+                grow = spread * frac
+                alpha = int(max_alpha * (1.0 - (frac * 0.86)))
+                if alpha <= 0:
+                    continue
+                shadow_rect = card_rect.translated(offset_x, offset_y).adjusted(-grow, -grow, grow, grow)
+                painter.setBrush(QColor(0, 0, 0, alpha))
+                painter.drawEllipse(shadow_rect)
+            painter.restore()
+
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(self._bg_color)
+        painter.drawEllipse(card_rect)
+        if self._bg_border_width > 0 and self._bg_border_color.alpha() > 0:
+            border_pen = QPen(self._bg_border_color, max(1, int(self._bg_border_width)))
+            border_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(border_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(card_rect)
+        painter.restore()
 
     def _paint_analog(self, event: QPaintEvent) -> None:
         """Paint analog clock face, hands, and numerals.

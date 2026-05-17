@@ -186,6 +186,24 @@ def test_reddit_manual_refresh_defers_during_parent_transition(qt_app, qtbot):  
 
 
 @pytest.mark.qt
+def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._fetch_in_progress = True  # type: ignore[attr-defined]
+        calls = []
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
 def test_reddit_fetch_result_defers_apply_during_parent_transition(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     """Fetched Reddit data should not invalidate/repaint content mid-transition."""
     from PySide6.QtWidgets import QWidget

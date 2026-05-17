@@ -143,3 +143,84 @@ def sync_refresh_spinner_for_transition(
                 timer.start()
         if update_callback:
             update_callback()
+
+
+def begin_fetch_guard(
+    widget: Any,
+    *,
+    flag_attr: str = "_fetch_in_progress",
+    lock_attr: str | None = None,
+    logger: Any | None = None,
+    busy_message: str | None = None,
+) -> bool:
+    """Return False when a fetch is already active, otherwise mark it active."""
+
+    lock = getattr(widget, lock_attr, None) if lock_attr else None
+    if lock is not None:
+        with lock:
+            if getattr(widget, flag_attr, False):
+                if logger is not None and busy_message:
+                    logger.debug(busy_message)
+                return False
+            setattr(widget, flag_attr, True)
+            return True
+    if getattr(widget, flag_attr, False):
+        if logger is not None and busy_message:
+            logger.debug(busy_message)
+        return False
+    setattr(widget, flag_attr, True)
+    return True
+
+
+def end_fetch_guard(
+    widget: Any,
+    *,
+    flag_attr: str = "_fetch_in_progress",
+    lock_attr: str | None = None,
+) -> None:
+    """Clear a fetch-in-progress flag, respecting an optional widget lock."""
+
+    lock = getattr(widget, lock_attr, None) if lock_attr else None
+    if lock is not None:
+        with lock:
+            setattr(widget, flag_attr, False)
+        return
+    setattr(widget, flag_attr, False)
+
+
+def trigger_manual_refresh(
+    widget: Any,
+    *,
+    enabled_attr: str = "_enabled",
+    fetch_flag_attr: str = "_fetch_in_progress",
+    defer_refresh: Callable[[], bool],
+    fetch_callback: Callable[[], bool],
+    logger: Any | None = None,
+    busy_message: str | None = None,
+    failure_message: str | None = None,
+    start_feedback: Callable[[], None] | None = None,
+    stop_feedback: Callable[[], None] | None = None,
+) -> bool:
+    """Shared manual-refresh request flow for service-backed widgets."""
+
+    if not getattr(widget, enabled_attr, False):
+        return False
+    if getattr(widget, fetch_flag_attr, False):
+        if logger is not None and busy_message:
+            logger.debug(busy_message)
+        return True
+    if defer_refresh():
+        return True
+    try:
+        if start_feedback is not None:
+            start_feedback()
+        queued = bool(fetch_callback())
+        if not queued and stop_feedback is not None:
+            stop_feedback()
+        return queued
+    except Exception:
+        if stop_feedback is not None:
+            stop_feedback()
+        if logger is not None and failure_message:
+            logger.debug(failure_message, exc_info=True)
+        return False

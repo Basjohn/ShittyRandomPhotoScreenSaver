@@ -59,12 +59,15 @@ from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/exte
     try_bring_reddit_window_to_front as _try_bring_reddit_window_to_front,
 )
 from widgets.service_widget_runtime import (
+    begin_fetch_guard,
     defer_refresh_if_transition,
     defer_value_if_transition,
+    end_fetch_guard,
     ensure_single_shot_timer,
     parent_transition_running,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
+    trigger_manual_refresh,
 )
 
 logger = get_logger(__name__)
@@ -721,10 +724,12 @@ class RedditWidget(BaseOverlayWidget):
             return False
         if defer_for_transition and self._defer_refresh_if_transition():
             return True
-        if self._fetch_in_progress:
-            logger.debug("[REDDIT] Fetch already in progress, skipping")
+        if not begin_fetch_guard(
+            self,
+            logger=logger,
+            busy_message="[REDDIT] Fetch already in progress, skipping",
+        ):
             return False
-        self._fetch_in_progress = True
 
         tm = self._thread_manager
 
@@ -856,23 +861,16 @@ class RedditWidget(BaseOverlayWidget):
             return False
 
     def _trigger_manual_refresh(self) -> bool:
-        if not self._enabled:
-            return False
-        if self._fetch_in_progress:
-            logger.debug("[REDDIT] Manual refresh ignored; fetch already in progress")
-            return True
-        if self._defer_refresh_if_transition():
-            return True
-        try:
-            self._start_refresh_spinner()
-            queued = self._fetch_feed()
-            if not queued:
-                self._stop_refresh_spinner()
-            return queued
-        except Exception:
-            self._stop_refresh_spinner()
-            logger.debug("[REDDIT] Manual refresh failed", exc_info=True)
-            return False
+        return trigger_manual_refresh(
+            self,
+            defer_refresh=self._defer_refresh_if_transition,
+            fetch_callback=self._fetch_feed,
+            logger=logger,
+            busy_message="[REDDIT] Manual refresh ignored; fetch already in progress",
+            failure_message="[REDDIT] Manual refresh failed",
+            start_feedback=self._start_refresh_spinner,
+            stop_feedback=self._stop_refresh_spinner,
+        )
 
     def _parent_transition_running(self) -> bool:
         return parent_transition_running(self)
@@ -990,7 +988,7 @@ class RedditWidget(BaseOverlayWidget):
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
-        self._fetch_in_progress = False
+        end_fetch_guard(self)
         self._stop_refresh_spinner()
         if defer_for_transition and self._defer_feed_apply_if_transition(posts_data):
             return
@@ -1155,7 +1153,7 @@ class RedditWidget(BaseOverlayWidget):
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
-        self._fetch_in_progress = False
+        end_fetch_guard(self)
         self._stop_refresh_spinner()
         if defer_for_transition and self._defer_fetch_error_if_transition(error):
             return

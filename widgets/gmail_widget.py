@@ -46,12 +46,15 @@ from widgets.gmail_components import (
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.service_widget_runtime import (
+    begin_fetch_guard,
     defer_refresh_if_transition,
     defer_value_if_transition,
+    end_fetch_guard,
     ensure_single_shot_timer,
     parent_transition_running,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
+    trigger_manual_refresh,
 )
 from widgets.shadow_utils import (
     ShadowFadeProfile,
@@ -497,17 +500,18 @@ class GmailWidget(BaseOverlayWidget):
             )
             return True
         try:
-            with self._fetch_lock:
-                if self._fetch_in_progress:
-                    logger.debug("[GMAIL] Fetch already in progress, skipping")
-                    return False
-                self._fetch_in_progress = True
+            if not begin_fetch_guard(
+                self,
+                lock_attr="_fetch_lock",
+                logger=logger,
+                busy_message="[GMAIL] Fetch already in progress, skipping",
+            ):
+                return False
             self._set_refreshing(True)
             # Re-acquire client from backend each fetch in case mode/credentials changed
             self._gmail_client = self._backend.client if self._backend.is_authenticated else None
             if self._gmail_client is None:
-                with self._fetch_lock:
-                    self._fetch_in_progress = False
+                end_fetch_guard(self, lock_attr="_fetch_lock")
                 self._set_refreshing(False)
                 logger.debug("[GMAIL] Not authenticated, skipping fetch")
                 self._last_error = "auth"
@@ -698,8 +702,7 @@ class GmailWidget(BaseOverlayWidget):
             except Exception:
                 logger.critical("[GMAIL] run_on_ui_thread failed, dropping error")
         finally:
-            with self._fetch_lock:
-                self._fetch_in_progress = False
+            end_fetch_guard(self, lock_attr="_fetch_lock")
 
     def _fetch_emails_sync(self) -> None:
         try:
@@ -713,8 +716,7 @@ class GmailWidget(BaseOverlayWidget):
             logger.error("[GMAIL] Sync fetch failed: %s", e)
             self._on_fetch_error(str(e))
         finally:
-            with self._fetch_lock:
-                self._fetch_in_progress = False
+            end_fetch_guard(self, lock_attr="_fetch_lock")
 
     def _on_emails_fetched(
         self,
@@ -1462,7 +1464,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def handle_click(self, local_pos: QPoint) -> bool:
         if self._show_refresh_spiral and self._refresh_hit_rect is not None and self._refresh_hit_rect.contains(local_pos):
-            self._fetch_emails()
+            self._trigger_manual_refresh()
             return True
 
         if self._last_error:
@@ -1470,7 +1472,7 @@ class GmailWidget(BaseOverlayWidget):
             if is_auth:
                 self._trigger_auth_flow()
             else:
-                self._fetch_emails()
+                self._trigger_manual_refresh()
             return True
 
         if self._header_hit_rect is not None and self._header_hit_rect.contains(local_pos):
@@ -1500,14 +1502,10 @@ class GmailWidget(BaseOverlayWidget):
             return False
         if self._is_interactive_point(local_pos):
             return False
-        try:
-            started = self._fetch_emails()
-            if started:
-                logger.debug("[GMAIL] Blank-space double-click triggered email refresh")
-            return True
-        except Exception:
-            logger.debug("[GMAIL] Double-click refresh failed", exc_info=True)
-            return False
+        started = self._trigger_manual_refresh()
+        if started:
+            logger.debug("[GMAIL] Blank-space double-click triggered email refresh")
+        return bool(started)
 
     def resolve_click_target(self, local_pos: QPoint) -> Optional[str]:
         """Return a Gmail URL for central MC/SCR click routing, without opening it."""
@@ -1540,6 +1538,16 @@ class GmailWidget(BaseOverlayWidget):
             self._backend.start_oauth_flow()
         except Exception as e:
             logger.error("[GMAIL] Auth flow failed: %s", e)
+
+    def _trigger_manual_refresh(self) -> bool:
+        return trigger_manual_refresh(
+            self,
+            defer_refresh=self._defer_refresh_if_transition,
+            fetch_callback=self._fetch_emails,
+            logger=logger,
+            busy_message="[GMAIL] Manual refresh ignored; fetch already in progress",
+            failure_message="[GMAIL] Manual refresh failed",
+        )
 
     def _show_action_menu(self, message_id: str, local_pos: QPoint) -> None:
         if self._active_action_menu is not None:
