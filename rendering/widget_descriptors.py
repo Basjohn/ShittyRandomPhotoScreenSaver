@@ -194,6 +194,7 @@ class WidgetSettingsSectionDescriptor:
     persisted_widget_keys: tuple[str, ...] = ()
     signal_block_attrs: tuple[str, ...] = ()
     bootstrap_in_lazy_mode: bool = False
+    lazy_dependency_section_ids: tuple[str, ...] = ()
     default_selected: bool = False
     method_name: str | None = None
     dev_feature_env: str | None = None
@@ -307,6 +308,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "media_show_header_frame", "media_show_controls",
             "media_spotify_volume_enabled",
         ),
+        lazy_dependency_section_ids=("visualizers",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="visualizers",
@@ -532,6 +534,37 @@ def get_widget_lazy_bootstrap_indices(
     ]
     if 0 <= initial_index < len(descriptor_iter) and initial_index not in ordered:
         ordered.append(initial_index)
+    return tuple(ordered)
+
+
+def get_widget_lazy_dependency_indices(
+    target_index: int,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> tuple[int, ...]:
+    """Return descriptor-owned lazy-build dependency indices for one section."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    if target_index < 0 or target_index >= len(descriptor_iter):
+        return ()
+
+    index_map = get_widget_section_index_map(descriptor_iter)
+    ordered: list[int] = []
+    seen: set[int] = set()
+
+    def _visit(idx: int) -> None:
+        if idx in seen or idx < 0 or idx >= len(descriptor_iter):
+            return
+        seen.add(idx)
+        descriptor = descriptor_iter[idx]
+        for section_id in descriptor.lazy_dependency_section_ids:
+            dep_idx = index_map.get(section_id)
+            if dep_idx is None:
+                continue
+            _visit(dep_idx)
+            if dep_idx not in ordered:
+                ordered.append(dep_idx)
+
+    _visit(target_index)
     return tuple(ordered)
 
 

@@ -6,6 +6,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Guardrails
 - Keep this aligned with `Spec.md`, `Index.md`, `Docs/Guardrails.md`, and `Docs/Historical_Bugs.md`.
+- Prune validated work aggressively. Once a milestone is materially landed and no longer driving active decisions, collapse it into `Recently Completed / Not Active` instead of letting this plan become a changelog.
 - Keep harnesses/probes intact unless explicitly asked to retire them.
 - Treat `presets/visualizer_modes/` as authored content. Tests may validate schema/index/repair behavior, but must not force exact preset names, slots, or creative numeric values.
 - Do not close visual/runtime bugs from tests alone when symptoms are user-visible.
@@ -13,32 +14,26 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Stronger transition registry / descriptor layer.
-Core value: next best architecture payoff after widget descriptors.
-- Goal:
-  - centralize transition identity, labels, startup-safe gating, warmup metadata, and enabled-pool selection,
-  - reduce scattered transition ownership so future transitions can be added safely with less multi-file surgery.
-- Required validation:
-  - targeted transition registry/startup-path tests,
-  - doc refresh in `Spec.md`, `Index.md`, and `Docs/Transition_Change_Checklist.md`.
+1. Settings entry / lazy restore hardening.
+Core value: prevent another “looks wrong until you bounce tabs” regression after the descriptor/lazy migration.
+- [ ] Audit remaining lazy-load dependency assumptions in `WidgetsTab`, especially where a section loader depends on another section’s controls or state.
+- [ ] Make any real inter-section dependency explicit in descriptor metadata instead of leaving it as tab-order behavior.
+- [ ] Lock programmatic settings entry paths (`SettingsDialog`, restored subtab/view state, hidden/lazy access) behind focused regression coverage.
+- [ ] Re-run the Media/Visualizers restore path plus any similar dependency paths that surface during the audit.
 
 2. Final shared async / service-backed widget audit.
-Core value: reuse and lifecycle safety follow-through.
-- Current state:
-  - shared lifecycle helpers, fetch guards, manual refresh flow, visible-fallback preservation, and descriptor-owned service contract metadata are all landed.
-- Remaining work:
-  - use the descriptor-owned service-runtime contract map to decide whether any remaining duplicated lifecycle logic should widen into `widgets/service_widget_runtime.py`,
-  - leave widget-local behavior local when the contract is not truly shared.
-- Required validation:
-  - targeted widget tests for Gmail/Weather/Reddit/Imgur/Media-family lifecycle behavior,
-  - transition deferral coverage where shared service-backed behavior is touched.
+Core value: finish the reuse/lifecycle sweep without flattening widget-specific behavior.
+- [ ] Use the descriptor-owned service-runtime contract map to inspect remaining lifecycle duplication in Gmail/Reddit/Weather/Imgur/Media-adjacent widgets.
+- [ ] Widen `widgets/service_widget_runtime.py` only where the contract is genuinely shared and already proven by behavior.
+- [ ] Keep widget-local policy local when fetch/display/runtime semantics diverge.
+- [ ] Re-validate targeted lifecycle behavior after each widening slice: deferral, fetch-in-progress guards, visible-fallback preservation, retry/refresh timers.
 
 3. Extension-path contract tests and targeted test maintainability.
-Core value: supporting hardening work.
-- Scope:
-  - add extension-path tests around descriptor/registry contracts as they stabilize,
-  - split oversized tests only where it materially improves safety for active refactors,
-  - keep test work tied to active architecture changes rather than broad cleanup.
+Core value: keep the registry/descriptor base safe without turning test work into a cleanup side quest.
+- [ ] Add focused extension-path tests around descriptor/registry contracts as they stabilize.
+- [ ] Add coverage for the specific lazy/settings entry paths that have now proven regression-prone.
+- [ ] Split oversized tests only when it materially improves safety for an active refactor or a known flaky/opaque path.
+- [ ] Keep this work coupled to active architecture changes, not broad test-file tidying.
 
 ## Recently Completed / Not Active
 - Widget descriptor base is substantially landed:
@@ -57,6 +52,10 @@ Core value: supporting hardening work.
   - visible-fallback preservation,
   - local canonical cleanup seams for Weather, Imgur, Spotify volume, Media widget, and mute button.
 - Visualizer settings-model residue reduction in `core/settings/models/_spotify_visualizer.py` is substantially landed and documented.
+- Transition registry / descriptor layer is substantially landed:
+  - canonical transition identity and legacy alias handling now live in `rendering/transition_registry.py`,
+  - ordinary transition selector ordering is shared by the transitions tab and context menu,
+  - engine cycle/random availability, hardware gating, factory-side random fallback, compositor program routing, and startup shader warmup now consume shared registry truth instead of parallel handwritten lists/maps.
 - Visualizer coordinator residue reduction in `widgets/spotify_visualizer_widget.py` plus extracted seams (`activation_runtime.py`, `runtime_config.py`, `mode_transition.py`, `tick_helpers.py`) is substantially landed and documented.
 - Visualizer overlay split Task 3 slices `3A` through `3D` are substantially landed and documented:
   - passive diagnostics,

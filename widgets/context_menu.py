@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction
 
 from core.logging.logger import get_logger
+from rendering.transition_registry import get_transition_setting_names
 
 logger = get_logger(__name__)
 
@@ -136,11 +137,7 @@ class ScreensaverContextMenu(QMenu):
         
         self._is_mc_build = is_mc_build
         self._always_on_top = always_on_top
-        self._transition_types = transition_types or [
-            "Ripple", "Wipe", "3D Block Spins", "Diffuse", "Slide",
-            "Crossfade", "Block Puzzle Flip", "Warp Dissolve",
-            "Blinds", "Crumble", "Particle", "Burn",
-        ]
+        self._transition_types = transition_types or get_transition_setting_names()
         self._current_transition = current_transition
         self._random_enabled = random_enabled
         self._dimming_enabled = dimming_enabled

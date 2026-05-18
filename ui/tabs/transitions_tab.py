@@ -19,6 +19,10 @@ from PySide6.QtGui import QColor
 from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.logging.logger import get_logger
+from rendering.transition_registry import (
+    canonicalize_transition_name,
+    get_transition_setting_names,
+)
 from ui.tabs.shared_styles import (
     COMBOBOX_STYLE,
     CIRCLE_CHECKBOX_STYLE,
@@ -35,6 +39,8 @@ from ui.styled_popup import ColorSwatchButton, StyledColorPicker
 from ui.widgets import StyledComboBox
 
 logger = get_logger(__name__)
+
+_TRANSITION_SETTING_NAMES = get_transition_setting_names()
 
 
 class TransitionsTab(QWidget):
@@ -161,20 +167,7 @@ class TransitionsTab(QWidget):
         
         type_row = _aligned_row(type_layout, "Transition:")
         self.transition_combo = StyledComboBox(size_variant="hero")
-        self.transition_combo.addItems([
-            "Ripple",            # 1. GL-only (formerly Rain Drops)
-            "Wipe",              # 2. Directional
-            "3D Block Spins",    # 3. GL-only
-            "Diffuse",           # 4. Particle dissolve
-            "Slide",             # 5. Directional
-            "Crossfade",         # 6. Classic fallback
-            "Block Puzzle Flip", # 7. Tile flip
-            "Warp Dissolve",     # 9. GL-only
-            "Blinds",            # 10. GL-only
-            "Crumble",           # 11. GL-only, falling pieces
-            "Particle",          # 12. GL-only, particle balls
-            "Burn",              # 13. GL-only, fire/burn
-        ])
+        self.transition_combo.addItems(_TRANSITION_SETTING_NAMES)
         self.transition_combo.currentTextChanged.connect(self._on_transition_changed)
         type_row.addWidget(self.transition_combo)
         type_row.addStretch()
@@ -688,20 +681,7 @@ class TransitionsTab(QWidget):
         if not isinstance(durations_cfg, dict):
             durations_cfg = {}
 
-        type_keys = [
-            "Crossfade",
-            "Slide",
-            "Wipe",
-            "Diffuse",
-            "Block Puzzle Flip",
-            "3D Block Spins",
-            "Ripple",       # UI label for the former Rain Drops transition
-            "Warp Dissolve",
-            "Blinds",
-            "Crumble",
-            "Particle",
-            "Burn",
-        ]
+        type_keys = list(_TRANSITION_SETTING_NAMES)
         self._duration_by_type = {}
         for name in type_keys:
             # Migrate any legacy "Rain Drops" duration to the new "Ripple"
@@ -784,14 +764,10 @@ class TransitionsTab(QWidget):
 
         try:
             # Load transition type (default to Wipe to match SettingsManager defaults)
-            transition_type = transitions_config.get('type', canonical_transitions.get('type', 'Ripple'))
-            # Map legacy labels to their modern equivalents.
-            if transition_type == 'Rain Drops':
-                transition_type = 'Ripple'
-            elif transition_type == 'Claw Marks':
-                # Claw Marks was removed as a transition; treat any saved
-                # configuration as Crossfade for backwards compatibility.
-                transition_type = 'Crossfade'
+            transition_type = canonicalize_transition_name(
+                transitions_config.get('type', canonical_transitions.get('type', 'Ripple')),
+                fallback='Ripple',
+            )
             index = self.transition_combo.findText(transition_type)
             if index >= 0:
                 self.transition_combo.setCurrentIndex(index)

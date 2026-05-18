@@ -37,6 +37,7 @@ from rendering.image_processor import ImageProcessor
 from rendering.gl_compositor import GLCompositorWidget
 from transitions.base_transition import BaseTransition
 from rendering.transition_factory import TransitionFactory
+from rendering.transition_registry import canonicalize_transition_name
 from widgets.clock_widget import ClockWidget
 from widgets.weather_widget import WeatherWidget
 from widgets.media_widget import MediaWidget
@@ -562,11 +563,10 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Failed to read transitions config: %s", e)
             trans_cfg = {}
         
-        next_type = trans_cfg.get("type", fallback) or fallback
-        if not isinstance(next_type, str):
-            next_type = fallback or "Crossfade"
-        else:
-            next_type = next_type.strip() or "Crossfade"
+        next_type = canonicalize_transition_name(
+            trans_cfg.get("type", fallback) or fallback,
+            fallback=fallback or "Crossfade",
+        )
         
         next_random = SettingsManager.to_bool(trans_cfg.get("random_always", False), False)
         self._transition_fallback_type = next_type

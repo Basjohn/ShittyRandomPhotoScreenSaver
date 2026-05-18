@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QCursor
 
 from core.logging.logger import get_logger
+from rendering.transition_registry import canonicalize_transition_name
 from core.settings.settings_manager import SettingsManager
 from widgets.context_menu import ScreensaverContextMenu
 
@@ -232,11 +233,12 @@ def on_context_transition_selected(widget, name: str) -> None:
                 logger.info("Context menu: random transitions enabled")
                 widget._transition_random_enabled = True
             else:
-                trans_cfg["type"] = name
+                canonical_name = canonicalize_transition_name(name, fallback="Crossfade")
+                trans_cfg["type"] = canonical_name
                 trans_cfg["random_always"] = False
-                logger.info("Context menu: transition changed to %s", name)
+                logger.info("Context menu: transition changed to %s", canonical_name)
                 widget._transition_random_enabled = False
-                widget._transition_fallback_type = name
+                widget._transition_fallback_type = canonical_name
 
             # Clear cached random selections from the dict itself so the
             # subsequent set("transitions", trans_cfg) doesn't re-introduce

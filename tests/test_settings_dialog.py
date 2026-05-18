@@ -268,6 +268,23 @@ def test_settings_dialog_builds_widgets_tab_in_lazy_mode():
     assert 'self._tab_state_cache.get("widgets", {}).get("view_state", {})' in source
 
 
+def test_settings_dialog_exposes_widgets_tab_via_lazy_accessor(qapp, settings_manager, animation_manager):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    tab = dialog.widgets_tab
+
+    assert tab is not None
+    assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "sources"
+
+
+def test_settings_dialog_hidden_close_skips_no_sources_popup(qapp, settings_manager, animation_manager):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    dialog.close()
+
+    assert dialog.isVisible() is False
+
+
 def test_settings_dialog_theme_loaded(qapp, settings_manager, animation_manager):
     """Test dialog has stylesheet applied."""
     dialog = SettingsDialog(settings_manager, animation_manager)

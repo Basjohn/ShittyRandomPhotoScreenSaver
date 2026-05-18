@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QApplication
 
 from ui.tabs.transitions_tab import TransitionsTab
 from core.settings.settings_manager import SettingsManager
+from rendering.transition_registry import get_transition_setting_names
 
 
 @pytest.fixture
@@ -82,3 +83,11 @@ def test_default_transition_type_and_direction(qapp, settings_manager, qtbot):
 
     assert slide_cfg.get('direction') == 'Random'
     assert wipe_cfg.get('direction') == 'Diagonal TL-BR'
+
+
+def test_transition_combo_uses_registry_order(qapp, settings_manager, qtbot):
+    tab = TransitionsTab(settings_manager)
+    qtbot.addWidget(tab)
+
+    combo_items = [tab.transition_combo.itemText(i) for i in range(tab.transition_combo.count())]
+    assert combo_items == get_transition_setting_names()

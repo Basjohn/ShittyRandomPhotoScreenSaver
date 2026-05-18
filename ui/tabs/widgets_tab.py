@@ -56,6 +56,7 @@ from rendering.widget_descriptors import (
     collect_widget_stack_status_targets,
     get_default_widget_section_index,
     get_widget_default_init_descriptors,
+    get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
@@ -556,6 +557,13 @@ class WidgetsTab(QWidget):
         if subtab_id < 0 or subtab_id >= len(getattr(self, "_subtab_containers", [])):
             return
 
+        for dep_index in get_widget_lazy_dependency_indices(
+            subtab_id,
+            self._widget_section_descriptors,
+        ):
+            if dep_index != subtab_id:
+                self._build_lazy_subtab_content(dep_index)
+
         host_layout = self._subtab_host_layouts[subtab_id] if subtab_id < len(self._subtab_host_layouts) else None
         if host_layout is None:
             return
@@ -571,6 +579,32 @@ class WidgetsTab(QWidget):
             self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
 
         self._load_settings()
+
+    def ensure_all_sections_built(self) -> None:
+        """Materialize every lazy section for programmatic callers/tests.
+
+        The visible settings dialog keeps lazy construction for UX/perf, but
+        callers that explicitly request the WidgetsTab instance historically
+        expected the standard section controls to exist immediately.
+        """
+        if not self._lazy_sections:
+            return
+        for idx in range(len(self._widget_section_descriptors)):
+            self._build_lazy_subtab_content(idx)
+
+    def ensure_programmatic_media_sections_built(self) -> None:
+        """Materialize the programmatic media sections expected by older callers.
+
+        Keep this intentionally narrow. Building every lazy section here can
+        pull in heavier widget settings surfaces and leave more timers/background
+        activity alive than simple programmatic media tests actually need.
+        """
+        if not self._lazy_sections:
+            return
+        wanted = {"media", "visualizers", "defaults"}
+        for idx, descriptor in enumerate(self._widget_section_descriptors):
+            if descriptor.section_id in wanted:
+                self._build_lazy_subtab_content(idx)
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""

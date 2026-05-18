@@ -734,6 +734,19 @@ class SettingsDialog(QDialog):
         from ui.settings_about_tab import build_about_tab
         return build_about_tab(self)
 
+    def __getattr__(self, name: str):
+        if name.endswith("_tab"):
+            key = name[:-4]
+            if key in getattr(self, "_tab_keys", []):
+                tab = self._get_tab_instance(key)
+                if key == "widgets" and tab is not None:
+                    ensure_media = getattr(tab, "ensure_programmatic_media_sections_built", None)
+                    if callable(ensure_media):
+                        ensure_media()
+                if tab is not None:
+                    return tab
+        raise AttributeError(f"{type(self).__name__!s} object has no attribute {name!r}")
+
     def _get_tab_instance(self, key: str) -> Optional[QWidget]:
         index = self._tab_index_for_key(key)
         if index < 0:
@@ -1112,6 +1125,9 @@ class SettingsDialog(QDialog):
     def closeEvent(self, event):
         # Check if user has configured any image sources
         if not self._has_image_sources():
+            if not self.isVisible():
+                event.accept()
+                return
             event.ignore()
             self._show_no_sources_popup()
             return

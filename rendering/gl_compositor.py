@@ -74,6 +74,7 @@ from rendering.gl_programs.texture_manager import GLTextureManager
 from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
 from rendering.gl_state_manager import GLStateManager, GLContextState
+from rendering.transition_registry import get_transition_program_map
 
 
 def _get_blockflip_program():
@@ -312,20 +313,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._dimming_opacity: float = 0.0  # 0.0-1.0
 
         # Mapping of transition controller class names to shader program keys.
-        self._transition_program_map: Dict[str, str] = {
-            "GLCompositorCrossfadeTransition": GLProgramCache.CROSSFADE,
-            "GLCompositorSlideTransition": GLProgramCache.SLIDE,
-            "GLCompositorWipeTransition": GLProgramCache.WIPE,
-            "GLCompositorBlockFlipTransition": GLProgramCache.BLOCK_FLIP,
-            "GLCompositorBlindsTransition": GLProgramCache.BLINDS,
-            "GLCompositorDiffuseTransition": GLProgramCache.DIFFUSE,
-            "GLCompositorBlockSpinTransition": GLProgramCache.WARP,  # Uses warp helpers for card flip
-            "GLCompositorRainDropsTransition": GLProgramCache.RAINDROPS,
-            "GLCompositorWarpTransition": GLProgramCache.WARP,
-            "GLCompositorCrumbleTransition": GLProgramCache.CRUMBLE,
-            "GLCompositorParticleTransition": GLProgramCache.PARTICLE,
-            "GLCompositorBurnTransition": GLProgramCache.BURN,
-        }
+        self._transition_program_map: Dict[str, str] = get_transition_program_map()
 
     # ------------------------------------------------------------------
     # Public API used by DisplayWidget / transitions

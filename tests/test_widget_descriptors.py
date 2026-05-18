@@ -11,6 +11,7 @@ from rendering.widget_descriptors import (
     get_factory_widget_descriptors,
     get_default_widget_section_index,
     get_widget_default_init_descriptors,
+    get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
     get_service_runtime_contracts,
     get_live_refresh_handlers,
@@ -136,6 +137,15 @@ def test_widget_lazy_bootstrap_indices_include_defaults_and_requested_subtab():
 
     assert index_map["defaults"] in bootstrap
     assert index_map["weather"] in bootstrap
+
+
+def test_widget_lazy_dependency_indices_capture_media_visualizer_contract():
+    descriptors = get_widget_settings_section_descriptors()
+    index_map = get_widget_section_index_map(descriptors)
+
+    assert get_widget_lazy_dependency_indices(index_map["media"], descriptors) == (
+        index_map["visualizers"],
+    )
 
 
 def test_widget_section_signal_block_attrs_follow_descriptor_registry():

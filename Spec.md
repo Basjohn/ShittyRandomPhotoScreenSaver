@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -118,6 +118,18 @@ Active ids:
 - Mute button follows secondary-stage reveal contract.
 - Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime and then warm the remaining transition programs incrementally. Spotify visualizer GL startup should compile the resolved startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining mode programs incrementally afterward.
 - Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
+
+## 7.1 Transition Registry Contract
+- `rendering/transition_registry.py` is the canonical source of truth for ordinary transition identity and startup/runtime metadata.
+- Descriptor metadata should own at least:
+  - stable persisted transition names and legacy alias canonicalization,
+  - UI order/labels for ordinary transition selectors,
+  - cycle/random-pool participation,
+  - hardware-gating metadata,
+  - compositor program-key routing,
+  - startup-safe transition-program warmup participation.
+- `ui/tabs/transitions_tab.py`, `widgets/context_menu.py`, `engine/screensaver_engine.py`, `engine/engine_handlers.py`, `rendering/transition_factory.py`, `rendering/gl_compositor.py`, and `rendering/gl_compositor_pkg/gl_lifecycle.py` should consume that shared registry for ordinary transition identity/routing instead of keeping parallel handwritten lists.
+- Keep transition-specific runtime behavior explicit in the transition implementations and factory creator methods. Do not flatten per-transition math or widget-local settings UI behavior into a giant opaque descriptor table just for neatness.
 
 ## 8. Widget Descriptor / Registry Contract
 - `rendering/widget_descriptors.py` is the canonical registry for factory-backed overlay widgets.

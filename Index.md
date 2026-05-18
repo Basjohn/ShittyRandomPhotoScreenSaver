@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 Living map of the current SRPSS codebase.
 
@@ -98,6 +98,7 @@ Living map of the current SRPSS codebase.
 | Module | File | Role |
 |---|---|---|
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
+| Transition registry | `rendering/transition_registry.py` | Canonical transition identity, legacy alias canonicalization, UI ordering, cycle/random-pool participation, hardware gating, compositor program routing, and startup shader warmup metadata |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff |
 | Widget descriptor registry | `rendering/widget_descriptors.py` | Canonical factory-backed widget family metadata plus WidgetsTab section, runtime-capability, service-runtime-contract, and stack-preview/settings-composition registry: stable widget ids, parent attributes, factory routing, startup-stage intent, inheritance kwargs, config injection such as Gmail shadow plumbing, settings-section order/label/builder/load/save ownership, descriptor-owned load/save orchestration helpers, descriptor-owned lazy-bootstrap/section-id/default-selection policy for WidgetsTab, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, service-backed/anchor-dependent capability flags, live-refresh handler ownership, descriptor-owned service-widget lifecycle contract participation, canonical widget position-option/layout-edit capability metadata, future resize/reset capability flags, and descriptor-owned preview field reads for WidgetsTab stack/status composition |
 | Defaults section helpers | `ui/tabs/widgets_tab_defaults.py` | Descriptor-owned builder/load/save helpers for shared widget defaults such as shadow toggles and card-border-width persistence |
@@ -109,9 +110,11 @@ Living map of the current SRPSS codebase.
 | Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface with transition-resource warmup delegated to the compositor/runtime helpers |
-| GL lifecycle helpers | `rendering/gl_compositor_pkg/gl_lifecycle.py` | Compositor context initialization, minimal startup transition-program compilation, and deferred warmup of the remaining transition shader programs |
+| GL lifecycle helpers | `rendering/gl_compositor_pkg/gl_lifecycle.py` | Compositor context initialization plus registry-driven minimal startup transition-program compilation and deferred warmup of the remaining transition shader programs |
 | Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil-mask inset |
 | Transition busy state | `rendering/display_widget.py` / `engine/display_manager.py` | Pending/active transition reporting used by overlay widgets to defer refresh/cache churn during image-load and GL transition windows |
+| Transition settings UI | `ui/tabs/transitions_tab.py` | Transition settings UI, per-transition specific controls, and registry-driven ordinary transition selector order/load/save behavior |
+| Transition factory | `rendering/transition_factory.py` | Runtime transition instantiation, duration/direction resolution, registry-driven canonical name handling, and factory-side random fallback selection |
 
 ## Gmail Integration
 

@@ -47,6 +47,12 @@ from sources.folder_source import FolderSource
 from sources.rss.coordinator import RSSCoordinator
 from sources.base_provider import ImageMetadata
 from rendering.display_modes import DisplayMode
+from rendering.transition_registry import (
+    canonicalize_transition_name,
+    get_cycle_transition_names,
+    get_transition_setting_names,
+    is_transition_available_for_hw,
+)
 from utils.image_cache import ImageCache
 from utils.image_prefetcher import ImagePrefetcher
 
@@ -160,19 +166,7 @@ class ScreensaverEngine(QObject):
         # mapped to "Crossfade" at selection time for back-compat only. The
         # Shuffle transition has been retired for v1.2 and no longer appears in
         # the active rotation.
-        self._transition_types: List[str] = [
-            "Ripple",            # 1. GL-only (formerly "Rain Drops")
-            "Wipe",              # 2. Directional
-            "3D Block Spins",    # 3. GL-only
-            "Diffuse",           # 4. Particle dissolve
-            "Slide",             # 5. Directional
-            "Crossfade",         # 6. Classic fallback
-            "Block Puzzle Flip", # 7. Tile flip
-            "Warp Dissolve",     # 9. GL-only
-            "Blinds",            # 10. GL-only
-            "Crumble",           # 11. GL-only, falling pieces
-            "Particle",
-        ]
+        self._transition_types: List[str] = get_cycle_transition_names()
         self._current_transition_index: int = 0  # Will sync with settings in initialize()
         # Caching / prefetch
         self._image_cache: Optional[ImageCache] = None
@@ -938,25 +932,15 @@ class ScreensaverEngine(QObject):
             raw_rnd = transitions.get('random_always', self.settings_manager.get('transitions.random_always', False))
             rnd = SettingsManager.to_bool(raw_rnd, False)
             # Also treat type="Random" (the canonical default) as random mode
-            trans_type = transitions.get('type', 'Random') if isinstance(transitions, dict) else 'Random'
+            trans_type = canonicalize_transition_name(
+                transitions.get('type', 'Random') if isinstance(transitions, dict) else 'Random',
+                fallback='Random',
+            )
             if not rnd and trans_type != 'Random':
                 return
             # Available transition types; include GL-only when HW is enabled and
             # restrict to those enabled in the per-transition pool map.
-            base_types = ["Crossfade", "Slide", "Wipe", "Diffuse", "Block Puzzle Flip"]
-            # Treat legacy 'Rain Drops' entries as equivalent to 'Ripple' when
-            # evaluating GL-only pools. "Claw Marks" and "Shuffle" have been
-            # removed from the runtime and are no longer part of the random pool.
-            gl_only_types = [
-                "Blinds",
-                "3D Block Spins",
-                "Ripple",
-                "Warp Dissolve",
-                "Crumble",
-                "Particle",
-                "Burn",
-            ]
-
+            cycle_types = get_transition_setting_names()
             try:
                 raw_hw = self.settings_manager.get('display.hw_accel', False)
                 hw = SettingsManager.to_bool(raw_hw, False)
@@ -978,16 +962,10 @@ class ScreensaverEngine(QObject):
                     return True
 
             available: List[str] = []
-            for name in base_types:
-                if not _in_pool(name):
+            for name in cycle_types:
+                if not is_transition_available_for_hw(name, hw) or not _in_pool(name):
                     continue
                 available.append(name)
-
-            if hw:
-                for name in gl_only_types:
-                    if not _in_pool(name):
-                        continue
-                    available.append(name)
 
             if not available:
                 # Fallback: always ensure at least Crossfade is available so
@@ -996,9 +974,10 @@ class ScreensaverEngine(QObject):
             # Avoid immediate repeats of transition type. Legacy "Shuffle"
             # selections are treated as "Crossfade" so the engine no longer
             # reintroduces Shuffle into the pool.
-            last_type = self.settings_manager.get('transitions.last_random_choice', None)
-            if last_type == "Shuffle":
-                last_type = "Crossfade"
+            last_type = canonicalize_transition_name(
+                self.settings_manager.get('transitions.last_random_choice', None),
+                fallback="Crossfade",
+            )
             candidates = [t for t in available if t != last_type] if last_type in available else available
             if not candidates:
                 candidates = available

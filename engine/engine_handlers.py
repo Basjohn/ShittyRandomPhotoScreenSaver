@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QApplication
 from core.logging.logger import get_logger
 from core.animation import AnimationManager
 from core.settings import SettingsManager
+from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
 from ui.settings_dialog import SettingsDialog
 
 if TYPE_CHECKING:
@@ -37,8 +38,6 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 
     raw_hw = engine.settings_manager.get('display.hw_accel', False)
     hw = SettingsManager.to_bool(raw_hw, False)
-    gl_only = {"Blinds", "3D Block Spins", "Ripple", "Rain Drops", "Warp Dissolve", "Crumble", "Particle"}
-
     transitions_config = engine.settings_manager.get('transitions', {})
     if not isinstance(transitions_config, dict):
         transitions_config = {}
@@ -46,7 +45,9 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
 
     def _in_pool(name: str) -> bool:
         try:
-            raw_flag = pool_cfg.get(name, True)
+            descriptor = get_transition_descriptor(name)
+            pool_name = descriptor.random_pool_name if descriptor is not None and descriptor.random_pool_name else name
+            raw_flag = pool_cfg.get(pool_name, True)
             return bool(SettingsManager.to_bool(raw_flag, True))
         except Exception as e:
             logger.debug("[ENGINE] Exception suppressed: %s", e)
@@ -58,7 +59,7 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
     for _ in range(len(engine._transition_types)):
         engine._current_transition_index = (engine._current_transition_index + 1) % len(engine._transition_types)
         candidate = engine._transition_types[engine._current_transition_index]
-        if (not hw and candidate in gl_only) or not _in_pool(candidate):
+        if not is_transition_available_for_hw(candidate, hw) or not _in_pool(candidate):
             continue
         new_transition = candidate
         break
@@ -68,7 +69,7 @@ def on_cycle_transition(engine: ScreensaverEngine) -> None:
         engine._current_transition_index = engine._transition_types.index(new_transition) if new_transition in engine._transition_types else 0
 
     # Update settings with permissible transition
-    if not hw and new_transition in gl_only:
+    if not is_transition_available_for_hw(new_transition, hw):
         new_transition = "Crossfade"
         if new_transition in engine._transition_types:
             engine._current_transition_index = engine._transition_types.index(new_transition)

@@ -14,6 +14,11 @@ from core.settings.defaults import get_default_settings
 from core.settings.settings_manager import SettingsManager
 from core.resources.manager import ResourceManager
 from core.process import ProcessSupervisor, WorkerType, MessageType
+from rendering.transition_registry import (
+    canonicalize_transition_name,
+    get_transition_setting_names,
+    is_transition_available_for_hw,
+)
 
 # Transition imports
 from transitions.base_transition import BaseTransition, SlideDirection, WipeDirection
@@ -215,7 +220,10 @@ class TransitionFactory:
             canonical_transitions = {}
         
         # Get transition type
-        transition_type = transitions_settings.get('type') or canonical_transitions.get('type') or 'Crossfade'
+        transition_type = canonicalize_transition_name(
+            transitions_settings.get('type') or canonical_transitions.get('type') or 'Crossfade',
+            fallback='Crossfade',
+        )
         requested_type = transition_type
         
         # Handle random mode
@@ -243,11 +251,9 @@ class TransitionFactory:
         return transition
     
     # Concrete transition names the factory can instantiate directly.
-    _CONCRETE_TYPES = frozenset({
-        'Crossfade', 'Slide', 'Wipe', 'Shuffle', 'Claw Marks',
-        'Warp Dissolve', 'Diffuse', 'Rain Drops', 'Ripple',
-        'Block Puzzle Flip', '3D Block Spins', 'Blinds', 'Crumble', 'Particle', 'Burn',
-    })
+    _CONCRETE_TYPES = frozenset(
+        set(get_transition_setting_names()) | {'Shuffle', 'Claw Marks', 'Rain Drops'}
+    )
 
     def _get_random_mode(
         self, settings: dict, transition_type: str,
@@ -274,7 +280,7 @@ class TransitionFactory:
             if random_mode:
                 chosen = self._settings.get('transitions.random_choice', None)
                 if isinstance(chosen, str) and chosen and chosen != 'Random':
-                    random_choice_value = chosen
+                    random_choice_value = canonicalize_transition_name(chosen, fallback='Crossfade')
                 else:
                     # Engine didn't pre-resolve a choice — pick one now.
                     random_choice_value = self._pick_random_transition(settings)
@@ -286,11 +292,13 @@ class TransitionFactory:
     def _pick_random_transition(self, settings: dict) -> str:
         """Pick a concrete random transition type (factory-side fallback)."""
         try:
-            all_types = [
-                'Crossfade', 'Slide', 'Wipe', 'Diffuse', 'Block Puzzle Flip',
-                'Blinds', '3D Block Spins', 'Ripple',
-                'Warp Dissolve', 'Crumble', 'Particle', 'Burn',
-            ]
+            all_types = get_transition_setting_names()
+            try:
+                raw_hw = self._settings.get('display.hw_accel', False)
+                hw = SettingsManager.to_bool(raw_hw, False)
+            except Exception as e:
+                logger.debug("[TRANSITION_FACTORY] Exception suppressed: %s", e)
+                hw = False
             pool_cfg = (
                 settings.get('pool', {})
                 if isinstance(settings.get('pool', {}), dict)
@@ -304,7 +312,10 @@ class TransitionFactory:
                     raw = pool_cfg.get(name, True)
                 return bool(SettingsManager.to_bool(raw, True))
 
-            available = [n for n in all_types if _in_pool(n)]
+            available = [
+                n for n in all_types
+                if is_transition_available_for_hw(n, hw) and _in_pool(n)
+            ]
             if not available:
                 available = ['Crossfade']
 
@@ -366,6 +377,7 @@ class TransitionFactory:
     ) -> Optional[BaseTransition]:
         """Create transition by type name (GL-only, no SW fallbacks)."""
         self._ensure_gl()
+        transition_type = canonicalize_transition_name(transition_type, fallback='Crossfade')
         
         if transition_type == 'Crossfade':
             return self._create_crossfade(duration_ms, easing_str)
@@ -376,16 +388,13 @@ class TransitionFactory:
         if transition_type == 'Wipe':
             return self._create_wipe(settings, duration_ms, easing_str)
         
-        if transition_type in ('Shuffle', 'Claw Marks'):
-            return self._create_crossfade(duration_ms, easing_str)
-        
         if transition_type == 'Warp Dissolve':
             return self._create_warp(duration_ms, easing_str)
         
         if transition_type == 'Diffuse':
             return self._create_diffuse(settings, duration_ms, easing_str)
         
-        if transition_type in ('Rain Drops', 'Ripple'):
+        if transition_type == 'Ripple':
             return self._create_raindrops(settings, duration_ms, easing_str)
         
         if transition_type == 'Block Puzzle Flip':

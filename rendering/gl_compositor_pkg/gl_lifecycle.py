@@ -23,6 +23,7 @@ from rendering.gl_state_manager import GLContextState
 from rendering.gl_programs.program_cache import get_program_cache, GLProgramCache
 from rendering.gl_programs.geometry_manager import GLGeometryManager
 from rendering.gl_programs.texture_manager import GLTextureManager
+from rendering.transition_registry import get_transition_program_specs
 
 if TYPE_CHECKING:
     pass
@@ -31,31 +32,16 @@ logger = get_logger(__name__)
 
 
 def _transition_program_specs() -> list[tuple[str, str, str]]:
-    return [
-        (GLProgramCache.RAINDROPS, "raindrops_program", "raindrops_uniforms"),
-        (GLProgramCache.WARP, "warp_program", "warp_uniforms"),
-        (GLProgramCache.DIFFUSE, "diffuse_program", "diffuse_uniforms"),
-        (GLProgramCache.BLOCK_FLIP, "blockflip_program", "blockflip_uniforms"),
-        (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
-        (GLProgramCache.SLIDE, "slide_program", "slide_uniforms"),
-        (GLProgramCache.WIPE, "wipe_program", "wipe_uniforms"),
-        (GLProgramCache.BLINDS, "blinds_program", "blinds_uniforms"),
-        (GLProgramCache.CRUMBLE, "crumble_program", "crumble_uniforms"),
-        (GLProgramCache.PARTICLE, "particle_program", "particle_uniforms"),
-        (GLProgramCache.BURN, "burn_program", "burn_uniforms"),
-    ]
+    return get_transition_program_specs()
 
 
 def startup_transition_program_specs() -> list[tuple[str, str, str]]:
     """Return the small shader subset worth paying for on cold startup."""
-    return [
-        (GLProgramCache.CROSSFADE, "crossfade_program", "crossfade_uniforms"),
-    ]
+    return get_transition_program_specs(startup_only=True)
 
 
 def deferred_transition_program_specs() -> list[tuple[str, str, str]]:
-    startup_names = {name for name, _, _ in startup_transition_program_specs()}
-    return [spec for spec in _transition_program_specs() if spec[0] not in startup_names]
+    return get_transition_program_specs(startup_only=False)
 
 
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:

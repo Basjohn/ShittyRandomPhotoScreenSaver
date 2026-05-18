@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-17
+Last updated: 2026-05-18
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -104,6 +104,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Interaction/dimming regression coverage across recent runtime fixes.
 - `tests/test_transition_distribution.py`
   Transition random-pool parity, enabled-pool selection, and approximate long-run uniformity for engine-driven random transition choice.
+- `tests/test_transition_registry.py`
+  Transition registry parity: canonical labels/aliases, hardware gating, cycle-list coverage, compositor program routing, and factory-side random fallback behavior.
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 - `tests/test_startup_shader_warmup.py`
