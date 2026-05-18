@@ -106,6 +106,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Transition random-pool parity, enabled-pool selection, and approximate long-run uniformity for engine-driven random transition choice.
 - `tests/test_transition_registry.py`
   Transition registry parity: canonical labels/aliases, hardware gating, cycle-list coverage, compositor program routing, and factory-side random fallback behavior.
+- `tests/test_visualizer_card_geometry.py`
+  Visualizer outer card geometry parity: mode/preset-owned preferred height, shrink-to-base behavior for strip-like modes, blob-width reduction, and media-relative placement ownership separate from stencil math.
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 - `tests/test_startup_shader_warmup.py`
@@ -122,6 +124,7 @@ When changing visualizer settings/contracts, include tests for:
 - mode-prefix compatibility for future/unknown-style payload prefixes.
 - reset-order / stale-generation gating when touching mode-reset, activation, or overlay-handoff code.
 - **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
+- **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that mode/preset-owned growth still drives preferred outer height, blob-width reduction stays media-relative, and top/bottom anchor placement remains correct independently of stencil-shell behavior.
 
 ## 4.1 Gmail Test Expectations
 When changing Gmail widget OAuth/backend, include tests for:

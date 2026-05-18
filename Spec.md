@@ -76,6 +76,7 @@ Active ids:
 - Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`
 - Mode-program resolution and renderer-owned uniform dispatch: `widgets/spotify_visualizer/overlay_render_dispatch.py`
 - Shared GL frame shell for backbuffer clear, fade gating, and stencil-wrapped render execution: `widgets/spotify_visualizer/overlay_frame_shell.py`
+- Outer visualizer card geometry policy: `widgets/spotify_visualizer/card_geometry.py`; mode/preset-owned outer height, blob-width reduction, and media-relative placement belong here rather than in the stencil shell or generic overlay-widget sizing
 - Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
 - Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.
@@ -102,6 +103,7 @@ Active ids:
 - `widgets.shadows.enabled`, `widgets.shadows.text_enabled`, and `widgets.shadows.header_enabled` are the runtime shadow controls for framed widgets.
 - Framed widgets that use the painted shadow path must explicitly clear transparent backing regions before repainting cached shadow output so stale shadow pixels cannot accumulate in the gutter.
 - Direct `QWidget` implementations that do not inherit `BaseOverlayWidget` but need framed-card parity, such as the Spotify visualizer, must mirror the same painted-frame contract explicitly rather than assuming inheritance.
+- Spotify visualizer outer card sizing is intentionally special: presets and live mode settings own outer height, blob width may narrow the card independently of media width, and media-relative placement belongs to the visualizer card-geometry policy rather than the generic overlay-widget card-height path. Future custom edit/resizing work should extend that outer-geometry policy, not bypass it.
 - Analog clock cache/paint geometry should stay explicit and shared: the analogue card ring is intentionally larger than the inner face, framed mode keeps extra outer-ring breathing room between numerals and the card edge, the numerals are intentionally smaller than the old digital-proportional fallback, and numeral placement uses an authored optical layout map rather than plain text centering so wide Roman numerals such as `VIII` remain visually balanced across future resizing work.
 
 ## 6. Preset Architecture Contract

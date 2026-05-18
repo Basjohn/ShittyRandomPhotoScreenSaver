@@ -41,6 +41,15 @@ def vis_widget():
     widget.height.return_value = 50
     widget.minimumHeight.return_value = 50
     widget.geometry.return_value = QRect(0, 0, 300, 50)
+    widget._vis_mode_str = "spectrum"
+    widget._base_height = 80
+    widget._spectrum_growth = 2.0
+    widget._osc_growth = 2.0
+    widget._blob_growth = 3.5
+    widget._sine_wave_growth = 2.0
+    widget._bubble_growth = 3.0
+    widget._devcurve_growth = 3.5
+    widget._blob_width = 1.0
     return widget
 
 def test_visualizer_below_media_at_top_left(widget_manager, media_widget, vis_widget):
@@ -113,7 +122,38 @@ def test_visualizer_above_media_at_bottom_left(widget_manager, media_widget, vis
     
     # Media top 960. Gap 20. Vis height 50.
     # Expected Y = 960 - 20 - 50 = 890.
-    # This expects "place_above" = True.
+    # Height is now descriptor/preset-owned, so spectrum uses its preferred
+    # outer card height rather than a stale current widget height.
     assert y < 960
-    assert y == 890
+    assert y == 780
+
+
+def test_visualizer_uses_mode_owned_preferred_height_for_positioning(widget_manager, media_widget, vis_widget):
+    media_widget._position = MockPosition("BOTTOM_LEFT")
+    media_widget.geometry.return_value = QRect(100, 700, 300, 100)
+    vis_widget._vis_mode_str = "bubble"
+    vis_widget._bubble_growth = 4.5
+
+    widget_manager.position_spotify_visualizer(vis_widget, media_widget, 1920, 1080)
+
+    x, y, w, h = vis_widget.setGeometry.call_args[0]
+    assert h == 360
+    assert y == 320
+    assert w == 300
+    assert x == 100
+
+
+def test_blob_mode_centers_narrower_card_width(widget_manager, media_widget, vis_widget):
+    media_widget._position = MockPosition("BOTTOM_LEFT")
+    media_widget.geometry.return_value = QRect(100, 700, 300, 100)
+    vis_widget._vis_mode_str = "blob"
+    vis_widget._blob_width = 0.5
+
+    widget_manager.position_spotify_visualizer(vis_widget, media_widget, 1920, 1080)
+
+    x, y, w, h = vis_widget.setGeometry.call_args[0]
+    assert w == 150
+    assert x == 175
+    assert h == 280
+    assert y == 400
 

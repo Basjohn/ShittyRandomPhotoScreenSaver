@@ -1,41 +1,18 @@
-"""Reusable card height expansion for Spotify visualizer modes.
+"""Backward-compatible height helper for Spotify visualizer cards.
 
-Some visualizer modes (blob, bubble) benefit from a taller card
-than the default spectrum strip (~80 px).  This module provides a
-centralised way to compute the preferred height for any mode and a
-user-configurable growth factor so the expansion scales well on
-different screen sizes.
-
-The default height for spectrum is whatever the widget already has
-(typically set by ``position_spotify_visualizer`` in widget_manager).
-For expanded modes the height is multiplied by a per-mode growth
-factor that the user can tune via settings.
-
-Usage
------
->>> from widgets.spotify_visualizer.card_height import preferred_height
->>> h = preferred_height("blob", base_height=80, growth_factor=2.5)
-160   # 80 * 2.0 (clamped by MAX)
+The full outer-card geometry policy now lives in
+``widgets.spotify_visualizer.card_geometry``. This module stays as a thin
+compatibility wrapper for existing imports and tests that only need the
+preferred-height helper.
 """
 from __future__ import annotations
 
-from core.logging.logger import get_logger
-
-logger = get_logger(__name__)
-
-# Hard bounds to prevent absurd card sizes
-MIN_HEIGHT: int = 40
-MAX_HEIGHT: int = 600
-
-# Default growth factors per mode (multiplied against base_height)
-DEFAULT_GROWTH: dict[str, float] = {
-    "spectrum": 2.0,
-    "oscilloscope": 2.0,
-    "blob": 3.5,
-    "sine_wave": 2.0,
-    "bubble": 3.0,
-    "devcurve": 3.5,
-}
+from widgets.spotify_visualizer.card_geometry import (
+    DEFAULT_GROWTH,
+    MAX_HEIGHT,
+    MIN_HEIGHT,
+    resolve_card_metrics,
+)
 
 
 def preferred_height(
@@ -66,16 +43,15 @@ def preferred_height(
     int
         Clamped height in logical pixels.
     """
-    if growth_factor is None:
-        growth_factor = DEFAULT_GROWTH.get(vis_mode, 1.0)
-
-    growth_factor = max(0.5, min(5.0, float(growth_factor)))
-    raw = int(base_height * growth_factor)
-    clamped = max(MIN_HEIGHT, min(MAX_HEIGHT, raw))
-
-    if max_available is not None and max_available > 0:
-        clamped = min(clamped, max_available)
-
-    return max(MIN_HEIGHT, clamped)
+    growth_map = dict(DEFAULT_GROWTH)
+    if growth_factor is not None:
+        growth_map[vis_mode] = float(growth_factor)
+    metrics = resolve_card_metrics(
+        vis_mode,
+        base_height,
+        growth_map,
+        max_available=max_available,
+    )
+    return metrics.preferred_height
 
 

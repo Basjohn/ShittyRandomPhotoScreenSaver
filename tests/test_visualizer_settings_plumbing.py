@@ -139,6 +139,24 @@ class TestCardHeight:
 
         assert SpotifyVisualizerWidget.get_preferred_height(widget) == 240
 
+    def test_widget_get_preferred_height_tracks_curated_vs_custom_growth_values(self):
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        widget = SimpleNamespace(
+            _vis_mode_str="spectrum",
+            _base_height=80,
+            _spectrum_growth=1.75,
+            _osc_growth=2.0,
+            _blob_growth=3.5,
+            _sine_wave_growth=2.0,
+            _bubble_growth=3.0,
+            _devcurve_growth=3.5,
+        )
+
+        assert SpotifyVisualizerWidget.get_preferred_height(widget) == 140
+        widget._spectrum_growth = 5.0
+        assert SpotifyVisualizerWidget.get_preferred_height(widget) == 400
+
 
 # ===========================================================================
 # 3. Rainbow greyscale saturation fix in ALL shaders

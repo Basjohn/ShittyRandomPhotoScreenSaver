@@ -22,6 +22,11 @@ Core value: keep the registry/descriptor base safe without turning test work int
 - [ ] Keep this work coupled to active architecture changes, not broad test-file tidying.
 
 ## Recently Completed / Not Active
+- Visualizer outer card geometry contract is substantially landed:
+  - `widgets/spotify_visualizer/card_geometry.py` now owns mode/preset-driven preferred height, blob-width reduction, and media-relative placement,
+  - stencil clipping remains explicit and separate in the overlay mask/frame shell,
+  - focused tests now cover outer geometry policy, expanded-height stencil parity, and media-relative placement for tall modes and blob-width exceptions,
+  - this is the intended base for any future custom visualizer edit/resize work rather than trying to normalize the visualizer into ordinary overlay card sizing.
 - Widget descriptor base is substantially landed:
   - factory-backed widget registry,
   - descriptor-owned `WidgetsTab` section build/load/save routing,
@@ -98,13 +103,6 @@ Core value: keep the registry/descriptor base safe without turning test work int
   - Decide which widgets will allow resizing as a whole only, or vertical and horizontal as additionals. Widgets like Reddit, Gmail, Media would ideally show more contents width wise, less if width is reduced. Overall size changes would keep status quo but shrink contents visually. Be very aware of what will and won't break with these options and only give more options to safe bets, perhaps in phased approaches.
   - do not force resize on widgets whose authored layout cannot safely express it through stable logical controls.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
-- `card_height.py` assessment is deferred, but now explicitly queued as future actionable work because the visualizer card sizing path still differs from peer overlay cards. When it becomes active, do it in this order:
-  - audit where card height truth currently lives across `widgets/spotify_visualizer/card_height.py`, `widgets/spotify_visualizer_widget.py`, `widgets/spotify_visualizer/mode_transition.py`, `rendering/widget_manager.py`, and the GL overlay stencil/card shell seams,
-  - decide whether visualizer card sizing should normalize toward the shared card-height behavior used by other widgets or remain intentionally special with clearer adapters,
-  - if normalization is viable, extract the minimum shared seam without changing authored visualizer amplitude, border/stencil inset math, transition behavior, or first-frame authority,
-  - if normalization is not viable, document the visualizer-specific sizing contract more explicitly and make adapter points first-class instead of implicit,
-  - treat this as parity-or-improvement work only after running `tests/test_stencil_mask_alignment.py`, relevant visualizer widget/mode-transition subsets, and runtime log sweeps for `FIRST_FRAME_GUARD`, `before_first_overlay_push`, `after_first_overlay_push`, and `MODE_RESET_ASSERT`,
-  - success means easier future card/layout work without breaking the visualizer’s stencil mask, painted-card border contract, or mode-specific perceived scale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
 
 ## Documentation Rule

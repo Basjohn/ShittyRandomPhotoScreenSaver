@@ -999,17 +999,17 @@ class SpotifyVisualizerWidget(QWidget):
 
     def get_preferred_height(self) -> int:
         """Return the ideal card height for the current visualizer mode."""
-        from widgets.spotify_visualizer.card_height import preferred_height
-        mode = self._vis_mode_str
-        growth = {
-            'spectrum': self._spectrum_growth,
-            'oscilloscope': self._osc_growth,
-            'blob': self._blob_growth,
-            'sine_wave': self._sine_wave_growth,
-            'bubble': self._bubble_growth,
-            'devcurve': getattr(self, '_devcurve_growth', 3.0),
-        }.get(mode)
-        return preferred_height(mode, self._base_height, growth)
+        from widgets.spotify_visualizer.card_geometry import (
+            build_growth_map_from_widget,
+            resolve_card_metrics,
+        )
+
+        metrics = resolve_card_metrics(
+            self._vis_mode_str,
+            self._base_height,
+            build_growth_map_from_widget(self),
+        )
+        return metrics.preferred_height
 
     def _request_reposition(self) -> None:
         """Ask the WidgetManager to reposition this widget for the new mode.
@@ -1040,14 +1040,18 @@ class SpotifyVisualizerWidget(QWidget):
         a stale tall height from an expanded mode (blob/bubble).
         For expanded modes we set a minimum height from the growth factor.
         """
+        from widgets.spotify_visualizer.card_geometry import (
+            build_growth_map_from_widget,
+            resolve_card_metrics,
+        )
+
         mode = self._vis_mode_str
-        growth = {
-            'spectrum': self._spectrum_growth,
-            'oscilloscope': self._osc_growth,
-            'sine_wave': self._sine_wave_growth,
-            'devcurve': getattr(self, '_devcurve_growth', 3.0),
-        }.get(mode)
-        if growth is not None and growth <= 1.0:
+        metrics = resolve_card_metrics(
+            mode,
+            self._base_height,
+            build_growth_map_from_widget(self),
+        )
+        if metrics.force_base_height:
             base = self._base_height
             self.setMinimumHeight(0)
             self.setMaximumHeight(16777215)  # QWIDGETSIZE_MAX
@@ -1056,7 +1060,7 @@ class SpotifyVisualizerWidget(QWidget):
                 self.resize(self.width(), base)
                 logger.debug("[SPOTIFY_VIS] Card height shrunk: %d -> %d (mode=%s)", current, base, mode)
             return
-        h = self.get_preferred_height()
+        h = metrics.preferred_height
         current = self.height()
         if current != h:
             self.setMinimumHeight(h)

@@ -1210,30 +1210,22 @@ class WidgetManager:
         if vis_widget is None or media_widget is None:
             return
         try:
+            from widgets.spotify_visualizer.card_geometry import (
+                build_growth_map_from_widget,
+                resolve_card_metrics,
+                resolve_relative_card_placement,
+            )
+
             media_geom = media_widget.geometry()
             if media_geom.width() <= 0 or media_geom.height() <= 0:
                 return
-            
-            gap = 20
-            height = max(vis_widget.height(), vis_widget.minimumHeight())
-            full_width = media_geom.width()
-            width = full_width
-            x = media_geom.left()
-
-            # Blob mode: apply card width factor and centre the narrower card
             vis_mode = getattr(vis_widget, '_vis_mode_str', 'spectrum')
-            if vis_mode == 'blob':
-                blob_w = getattr(vis_widget, '_blob_width', 1.0)
-                blob_w = max(0.1, min(1.0, float(blob_w)))
-                if blob_w < 1.0:
-                    width = max(40, int(full_width * blob_w))
-                    x = media_geom.left() + (full_width - width) // 2
-            
-            # Determine if we should place the visualizer BELOW or ABOVE the media widget.
-            # If media is at the TOP of the screen, visualizer should be BELOW.
-            # If media is at the BOTTOM (or center/middle), visualizer generally goes ABOVE.
-            
-            # Robustly check position name
+            metrics = resolve_card_metrics(
+                vis_mode,
+                int(getattr(vis_widget, "_base_height", 80)),
+                build_growth_map_from_widget(vis_widget),
+            )
+
             position_name = ""
             if hasattr(media_widget, "_position"):
                 pos = media_widget._position
@@ -1241,32 +1233,31 @@ class WidgetManager:
                     position_name = pos.name.upper()
                 else:
                     position_name = str(pos).upper()
-            
-            # List of anchors where visualizer should be BELOW the media card
-            top_anchors = ("TOP_LEFT", "TOP_CENTER", "TOP_RIGHT")
-            
-            # Default to placing ABOVE, unless we are definitely at a TOP anchor
-            place_below = any(anchor in position_name for anchor in top_anchors)
-            
-            if place_below:
-                 # usage of top() + height() avoids QRect.bottom() off-by-one (bottom is y+h-1)
-                 y = media_geom.top() + media_geom.height() + gap
-            else:
-                 y = media_geom.top() - gap - height
-            
-            y = max(0, y)
-            x = max(0, x)
-            width = min(width, max(10, parent_width - x))
-            
-            vis_widget.setGeometry(x, y, width, height)
+
+            placement = resolve_relative_card_placement(
+                media_rect=media_geom,
+                parent_width=parent_width,
+                parent_height=parent_height,
+                mode_id=vis_mode,
+                card_height=metrics.preferred_height,
+                position_name=position_name,
+                blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
+            )
+
+            vis_widget.setGeometry(
+                placement.x,
+                placement.y,
+                placement.width,
+                placement.height,
+            )
             vis_widget.raise_()
             if is_perf_metrics_enabled():
                 logger.info(
                     "[SPOTIFY_VIS] Positioned visualizer widget geom=(%d,%d,%d,%d)",
-                    x,
-                    y,
-                    width,
-                    height,
+                    placement.x,
+                    placement.y,
+                    placement.width,
+                    placement.height,
                 )
             
             # NOTE: The visualizer card and its GL overlay are intentionally

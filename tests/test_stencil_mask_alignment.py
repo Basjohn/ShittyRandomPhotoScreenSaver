@@ -206,6 +206,17 @@ def test_stencil_mask_no_bleed():
             print(f"INFO: {len(missing)} pixels inside expected card but outside mask for {cfg}")
 
 
+def test_stencil_mask_no_bleed_across_visualizer_growth_heights():
+    """Expanded visualizer card heights must not change the painted-card mask contract."""
+    heights = [140, 280, 400]
+    for widget_h in heights:
+        cfg = CardConfig(300, widget_h, shrink_r=20, shrink_b=16, radius=8.0)
+        expected = compute_expected_boundary(cfg)
+        mask = compute_mask_boundary(cfg)
+        bleed = mask - expected
+        assert not bleed, f"BLEED for expanded visualizer height {widget_h}: {list(bleed)[:10]}"
+
+
 def test_stencil_mask_corner_rounding():
     """Verify corners are actually rounded (not rectangular)."""
     cfg = CardConfig(100, 100, shrink_r=0, shrink_b=0, radius=8.0)
