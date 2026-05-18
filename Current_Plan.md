@@ -14,55 +14,30 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Extension-path contract tests and targeted test maintainability.
-Core value: keep the registry/descriptor base safe without turning test work into a cleanup side quest.
-- [ ] Add focused extension-path tests around descriptor/registry contracts as they stabilize.
-- [ ] Add coverage for the specific lazy/settings entry paths that have now proven regression-prone.
-- [ ] Split oversized tests only when it materially improves safety for an active refactor or a known flaky/opaque path.
-- [ ] Keep this work coupled to active architecture changes, not broad test-file tidying.
+1. Custom widget edit mode groundwork.
+Core value: use the now-cleaner widget/visualizer descriptor base to design the future CUSTOM layout path safely before implementation pressure arrives.
+- [ ] Treat `Docs/Custom_Widget_Edit_Mode_Plan.md` as the detailed source of truth for this feature. Keep this section short and actionable.
+- [ ] Decide the saved-coordinate contract for CUSTOM positions and sizes: logical/grid-first vs raw-pixel fallback, with explicit DPR and multi-monitor rules.
+- [ ] Extend descriptor ownership for edit-mode capability flags: movable, resizable, axis constraints, and reset affordances.
+- [ ] Define the edit-session lifecycle precisely: entry/exit, paused subsystems, safe edit shells/live-widget exceptions, and fade-back-in behavior.
+- [ ] Define first-phase resize semantics per widget family, including which widgets can safely support whole-widget resize only versus directional resize.
+- [ ] Decide how proportional font/content scaling should behave during custom resize so recovery/reset remains predictable.
+
+2. First-phase candidate audit for CUSTOM layout/edit mode.
+Core value: avoid promising drag/resize behavior on widgets whose authored runtime contracts are not ready for it.
+- [ ] Identify the safest first-phase movable widgets.
+- [ ] Identify the safest first-phase resizable widgets.
+- [ ] Explicitly record which widgets should stay position-only or non-participating in phase one and why.
+- [ ] Use the visualizer outer-card geometry contract as the evaluation base for whether visualizer participation should begin as move-only, move-plus-scale, or remain deferred.
 
 ## Recently Completed / Not Active
-- Visualizer outer card geometry contract is substantially landed:
-  - `widgets/spotify_visualizer/card_geometry.py` now owns mode/preset-driven preferred height, blob-width reduction, and media-relative placement,
-  - stencil clipping remains explicit and separate in the overlay mask/frame shell,
-  - focused tests now cover outer geometry policy, expanded-height stencil parity, and media-relative placement for tall modes and blob-width exceptions,
-  - this is the intended base for any future custom visualizer edit/resize work rather than trying to normalize the visualizer into ordinary overlay card sizing.
-- Widget descriptor base is substantially landed:
-  - factory-backed widget registry,
-  - descriptor-owned `WidgetsTab` section build/load/save routing,
-  - Defaults section migration,
-  - descriptor-owned section-id restore, lazy bootstrap, and default section selection,
-  - descriptor-owned subtab button/container plumbing for ordinary sections,
-  - runtime capability and service-contract ownership.
-- Ordinary `WidgetsTab` coordination cleanup is complete enough to retire as the main active track:
-  - remaining inline behavior is now either genuinely special (`spotify_visualizer`, Gmail-specific buckets) or plain tab-local orchestration that is not worth flattening further right now.
-- Settings entry / lazy restore hardening is substantially landed:
-  - Media/Visualizers lazy-build dependencies are now descriptor-owned instead of relying on section order,
-  - lazy dependency resolution tolerates mutual descriptor dependencies safely,
-  - programmatic `SettingsDialog.widgets_tab` access stays narrow but now hydrates the descriptor-owned media/visualizer/defaults contract,
-  - focused regressions cover Media-first restore, Visualizers-first restore, hidden/lazy dialog access, and media roundtrip integration.
-- Shared service-backed widget contract is substantially landed:
-  - transition-aware deferral,
-  - fetch-in-progress guards,
-  - manual refresh flow,
-  - visible-fallback preservation,
-  - shared deferred-runtime timer/state reset,
-  - shared overlay timer-pair teardown for Gmail/Reddit/Weather,
-  - local canonical cleanup seams for Weather, Imgur, Spotify volume, Media widget, and mute button.
-- Final shared async / service-backed widget audit is complete enough to retire:
-  - Gmail/Reddit/Weather shared lifecycle seams now cover the real repeated contracts,
-  - Imgur/Media/Mute/Spotify volume remain intentionally local because their runtime contracts diverge in meaningful ways rather than only by drift.
-- Visualizer settings-model residue reduction in `core/settings/models/_spotify_visualizer.py` is substantially landed and documented.
-- Transition registry / descriptor layer is substantially landed:
-  - canonical transition identity and legacy alias handling now live in `rendering/transition_registry.py`,
-  - ordinary transition selector ordering is shared by the transitions tab and context menu,
-  - engine cycle/random availability, hardware gating, factory-side random fallback, compositor program routing, and startup shader warmup now consume shared registry truth instead of parallel handwritten lists/maps.
-- Visualizer coordinator residue reduction in `widgets/spotify_visualizer_widget.py` plus extracted seams (`activation_runtime.py`, `runtime_config.py`, `mode_transition.py`, `tick_helpers.py`) is substantially landed and documented.
-- Visualizer overlay split Task 3 slices `3A` through `3D` are substantially landed and documented:
-  - passive diagnostics,
-  - common uniform upload,
-  - render dispatch,
-  - frame shell.
+- Extension-path contract tests and targeted maintainability work are materially landed for the recent architecture seams: lazy/programmatic `WidgetsTab` hydration, raw `DisplayWidget.set_image()` sync-entry behavior, and live visualizer geometry refresh-to-placement contracts now have focused regression coverage.
+- DisplayWidget raw-image entry now has a single explicit synchronous processing path; the old presenter-owned sync processing branch is retired, and regression coverage now locks down the narrow legacy `set_image()` contract separately from the async pre-processed mainline.
+- Visualizer outer card geometry contract is landed and validated in runtime plus focused tests; `card_geometry.py` now owns mode/preset-driven preferred height, blob-width reduction, and media-relative placement while stencil clipping stays separate.
+- Widget descriptor base and ordinary `WidgetsTab` coordination cleanup are substantially landed, including Defaults migration, descriptor-owned section restore/bootstrap/build/load/save plumbing, and lazy/settings-entry hardening.
+- Shared service-backed widget contract and final audit are substantially landed; Gmail/Reddit/Weather share the true lifecycle seams, while Imgur/Media/Mute/Spotify volume keep intentionally local canonical seams where their runtime contracts diverge.
+- Transition registry / descriptor work is substantially landed and now owns ordinary transition identity, alias handling, selector ordering, hardware gating, random/cycle participation, compositor routing, and startup warmup metadata.
+- Visualizer structural work is substantially landed across settings-model residue reduction, coordinator extraction, and overlay split slices `3A` through `3D`. Do not reopen unless a concrete regression or clearly higher-value follow-through appears.
 - Do not reopen those tracks as active work unless a concrete regression or a clearly higher-value follow-through appears.
 
 ## Watchlist
@@ -86,24 +61,12 @@ Core value: keep the registry/descriptor base safe without turning test work int
 - The overlay cold-reset path should preserve guardrails even if the GL object is reused. If a reused overlay ever reintroduces stale activation/generation state, the first-frame guard warning should make that visible immediately in logs.
 
 ## Deferred / Not Active
-- Future custom widget edit mode is intentionally not active yet, but the guarded direction is now recorded:
-  - enter/exit from the context menu,
-  - temporarily replace live widgets with safe edit shells/bounds instead of full animated runtime behavior where needed,
-  - pause transitions and visualizer work during edit mode,
-  - support snapping/dragging while editing,
-  - optional resize can be part of that mode if it stays descriptor-owned and widget-logical: `Ctrl + mouse wheel` should adjust widget-owned size axes rather than applying a blind global scale transform,
-  - any widget that participates in edit-mode resize must also expose a clear settings-side size reset affordance for recovery,
-  - save edited positions into a `CUSTOM` slot while preserving the current normal descriptor/grid positioning system as the fallback path,
-  - keep `CUSTOM` greyed out/unavailable until real saved coordinates exist,
-  - restore widgets with fade-in on edit completion, mimicking settings exit cold start behaviour if needed.
-  - validate DPR/multi-monitor adaptability explicitly before rollout; do not store brittle raw-pixel assumptions if a more portable logical/grid representation is viable,
-  - In Edit mode - No keys exit the application. ESC exits edit mode, Enter exits edit mode and applies changes. No mouse movement exits edit mode or any clicking.
-  - See if viable to also have resize handles for mouse usage on all sides and corners.
-  - Assess how we should handle font sizes when custom resizing is done. My initial idea is they lower or grow higher based on the resizing proportionally.
-  - Decide which widgets will allow resizing as a whole only, or vertical and horizontal as additionals. Widgets like Reddit, Gmail, Media would ideally show more contents width wise, less if width is reduced. Overall size changes would keep status quo but shrink contents visually. Be very aware of what will and won't break with these options and only give more options to safe bets, perhaps in phased approaches.
-  - do not force resize on widgets whose authored layout cannot safely express it through stable logical controls.
+- Detailed CUSTOM layout/edit-mode design now lives in `Docs/Custom_Widget_Edit_Mode_Plan.md`. Do not duplicate that design prose here; keep only live implementation work in the active section above.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
+- Memory/doc drift cleanup is deferred until after the first meaningful CUSTOM edit-mode phase. Best scope then: resolve or retire phantom doc references, index any long-lived docs still worth keeping, and avoid creating a second sprawling audit.
+- Test maintainability cleanup is deferred until after the first meaningful CUSTOM edit-mode phase. Best scope then: split oversized visualizer test files where the seams are now clearer, document justified raw-thread test probes, and review tiny stub-like tests for expand-or-delete decisions.
+- Further visualizer residue reduction is deferred. Only reopen `_spotify_visualizer.py`, `spotify_visualizer_widget.py`, or deeper `spotify_bars_gl_overlay.py` work if a concrete regression appears or a clearly higher-value feature cannot proceed safely without it.
 
 ## Documentation Rule
 - Architecture: `Spec.md`

@@ -20,6 +20,7 @@ Living map of the current SRPSS codebase.
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
 | `Docs/00_PROJECT_OVERVIEW.md` | High-level orientation to the documentation set and main runtime areas |
 | `Docs/Custom_Style_Implementation.md` | Styling/reference guardrails for shared settings-dialog and UI chrome work |
+| `Docs/Custom_Widget_Edit_Mode_Plan.md` | Detailed phased design and validation plan for future CUSTOM widget layout/edit mode |
 | `Docs/10_WIDGET_GUIDELINES.md` | Canonical widget implementation guidance and integration checklist |
 | `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
 | `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |

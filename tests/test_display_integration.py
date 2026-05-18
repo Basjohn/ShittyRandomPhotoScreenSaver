@@ -5,6 +5,7 @@ import ast
 import inspect
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable
 from unittest.mock import Mock, patch
 
@@ -345,6 +346,30 @@ class TestSoftwareBackendWatchdog:
 
 class TestFlickerAndTelemetry:
     """Integration tests for allocation limits and telemetry hooks."""
+
+    def test_set_image_uses_single_sync_processing_path(
+        self, qt_app, settings_manager, thread_manager, test_pixmap, test_pixmap2
+    ):
+        widget = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+            thread_manager=thread_manager,
+        )
+        widget.resize(400, 400)
+        widget._image_presenter = SimpleNamespace()
+
+        try:
+            with patch(
+                "rendering.display_widget.ImageProcessor.process_image",
+                return_value=test_pixmap2,
+            ) as process_image, patch.object(widget, "set_processed_image") as set_processed:
+                widget.set_image(test_pixmap, "sync_path.png")
+
+            process_image.assert_called_once()
+            set_processed.assert_called_once_with(test_pixmap2, test_pixmap, "sync_path.png")
+        finally:
+            widget.close()
 
     def test_qimage_allocation_limit_can_be_increased(self, qt_app):
         old_limit = QImageReader.allocationLimit()

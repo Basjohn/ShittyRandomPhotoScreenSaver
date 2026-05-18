@@ -779,7 +779,14 @@ class DisplayWidget(QWidget):
         return self.get_target_size()
 
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
-        """Display a new image with transition (backward-compatible sync version)."""
+        """Display a raw pixmap via the legacy synchronous processing path.
+
+        The async engine pipeline should prefer ``set_processed_image()`` with a
+        pre-sized pixmap. This method remains for direct/raw pixmap callers such
+        as tests and a few manager helpers, but it intentionally uses exactly
+        one processing path so image preparation ownership does not drift across
+        multiple sync branches.
+        """
         if pixmap.isNull():
             self.set_transition_work_pending(False)
             logger.warning("[FALLBACK] Received null pixmap in set_image")
@@ -788,17 +795,7 @@ class DisplayWidget(QWidget):
             self.update()
             return
 
-        # Delegate processing to ImagePresenter if available
         screen_size = self.get_target_size()
-        if self._image_presenter is not None:
-            processed = self._image_presenter.process_image(
-                pixmap, (screen_size.width(), screen_size.height()), image_path
-            )
-            if processed is not None:
-                self.set_processed_image(processed, pixmap, image_path)
-                return
-        
-        # Fallback: direct processing
         processed_pixmap = ImageProcessor.process_image(
             pixmap, screen_size, self.display_mode, False, False
         )

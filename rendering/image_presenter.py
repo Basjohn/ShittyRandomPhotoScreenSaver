@@ -1,22 +1,24 @@
 """
 Image Presenter - Extracted from DisplayWidget for better separation of concerns.
 
-Manages image loading, processing, and pixmap lifecycle for display.
+Manages pixmap lifecycle for display.
 
-Phase E Context: This module centralizes pixmap management to ensure consistent
-state during transitions and avoid stale pixmap references.
+Phase E Context: This module centralizes pixmap state management to ensure
+consistent transition bookkeeping and avoid stale pixmap references. It does
+not own image processing; raw pixmap processing stays on the explicit
+DisplayWidget/ImageProcessor sync entry path, while the preferred runtime path
+remains the async pre-processed pipeline.
 """
 from __future__ import annotations
 
 import time
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import Signal, QObject, QSize
+from PySide6.QtCore import Signal, QObject
 from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger, is_verbose_logging
 from rendering.display_modes import DisplayMode
-from rendering.image_processor import ImageProcessor
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -43,14 +45,13 @@ def _describe_pixmap(pm: Optional[QPixmap]) -> str:
 
 class ImagePresenter(QObject):
     """
-    Manages image loading and pixmap lifecycle for DisplayWidget.
+    Manages pixmap lifecycle for DisplayWidget.
     
     Responsibilities:
-    - Image processing with display modes
-    - Pixmap caching and lifecycle
+    - Pixmap lifecycle and state tracking
     - Device pixel ratio handling
     - Seed pixmap management for transition smoothness
-    
+
     Phase E Context:
         This class provides consistent pixmap state management,
         ensuring transitions always have valid source/destination pixmaps.
@@ -84,9 +85,6 @@ class ImagePresenter(QObject):
         self._previous_pixmap: Optional[QPixmap] = None
         self._seed_pixmap: Optional[QPixmap] = None
         self._last_seed_ts: Optional[float] = None
-        
-        # Image processor
-        self._processor = ImageProcessor()
         
         logger.debug("[IMAGE_PRESENTER] Initialized with mode=%s, dpr=%.2f",
                      display_mode, device_pixel_ratio)
@@ -139,76 +137,6 @@ class ImagePresenter(QObject):
     def device_pixel_ratio(self, value: float) -> None:
         """Set the device pixel ratio."""
         self._device_pixel_ratio = value
-    
-    # =========================================================================
-    # Image Processing
-    # =========================================================================
-    
-    def process_image(
-        self,
-        pixmap: QPixmap,
-        target_size: tuple[int, int],
-        image_path: str = "",
-    ) -> Optional[QPixmap]:
-        """
-        Process an image for display.
-        
-        Args:
-            pixmap: The source pixmap to process
-            target_size: Target (width, height) for processing
-            image_path: Path to the image (for logging)
-            
-        Returns:
-            Processed pixmap or None on error
-        """
-        if pixmap is None or pixmap.isNull():
-            logger.warning("[IMAGE_PRESENTER] Received null pixmap")
-            self.image_error.emit("Failed to load image")
-            return None
-        
-        try:
-            if isinstance(target_size, tuple):
-                width, height = target_size
-                target_qsize = QSize(int(width), int(height))
-            elif isinstance(target_size, QSize):
-                target_qsize = target_size
-            else:
-                try:
-                    w = int(getattr(target_size, "width", lambda: 0)())
-                    h = int(getattr(target_size, "height", lambda: 0)())
-                    target_qsize = QSize(w, h)
-                except Exception as e:
-                    logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
-                    target_qsize = QSize(pixmap.width(), pixmap.height())
-
-            processed = self._processor.process_image(
-                pixmap, target_qsize, self._display_mode
-            )
-            
-            if processed is None or processed.isNull():
-                logger.warning("[IMAGE_PRESENTER] Processing returned null pixmap")
-                self.image_error.emit("Failed to process image")
-                return None
-            
-            # Apply device pixel ratio
-            try:
-                processed.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception as e:
-                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
-            
-            if is_verbose_logging():
-                logger.debug(
-                    "[IMAGE_PRESENTER] Processed: %s -> %s",
-                    _describe_pixmap(pixmap),
-                    _describe_pixmap(processed),
-                )
-            
-            return processed
-            
-        except Exception as e:
-            logger.error("[IMAGE_PRESENTER] Processing failed: %s", e, exc_info=True)
-            self.image_error.emit(f"Failed to process image: {e}")
-            return None
     
     # =========================================================================
     # Pixmap Lifecycle
