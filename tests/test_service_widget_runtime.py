@@ -12,6 +12,7 @@ from widgets.service_widget_runtime import (
     has_visible_fallback_content,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
+    stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -282,5 +283,34 @@ def test_reset_deferred_runtime_state_stops_timers_and_clears_attrs(qt_app):
         assert widget._timer_two is None  # type: ignore[attr-defined]
         assert widget._pending is False  # type: ignore[attr-defined]
         assert widget._payload is None  # type: ignore[attr-defined]
+    finally:
+        widget.deleteLater()
+
+
+def test_stop_overlay_timer_pair_stops_handle_and_qtimer(qt_app):
+    class _Handle:
+        def __init__(self) -> None:
+            self.stopped = False
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    widget = _ResourceWidget()
+    try:
+        handle = _Handle()
+        widget._handle = handle  # type: ignore[attr-defined]
+        widget._timer = QTimer(widget)  # type: ignore[attr-defined]
+        widget._timer.start(1000)  # type: ignore[attr-defined]
+
+        stop_overlay_timer_pair(
+            widget,
+            handle_attr="_handle",
+            qtimer_attr="_timer",
+            delete_qtimers=True,
+        )
+
+        assert handle.stopped is True
+        assert widget._handle is None  # type: ignore[attr-defined]
+        assert widget._timer is None  # type: ignore[attr-defined]
     finally:
         widget.deleteLater()

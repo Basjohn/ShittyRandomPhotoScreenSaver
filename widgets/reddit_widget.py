@@ -67,6 +67,7 @@ from widgets.service_widget_runtime import (
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
+    stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -273,20 +274,12 @@ class RedditWidget(BaseOverlayWidget):
     
     def _deactivate_impl(self) -> None:
         """Deactivate reddit widget - stop fetching (lifecycle hook)."""
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-        
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._update_timer = None
+        stop_overlay_timer_pair(
+            self,
+            handle_attr="_update_timer_handle",
+            qtimer_attr="_update_timer",
+            delete_qtimers=True,
+        )
         self._reset_deferred_runtime_state(delete_qtimers=False)
         
         self._posts.clear()
@@ -370,20 +363,12 @@ class RedditWidget(BaseOverlayWidget):
         if not self._enabled:
             return
 
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                self._update_timer.deleteLater()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._update_timer = None
+        stop_overlay_timer_pair(
+            self,
+            handle_attr="_update_timer_handle",
+            qtimer_attr="_update_timer",
+            delete_qtimers=True,
+        )
 
         if self._growth_timer is not None:
             try:

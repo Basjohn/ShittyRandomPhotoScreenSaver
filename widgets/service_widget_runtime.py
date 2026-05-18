@@ -75,6 +75,33 @@ def stop_qtimer_attr(
         setattr(widget, attr_name, None)
 
 
+def stop_overlay_timer_pair(
+    widget: Any,
+    *,
+    handle_attr: str,
+    qtimer_attr: str | None = None,
+    delete_qtimers: bool,
+) -> None:
+    """Stop a service widget's overlay timer handle and optional fallback QTimer.
+
+    Several service-backed widgets use the same pattern: prefer an
+    `OverlayTimerHandle` when available, but retain a backing/fallback `QTimer`
+    for compatibility or direct access. Keep that teardown contract in one
+    place so stop/deactivate/cleanup paths do not drift.
+    """
+
+    handle = getattr(widget, handle_attr, None)
+    if handle is not None:
+        try:
+            handle.stop()
+        except Exception:
+            pass
+        setattr(widget, handle_attr, None)
+
+    if qtimer_attr:
+        stop_qtimer_attr(widget, qtimer_attr, delete_qtimers=delete_qtimers)
+
+
 def defer_refresh_if_transition(
     widget: Any,
     *,

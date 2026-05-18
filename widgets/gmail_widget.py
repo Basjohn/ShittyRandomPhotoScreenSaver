@@ -54,6 +54,7 @@ from widgets.service_widget_runtime import (
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
+    stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -449,20 +450,12 @@ class GmailWidget(BaseOverlayWidget):
         super().cleanup()
 
     def _stop_polling_timers(self, *, delete_qtimers: bool) -> None:
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception:
-                pass
-            self._update_timer_handle = None
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                if delete_qtimers:
-                    self._update_timer.deleteLater()
-            except Exception:
-                pass
-            self._update_timer = None
+        stop_overlay_timer_pair(
+            self,
+            handle_attr="_update_timer_handle",
+            qtimer_attr="_update_timer",
+            delete_qtimers=delete_qtimers,
+        )
 
     def _stop_deferred_timers(self, *, delete_qtimers: bool) -> None:
         for attr_name in ("_deferred_fetch_timer", "_deferred_refresh_timer"):

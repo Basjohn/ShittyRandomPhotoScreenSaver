@@ -21,7 +21,7 @@ from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from widgets.service_widget_runtime import ensure_single_shot_timer, stop_qtimer_attr
+from widgets.service_widget_runtime import ensure_single_shot_timer, stop_overlay_timer_pair, stop_qtimer_attr
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
     WeatherDetailRow,
@@ -664,21 +664,12 @@ class WeatherWidget(BaseOverlayWidget):
         logger.debug("Weather widget stopped")
 
     def _stop_runtime_timers(self, *, delete_qtimers: bool) -> None:
-        if self._update_timer_handle is not None:
-            try:
-                self._update_timer_handle.stop()
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self._update_timer_handle = None
-
-        if self._update_timer is not None:
-            try:
-                self._update_timer.stop()
-                if delete_qtimers:
-                    self._update_timer.deleteLater()
-            except RuntimeError:
-                pass
-            self._update_timer = None
+        stop_overlay_timer_pair(
+            self,
+            handle_attr="_update_timer_handle",
+            qtimer_attr="_update_timer",
+            delete_qtimers=delete_qtimers,
+        )
 
         stop_qtimer_attr(self, "_retry_timer", delete_qtimers=delete_qtimers)
 

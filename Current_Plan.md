@@ -14,14 +14,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Final shared async / service-backed widget audit.
-Core value: finish the reuse/lifecycle sweep without flattening widget-specific behavior.
-- [ ] Use the descriptor-owned service-runtime contract map to inspect remaining lifecycle duplication in Gmail/Reddit/Weather/Imgur/Media-adjacent widgets.
-- [ ] Widen `widgets/service_widget_runtime.py` only where the contract is genuinely shared and already proven by behavior.
-- [ ] Keep widget-local policy local when fetch/display/runtime semantics diverge.
-- [ ] Re-validate targeted lifecycle behavior after each widening slice: deferral, fetch-in-progress guards, visible-fallback preservation, retry/refresh timers.
-
-2. Extension-path contract tests and targeted test maintainability.
+1. Extension-path contract tests and targeted test maintainability.
 Core value: keep the registry/descriptor base safe without turning test work into a cleanup side quest.
 - [ ] Add focused extension-path tests around descriptor/registry contracts as they stabilize.
 - [ ] Add coverage for the specific lazy/settings entry paths that have now proven regression-prone.
@@ -48,7 +41,12 @@ Core value: keep the registry/descriptor base safe without turning test work int
   - fetch-in-progress guards,
   - manual refresh flow,
   - visible-fallback preservation,
+  - shared deferred-runtime timer/state reset,
+  - shared overlay timer-pair teardown for Gmail/Reddit/Weather,
   - local canonical cleanup seams for Weather, Imgur, Spotify volume, Media widget, and mute button.
+- Final shared async / service-backed widget audit is complete enough to retire:
+  - Gmail/Reddit/Weather shared lifecycle seams now cover the real repeated contracts,
+  - Imgur/Media/Mute/Spotify volume remain intentionally local because their runtime contracts diverge in meaningful ways rather than only by drift.
 - Visualizer settings-model residue reduction in `core/settings/models/_spotify_visualizer.py` is substantially landed and documented.
 - Transition registry / descriptor layer is substantially landed:
   - canonical transition identity and legacy alias handling now live in `rendering/transition_registry.py`,
@@ -92,8 +90,12 @@ Core value: keep the registry/descriptor base safe without turning test work int
   - any widget that participates in edit-mode resize must also expose a clear settings-side size reset affordance for recovery,
   - save edited positions into a `CUSTOM` slot while preserving the current normal descriptor/grid positioning system as the fallback path,
   - keep `CUSTOM` greyed out/unavailable until real saved coordinates exist,
-  - restore widgets with fade-in on edit completion,
+  - restore widgets with fade-in on edit completion, mimicking settings exit cold start behaviour if needed.
   - validate DPR/multi-monitor adaptability explicitly before rollout; do not store brittle raw-pixel assumptions if a more portable logical/grid representation is viable,
+  - In Edit mode - No keys exit the application. ESC exits edit mode, Enter exits edit mode and applies changes. No mouse movement exits edit mode or any clicking.
+  - See if viable to also have resize handles for mouse usage on all sides and corners.
+  - Assess how we should handle font sizes when custom resizing is done. My initial idea is they lower or grow higher based on the resizing proportionally.
+  - Decide which widgets will allow resizing as a whole only, or vertical and horizontal as additionals. Widgets like Reddit, Gmail, Media would ideally show more contents width wise, less if width is reduced. Overall size changes would keep status quo but shrink contents visually. Be very aware of what will and won't break with these options and only give more options to safe bets, perhaps in phased approaches.
   - do not force resize on widgets whose authored layout cannot safely express it through stable logical controls.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - `card_height.py` assessment is deferred, but now explicitly queued as future actionable work because the visualizer card sizing path still differs from peer overlay cards. When it becomes active, do it in this order:
