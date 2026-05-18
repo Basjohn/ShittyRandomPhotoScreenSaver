@@ -46,15 +46,15 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_manager.py`
   Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
 - `tests/test_widget_descriptors.py`
-  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
+  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, descriptor-owned lazy/programmatic dependency metadata for inter-section hydration, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
-  Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, shared fetch-in-progress guards, shared manual-refresh flow, visible-fallback preservation for non-authoritative empty/error results, and timer-stop cleanup.
+  Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, shared fetch-in-progress guards, shared manual-refresh flow, visible-fallback preservation for non-authoritative empty/error results, shared deferred-runtime timer/state reset, and timer-stop cleanup.
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
-  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, bucket-state persistence, and visualizer/settings integration paths.
+  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
 - `tests/test_widget_manager.py`
   Descriptor-driven live settings routing parity, expected-overlay coordination, secondary-stage starter ownership, and manager cleanup behavior.
 - `tests/test_spotify_visualizer_widget.py`
@@ -89,7 +89,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_gmail_imap_actions.py`
   Gmail IMAP UID action helpers, mailbox order preservation, and partial-fetch failure rejection so truncated IMAP snapshots cannot overwrite valid Gmail display/cache state.
 - `tests/test_settings_dialog.py`
-  Settings-dialog destructive flows such as reset-defaults completion/auto-close behavior.
+  Settings-dialog destructive flows such as reset-defaults completion/auto-close behavior, plus lazy WidgetsTab programmatic access and hidden-close guardrails.
 - `tests/test_widgets_tab.py`
   Widgets-tab bucketing persistence/default-collapsed behavior and visualizer/settings tab integration paths.
 - `tests/test_flicker_fix_integration.py`

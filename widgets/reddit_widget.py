@@ -66,6 +66,7 @@ from widgets.service_widget_runtime import (
     ensure_single_shot_timer,
     parent_transition_running,
     preserve_visible_fallback,
+    reset_deferred_runtime_state,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -286,11 +287,7 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
-        self._stop_deferred_refresh_timer(delete_qtimers=False)
-        self._pending_refresh_after_transition = False
-        self._deferred_posts_data = None
-        self._deferred_fetch_error = None
-        self._fetch_in_progress = False
+        self._reset_deferred_runtime_state(delete_qtimers=False)
         
         self._posts.clear()
         self._row_hit_rects.clear()
@@ -395,11 +392,7 @@ class RedditWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._growth_timer = None
-        self._stop_deferred_refresh_timer(delete_qtimers=False)
-        self._pending_refresh_after_transition = False
-        self._deferred_posts_data = None
-        self._deferred_fetch_error = None
-        self._fetch_in_progress = False
+        self._reset_deferred_runtime_state(delete_qtimers=False)
 
         self._enabled = False
         self._posts.clear()
@@ -426,7 +419,7 @@ class RedditWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         self._refresh_spin_timer = None
-        self._stop_deferred_refresh_timer(delete_qtimers=True)
+        self._reset_deferred_runtime_state(delete_qtimers=True)
 
     def is_running(self) -> bool:
         return self._enabled
@@ -435,6 +428,19 @@ class RedditWidget(BaseOverlayWidget):
         stop_qtimer_attr(
             self,
             "_deferred_refresh_timer",
+            delete_qtimers=delete_qtimers,
+        )
+
+    def _reset_deferred_runtime_state(self, *, delete_qtimers: bool) -> None:
+        reset_deferred_runtime_state(
+            self,
+            timer_attrs=("_deferred_refresh_timer",),
+            state_attrs=(
+                ("_pending_refresh_after_transition", False),
+                ("_deferred_posts_data", None),
+                ("_deferred_fetch_error", None),
+                ("_fetch_in_progress", False),
+            ),
             delete_qtimers=delete_qtimers,
         )
 

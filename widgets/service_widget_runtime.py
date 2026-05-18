@@ -264,3 +264,24 @@ def preserve_visible_fallback(
     if logger is not None and log_message:
         logger.warning(log_message)
     return True
+
+
+def reset_deferred_runtime_state(
+    widget: Any,
+    *,
+    timer_attrs: Iterable[str] = (),
+    state_attrs: Iterable[tuple[str, Any]] = (),
+    delete_qtimers: bool,
+) -> None:
+    """Stop deferred runtime timers and restore paired deferred-state attrs.
+
+    This covers the repeated "stop timer(s), clear pending deferred payloads,
+    and drop fetch/transition flags" cleanup seam used by service-backed
+    widgets such as Gmail and Reddit without forcing their provider-specific
+    fetch/render semantics into one shared implementation.
+    """
+
+    for attr_name in timer_attrs:
+        stop_qtimer_attr(widget, attr_name, delete_qtimers=delete_qtimers)
+    for attr_name, value in state_attrs:
+        setattr(widget, attr_name, value)

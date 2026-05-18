@@ -14,21 +14,14 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Settings entry / lazy restore hardening.
-Core value: prevent another “looks wrong until you bounce tabs” regression after the descriptor/lazy migration.
-- [ ] Audit remaining lazy-load dependency assumptions in `WidgetsTab`, especially where a section loader depends on another section’s controls or state.
-- [ ] Make any real inter-section dependency explicit in descriptor metadata instead of leaving it as tab-order behavior.
-- [ ] Lock programmatic settings entry paths (`SettingsDialog`, restored subtab/view state, hidden/lazy access) behind focused regression coverage.
-- [ ] Re-run the Media/Visualizers restore path plus any similar dependency paths that surface during the audit.
-
-2. Final shared async / service-backed widget audit.
+1. Final shared async / service-backed widget audit.
 Core value: finish the reuse/lifecycle sweep without flattening widget-specific behavior.
 - [ ] Use the descriptor-owned service-runtime contract map to inspect remaining lifecycle duplication in Gmail/Reddit/Weather/Imgur/Media-adjacent widgets.
 - [ ] Widen `widgets/service_widget_runtime.py` only where the contract is genuinely shared and already proven by behavior.
 - [ ] Keep widget-local policy local when fetch/display/runtime semantics diverge.
 - [ ] Re-validate targeted lifecycle behavior after each widening slice: deferral, fetch-in-progress guards, visible-fallback preservation, retry/refresh timers.
 
-3. Extension-path contract tests and targeted test maintainability.
+2. Extension-path contract tests and targeted test maintainability.
 Core value: keep the registry/descriptor base safe without turning test work into a cleanup side quest.
 - [ ] Add focused extension-path tests around descriptor/registry contracts as they stabilize.
 - [ ] Add coverage for the specific lazy/settings entry paths that have now proven regression-prone.
@@ -45,6 +38,11 @@ Core value: keep the registry/descriptor base safe without turning test work int
   - runtime capability and service-contract ownership.
 - Ordinary `WidgetsTab` coordination cleanup is complete enough to retire as the main active track:
   - remaining inline behavior is now either genuinely special (`spotify_visualizer`, Gmail-specific buckets) or plain tab-local orchestration that is not worth flattening further right now.
+- Settings entry / lazy restore hardening is substantially landed:
+  - Media/Visualizers lazy-build dependencies are now descriptor-owned instead of relying on section order,
+  - lazy dependency resolution tolerates mutual descriptor dependencies safely,
+  - programmatic `SettingsDialog.widgets_tab` access stays narrow but now hydrates the descriptor-owned media/visualizer/defaults contract,
+  - focused regressions cover Media-first restore, Visualizers-first restore, hidden/lazy dialog access, and media roundtrip integration.
 - Shared service-backed widget contract is substantially landed:
   - transition-aware deferral,
   - fetch-in-progress guards,

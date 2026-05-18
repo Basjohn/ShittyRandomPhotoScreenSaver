@@ -277,6 +277,26 @@ def test_settings_dialog_exposes_widgets_tab_via_lazy_accessor(qapp, settings_ma
     assert dialog._tab_key_for_index(dialog.content_stack.currentIndex()) == "sources"
 
 
+def test_settings_dialog_widgets_tab_accessor_keeps_visualizers_restore_hydrated(
+    qapp, settings_manager, animation_manager
+):
+    settings_manager.set("ui.tab_state", {"widgets": {"view_state": {"subtab_id": "visualizers"}}})
+    settings_manager.set("widgets", {
+        "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
+        "spotify_visualizer": {"enabled": False, "visualizers_enabled": True, "mode": "bubble"},
+        "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+        "global": {"card_border_width_px": 3},
+    })
+
+    dialog = SettingsDialog(settings_manager, animation_manager)
+
+    tab = dialog.widgets_tab
+
+    assert tab.media_enabled.isChecked() is True
+    assert tab.vis_enabled_checkbox.isChecked() is False
+    assert tab.vis_mode_combo.currentData() == "bubble"
+
+
 def test_settings_dialog_hidden_close_skips_no_sources_popup(qapp, settings_manager, animation_manager):
     dialog = SettingsDialog(settings_manager, animation_manager)
 

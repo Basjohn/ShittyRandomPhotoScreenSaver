@@ -53,6 +53,7 @@ from widgets.service_widget_runtime import (
     ensure_single_shot_timer,
     parent_transition_running,
     preserve_visible_fallback,
+    reset_deferred_runtime_state,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -406,10 +407,7 @@ class GmailWidget(BaseOverlayWidget):
 
     def _deactivate_impl(self) -> None:
         self._stop_polling_timers(delete_qtimers=True)
-        self._stop_deferred_timers(delete_qtimers=False)
-        self._pending_refresh_after_transition = False
-        self._deferred_fetch_result = None
-        self._deferred_fetch_error = None
+        self._reset_deferred_runtime_state(delete_qtimers=False)
         self._set_refreshing(False)
         self._cancelled = True
         self._fetch_generation += 1
@@ -441,10 +439,7 @@ class GmailWidget(BaseOverlayWidget):
         self._fetch_generation += 1
         # Explicit timer cleanup for safety (also covered by _cleanup_impl → _deactivate_impl)
         self._stop_polling_timers(delete_qtimers=True)
-        self._stop_deferred_timers(delete_qtimers=True)
-        self._pending_refresh_after_transition = False
-        self._deferred_fetch_result = None
-        self._deferred_fetch_error = None
+        self._reset_deferred_runtime_state(delete_qtimers=True)
         self._set_refreshing(False)
         self._emails.clear()
         self._row_hit_rects.clear()
@@ -472,6 +467,18 @@ class GmailWidget(BaseOverlayWidget):
     def _stop_deferred_timers(self, *, delete_qtimers: bool) -> None:
         for attr_name in ("_deferred_fetch_timer", "_deferred_refresh_timer"):
             stop_qtimer_attr(self, attr_name, delete_qtimers=delete_qtimers)
+
+    def _reset_deferred_runtime_state(self, *, delete_qtimers: bool) -> None:
+        reset_deferred_runtime_state(
+            self,
+            timer_attrs=("_deferred_fetch_timer", "_deferred_refresh_timer"),
+            state_attrs=(
+                ("_pending_refresh_after_transition", False),
+                ("_deferred_fetch_result", None),
+                ("_deferred_fetch_error", None),
+            ),
+            delete_qtimers=delete_qtimers,
+        )
 
     # ------------------------------------------------------------------
     # Timer & Fetch

@@ -13,6 +13,7 @@ from rendering.widget_descriptors import (
     get_widget_default_init_descriptors,
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
+    get_widget_programmatic_dependency_indices,
     get_service_runtime_contracts,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
@@ -144,6 +145,25 @@ def test_widget_lazy_dependency_indices_capture_media_visualizer_contract():
     index_map = get_widget_section_index_map(descriptors)
 
     assert get_widget_lazy_dependency_indices(index_map["media"], descriptors) == (
+        index_map["visualizers"],
+    )
+    assert get_widget_lazy_dependency_indices(index_map["visualizers"], descriptors) == (
+        index_map["media"],
+    )
+
+
+def test_widget_programmatic_dependency_indices_capture_media_visualizer_defaults_contract():
+    descriptors = get_widget_settings_section_descriptors()
+    index_map = get_widget_section_index_map(descriptors)
+
+    assert get_widget_programmatic_dependency_indices(("media",), descriptors) == (
+        index_map["visualizers"],
+        index_map["defaults"],
+        index_map["media"],
+    )
+    assert get_widget_programmatic_dependency_indices(("visualizers",), descriptors) == (
+        index_map["media"],
+        index_map["defaults"],
         index_map["visualizers"],
     )
 

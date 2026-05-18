@@ -58,6 +58,7 @@ from rendering.widget_descriptors import (
     get_widget_default_init_descriptors,
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
+    get_widget_programmatic_dependency_indices,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
     load_widget_sections,
@@ -180,6 +181,7 @@ class WidgetsTab(QWidget):
         self._subtab_scroll_cache: Dict[int, int] = {}
         self._scroll_area: Optional[QScrollArea] = None
         self._subtab_content_built: set[int] = set()
+        self._subtab_content_building: set[int] = set()
         self._subtab_host_layouts: list[QVBoxLayout | None] = []
         self._initialize_descriptor_default_attrs()
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
@@ -554,31 +556,37 @@ class WidgetsTab(QWidget):
         """Build the requested subtab section only when needed."""
         if subtab_id in self._subtab_content_built:
             return
+        if subtab_id in self._subtab_content_building:
+            return
         if subtab_id < 0 or subtab_id >= len(getattr(self, "_subtab_containers", [])):
             return
 
-        for dep_index in get_widget_lazy_dependency_indices(
-            subtab_id,
-            self._widget_section_descriptors,
-        ):
-            if dep_index != subtab_id:
-                self._build_lazy_subtab_content(dep_index)
+        self._subtab_content_building.add(subtab_id)
+        try:
+            for dep_index in get_widget_lazy_dependency_indices(
+                subtab_id,
+                self._widget_section_descriptors,
+            ):
+                if dep_index != subtab_id:
+                    self._build_lazy_subtab_content(dep_index)
 
-        host_layout = self._subtab_host_layouts[subtab_id] if subtab_id < len(self._subtab_host_layouts) else None
-        if host_layout is None:
-            return
+            host_layout = self._subtab_host_layouts[subtab_id] if subtab_id < len(self._subtab_host_layouts) else None
+            if host_layout is None:
+                return
 
-        build_start = time.perf_counter()
-        self._build_section_descriptor_content(
-            self._widget_section_descriptors[subtab_id],
-            host_layout,
-            subtab_id,
-        )
+            build_start = time.perf_counter()
+            self._build_section_descriptor_content(
+                self._widget_section_descriptors[subtab_id],
+                host_layout,
+                subtab_id,
+            )
 
-        if is_perf_metrics_enabled():
-            self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
+            if is_perf_metrics_enabled():
+                self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
 
-        self._load_settings()
+            self._load_settings()
+        finally:
+            self._subtab_content_building.discard(subtab_id)
 
     def ensure_all_sections_built(self) -> None:
         """Materialize every lazy section for programmatic callers/tests.
@@ -592,19 +600,27 @@ class WidgetsTab(QWidget):
         for idx in range(len(self._widget_section_descriptors)):
             self._build_lazy_subtab_content(idx)
 
+    def ensure_programmatic_widget_sections_built(self, *section_ids: str) -> None:
+        """Materialize a narrow descriptor-owned set of sections for callers/tests."""
+        if not self._lazy_sections:
+            return
+        target_ids = tuple(section_id for section_id in section_ids if isinstance(section_id, str) and section_id)
+        if not target_ids:
+            return
+        for idx in get_widget_programmatic_dependency_indices(
+            target_ids,
+            self._widget_section_descriptors,
+        ):
+            self._build_lazy_subtab_content(idx)
+
     def ensure_programmatic_media_sections_built(self) -> None:
-        """Materialize the programmatic media sections expected by older callers.
+        """Materialize the narrow media/visualizer/defaults contract for callers/tests.
 
         Keep this intentionally narrow. Building every lazy section here can
         pull in heavier widget settings surfaces and leave more timers/background
         activity alive than simple programmatic media tests actually need.
         """
-        if not self._lazy_sections:
-            return
-        wanted = {"media", "visualizers", "defaults"}
-        for idx, descriptor in enumerate(self._widget_section_descriptors):
-            if descriptor.section_id in wanted:
-                self._build_lazy_subtab_content(idx)
+        self.ensure_programmatic_widget_sections_built("media")
     
     def _setup_ui(self) -> None:
         """Setup tab UI with scroll area."""

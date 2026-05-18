@@ -11,6 +11,7 @@ from widgets.service_widget_runtime import (
     ensure_single_shot_timer,
     has_visible_fallback_content,
     preserve_visible_fallback,
+    reset_deferred_runtime_state,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
@@ -256,5 +257,30 @@ def test_preserve_visible_fallback_returns_true_only_for_trustworthy_visible_con
 
         widget._items = []  # type: ignore[attr-defined]
         assert preserve_visible_fallback(widget, content_attr="_items") is False
+    finally:
+        widget.deleteLater()
+
+
+def test_reset_deferred_runtime_state_stops_timers_and_clears_attrs(qt_app):
+    widget = _ResourceWidget()
+    try:
+        widget._timer_one = QTimer(widget)  # type: ignore[attr-defined]
+        widget._timer_two = QTimer(widget)  # type: ignore[attr-defined]
+        widget._timer_one.start(1000)  # type: ignore[attr-defined]
+        widget._timer_two.start(1000)  # type: ignore[attr-defined]
+        widget._pending = True  # type: ignore[attr-defined]
+        widget._payload = {"x": 1}  # type: ignore[attr-defined]
+
+        reset_deferred_runtime_state(
+            widget,
+            timer_attrs=("_timer_one", "_timer_two"),
+            state_attrs=(("_pending", False), ("_payload", None)),
+            delete_qtimers=True,
+        )
+
+        assert widget._timer_one is None  # type: ignore[attr-defined]
+        assert widget._timer_two is None  # type: ignore[attr-defined]
+        assert widget._pending is False  # type: ignore[attr-defined]
+        assert widget._payload is None  # type: ignore[attr-defined]
     finally:
         widget.deleteLater()

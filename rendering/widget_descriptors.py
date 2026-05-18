@@ -195,6 +195,7 @@ class WidgetSettingsSectionDescriptor:
     signal_block_attrs: tuple[str, ...] = ()
     bootstrap_in_lazy_mode: bool = False
     lazy_dependency_section_ids: tuple[str, ...] = ()
+    programmatic_dependency_section_ids: tuple[str, ...] = ()
     default_selected: bool = False
     method_name: str | None = None
     dev_feature_env: str | None = None
@@ -309,6 +310,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "media_spotify_volume_enabled",
         ),
         lazy_dependency_section_ids=("visualizers",),
+        programmatic_dependency_section_ids=("visualizers", "defaults"),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="visualizers",
@@ -317,6 +319,8 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_visualizers_container",
         builder_module="ui.tabs.widgets_tab_media",
         builder_name="build_visualizers_ui",
+        lazy_dependency_section_ids=("media",),
+        programmatic_dependency_section_ids=("media", "defaults"),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="reddit",
@@ -561,10 +565,48 @@ def get_widget_lazy_dependency_indices(
             if dep_idx is None:
                 continue
             _visit(dep_idx)
-            if dep_idx not in ordered:
+            if dep_idx != target_index and dep_idx not in ordered:
                 ordered.append(dep_idx)
 
     _visit(target_index)
+    return tuple(ordered)
+
+
+def get_widget_programmatic_dependency_indices(
+    target_section_ids: tuple[str, ...],
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> tuple[int, ...]:
+    """Return descriptor-owned programmatic build indices for lazy WidgetsTab access.
+
+    This is intentionally narrower than "build everything". It lets callers
+    materialize only the sections they truly expect, together with any explicit
+    descriptor-owned lazy/programmatic dependencies, instead of relying on
+    section order or a handwritten hardcoded set.
+    """
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    index_map = get_widget_section_index_map(descriptor_iter)
+    ordered: list[int] = []
+    seen: set[int] = set()
+
+    def _append(idx: int) -> None:
+        if idx < 0 or idx >= len(descriptor_iter) or idx in seen:
+            return
+        seen.add(idx)
+        ordered.append(idx)
+
+    for section_id in target_section_ids:
+        target_idx = index_map.get(section_id)
+        if target_idx is None:
+            continue
+        descriptor = descriptor_iter[target_idx]
+        dependency_ids = descriptor.programmatic_dependency_section_ids or descriptor.lazy_dependency_section_ids
+        for dep_id in dependency_ids:
+            dep_idx = index_map.get(dep_id)
+            if dep_idx is not None:
+                _append(dep_idx)
+        _append(target_idx)
+
     return tuple(ordered)
 
 

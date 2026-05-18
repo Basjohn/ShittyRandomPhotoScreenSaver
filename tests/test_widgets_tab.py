@@ -126,6 +126,33 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_lazy_widgets_tab_visualizers_restore_builds_media_dependency_first(self, qt_app, settings_manager):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
+            "spotify_visualizer": {
+                "enabled": False,
+                "visualizers_enabled": True,
+                "mode": "devcurve",
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "visualizers"},
+        )
+        try:
+            assert hasattr(tab, "media_enabled")
+            assert hasattr(tab, "vis_enabled_checkbox")
+            assert tab.media_enabled.isChecked() is True
+            assert tab.media_position.currentText() == "Bottom Right"
+            assert tab.vis_enabled_checkbox.isChecked() is False
+            assert tab.vis_mode_combo.currentData() == "devcurve"
+        finally:
+            tab.deleteLater()
+
     def test_lazy_widgets_tab_save_preserves_unbuilt_section_config(self, qt_app, settings_manager):
         """Saving a built lazy section must not clobber config for sections never constructed."""
         settings_manager.set("widgets", {
