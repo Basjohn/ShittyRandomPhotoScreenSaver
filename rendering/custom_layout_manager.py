@@ -135,6 +135,11 @@ class CustomLayoutManager:
     def is_any_session_active(cls) -> bool:
         return bool(cls._active_managers)
 
+    @classmethod
+    def raise_all_active_shells(cls) -> None:
+        for manager in cls._active_managers:
+            manager._raise_all_shells()
+
     def is_active(self) -> bool:
         return bool(self._active)
 
@@ -652,12 +657,19 @@ class CustomLayoutManager:
             snapshot=snapshot,
             initial_global_rect=global_rect,
             resizable=descriptor.supports_layout_resize_edit,
+            live_geometry_resolver=lambda rect, cursor, _widget_id=descriptor.widget_id: self._resolve_shell_geometry_for_widget_id(
+                _widget_id,
+                rect,
+                cursor_global=cursor,
+                snap_to_grid=False,
+            ),
         )
         shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
         shell.drag_finished.connect(self._on_shell_drag_finished)
         shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
         shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
         shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
+        shell.set_reset_enabled(False)
         return _ShellState(
             descriptor=descriptor,
             widget=widget,
@@ -708,8 +720,25 @@ class CustomLayoutManager:
                 logger.debug("[CUSTOM_LAYOUT] Failed to raise edit shell", exc_info=True)
 
     def _raise_all_shells_globally(self) -> None:
-        for manager in CustomLayoutManager._active_managers:
-            manager._raise_all_shells()
+        CustomLayoutManager.raise_all_active_shells()
+
+    def _resolve_shell_geometry_for_widget_id(
+        self,
+        widget_id: str,
+        global_rect: QRect,
+        *,
+        cursor_global: QPoint | None,
+        snap_to_grid: bool,
+    ) -> QRect:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return QRect(global_rect)
+        return self._resolve_shell_global_rect(
+            state,
+            global_rect,
+            snap_to_grid=snap_to_grid,
+            cursor_global=cursor_global,
+        )
 
     def _on_shell_geometry_live_changed(self, widget_id: str, global_rect: QRect) -> None:
         state = self._shell_states.get(widget_id)
@@ -757,6 +786,7 @@ class CustomLayoutManager:
             state.baseline_size_payload,
             next_scale,
         )
+        state.shell.set_reset_enabled(abs(next_scale - 1.0) > 1e-6)
         next_rect = self._scaled_rect_from_baseline(state)
         target_screen = state.current_screen or self._screen
         if target_screen is not None:
@@ -770,6 +800,7 @@ class CustomLayoutManager:
             return
         state.resize_scale = 1.0
         state.current_size_payload = dict(state.baseline_size_payload)
+        state.shell.set_reset_enabled(False)
         current = QRect(state.current_global_rect)
         baseline = QRect(state.baseline_global_rect)
         center = current.center()

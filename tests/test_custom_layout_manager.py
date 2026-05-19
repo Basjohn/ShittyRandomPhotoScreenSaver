@@ -211,6 +211,25 @@ def test_edit_shell_reset_button_is_bottom_centered(qtbot):
     assert abs((btn.x() + (btn.width() / 2)) - (shell.width() / 2)) <= 2
 
 
+def test_edit_shell_reset_button_ignores_shell_drag_and_can_be_enabled(qtbot):
+    pm = QPixmap(300, 160)
+    pm.fill(QColor("black"))
+    shell = EditShellWidget(
+        widget_id="clock",
+        snapshot=pm,
+        initial_global_rect=QRect(0, 0, 300, 160),
+        resizable=True,
+    )
+    qtbot.addWidget(shell)
+    shell.show()
+
+    assert shell._reset_btn.isEnabled() is True
+    shell.set_reset_enabled(False)
+    assert shell._reset_btn.isEnabled() is False
+    shell.set_reset_enabled(True)
+    assert shell._reset_btn.isEnabled() is True
+
+
 def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

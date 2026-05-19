@@ -1,7 +1,7 @@
 """Temporary top-level edit shell used by CUSTOM widget layout mode."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Optional
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QPainter, QPen, QPixmap, QWheelEvent
@@ -24,6 +24,7 @@ class EditShellWidget(QWidget):
         snapshot: QPixmap,
         initial_global_rect: QRect,
         resizable: bool,
+        live_geometry_resolver: Optional[Callable[[QRect, QPoint], QRect]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
         flags = (
@@ -43,6 +44,7 @@ class EditShellWidget(QWidget):
         self._drag_offset = QPoint()
         self._transfer_blocked = False
         self._transfer_block_reason = ""
+        self._live_geometry_resolver = live_geometry_resolver
 
         self._reset_btn = QPushButton("Reset", self)
         self._reset_btn.setVisible(self._resizable)
@@ -86,6 +88,9 @@ class EditShellWidget(QWidget):
         self._snapshot = snapshot
         self.update()
 
+    def set_reset_enabled(self, enabled: bool) -> None:
+        self._reset_btn.setEnabled(bool(enabled))
+
     def _reposition_reset_button(self) -> None:
         if not self._resizable:
             return
@@ -100,6 +105,9 @@ class EditShellWidget(QWidget):
         self.reset_size_requested.emit(self.widget_id)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self.childAt(event.position().toPoint()) is self._reset_btn:
+            event.ignore()
+            return
         if event.button() == Qt.MouseButton.RightButton:
             self.context_menu_requested.emit(event.globalPosition().toPoint())
             event.accept()
@@ -116,7 +124,13 @@ class EditShellWidget(QWidget):
             super().mouseMoveEvent(event)
             return
         top_left = event.globalPosition().toPoint() - self._drag_offset
-        self.move(top_left)
+        next_rect = QRect(top_left, self.size())
+        if callable(self._live_geometry_resolver):
+            try:
+                next_rect = QRect(self._live_geometry_resolver(QRect(next_rect), event.globalPosition().toPoint()))
+            except Exception:
+                next_rect = QRect(top_left, self.size())
+        self.setGeometry(next_rect)
         self.geometry_live_changed.emit(self.widget_id, QRect(self.geometry()))
         event.accept()
 
@@ -124,6 +138,12 @@ class EditShellWidget(QWidget):
         if self._dragging and event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
             global_pos = event.globalPosition().toPoint()
+            if callable(self._live_geometry_resolver):
+                try:
+                    next_rect = QRect(self._live_geometry_resolver(QRect(self.geometry()), global_pos))
+                    self.setGeometry(next_rect)
+                except Exception:
+                    pass
             self.drag_finished.emit(self.widget_id, QRect(self.geometry()), global_pos)
             event.accept()
             return

@@ -84,6 +84,7 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
             try:
                 widget._context_menu.aboutToShow.connect(lambda: widget._invalidate_overlay_effects("menu_about_to_show"))
+                widget._context_menu.aboutToShow.connect(lambda: CustomLayoutManager.raise_all_active_shells() if CustomLayoutManager.is_any_session_active() else None)
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
@@ -163,6 +164,11 @@ def show_context_menu(widget, global_pos) -> None:
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
+                        if CustomLayoutManager.is_any_session_active():
+                            CustomLayoutManager.raise_all_active_shells()
+                    except Exception as e:
+                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    try:
                         start = getattr(widget, "_menu_open_ts", None)
                         if start is not None and win_diag_logger.isEnabledFor(logging.DEBUG):
                             t1 = time.monotonic()
@@ -212,10 +218,14 @@ def show_context_menu(widget, global_pos) -> None:
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
+            if CustomLayoutManager.is_any_session_active():
+                CustomLayoutManager.raise_all_active_shells()
             widget._context_menu.popup(global_pos)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
+                if CustomLayoutManager.is_any_session_active():
+                    CustomLayoutManager.raise_all_active_shells()
                 widget._context_menu.popup(QCursor.pos())
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
