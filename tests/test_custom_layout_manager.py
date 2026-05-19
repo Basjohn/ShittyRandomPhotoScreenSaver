@@ -82,6 +82,7 @@ class _DisplayStub(QWidget):
         self._apply_saved_layouts_calls = 0
         self._runtime_reload_requests = 0
         self._custom_layout_manager_proxy = None
+        self._custom_layout_manager = None
         self.clock_widget: _EditableTestWidget | None = None
         self.clock2_widget = None
         self.clock3_widget = None
@@ -136,8 +137,17 @@ class _GmailLikeTestWidget(_EditableTestWidget):
         self._font_size = int(size)
 
 
+def _reset_custom_layout_manager_state() -> None:
+    CustomLayoutManager._active_managers = []
+
+
+def _attach_manager(display: _DisplayStub, manager: CustomLayoutManager) -> None:
+    display._custom_layout_manager_proxy = manager
+    display._custom_layout_manager = manager
+
+
 def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
     display = _DisplayStub(settings_stub)
@@ -149,7 +159,7 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
     assert display._custom_layout_edit_active is True
 
@@ -202,7 +212,7 @@ def test_edit_shell_reset_button_is_bottom_centered(qtbot):
 
 
 def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     display = _DisplayStub(settings_stub)
     qtbot.addWidget(display)
@@ -210,7 +220,7 @@ def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
     display.clock_widget = _EditableTestWidget(display)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
 
     pm = QPixmap(40, 40)
@@ -223,7 +233,7 @@ def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
 
 
 def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custom(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {
         "clock": {"position": "Top Right"},
@@ -249,7 +259,7 @@ def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custo
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     manager._screen_signature = "screen:test"
     manager.apply_saved_layouts_to_display()
 
@@ -257,7 +267,7 @@ def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custo
 
 
 def test_custom_layout_manager_apply_saved_layouts_does_not_force_widget_visible(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     screen = _FakeScreen("screen0", QRect(0, 0, 800, 600))
     signature = get_screen_signature(screen)
     settings_stub = _SettingsStub()
@@ -286,7 +296,7 @@ def test_custom_layout_manager_apply_saved_layouts_does_not_force_widget_visible
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     manager.apply_saved_layouts_to_display()
 
     assert hasattr(clock, "_custom_layout_local_rect")
@@ -294,7 +304,7 @@ def test_custom_layout_manager_apply_saved_layouts_does_not_force_widget_visible
 
 
 def test_custom_layout_manager_late_screen_binding_saves_under_live_signature(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
     live_screen = _FakeScreen("screen0", QRect(0, 0, 800, 600))
@@ -308,7 +318,7 @@ def test_custom_layout_manager_late_screen_binding_saves_under_live_signature(qt
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
 
     # Simulate the real DisplayWidget lifecycle where the manager is created
     # before the live screen reference becomes available.
@@ -325,7 +335,7 @@ def test_custom_layout_manager_late_screen_binding_saves_under_live_signature(qt
 
 
 def test_custom_layout_manager_reapplies_legacy_signature_after_late_screen_binding(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     legacy_signature = "serial:abc|manufacturer:LG|model:TV|name:LG TV|geom:2560_0_2560x1440"
     live_screen = _FakeScreen("LG TV", QRect(2560, 0, 2560, 1439))
     live_screen.serialNumber = lambda: "abc"  # type: ignore[attr-defined]
@@ -357,7 +367,7 @@ def test_custom_layout_manager_reapplies_legacy_signature_after_late_screen_bind
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     display._screen = live_screen
 
     manager.apply_saved_layouts_to_display()
@@ -369,7 +379,7 @@ def test_custom_layout_manager_reapplies_legacy_signature_after_late_screen_bind
 
 
 def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     display = _DisplayStub(settings_stub)
     qtbot.addWidget(display)
@@ -384,7 +394,7 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
     qtbot.addWidget(weather)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
 
     clock_state = manager._shell_states["clock"]
@@ -403,7 +413,7 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
 
 
 def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reloads(qtbot, monkeypatch):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock2": {"position": "Bottom Right", "monitor": "2"}}
     screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
@@ -419,12 +429,12 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
     display1.clock2_widget = clock2
     qtbot.addWidget(clock2)
 
-    manager = CustomLayoutManager(display1)
-    display0._custom_layout_manager_proxy = manager
-    display1._custom_layout_manager_proxy = manager
-    monkeypatch.setattr(manager, "_get_available_screens", lambda: [screen0, screen1])
+    manager0 = CustomLayoutManager(display0)
+    manager1 = CustomLayoutManager(display1)
+    _attach_manager(display0, manager0)
+    _attach_manager(display1, manager1)
     monkeypatch.setattr(
-        manager,
+        manager1,
         "_get_display_instance_for_screen",
         lambda screen: display0 if screen is screen0 else display1,
     )
@@ -435,16 +445,16 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
 
     monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
 
-    assert manager.start_session() is True
-    state = manager._shell_states["clock2"]
+    assert manager1.start_session() is True
+    state = manager1._shell_states["clock2"]
     assert state.descriptor.get_effective_position_settings_key() == "clock"
     proposal = QRect(120, 80, state.current_global_rect.width(), state.current_global_rect.height())
-    manager._on_shell_drag_finished("clock2", proposal, proposal.center())
+    manager1._on_shell_drag_finished("clock2", proposal, proposal.center())
 
     assert state.current_screen is screen0
     assert state.current_screen_signature == get_screen_signature(screen0)
 
-    assert manager.save_session() is True
+    assert manager1.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
     assert widgets_map["clock2"]["monitor"] == "1"
     assert "clock" in widgets_map, widgets_map
@@ -458,7 +468,7 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
 
 
 def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, monkeypatch):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right", "monitor": "ALL"}}
     screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
@@ -472,7 +482,7 @@ def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, m
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display1)
-    display1._custom_layout_manager_proxy = manager
+    _attach_manager(display1, manager)
     monkeypatch.setattr(manager, "_get_available_screens", lambda: [screen0, screen1])
     monkeypatch.setattr(manager, "_get_display_instance_for_screen", lambda screen: display1)
 
@@ -487,8 +497,83 @@ def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, m
     assert state.shell._transfer_block_reason == "Locked to ALL displays"
 
 
+def test_custom_layout_manager_starts_global_session_for_all_active_displays(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    screen1 = _FakeScreen("screen1", QRect(800, 0, 800, 600))
+    display0 = _DisplayStub(settings_stub, screen=screen0, screen_index=0)
+    display1 = _DisplayStub(settings_stub, screen=screen1, screen_index=1)
+    qtbot.addWidget(display0)
+    qtbot.addWidget(display1)
+    display0.show()
+    display1.show()
+
+    display0.clock_widget = _EditableTestWidget(display0, font_size=48)
+    display1.weather_widget = _EditableTestWidget(display1, font_size=18)
+
+    manager0 = CustomLayoutManager(display0)
+    manager1 = CustomLayoutManager(display1)
+    _attach_manager(display0, manager0)
+    _attach_manager(display1, manager1)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display0, display1]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager1.start_session() is True
+    assert display0._custom_layout_edit_active is True
+    assert display1._custom_layout_edit_active is True
+    assert CustomLayoutManager.is_any_session_active() is True
+    assert set(CustomLayoutManager.active_managers()) == {manager0, manager1}
+    assert "clock" in manager0._shell_states
+    assert "weather" in manager1._shell_states
+
+
+def test_custom_layout_manager_transfer_targets_only_active_displays(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock2": {"position": "Bottom Right", "monitor": "2"}}
+    screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    screen1 = _FakeScreen("screen1", QRect(800, 0, 800, 600))
+    screen2 = _FakeScreen("screen2", QRect(1600, 0, 800, 600))
+    display0 = _DisplayStub(settings_stub, screen=screen0, screen_index=0)
+    display1 = _DisplayStub(settings_stub, screen=screen1, screen_index=1)
+    qtbot.addWidget(display0)
+    qtbot.addWidget(display1)
+    display0.show()
+    display1.show()
+
+    clock2 = _EditableTestWidget(display1, font_size=32)
+    display1.clock2_widget = clock2
+    qtbot.addWidget(clock2)
+
+    manager0 = CustomLayoutManager(display0)
+    manager1 = CustomLayoutManager(display1)
+    _attach_manager(display0, manager0)
+    _attach_manager(display1, manager1)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display0, display1]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+    monkeypatch.setattr(QGuiApplication, "screens", staticmethod(lambda: [screen0, screen1, screen2]))
+
+    assert manager1._get_available_screens() == [screen0, screen1]
+    assert manager1.start_session() is True
+    state = manager1._shell_states["clock2"]
+
+    proposal = QRect(1700, 120, state.current_global_rect.width(), state.current_global_rect.height())
+    manager1._on_shell_drag_finished("clock2", proposal, QPoint(1750, 140))
+
+    assert state.current_screen is screen1
+
+
 def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, monkeypatch):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock2": {"position": "Bottom Right", "monitor": "2"}}
     screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
@@ -502,7 +587,7 @@ def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, m
     qtbot.addWidget(clock2)
 
     manager = CustomLayoutManager(display1)
-    display1._custom_layout_manager_proxy = manager
+    _attach_manager(display1, manager)
     monkeypatch.setattr(manager, "_get_available_screens", lambda: [screen0, screen1])
     monkeypatch.setattr(manager, "_get_display_instance_for_screen", lambda screen: display1)
 
@@ -521,7 +606,7 @@ def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, m
 
 
 def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"reddit": {"position": "Bottom Right"}}
     display = _DisplayStub(settings_stub)
@@ -533,7 +618,7 @@ def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
     qtbot.addWidget(reddit)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
 
     state = manager._shell_states["reddit"]
@@ -548,7 +633,7 @@ def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
 
 
 def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"gmail": {"position": "Top Left"}}
     display = _DisplayStub(settings_stub)
@@ -560,7 +645,7 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     qtbot.addWidget(gmail)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
 
     state = manager._shell_states["gmail"]
@@ -575,7 +660,7 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
 
 
 def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_and_restores_route(qtbot, monkeypatch):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {
         "clock": {"position": "Custom"},
@@ -608,7 +693,7 @@ def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_a
     qtbot.addWidget(clock)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
 
     class _CoordinatorStub:
         def get_all_instances(self):
@@ -628,7 +713,7 @@ def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_a
 
 
 def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
-    CustomLayoutManager._active_manager = None
+    _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     display = _DisplayStub(settings_stub)
     qtbot.addWidget(display)
@@ -643,7 +728,7 @@ def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
     qtbot.addWidget(weather)
 
     manager = CustomLayoutManager(display)
-    display._custom_layout_manager_proxy = manager
+    _attach_manager(display, manager)
     assert manager.start_session() is True
 
     clock_state = manager._shell_states["clock"]

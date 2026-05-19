@@ -14,7 +14,7 @@ What exists today:
 - context-menu entry/save/cancel actions for CUSTOM widget edit mode,
 - temporary top-level edit shells via `widgets/edit_shell_widget.py`,
 - display-local normalized CUSTOM layout persistence via `rendering/custom_layout_contract.py`,
-- first-phase session lifecycle, runtime-update deferral, and live-widget reapply via `rendering/custom_layout_manager.py`,
+- first-phase session lifecycle, runtime-update deferral, global active-display session orchestration, and live-widget reapply via `rendering/custom_layout_manager.py`,
 - live snapping against display edges, the shared gutter guide, peer widget shells, and live peer widgets on the destination display through the same contract layer,
 - persisted widget `position` now treats `custom` as a first-class runtime value rather than falling back to authored anchors during settings normalization,
 - edit-mode save and authored-layout reset now commit through the canonical widget rebuild path so reveal/fade startup contracts stay identical to cold/runtime widget setup,
@@ -28,6 +28,11 @@ What exists today:
   - shells may hand off between displays while dragging,
   - the live runtime widget is still untouched until save,
   - save commits the new `monitor` binding plus destination display geometry and then triggers a clean widget rebuild across display instances,
+- edit mode is now global across the active compositor-backed display set:
+  - entering edit mode on one display starts the shell session on every active `DisplayWidget` instance,
+  - save/cancel/reset are session-global actions,
+  - context menus reflect the global edit-mode state instead of pretending the session is display-local,
+  - cross-display transfer targets are limited to displays that actually host a live compositor-backed display instance rather than every raw `QGuiApplication` screen,
 - explicit transfer blocking for `ALL` widgets:
   - these shells may still precision-snap against display edges,
   - but they cannot hand off to another display,
@@ -88,6 +93,7 @@ This is intentionally not a freeform raw-pixel editor.
 ### 3.1 Entry and Exit
 
 - Edit mode is entered from the context menu.
+- Entering edit mode on one active display enters edit mode on the full active display set at once.
 - Edit mode is exited with:
   - `Esc` = cancel changes and leave edit mode.
   - `Enter` = apply changes and leave edit mode.
@@ -132,6 +138,7 @@ This is intentionally not a freeform raw-pixel editor.
 
 - A widget may be dragged across display boundaries while the drag is active.
 - During edit mode, this is a shell-level ownership proposal, not a live runtime widget move.
+- Only compositor-backed active displays are valid transfer targets. Screens that do not currently host a live `DisplayWidget` instance must not accept shell handoff.
 - If the widget’s current `monitor` binding is a numbered display, the shell may hand off to another display while dragging.
 - If the widget’s current `monitor` binding is `ALL`, handoff must be blocked.
 - When the user releases the drag:

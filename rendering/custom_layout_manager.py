@@ -62,9 +62,9 @@ class _ShellState:
 
 
 class CustomLayoutManager:
-    """Owns one display-local CUSTOM layout edit session."""
+    """Owns one display participant in the global CUSTOM layout edit session."""
 
-    _active_manager: Optional["CustomLayoutManager"] = None
+    _active_managers: list["CustomLayoutManager"] = []
 
     def __init__(self, display_widget) -> None:
         self._display = display_widget
@@ -78,7 +78,24 @@ class CustomLayoutManager:
         self._suppress_live_feedback_widget_ids: set[str] = set()
 
     def _get_available_screens(self) -> list[Any]:
+        instances = self._get_global_display_instances()
+        screens = [getattr(instance, "_screen", None) for instance in instances]
+        screens = [screen for screen in screens if screen is not None]
+        if screens:
+            return screens
         return list(QGuiApplication.screens())
+
+    def _get_global_display_instances(self) -> list[Any]:
+        instances: list[Any] = []
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to enumerate global display instances", exc_info=True)
+            instances = []
+        if self._display not in instances:
+            instances.append(self._display)
+        instances.sort(key=lambda instance: int(getattr(instance, "screen_index", 0)))
+        return instances
 
     def _sync_display_screen_binding(self) -> tuple[Any, str]:
         screen = getattr(self._display, "_screen", None)
@@ -108,7 +125,15 @@ class CustomLayoutManager:
 
     @classmethod
     def active_manager(cls) -> Optional["CustomLayoutManager"]:
-        return cls._active_manager
+        return cls._active_managers[0] if cls._active_managers else None
+
+    @classmethod
+    def active_managers(cls) -> tuple["CustomLayoutManager", ...]:
+        return tuple(cls._active_managers)
+
+    @classmethod
+    def is_any_session_active(cls) -> bool:
+        return bool(cls._active_managers)
 
     def is_active(self) -> bool:
         return bool(self._active)
@@ -137,39 +162,26 @@ class CustomLayoutManager:
     def start_session(self) -> bool:
         if self._active:
             return True
-        active = CustomLayoutManager._active_manager
-        if active is not None and active is not self:
-            return False
+        if CustomLayoutManager._active_managers:
+            return self in CustomLayoutManager._active_managers
 
-        self._sync_display_screen_binding()
-
-        targets = self._collect_targets()
-        if not targets:
-            logger.debug("[CUSTOM_LAYOUT] No eligible widgets found for edit session")
-            return False
-
-        CustomLayoutManager._active_manager = self
-        self._active = True
-        setattr(self._display, "_custom_layout_edit_active", True)
-
-        self._hide_special_widgets()
-
-        for descriptor, widget in targets:
-            state = self._create_shell_state(descriptor, widget)
-            if state is None:
+        managers: list[CustomLayoutManager] = []
+        seen_ids: set[int] = set()
+        for instance in self._get_global_display_instances():
+            manager = getattr(instance, "_custom_layout_manager", None)
+            if not isinstance(manager, CustomLayoutManager):
                 continue
-            self._shell_states[descriptor.widget_id] = state
-            state.shell.show()
-            state.shell.raise_()
-            if state.was_visible:
-                try:
-                    widget.hide()
-                except Exception:
-                    logger.debug("[CUSTOM_LAYOUT] Failed to hide %s during edit session", descriptor.widget_id, exc_info=True)
-
-        if not self._shell_states:
-            self._finish_session()
+            if id(manager) in seen_ids:
+                continue
+            seen_ids.add(id(manager))
+            managers.append(manager)
+        started: list[CustomLayoutManager] = []
+        for manager in managers:
+            if manager._start_session_local():
+                started.append(manager)
+        if not started:
             return False
+        CustomLayoutManager._active_managers = started
         return True
 
     def save_session(self) -> bool:
@@ -185,26 +197,29 @@ class CustomLayoutManager:
         sync_custom_layout_restore_routes(widgets_map)
         custom_layout_map = load_custom_layout_map(widgets_map)
 
-        for widget_id, state in self._shell_states.items():
-            monitor_value = state.current_monitor_value
-            if state.current_screen_signature != state.source_screen_signature:
-                monitor_value = self._monitor_value_for_screen(state.current_screen)
-            self._write_widget_custom_layout(
-                widgets_map,
-                custom_layout_map,
-                widget_id,
-                state,
-                monitor_value,
-            )
+        active_managers = list(CustomLayoutManager._active_managers)
+        for manager in active_managers:
+            for widget_id, state in manager._shell_states.items():
+                monitor_value = state.current_monitor_value
+                if state.current_screen_signature != state.source_screen_signature:
+                    monitor_value = manager._monitor_value_for_screen(state.current_screen)
+                manager._write_widget_custom_layout(
+                    widgets_map,
+                    custom_layout_map,
+                    widget_id,
+                    state,
+                    monitor_value,
+                )
 
         write_custom_layout_map(widgets_map, custom_layout_map)
         settings_manager.set_widgets_map(widgets_map)
         settings_manager.save()
 
-        self._finish_session(
-            restore_live_visibility=False,
-            restore_special_widgets=False,
-        )
+        for manager in active_managers:
+            manager._finish_session(
+                restore_live_visibility=False,
+                restore_special_widgets=False,
+            )
         if not self._request_runtime_reload():
             self._reload_widgets_across_instances()
         return True
@@ -230,33 +245,35 @@ class CustomLayoutManager:
         custom_layout_map = load_custom_layout_map(widgets_map)
         restored_any = False
 
-        for widget_id, state in self._shell_states.items():
-            restore_entry = get_custom_layout_restore_entry(restore_map, widget_id)
-            if restore_entry is None:
-                continue
+        active_managers = list(CustomLayoutManager._active_managers)
+        for manager in active_managers:
+            for widget_id, state in manager._shell_states.items():
+                restore_entry = get_custom_layout_restore_entry(restore_map, widget_id)
+                if restore_entry is None:
+                    continue
 
-            position_settings_key = state.descriptor.get_effective_position_settings_key()
-            position_section = widgets_map.get(position_settings_key, {})
-            if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
-                position_section = {}
-                widgets_map[position_settings_key] = position_section
-            position_section["position"] = restore_entry["position"]
+                position_settings_key = state.descriptor.get_effective_position_settings_key()
+                position_section = widgets_map.get(position_settings_key, {})
+                if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
+                    position_section = {}
+                    widgets_map[position_settings_key] = position_section
+                position_section["position"] = restore_entry["position"]
 
-            monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
-            monitor_section = widgets_map.get(monitor_settings_key, {})
-            if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
-                monitor_section = {}
-                widgets_map[monitor_settings_key] = monitor_section
-            monitor_section["monitor"] = restore_entry["monitor"]
+                monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
+                monitor_section = widgets_map.get(monitor_settings_key, {})
+                if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
+                    monitor_section = {}
+                    widgets_map[monitor_settings_key] = monitor_section
+                monitor_section["monitor"] = restore_entry["monitor"]
 
-            self._remove_widget_entries_from_other_displays(
-                custom_layout_map,
-                widget_id,
-                exclude_signature="__none__",
-            )
-            for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or self._screen):
-                remove_screen_layout_entry(custom_layout_map, alias, widget_id)
-            restored_any = True
+                manager._remove_widget_entries_from_other_displays(
+                    custom_layout_map,
+                    widget_id,
+                    exclude_signature="__none__",
+                )
+                for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or manager._screen):
+                    remove_screen_layout_entry(custom_layout_map, alias, widget_id)
+                restored_any = True
 
         if not restored_any:
             return False
@@ -265,13 +282,47 @@ class CustomLayoutManager:
         settings_manager.set_widgets_map(widgets_map)
         settings_manager.save()
 
-        self._finish_session(
-            restore_live_visibility=False,
-            restore_special_widgets=False,
-        )
+        for manager in active_managers:
+            manager._finish_session(
+                restore_live_visibility=False,
+                restore_special_widgets=False,
+            )
         if not self._request_runtime_reload():
             self._reload_widgets_across_instances()
         return True
+
+    def _start_session_local(self) -> bool:
+        if self._active:
+            return True
+
+        self._sync_display_screen_binding()
+        targets = self._collect_targets()
+        if not targets:
+            logger.debug("[CUSTOM_LAYOUT] No eligible widgets found for edit session on screen %s", self._screen_signature)
+            return False
+
+        self._active = True
+        setattr(self._display, "_custom_layout_edit_active", True)
+        self._hide_special_widgets()
+
+        for descriptor, widget in targets:
+            state = self._create_shell_state(descriptor, widget)
+            if state is None:
+                continue
+            self._shell_states[descriptor.widget_id] = state
+            state.shell.show()
+            state.shell.raise_()
+            if state.was_visible:
+                try:
+                    widget.hide()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to hide %s during edit session", descriptor.widget_id, exc_info=True)
+
+        if self._shell_states:
+            return True
+
+        self._finish_session()
+        return False
 
     def _request_runtime_reload(self) -> bool:
         requester = getattr(self._display, "_request_custom_layout_runtime_reload", None)
@@ -453,8 +504,14 @@ class CustomLayoutManager:
     def cancel_session(self) -> bool:
         if not self._active:
             return False
-        self._finish_session()
-        self.apply_saved_layouts_to_display()
+        active_managers = list(CustomLayoutManager._active_managers)
+        for manager in active_managers:
+            manager._finish_session()
+        for instance in self._get_global_display_instances():
+            try:
+                instance._apply_saved_custom_layouts()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts after cancel", exc_info=True)
         return True
 
     def apply_saved_layouts_to_display(self) -> None:
@@ -509,8 +566,10 @@ class CustomLayoutManager:
             self._paused_visualizer = None
 
         self._active = False
-        if CustomLayoutManager._active_manager is self:
-            CustomLayoutManager._active_manager = None
+        if self in CustomLayoutManager._active_managers:
+            CustomLayoutManager._active_managers = [
+                manager for manager in CustomLayoutManager._active_managers if manager is not self
+            ]
         setattr(self._display, "_custom_layout_edit_active", False)
         self.flush_deferred_processed_image()
 
@@ -635,7 +694,7 @@ class CustomLayoutManager:
     def _on_shell_context_menu_requested(self, global_pos: QPoint) -> None:
         try:
             self._display._show_context_menu(global_pos)
-            QTimer.singleShot(0, self._raise_all_shells)
+            QTimer.singleShot(0, self._raise_all_shells_globally)
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
 
@@ -647,6 +706,10 @@ class CustomLayoutManager:
                 state.shell.update()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to raise edit shell", exc_info=True)
+
+    def _raise_all_shells_globally(self) -> None:
+        for manager in CustomLayoutManager._active_managers:
+            manager._raise_all_shells()
 
     def _on_shell_geometry_live_changed(self, widget_id: str, global_rect: QRect) -> None:
         state = self._shell_states.get(widget_id)

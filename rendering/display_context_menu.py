@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QCursor
 
 from core.logging.logger import get_logger
+from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.transition_registry import canonicalize_transition_name
 from core.settings.settings_manager import SettingsManager
 from widgets.context_menu import ScreensaverContextMenu
@@ -116,7 +117,7 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.update_interaction_mode_state(interaction_mode)
             widget._context_menu.update_always_on_top_state(widget._always_on_top)
             widget._context_menu.update_visualizer_state(current_vis)
-        widget._context_menu.update_edit_mode_state(bool(getattr(widget, "_custom_layout_edit_active", False)))
+        widget._context_menu.update_edit_mode_state(CustomLayoutManager.is_any_session_active())
         
         try:
             widget._context_menu_active = True
