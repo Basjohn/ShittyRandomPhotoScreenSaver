@@ -86,6 +86,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Weather retry timer cleanup, retry timer reuse, retry timeout state handling, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
 - `tests/test_imgur_widget.py`
   Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
+- `tests/test_custom_layout_manager.py`
+  CUSTOM size-payload persistence and reapply coverage now also includes Imgur’s authored resize contract (header scale, spacing, base cell width, and border weight), alongside the earlier clock/weather/media/Reddit/Gmail families.
 - `tests/test_spotify_volume_widget.py`
   Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths.
 - `tests/test_gmail_widget.py`

@@ -965,6 +965,13 @@ class CustomLayoutManager:
             return {"font_size": int(getattr(widget, "_font_size", 18))}
         if mode == "gmail_font":
             return {"font_size": int(getattr(widget, "_font_size", 13))}
+        if mode == "imgur_scale":
+            return {
+                "header_font_size": int(getattr(widget, "_header_font_size", 14)),
+                "image_spacing": int(getattr(widget, "_image_spacing", 4)),
+                "cell_base_width": int(getattr(widget, "_cell_base_width", 120)),
+                "image_border_width": int(getattr(widget, "_image_border_width", 2)),
+            }
         return {}
 
     def _scale_size_payload(
@@ -999,6 +1006,13 @@ class CustomLayoutManager:
         if mode == "gmail_font":
             base = int(baseline_payload.get("font_size", 13))
             return {"font_size": max(10, int(round(base * scale)))}
+        if mode == "imgur_scale":
+            return {
+                "header_font_size": max(10, int(round(int(baseline_payload.get("header_font_size", 14)) * scale))),
+                "image_spacing": max(0, min(20, int(round(int(baseline_payload.get("image_spacing", 4)) * scale)))),
+                "cell_base_width": max(80, int(round(int(baseline_payload.get("cell_base_width", 120)) * scale))),
+                "image_border_width": max(0, min(5, int(round(int(baseline_payload.get("image_border_width", 2)) * scale)))),
+            }
         return dict(baseline_payload)
 
     def _apply_size_payload(self, descriptor: WidgetRuntimeDescriptor, widget: Any, payload: dict[str, Any]) -> None:
@@ -1021,6 +1035,12 @@ class CustomLayoutManager:
                 return
             if mode == "gmail_font":
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 13))))
+                return
+            if mode == "imgur_scale":
+                widget.set_header_font_size(int(payload.get("header_font_size", getattr(widget, "_header_font_size", 14))))
+                widget.set_image_spacing(int(payload.get("image_spacing", getattr(widget, "_image_spacing", 4))))
+                widget.set_cell_base_width(int(payload.get("cell_base_width", getattr(widget, "_cell_base_width", 120))))
+                widget.set_image_border_width(int(payload.get("image_border_width", getattr(widget, "_image_border_width", 2))))
                 return
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply size payload for %s", descriptor.widget_id, exc_info=True)

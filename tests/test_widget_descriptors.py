@@ -518,7 +518,8 @@ def test_sync_custom_layout_restore_routes_tracks_last_non_custom_authored_state
     assert "gmail" not in restore_map
 
 
-def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract():
+def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkeypatch):
+    monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
     descriptors = {item.widget_id: item for item in get_layout_edit_runtime_descriptors()}
 
     assert descriptors["clock"].attr_name == "clock_widget"
@@ -532,6 +533,8 @@ def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract():
     assert descriptors["media"].custom_layout_resize_mode == "media_scale"
 
     assert descriptors["gmail"].supports_layout_resize_edit is True
+    assert descriptors["imgur"].supports_layout_resize_edit is True
+    assert descriptors["imgur"].custom_layout_resize_mode == "imgur_scale"
     assert descriptors["reddit"].requires_size_reset_affordance is True
 
 

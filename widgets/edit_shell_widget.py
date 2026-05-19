@@ -106,7 +106,7 @@ class EditShellWidget(QWidget):
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if self.childAt(event.position().toPoint()) is self._reset_btn:
-            event.ignore()
+            super().mousePressEvent(event)
             return
         if event.button() == Qt.MouseButton.RightButton:
             self.context_menu_requested.emit(event.globalPosition().toPoint())

@@ -49,6 +49,7 @@ DEFAULT_GRID_COLS = 4
 DEFAULT_IMAGE_SPACING = 4
 DEFAULT_UPDATE_INTERVAL_SEC = 600  # 10 minutes
 MIN_CELL_SIZE = 80
+DEFAULT_CELL_WIDTH = 120
 HEADER_HEIGHT = 36
 HEADER_PADDING = 8
 
@@ -132,6 +133,7 @@ class ImgurWidget(BaseOverlayWidget):
         self._layout_mode = LayoutMode.HYBRID
         self._image_spacing = DEFAULT_IMAGE_SPACING
         self._update_interval_sec = DEFAULT_UPDATE_INTERVAL_SEC
+        self._cell_base_width = DEFAULT_CELL_WIDTH
         
         # Image styling
         self._image_border_enabled = True
@@ -228,19 +230,23 @@ class ImgurWidget(BaseOverlayWidget):
     
     def _calculate_size(self) -> None:
         """Calculate widget size based on grid configuration."""
-        cell_width = 120  # Base cell width
+        cell_width = int(self._cell_base_width)
         cell_height = self._get_cell_height(cell_width)
-        
+
         width = (cell_width * self._grid_cols) + (self._image_spacing * (self._grid_cols - 1)) + 20
         height = (cell_height * self._grid_rows) + (self._image_spacing * (self._grid_rows - 1))
-        
+
         if self._show_header:
-            height += HEADER_HEIGHT + HEADER_PADDING
+            height += self._get_header_height() + HEADER_PADDING
         
         height += 20  # Padding
         
         self.setMinimumSize(width, height)
         self.setFixedSize(width, height)
+
+    def _get_header_height(self) -> int:
+        """Return the effective header height for the current header scale."""
+        return max(HEADER_HEIGHT, int(round(self._header_font_size * 2.4)))
     
     def _get_cell_height(self, cell_width: int, image_id: Optional[str] = None) -> int:
         """Get cell height based on layout mode.
@@ -797,7 +803,7 @@ class ImgurWidget(BaseOverlayWidget):
         # Account for header
         y_offset = padding
         if self._show_header:
-            y_offset += HEADER_HEIGHT + HEADER_PADDING
+            y_offset += self._get_header_height() + HEADER_PADDING
         
         available_width = widget_rect.width() - (padding * 2)
         available_height = widget_rect.height() - y_offset - padding
@@ -1277,6 +1283,26 @@ class ImgurWidget(BaseOverlayWidget):
         spacing = max(0, min(20, spacing))
         if self._image_spacing != spacing:
             self._image_spacing = spacing
+            self._calculate_size()
+            self._rebuild_grid()
+            self._invalidate_cache()
+            self.update()
+
+    def set_header_font_size(self, size: int) -> None:
+        """Set the Imgur header font size."""
+        size = max(10, min(32, size))
+        if self._header_font_size != size:
+            self._header_font_size = size
+            self._calculate_size()
+            self._rebuild_grid()
+            self._invalidate_cache()
+            self.update()
+
+    def set_cell_base_width(self, width: int) -> None:
+        """Set the authored base cell width used for size-driven layouts."""
+        width = max(MIN_CELL_SIZE, min(260, width))
+        if self._cell_base_width != width:
+            self._cell_base_width = width
             self._calculate_size()
             self._rebuild_grid()
             self._invalidate_cache()

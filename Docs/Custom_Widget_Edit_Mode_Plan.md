@@ -49,7 +49,7 @@ What exists today:
   - `reddit`
   - `reddit2`
   - `gmail`
-- current move-only participation for:
+- phase-two uniform resize is now also landed for:
   - `imgur`
 - explicit `Custom` position-slot behavior for participating widget families:
   - the slot is descriptor-owned rather than hardcoded per tab,
@@ -65,7 +65,7 @@ Important current limitation:
 - edit shells still never straddle two displays at once.
 - cross-display transfer is currently limited to numbered-monitor widget families.
 - `ALL` widgets remain intentionally display-locked during a single drag because `monitor` routing stays authoritative and we do not silently collapse `ALL` into a single-display binding.
-- `imgur` and `spotify_visualizer` still need their final uniform-resize contracts before the “every widget uniformly resizable” goal is fully complete.
+- `spotify_visualizer` still needs its final uniform-resize contract before the “every widget uniformly resizable” goal is fully complete.
 
 ## 1. Purpose
 

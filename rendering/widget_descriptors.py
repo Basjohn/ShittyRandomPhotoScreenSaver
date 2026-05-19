@@ -946,8 +946,9 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
-        supports_layout_resize_edit=False,
-        requires_size_reset_affordance=False,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="imgur_scale",
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetRuntimeDescriptor(

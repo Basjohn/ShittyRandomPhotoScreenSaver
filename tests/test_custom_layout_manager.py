@@ -137,6 +137,28 @@ class _GmailLikeTestWidget(_EditableTestWidget):
         self._font_size = int(size)
 
 
+class _ImgurLikeTestWidget(_EditableTestWidget):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, font_size=14)
+        self._header_font_size = 14
+        self._image_spacing = 4
+        self._cell_base_width = 120
+        self._image_border_width = 2
+        self.setGeometry(60, 80, 520, 260)
+
+    def set_header_font_size(self, size: int) -> None:
+        self._header_font_size = int(size)
+
+    def set_image_spacing(self, spacing: int) -> None:
+        self._image_spacing = int(spacing)
+
+    def set_cell_base_width(self, width: int) -> None:
+        self._cell_base_width = int(width)
+
+    def set_image_border_width(self, width: int) -> None:
+        self._image_border_width = int(width)
+
+
 def _reset_custom_layout_manager_state() -> None:
     CustomLayoutManager._active_managers = []
 
@@ -676,6 +698,42 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]
     assert payload["size_payload"]["font_size"] == 18
     assert payload["resize_mode"] == "gmail_font"
+
+
+def test_custom_layout_manager_saves_and_reapplies_imgur_scale_resize(qtbot, monkeypatch):
+    monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"imgur": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    imgur = _ImgurLikeTestWidget(display)
+    display.imgur_widget = imgur
+    qtbot.addWidget(imgur)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["imgur"]
+    state.current_size_payload = {
+        "header_font_size": 18,
+        "image_spacing": 6,
+        "cell_base_width": 150,
+        "image_border_width": 3,
+    }
+    state.resize_scale = 1.25
+    state.current_global_rect = QRect(state.current_global_rect.x(), state.current_global_rect.y(), 640, 320)
+
+    assert manager.save_session() is True
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["imgur"]
+    assert payload["size_payload"]["header_font_size"] == 18
+    assert payload["size_payload"]["image_spacing"] == 6
+    assert payload["size_payload"]["cell_base_width"] == 150
+    assert payload["size_payload"]["image_border_width"] == 3
+    assert payload["resize_mode"] == "imgur_scale"
 
 
 def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_and_restores_route(qtbot, monkeypatch):
