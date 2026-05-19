@@ -145,6 +145,10 @@ class EditShellWidget(QWidget):
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
+        # Ensure the full shell bounds remain a mouse-hit region even for
+        # highly transparent snapshots such as analogue clocks.
+        painter.fillRect(self.rect(), QColor(255, 255, 255, 1))
+
         if self._snapshot is not None and not self._snapshot.isNull():
             painter.drawPixmap(self.rect(), self._snapshot)
 

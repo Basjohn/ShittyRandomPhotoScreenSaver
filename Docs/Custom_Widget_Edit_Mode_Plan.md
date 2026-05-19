@@ -22,6 +22,8 @@ What exists today:
 - runtime rebuilds triggered by CUSTOM save/reset also clear stale fade participants before the new widget set registers, so compositor-ready rebuilds cannot stay blocked on overlays from the previous setup cycle,
 - CUSTOM screen routing now re-syncs against the live `DisplayWidget` screen binding before session start, save, and runtime reapply rather than trusting constructor-time `_screen` state,
 - legacy MC-style saved display buckets whose keys included both display identity and geometry are now resolved/migrated through canonical display identity, so a one-pixel geometry drift does not strand valid saved CUSTOM layouts,
+- saved CUSTOM geometry is now pre-applied before widget activation/fade startup during rebuild, so settings-entry and edit-mode rebuilds do not briefly show authored-anchor positions before the gentle overlay fade path takes over,
+- save/reset no longer briefly restore the old live widgets or paused Spotify-dependent special widgets before the rebuild path starts, and runtime custom-layout reapply no longer force-shows hidden widgets,
 - true monitor-ownership transfer for numbered-monitor widgets during the shell session:
   - shells may hand off between displays while dragging,
   - the live runtime widget is still untouched until save,

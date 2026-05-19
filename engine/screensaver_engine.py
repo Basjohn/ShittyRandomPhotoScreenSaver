@@ -640,6 +640,7 @@ class ScreensaverEngine(QObject):
             self.display_manager.next_requested.connect(self._on_next_requested)
             self.display_manager.cycle_transition_requested.connect(self._on_cycle_transition)
             self.display_manager.settings_requested.connect(self._on_settings_requested)
+            self.display_manager.custom_layout_reload_requested.connect(self._on_custom_layout_reload_requested)
             
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
@@ -1104,6 +1105,11 @@ class ScreensaverEngine(QObject):
         """Delegates to engine.engine_handlers."""
         from engine.engine_handlers import on_settings_requested
         on_settings_requested(self)
+
+    def _on_custom_layout_reload_requested(self) -> None:
+        """Delegates to engine.engine_handlers."""
+        from engine.engine_handlers import on_custom_layout_reload_requested
+        on_custom_layout_reload_requested(self)
 
     def _on_exit_requested(self) -> None:
         """Handle exit request coming from any display window."""

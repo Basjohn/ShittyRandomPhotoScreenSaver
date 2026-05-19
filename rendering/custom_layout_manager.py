@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PySide6.QtCore import QPoint, QRect, QSize
+from PySide6.QtCore import QPoint, QRect, QSize, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPixmap
 
 from core.logging.logger import get_logger
@@ -201,8 +201,12 @@ class CustomLayoutManager:
         settings_manager.set_widgets_map(widgets_map)
         settings_manager.save()
 
-        self._finish_session()
-        self._reload_widgets_across_instances()
+        self._finish_session(
+            restore_live_visibility=False,
+            restore_special_widgets=False,
+        )
+        if not self._request_runtime_reload():
+            self._reload_widgets_across_instances()
         return True
 
     def reset_to_authored_layout(self) -> bool:
@@ -261,9 +265,24 @@ class CustomLayoutManager:
         settings_manager.set_widgets_map(widgets_map)
         settings_manager.save()
 
-        self._finish_session()
-        self._reload_widgets_across_instances()
+        self._finish_session(
+            restore_live_visibility=False,
+            restore_special_widgets=False,
+        )
+        if not self._request_runtime_reload():
+            self._reload_widgets_across_instances()
         return True
+
+    def _request_runtime_reload(self) -> bool:
+        requester = getattr(self._display, "_request_custom_layout_runtime_reload", None)
+        if not callable(requester):
+            return False
+        try:
+            requester()
+            return True
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to request runtime reload; falling back to local rebuild", exc_info=True)
+            return False
 
     def _write_widget_custom_layout(
         self,
@@ -464,21 +483,30 @@ class CustomLayoutManager:
                 continue
             self._apply_entry_to_widget(widget, descriptor, entry)
 
-    def _finish_session(self) -> None:
+    def _finish_session(
+        self,
+        *,
+        restore_live_visibility: bool = True,
+        restore_special_widgets: bool = True,
+    ) -> None:
         for state in list(self._shell_states.values()):
             try:
                 state.shell.hide()
                 state.shell.deleteLater()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to destroy edit shell", exc_info=True)
-            if state.was_visible:
+            if restore_live_visibility and state.was_visible:
                 try:
                     state.widget.show()
                 except Exception:
                     logger.debug("[CUSTOM_LAYOUT] Failed to restore %s visibility", state.descriptor.widget_id, exc_info=True)
         self._shell_states.clear()
 
-        self._restore_special_widgets()
+        if restore_special_widgets:
+            self._restore_special_widgets()
+        else:
+            self._special_hidden.clear()
+            self._paused_visualizer = None
 
         self._active = False
         if CustomLayoutManager._active_manager is self:
@@ -607,8 +635,18 @@ class CustomLayoutManager:
     def _on_shell_context_menu_requested(self, global_pos: QPoint) -> None:
         try:
             self._display._show_context_menu(global_pos)
+            QTimer.singleShot(0, self._raise_all_shells)
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
+
+    def _raise_all_shells(self) -> None:
+        for state in self._shell_states.values():
+            try:
+                state.shell.show()
+                state.shell.raise_()
+                state.shell.update()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to raise edit shell", exc_info=True)
 
     def _on_shell_geometry_live_changed(self, widget_id: str, global_rect: QRect) -> None:
         state = self._shell_states.get(widget_id)
@@ -749,6 +787,7 @@ class CustomLayoutManager:
             local_rect,
             geom.size(),
             peer_rects=self._collect_peer_local_rects(state.descriptor.widget_id, target_screen),
+            threshold_px=8 if not snap_to_grid else 24,
         )
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
@@ -934,10 +973,10 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply custom rect to %s", descriptor.widget_id, exc_info=True)
         try:
-            widget.show()
-            widget.raise_()
+            if bool(getattr(widget, "isVisible", lambda: False)()):
+                widget.raise_()
             tz_label = getattr(widget, "_tz_label", None)
             if tz_label is not None:
                 tz_label.raise_()
         except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to finalize widget visibility after custom apply", exc_info=True)
+            logger.debug("[CUSTOM_LAYOUT] Failed to finalize widget layering after custom apply", exc_info=True)

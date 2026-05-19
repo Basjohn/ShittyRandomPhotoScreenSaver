@@ -209,6 +209,46 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
         QApplication.quit()
 
 
+def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
+    """Handle committed CUSTOM layout changes with a full clean runtime reload."""
+    logger.info("CUSTOM layout reload requested")
+
+    try:
+        engine.stop(exit_app=False)
+
+        if engine.display_manager:
+            try:
+                engine.display_manager.cleanup()
+            except Exception:
+                logger.debug("DisplayManager cleanup after custom layout reload failed", exc_info=True)
+            engine.display_manager = None
+            engine._display_initialized = False
+
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+            coordinator = get_coordinator()
+            coordinator.cleanup()
+        except Exception:
+            logger.debug("Coordinator cleanup after custom layout reload failed", exc_info=True)
+
+        if not engine._initialize_display():
+            logger.error("Failed to reinitialize displays after custom layout reload; quitting")
+            QApplication.quit()
+            return
+
+        engine._setup_rotation_timer()
+
+        if not engine.start():
+            logger.error("Failed to restart screensaver after custom layout reload; quitting")
+            QApplication.quit()
+            return
+
+        logger.info("CUSTOM layout runtime reload complete")
+    except Exception as e:
+        logger.exception("Failed to reload screensaver after CUSTOM layout commit: %s", e)
+        QApplication.quit()
+
+
 # ------------------------------------------------------------------
 # Source reconfiguration
 # ------------------------------------------------------------------

@@ -199,6 +199,13 @@ def setup_all_widgets(
 
         mgr._queue_spotify_visibility_sync(media_widget)
 
+    parent = mgr._parent
+    if parent is not None:
+        try:
+            parent._apply_saved_custom_layouts()
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to apply saved custom layouts before startup", exc_info=True)
+
     # NOW start all widgets - ensures fade sync has complete expected overlay set
     state = mgr._fade_coordinator.describe()
     logger.debug("[FADE_SYNC] Starting %d widgets with expected overlays: %s",

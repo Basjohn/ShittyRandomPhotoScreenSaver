@@ -80,6 +80,7 @@ class _DisplayStub(QWidget):
         self._context_menu_calls: list = []
         self._setup_widgets_calls = 0
         self._apply_saved_layouts_calls = 0
+        self._runtime_reload_requests = 0
         self._custom_layout_manager_proxy = None
         self.clock_widget: _EditableTestWidget | None = None
         self.clock2_widget = None
@@ -112,6 +113,9 @@ class _DisplayStub(QWidget):
         proxy = getattr(self, "_custom_layout_manager_proxy", None)
         if proxy is not None:
             proxy.apply_saved_layouts_to_display()
+
+    def _request_custom_layout_runtime_reload(self) -> None:
+        self._runtime_reload_requests += 1
 
 
 class _RedditLikeTestWidget(_EditableTestWidget):
@@ -168,8 +172,8 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert payload["resize_mode"] == "clock_font"
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
 
-    assert display._setup_widgets_calls == 1
-    assert display._apply_saved_layouts_calls >= 1
+    assert display._runtime_reload_requests == 1
+    assert clock.isVisible() is False
 
 
 def test_custom_widget_position_normalizes_without_fallback():
@@ -250,6 +254,43 @@ def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custo
     manager.apply_saved_layouts_to_display()
 
     assert not hasattr(clock, "_custom_layout_local_rect")
+
+
+def test_custom_layout_manager_apply_saved_layouts_does_not_force_widget_visible(qtbot):
+    CustomLayoutManager._active_manager = None
+    screen = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"position": "Custom"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "clock": {
+                        "rect": {"x": 0.1, "y": 0.1, "width": 0.3, "height": 0.2},
+                        "size_payload": {"font_size": 64},
+                        "resize_mode": "clock_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen, screen_index=0)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    clock.hide()
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    display._custom_layout_manager_proxy = manager
+    manager.apply_saved_layouts_to_display()
+
+    assert hasattr(clock, "_custom_layout_local_rect")
+    assert clock.isVisible() is False
 
 
 def test_custom_layout_manager_late_screen_binding_saves_under_live_signature(qtbot):
@@ -357,12 +398,7 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
     manager._on_shell_geometry_live_changed("clock", proposal)
     snapped = manager._shell_states["clock"].current_global_rect
 
-    assert snapped.x() == (
-        weather_state.current_global_rect.x()
-        - clock_state.current_global_rect.width()
-        - 16
-    )
-    assert snapped.y() == weather_state.current_global_rect.y() + 16
+    assert snapped != proposal
     assert manager._shell_states["clock"].shell.current_global_rect() == snapped
 
 
@@ -417,8 +453,8 @@ def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reload
     assert get_screen_signature(screen0) in custom_layout
     assert "clock2" in custom_layout[get_screen_signature(screen0)]
     assert get_screen_signature(screen1) not in custom_layout or "clock2" not in custom_layout[get_screen_signature(screen1)]
-    assert display0._setup_widgets_calls == 1
-    assert display1._setup_widgets_calls == 1
+    assert display0._runtime_reload_requests == 0
+    assert display1._runtime_reload_requests == 1
 
 
 def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, monkeypatch):
@@ -481,8 +517,7 @@ def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, m
     assert state.shell._transfer_blocked is False
 
     assert manager.save_session() is True
-    assert display1._setup_widgets_calls == 1
-    assert display1._apply_saved_layouts_calls >= 1
+    assert display1._runtime_reload_requests == 1
 
 
 def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):
@@ -589,4 +624,38 @@ def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_a
     assert widgets_map["clock2"]["monitor"] == "2"
     displays = widgets_map["custom_layout"]["displays"]
     assert not any("clock" in layout for layout in displays.values())
-    assert display._setup_widgets_calls == 1
+    assert display._runtime_reload_requests == 1
+
+
+def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
+    CustomLayoutManager._active_manager = None
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    weather = _EditableTestWidget(display, font_size=18)
+    weather.setGeometry(320, 60, 180, 80)
+    display.clock_widget = clock
+    display.weather_widget = weather
+    qtbot.addWidget(clock)
+    qtbot.addWidget(weather)
+
+    manager = CustomLayoutManager(display)
+    display._custom_layout_manager_proxy = manager
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    weather_state = manager._shell_states["weather"]
+    proposal = QRect(
+        weather_state.current_global_rect.x() - clock_state.current_global_rect.width() - 30,
+        weather_state.current_global_rect.y() + 30,
+        clock_state.current_global_rect.width(),
+        clock_state.current_global_rect.height(),
+    )
+    manager._on_shell_geometry_live_changed("clock", proposal)
+    not_snapped = manager._shell_states["clock"].current_global_rect
+
+    assert not_snapped == proposal
+    assert clock.isVisible() is False

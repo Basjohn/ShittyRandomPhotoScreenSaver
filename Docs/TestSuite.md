@@ -50,7 +50,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_custom_layout_contract.py`
   CUSTOM layout normalized-rect schema helpers, display/gutter/widget snapping, clamp rules, target-screen resolution, display-local persistence roundtrip coverage, and the narrow legacy MC display-signature ingestion bridge that resolves old identity-plus-geometry buckets onto the canonical display identity.
 - `tests/test_custom_layout_manager.py`
-  CUSTOM edit-session save/cancel behavior, first-class `custom` position persistence, saved authored-route reset behavior, late screen-binding recovery, size-payload persistence for clock/weather/media plus Reddit/Gmail font-driven resize families, live peer-snapping/clamp behavior, canonical rebuild-on-save/reset behavior, numbered-monitor cross-display ownership transfer, `ALL`-locked transfer blocking, deferred processed-image flush behavior, and edit-shell reset-affordance placement.
+  CUSTOM edit-session save/cancel behavior, first-class `custom` position persistence, saved authored-route reset behavior, late screen-binding recovery, size-payload persistence for clock/weather/media plus Reddit/Gmail font-driven resize families, live peer-snapping/clamp behavior, canonical rebuild-on-save/reset behavior, numbered-monitor cross-display ownership transfer, `ALL`-locked transfer blocking, deferred processed-image flush behavior, non-forced widget visibility during runtime custom-layout reapply, and edit-shell reset-affordance placement.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`

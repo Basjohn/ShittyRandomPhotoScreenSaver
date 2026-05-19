@@ -46,6 +46,7 @@ class DisplayManager(QObject):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
+    custom_layout_reload_requested = Signal()
     
     def __init__(
         self,
@@ -255,6 +256,7 @@ class DisplayManager(QObject):
             display.next_requested.connect(self.next_requested.emit)
             display.cycle_transition_requested.connect(self.cycle_transition_requested.emit)
             display.settings_requested.connect(self.settings_requested.emit)
+            display.custom_layout_reload_requested.connect(self.custom_layout_reload_requested.emit)
             
             # Connect dimming sync signal - when one display changes dimming, update all
             display.dimming_changed.connect(self.set_dimming_all_displays)

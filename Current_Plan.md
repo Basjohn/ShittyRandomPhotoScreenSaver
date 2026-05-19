@@ -17,10 +17,17 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 1. CUSTOM edit mode phase-two follow-through.
 Core value: build on the now-landed first-phase edit session without overpromising monitor semantics or unsafe widget-family resizing.
 - [ ] Keep `Docs/Custom_Widget_Edit_Mode_Plan.md` as the detailed source of truth and update only the phase/checklist deltas here.
+- [ ] Finish the remaining edit-mode foundation hardening before widening resize:
+  - global authored reset must feel identical to the normal save/rebuild reveal path,
+  - live snapping should stay strong without jitter,
+  - settings open/close with `Custom` layouts should not flash widgets at authored anchors before fade,
+  - maintain MC-profile parity while keeping the runtime contract canonical.
 - [ ] Finish the remaining uniform-resize holdouts cleanly:
   - `imgur`
   - `spotify_visualizer`
 - [ ] Land visualizer participation as move + safe uniform resize through `widgets/spotify_visualizer/card_geometry.py`, not shell-only stretching or mode-local hacks.
+- [ ] Keep media + visualizer as explicit CUSTOM follow-through work until both move/rebuild/reveal behavior and uniform resize are fully parity-safe.
+- [ ] Evaluate optional overlap resistance only if it can be expressed as a clean contract-layer rule rather than per-widget drag hacks.
 - [ ] Decide whether `ALL` widgets should later gain any multi-display coordinated edit affordance beyond the current explicit transfer block, without weakening `monitor` as the ownership field.
 
 2. Post-CUSTOM hygiene and maintainability.
@@ -38,6 +45,7 @@ Core value: use the edit-mode landing as the next pruning point instead of letti
 - Phase-two CUSTOM uniform resize is now landed for the text/card service families that already had safe authored size hooks: `reddit`, `reddit2`, and `gmail` now resize through shared size-payload contracts instead of shell-only geometry stretching.
 - Explicit `CUSTOM` settings-slot UX is now landed for participating widget families: descriptor-owned position labels expose `Custom`, WidgetsTab disables that slot until real saved custom geometry exists, saving an edit session promotes the relevant widget-family position setting to `Custom`, and switching back to an authored position now truly clears runtime custom-rect authority without deleting the saved layout payload.
 - Display-local CUSTOM layout persistence now reapplies through the shared widget/runtime seams rather than one-off widget hacks: `BaseOverlayWidget` honors `_custom_layout_local_rect`, `DisplayWidget` defers processed-image updates while an edit session is active, `WidgetManager` reapplies saved custom layouts after live widget refreshes, and the context menu now exposes enter/save/cancel edit-mode actions.
+- CUSTOM rebuild/reapply polish is now materially landed too: saved CUSTOM geometry is pre-applied before widget activation/fade startup, save/reset no longer briefly revive the old live widgets or special Spotify dependents before rebuild, and runtime custom-layout reapply no longer force-shows hidden widgets during settings/rebuild flows.
 - CUSTOM widgets are now explicitly outside the legacy widget-stacking system while `position == Custom`, so authored stack offsets no longer compete with committed CUSTOM geometry during rebuild/reveal.
 - CUSTOM authored-route reset is now landed as a real saved contract: last known non-`Custom` position/monitor routes are persisted under the widgets map, the edit-mode context menu exposes a global authored-layout reset action, and that reset clears CUSTOM geometry then restores the saved authored routing through a clean rebuild instead of shell-only guessing.
 - Extension-path contract tests and targeted maintainability work are materially landed for the recent architecture seams: lazy/programmatic `WidgetsTab` hydration, raw `DisplayWidget.set_image()` sync-entry behavior, and live visualizer geometry refresh-to-placement contracts now have focused regression coverage.
@@ -71,6 +79,7 @@ Core value: use the edit-mode landing as the next pruning point instead of letti
 
 ## Deferred / Not Active
 - Detailed CUSTOM layout/edit-mode design still lives in `Docs/Custom_Widget_Edit_Mode_Plan.md`. Do not duplicate that design prose here; keep only live implementation deltas in the active section above.
+- Legacy widget stacking is still intentionally active for authored anchor-based layouts. It is not a general removal candidate yet; only its interaction with `Custom` remains disabled by contract.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
 - Memory/doc drift cleanup is deferred until after the first meaningful CUSTOM edit-mode phase. Best scope then: resolve or retire phantom doc references, index any long-lived docs still worth keeping, and avoid creating a second sprawling audit.

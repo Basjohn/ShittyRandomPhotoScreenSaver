@@ -505,7 +505,7 @@ def setup_widgets(widget) -> None:
         for attr_name, child_widget in created.items():
             setattr(widget, attr_name, child_widget)
         logger.info("WidgetManager created %d widgets", len(created))
-        
+
         # Initialize all widgets via lifecycle system (Dec 2025)
         initialized_count = widget._widget_manager.initialize_all_widgets()
         if initialized_count > 0:
@@ -523,10 +523,6 @@ def setup_widgets(widget) -> None:
     # Apply widget stacking for overlapping positions
     widgets = widget.settings_manager.get('widgets', {})
     widget._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
-    try:
-        widget._apply_saved_custom_layouts()
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
 def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:
     """Apply vertical stacking offsets - delegates to WidgetManager."""

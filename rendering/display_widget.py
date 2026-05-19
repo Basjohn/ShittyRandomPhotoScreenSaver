@@ -161,6 +161,7 @@ class DisplayWidget(QWidget):
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
     settings_requested = Signal()  # S key - open settings
+    custom_layout_reload_requested = Signal()
     dimming_changed = Signal(bool, float)  # enabled, opacity - sync dimming across displays
     
     # Phase 5: Class-level state has been migrated to MultiMonitorCoordinator.
@@ -727,6 +728,9 @@ class DisplayWidget(QWidget):
             self._custom_layout_manager.apply_saved_layouts_to_display()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts", exc_info=True)
+
+    def _request_custom_layout_runtime_reload(self) -> None:
+        self.custom_layout_reload_requested.emit()
 
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on the WidgetManager and TransitionFactory.
