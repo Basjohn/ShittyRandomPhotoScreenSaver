@@ -18,6 +18,8 @@ from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 from rendering.widget_descriptors import (
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_runtime_descriptor_by_attr_name,
+    is_custom_position_selected_for_widget,
 )
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
@@ -735,12 +737,24 @@ class WidgetManager:
                 handler = getattr(self, handler_name, None)
                 if callable(handler):
                     handler(widgets_payload)
+            parent = self._parent
+            if parent is not None:
+                try:
+                    parent._apply_saved_custom_layouts()
+                except Exception:
+                    logger.debug("[WIDGET_MANAGER] Failed to reapply saved custom layouts", exc_info=True)
             return
 
         for handler_name in get_live_refresh_handlers_for_settings_key(setting_key):
             handler = getattr(self, handler_name, None)
             if callable(handler):
                 handler()
+        parent = self._parent
+        if parent is not None and setting_key.startswith("widgets."):
+            try:
+                parent._apply_saved_custom_layouts()
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to reapply saved custom layouts", exc_info=True)
 
     def _log_spotify_vis_config(
         self,
@@ -1310,13 +1324,22 @@ class WidgetManager:
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
-    def apply_widget_stacking(self, widget_list: list) -> None:
+    def apply_widget_stacking(self, widget_list: list, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply vertical stacking offsets to widgets sharing the same position."""
         from PySide6.QtCore import QPoint
         
         position_groups: dict = {}
         for i, (widget, attr_name) in enumerate(widget_list):
             if widget is None:
+                continue
+            descriptor = get_widget_runtime_descriptor_by_attr_name(attr_name)
+            if (
+                descriptor is not None
+                and descriptor.supports_custom_position_slot
+                and is_custom_position_selected_for_widget(descriptor.widget_id, widgets_config)
+            ):
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, 0))
                 continue
             pos_key = self._get_widget_position_key(widget)
             if not pos_key:
@@ -1647,7 +1670,7 @@ class WidgetManager:
     def reset_fade_coordination(self) -> None:
         """Reset fade coordination state for a new widget setup cycle."""
         if hasattr(self, '_fade_coordinator') and self._fade_coordinator is not None:
-            self._fade_coordinator.reset()
+            self._fade_coordinator.reset(clear_participants=True)
         self._expected_overlays = set()
         self._spotify_secondary_fade_starters = []
         self._spotify_overlay_prewarm_attempted = False
@@ -1656,10 +1679,15 @@ class WidgetManager:
         parent = self._parent
         if parent is not None:
             try:
-                parent._overlay_fade_started = False
+                parent._overlay_fade_started = bool(self._compositor_ready)
                 parent._spotify_secondary_not_before_ts = 0.0
             except Exception as e:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        if self._compositor_ready and hasattr(self, '_fade_coordinator') and self._fade_coordinator is not None:
+            try:
+                self._fade_coordinator.signal_compositor_ready()
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to re-prime fade coordinator for ready compositor", exc_info=True)
 
     def set_expected_overlays(self, expected: Set[str]) -> None:
         """Set the overlays expected to participate in coordinated fade.

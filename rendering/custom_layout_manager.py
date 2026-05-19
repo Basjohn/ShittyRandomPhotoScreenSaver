@@ -1,0 +1,943 @@
+"""CUSTOM widget layout edit-mode session manager."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Optional
+
+from PySide6.QtCore import QPoint, QRect, QSize
+from PySide6.QtGui import QCursor, QGuiApplication, QPixmap
+
+from core.logging.logger import get_logger
+from rendering.custom_layout_contract import (
+    CUSTOM_LAYOUT_GRID_STEP_PX,
+    canonicalize_screen_layout_bucket,
+    CustomLayoutEntry,
+    choose_best_screen_for_global_rect,
+    clamp_global_rect_to_screen,
+    clamp_local_rect_to_bounds,
+    denormalize_local_rect,
+    deserialize_custom_layout_entry,
+    get_screen_layout_entries_for_screen,
+    get_screen_signature,
+    get_screen_signature_aliases,
+    get_custom_layout_restore_entry,
+    load_custom_layout_map,
+    load_custom_layout_restore_map,
+    normalize_local_rect,
+    remove_screen_layout_entry,
+    set_screen_layout_entry,
+    should_transfer_rect_to_screen,
+    snap_local_rect_for_edit,
+    snap_rect_to_grid,
+    write_custom_layout_map,
+)
+from rendering.widget_descriptors import (
+    WidgetRuntimeDescriptor,
+    get_layout_edit_runtime_descriptors,
+    is_custom_position_selected_for_widget,
+    sync_custom_layout_restore_routes,
+)
+from rendering.multi_monitor_coordinator import get_coordinator
+from widgets.edit_shell_widget import EditShellWidget
+
+logger = get_logger(__name__)
+
+
+@dataclass
+class _ShellState:
+    descriptor: WidgetRuntimeDescriptor
+    widget: Any
+    shell: EditShellWidget
+    baseline_global_rect: QRect
+    current_global_rect: QRect
+    baseline_size_payload: dict[str, Any]
+    current_size_payload: dict[str, Any]
+    resize_scale: float
+    was_visible: bool
+    source_screen: Any
+    source_screen_signature: str
+    current_screen: Any
+    current_screen_signature: str
+    current_monitor_value: str
+
+
+class CustomLayoutManager:
+    """Owns one display-local CUSTOM layout edit session."""
+
+    _active_manager: Optional["CustomLayoutManager"] = None
+
+    def __init__(self, display_widget) -> None:
+        self._display = display_widget
+        self._screen = getattr(display_widget, "_screen", None)
+        self._screen_signature = get_screen_signature(self._screen)
+        self._shell_states: dict[str, _ShellState] = {}
+        self._special_hidden: list[tuple[Any, bool]] = []
+        self._paused_visualizer: tuple[Any, bool] | None = None
+        self._active = False
+        self._deferred_processed_image: tuple[QPixmap, QPixmap, str] | None = None
+        self._suppress_live_feedback_widget_ids: set[str] = set()
+
+    def _get_available_screens(self) -> list[Any]:
+        return list(QGuiApplication.screens())
+
+    def _sync_display_screen_binding(self) -> tuple[Any, str]:
+        screen = getattr(self._display, "_screen", None)
+        if screen is None:
+            try:
+                screens = self._get_available_screens()
+                screen_index = int(getattr(self._display, "screen_index", 0))
+                if 0 <= screen_index < len(screens):
+                    screen = screens[screen_index]
+                elif screens:
+                    screen = screens[0]
+            except Exception:
+                screen = None
+        self._screen = screen
+        self._screen_signature = get_screen_signature(screen)
+        return self._screen, self._screen_signature
+
+    def _get_cursor_global_pos(self) -> QPoint:
+        return QCursor.pos()
+
+    def _get_display_instance_for_screen(self, screen: Any) -> Any:
+        try:
+            return get_coordinator().get_instance_for_screen(screen)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to resolve display instance for screen", exc_info=True)
+            return None
+
+    @classmethod
+    def active_manager(cls) -> Optional["CustomLayoutManager"]:
+        return cls._active_manager
+
+    def is_active(self) -> bool:
+        return bool(self._active)
+
+    def should_defer_runtime_updates(self) -> bool:
+        return bool(self._active)
+
+    def defer_processed_image(
+        self,
+        processed_pixmap: QPixmap,
+        original_pixmap: QPixmap,
+        image_path: str,
+    ) -> None:
+        self._deferred_processed_image = (processed_pixmap, original_pixmap, image_path)
+
+    def flush_deferred_processed_image(self) -> None:
+        if self._deferred_processed_image is None:
+            return
+        payload = self._deferred_processed_image
+        self._deferred_processed_image = None
+        try:
+            self._display.set_processed_image(*payload)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to flush deferred image update", exc_info=True)
+
+    def start_session(self) -> bool:
+        if self._active:
+            return True
+        active = CustomLayoutManager._active_manager
+        if active is not None and active is not self:
+            return False
+
+        self._sync_display_screen_binding()
+
+        targets = self._collect_targets()
+        if not targets:
+            logger.debug("[CUSTOM_LAYOUT] No eligible widgets found for edit session")
+            return False
+
+        CustomLayoutManager._active_manager = self
+        self._active = True
+        setattr(self._display, "_custom_layout_edit_active", True)
+
+        self._hide_special_widgets()
+
+        for descriptor, widget in targets:
+            state = self._create_shell_state(descriptor, widget)
+            if state is None:
+                continue
+            self._shell_states[descriptor.widget_id] = state
+            state.shell.show()
+            state.shell.raise_()
+            if state.was_visible:
+                try:
+                    widget.hide()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to hide %s during edit session", descriptor.widget_id, exc_info=True)
+
+        if not self._shell_states:
+            self._finish_session()
+            return False
+        return True
+
+    def save_session(self) -> bool:
+        if not self._active:
+            return False
+
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            self.cancel_session()
+            return False
+
+        widgets_map = settings_manager.get_widgets_map()
+        sync_custom_layout_restore_routes(widgets_map)
+        custom_layout_map = load_custom_layout_map(widgets_map)
+
+        for widget_id, state in self._shell_states.items():
+            monitor_value = state.current_monitor_value
+            if state.current_screen_signature != state.source_screen_signature:
+                monitor_value = self._monitor_value_for_screen(state.current_screen)
+            self._write_widget_custom_layout(
+                widgets_map,
+                custom_layout_map,
+                widget_id,
+                state,
+                monitor_value,
+            )
+
+        write_custom_layout_map(widgets_map, custom_layout_map)
+        settings_manager.set_widgets_map(widgets_map)
+        settings_manager.save()
+
+        self._finish_session()
+        self._reload_widgets_across_instances()
+        return True
+
+    def reset_to_authored_layout(self) -> bool:
+        """Restore the last known non-CUSTOM authored routes and exit edit mode.
+
+        This is intentionally a commit-style action rather than a purely visual
+        shell preview. It clears CUSTOM geometry, restores the saved authored
+        position/monitor contract, and then performs a clean widget rebuild.
+        """
+
+        if not self._active:
+            return False
+
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            self.cancel_session()
+            return False
+
+        widgets_map = settings_manager.get_widgets_map()
+        restore_map = load_custom_layout_restore_map(widgets_map)
+        custom_layout_map = load_custom_layout_map(widgets_map)
+        restored_any = False
+
+        for widget_id, state in self._shell_states.items():
+            restore_entry = get_custom_layout_restore_entry(restore_map, widget_id)
+            if restore_entry is None:
+                continue
+
+            position_settings_key = state.descriptor.get_effective_position_settings_key()
+            position_section = widgets_map.get(position_settings_key, {})
+            if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
+                position_section = {}
+                widgets_map[position_settings_key] = position_section
+            position_section["position"] = restore_entry["position"]
+
+            monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
+            monitor_section = widgets_map.get(monitor_settings_key, {})
+            if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
+                monitor_section = {}
+                widgets_map[monitor_settings_key] = monitor_section
+            monitor_section["monitor"] = restore_entry["monitor"]
+
+            self._remove_widget_entries_from_other_displays(
+                custom_layout_map,
+                widget_id,
+                exclude_signature="__none__",
+            )
+            for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or self._screen):
+                remove_screen_layout_entry(custom_layout_map, alias, widget_id)
+            restored_any = True
+
+        if not restored_any:
+            return False
+
+        write_custom_layout_map(widgets_map, custom_layout_map)
+        settings_manager.set_widgets_map(widgets_map)
+        settings_manager.save()
+
+        self._finish_session()
+        self._reload_widgets_across_instances()
+        return True
+
+    def _write_widget_custom_layout(
+        self,
+        widgets_map: dict[str, Any],
+        custom_layout_map: dict[str, Any],
+        widget_id: str,
+        state: _ShellState,
+        monitor_value: str,
+    ) -> None:
+        target_screen = state.current_screen or self._screen
+        if target_screen is None:
+            target_screen, _ = self._sync_display_screen_binding()
+        if target_screen is None:
+            return
+        target_signature = canonicalize_screen_layout_bucket(custom_layout_map, target_screen)
+        if not target_signature:
+            target_signature = get_screen_signature(target_screen)
+        target_geom = target_screen.geometry()
+
+        if self._monitor_value_is_all(monitor_value):
+            for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or target_screen):
+                remove_screen_layout_entry(custom_layout_map, alias, widget_id)
+        else:
+            self._remove_widget_entries_from_other_displays(
+                custom_layout_map,
+                widget_id,
+                exclude_signature=target_signature,
+            )
+
+        global_rect = QRect(state.current_global_rect)
+        local_rect = QRect(
+            global_rect.x() - target_geom.x(),
+            global_rect.y() - target_geom.y(),
+            global_rect.width(),
+            global_rect.height(),
+        )
+        local_rect = clamp_local_rect_to_bounds(local_rect, target_geom.size())
+        entry = CustomLayoutEntry(
+            widget_id=widget_id,
+            rect=normalize_local_rect(local_rect, target_geom.size()),
+            size_payload=dict(state.current_size_payload),
+            resize_mode=state.descriptor.custom_layout_resize_mode,
+        )
+        set_screen_layout_entry(custom_layout_map, target_signature, widget_id, entry)
+
+        position_settings_key = state.descriptor.get_effective_position_settings_key()
+        position_section = widgets_map.get(position_settings_key, {})
+        if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
+            position_section = {}
+            widgets_map[position_settings_key] = position_section
+        position_section["position"] = "Custom"
+
+        monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
+        monitor_section = widgets_map.get(monitor_settings_key, {})
+        if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
+            monitor_section = {}
+            widgets_map[monitor_settings_key] = monitor_section
+        monitor_section["monitor"] = monitor_value
+
+    def _remove_widget_entries_from_other_displays(
+        self,
+        custom_layout_map: dict[str, Any],
+        widget_id: str,
+        *,
+        exclude_signature: str,
+    ) -> None:
+        displays = custom_layout_map.get("displays", {})
+        if not isinstance(displays, dict):
+            return
+        for screen_signature in tuple(displays.keys()):
+            if screen_signature == exclude_signature:
+                continue
+            remove_screen_layout_entry(custom_layout_map, screen_signature, widget_id)
+
+    def _reload_widgets_across_instances(self) -> None:
+        instances: list[Any] = []
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to enumerate display instances for widget reload", exc_info=True)
+            instances = []
+        if self._display not in instances:
+            instances.append(self._display)
+        for instance in instances:
+            try:
+                self._teardown_display_widgets(instance)
+                instance._setup_widgets()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to rebuild widgets after custom layout save", exc_info=True)
+                try:
+                    instance._apply_saved_custom_layouts()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to apply saved custom layouts after rebuild fallback", exc_info=True)
+
+    def _reapply_saved_layouts_across_instances(self) -> None:
+        instances: list[Any] = []
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to enumerate display instances for layout reapply", exc_info=True)
+            instances = []
+        if self._display not in instances:
+            instances.append(self._display)
+        for instance in instances:
+            try:
+                instance._apply_saved_custom_layouts()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved custom layouts across instances", exc_info=True)
+
+    def _teardown_display_widgets(self, instance: Any) -> None:
+        widget_manager = getattr(instance, "_widget_manager", None)
+        if widget_manager is not None:
+            try:
+                widget_manager.cleanup()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to cleanup WidgetManager before rebuild", exc_info=True)
+
+        for attr_name in (
+            "clock_widget",
+            "clock2_widget",
+            "clock3_widget",
+            "weather_widget",
+            "media_widget",
+            "reddit_widget",
+            "reddit2_widget",
+            "gmail_widget",
+            "imgur_widget",
+            "spotify_volume_widget",
+            "spotify_visualizer_widget",
+            "mute_button_widget",
+        ):
+            child = getattr(instance, attr_name, None)
+            if child is None:
+                continue
+            try:
+                hide = getattr(child, "hide", None)
+                if callable(hide):
+                    hide()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to hide %s during rebuild teardown", attr_name, exc_info=True)
+            try:
+                child.setParent(None)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to detach %s during rebuild teardown", attr_name, exc_info=True)
+            try:
+                child.deleteLater()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to deleteLater %s during rebuild teardown", attr_name, exc_info=True)
+            try:
+                setattr(instance, attr_name, None)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to clear %s during rebuild teardown", attr_name, exc_info=True)
+
+    def _monitor_value_is_all(self, monitor_value: object) -> bool:
+        return str(monitor_value or "ALL").strip().upper() == "ALL"
+
+    def _monitor_value_for_screen(self, screen: Any) -> str:
+        if screen is None:
+            return "ALL"
+        for display in get_coordinator().get_all_instances():
+            if getattr(display, "_screen", None) is screen:
+                return str(int(getattr(display, "screen_index", 0)) + 1)
+        for index, candidate in enumerate(self._get_available_screens()):
+            if candidate is screen:
+                return str(index + 1)
+        return "ALL"
+
+    def cancel_session(self) -> bool:
+        if not self._active:
+            return False
+        self._finish_session()
+        self.apply_saved_layouts_to_display()
+        return True
+
+    def apply_saved_layouts_to_display(self) -> None:
+        if self._active:
+            return
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return
+        screen, fallback_signature = self._sync_display_screen_binding()
+        widgets_map = settings_manager.get_widgets_map()
+        custom_layout_map = load_custom_layout_map(widgets_map)
+        matched_signature, entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+        self._screen_signature = matched_signature or fallback_signature
+
+        for descriptor in get_layout_edit_runtime_descriptors():
+            widget = getattr(self._display, descriptor.attr_name, None)
+            if widget is None:
+                continue
+            if not is_custom_position_selected_for_widget(descriptor.widget_id, widgets_map):
+                self._clear_widget_custom_layout(widget)
+                continue
+            payload = entries.get(descriptor.widget_id, {})
+            entry = deserialize_custom_layout_entry(descriptor.widget_id, payload)
+            if entry is None:
+                self._clear_widget_custom_layout(widget)
+                continue
+            self._apply_entry_to_widget(widget, descriptor, entry)
+
+    def _finish_session(self) -> None:
+        for state in list(self._shell_states.values()):
+            try:
+                state.shell.hide()
+                state.shell.deleteLater()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to destroy edit shell", exc_info=True)
+            if state.was_visible:
+                try:
+                    state.widget.show()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to restore %s visibility", state.descriptor.widget_id, exc_info=True)
+        self._shell_states.clear()
+
+        self._restore_special_widgets()
+
+        self._active = False
+        if CustomLayoutManager._active_manager is self:
+            CustomLayoutManager._active_manager = None
+        setattr(self._display, "_custom_layout_edit_active", False)
+        self.flush_deferred_processed_image()
+
+    def _collect_targets(self) -> list[tuple[WidgetRuntimeDescriptor, Any]]:
+        targets: list[tuple[WidgetRuntimeDescriptor, Any]] = []
+        for descriptor in get_layout_edit_runtime_descriptors():
+            widget = getattr(self._display, descriptor.attr_name, None)
+            if widget is None:
+                continue
+            targets.append((descriptor, widget))
+        return targets
+
+    def _hide_special_widgets(self) -> None:
+        for attr_name in ("spotify_volume_widget", "mute_button_widget"):
+            widget = getattr(self._display, attr_name, None)
+            if widget is None:
+                continue
+            was_visible = bool(getattr(widget, "isVisible", lambda: False)())
+            self._special_hidden.append((widget, was_visible))
+            if was_visible:
+                try:
+                    widget.hide()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to hide %s", attr_name, exc_info=True)
+
+        vis = getattr(self._display, "spotify_visualizer_widget", None)
+        if vis is not None:
+            was_visible = bool(getattr(vis, "isVisible", lambda: False)())
+            self._paused_visualizer = (vis, was_visible)
+            try:
+                if was_visible and hasattr(vis, "stop"):
+                    vis.stop()
+                vis.hide()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
+
+    def _restore_special_widgets(self) -> None:
+        for widget, was_visible in self._special_hidden:
+            if not was_visible:
+                continue
+            try:
+                widget.show()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to restore special widget visibility", exc_info=True)
+        self._special_hidden.clear()
+
+        if self._paused_visualizer is not None:
+            vis, was_visible = self._paused_visualizer
+            try:
+                if was_visible and hasattr(vis, "start"):
+                    vis.start()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to resume visualizer after edit mode", exc_info=True)
+            self._paused_visualizer = None
+
+    def _create_shell_state(
+        self,
+        descriptor: WidgetRuntimeDescriptor,
+        widget: Any,
+    ) -> _ShellState | None:
+        screen, screen_signature = self._sync_display_screen_binding()
+        try:
+            snapshot = widget.grab()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to snapshot %s", descriptor.widget_id, exc_info=True)
+            return None
+
+        try:
+            local_rect = widget.geometry()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to read geometry for %s", descriptor.widget_id, exc_info=True)
+            return None
+
+        global_top_left = self._display.mapToGlobal(local_rect.topLeft())
+        global_rect = QRect(global_top_left, local_rect.size())
+        baseline_payload = self._capture_size_payload(descriptor, widget)
+        current_monitor_value = self._read_monitor_value_for_widget(descriptor)
+        shell = EditShellWidget(
+            widget_id=descriptor.widget_id,
+            snapshot=snapshot,
+            initial_global_rect=global_rect,
+            resizable=descriptor.supports_layout_resize_edit,
+        )
+        shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
+        shell.drag_finished.connect(self._on_shell_drag_finished)
+        shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
+        shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
+        shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
+        return _ShellState(
+            descriptor=descriptor,
+            widget=widget,
+            shell=shell,
+            baseline_global_rect=QRect(global_rect),
+            current_global_rect=QRect(global_rect),
+            baseline_size_payload=baseline_payload,
+            current_size_payload=dict(baseline_payload),
+            resize_scale=1.0,
+            was_visible=bool(getattr(widget, "isVisible", lambda: False)()),
+            source_screen=screen,
+            source_screen_signature=screen_signature,
+            current_screen=screen,
+            current_screen_signature=screen_signature,
+            current_monitor_value=current_monitor_value,
+        )
+
+    def _read_monitor_value_for_widget(self, descriptor: WidgetRuntimeDescriptor) -> str:
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return "ALL"
+        widgets_map = settings_manager.get_widgets_map()
+        settings_key = descriptor.get_effective_monitor_settings_key()
+        section = widgets_map.get(settings_key, {})
+        if not isinstance(section, dict):
+            return "ALL"
+        return str(section.get("monitor", "ALL") or "ALL")
+
+    def _can_transfer_shell_between_displays(self, state: _ShellState) -> tuple[bool, str]:
+        if self._monitor_value_is_all(state.current_monitor_value):
+            return False, "Locked to ALL displays"
+        return True, ""
+
+    def _on_shell_context_menu_requested(self, global_pos: QPoint) -> None:
+        try:
+            self._display._show_context_menu(global_pos)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
+
+    def _on_shell_geometry_live_changed(self, widget_id: str, global_rect: QRect) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return
+        if widget_id in self._suppress_live_feedback_widget_ids:
+            state.current_global_rect = QRect(global_rect)
+            return
+        resolved = self._resolve_shell_global_rect(
+            state,
+            global_rect,
+            snap_to_grid=False,
+            cursor_global=self._get_cursor_global_pos(),
+        )
+        state.current_global_rect = QRect(resolved)
+        if resolved != global_rect:
+            self._set_shell_geometry_silently(state, resolved)
+
+    def _on_shell_drag_finished(self, widget_id: str, global_rect: QRect, cursor_global: QPoint) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return
+        committed = self._resolve_shell_global_rect(
+            state,
+            global_rect,
+            snap_to_grid=True,
+            cursor_global=cursor_global,
+        )
+        state.current_global_rect = QRect(committed)
+        self._set_shell_geometry_silently(state, committed)
+
+    def _on_shell_resize_wheel_requested(self, widget_id: str, angle_delta_y: int) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return
+        step_count = int(angle_delta_y / 120) if angle_delta_y else 0
+        if step_count == 0:
+            step_count = 1 if angle_delta_y > 0 else -1
+        next_scale = max(0.7, min(2.4, state.resize_scale + (0.05 * step_count)))
+        if abs(next_scale - state.resize_scale) < 1e-6:
+            return
+        state.resize_scale = next_scale
+        state.current_size_payload = self._scale_size_payload(
+            state.descriptor,
+            state.baseline_size_payload,
+            next_scale,
+        )
+        next_rect = self._scaled_rect_from_baseline(state)
+        target_screen = state.current_screen or self._screen
+        if target_screen is not None:
+            next_rect = clamp_global_rect_to_screen(next_rect, target_screen)
+        state.current_global_rect = QRect(next_rect)
+        state.shell.set_shell_geometry(next_rect)
+
+    def _on_shell_reset_size_requested(self, widget_id: str) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return
+        state.resize_scale = 1.0
+        state.current_size_payload = dict(state.baseline_size_payload)
+        current = QRect(state.current_global_rect)
+        baseline = QRect(state.baseline_global_rect)
+        center = current.center()
+        baseline.moveCenter(center)
+        target_screen = state.current_screen or self._screen
+        if target_screen is not None:
+            baseline = clamp_global_rect_to_screen(baseline, target_screen)
+        state.current_global_rect = QRect(baseline)
+        self._set_shell_geometry_silently(state, baseline)
+
+    def _set_shell_geometry_silently(self, state: _ShellState, global_rect: QRect) -> None:
+        widget_id = state.descriptor.widget_id
+        self._suppress_live_feedback_widget_ids.add(widget_id)
+        try:
+            state.shell.set_shell_geometry(global_rect)
+        finally:
+            self._suppress_live_feedback_widget_ids.discard(widget_id)
+
+    def _collect_peer_local_rects(self, exclude_widget_id: str, screen: Any) -> list[QRect]:
+        if screen is None:
+            return []
+        geom = screen.geometry()
+        peers: list[QRect] = []
+        for widget_id, state in self._shell_states.items():
+            if widget_id == exclude_widget_id:
+                continue
+            if state.current_screen_signature != get_screen_signature(screen):
+                continue
+            current = state.current_global_rect
+            peers.append(
+                QRect(
+                    current.x() - geom.x(),
+                    current.y() - geom.y(),
+                    current.width(),
+                    current.height(),
+                )
+            )
+        display = self._get_display_instance_for_screen(screen)
+        if display is not None:
+            for descriptor in get_layout_edit_runtime_descriptors():
+                if descriptor.widget_id == exclude_widget_id:
+                    continue
+                if descriptor.widget_id in self._shell_states:
+                    continue
+                widget = getattr(display, descriptor.attr_name, None)
+                if widget is None:
+                    continue
+                try:
+                    peers.append(QRect(widget.geometry()))
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to inspect peer widget geometry", exc_info=True)
+        return peers
+
+    def _resolve_shell_global_rect(
+        self,
+        state: _ShellState,
+        global_rect: QRect,
+        *,
+        snap_to_grid: bool,
+        cursor_global: QPoint | None,
+    ) -> QRect:
+        target_screen = self._resolve_target_screen_for_rect(state, global_rect, cursor_global=cursor_global)
+        if target_screen is None:
+            return QRect(global_rect)
+        target_signature = get_screen_signature(target_screen)
+        geom = target_screen.geometry()
+        local_rect = QRect(
+            global_rect.x() - geom.x(),
+            global_rect.y() - geom.y(),
+            global_rect.width(),
+            global_rect.height(),
+        )
+        local_rect = clamp_local_rect_to_bounds(local_rect, geom.size())
+        if snap_to_grid:
+            local_rect = snap_rect_to_grid(local_rect, step_px=CUSTOM_LAYOUT_GRID_STEP_PX)
+            local_rect = clamp_local_rect_to_bounds(local_rect, geom.size())
+        local_rect = snap_local_rect_for_edit(
+            local_rect,
+            geom.size(),
+            peer_rects=self._collect_peer_local_rects(state.descriptor.widget_id, target_screen),
+        )
+        state.current_screen = target_screen
+        state.current_screen_signature = target_signature
+        return QRect(
+            geom.x() + local_rect.x(),
+            geom.y() + local_rect.y(),
+            local_rect.width(),
+            local_rect.height(),
+        )
+
+    def _resolve_target_screen_for_rect(
+        self,
+        state: _ShellState,
+        global_rect: QRect,
+        *,
+        cursor_global: QPoint | None,
+    ) -> Any:
+        screens = self._get_available_screens()
+        if not screens:
+            return state.current_screen or self._screen
+
+        candidate = choose_best_screen_for_global_rect(
+            global_rect,
+            cursor_global=cursor_global,
+            screens=screens,
+        )
+        if candidate is None:
+            return state.current_screen or self._screen
+        current_screen = state.current_screen or self._screen
+        if current_screen is None or get_screen_signature(candidate) == get_screen_signature(current_screen):
+            state.shell.set_transfer_blocked(False, "")
+            return current_screen or candidate
+
+        if not should_transfer_rect_to_screen(
+            global_rect,
+            current_screen=current_screen,
+            candidate_screen=candidate,
+            cursor_global=cursor_global,
+        ):
+            state.shell.set_transfer_blocked(False, "")
+            return current_screen
+
+        can_transfer, reason = self._can_transfer_shell_between_displays(state)
+        if can_transfer:
+            state.shell.set_transfer_blocked(False, "")
+            return candidate
+
+        state.shell.set_transfer_blocked(True, reason)
+        return current_screen
+
+    def _scaled_rect_from_baseline(self, state: _ShellState) -> QRect:
+        base = state.baseline_global_rect
+        current = state.current_global_rect
+        center = current.center()
+        next_width = max(48, int(round(base.width() * state.resize_scale)))
+        next_height = max(32, int(round(base.height() * state.resize_scale)))
+        rect = QRect(0, 0, next_width, next_height)
+        rect.moveCenter(center)
+        return rect
+
+    def _capture_size_payload(
+        self,
+        descriptor: WidgetRuntimeDescriptor,
+        widget: Any,
+    ) -> dict[str, Any]:
+        mode = descriptor.custom_layout_resize_mode
+        if mode == "clock_font":
+            return {"font_size": int(getattr(widget, "_font_size", 48))}
+        if mode == "weather_scale":
+            return {
+                "font_size": int(getattr(widget, "_font_size", 18)),
+                "icon_size": int(getattr(widget, "_icon_size", 32)),
+                "detail_icon_size": int(getattr(widget, "_detail_icon_size", 16)),
+            }
+        if mode == "media_scale":
+            return {
+                "font_size": int(getattr(widget, "_font_size", 14)),
+                "artwork_size": int(getattr(widget, "_artwork_size", 80)),
+            }
+        if mode == "reddit_font":
+            return {"font_size": int(getattr(widget, "_font_size", 18))}
+        if mode == "gmail_font":
+            return {"font_size": int(getattr(widget, "_font_size", 13))}
+        return {}
+
+    def _scale_size_payload(
+        self,
+        descriptor: WidgetRuntimeDescriptor,
+        baseline_payload: dict[str, Any],
+        scale: float,
+    ) -> dict[str, Any]:
+        mode = descriptor.custom_layout_resize_mode
+        if mode == "clock_font":
+            base = int(baseline_payload.get("font_size", 48))
+            return {"font_size": max(12, int(round(base * scale)))}
+        if mode == "weather_scale":
+            font_size = max(10, int(round(int(baseline_payload.get("font_size", 18)) * scale)))
+            icon_size = max(12, int(round(int(baseline_payload.get("icon_size", 32)) * scale)))
+            detail_size = max(8, int(round(int(baseline_payload.get("detail_icon_size", 16)) * scale)))
+            return {
+                "font_size": font_size,
+                "icon_size": icon_size,
+                "detail_icon_size": detail_size,
+            }
+        if mode == "media_scale":
+            font_size = max(10, int(round(int(baseline_payload.get("font_size", 14)) * scale)))
+            artwork_size = max(48, int(round(int(baseline_payload.get("artwork_size", 80)) * scale)))
+            return {
+                "font_size": font_size,
+                "artwork_size": artwork_size,
+            }
+        if mode == "reddit_font":
+            base = int(baseline_payload.get("font_size", 18))
+            return {"font_size": max(10, int(round(base * scale)))}
+        if mode == "gmail_font":
+            base = int(baseline_payload.get("font_size", 13))
+            return {"font_size": max(10, int(round(base * scale)))}
+        return dict(baseline_payload)
+
+    def _apply_size_payload(self, descriptor: WidgetRuntimeDescriptor, widget: Any, payload: dict[str, Any]) -> None:
+        mode = descriptor.custom_layout_resize_mode
+        try:
+            if mode == "clock_font":
+                widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 48))))
+                return
+            if mode == "weather_scale":
+                widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 18))))
+                widget.set_icon_size(int(payload.get("icon_size", getattr(widget, "_icon_size", 32))))
+                widget.set_detail_icon_size(int(payload.get("detail_icon_size", getattr(widget, "_detail_icon_size", 16))))
+                return
+            if mode == "media_scale":
+                widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 14))))
+                widget.set_artwork_size(int(payload.get("artwork_size", getattr(widget, "_artwork_size", 80))))
+                return
+            if mode == "reddit_font":
+                widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 18))))
+                return
+            if mode == "gmail_font":
+                widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 13))))
+                return
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to apply size payload for %s", descriptor.widget_id, exc_info=True)
+
+    def _clear_widget_custom_layout(self, widget: Any) -> None:
+        try:
+            if hasattr(widget, "_custom_layout_local_rect"):
+                delattr(widget, "_custom_layout_local_rect")
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to clear custom rect", exc_info=True)
+        try:
+            update_position = getattr(widget, "_update_position", None)
+            if callable(update_position):
+                update_position()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to restore default position after clearing custom layout", exc_info=True)
+
+    def _apply_entry_to_widget(
+        self,
+        widget: Any,
+        descriptor: WidgetRuntimeDescriptor,
+        entry: CustomLayoutEntry,
+    ) -> None:
+        if self._screen is None:
+            self._sync_display_screen_binding()
+        if self._screen is None:
+            return
+        self._apply_size_payload(descriptor, widget, entry.size_payload)
+        local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
+        local_rect = clamp_local_rect_to_bounds(local_rect, self._screen.geometry().size())
+        setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
+        try:
+            set_stack_offset = getattr(widget, "set_stack_offset", None)
+            if callable(set_stack_offset):
+                set_stack_offset(QPoint(0, 0))
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to clear stack offset for custom layout", exc_info=True)
+        try:
+            update_position = getattr(widget, "_update_position", None)
+            if callable(update_position):
+                update_position()
+            else:
+                widget.setGeometry(local_rect)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to apply custom rect to %s", descriptor.widget_id, exc_info=True)
+        try:
+            widget.show()
+            widget.raise_()
+            tz_label = getattr(widget, "_tz_label", None)
+            if tz_label is not None:
+                tz_label.raise_()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to finalize widget visibility after custom apply", exc_info=True)

@@ -120,8 +120,30 @@ class TestContextMenuSignals:
         menu.exit_requested.connect(lambda: signals_received.append(True))
         
         menu.exit_requested.emit()
-        
+
         assert len(signals_received) == 1
+
+    def test_reset_edit_mode_signal(self, qtbot):
+        """Edit-mode reset emits the dedicated authored-layout reset signal."""
+        menu = ScreensaverContextMenu()
+        qtbot.addWidget(menu)
+
+        signals_received = []
+        menu.reset_edit_mode_requested.connect(lambda: signals_received.append(True))
+
+        menu.reset_edit_mode_requested.emit()
+
+        assert len(signals_received) == 1
+
+    def test_edit_mode_state_shows_reset_action_only_when_active(self, qtbot):
+        menu = ScreensaverContextMenu()
+        qtbot.addWidget(menu)
+
+        menu.update_edit_mode_state(False)
+        assert menu._reset_edit_mode_action.isVisible() is False
+
+        menu.update_edit_mode_state(True)
+        assert menu._reset_edit_mode_action.isVisible() is True
 
 
 class TestContextMenuTransitions:

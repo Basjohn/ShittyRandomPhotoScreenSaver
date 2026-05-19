@@ -181,6 +181,36 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_widgets_tab_custom_position_slot_tracks_saved_custom_layout_state(self, qt_app, settings_manager):
+        settings_manager.set("widgets", {
+            "clock": {"enabled": True, "position": "Custom"},
+            "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "clock": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.1},
+                            "size_payload": {"font_size": 64},
+                            "resize_mode": "clock_font",
+                        }
+                    }
+                },
+            },
+        })
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            clock_idx = tab.clock_position.findText("Custom")
+            media_idx = tab.media_position.findText("Custom")
+            assert clock_idx >= 0
+            assert media_idx >= 0
+            assert tab.clock_position.currentText() == "Custom"
+            assert tab.clock_position.model().item(clock_idx).isEnabled() is True
+            assert tab.media_position.model().item(media_idx).isEnabled() is False
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_default_values(self, qt_app, tmp_path):
         """Default widget settings match canonical SettingsManager defaults."""
         mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)

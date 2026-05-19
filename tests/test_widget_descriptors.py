@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from rendering.widget_descriptors import (
+    CUSTOM_POSITION_OPTION_LABEL,
     apply_widget_section_save_results,
     build_widget_section_buttons,
     build_widget_stack_preview_config,
@@ -10,6 +11,7 @@ from rendering.widget_descriptors import (
     collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
     get_default_widget_section_index,
+    get_layout_edit_runtime_descriptors,
     get_widget_default_init_descriptors,
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
@@ -24,8 +26,11 @@ from rendering.widget_descriptors import (
     get_widget_runtime_descriptors,
     get_widget_stack_preview_descriptors,
     get_widget_settings_section_descriptors,
+    has_saved_custom_layout_for_widget,
+    is_custom_position_selected_for_widget,
     load_widget_sections,
     resolve_widget_section_index_from_view_state,
+    sync_custom_layout_restore_routes,
 )
 from PySide6.QtWidgets import QButtonGroup
 
@@ -227,6 +232,15 @@ def test_collect_widget_section_containers_uses_descriptor_metadata():
     assert containers == ("clock", "weather")
 
 
+def test_widget_runtime_descriptor_monitor_settings_key_defaults_to_widget_id():
+    descriptors = get_widget_runtime_descriptors()
+    clock = next(item for item in descriptors if item.widget_id == "clock")
+    clock2 = next(item for item in descriptors if item.widget_id == "clock2")
+
+    assert clock.get_effective_monitor_settings_key() == "clock"
+    assert clock2.get_effective_monitor_settings_key() == "clock2"
+
+
 def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_dedupes():
     class _Owner:
         pass
@@ -403,8 +417,11 @@ def test_widget_runtime_descriptors_capture_capability_and_refresh_ownership():
     assert gmail.supports_custom_position_slot is True
     assert gmail.supports_layout_resize_edit is True
     assert gmail.requires_size_reset_affordance is True
+    assert gmail.custom_layout_resize_mode == "gmail_font"
     assert "visible_fallback" in gmail.service_runtime_contracts
     assert "manual_refresh" in reddit2.service_runtime_contracts
+    assert reddit2.supports_layout_resize_edit is True
+    assert reddit2.custom_layout_resize_mode == "reddit_font"
 
 
 def test_service_runtime_contract_queries_follow_descriptor_contract():
@@ -443,6 +460,7 @@ def test_widget_position_option_labels_follow_runtime_descriptor_contract():
         "Bottom Left",
         "Bottom Center",
         "Bottom Right",
+        "Custom",
     )
     assert get_widget_position_option_labels("unknown-widget") == (
         "Top Left",
@@ -455,6 +473,66 @@ def test_widget_position_option_labels_follow_runtime_descriptor_contract():
         "Bottom Center",
         "Bottom Right",
     )
+
+
+def test_custom_position_contract_helpers_follow_runtime_descriptor_metadata():
+    widgets_cfg = {
+        "clock": {"position": "Custom"},
+        "gmail": {"position": "Top Left"},
+        "custom_layout": {
+            "displays": {
+                "screen:1": {
+                    "clock": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4}},
+                    "gmail": {"rect": {"x": 0.2, "y": 0.3, "width": 0.2, "height": 0.1}},
+                }
+            }
+        },
+    }
+
+    assert CUSTOM_POSITION_OPTION_LABEL == "Custom"
+    assert has_saved_custom_layout_for_widget("clock2", widgets_cfg) is False
+    assert has_saved_custom_layout_for_widget("clock", widgets_cfg) is True
+    assert has_saved_custom_layout_for_widget("gmail", widgets_cfg) is True
+    assert is_custom_position_selected_for_widget("clock2", widgets_cfg) is True
+    assert is_custom_position_selected_for_widget("clock", widgets_cfg) is True
+    assert is_custom_position_selected_for_widget("gmail", widgets_cfg) is False
+
+
+def test_sync_custom_layout_restore_routes_tracks_last_non_custom_authored_state():
+    widgets_cfg = {
+        "clock": {"position": "Top Right"},
+        "clock2": {"monitor": "2"},
+        "gmail": {"position": "Custom", "monitor": "ALL"},
+        "weather": {"position": "Bottom Left", "monitor": "1"},
+    }
+
+    sync_custom_layout_restore_routes(widgets_cfg)
+
+    restore_map = widgets_cfg["custom_layout_restore"]["widgets"]
+    assert restore_map["clock"]["position"] == "Top Right"
+    assert restore_map["clock"]["monitor"] == "ALL"
+    assert restore_map["clock2"]["position"] == "Top Right"
+    assert restore_map["clock2"]["monitor"] == "2"
+    assert restore_map["weather"]["position"] == "Bottom Left"
+    assert restore_map["weather"]["monitor"] == "1"
+    assert "gmail" not in restore_map
+
+
+def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract():
+    descriptors = {item.widget_id: item for item in get_layout_edit_runtime_descriptors()}
+
+    assert descriptors["clock"].attr_name == "clock_widget"
+    assert descriptors["clock"].supports_layout_resize_edit is True
+    assert descriptors["clock"].custom_layout_resize_mode == "clock_font"
+
+    assert descriptors["weather"].attr_name == "weather_widget"
+    assert descriptors["weather"].custom_layout_resize_mode == "weather_scale"
+
+    assert descriptors["media"].attr_name == "media_widget"
+    assert descriptors["media"].custom_layout_resize_mode == "media_scale"
+
+    assert descriptors["gmail"].supports_layout_resize_edit is True
+    assert descriptors["reddit"].requires_size_reset_affordance is True
 
 
 def test_live_refresh_handlers_follow_runtime_descriptors():

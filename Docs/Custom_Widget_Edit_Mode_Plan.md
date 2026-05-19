@@ -1,10 +1,64 @@
 # Custom Widget Edit Mode Plan
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
-This document is the detailed implementation plan for the future CUSTOM widget layout/edit mode.
+This document is the detailed implementation plan for the CUSTOM widget layout/edit mode.
 
 It is intentionally more detailed than `Current_Plan.md`. The plan file should point here, not duplicate this content.
+
+## Current Implementation Snapshot
+
+The first meaningful implementation phase is now landed.
+
+What exists today:
+- context-menu entry/save/cancel actions for CUSTOM widget edit mode,
+- temporary top-level edit shells via `widgets/edit_shell_widget.py`,
+- display-local normalized CUSTOM layout persistence via `rendering/custom_layout_contract.py`,
+- first-phase session lifecycle, runtime-update deferral, and live-widget reapply via `rendering/custom_layout_manager.py`,
+- live snapping against display edges, the shared gutter guide, peer widget shells, and live peer widgets on the destination display through the same contract layer,
+- persisted widget `position` now treats `custom` as a first-class runtime value rather than falling back to authored anchors during settings normalization,
+- edit-mode save and authored-layout reset now commit through the canonical widget rebuild path so reveal/fade startup contracts stay identical to cold/runtime widget setup,
+- runtime rebuilds triggered by CUSTOM save/reset explicitly re-prime the fade coordinator when the compositor is already ready, so primary overlays do not stay queued forever after edit-mode exit,
+- runtime rebuilds triggered by CUSTOM save/reset also clear stale fade participants before the new widget set registers, so compositor-ready rebuilds cannot stay blocked on overlays from the previous setup cycle,
+- CUSTOM screen routing now re-syncs against the live `DisplayWidget` screen binding before session start, save, and runtime reapply rather than trusting constructor-time `_screen` state,
+- legacy MC-style saved display buckets whose keys included both display identity and geometry are now resolved/migrated through canonical display identity, so a one-pixel geometry drift does not strand valid saved CUSTOM layouts,
+- true monitor-ownership transfer for numbered-monitor widgets during the shell session:
+  - shells may hand off between displays while dragging,
+  - the live runtime widget is still untouched until save,
+  - save commits the new `monitor` binding plus destination display geometry and then triggers a clean widget rebuild across display instances,
+- explicit transfer blocking for `ALL` widgets:
+  - these shells may still precision-snap against display edges,
+  - but they cannot hand off to another display,
+  - a blocked shell affordance explains the reason instead of silently failing,
+- shared sticky custom-geometry reapply through `BaseOverlayWidget._update_position()` when `_custom_layout_local_rect` is present,
+- legacy authored widget stacking is explicitly disabled for any widget family currently using the `Custom` slot, so stack offsets cannot fight committed CUSTOM geometry after rebuild,
+- safe first-phase uniform `Ctrl + wheel` resize for:
+  - `clock`
+  - `clock2`
+  - `clock3`
+  - `weather`
+  - `media`
+- phase-two uniform resize is now also landed for:
+  - `reddit`
+  - `reddit2`
+  - `gmail`
+- current move-only participation for:
+  - `imgur`
+- explicit `Custom` position-slot behavior for participating widget families:
+  - the slot is descriptor-owned rather than hardcoded per tab,
+  - it remains disabled until real saved custom geometry exists for that family,
+  - saving an edit session promotes the relevant widget-family position setting to `Custom`,
+  - switching back to an authored position stops runtime custom-rect authority without deleting the saved payload.
+- explicit authored-route reset contract:
+  - the last known non-`Custom` position + monitor route is persisted separately from CUSTOM geometry,
+  - the edit-mode context menu now exposes a global reset-to-authored action,
+  - that reset clears CUSTOM geometry and restores authored routing through a clean save + rebuild path instead of trying to visually fake every shell back into place first.
+
+Important current limitation:
+- edit shells still never straddle two displays at once.
+- cross-display transfer is currently limited to numbered-monitor widget families.
+- `ALL` widgets remain intentionally display-locked during a single drag because `monitor` routing stays authoritative and we do not silently collapse `ALL` into a single-display binding.
+- `imgur` and `spotify_visualizer` still need their final uniform-resize contracts before the “every widget uniformly resizable” goal is fully complete.
 
 ## 1. Purpose
 
@@ -41,7 +95,7 @@ This is intentionally not a freeform raw-pixel editor.
   - `Enter Edit Mode`
   - `Save Edits`
   - `Cancel Edits`
-  - eventually `Reset CUSTOM Layout`
+  - `Reset To Saved Layout`
 
 ### 3.2 What the User Sees
 
@@ -61,20 +115,33 @@ This is intentionally not a freeform raw-pixel editor.
 
 - If the widget supports resize, the edit shell should expose a size reset affordance.
 - Best placement:
-  - bottom-right inside the shell,
+  - bottom-center inside the shell,
   - visually consistent across widgets,
   - always reachable,
   - disabled or absent for non-resizable widgets.
 - Reset should restore that widget’s authored/default size contract for the current display context, not some arbitrary last-known dimensions.
+- Separate from that per-widget size reset, edit mode should also expose a global authored-layout reset in the context menu.
+- That global reset should:
+  - restore the last saved non-`Custom` position/monitor route for each participating widget family,
+  - clear CUSTOM geometry payloads,
+  - and exit edit mode through the normal clean rebuild path.
 
 ### 3.4 Dragging Between Displays
 
 - A widget may be dragged across display boundaries while the drag is active.
+- During edit mode, this is a shell-level ownership proposal, not a live runtime widget move.
+- If the widget’s current `monitor` binding is a numbered display, the shell may hand off to another display while dragging.
+- If the widget’s current `monitor` binding is `ALL`, handoff must be blocked.
 - When the user releases the drag:
   - the widget lands on the display containing the largest area of its visible bounds,
   - if there is an exact tie, prefer the display under the pointer at release,
   - if that still fails, prefer the source display.
 - Users cannot commit a widget in a state where its committed bounds belong to two displays at once.
+- On save:
+  - the destination display receives the saved CUSTOM geometry,
+  - numbered-monitor widgets update their `monitor` field to the new display,
+  - stale geometry for the old display is removed for numbered-monitor widgets,
+  - the runtime widget layer is rebuilt cleanly across displays.
 
 ### 3.5 Edge Rules
 
@@ -83,6 +150,8 @@ This is intentionally not a freeform raw-pixel editor.
 - The committed visible bounds must remain fully inside the destination display.
 - “Inside the display” means the visible widget/card bounds do not breach the display rectangle.
 - This clamp should use the same visible-boundary contract the runtime uses for positioning, not a misleading raw transparent QWidget/effect rect.
+- Soft snap should prefer the shared gutter before hard display-edge clamp when both are near.
+- If the user keeps pushing past those snaps and the widget is transferable, the shell may hand off to the adjacent display and clamp there instead.
 
 ## 4. Non-Goals for First Implementation
 

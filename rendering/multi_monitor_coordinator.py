@@ -334,7 +334,8 @@ class MultiMonitorCoordinator(QObject):
         if screen is None:
             return "screen:none"
 
-        parts: List[str] = []
+        identity_parts: List[str] = []
+        serial_present = False
         for label, getter in (
             ("serial", getattr(screen, "serialNumber", None)),
             ("manufacturer", getattr(screen, "manufacturer", None)),
@@ -345,23 +346,30 @@ class MultiMonitorCoordinator(QObject):
                 if callable(getter):
                     value = getter()
                     if value:
-                        parts.append(f"{label}:{value}")
+                        text = f"{label}:{value}"
+                        identity_parts.append(text)
+                        if label == "serial":
+                            serial_present = True
             except Exception as e:
                 logger.debug("[COORDINATOR] Exception suppressed: %s", e)
                 continue
 
-        # Geometry (pos + size) is a decent fallback when metadata is missing.
+        geom_part = ""
         try:
             geom = screen.geometry()
-            parts.append(
-                f"geom:{geom.x()}_{geom.y()}_{geom.width()}x{geom.height()}"
-            )
+            geom_part = f"geom:{geom.x()}_{geom.y()}_{geom.width()}x{geom.height()}"
         except Exception as e:
             logger.debug("[COORDINATOR] Exception suppressed: %s", e)
 
-        if not parts:
-            parts.append(f"id:{id(screen)}")
-        return "|".join(parts)
+        if serial_present and identity_parts:
+            return "|".join(identity_parts)
+        if identity_parts:
+            if geom_part:
+                return "|".join(identity_parts + [geom_part])
+            return "|".join(identity_parts)
+        if geom_part:
+            return geom_part
+        return f"id:{id(screen)}"
 
     def register_instance(self, widget: "DisplayWidget", screen: Optional[QScreen]) -> None:
         """Register a DisplayWidget instance for a screen."""

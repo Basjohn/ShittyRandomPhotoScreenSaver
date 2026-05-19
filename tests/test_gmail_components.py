@@ -32,6 +32,7 @@ def test_gmail_position_from_string() -> None:
     assert GmailPosition.from_string("bottom_left") == GmailPosition.BOTTOM_LEFT
     assert GmailPosition.from_string("Bottom Center") == GmailPosition.BOTTOM_CENTER
     assert GmailPosition.from_string("bottom_right") == GmailPosition.BOTTOM_RIGHT
+    assert GmailPosition.from_string("Custom") == GmailPosition.TOP_LEFT
 
     # Test that unknown positions default to TOP_LEFT
     assert GmailPosition.from_string("invalid") == GmailPosition.TOP_LEFT

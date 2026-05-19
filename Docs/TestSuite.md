@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-18
+Last updated: 2026-05-19
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -44,9 +44,13 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_gmail_oauth.py`
   Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
-  Overlay re-raise ordering, deferred raise timer cleanup, and `WidgetManager` startup/teardown coordination.
+  Overlay re-raise ordering, deferred raise timer cleanup, `WidgetManager` startup/teardown coordination, fade-coordinator re-prime behavior for already-ready compositor rebuilds, stale fade-participant clearing on runtime rebuild, and CUSTOM-position stacking exclusion.
 - `tests/test_widget_descriptors.py`
-  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, descriptor-owned lazy/programmatic dependency metadata for inter-section hydration, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, future resize/reset capability flags, and descriptor-owned stack-preview/settings-composition field ownership.
+  Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, descriptor-owned lazy/programmatic dependency metadata for inter-section hydration, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, explicit `Custom` slot availability/selection helpers, first-phase CUSTOM attr/resize-mode ownership, and descriptor-owned stack-preview/settings-composition field ownership.
+- `tests/test_custom_layout_contract.py`
+  CUSTOM layout normalized-rect schema helpers, display/gutter/widget snapping, clamp rules, target-screen resolution, display-local persistence roundtrip coverage, and the narrow legacy MC display-signature ingestion bridge that resolves old identity-plus-geometry buckets onto the canonical display identity.
+- `tests/test_custom_layout_manager.py`
+  CUSTOM edit-session save/cancel behavior, first-class `custom` position persistence, saved authored-route reset behavior, late screen-binding recovery, size-payload persistence for clock/weather/media plus Reddit/Gmail font-driven resize families, live peer-snapping/clamp behavior, canonical rebuild-on-save/reset behavior, numbered-monitor cross-display ownership transfer, `ALL`-locked transfer blocking, deferred processed-image flush behavior, and edit-shell reset-affordance placement.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
@@ -54,9 +58,11 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
-  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
+  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, explicit `Custom` slot enable/disable behavior, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
 - `tests/test_widget_manager.py`
   Descriptor-driven live settings routing parity, expected-overlay coordination, secondary-stage starter ownership, and manager cleanup behavior.
+- `tests/test_widget_visual_padding.py`
+  BaseOverlayWidget visual-padding math plus `_custom_layout_local_rect` override behavior used by first-phase CUSTOM layout reapply.
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), Spectrum GPU extras reuse, and architecture-split engine-resolution regression coverage.
 - `tests/test_visualizer_settings_plumbing.py`

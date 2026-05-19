@@ -246,6 +246,10 @@ def prewarm_context_menu(widget) -> None:
         widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
         widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
         widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
+        widget._context_menu.edit_mode_requested.connect(widget._on_context_edit_mode_requested)
+        widget._context_menu.save_edit_mode_requested.connect(widget._on_context_save_edit_mode_requested)
+        widget._context_menu.cancel_edit_mode_requested.connect(widget._on_context_cancel_edit_mode_requested)
+        widget._context_menu.reset_edit_mode_requested.connect(widget._on_context_reset_edit_mode_requested)
         widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
         widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
         widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
@@ -519,6 +523,10 @@ def setup_widgets(widget) -> None:
     # Apply widget stacking for overlapping positions
     widgets = widget.settings_manager.get('widgets', {})
     widget._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
+    try:
+        widget._apply_saved_custom_layouts()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
 def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:
     """Apply vertical stacking offsets - delegates to WidgetManager."""
@@ -535,7 +543,10 @@ def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:
         (getattr(widget, 'reddit2_widget', None), 'reddit2_widget'),
         (getattr(widget, 'imgur_widget', None), 'imgur_widget'),
     ]
-    widget._widget_manager.apply_widget_stacking(widget_list)
+    widget._widget_manager.apply_widget_stacking(
+        widget_list,
+        widgets_config if isinstance(widgets_config, dict) else None,
+    )
 
 def on_animation_manager_ready(widget, animation_manager) -> None:
     """Hook called by BaseTransition when an AnimationManager is available.

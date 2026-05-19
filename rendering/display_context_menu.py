@@ -73,6 +73,10 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
             widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
             widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
+            widget._context_menu.edit_mode_requested.connect(widget._on_context_edit_mode_requested)
+            widget._context_menu.save_edit_mode_requested.connect(widget._on_context_save_edit_mode_requested)
+            widget._context_menu.cancel_edit_mode_requested.connect(widget._on_context_cancel_edit_mode_requested)
+            widget._context_menu.reset_edit_mode_requested.connect(widget._on_context_reset_edit_mode_requested)
             widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
             widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
             widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
@@ -112,6 +116,7 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.update_interaction_mode_state(interaction_mode)
             widget._context_menu.update_always_on_top_state(widget._always_on_top)
             widget._context_menu.update_visualizer_state(current_vis)
+        widget._context_menu.update_edit_mode_state(bool(getattr(widget, "_custom_layout_edit_active", False)))
         
         try:
             widget._context_menu_active = True

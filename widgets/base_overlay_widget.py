@@ -473,6 +473,11 @@ class BaseOverlayWidget(QLabel):
         if not parent:
             return
 
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if isinstance(custom_rect, QRect) and custom_rect.width() > 0 and custom_rect.height() > 0:
+            self.setGeometry(custom_rect)
+            return
+
         try:
             old_geo = self.geometry()
         except Exception as e:

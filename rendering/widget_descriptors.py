@@ -12,6 +12,11 @@ import os
 from typing import Any, Callable, Dict, Mapping
 
 from PySide6.QtWidgets import QButtonGroup, QPushButton
+from rendering.custom_layout_contract import (
+    load_custom_layout_restore_map,
+    set_custom_layout_restore_entry,
+    write_custom_layout_restore_map,
+)
 
 
 STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
@@ -25,6 +30,7 @@ STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
     "Bottom Center",
     "Bottom Right",
 )
+CUSTOM_POSITION_OPTION_LABEL = "Custom"
 
 
 @dataclass(frozen=True)
@@ -742,6 +748,7 @@ class WidgetRuntimeDescriptor:
     """Canonical runtime/capability descriptor for a widget family."""
 
     widget_id: str
+    attr_name: str
     settings_section_id: str
     settings_prefixes: tuple[str, ...]
     startup_stage: str
@@ -750,10 +757,13 @@ class WidgetRuntimeDescriptor:
     live_refresh_handler: str | None = None
     service_runtime_contracts: tuple[str, ...] = ()
     position_option_labels: tuple[str, ...] = STANDARD_POSITION_OPTION_LABELS
+    position_settings_key: str | None = None
+    monitor_settings_key: str | None = None
     supports_layout_edit_mode: bool = False
     supports_custom_position_slot: bool = False
     supports_layout_resize_edit: bool = False
     requires_size_reset_affordance: bool = False
+    custom_layout_resize_mode: str = "none"
     dev_feature_env: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
@@ -767,44 +777,63 @@ class WidgetRuntimeDescriptor:
     def supports_service_runtime_contract(self, contract_name: str) -> bool:
         return contract_name in self.service_runtime_contracts
 
+    def get_effective_position_settings_key(self) -> str:
+        return self.position_settings_key or self.widget_id
+
+    def get_effective_monitor_settings_key(self) -> str:
+        return self.monitor_settings_key or self.widget_id
+
 
 WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
     WidgetRuntimeDescriptor(
         widget_id="clock",
+        attr_name="clock_widget",
         settings_section_id="clock",
         settings_prefixes=("widgets.clock",),
         startup_stage="primary",
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="clock_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock2",
+        attr_name="clock2_widget",
         settings_section_id="clock",
         settings_prefixes=("widgets.clock2",),
         startup_stage="primary",
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        position_settings_key="clock",
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="clock_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="clock3",
+        attr_name="clock3_widget",
         settings_section_id="clock",
         settings_prefixes=("widgets.clock3",),
         startup_stage="primary",
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        position_settings_key="clock",
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="clock_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="weather",
+        attr_name="weather_widget",
         settings_section_id="weather",
         settings_prefixes=("widgets.weather",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         service_runtime_contracts=(
             "single_shot_timer_reuse",
             "timer_stop_cleanup",
@@ -813,25 +842,31 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="weather_scale",
     ),
     WidgetRuntimeDescriptor(
         widget_id="media",
+        attr_name="media_widget",
         settings_section_id="media",
         settings_prefixes=("widgets.media",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         live_refresh_handler="_refresh_media_config",
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="media_scale",
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit",
+        attr_name="reddit_widget",
         settings_section_id="reddit",
         settings_prefixes=("widgets.reddit",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         live_refresh_handler="_refresh_reddit_configs",
         service_runtime_contracts=(
             "transition_probe",
@@ -848,13 +883,16 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="reddit_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
+        attr_name="reddit2_widget",
         settings_section_id="reddit",
         settings_prefixes=("widgets.reddit2",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         live_refresh_handler="_refresh_reddit_configs",
         service_runtime_contracts=(
             "transition_probe",
@@ -871,13 +909,16 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="reddit_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
+        attr_name="gmail_widget",
         settings_section_id="gmail",
         settings_prefixes=("widgets.gmail",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         service_runtime_contracts=(
             "transition_probe",
             "single_shot_timer_reuse",
@@ -893,21 +934,25 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
+        custom_layout_resize_mode="gmail_font",
     ),
     WidgetRuntimeDescriptor(
         widget_id="imgur",
+        attr_name="imgur_widget",
         settings_section_id="imgur",
         settings_prefixes=("widgets.imgur",),
         startup_stage="primary",
         service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         supports_layout_edit_mode=True,
         supports_custom_position_slot=True,
-        supports_layout_resize_edit=True,
-        requires_size_reset_affordance=True,
+        supports_layout_resize_edit=False,
+        requires_size_reset_affordance=False,
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",
+        attr_name="spotify_visualizer_widget",
         settings_section_id="visualizers",
         settings_prefixes=("widgets.spotify_visualizer",),
         startup_stage="secondary",
@@ -916,6 +961,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_volume",
+        attr_name="spotify_volume_widget",
         settings_section_id="media",
         settings_prefixes=("widgets.media",),
         startup_stage="secondary",
@@ -925,6 +971,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
     ),
     WidgetRuntimeDescriptor(
         widget_id="mute_button",
+        attr_name="mute_button_widget",
         settings_section_id="media",
         settings_prefixes=("widgets.media",),
         startup_stage="secondary",
@@ -1004,6 +1051,104 @@ def get_widget_position_option_labels(widget_id: str) -> tuple[str, ...]:
     if descriptor is None:
         return STANDARD_POSITION_OPTION_LABELS
     return descriptor.position_option_labels
+
+
+def has_saved_custom_layout_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+) -> bool:
+    """Return True when any display has a saved CUSTOM layout entry for widget_id."""
+
+    if not isinstance(widgets_config, Mapping):
+        return False
+    candidate = widgets_config.get("custom_layout", {})
+    if not isinstance(candidate, Mapping):
+        return False
+    displays = candidate.get("displays", {})
+    if not isinstance(displays, Mapping):
+        return False
+    for layouts in displays.values():
+        if not isinstance(layouts, Mapping):
+            continue
+        if isinstance(layouts.get(widget_id), Mapping):
+            return True
+    return False
+
+
+def is_custom_position_selected_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+) -> bool:
+    """Return True when the widget family is currently set to use the CUSTOM slot."""
+
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None or not isinstance(widgets_config, Mapping):
+        return False
+    settings_key = descriptor.get_effective_position_settings_key()
+    section = widgets_config.get(settings_key, {})
+    if not isinstance(section, Mapping):
+        return False
+    return str(section.get("position", "")).strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
+
+
+def sync_custom_layout_restore_routes(
+    widgets_config: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist last-known non-CUSTOM authored position/monitor routes.
+
+    This is the authoritative restore contract used by the global edit-mode
+    reset action. We only update entries when a widget family is currently in
+    a non-CUSTOM authored state, so CUSTOM saves preserve the last good route.
+    """
+
+    restore_map = load_custom_layout_restore_map(widgets_config)
+    for descriptor in get_layout_edit_runtime_descriptors():
+        if not descriptor.supports_custom_position_slot:
+            continue
+
+        position_section = widgets_config.get(descriptor.get_effective_position_settings_key(), {})
+        if not isinstance(position_section, Mapping):
+            continue
+        current_position = str(position_section.get("position", "") or "").strip()
+        if not current_position or current_position.lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
+            continue
+
+        monitor_section = widgets_config.get(descriptor.get_effective_monitor_settings_key(), {})
+        if not isinstance(monitor_section, Mapping):
+            monitor_section = {}
+        current_monitor = str(monitor_section.get("monitor", "ALL") or "ALL").strip() or "ALL"
+
+        set_custom_layout_restore_entry(
+            restore_map,
+            descriptor.widget_id,
+            position=current_position,
+            monitor=current_monitor,
+        )
+
+    write_custom_layout_restore_map(widgets_config, restore_map)
+    return widgets_config
+
+
+def get_layout_edit_runtime_descriptors() -> tuple[WidgetRuntimeDescriptor, ...]:
+    """Return runtime descriptors that currently participate in CUSTOM edit mode."""
+
+    return tuple(
+        descriptor
+        for descriptor in get_widget_runtime_descriptors()
+        if descriptor.supports_layout_edit_mode
+    )
+
+
+def get_widget_runtime_descriptor_by_attr_name(attr_name: str) -> WidgetRuntimeDescriptor | None:
+    """Return the runtime descriptor bound to a DisplayWidget child attribute."""
+
+    target = str(attr_name or "").strip()
+    if not target:
+        return None
+    for descriptor in get_widget_runtime_descriptors():
+        if descriptor.attr_name == target:
+            return descriptor
+    return None
 
 
 @dataclass(frozen=True)

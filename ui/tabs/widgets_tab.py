@@ -47,6 +47,7 @@ from core.settings.visualizer_mode_registry import (
     get_preset_slider_attr,
 )
 from rendering.widget_descriptors import (
+    CUSTOM_POSITION_OPTION_LABEL,
     apply_widget_section_save_results,
     build_widget_section_buttons,
     build_widget_stack_preview_config,
@@ -59,10 +60,13 @@ from rendering.widget_descriptors import (
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
     get_widget_programmatic_dependency_indices,
+    get_widget_runtime_descriptor,
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
+    has_saved_custom_layout_for_widget,
     load_widget_sections,
     resolve_widget_section_index_from_view_state,
+    sync_custom_layout_restore_routes,
 )
 from ui.tabs.shared_styles import (
     SPINBOX_STYLE,
@@ -207,6 +211,7 @@ class WidgetsTab(QWidget):
         self._loading = True
         try:
             self._load_settings()
+            self._refresh_custom_position_option_state()
         finally:
             self._loading = False
         logger.debug("[WIDGETS_TAB] Reloaded from settings")
@@ -531,6 +536,51 @@ class WidgetsTab(QWidget):
         idx = combo.findData(data)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+
+    @staticmethod
+    def _set_combo_item_enabled(combo: QComboBox, text: str, enabled: bool) -> None:
+        idx = combo.findText(text, Qt.MatchFlag.MatchFixedString)
+        if idx < 0:
+            return
+        model = combo.model()
+        if model is None:
+            return
+        item = model.item(idx) if hasattr(model, "item") else None
+        if item is not None and hasattr(item, "setEnabled"):
+            item.setEnabled(bool(enabled))
+
+    def _iter_custom_position_combo_bindings(self) -> tuple[tuple[str, str, str, str], ...]:
+        return (
+            ("clock", "clock", "clock_position", "Top Right"),
+            ("weather", "weather", "weather_position", "Top Left"),
+            ("media", "media", "media_position", "Bottom Left"),
+            ("reddit", "reddit", "reddit_position", "Bottom Right"),
+            ("reddit2", "reddit2", "reddit2_position", "Top Left"),
+            ("gmail", "gmail", "gmail_position", "Top Left"),
+            ("imgur", "imgur", "imgur_position", "Top Right"),
+        )
+
+    def _refresh_custom_position_option_state(self) -> None:
+        widgets_cfg = self._settings.get("widgets", {}) or {}
+        if not isinstance(widgets_cfg, Mapping):
+            widgets_cfg = {}
+
+        for widget_id, settings_key, combo_attr, fallback in self._iter_custom_position_combo_bindings():
+            combo = getattr(self, combo_attr, None)
+            if combo is None:
+                continue
+            descriptor = get_widget_runtime_descriptor(widget_id)
+            if descriptor is None or not descriptor.supports_custom_position_slot:
+                continue
+            current_section = widgets_cfg.get(settings_key, {})
+            if not isinstance(current_section, Mapping):
+                current_section = {}
+            current_position = str(current_section.get("position", fallback) or fallback)
+            has_custom = has_saved_custom_layout_for_widget(widget_id, widgets_cfg)
+            allow_custom = has_custom or current_position.strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
+            self._set_combo_item_enabled(combo, CUSTOM_POSITION_OPTION_LABEL, allow_custom)
+            if not allow_custom and combo.currentText().strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
+                self._set_combo_text(combo, fallback)
 
     def _resolve_initial_subtab_id(self) -> int:
         """Resolve the first Widgets subtab to build/show."""
@@ -889,6 +939,7 @@ class WidgetsTab(QWidget):
         
         # Update stack status labels after loading settings
         try:
+            self._refresh_custom_position_option_state()
             self._update_stack_status()
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
@@ -1389,6 +1440,7 @@ class WidgetsTab(QWidget):
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
+        sync_custom_layout_restore_routes(existing_widgets)
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
 

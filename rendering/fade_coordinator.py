@@ -127,12 +127,21 @@ class FadeCoordinator:
             self._state = FadeState.COMPLETE
             logger.info("[FADE_COORD] screen=%s all fades complete", self._screen_index)
     
-    def reset(self) -> None:
-        """Reset for next image transition."""
+    def reset(self, *, clear_participants: bool = False) -> None:
+        """Reset coordination state for a new cycle.
+
+        Args:
+            clear_participants: When True, forget the previously registered
+                overlay participants as well. Widget rebuild/setup cycles need
+                this so stale participant names do not block immediate fade
+                starts after the compositor is already ready.
+        """
         self._state = FadeState.IDLE
         self._compositor_ready = False
         self._pending.clear()
         self._completed.clear()
+        if clear_participants:
+            self._participants.clear()
         logger.debug("[FADE_COORD] screen=%s reset", self._screen_index)
     
     def get_state(self) -> FadeState:

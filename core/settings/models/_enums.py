@@ -39,6 +39,7 @@ class WidgetPosition(Enum):
     BOTTOM_LEFT = "bottom_left"
     BOTTOM_CENTER = "bottom_center"
     BOTTOM_RIGHT = "bottom_right"
+    CUSTOM = "custom"
 
 
 def coerce_widget_position(value: Any, fallback: WidgetPosition) -> WidgetPosition:

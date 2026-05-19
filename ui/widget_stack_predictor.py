@@ -289,7 +289,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Clock 1
     clock = settings.get('clock', {})
-    if clock.get('enabled', False):
+    if clock.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
         font_size = clock.get('font_size', 48)
         show_seconds = clock.get('show_seconds', False)
         show_tz = clock.get('show_timezone_label', False)
@@ -306,7 +306,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Clock 2
     clock2 = settings.get('clock2', {})
-    if clock2.get('enabled', False):
+    if clock2.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
         # Clock 2/3 inherit font and display_mode from Clock 1
         font_size = clock.get('font_size', 48)
         display_mode = clock.get('display_mode', 'digital')
@@ -322,7 +322,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Clock 3
     clock3 = settings.get('clock3', {})
-    if clock3.get('enabled', False):
+    if clock3.get('enabled', False) and str(clock.get('position', '')).strip().lower() != "custom":
         font_size = clock.get('font_size', 48)
         display_mode = clock.get('display_mode', 'digital')
         w, h = estimate_clock_size(font_size, display_mode=display_mode)
@@ -337,7 +337,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Weather
     weather = settings.get('weather', {})
-    if weather.get('enabled', False):
+    if weather.get('enabled', False) and str(weather.get('position', '')).strip().lower() != "custom":
         font_size = weather.get('font_size', 18)
         show_forecast = weather.get('show_forecast', False)
         w, h = estimate_weather_size(font_size, show_forecast)
@@ -352,7 +352,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Media
     media = settings.get('media', {})
-    if media.get('enabled', False):
+    if media.get('enabled', False) and str(media.get('position', '')).strip().lower() != "custom":
         font_size = media.get('font_size', 14)
         artwork_size = media.get('artwork_size', 80)
         w, h = estimate_media_size(font_size, artwork_size)
@@ -367,7 +367,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Reddit
     reddit = settings.get('reddit', {})
-    if reddit.get('enabled', False):
+    if reddit.get('enabled', False) and str(reddit.get('position', '')).strip().lower() != "custom":
         font_size = reddit.get('font_size', 18)
         item_count = reddit.get('limit', 10)
         w, h = estimate_reddit_size(font_size, item_count)
@@ -382,7 +382,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     
     # Reddit 2
     reddit2 = settings.get('reddit2', {})
-    if reddit2.get('enabled', False):
+    if reddit2.get('enabled', False) and str(reddit2.get('position', '')).strip().lower() != "custom":
         # Reddit 2 inherits font from Reddit 1
         font_size = reddit.get('font_size', 18)
         item_count = reddit2.get('limit', 4)
@@ -568,6 +568,9 @@ def get_position_status_for_widget(
     Returns:
         Tuple of (can_stack: bool, status_message: str)
     """
+    if str(position or "").strip().lower() == "custom":
+        return (True, "")
+
     estimates = build_widget_estimates(settings)
     
     # Determine the effective screen height for prediction

@@ -116,6 +116,10 @@ class ScreensaverContextMenu(QMenu):
     transition_selected = Signal(str)  # transition name
     visualizer_selected = Signal(str)  # mode_id
     settings_requested = Signal()
+    edit_mode_requested = Signal()
+    save_edit_mode_requested = Signal()
+    cancel_edit_mode_requested = Signal()
+    reset_edit_mode_requested = Signal()
     dimming_toggled = Signal(bool)  # new state
     interaction_mode_toggled = Signal(bool)  # new state
     always_on_top_toggled = Signal(bool)  # new state (MC mode only)
@@ -209,7 +213,19 @@ class ScreensaverContextMenu(QMenu):
         # Settings - monochrome gear
         settings_action = self.addAction("⚙  Settings")
         settings_action.triggered.connect(self.settings_requested.emit)
-        
+
+        self._edit_mode_action = self.addAction("✥  Edit Widget Layout")
+        self._edit_mode_action.triggered.connect(self.edit_mode_requested.emit)
+
+        self._save_edit_mode_action = self.addAction("✓  Save Widget Layout")
+        self._save_edit_mode_action.triggered.connect(self.save_edit_mode_requested.emit)
+
+        self._cancel_edit_mode_action = self.addAction("↺  Cancel Widget Layout")
+        self._cancel_edit_mode_action.triggered.connect(self.cancel_edit_mode_requested.emit)
+
+        self._reset_edit_mode_action = self.addAction("⟲  Reset To Saved Layout")
+        self._reset_edit_mode_action.triggered.connect(self.reset_edit_mode_requested.emit)
+
         self.addSeparator()
         
         # Background Dimming toggle - monochrome circle
@@ -308,6 +324,14 @@ class ScreensaverContextMenu(QMenu):
         self._always_on_top = on_top
         if self._on_top_action is not None:
             self._on_top_action.setChecked(on_top)
+
+    def update_edit_mode_state(self, active: bool) -> None:
+        """Update edit-mode actions to reflect the active session state."""
+
+        self._edit_mode_action.setVisible(not active)
+        self._save_edit_mode_action.setVisible(active)
+        self._cancel_edit_mode_action.setVisible(active)
+        self._reset_edit_mode_action.setVisible(active)
     
     def _populate_visualizer_submenu(self) -> None:
         """Build visualizer submenu entries from active mode descriptors."""

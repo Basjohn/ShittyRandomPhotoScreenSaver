@@ -44,6 +44,8 @@ class GmailPosition(Enum):
             logger.warning("[GMAIL] Unknown position '%s', defaulting to TOP_LEFT", value)
             return cls.TOP_LEFT
         normalized = value.lower().replace(" ", "_")
+        if normalized == "custom":
+            return cls.TOP_LEFT
         try:
             return cls(normalized)
         except ValueError:

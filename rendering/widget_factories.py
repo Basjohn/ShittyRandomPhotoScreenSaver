@@ -138,6 +138,7 @@ class ClockWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_LEFT: ClockPosition.BOTTOM_LEFT,
                 WidgetPosition.BOTTOM_CENTER: ClockPosition.BOTTOM_CENTER,
                 WidgetPosition.BOTTOM_RIGHT: ClockPosition.BOTTOM_RIGHT,
+                WidgetPosition.CUSTOM: ClockPosition.TOP_RIGHT,
             }
             
             default_pos = config.get("_default_position", "Top Right")
@@ -279,6 +280,7 @@ class WeatherWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_LEFT: WeatherPosition.BOTTOM_LEFT,
                 WidgetPosition.BOTTOM_CENTER: WeatherPosition.BOTTOM_CENTER,
                 WidgetPosition.BOTTOM_RIGHT: WeatherPosition.BOTTOM_RIGHT,
+                WidgetPosition.CUSTOM: WeatherPosition.TOP_LEFT,
             }
             
             widget_pos = coerce_widget_position(
@@ -424,6 +426,7 @@ class MediaWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_LEFT: MediaPosition.BOTTOM_LEFT,
                 WidgetPosition.BOTTOM_CENTER: MediaPosition.BOTTOM_CENTER,
                 WidgetPosition.BOTTOM_RIGHT: MediaPosition.BOTTOM_RIGHT,
+                WidgetPosition.CUSTOM: MediaPosition.BOTTOM_LEFT,
             }
             
             widget_pos = coerce_widget_position(model.position, WidgetPosition.BOTTOM_LEFT)
@@ -539,6 +542,7 @@ class RedditWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_LEFT: RedditPosition.BOTTOM_LEFT,
                 WidgetPosition.BOTTOM_CENTER: RedditPosition.BOTTOM_CENTER,
                 WidgetPosition.BOTTOM_RIGHT: RedditPosition.BOTTOM_RIGHT,
+                WidgetPosition.CUSTOM: RedditPosition.TOP_RIGHT,
             }
             
             widget_pos = coerce_widget_position(model.position, WidgetPosition.TOP_RIGHT)
@@ -765,6 +769,7 @@ class ImgurWidgetFactory(WidgetFactory):
                 WidgetPosition.BOTTOM_LEFT: ImgurPosition.BOTTOM_LEFT,
                 WidgetPosition.BOTTOM_CENTER: ImgurPosition.BOTTOM_CENTER,
                 WidgetPosition.BOTTOM_RIGHT: ImgurPosition.BOTTOM_RIGHT,
+                WidgetPosition.CUSTOM: ImgurPosition.TOP_RIGHT,
             }
             
             widget_pos = coerce_widget_position(
@@ -918,6 +923,7 @@ class GmailWidgetFactory(WidgetFactory):
                 'bottom_left': GmailPosition.BOTTOM_LEFT,
                 'bottom_center': GmailPosition.BOTTOM_LEFT,
                 'bottom_right': GmailPosition.BOTTOM_RIGHT,
+                'custom': GmailPosition.TOP_LEFT,
             }
             position = corner_map.get(raw_pos, GmailPosition.TOP_LEFT)
 

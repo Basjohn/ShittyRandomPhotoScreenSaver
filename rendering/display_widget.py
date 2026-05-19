@@ -53,6 +53,7 @@ from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
 from rendering.image_presenter import ImagePresenter
 from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
+from rendering.custom_layout_manager import CustomLayoutManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
@@ -273,7 +274,8 @@ class DisplayWidget(QWidget):
         self._pending_reddit_url_prequeued: bool = False
         self._pending_activation_refresh: bool = False
         self._last_deactivate_ts: float = 0.0
-        
+        self._custom_layout_edit_active: bool = False
+
         # Context menu for right-click actions
         self._context_menu: Optional[ScreensaverContextMenu] = None
         self._context_menu_active: bool = False
@@ -353,9 +355,6 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to create ImagePresenter: %s", e, exc_info=True)
         
-        # MultiMonitorCoordinator for centralized cross-display state (Phase 5 refactor)
-        self._coordinator: MultiMonitorCoordinator = get_coordinator()
-
         # Best-effort screen binding for tests/dev windows that call `show()`
         # directly instead of `show_on_screen()`. This allows Ctrl-halo logic
         # (and MultiMonitorCoordinator registration) to function in unit tests.
@@ -368,6 +367,10 @@ class DisplayWidget(QWidget):
                     self._screen = QGuiApplication.primaryScreen()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to bind screen: %s", e)
+
+        # MultiMonitorCoordinator for centralized cross-display state (Phase 5 refactor)
+        self._coordinator: MultiMonitorCoordinator = get_coordinator()
+        self._custom_layout_manager = CustomLayoutManager(self)
 
         # Setup widget: frameless, always-on-top display window.
         # Standard builds keep SplashScreen to ensure WM_APPCOMMAND messages are
@@ -691,6 +694,40 @@ class DisplayWidget(QWidget):
         from rendering.display_setup import setup_widgets
         setup_widgets(self)
 
+    def _start_custom_layout_edit_mode(self) -> bool:
+        try:
+            return bool(self._custom_layout_manager.start_session())
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to start edit mode", exc_info=True)
+            return False
+
+    def _save_custom_layout_edit_mode(self) -> bool:
+        try:
+            return bool(self._custom_layout_manager.save_session())
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to save edit mode", exc_info=True)
+            return False
+
+    def _cancel_custom_layout_edit_mode(self) -> bool:
+        try:
+            return bool(self._custom_layout_manager.cancel_session())
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to cancel edit mode", exc_info=True)
+            return False
+
+    def _reset_custom_layout_edit_mode(self) -> bool:
+        try:
+            return bool(self._custom_layout_manager.reset_to_authored_layout())
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to reset edit mode to authored layout", exc_info=True)
+            return False
+
+    def _apply_saved_custom_layouts(self) -> None:
+        try:
+            self._custom_layout_manager.apply_saved_layouts_to_display()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts", exc_info=True)
+
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on the WidgetManager and TransitionFactory.
         
@@ -804,6 +841,13 @@ class DisplayWidget(QWidget):
     def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap,
                             image_path: str = "") -> None:
         """Delegates to rendering.display_image_ops."""
+        if self._custom_layout_manager.should_defer_runtime_updates():
+            self._custom_layout_manager.defer_processed_image(
+                processed_pixmap,
+                original_pixmap,
+                image_path,
+            )
+            return
         from rendering.display_image_ops import set_processed_image
         set_processed_image(self, processed_pixmap, original_pixmap, image_path)
 
@@ -933,6 +977,10 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
             self._position_spotify_volume()
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        try:
+            self._apply_saved_custom_layouts()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
@@ -1281,6 +1329,11 @@ class DisplayWidget(QWidget):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         try:
+            if self._custom_layout_edit_active:
+                self._cancel_custom_layout_edit_mode()
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        try:
             self._coordinator.release_focus(self)
             self._coordinator.uninstall_event_filter(self)
         except Exception as e:
@@ -1305,6 +1358,21 @@ class DisplayWidget(QWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
         key = event.key()
+
+        if self._custom_layout_edit_active:
+            if key in (Qt.Key.Key_Escape,):
+                self._cancel_custom_layout_edit_mode()
+                event.accept()
+                return
+            if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                self._save_custom_layout_edit_mode()
+                event.accept()
+                return
+            if key == Qt.Key.Key_Control:
+                event.accept()
+                return
+            event.accept()
+            return
 
         # Ctrl key: delegate halo management to InputHandler
         if key == Qt.Key.Key_Control:
@@ -1334,6 +1402,9 @@ class DisplayWidget(QWidget):
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()
+        if self._custom_layout_edit_active:
+            event.accept()
+            return
         if key == Qt.Key.Key_Control:
             # Delegate Ctrl release to InputHandler
             if self._input_handler is not None:
@@ -1349,16 +1420,27 @@ class DisplayWidget(QWidget):
     
     def mousePressEvent(self, event) -> None:
         """Delegates to rendering.display_input."""
+        if self._custom_layout_edit_active:
+            if event.button() == Qt.MouseButton.RightButton:
+                self._show_context_menu(event.globalPosition().toPoint())
+            event.accept()
+            return
         from rendering.display_input import handle_mousePressEvent
         handle_mousePressEvent(self, event)
 
     def mouseMoveEvent(self, event) -> None:
         """Delegates to rendering.display_input."""
+        if self._custom_layout_edit_active:
+            event.accept()
+            return
         from rendering.display_input import handle_mouseMoveEvent
         handle_mouseMoveEvent(self, event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
+        if self._custom_layout_edit_active:
+            event.accept()
+            return
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_interaction_mode_enabled() or ctrl_mode_active:
             if self._input_handler is not None:
@@ -1369,6 +1451,9 @@ class DisplayWidget(QWidget):
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         """Route wheel scrolling to Spotify volume widget in interaction mode."""
+        if self._custom_layout_edit_active:
+            event.accept()
+            return
         ctrl_mode_active = self._ctrl_held or self._coordinator.ctrl_held
         if self._is_interaction_mode_enabled() or ctrl_mode_active:
             # Delegate to InputHandler
@@ -1410,6 +1495,18 @@ class DisplayWidget(QWidget):
         """Delegates to rendering.display_context_menu."""
         from rendering.display_context_menu import on_context_dimming_toggled
         on_context_dimming_toggled(self, enabled)
+
+    def _on_context_edit_mode_requested(self) -> None:
+        self._start_custom_layout_edit_mode()
+
+    def _on_context_save_edit_mode_requested(self) -> None:
+        self._save_custom_layout_edit_mode()
+
+    def _on_context_cancel_edit_mode_requested(self) -> None:
+        self._cancel_custom_layout_edit_mode()
+
+    def _on_context_reset_edit_mode_requested(self) -> None:
+        self._reset_custom_layout_edit_mode()
 
     def _on_context_interaction_mode_toggled(self, enabled: bool) -> None:
         """Delegates to rendering.display_context_menu."""

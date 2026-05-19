@@ -7,7 +7,7 @@ Tests cover:
 - Position update with visual padding applied
 """
 import pytest
-from PySide6.QtCore import QPoint, QSize
+from PySide6.QtCore import QPoint, QRect, QSize
 from PySide6.QtWidgets import QWidget
 
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
@@ -41,6 +41,20 @@ class TestVisualPaddingSetterGetter:
         
         padding = widget.get_visual_padding()
         assert padding == (0, 0, 0, 0)
+
+    def test_custom_layout_rect_overrides_anchor_positioning(self, qtbot):
+        parent = QWidget()
+        parent.resize(800, 600)
+        qtbot.addWidget(parent)
+
+        widget = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        qtbot.addWidget(widget)
+        widget.resize(100, 50)
+
+        widget._custom_layout_local_rect = QRect(123, 234, 160, 90)
+        widget._update_position()
+
+        assert widget.geometry() == QRect(123, 234, 160, 90)
     
     def test_set_visual_padding(self, qtbot):
         """Test setting visual padding."""

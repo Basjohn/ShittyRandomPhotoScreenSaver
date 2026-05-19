@@ -569,6 +569,69 @@ class TestStartupCoordination:
         assert manager._spotify_overlay_prewarm_attempted is False
         assert manager._spotify_overlay_prewarmed is False
 
+    def test_reset_fade_coordination_reprimes_ready_compositor_state(self):
+        from rendering.widget_manager import WidgetManager
+        from rendering.fade_coordinator import FadeState
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._compositor_ready = True
+
+        manager.reset_fade_coordination()
+
+        assert parent._overlay_fade_started is True
+        assert manager._fade_coordinator.get_state() == FadeState.READY
+
+    def test_reset_fade_coordination_clears_stale_fade_participants(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._fade_coordinator.register_participant("clock")
+        manager._fade_coordinator.register_participant("weather")
+
+        manager.reset_fade_coordination()
+
+        desc = manager._fade_coordinator.describe()
+        assert desc["participants"] == []
+
+    def test_apply_widget_stacking_skips_widgets_in_custom_position_mode(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str):
+                self._position = SimpleNamespace(name=position_name)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self.stack_offsets.append(QPoint(offset))
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 100)
+
+            def height(self):
+                return 100
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        clock = _StackWidget("TOP_RIGHT")
+        weather = _StackWidget("TOP_RIGHT")
+
+        manager.apply_widget_stacking(
+            [
+                (clock, "clock_widget"),
+                (weather, "weather_widget"),
+            ],
+            {
+                "clock": {"position": "Custom"},
+                "weather": {"position": "Top Right"},
+            },
+        )
+
+        assert clock.stack_offsets[-1] == QPoint(0, 0)
+        assert weather.stack_offsets[-1] == QPoint(0, 0)
+
     def test_spotify_overlay_prewarm_can_retry_after_early_unavailable_widget(self):
         from rendering.widget_manager import WidgetManager
 
