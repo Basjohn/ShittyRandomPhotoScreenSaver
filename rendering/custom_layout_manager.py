@@ -5,11 +5,13 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from PySide6.QtCore import QPoint, QRect, QSize, QTimer
-from PySide6.QtGui import QCursor, QGuiApplication, QPixmap
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap
 
 from core.logging.logger import get_logger
 from rendering.custom_layout_contract import (
     CUSTOM_LAYOUT_GRID_STEP_PX,
+    CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
+    CUSTOM_LAYOUT_SNAP_GUTTER_PX,
     canonicalize_screen_layout_bucket,
     CustomLayoutEntry,
     choose_best_screen_for_global_rect,
@@ -25,10 +27,9 @@ from rendering.custom_layout_contract import (
     load_custom_layout_restore_map,
     normalize_local_rect,
     remove_screen_layout_entry,
+    resolve_snap_local_rect_for_edit,
     set_screen_layout_entry,
     should_transfer_rect_to_screen,
-    snap_local_rect_for_edit,
-    snap_rect_to_grid,
     write_custom_layout_map,
 )
 from rendering.widget_descriptors import (
@@ -38,6 +39,7 @@ from rendering.widget_descriptors import (
     sync_custom_layout_restore_routes,
 )
 from rendering.multi_monitor_coordinator import get_coordinator
+from widgets.edit_grid_overlay_widget import EditGridOverlayWidget
 from widgets.edit_shell_widget import EditShellWidget
 
 logger = get_logger(__name__)
@@ -56,6 +58,7 @@ class _ShellState:
     was_visible: bool
     source_screen: Any
     source_screen_signature: str
+    source_monitor_value: str
     current_screen: Any
     current_screen_signature: str
     current_monitor_value: str
@@ -72,8 +75,9 @@ class CustomLayoutManager:
         self._screen_signature = get_screen_signature(self._screen)
         self._shell_states: dict[str, _ShellState] = {}
         self._special_hidden: list[tuple[Any, bool]] = []
-        self._paused_visualizer: tuple[Any, bool] | None = None
+        self._paused_visualizer: tuple[Any, bool, Any | None, bool] | None = None
         self._active = False
+        self._grid_overlay: EditGridOverlayWidget | None = None
         self._deferred_processed_image: tuple[QPixmap, QPixmap, str] | None = None
         self._suppress_live_feedback_widget_ids: set[str] = set()
 
@@ -308,15 +312,20 @@ class CustomLayoutManager:
 
         self._active = True
         setattr(self._display, "_custom_layout_edit_active", True)
-        self._hide_special_widgets()
+        target_widget_ids = {descriptor.widget_id for descriptor, _widget in targets}
+        self._hide_special_widgets(target_widget_ids)
+        self._show_grid_overlay()
 
         for descriptor, widget in targets:
             state = self._create_shell_state(descriptor, widget)
             if state is None:
                 continue
+            self._set_shell_session_flag(widget, True)
             self._shell_states[descriptor.widget_id] = state
             state.shell.show()
             state.shell.raise_()
+            if descriptor.widget_id == "spotify_visualizer":
+                self._pause_visualizer_for_edit_mode(widget)
             if state.was_visible:
                 try:
                     widget.hide()
@@ -375,7 +384,13 @@ class CustomLayoutManager:
             global_rect.width(),
             global_rect.height(),
         )
-        local_rect = clamp_local_rect_to_bounds(local_rect, target_geom.size())
+        if not state.descriptor.supports_layout_resize_edit:
+            local_rect.setSize(state.baseline_global_rect.size())
+        local_rect = clamp_local_rect_to_bounds(
+            local_rect,
+            target_geom.size(),
+            min_size=self._min_size_for_state(state),
+        )
         entry = CustomLayoutEntry(
             widget_id=widget_id,
             rect=normalize_local_rect(local_rect, target_geom.size()),
@@ -447,6 +462,38 @@ class CustomLayoutManager:
                 instance._apply_saved_custom_layouts()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved custom layouts across instances", exc_info=True)
+
+    def _show_grid_overlay(self) -> None:
+        if self._screen is None:
+            self._sync_display_screen_binding()
+        if self._screen is None:
+            return
+        try:
+            global_rect = QRect(self._screen.geometry())
+            overlay = EditGridOverlayWidget(
+                global_rect=global_rect,
+                grid_step_px=CUSTOM_LAYOUT_GRID_STEP_PX,
+                gutter_px=CUSTOM_LAYOUT_SNAP_GUTTER_PX,
+            )
+            overlay.show()
+            self._grid_overlay = overlay
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to create edit grid overlay", exc_info=True)
+            self._grid_overlay = None
+
+    def _destroy_grid_overlay(self) -> None:
+        overlay = self._grid_overlay
+        self._grid_overlay = None
+        if overlay is None:
+            return
+        try:
+            overlay.hide()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to hide edit grid overlay", exc_info=True)
+        try:
+            overlay.deleteLater()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to delete edit grid overlay", exc_info=True)
 
     def _teardown_display_widgets(self, instance: Any) -> None:
         widget_manager = getattr(instance, "_widget_manager", None)
@@ -557,12 +604,14 @@ class CustomLayoutManager:
                 state.shell.deleteLater()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to destroy edit shell", exc_info=True)
+            self._set_shell_session_flag(state.widget, False)
             if restore_live_visibility and state.was_visible:
                 try:
                     state.widget.show()
                 except Exception:
                     logger.debug("[CUSTOM_LAYOUT] Failed to restore %s visibility", state.descriptor.widget_id, exc_info=True)
         self._shell_states.clear()
+        self._destroy_grid_overlay()
 
         if restore_special_widgets:
             self._restore_special_widgets()
@@ -587,8 +636,8 @@ class CustomLayoutManager:
             targets.append((descriptor, widget))
         return targets
 
-    def _hide_special_widgets(self) -> None:
-        for attr_name in ("spotify_volume_widget", "mute_button_widget"):
+    def _hide_special_widgets(self, target_widget_ids: set[str]) -> None:
+        for attr_name in ("mute_button_widget",):
             widget = getattr(self._display, attr_name, None)
             if widget is None:
                 continue
@@ -600,16 +649,29 @@ class CustomLayoutManager:
                 except Exception:
                     logger.debug("[CUSTOM_LAYOUT] Failed to hide %s", attr_name, exc_info=True)
 
-        vis = getattr(self._display, "spotify_visualizer_widget", None)
-        if vis is not None:
-            was_visible = bool(getattr(vis, "isVisible", lambda: False)())
-            self._paused_visualizer = (vis, was_visible)
-            try:
-                if was_visible and hasattr(vis, "stop"):
-                    vis.stop()
-                vis.hide()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
+        if "spotify_visualizer" not in target_widget_ids:
+            vis = getattr(self._display, "spotify_visualizer_widget", None)
+            if vis is not None:
+                self._pause_visualizer_for_edit_mode(vis)
+
+    def _pause_visualizer_for_edit_mode(self, vis: Any) -> None:
+        if self._paused_visualizer is not None:
+            return
+        try:
+            overlay = getattr(self._display, "_spotify_bars_overlay", None)
+        except Exception:
+            overlay = None
+        was_visible = bool(getattr(vis, "isVisible", lambda: False)())
+        overlay_visible = bool(getattr(overlay, "isVisible", lambda: False)()) if overlay is not None else False
+        self._paused_visualizer = (vis, was_visible, overlay, overlay_visible)
+        try:
+            if was_visible and hasattr(vis, "stop"):
+                vis.stop()
+            vis.hide()
+            if overlay is not None:
+                overlay.hide()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to pause visualizer for edit mode", exc_info=True)
 
     def _restore_special_widgets(self) -> None:
         for widget, was_visible in self._special_hidden:
@@ -622,12 +684,19 @@ class CustomLayoutManager:
         self._special_hidden.clear()
 
         if self._paused_visualizer is not None:
-            vis, was_visible = self._paused_visualizer
+            vis, was_visible, overlay, overlay_visible = self._paused_visualizer
             try:
                 if was_visible and hasattr(vis, "start"):
                     vis.start()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to resume visualizer after edit mode", exc_info=True)
+            try:
+                if was_visible:
+                    vis.show()
+                if overlay is not None and overlay_visible:
+                    overlay.show()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to restore visualizer visibility after edit mode", exc_info=True)
             self._paused_visualizer = None
 
     def _create_shell_state(
@@ -637,15 +706,18 @@ class CustomLayoutManager:
     ) -> _ShellState | None:
         screen, screen_signature = self._sync_display_screen_binding()
         try:
-            snapshot = widget.grab()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to snapshot %s", descriptor.widget_id, exc_info=True)
-            return None
-
-        try:
             local_rect = widget.geometry()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to read geometry for %s", descriptor.widget_id, exc_info=True)
+            return None
+
+        try:
+            if descriptor.widget_id == "spotify_visualizer":
+                snapshot = self._capture_visualizer_shell_snapshot(widget, local_rect)
+            else:
+                snapshot = widget.grab()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to snapshot %s", descriptor.widget_id, exc_info=True)
             return None
 
         global_top_left = self._display.mapToGlobal(local_rect.topLeft())
@@ -668,8 +740,10 @@ class CustomLayoutManager:
         shell.drag_finished.connect(self._on_shell_drag_finished)
         shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
         shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
+        shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
         shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
-        shell.set_reset_enabled(False)
+        shell.set_reset_size_enabled(False)
+        shell.set_reset_position_enabled(False)
         return _ShellState(
             descriptor=descriptor,
             widget=widget,
@@ -682,10 +756,48 @@ class CustomLayoutManager:
             was_visible=bool(getattr(widget, "isVisible", lambda: False)()),
             source_screen=screen,
             source_screen_signature=screen_signature,
+            source_monitor_value=current_monitor_value,
             current_screen=screen,
             current_screen_signature=screen_signature,
             current_monitor_value=current_monitor_value,
         )
+
+    def _capture_visualizer_shell_snapshot(self, widget: Any, local_rect: QRect) -> QPixmap:
+        snapshot = widget.grab()
+        if snapshot.isNull():
+            snapshot = QPixmap(local_rect.size())
+            snapshot.fill()
+
+        overlay = getattr(self._display, "_spotify_bars_overlay", None)
+        if overlay is None:
+            return snapshot
+
+        try:
+            overlay_geom = overlay.geometry()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to read visualizer overlay geometry", exc_info=True)
+            return snapshot
+
+        if overlay_geom.width() <= 0 or overlay_geom.height() <= 0:
+            return snapshot
+
+        try:
+            overlay_image = overlay.grabFramebuffer()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to capture visualizer overlay framebuffer", exc_info=True)
+            return snapshot
+
+        if overlay_image.isNull():
+            return snapshot
+
+        painter = QPainter(snapshot)
+        try:
+            overlay_pixmap = QPixmap.fromImage(overlay_image)
+            overlay_offset = overlay_geom.topLeft() - local_rect.topLeft()
+            painter.drawPixmap(overlay_offset, overlay_pixmap)
+        finally:
+            painter.end()
+        return snapshot
 
     def _read_monitor_value_for_widget(self, descriptor: WidgetRuntimeDescriptor) -> str:
         settings_manager = getattr(self._display, "settings_manager", None)
@@ -754,6 +866,7 @@ class CustomLayoutManager:
             cursor_global=self._get_cursor_global_pos(),
         )
         state.current_global_rect = QRect(resolved)
+        self._update_shell_reset_affordances(state)
         if resolved != global_rect:
             self._set_shell_geometry_silently(state, resolved)
 
@@ -768,6 +881,7 @@ class CustomLayoutManager:
             cursor_global=cursor_global,
         )
         state.current_global_rect = QRect(committed)
+        self._update_shell_reset_affordances(state)
         self._set_shell_geometry_silently(state, committed)
 
     def _on_shell_resize_wheel_requested(self, widget_id: str, angle_delta_y: int) -> None:
@@ -786,7 +900,7 @@ class CustomLayoutManager:
             state.baseline_size_payload,
             next_scale,
         )
-        state.shell.set_reset_enabled(abs(next_scale - 1.0) > 1e-6)
+        self._update_shell_reset_affordances(state)
         next_rect = self._scaled_rect_from_baseline(state)
         target_screen = state.current_screen or self._screen
         if target_screen is not None:
@@ -800,7 +914,7 @@ class CustomLayoutManager:
             return
         state.resize_scale = 1.0
         state.current_size_payload = dict(state.baseline_size_payload)
-        state.shell.set_reset_enabled(False)
+        self._update_shell_reset_affordances(state)
         current = QRect(state.current_global_rect)
         baseline = QRect(state.baseline_global_rect)
         center = current.center()
@@ -811,6 +925,24 @@ class CustomLayoutManager:
         state.current_global_rect = QRect(baseline)
         self._set_shell_geometry_silently(state, baseline)
 
+    def _on_shell_reset_position_requested(self, widget_id: str) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return
+        source_screen = state.source_screen or self._screen
+        state.current_screen = source_screen
+        state.current_screen_signature = state.source_screen_signature
+        state.current_monitor_value = state.source_monitor_value
+        baseline_top_left = state.baseline_global_rect.topLeft()
+        current_rect = QRect(state.current_global_rect)
+        reset_rect = QRect(baseline_top_left, current_rect.size())
+        if source_screen is not None:
+            reset_rect = clamp_global_rect_to_screen(reset_rect, source_screen)
+        state.current_global_rect = QRect(reset_rect)
+        state.shell.set_transfer_blocked(False, "")
+        self._set_shell_geometry_silently(state, reset_rect)
+        self._update_shell_reset_affordances(state)
+
     def _set_shell_geometry_silently(self, state: _ShellState, global_rect: QRect) -> None:
         widget_id = state.descriptor.widget_id
         self._suppress_live_feedback_widget_ids.add(widget_id)
@@ -818,6 +950,16 @@ class CustomLayoutManager:
             state.shell.set_shell_geometry(global_rect)
         finally:
             self._suppress_live_feedback_widget_ids.discard(widget_id)
+        self._update_shell_reset_affordances(state)
+
+    def _update_shell_reset_affordances(self, state: _ShellState) -> None:
+        size_changed = abs(state.resize_scale - 1.0) > 1e-6
+        position_changed = (
+            state.current_screen_signature != state.source_screen_signature
+            or state.current_global_rect.topLeft() != state.baseline_global_rect.topLeft()
+        )
+        state.shell.set_reset_size_enabled(size_changed)
+        state.shell.set_reset_position_enabled(position_changed)
 
     def _collect_peer_local_rects(self, exclude_widget_id: str, screen: Any) -> list[QRect]:
         if screen is None:
@@ -873,24 +1015,41 @@ class CustomLayoutManager:
             global_rect.width(),
             global_rect.height(),
         )
-        local_rect = clamp_local_rect_to_bounds(local_rect, geom.size())
-        if snap_to_grid:
-            local_rect = snap_rect_to_grid(local_rect, step_px=CUSTOM_LAYOUT_GRID_STEP_PX)
-            local_rect = clamp_local_rect_to_bounds(local_rect, geom.size())
-        local_rect = snap_local_rect_for_edit(
+        local_rect = clamp_local_rect_to_bounds(
+            local_rect,
+            geom.size(),
+            min_size=self._min_size_for_state(state),
+        )
+        snap_resolution = resolve_snap_local_rect_for_edit(
             local_rect,
             geom.size(),
             peer_rects=self._collect_peer_local_rects(state.descriptor.widget_id, target_screen),
             threshold_px=8 if not snap_to_grid else 24,
+            min_size=self._min_size_for_state(state),
         )
+        local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
+        self._update_grid_guides(target_screen, snap_resolution)
         return QRect(
             geom.x() + local_rect.x(),
             geom.y() + local_rect.y(),
             local_rect.width(),
             local_rect.height(),
         )
+
+    def _update_grid_guides(self, target_screen: Any, snap_resolution) -> None:
+        for manager in CustomLayoutManager._active_managers:
+            overlay = getattr(manager, "_grid_overlay", None)
+            if overlay is None:
+                continue
+            if getattr(manager, "_screen", None) is target_screen:
+                overlay.set_active_guides(
+                    vertical=[(guide.position, guide.kind) for guide in snap_resolution.vertical_guides],
+                    horizontal=[(guide.position, guide.kind) for guide in snap_resolution.horizontal_guides],
+                )
+            else:
+                overlay.set_active_guides(vertical=(), horizontal=())
 
     def _resolve_target_screen_for_rect(
         self,
@@ -1070,7 +1229,16 @@ class CustomLayoutManager:
             return
         self._apply_size_payload(descriptor, widget, entry.size_payload)
         local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
-        local_rect = clamp_local_rect_to_bounds(local_rect, self._screen.geometry().size())
+        if not descriptor.supports_layout_resize_edit:
+            try:
+                local_rect.setSize(widget.geometry().size())
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to reuse authored size for move-only widget", exc_info=True)
+        local_rect = clamp_local_rect_to_bounds(
+            local_rect,
+            self._screen.geometry().size(),
+            min_size=local_rect.size(),
+        )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
         try:
             set_stack_offset = getattr(widget, "set_stack_offset", None)
@@ -1094,3 +1262,17 @@ class CustomLayoutManager:
                 tz_label.raise_()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to finalize widget layering after custom apply", exc_info=True)
+
+    def _set_shell_session_flag(self, widget: Any, active: bool) -> None:
+        try:
+            setattr(widget, "_custom_layout_shell_active", bool(active))
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to set shell-active flag", exc_info=True)
+
+    def _min_size_for_state(self, state: _ShellState) -> QSize:
+        if state.descriptor.supports_layout_resize_edit:
+            return CUSTOM_LAYOUT_MIN_WIDGET_SIZE
+        return QSize(
+            max(1, state.baseline_global_rect.width()),
+            max(1, state.baseline_global_rect.height()),
+        )

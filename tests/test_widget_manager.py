@@ -917,6 +917,84 @@ class TestSettingsRouting:
         assert vis._blob_width == pytest.approx(0.5)
         assert vis._geometry == (175, 400, 150, 280)
 
+    def test_position_spotify_visualizer_honors_custom_rect_when_media_position_is_custom(self):
+        from PySide6.QtCore import QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeVisualizer:
+            def __init__(self):
+                self._custom_layout_local_rect = QRect(333, 444, 555, 222)
+                self._geometry = None
+                self.raised = False
+
+            def setGeometry(self, *args):
+                if len(args) == 1 and isinstance(args[0], QRect):
+                    rect = args[0]
+                    self._geometry = (rect.x(), rect.y(), rect.width(), rect.height())
+                else:
+                    x, y, w, h = args
+                    self._geometry = (x, y, w, h)
+
+            def raise_(self):
+                self.raised = True
+
+        settings = MagicMock()
+        settings.get.return_value = {"media": {"position": "Custom"}}
+        manager = WidgetManager(MagicMock())
+        manager._settings_manager = settings
+
+        vis = _FakeVisualizer()
+
+        manager.position_spotify_visualizer(vis, None, 1920, 1080)
+
+        assert vis._geometry == (333, 444, 555, 222)
+        assert vis.raised is True
+
+    def test_position_spotify_volume_honors_custom_rect_when_media_position_is_custom(self):
+        from PySide6.QtCore import QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeVolume:
+            def __init__(self):
+                self._custom_layout_local_rect = QRect(111, 222, 144, 320)
+                self._geometry = None
+                self.raised = False
+
+            def setGeometry(self, *args):
+                if len(args) == 1 and isinstance(args[0], QRect):
+                    rect = args[0]
+                    self._geometry = (rect.x(), rect.y(), rect.width(), rect.height())
+                else:
+                    x, y, w, h = args
+                    self._geometry = (x, y, w, h)
+
+            def isVisible(self):
+                return True
+
+            def raise_(self):
+                self.raised = True
+
+            def minimumWidth(self):
+                return 32
+
+            def minimumHeight(self):
+                return 180
+
+            def height(self):
+                return 180
+
+        settings = MagicMock()
+        settings.get.return_value = {"media": {"position": "Custom"}}
+        manager = WidgetManager(MagicMock())
+        manager._settings_manager = settings
+
+        volume = _FakeVolume()
+
+        manager.position_spotify_volume(volume, None, 1920, 1080)
+
+        assert volume._geometry == (111, 222, 32, 180)
+        assert volume.raised is True
+
 
 class TestPositioning:
     """Tests for widget positioning."""

@@ -13,10 +13,10 @@ from rendering.custom_layout_contract import (
     get_screen_layout_entries_for_screen,
     load_custom_layout_map,
     normalize_local_rect,
+    resolve_snap_local_rect_for_edit,
     should_transfer_rect_to_screen,
     snap_local_rect_for_edit,
     set_screen_layout_entry,
-    snap_rect_to_grid,
 )
 
 
@@ -51,26 +51,26 @@ def test_normalize_and_clamp_rect_helpers_are_display_local():
     normalized = normalize_local_rect(rect, display_size)
     assert normalized == NormalizedRect(0.1, 0.16, 0.22, 0.28)
 
-    snapped = snap_rect_to_grid(QRect(17, 25, 119, 81), step_px=12)
-    assert snapped == QRect(12, 24, 120, 84)
+    snapped = resolve_snap_local_rect_for_edit(QRect(17, 25, 119, 81), display_size)
+    assert snapped.rect == QRect(12, 24, 119, 81)
 
     clamped = clamp_local_rect_to_bounds(QRect(950, 470, 120, 80), display_size)
     assert clamped.right() <= display_size.width() - 1
     assert clamped.bottom() <= display_size.height() - 1
 
 
-def test_snap_local_rect_for_edit_snaps_to_display_edges_and_gutter():
+def test_snap_local_rect_for_edit_snaps_to_display_edges_and_grid():
     display_size = QSize(1000, 600)
 
     edge_rect = snap_local_rect_for_edit(QRect(8, 9, 180, 90), display_size)
-    assert edge_rect.topLeft() == QPoint(16, 16)
+    assert edge_rect.topLeft() == QPoint(12, 12)
 
     far_edge_rect = snap_local_rect_for_edit(QRect(813, 507, 180, 90), display_size)
-    assert far_edge_rect.left() == 804
-    assert far_edge_rect.top() == 494
+    assert far_edge_rect.left() == 816
+    assert far_edge_rect.top() == 504
 
 
-def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_gutter():
+def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_grid():
     display_size = QSize(1000, 600)
     peer = QRect(300, 200, 180, 90)
 
@@ -79,16 +79,49 @@ def test_snap_local_rect_for_edit_snaps_to_peer_edges_and_gutter():
         display_size,
         peer_rects=[peer],
     )
-    assert flush_right.left() == peer.right() + 1 + 16
-    assert flush_right.top() == peer.bottom() - flush_right.height() - 16 + 1
+    assert flush_right.left() == 480
+    assert flush_right.top() == 204
 
-    gutter_left = snap_local_rect_for_edit(
+    flush_left = snap_local_rect_for_edit(
         QRect(148, 284, 140, 70),
         display_size,
         peer_rects=[peer],
     )
-    assert gutter_left.left() == peer.x() - gutter_left.width() - 16
-    assert gutter_left.top() == peer.bottom() + 1 + 16
+    assert flush_left.left() == 144
+    assert flush_left.top() == 288
+
+
+def test_resolve_snap_local_rect_for_edit_reports_active_guides():
+    display_size = QSize(1000, 600)
+    peer = QRect(300, 200, 180, 90)
+
+    snap = resolve_snap_local_rect_for_edit(
+        QRect(474, 204, 140, 70),
+        display_size,
+        peer_rects=[peer],
+    )
+
+    assert snap.rect == QRect(480, 204, 140, 70)
+    assert snap.vertical_guides
+    assert snap.vertical_guides[0].position == 480
+    assert snap.vertical_guides[0].kind == "grid"
+    assert snap.horizontal_guides == ()
+
+
+def test_resolve_snap_local_rect_for_edit_can_report_peer_guides_when_closer_than_grid():
+    display_size = QSize(1000, 600)
+    peer = QRect(301, 200, 180, 90)
+
+    snap = resolve_snap_local_rect_for_edit(
+        QRect(162, 210, 140, 70),
+        display_size,
+        peer_rects=[peer],
+    )
+
+    assert snap.rect.left() == 161
+    assert snap.vertical_guides
+    assert snap.vertical_guides[0].position == 301
+    assert snap.vertical_guides[0].kind == "peer"
 
 
 class _FakeScreen:

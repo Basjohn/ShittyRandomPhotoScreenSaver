@@ -458,9 +458,9 @@ def setup_pixel_shift(widget) -> None:
         if child is not None:
             widget._pixel_shift_manager.register_widget(child)
 
-    # The Spotify volume widget remains anchored to the media card edge; allowing
-    # pixel shift to move it independently causes visible desync. It intentionally
-    # opts out of pixel shifting until we support grouped offsets.
+    # The Spotify volume widget still opts out of standalone pixel shift. In the
+    # authored layout it remains media-relative, and in CUSTOM layout it uses its
+    # own saved geometry. Independent PSM movement would desync both contracts.
     
     if pixel_shift_enabled:
         widget._pixel_shift_manager.set_enabled(True)

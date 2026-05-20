@@ -21,7 +21,7 @@ CUSTOM_LAYOUT_RESTORE_VERSION = 1
 CUSTOM_LAYOUT_RESTORE_SETTINGS_KEY = "custom_layout_restore"
 CUSTOM_LAYOUT_GRID_STEP_PX = 12
 CUSTOM_LAYOUT_SNAP_THRESHOLD_PX = 24
-CUSTOM_LAYOUT_SNAP_GUTTER_PX = 16
+CUSTOM_LAYOUT_SNAP_GUTTER_PX = 0
 CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX = 28
 CUSTOM_LAYOUT_MIN_WIDGET_SIZE = QSize(80, 48)
 
@@ -55,6 +55,19 @@ class CustomLayoutEntry:
             "size_payload": dict(self.size_payload),
             "resize_mode": self.resize_mode,
         }
+
+
+@dataclass(frozen=True)
+class SnapGuide:
+    position: int
+    kind: str
+
+
+@dataclass(frozen=True)
+class SnapResolution:
+    rect: QRect
+    vertical_guides: tuple[SnapGuide, ...] = ()
+    horizontal_guides: tuple[SnapGuide, ...] = ()
 
 
 def get_screen_signature(screen: QScreen | None) -> str:
@@ -451,22 +464,31 @@ def _snap_axis_position(
     *,
     threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
     gutter_px: int = CUSTOM_LAYOUT_SNAP_GUTTER_PX,
-) -> int:
+) -> tuple[int, tuple[SnapGuide, ...]]:
     threshold = max(0, int(threshold_px))
     gutter = max(0, int(gutter_px))
     max_position = max(0, int(boundary_span) - max(1, int(span)))
     current = max(0, min(int(position), max_position))
 
-    candidates: list[tuple[int, int]] = [
-        (0, 1),
-        (max_position, 1),
+    candidates: list[tuple[int, int, str, int]] = [
+        (0, 1, "edge", 0),
+        (max_position, 1, "edge", boundary_span),
     ]
+
+    step = max(1, int(CUSTOM_LAYOUT_GRID_STEP_PX))
+    nearest_grid = int(round(current / step) * step)
+    for grid_candidate in {
+        max(0, min(nearest_grid - step, max_position)),
+        max(0, min(nearest_grid, max_position)),
+        max(0, min(nearest_grid + step, max_position)),
+    }:
+        candidates.append((grid_candidate, 0, "grid", grid_candidate))
 
     if gutter:
         candidates.extend(
             [
-                (min(gutter, max_position), 0),
-                (max(0, max_position - gutter), 0),
+                (min(gutter, max_position), 2, "gutter", min(gutter, max_position)),
+                (max(0, max_position - gutter), 2, "gutter", boundary_span - gutter),
             ]
         )
 
@@ -475,35 +497,42 @@ def _snap_axis_position(
         peer_end = int(peer_end)
         candidates.extend(
             {
-                (peer_start, 1),
-                (peer_end - span, 1),
-                (peer_end, 1),
-                (peer_start - span, 1),
+                (peer_start, 1, "peer", peer_start),
+                (peer_end - span, 1, "peer", peer_end),
+                (peer_end, 1, "peer", peer_end),
+                (peer_start - span, 1, "peer", peer_start),
             }
         )
         if gutter:
             candidates.extend(
                 {
-                    (peer_start + gutter, 0),
-                    (peer_end - span - gutter, 0),
-                    (peer_end + gutter, 0),
-                    (peer_start - span - gutter, 0),
+                    (peer_start + gutter, 2, "peer_gutter", peer_start + gutter),
+                    (peer_end - span - gutter, 2, "peer_gutter", peer_end - gutter),
+                    (peer_end + gutter, 2, "peer_gutter", peer_end + gutter),
+                    (peer_start - span - gutter, 2, "peer_gutter", peer_start - gutter),
                 }
             )
 
     best = current
     best_priority = 99
     best_delta = threshold + 1
-    for candidate, priority in candidates:
+    best_kind = ""
+    best_guide = current
+    for candidate, priority, kind, guide_position in candidates:
         candidate = max(0, min(int(candidate), max_position))
         delta = abs(candidate - current)
         if delta > threshold:
             continue
-        if priority < best_priority or (priority == best_priority and delta < best_delta):
+        if delta < best_delta or (delta == best_delta and priority < best_priority):
             best = candidate
             best_priority = priority
             best_delta = delta
-    return best
+            best_kind = kind
+            best_guide = guide_position
+    guides: tuple[SnapGuide, ...] = ()
+    if best != current:
+        guides = (SnapGuide(position=max(0, min(int(best_guide), max(0, boundary_span - 1))), kind=best_kind),)
+    return best, guides
 
 
 def snap_local_rect_for_edit(
@@ -515,18 +544,37 @@ def snap_local_rect_for_edit(
     gutter_px: int = CUSTOM_LAYOUT_SNAP_GUTTER_PX,
     min_size: QSize = CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
 ) -> QRect:
+    return resolve_snap_local_rect_for_edit(
+        rect,
+        display_size,
+        peer_rects=peer_rects,
+        threshold_px=threshold_px,
+        gutter_px=gutter_px,
+        min_size=min_size,
+    ).rect
+
+
+def resolve_snap_local_rect_for_edit(
+    rect: QRect,
+    display_size: QSize,
+    *,
+    peer_rects: list[QRect] | tuple[QRect, ...] = (),
+    threshold_px: int = CUSTOM_LAYOUT_SNAP_THRESHOLD_PX,
+    gutter_px: int = CUSTOM_LAYOUT_SNAP_GUTTER_PX,
+    min_size: QSize = CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
+) -> SnapResolution:
     """Snap a display-local edit rect to nearby guides without crossing bounds.
 
     The rect may snap to:
     - the real display edges
-    - an optional standard gutter from those edges
+    - the shared display-local grid
     - peer widget edges
-    - the same standard gutter between peer widget edges
+    - optional secondary gutter spacing helpers
     """
 
     clamped = clamp_local_rect_to_bounds(rect, display_size, min_size=min_size)
     peer_list = [QRect(peer) for peer in peer_rects if isinstance(peer, QRect)]
-    x = _snap_axis_position(
+    x, vertical_guides = _snap_axis_position(
         clamped.x(),
         clamped.width(),
         display_size.width(),
@@ -534,7 +582,7 @@ def snap_local_rect_for_edit(
         threshold_px=threshold_px,
         gutter_px=gutter_px,
     )
-    y = _snap_axis_position(
+    y, horizontal_guides = _snap_axis_position(
         clamped.y(),
         clamped.height(),
         display_size.height(),
@@ -542,10 +590,14 @@ def snap_local_rect_for_edit(
         threshold_px=threshold_px,
         gutter_px=gutter_px,
     )
-    return clamp_local_rect_to_bounds(
-        QRect(x, y, clamped.width(), clamped.height()),
-        display_size,
-        min_size=min_size,
+    return SnapResolution(
+        rect=clamp_local_rect_to_bounds(
+            QRect(x, y, clamped.width(), clamped.height()),
+            display_size,
+            min_size=min_size,
+        ),
+        vertical_guides=vertical_guides,
+        horizontal_guides=horizontal_guides,
     )
 
 

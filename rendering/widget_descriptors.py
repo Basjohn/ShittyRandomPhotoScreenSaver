@@ -959,6 +959,12 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="secondary",
         anchor_dependent=True,
         live_refresh_handler="_refresh_spotify_visualizer_config",
+        position_settings_key="media",
+        monitor_settings_key="media",
+        supports_layout_edit_mode=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="visualizer_rect",
     ),
     WidgetRuntimeDescriptor(
         widget_id="spotify_volume",
@@ -968,7 +974,10 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="secondary",
         anchor_dependent=True,
         service_backed=True,
+        position_settings_key="media",
+        monitor_settings_key="media",
         live_refresh_handler="_refresh_media_config",
+        supports_layout_edit_mode=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="mute_button",

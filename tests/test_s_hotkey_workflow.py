@@ -15,6 +15,7 @@ otherwise they cover the dialog with black fullscreen windows!
 """
 import pytest
 import uuid
+from types import SimpleNamespace
 
 from core.settings import SettingsManager
 from engine.screensaver_engine import ScreensaverEngine
@@ -200,3 +201,62 @@ def test_settings_dialog_import_exists():
     assert QApplication is not None
     assert AnimationManager is not None
     assert SettingsDialog is not None
+
+
+def test_settings_request_cancels_active_custom_layout_session_before_stop(monkeypatch, qt_app):
+    from engine import engine_handlers
+
+    calls: list[str] = []
+
+    class _ActiveManager:
+        def cancel_session(self):
+            calls.append("cancel_session")
+            return True
+
+    class _FakeDialog:
+        def __init__(self, *_args, **_kwargs):
+            calls.append("dialog_init")
+
+        def exec(self):
+            calls.append("dialog_exec")
+            return 0
+
+    engine = SimpleNamespace(
+        display_manager=SimpleNamespace(displays=[]),
+        resource_manager=None,
+        settings_manager=SimpleNamespace(),
+        _display_initialized=False,
+        stop=lambda exit_app=False: calls.append(f"stop:{exit_app}"),
+        _initialize_display=lambda: True,
+        _setup_rotation_timer=lambda: calls.append("setup_rotation_timer"),
+        start=lambda: calls.append("start") or True,
+    )
+
+    monkeypatch.setattr(engine_handlers, "SettingsDialog", _FakeDialog)
+    monkeypatch.setattr(engine_handlers, "AnimationManager", lambda **kwargs: object())
+
+    class _Coordinator:
+        def set_settings_dialog_active(self, active):
+            calls.append(f"settings_dialog_active:{active}")
+
+        def cleanup(self):
+            calls.append("coordinator_cleanup")
+
+    monkeypatch.setattr(
+        "rendering.multi_monitor_coordinator.get_coordinator",
+        lambda: _Coordinator(),
+    )
+
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.CustomLayoutManager.is_any_session_active",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.CustomLayoutManager.active_manager",
+        classmethod(lambda cls: _ActiveManager()),
+    )
+
+    engine_handlers.on_settings_requested(engine)
+
+    assert "cancel_session" in calls
+    assert calls.index("cancel_session") < calls.index("stop:False")

@@ -88,6 +88,27 @@ def test_media_display_update_stores_structured_paint_metadata(qt_app) -> None:
         widget.deleteLater()
 
 
+def test_media_display_update_does_not_restore_live_widget_during_custom_edit_mode(qt_app) -> None:
+    from widgets.media.display_update import _ensure_widget_visible_for_active_metadata
+
+    parent = SimpleNamespace(_custom_layout_edit_active=True)
+    calls: list[str] = []
+    widget = SimpleNamespace(
+        parentWidget=lambda: parent,
+        _custom_layout_shell_active=True,
+        _telemetry_last_visibility=None,
+        isVisible=lambda: False,
+        _start_widget_fade_in=lambda *_args, **_kwargs: calls.append("fade"),
+        _notify_spotify_widgets_visibility=lambda: calls.append("notify"),
+        show=lambda: calls.append("show"),
+    )
+
+    _ensure_widget_visible_for_active_metadata(widget)
+
+    assert calls == []
+    assert widget._telemetry_last_visibility is False
+
+
 def test_media_widget_no_hidden_qlabel_render_shadow_path() -> None:
     source = Path("widgets/media_widget.py").read_text(encoding="utf-8")
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Callable, Optional
 
-from PySide6.QtCore import QPoint, QRect, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, QEvent, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QPushButton, QWidget
 
@@ -15,6 +15,7 @@ class EditShellWidget(QWidget):
     geometry_live_changed = Signal(str, QRect)
     resize_wheel_requested = Signal(str, int)
     reset_size_requested = Signal(str)
+    reset_position_requested = Signal(str)
     context_menu_requested = Signal(QPoint)
 
     def __init__(
@@ -42,15 +43,12 @@ class EditShellWidget(QWidget):
         self._resizable = bool(resizable)
         self._dragging = False
         self._drag_offset = QPoint()
+        self._pressed_button: QPushButton | None = None
         self._transfer_blocked = False
         self._transfer_block_reason = ""
         self._live_geometry_resolver = live_geometry_resolver
 
-        self._reset_btn = QPushButton("Reset", self)
-        self._reset_btn.setVisible(self._resizable)
-        self._reset_btn.clicked.connect(self._on_reset_clicked)
-        self._reset_btn.setStyleSheet(
-            """
+        button_stylesheet = """
             QPushButton {
                 background-color: rgba(25, 25, 25, 210);
                 color: rgba(255, 255, 255, 235);
@@ -64,11 +62,45 @@ class EditShellWidget(QWidget):
             QPushButton:hover {
                 background-color: rgba(55, 55, 55, 225);
             }
+            QPushButton:disabled {
+                background-color: rgba(25, 25, 25, 140);
+                color: rgba(255, 255, 255, 120);
+                border-color: rgba(255, 255, 255, 120);
+            }
             """
-        )
+        self._reset_position_btn = QPushButton("Reset Position", self)
+        self._reset_size_btn = QPushButton("Reset Size", self)
+        self._reset_size_btn.clicked.connect(self._on_reset_size_clicked)
+        self._reset_position_btn.clicked.connect(self._on_reset_position_clicked)
+        self._reset_size_btn.installEventFilter(self)
+        self._reset_position_btn.installEventFilter(self)
+        self._reset_size_btn.setStyleSheet(button_stylesheet)
+        self._reset_position_btn.setStyleSheet(button_stylesheet)
+        self._reset_size_btn.setEnabled(False)
+        self._reset_position_btn.setEnabled(False)
 
         self.setGeometry(initial_global_rect)
         self._reposition_reset_button()
+
+    def eventFilter(self, watched, event):  # type: ignore[override]
+        reset_size_btn = getattr(self, "_reset_size_btn", None)
+        reset_position_btn = getattr(self, "_reset_position_btn", None)
+        if watched in (reset_size_btn, reset_position_btn):
+            if event.type() == QEvent.Type.MouseButtonPress:
+                if isinstance(watched, QPushButton) and watched.isEnabled():
+                    self._pressed_button = watched
+                event.accept()
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                pressed = self._pressed_button
+                self._pressed_button = None
+                if pressed is self._reset_size_btn and self._reset_size_btn.isEnabled():
+                    self._on_reset_size_clicked()
+                elif pressed is self._reset_position_btn and self._reset_position_btn.isEnabled():
+                    self._on_reset_position_clicked()
+                event.accept()
+                return True
+        return super().eventFilter(watched, event)
 
     def set_shell_geometry(self, global_rect: QRect) -> None:
         self.setGeometry(global_rect)
@@ -88,25 +120,39 @@ class EditShellWidget(QWidget):
         self._snapshot = snapshot
         self.update()
 
-    def set_reset_enabled(self, enabled: bool) -> None:
-        self._reset_btn.setEnabled(bool(enabled))
+    def set_reset_size_enabled(self, enabled: bool) -> None:
+        self._reset_size_btn.setEnabled(bool(enabled) and self._resizable)
+
+    def set_reset_position_enabled(self, enabled: bool) -> None:
+        self._reset_position_btn.setEnabled(bool(enabled))
 
     def _reposition_reset_button(self) -> None:
-        if not self._resizable:
-            return
-        hint = self._reset_btn.sizeHint()
-        self._reset_btn.resize(hint)
-        x = max(6, int((self.width() - hint.width()) / 2))
-        y = max(6, self.height() - hint.height() - 10)
-        self._reset_btn.move(x, y)
-        self._reset_btn.raise_()
+        size_hint = self._reset_size_btn.sizeHint()
+        pos_hint = self._reset_position_btn.sizeHint()
+        self._reset_size_btn.resize(size_hint)
+        self._reset_position_btn.resize(pos_hint)
+        spacing = 8
+        total_width = size_hint.width() + pos_hint.width() + spacing
+        start_x = max(6, int((self.width() - total_width) / 2))
+        y = max(6, self.height() - max(size_hint.height(), pos_hint.height()) - 10)
+        self._reset_size_btn.move(start_x, y)
+        self._reset_position_btn.move(start_x + size_hint.width() + spacing, y)
+        self._reset_size_btn.raise_()
+        self._reset_position_btn.raise_()
 
-    def _on_reset_clicked(self) -> None:
+    def _on_reset_size_clicked(self) -> None:
         self.reset_size_requested.emit(self.widget_id)
 
+    def _on_reset_position_clicked(self) -> None:
+        self.reset_position_requested.emit(self.widget_id)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
-        if self.childAt(event.position().toPoint()) is self._reset_btn:
-            super().mousePressEvent(event)
+        local_pos = event.position().toPoint()
+        if (
+            self._reset_size_btn.geometry().contains(local_pos)
+            or self._reset_position_btn.geometry().contains(local_pos)
+        ):
+            event.accept()
             return
         if event.button() == Qt.MouseButton.RightButton:
             self.context_menu_requested.emit(event.globalPosition().toPoint())
@@ -135,6 +181,14 @@ class EditShellWidget(QWidget):
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        local_pos = event.position().toPoint()
+        if (
+            self._reset_size_btn.geometry().contains(local_pos)
+            or self._reset_position_btn.geometry().contains(local_pos)
+        ):
+            self._pressed_button = None
+            event.accept()
+            return
         if self._dragging and event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
             global_pos = event.globalPosition().toPoint()
@@ -147,6 +201,8 @@ class EditShellWidget(QWidget):
             self.drag_finished.emit(self.widget_id, QRect(self.geometry()), global_pos)
             event.accept()
             return
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._pressed_button = None
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:

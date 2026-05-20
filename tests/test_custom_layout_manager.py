@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QPixmap
 from PySide6.QtWidgets import QWidget
 
@@ -159,6 +159,21 @@ class _ImgurLikeTestWidget(_EditableTestWidget):
         self._image_border_width = int(width)
 
 
+class _VisualizerLikeTestWidget(_EditableTestWidget):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, font_size=14)
+        self._base_height = 80
+        self._vis_mode_str = "spectrum"
+        self._started = True
+        self.setGeometry(70, 360, 320, 160)
+
+    def stop(self) -> None:
+        self._started = False
+
+    def start(self) -> None:
+        self._started = True
+
+
 def _reset_custom_layout_manager_state() -> None:
     CustomLayoutManager._active_managers = []
 
@@ -213,7 +228,7 @@ def test_custom_widget_position_normalizes_without_fallback():
     assert coerce_widget_position("custom", WidgetPosition.TOP_RIGHT) == WidgetPosition.CUSTOM
 
 
-def test_edit_shell_reset_button_is_bottom_centered(qtbot):
+def test_edit_shell_reset_buttons_are_bottom_centered(qtbot):
     pm = QPixmap(300, 160)
     pm.fill(QColor("black"))
     shell = EditShellWidget(
@@ -225,15 +240,20 @@ def test_edit_shell_reset_button_is_bottom_centered(qtbot):
     qtbot.addWidget(shell)
     shell.show()
 
-    btn = shell._reset_btn
-    assert btn.x() >= 6
-    assert btn.y() >= 6
-    assert btn.x() + btn.width() <= shell.width() - 6
-    assert btn.y() + btn.height() <= shell.height() - 6
-    assert abs((btn.x() + (btn.width() / 2)) - (shell.width() / 2)) <= 2
+    size_btn = shell._reset_size_btn
+    pos_btn = shell._reset_position_btn
+    for btn in (size_btn, pos_btn):
+        assert btn.x() >= 6
+        assert btn.y() >= 6
+        assert btn.x() + btn.width() <= shell.width() - 6
+        assert btn.y() + btn.height() <= shell.height() - 6
+
+    left = size_btn.x()
+    right = pos_btn.x() + pos_btn.width()
+    assert abs(((left + right) / 2) - (shell.width() / 2)) <= 3
 
 
-def test_edit_shell_reset_button_ignores_shell_drag_and_can_be_enabled(qtbot):
+def test_edit_shell_reset_buttons_ignore_shell_drag_and_can_be_enabled(qtbot):
     pm = QPixmap(300, 160)
     pm.fill(QColor("black"))
     shell = EditShellWidget(
@@ -245,11 +265,37 @@ def test_edit_shell_reset_button_ignores_shell_drag_and_can_be_enabled(qtbot):
     qtbot.addWidget(shell)
     shell.show()
 
-    assert shell._reset_btn.isEnabled() is True
-    shell.set_reset_enabled(False)
-    assert shell._reset_btn.isEnabled() is False
-    shell.set_reset_enabled(True)
-    assert shell._reset_btn.isEnabled() is True
+    assert shell._reset_size_btn.isEnabled() is False
+    assert shell._reset_position_btn.isEnabled() is False
+    shell.set_reset_size_enabled(True)
+    shell.set_reset_position_enabled(True)
+    assert shell._reset_size_btn.isEnabled() is True
+    assert shell._reset_position_btn.isEnabled() is True
+
+
+def test_edit_shell_reset_buttons_emit_requests(qtbot):
+    size_emitted: list[str] = []
+    position_emitted: list[str] = []
+    pm = QPixmap(300, 160)
+    pm.fill(QColor("black"))
+    shell = EditShellWidget(
+        widget_id="clock",
+        snapshot=pm,
+        initial_global_rect=QRect(0, 0, 300, 160),
+        resizable=True,
+    )
+    shell.reset_size_requested.connect(size_emitted.append)
+    shell.reset_position_requested.connect(position_emitted.append)
+    qtbot.addWidget(shell)
+    shell.show()
+    shell.set_reset_size_enabled(True)
+    shell.set_reset_position_enabled(True)
+
+    qtbot.mouseClick(shell._reset_size_btn, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(shell._reset_position_btn, Qt.MouseButton.LeftButton)
+
+    assert size_emitted == ["clock"]
+    assert position_emitted == ["clock"]
 
 
 def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
@@ -271,6 +317,124 @@ def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):
 
     manager.cancel_session()
     assert display._last_processed[2] == "example.png"
+
+
+def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"media": {"position": "Bottom Left", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    volume = _EditableTestWidget(display, font_size=14)
+    volume.setGeometry(260, 80, 32, 180)
+    display.spotify_volume_widget = volume
+    qtbot.addWidget(volume)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_volume"]
+    updated_rect = QRect(state.current_global_rect.x() + 80, state.current_global_rect.y() + 24, 32, 180)
+    state.current_global_rect = QRect(updated_rect)
+    state.shell.set_shell_geometry(updated_rect)
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["media"]["position"] == "Custom"
+    displays = widgets_map["custom_layout"]["displays"]
+    payload = next(iter(displays.values()))["spotify_volume"]
+    assert payload["resize_mode"] == "none"
+    assert display._runtime_reload_requests == 1
+
+
+def test_custom_layout_manager_creates_and_destroys_grid_overlay(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert manager._grid_overlay is not None
+    assert manager._grid_overlay.isVisible() is True
+
+    assert manager.cancel_session() is True
+    assert manager._grid_overlay is None
+
+
+def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen = _FakeScreen("A", QRect(0, 0, 800, 600))
+    settings_stub._widgets_map = {
+        "media": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                get_screen_signature(screen): {
+                    "spotify_volume": {
+                        "rect": {"x": 0.4, "y": 0.2, "width": 0.25, "height": 0.55},
+                        "size_payload": {},
+                        "resize_mode": "none",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    volume = _EditableTestWidget(display, font_size=14)
+    volume.setGeometry(260, 80, 32, 180)
+    display.spotify_volume_widget = volume
+    qtbot.addWidget(volume)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(volume, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 32
+    assert custom_rect.height() == 180
+
+
+def test_custom_layout_manager_reset_position_restores_source_rect_without_resetting_size(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    state.current_global_rect = QRect(
+        state.current_global_rect.x() + 120,
+        state.current_global_rect.y() + 80,
+        state.current_global_rect.width() + 40,
+        state.current_global_rect.height() + 20,
+    )
+    state.resize_scale = 1.15
+    state.current_size_payload = {"font_size": 55}
+
+    manager._on_shell_reset_position_requested("clock")
+
+    assert state.current_global_rect.topLeft() == state.baseline_global_rect.topLeft()
+    assert state.current_global_rect.size() != state.baseline_global_rect.size()
+    assert state.resize_scale == 1.15
 
 
 def test_custom_layout_manager_reapply_skips_saved_rects_when_position_not_custom(qtbot):
@@ -736,6 +900,76 @@ def test_custom_layout_manager_saves_and_reapplies_imgur_scale_resize(qtbot, mon
     assert payload["resize_mode"] == "imgur_scale"
 
 
+def test_custom_layout_manager_visualizer_shell_snapshot_uses_display_composite(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"media": {"position": "Custom", "monitor": "ALL"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    class _OverlayStub(QWidget):
+        def grabFramebuffer(self):
+            pm = QPixmap(max(1, self.width()), max(1, self.height()))
+            pm.fill(QColor(40, 120, 240, 180))
+            return pm.toImage()
+
+    overlay = _OverlayStub(display)
+    overlay.setGeometry(visualizer.geometry())
+    overlay.show()
+    display._spotify_bars_overlay = overlay
+    qtbot.addWidget(visualizer)
+    qtbot.addWidget(overlay)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    original_grab = display.grab
+    display.grab = lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("display.grab should not be used"))  # type: ignore[assignment]
+    assert manager.start_session() is True
+    display.grab = original_grab  # type: ignore[assignment]
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert not state.shell._snapshot.isNull()
+    assert overlay.isVisible() is False
+    assert visualizer._started is False
+
+
+def test_custom_layout_manager_saves_visualizer_rect_under_media_custom_slot(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"media": {"position": "Custom", "monitor": "ALL"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    updated_rect = QRect(
+        state.current_global_rect.x() + 22,
+        state.current_global_rect.y() + 18,
+        420,
+        210,
+    )
+    state.current_global_rect = QRect(updated_rect)
+    state.resize_scale = 1.25
+    state.shell.set_shell_geometry(updated_rect)
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["media"]["position"] == "Custom"
+    payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]
+    assert payload["resize_mode"] == "visualizer_rect"
+
+
 def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_and_restores_route(qtbot, monkeypatch):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
@@ -819,5 +1053,5 @@ def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
     manager._on_shell_geometry_live_changed("clock", proposal)
     not_snapped = manager._shell_states["clock"].current_global_rect
 
-    assert not_snapped == proposal
+    assert not_snapped == QRect(120, 120, 180, 80)
     assert clock.isVisible() is False

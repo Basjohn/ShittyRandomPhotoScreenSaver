@@ -160,6 +160,9 @@ def handle_media_update(widget: Any, payload: dict) -> None:
 
 def sync_visibility_with_anchor(widget: Any) -> None:
     """Show/hide based on anchor media widget visibility."""
+    parent = widget.parentWidget() if hasattr(widget, "parentWidget") else None
+    if getattr(widget, "_custom_layout_shell_active", False) or getattr(parent, "_custom_layout_edit_active", False):
+        return
     try:
         anchor_visible = widget._is_anchor_visible()
         if anchor_visible:

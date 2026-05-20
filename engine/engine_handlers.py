@@ -103,6 +103,23 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     logger.info("Settings requested - pausing screensaver and opening config")
     request_start = time.perf_counter()
 
+    try:
+        from rendering.custom_layout_manager import CustomLayoutManager
+
+        if CustomLayoutManager.is_any_session_active():
+            logger.info("Settings requested during active CUSTOM edit session; cancelling session before teardown")
+            active_manager = CustomLayoutManager.active_manager()
+            if active_manager is not None:
+                active_manager.cancel_session()
+            app = QApplication.instance()
+            if app is not None:
+                try:
+                    app.processEvents()
+                except Exception:
+                    logger.debug("Failed to process events after CUSTOM session cancel", exc_info=True)
+    except Exception:
+        logger.debug("Failed to cancel CUSTOM edit session before settings", exc_info=True)
+
     # Wake media widget from idle mode when returning from settings
     # This ensures Spotify detection resumes if user opened Spotify while in settings
     try:

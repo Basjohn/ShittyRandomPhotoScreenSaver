@@ -1,6 +1,6 @@
 # Custom Widget Edit Mode Plan
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 This document is the detailed implementation plan for the CUSTOM widget layout/edit mode.
 
@@ -15,7 +15,7 @@ What exists today:
 - temporary top-level edit shells via `widgets/edit_shell_widget.py`,
 - display-local normalized CUSTOM layout persistence via `rendering/custom_layout_contract.py`,
 - first-phase session lifecycle, runtime-update deferral, global active-display session orchestration, and live-widget reapply via `rendering/custom_layout_manager.py`,
-- live snapping against display edges, the shared gutter guide, peer widget shells, and live peer widgets on the destination display through the same contract layer,
+- live snapping against the shared 12px grid scaffold, display edges, peer widget shells, and live peer widgets on the destination display through the same contract layer,
 - persisted widget `position` now treats `custom` as a first-class runtime value rather than falling back to authored anchors during settings normalization,
 - edit-mode save and authored-layout reset now commit through the canonical widget rebuild path so reveal/fade startup contracts stay identical to cold/runtime widget setup,
 - runtime rebuilds triggered by CUSTOM save/reset explicitly re-prime the fade coordinator when the compositor is already ready, so primary overlays do not stay queued forever after edit-mode exit,
@@ -51,6 +51,15 @@ What exists today:
   - `gmail`
 - phase-two uniform resize is now also landed for:
   - `imgur`
+- visualizer CUSTOM participation is now partially landed:
+  - it joins the global edit session,
+  - its shell snapshot is now composed from the visualizer card plus the GL overlay framebuffer so the card/background/stencil shell is preserved without relying on whole-display grabs,
+  - it pauses/hides the live overlay cleanly during edit mode,
+  - committed CUSTOM rects persist under the media-owned `Custom` slot,
+  - the normal runtime visualizer positioning path now honors that committed CUSTOM rect when `media.position == Custom` instead of always forcing the visualizer back into media-relative orbiting.
+- live widget visibility during edit sessions is now more strictly separated from shell state:
+  - hidden runtime media/visualizer widgets should not use their ordinary fade/show visibility re-entry paths while `_custom_layout_edit_active` is true,
+  - track-change updates during edit mode should therefore update runtime state silently rather than respawning a second live widget under the shell.
 - explicit `Custom` position-slot behavior for participating widget families:
   - the slot is descriptor-owned rather than hardcoded per tab,
   - it remains disabled until real saved custom geometry exists for that family,
@@ -60,12 +69,33 @@ What exists today:
   - the last known non-`Custom` position + monitor route is persisted separately from CUSTOM geometry,
   - the edit-mode context menu now exposes a global reset-to-authored action,
   - that reset clears CUSTOM geometry and restores authored routing through a clean save + rebuild path instead of trying to visually fake every shell back into place first.
+- local shell reset affordances are now explicit and split by responsibility:
+  - `Reset Position` restores that shell to its session-start display/position while preserving any current resize state,
+  - `Reset Size` restores that shell’s session-start size contract while preserving current position,
+  - both buttons are centered together at the shell bottom and are only enabled when their specific reset would do real work.
+- edit mode now also renders a dedicated low-opacity grid overlay per active display:
+  - it sits above the compositor/wallpaper surface,
+  - it sits below the temporary edit shells,
+  - it visualizes the real 12px snap scaffold without changing saved geometry format or adding always-on runtime overhead,
+  - active snap lines are now highlighted directly on that overlay,
+  - peer/widget assist alignment can be surfaced as temporary helper guides rather than being implied by the static background lattice.
+- entering settings during an active CUSTOM session is now an explicit contract boundary:
+  - the global shell session is cancelled first,
+  - shell windows are torn down before the normal engine stop/settings-dialog startup begins,
+  - settings entry no longer relies on display teardown to clean up edit shells indirectly.
+- `spotify_volume` now participates in the same media-owned CUSTOM move contract as the visualizer:
+  - it joins the edit shell session,
+  - committed custom rects persist under `media.position == Custom`,
+  - runtime positioning honors that saved rect instead of always forcing the slider back to the media-card edge,
+  - displayed volume is resynced from the real Spotify/MusicBee mixer session on activation, provider changes, and hidden→visible transitions without adding a high-frequency poll loop,
+  - because it is currently move-only, CUSTOM snap/clamp/save/reapply must preserve the authored slider footprint rather than inheriting the generic resizable-widget minimum edit rect.
 
 Important current limitation:
 - edit shells still never straddle two displays at once.
 - cross-display transfer is currently limited to numbered-monitor widget families.
 - `ALL` widgets remain intentionally display-locked during a single drag because `monitor` routing stays authoritative and we do not silently collapse `ALL` into a single-display binding.
-- `spotify_visualizer` still needs its final uniform-resize contract before the “every widget uniformly resizable” goal is fully complete.
+- `spotify_visualizer` still needs its final uniform-resize/reveal parity contract before the “every widget uniformly resizable” goal is fully complete.
+- `spotify_volume` is now move-safe in CUSTOM mode, but its own eventual uniform-resize contract is still separate follow-through work.
 
 ## 1. Purpose
 
@@ -159,7 +189,7 @@ This is intentionally not a freeform raw-pixel editor.
 - The committed visible bounds must remain fully inside the destination display.
 - “Inside the display” means the visible widget/card bounds do not breach the display rectangle.
 - This clamp should use the same visible-boundary contract the runtime uses for positioning, not a misleading raw transparent QWidget/effect rect.
-- Soft snap should prefer the shared gutter before hard display-edge clamp when both are near.
+- The static grid should represent the real primary snap scaffold, while contextual peer/widget alignment should appear as temporary assist guides rather than as hidden alternate rules.
 - If the user keeps pushing past those snaps and the widget is transferable, the shell may hand off to the adjacent display and clamp there instead.
 
 ## 4. Non-Goals for First Implementation

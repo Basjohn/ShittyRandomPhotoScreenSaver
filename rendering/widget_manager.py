@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QPoint, QRect, QTimer
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -1221,9 +1221,29 @@ class WidgetManager:
 
     def position_spotify_visualizer(self, vis_widget, media_widget, parent_width: int, parent_height: int) -> None:
         """Position Spotify visualizer relative to media widget."""
-        if vis_widget is None or media_widget is None:
+        if vis_widget is None:
             return
         try:
+            widgets_config: Mapping[str, Any] | None = None
+            if self._settings_manager is not None:
+                candidate = self._settings_manager.get('widgets', {}) or {}
+                if isinstance(candidate, Mapping):
+                    widgets_config = candidate
+
+            custom_rect = getattr(vis_widget, "_custom_layout_local_rect", None)
+            if (
+                isinstance(custom_rect, QRect)
+                and custom_rect.width() > 0
+                and custom_rect.height() > 0
+                and is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
+            ):
+                vis_widget.setGeometry(custom_rect)
+                vis_widget.raise_()
+                return
+
+            if media_widget is None:
+                return
+
             from widgets.spotify_visualizer.card_geometry import (
                 build_growth_map_from_widget,
                 resolve_card_metrics,
@@ -1283,18 +1303,51 @@ class WidgetManager:
 
     def position_spotify_volume(self, vol_widget, media_widget, parent_width: int, parent_height: int) -> None:
         """Position Spotify volume slider beside media widget."""
-        if vol_widget is None or media_widget is None:
+        if vol_widget is None:
             return
         try:
+            def _resolve_authored_size() -> tuple[int, int]:
+                width = max(vol_widget.minimumWidth(), 32)
+                if media_widget is None:
+                    height = max(vol_widget.minimumHeight(), vol_widget.height())
+                    return width, height
+                media_geom = media_widget.geometry()
+                card_height = media_geom.height()
+                height = max(vol_widget.minimumHeight(), card_height - 8)
+                height = min(height, card_height)
+                return width, height
+
+            widgets_config: Mapping[str, Any] | None = None
+            if self._settings_manager is not None:
+                candidate = self._settings_manager.get('widgets', {}) or {}
+                if isinstance(candidate, Mapping):
+                    widgets_config = candidate
+
+            custom_rect = getattr(vol_widget, "_custom_layout_local_rect", None)
+            if (
+                isinstance(custom_rect, QRect)
+                and custom_rect.width() > 0
+                and custom_rect.height() > 0
+                and is_custom_position_selected_for_widget("spotify_volume", widgets_config)
+            ):
+                width, height = _resolve_authored_size()
+                x = max(0, min(int(custom_rect.x()), max(0, parent_width - width)))
+                y = max(0, min(int(custom_rect.y()), max(0, parent_height - height)))
+                vol_widget.setGeometry(x, y, width, height)
+                if vol_widget.isVisible():
+                    vol_widget.raise_()
+                return
+
+            if media_widget is None:
+                return
+
             media_geom = media_widget.geometry()
             if media_geom.width() <= 0 or media_geom.height() <= 0:
                 return
             
             gap = 16
-            width = max(vol_widget.minimumWidth(), 32)
+            width, height = _resolve_authored_size()
             card_height = media_geom.height()
-            height = max(vol_widget.minimumHeight(), card_height - 8)
-            height = min(height, card_height)
             
             space_left = max(0, media_geom.left())
             space_right = max(0, parent_width - media_geom.right())

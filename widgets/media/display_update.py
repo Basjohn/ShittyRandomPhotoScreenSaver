@@ -464,6 +464,11 @@ def _build_and_apply_metadata(
 def _ensure_widget_visible_for_active_metadata(widget: "MediaWidget") -> None:
     """Re-enter the shared fade path when metadata returns after a real hide."""
 
+    parent = widget.parentWidget()
+    if getattr(widget, "_custom_layout_shell_active", False) or getattr(parent, "_custom_layout_edit_active", False):
+        widget._telemetry_last_visibility = False
+        return
+
     try:
         if widget.isVisible():
             widget._telemetry_last_visibility = True

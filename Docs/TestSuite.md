@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-19
+Last updated: 2026-05-20
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -48,9 +48,9 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_descriptors.py`
   Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, descriptor-owned lazy/programmatic dependency metadata for inter-section hydration, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, explicit `Custom` slot availability/selection helpers, first-phase CUSTOM attr/resize-mode ownership, and descriptor-owned stack-preview/settings-composition field ownership.
 - `tests/test_custom_layout_contract.py`
-  CUSTOM layout normalized-rect schema helpers, display/gutter/widget snapping, clamp rules, target-screen resolution, display-local persistence roundtrip coverage, transfer-target eligibility limited to active compositor-backed displays, and the narrow legacy MC display-signature ingestion bridge that resolves old identity-plus-geometry buckets onto the canonical display identity.
+  CUSTOM layout normalized-rect schema helpers, grid/display/peer snapping, snap-guide reporting, clamp rules, target-screen resolution, display-local persistence roundtrip coverage, transfer-target eligibility limited to active compositor-backed displays, and the narrow legacy MC display-signature ingestion bridge that resolves old identity-plus-geometry buckets onto the canonical display identity.
 - `tests/test_custom_layout_manager.py`
-  CUSTOM edit-session save/cancel behavior, global session activation across active display instances, first-class `custom` position persistence, saved authored-route reset behavior, late screen-binding recovery, size-payload persistence for clock/weather/media plus Reddit/Gmail font-driven resize families, live peer-snapping/clamp behavior, canonical rebuild-on-save/reset behavior, numbered-monitor cross-display ownership transfer, `ALL`-locked transfer blocking, deferred processed-image flush behavior, non-forced widget visibility during runtime custom-layout reapply, and edit-shell reset-affordance placement.
+  CUSTOM edit-session save/cancel behavior, global session activation across active display instances, first-class `custom` position persistence, saved authored-route reset behavior, late screen-binding recovery, size-payload persistence for clock/weather/media plus Reddit/Gmail font-driven resize families, live peer-snapping/clamp behavior, canonical rebuild-on-save/reset behavior, numbered-monitor cross-display ownership transfer, `ALL`-locked transfer blocking, deferred processed-image flush behavior, non-forced widget visibility during runtime custom-layout reapply, edit-shell reset-affordance placement, temporary per-display grid overlay lifecycle, visualizer shell capture via card-plus-overlay composition rather than whole-display grabs, and media-owned CUSTOM persistence for secondary dependents like `spotify_volume`.
 - `tests/test_widget_manager_refresh.py`
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
@@ -81,15 +81,17 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_mute_button_widget.py`
   Mute button secondary-stage gating, late-anchor recovery, centralized deadline respect, and canonical enable/disable/cleanup runtime reset behavior.
 - `tests/test_media_widget_runtime_methods.py`
-  Media deferred callbacks, canonical smart-poll timer reset, pending-state debounce cleanup, and optimistic media-control repaint/update behavior.
+  Media deferred callbacks, canonical smart-poll timer reset, pending-state debounce cleanup, optimistic media-control repaint/update behavior, and the rule that live media visibility re-entry stays suppressed while a CUSTOM shell session is active.
 - `tests/test_weather_widget.py`
   Weather retry timer cleanup, retry timer reuse, retry timeout state handling, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
 - `tests/test_imgur_widget.py`
   Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
 - `tests/test_custom_layout_manager.py`
-  CUSTOM size-payload persistence and reapply coverage now also includes Imgur’s authored resize contract (header scale, spacing, base cell width, and border weight), alongside the earlier clock/weather/media/Reddit/Gmail families.
+  CUSTOM size-payload persistence and reapply coverage now also includes Imgur’s authored resize contract (header scale, spacing, base cell width, and border weight), alongside the earlier clock/weather/media/Reddit/Gmail families; visualizer participation coverage now also asserts composited shell snapshot capture and media-slot-backed CUSTOM rect persistence.
 - `tests/test_spotify_volume_widget.py`
-  Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths.
+  Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths, provider-switch volume resync, and hidden→visible mixer-session resync without high-frequency polling.
+- `tests/test_s_hotkey_workflow.py`
+  Settings-entry regression coverage, including the rule that an active CUSTOM shell session is cancelled before the engine stop/settings-dialog startup path proceeds.
 - `tests/test_gmail_widget.py`
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`

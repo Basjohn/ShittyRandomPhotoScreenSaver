@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import Optional
 
 import weakref
+import time
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QRect, QRectF
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen, QPixmap
@@ -59,6 +60,7 @@ class SpotifyVolumeWidget(QWidget):
         self._flush_timer: Optional[QTimer] = None
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
+        self._last_volume_sync_request_ts: float = 0.0
         self._painted_frame_shadow_enabled: bool = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
@@ -96,6 +98,7 @@ class SpotifyVolumeWidget(QWidget):
             logger.debug("[SPOTIFY_VOL] Failed to retarget provider runtime", exc_info=True)
             return False
         logger.info("[SPOTIFY_VOL] Runtime provider switch applied: %s", normalized)
+        self._request_volume_sync(force=True)
         return True
 
     # ------------------------------------------------------------------
@@ -151,6 +154,11 @@ class SpotifyVolumeWidget(QWidget):
         """
         if is_verbose_logging():
             logger.debug("[SPOTIFY_VOL] Syncing visibility with anchor")
+        was_visible = False
+        try:
+            was_visible = self.isVisible()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
         try:
             visible = sync_anchor_dependent_visibility(
                 self,
@@ -162,6 +170,8 @@ class SpotifyVolumeWidget(QWidget):
             )
             if not visible and self._anchor_media is not None and is_verbose_logging():
                 logger.debug("[SPOTIFY_VOL] Anchor hidden or widget disabled; volume widget hidden")
+            if visible and not was_visible:
+                self._request_volume_sync()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
 
@@ -197,33 +207,7 @@ class SpotifyVolumeWidget(QWidget):
             return
         
         self._ensure_flush_timer()
-        
-        # Read initial volume
-        if self._thread_manager is not None:
-            def _do_read():
-                return self._controller.get_volume()
-            
-            def _on_result(result):
-                val = None
-                try:
-                    if getattr(result, "success", False):
-                        val = getattr(result, "result", None)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                if isinstance(val, float):
-                    ThreadManager.run_on_ui_thread(self._apply_volume, val)
-            
-            try:
-                self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-        else:
-            try:
-                current = self._controller.get_volume()
-                if isinstance(current, float):
-                    self._apply_volume(current)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        self._request_volume_sync(force=True)
         
         logger.debug("[LIFECYCLE] SpotifyVolumeWidget activated")
     
@@ -281,36 +265,7 @@ class SpotifyVolumeWidget(QWidget):
         # delayed media fade requests have the correct starting state.
         self.sync_visibility_with_anchor()
 
-        if self._thread_manager is None:
-            try:
-                current = self._controller.get_volume()
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                current = None
-            if isinstance(current, float):
-                self._apply_volume(current)
-        else:
-            def _do_read() -> Optional[float]:
-                return self._controller.get_volume()
-
-            def _on_result(result) -> None:
-                def _apply(val: Optional[float]) -> None:
-                    if isinstance(val, float):
-                        self._apply_volume(val)
-
-                val: Optional[float] = None
-                try:
-                    if getattr(result, "success", False):
-                        val = getattr(result, "result", None)
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
-                    val = None
-                ThreadManager.run_on_ui_thread(_apply, val)
-
-            try:
-                self._thread_manager.submit_io_task(_do_read, callback=_on_result)
-            except Exception:
-                logger.debug("[SPOTIFY_VOL] Failed to schedule initial volume read", exc_info=True)
+        self._request_volume_sync(force=True)
 
         # Participate in coordinated overlay fade sync like other widgets
         def _starter() -> None:
@@ -350,6 +305,7 @@ class SpotifyVolumeWidget(QWidget):
             return False
         if not self.isVisible():
             return False
+        self._request_volume_sync()
         self._dragging = True
         self._set_volume_from_pos(local_pos)
         return True
@@ -652,6 +608,46 @@ class SpotifyVolumeWidget(QWidget):
             )
         except Exception:
             pass
+
+    def _request_volume_sync(self, *, force: bool = False) -> None:
+        if not self._controller.is_available():
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_volume_sync_request_ts) < 1.25:
+            return
+        self._last_volume_sync_request_ts = now
+
+        if self._thread_manager is None:
+            try:
+                current = self._controller.get_volume()
+            except Exception:
+                logger.debug("[SPOTIFY_VOL] Direct volume sync failed", exc_info=True)
+                current = None
+            if isinstance(current, float):
+                self._apply_volume(current)
+            return
+
+        def _do_read() -> Optional[float]:
+            return self._controller.get_volume()
+
+        def _on_result(result) -> None:
+            def _apply(val: Optional[float]) -> None:
+                if isinstance(val, float):
+                    self._apply_volume(val)
+
+            val: Optional[float] = None
+            try:
+                if getattr(result, "success", False):
+                    val = getattr(result, "result", None)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                val = None
+            ThreadManager.run_on_ui_thread(_apply, val)
+
+        try:
+            self._thread_manager.submit_io_task(_do_read, callback=_on_result)
+        except Exception:
+            logger.debug("[SPOTIFY_VOL] Failed to schedule volume sync", exc_info=True)
 
     def _reset_flush_state(self, *, delete_timer: bool) -> None:
         """Stop pending flush work and optionally destroy the debounce timer."""

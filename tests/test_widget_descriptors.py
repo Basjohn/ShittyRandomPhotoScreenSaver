@@ -241,6 +241,16 @@ def test_widget_runtime_descriptor_monitor_settings_key_defaults_to_widget_id():
     assert clock2.get_effective_monitor_settings_key() == "clock2"
 
 
+def test_spotify_volume_participates_in_custom_layout_via_media_contract():
+    descriptors = get_layout_edit_runtime_descriptors()
+    volume = next(item for item in descriptors if item.widget_id == "spotify_volume")
+
+    assert volume.supports_layout_edit_mode is True
+    assert volume.get_effective_position_settings_key() == "media"
+    assert volume.get_effective_monitor_settings_key() == "media"
+    assert volume.supports_layout_resize_edit is False
+
+
 def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_dedupes():
     class _Owner:
         pass
