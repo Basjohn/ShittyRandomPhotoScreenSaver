@@ -105,7 +105,13 @@ def test_resolve_snap_local_rect_for_edit_reports_active_guides():
     assert snap.vertical_guides
     assert snap.vertical_guides[0].position == 480
     assert snap.vertical_guides[0].kind == "grid"
-    assert snap.horizontal_guides == ()
+    assert snap.vertical_guides[0].distance == 6
+    assert snap.horizontal_guides
+    assert snap.horizontal_guides[0].position == 204
+    assert snap.horizontal_guides[0].kind == "grid"
+    assert snap.horizontal_guides[0].distance == 0
+    assert any(guide.position == 200 and guide.kind == "peer" for guide in snap.horizontal_assists)
+    assert any(guide.position == 480 and guide.kind == "peer" for guide in snap.vertical_assists)
 
 
 def test_resolve_snap_local_rect_for_edit_can_report_peer_guides_when_closer_than_grid():
@@ -122,6 +128,63 @@ def test_resolve_snap_local_rect_for_edit_can_report_peer_guides_when_closer_tha
     assert snap.vertical_guides
     assert snap.vertical_guides[0].position == 301
     assert snap.vertical_guides[0].kind == "peer"
+    assert snap.vertical_guides[0].distance == 1
+    assert snap.vertical_assists == ()
+
+
+def test_resolve_snap_local_rect_for_edit_keeps_primary_guides_when_already_exactly_snapped():
+    display_size = QSize(1000, 600)
+
+    snap = resolve_snap_local_rect_for_edit(
+        QRect(120, 240, 140, 70),
+        display_size,
+    )
+
+    assert snap.rect == QRect(120, 240, 140, 70)
+    assert snap.vertical_guides
+    assert snap.vertical_guides[0].position == 120
+    assert snap.vertical_guides[0].kind == "grid"
+    assert snap.vertical_guides[0].distance == 0
+    assert snap.horizontal_guides
+    assert snap.horizontal_guides[0].position == 240
+    assert snap.horizontal_guides[0].kind == "grid"
+    assert snap.horizontal_guides[0].distance == 0
+
+
+def test_resolve_snap_local_rect_for_edit_reports_bottom_alignment_as_horizontal_peer_assist():
+    display_size = QSize(1000, 600)
+    peer = QRect(300, 200, 180, 90)
+
+    snap = resolve_snap_local_rect_for_edit(
+        QRect(120, 216, 140, 74),
+        display_size,
+        peer_rects=[peer],
+    )
+
+    assert snap.horizontal_guides
+    assert snap.horizontal_guides[0].position == 216
+    assert snap.horizontal_guides[0].kind == "grid"
+    assert any(guide.position == 290 and guide.kind == "peer" for guide in snap.horizontal_assists)
+
+
+def test_resolve_snap_local_rect_for_edit_keeps_same_line_peer_assist_when_grid_wins():
+    display_size = QSize(1000, 600)
+    peer = QRect(300, 192, 180, 96)
+
+    snap = resolve_snap_local_rect_for_edit(
+        QRect(300, 216, 140, 72),
+        display_size,
+        peer_rects=[peer],
+    )
+
+    assert snap.vertical_guides
+    assert snap.vertical_guides[0].position == 300
+    assert snap.vertical_guides[0].kind == "grid"
+    assert any(guide.position == 300 and guide.kind == "peer" for guide in snap.vertical_assists)
+    assert snap.horizontal_guides
+    assert snap.horizontal_guides[0].position == 216
+    assert snap.horizontal_guides[0].kind == "grid"
+    assert any(guide.position == 288 and guide.kind == "peer" for guide in snap.horizontal_assists)
 
 
 class _FakeScreen:

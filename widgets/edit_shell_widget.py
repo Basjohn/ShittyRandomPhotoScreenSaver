@@ -47,6 +47,10 @@ class EditShellWidget(QWidget):
         self._transfer_blocked = False
         self._transfer_block_reason = ""
         self._live_geometry_resolver = live_geometry_resolver
+        self._active_vertical_guides: tuple[tuple[int, str], ...] = ()
+        self._active_horizontal_guides: tuple[tuple[int, str], ...] = ()
+        self._active_vertical_assists: tuple[tuple[int, str], ...] = ()
+        self._active_horizontal_assists: tuple[tuple[int, str], ...] = ()
 
         button_stylesheet = """
             QPushButton {
@@ -118,6 +122,20 @@ class EditShellWidget(QWidget):
 
     def set_snapshot(self, snapshot: QPixmap) -> None:
         self._snapshot = snapshot
+        self.update()
+
+    def set_alignment_guides(
+        self,
+        *,
+        vertical: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+        horizontal: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+        vertical_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+        horizontal_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+    ) -> None:
+        self._active_vertical_guides = tuple((int(pos), str(kind)) for pos, kind in vertical)
+        self._active_horizontal_guides = tuple((int(pos), str(kind)) for pos, kind in horizontal)
+        self._active_vertical_assists = tuple((int(pos), str(kind)) for pos, kind in vertical_assists)
+        self._active_horizontal_assists = tuple((int(pos), str(kind)) for pos, kind in horizontal_assists)
         self.update()
 
     def set_reset_size_enabled(self, enabled: bool) -> None:
@@ -227,6 +245,44 @@ class EditShellWidget(QWidget):
 
         if self._snapshot is not None and not self._snapshot.isNull():
             painter.drawPixmap(self.rect(), self._snapshot)
+
+        assist_pen = QPen(QColor(180, 110, 255, 235), 3.0)
+        shell_rect = self.geometry()
+        primary_vertical_local = None
+        primary_horizontal_local = None
+        if self._active_vertical_guides:
+            candidate = int(self._active_vertical_guides[0][0]) - shell_rect.x()
+            if 0 <= candidate < self.width():
+                primary_vertical_local = candidate
+        if self._active_horizontal_guides:
+            candidate = int(self._active_horizontal_guides[0][0]) - shell_rect.y()
+            if 0 <= candidate < self.height():
+                primary_horizontal_local = candidate
+
+        def _draw_vertical_guide(local_x: int, pen: QPen, preferred_y: int | None = None) -> None:
+            painter.setPen(pen)
+            if preferred_y is not None and 0 <= preferred_y < self.height():
+                anchor_y = 0 if preferred_y <= (self.height() / 2) else self.height() - 1
+                painter.drawLine(local_x, anchor_y, local_x, preferred_y)
+                return
+            painter.drawLine(local_x, 0, local_x, self.height())
+
+        def _draw_horizontal_guide(local_y: int, pen: QPen, preferred_x: int | None = None) -> None:
+            painter.setPen(pen)
+            if preferred_x is not None and 0 <= preferred_x < self.width():
+                anchor_x = 0 if preferred_x <= (self.width() / 2) else self.width() - 1
+                painter.drawLine(anchor_x, local_y, preferred_x, local_y)
+                return
+            painter.drawLine(0, local_y, self.width(), local_y)
+
+        for x, _kind in self._active_vertical_assists:
+            local_x = int(x) - shell_rect.x()
+            if 0 <= local_x < self.width():
+                _draw_vertical_guide(local_x, assist_pen, primary_horizontal_local)
+        for y, _kind in self._active_horizontal_assists:
+            local_y = int(y) - shell_rect.y()
+            if 0 <= local_y < self.height():
+                _draw_horizontal_guide(local_y, assist_pen, primary_vertical_local)
 
         if self._transfer_blocked:
             overlay_pen = QPen(QColor(255, 179, 71, 245), 3)

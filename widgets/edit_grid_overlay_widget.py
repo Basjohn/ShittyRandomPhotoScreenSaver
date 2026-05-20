@@ -35,6 +35,8 @@ class EditGridOverlayWidget(QWidget):
         self._gutter_px = max(0, int(gutter_px))
         self._active_vertical_guides: tuple[tuple[int, str], ...] = ()
         self._active_horizontal_guides: tuple[tuple[int, str], ...] = ()
+        self._active_vertical_assists: tuple[tuple[int, str], ...] = ()
+        self._active_horizontal_assists: tuple[tuple[int, str], ...] = ()
         self.setGeometry(global_rect)
 
     def set_active_guides(
@@ -42,9 +44,13 @@ class EditGridOverlayWidget(QWidget):
         *,
         vertical: tuple[tuple[int, str], ...] | list[tuple[int, str]],
         horizontal: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+        vertical_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
+        horizontal_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
     ) -> None:
         self._active_vertical_guides = tuple((int(pos), str(kind)) for pos, kind in vertical)
         self._active_horizontal_guides = tuple((int(pos), str(kind)) for pos, kind in horizontal)
+        self._active_vertical_assists = tuple((int(pos), str(kind)) for pos, kind in vertical_assists)
+        self._active_horizontal_assists = tuple((int(pos), str(kind)) for pos, kind in horizontal_assists)
         self.update()
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
@@ -81,14 +87,13 @@ class EditGridOverlayWidget(QWidget):
             for y in sorted(y_positions):
                 painter.drawLine(0, y, width, y)
 
-        highlight_pen = QPen(QColor(255, 255, 255, 230), 1)
-        assist_pen = QPen(QColor(180, 110, 255, 128), 1)
-        for x, kind in self._active_vertical_guides:
-            painter.setPen(assist_pen if kind == "peer" else highlight_pen)
+        assist_pen = QPen(QColor(180, 110, 255, 235), 3.0)
+        for x, _kind in self._active_vertical_assists:
+            painter.setPen(assist_pen)
             clamped_x = max(0, min(int(x), width - 1))
             painter.drawLine(clamped_x, 0, clamped_x, height)
-        for y, kind in self._active_horizontal_guides:
-            painter.setPen(assist_pen if kind == "peer" else highlight_pen)
+        for y, _kind in self._active_horizontal_assists:
+            painter.setPen(assist_pen)
             clamped_y = max(0, min(int(y), height - 1))
             painter.drawLine(0, clamped_y, width, clamped_y)
 

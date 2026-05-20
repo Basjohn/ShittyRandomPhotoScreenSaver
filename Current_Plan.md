@@ -21,12 +21,18 @@ Core value: build on the now-landed first-phase edit session without overpromisi
   - global authored reset must feel identical to the normal save/rebuild reveal path,
   - live snapping should stay strong without jitter,
   - edit mode should keep the new low-opacity compositor grid overlay aligned with the real snap contract without affecting inactive runtime overhead,
+  - dynamic guide UX must stay truthful to the actual snap result:
+    - peer assist lines must appear on the edge the user is actually aligning to (top/bottom and left/right), not just the nearest unrelated axis,
+    - shell-local guide continuations should anchor from the corner/edge nearest the actual active alignment instead of always reading as top-left-biased,
+    - dynamic guide thickness/opacity should stay strong enough to read through real wallpapers without becoming visually noisy,
+    - edit mode should temporarily deepen the existing compositor/background dimming to at least 50% without touching saved accessibility settings, while leaving widgets and the grid undimmed,
   - settings open/close with `Custom` layouts should not flash widgets at authored anchors before fade,
   - maintain MC-profile parity while keeping the runtime contract canonical,
   - keep edit mode truly global across the active compositor-backed display set rather than per-display,
   - keep shell/session UX stable:
     - per-widget reset affordance must stay reliably clickable,
     - local shell reset roles must stay explicit (`Reset Position` vs `Reset Size`) so users are not forced to infer hidden semantics,
+    - `Escape` must cancel the global edit session and `Enter` / `Return` must save it without depending on fragile shell focus,
     - entering edit mode must not corrupt the compositor/background image,
     - media/visualizer live updates must not resurrect hidden runtime widgets mid-session,
     - entering settings during an active CUSTOM session must always cancel the shell session cleanly before the normal stop/dialog path begins.
@@ -34,6 +40,15 @@ Core value: build on the now-landed first-phase edit session without overpromisi
   - `spotify_visualizer`
 - [ ] Land visualizer participation as move + safe uniform resize through `widgets/spotify_visualizer/card_geometry.py`, not shell-only stretching or mode-local hacks.
 - [ ] Keep media dependents (`spotify_visualizer`, `spotify_volume`, `mute_button`) as explicit CUSTOM follow-through work until move/rebuild/reveal behavior and eventual uniform resize are fully parity-safe.
+- [ ] Design and land the visualizer-routing contract split only after the guide/edit foundation is stable:
+  - keep `spotify_volume` intentionally bound to media ownership/routing,
+  - give `spotify_visualizer` its own `monitor`/position authority for `Custom`,
+  - keep non-`Custom` behavior explicitly in “follow media” mode so current authored behavior stays identical,
+  - do not touch visualizer render-loop, audio-reactivity, warmup, or mode-runtime behavior while doing this routing split,
+  - prove parity with actionable checks:
+    - non-`Custom` media + visualizer still behave exactly as before,
+    - `Custom` can place media and visualizer on separate displays,
+    - save/reload preserves independent visualizer placement without introducing rebuild flicker or startup drift.
 - [ ] Evaluate optional overlap resistance only if it can be expressed as a clean contract-layer rule rather than per-widget drag hacks.
 - [ ] Decide whether `ALL` widgets should later gain any multi-display coordinated edit affordance beyond the current explicit transfer block, without weakening `monitor` as the ownership field.
 

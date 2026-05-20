@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QPixmap
+from PySide6.QtCore import QPoint, QRect, Qt, QEvent
+from PySide6.QtGui import QColor, QGuiApplication, QPixmap, QKeyEvent
 from PySide6.QtWidgets import QWidget
 
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
@@ -83,6 +83,9 @@ class _DisplayStub(QWidget):
         self._runtime_reload_requests = 0
         self._custom_layout_manager_proxy = None
         self._custom_layout_manager = None
+        self._dimming_enabled = False
+        self._dimming_opacity = 0.0
+        self._gl_compositor = None
         self.clock_widget: _EditableTestWidget | None = None
         self.clock2_widget = None
         self.clock3_widget = None
@@ -172,6 +175,14 @@ class _VisualizerLikeTestWidget(_EditableTestWidget):
 
     def start(self) -> None:
         self._started = True
+
+
+class _FakeCompositor:
+    def __init__(self) -> None:
+        self.calls: list[tuple[bool, float]] = []
+
+    def set_dimming(self, enabled: bool, opacity: float = 0.3) -> None:
+        self.calls.append((bool(enabled), float(opacity)))
 
 
 def _reset_custom_layout_manager_state() -> None:
@@ -296,6 +307,84 @@ def test_edit_shell_reset_buttons_emit_requests(qtbot):
 
     assert size_emitted == ["clock"]
     assert position_emitted == ["clock"]
+
+
+def test_custom_layout_manager_escape_cancels_active_session(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert CustomLayoutManager._key_filter is not None
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Escape, Qt.KeyboardModifier.NoModifier)
+    assert CustomLayoutManager._key_filter.eventFilter(display, event) is True
+    assert manager.is_active() is False
+
+
+def test_custom_layout_manager_enter_saves_active_session(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert CustomLayoutManager._key_filter is not None
+
+    event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+    assert CustomLayoutManager._key_filter.eventFilter(display, event) is True
+    assert settings_stub.saved is True
+    assert manager.is_active() is False
+
+
+def test_custom_layout_manager_raises_dimming_to_minimum_during_edit_mode(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    display._gl_compositor = _FakeCompositor()
+    display._dimming_enabled = False
+    display._dimming_opacity = 0.0
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert display._gl_compositor.calls[-1] == (True, 0.5)
+
+    manager.cancel_session()
+    assert display._gl_compositor.calls[-1] == (False, 0.0)
+
+
+def test_custom_layout_manager_preserves_stronger_existing_dimming(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    display._gl_compositor = _FakeCompositor()
+    display._dimming_enabled = True
+    display._dimming_opacity = 0.7
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert display._gl_compositor.calls[-1] == (True, 0.7)
+
+    manager.cancel_session()
+    assert display._gl_compositor.calls[-1] == (True, 0.7)
 
 
 def test_custom_layout_manager_defers_and_flushes_processed_images(qtbot):

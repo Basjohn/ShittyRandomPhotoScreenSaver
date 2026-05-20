@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PySide6.QtCore import QPoint, QRect, QSize, QTimer
-from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap
+from PySide6.QtCore import QPoint, QRect, QSize, QTimer, QObject, QEvent, Qt
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap, QKeyEvent
 
 from core.logging.logger import get_logger
 from rendering.custom_layout_contract import (
@@ -45,6 +45,28 @@ from widgets.edit_shell_widget import EditShellWidget
 logger = get_logger(__name__)
 
 
+class _CustomLayoutSessionKeyFilter(QObject):
+    """Global key filter for the active CUSTOM edit session."""
+
+    def eventFilter(self, watched: QObject | None, event: QEvent) -> bool:  # type: ignore[override]
+        if event.type() != QEvent.Type.KeyPress:
+            return False
+        if not isinstance(event, QKeyEvent):
+            return False
+        if event.isAutoRepeat():
+            return False
+        active_manager = CustomLayoutManager.active_manager()
+        if active_manager is None or not active_manager.is_active():
+            return False
+        if event.key() == Qt.Key.Key_Escape:
+            active_manager.cancel_session()
+            return True
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            active_manager.save_session()
+            return True
+        return False
+
+
 @dataclass
 class _ShellState:
     descriptor: WidgetRuntimeDescriptor
@@ -62,12 +84,15 @@ class _ShellState:
     current_screen: Any
     current_screen_signature: str
     current_monitor_value: str
+    last_drag_axis: str = "both"
 
 
 class CustomLayoutManager:
     """Owns one display participant in the global CUSTOM layout edit session."""
 
     _active_managers: list["CustomLayoutManager"] = []
+    _key_filter: _CustomLayoutSessionKeyFilter | None = None
+    _EDIT_MODE_MIN_DIM_OPACITY = 0.5
 
     def __init__(self, display_widget) -> None:
         self._display = display_widget
@@ -80,6 +105,7 @@ class CustomLayoutManager:
         self._grid_overlay: EditGridOverlayWidget | None = None
         self._deferred_processed_image: tuple[QPixmap, QPixmap, str] | None = None
         self._suppress_live_feedback_widget_ids: set[str] = set()
+        self._edit_mode_dimming_restore: tuple[bool, float] | None = None
 
     def _get_available_screens(self) -> list[Any]:
         instances = self._get_global_display_instances()
@@ -140,6 +166,32 @@ class CustomLayoutManager:
         return bool(cls._active_managers)
 
     @classmethod
+    def _uninstall_global_key_filter(cls) -> None:
+        app = QGuiApplication.instance()
+        if app is None:
+            cls._key_filter = None
+            return
+        if cls._key_filter is not None:
+            try:
+                app.removeEventFilter(cls._key_filter)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to remove global key filter", exc_info=True)
+        cls._key_filter = None
+
+    def _install_global_key_filter(self) -> None:
+        app = QGuiApplication.instance()
+        if app is None:
+            return
+        CustomLayoutManager._uninstall_global_key_filter()
+        try:
+            key_filter = _CustomLayoutSessionKeyFilter()
+            app.installEventFilter(key_filter)
+            CustomLayoutManager._key_filter = key_filter
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to install global key filter", exc_info=True)
+            CustomLayoutManager._key_filter = None
+
+    @classmethod
     def raise_all_active_shells(cls) -> None:
         for manager in cls._active_managers:
             manager._raise_all_shells()
@@ -191,6 +243,7 @@ class CustomLayoutManager:
         if not started:
             return False
         CustomLayoutManager._active_managers = started
+        started[0]._install_global_key_filter()
         return True
 
     def save_session(self) -> bool:
@@ -312,6 +365,7 @@ class CustomLayoutManager:
 
         self._active = True
         setattr(self._display, "_custom_layout_edit_active", True)
+        self._apply_edit_mode_dimming()
         target_widget_ids = {descriptor.widget_id for descriptor, _widget in targets}
         self._hide_special_widgets(target_widget_ids)
         self._show_grid_overlay()
@@ -612,6 +666,7 @@ class CustomLayoutManager:
                     logger.debug("[CUSTOM_LAYOUT] Failed to restore %s visibility", state.descriptor.widget_id, exc_info=True)
         self._shell_states.clear()
         self._destroy_grid_overlay()
+        self._restore_edit_mode_dimming()
 
         if restore_special_widgets:
             self._restore_special_widgets()
@@ -624,8 +679,45 @@ class CustomLayoutManager:
             CustomLayoutManager._active_managers = [
                 manager for manager in CustomLayoutManager._active_managers if manager is not self
             ]
+        if not CustomLayoutManager._active_managers:
+            CustomLayoutManager._uninstall_global_key_filter()
         setattr(self._display, "_custom_layout_edit_active", False)
         self.flush_deferred_processed_image()
+
+    def _apply_edit_mode_dimming(self) -> None:
+        comp = getattr(self._display, "_gl_compositor", None)
+        if comp is None or not hasattr(comp, "set_dimming"):
+            self._edit_mode_dimming_restore = None
+            return
+
+        prior_enabled = bool(getattr(self._display, "_dimming_enabled", False))
+        prior_opacity = float(getattr(self._display, "_dimming_opacity", 0.0) or 0.0)
+        self._edit_mode_dimming_restore = (prior_enabled, prior_opacity)
+
+        target_enabled = True
+        target_opacity = max(prior_opacity, self._EDIT_MODE_MIN_DIM_OPACITY)
+        try:
+            self._display._dimming_enabled = target_enabled
+            self._display._dimming_opacity = target_opacity
+            comp.set_dimming(target_enabled, target_opacity)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to apply edit-mode dimming", exc_info=True)
+
+    def _restore_edit_mode_dimming(self) -> None:
+        restore = self._edit_mode_dimming_restore
+        self._edit_mode_dimming_restore = None
+        if restore is None:
+            return
+        comp = getattr(self._display, "_gl_compositor", None)
+        if comp is None or not hasattr(comp, "set_dimming"):
+            return
+        enabled, opacity = restore
+        try:
+            self._display._dimming_enabled = bool(enabled)
+            self._display._dimming_opacity = float(opacity)
+            comp.set_dimming(bool(enabled), float(opacity))
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to restore dimming after edit mode", exc_info=True)
 
     def _collect_targets(self) -> list[tuple[WidgetRuntimeDescriptor, Any]]:
         targets: list[tuple[WidgetRuntimeDescriptor, Any]] = []
@@ -760,6 +852,7 @@ class CustomLayoutManager:
             current_screen=screen,
             current_screen_signature=screen_signature,
             current_monitor_value=current_monitor_value,
+            last_drag_axis="both",
         )
 
     def _capture_visualizer_shell_snapshot(self, widget: Any, local_rect: QRect) -> QPixmap:
@@ -856,6 +949,14 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
+        dx = abs(global_rect.x() - state.current_global_rect.x())
+        dy = abs(global_rect.y() - state.current_global_rect.y())
+        if dx > dy:
+            state.last_drag_axis = "x"
+        elif dy > dx:
+            state.last_drag_axis = "y"
+        else:
+            state.last_drag_axis = "both"
         if widget_id in self._suppress_live_feedback_widget_ids:
             state.current_global_rect = QRect(global_rect)
             return
@@ -874,6 +975,7 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None:
             return
+        state.last_drag_axis = "both"
         committed = self._resolve_shell_global_rect(
             state,
             global_rect,
@@ -1030,7 +1132,7 @@ class CustomLayoutManager:
         local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
-        self._update_grid_guides(target_screen, snap_resolution)
+        self._update_grid_guides(state, target_screen, snap_resolution)
         return QRect(
             geom.x() + local_rect.x(),
             geom.y() + local_rect.y(),
@@ -1038,7 +1140,16 @@ class CustomLayoutManager:
             local_rect.height(),
         )
 
-    def _update_grid_guides(self, target_screen: Any, snap_resolution) -> None:
+    def _update_grid_guides(self, state: _ShellState, target_screen: Any, snap_resolution) -> None:
+        vertical_assists = snap_resolution.vertical_assists
+        horizontal_assists = snap_resolution.horizontal_assists
+
+        state.shell.set_alignment_guides(
+            vertical=[(guide.position, guide.kind) for guide in snap_resolution.vertical_guides],
+            horizontal=[(guide.position, guide.kind) for guide in snap_resolution.horizontal_guides],
+            vertical_assists=[(guide.position, guide.kind) for guide in vertical_assists],
+            horizontal_assists=[(guide.position, guide.kind) for guide in horizontal_assists],
+        )
         for manager in CustomLayoutManager._active_managers:
             overlay = getattr(manager, "_grid_overlay", None)
             if overlay is None:
@@ -1047,9 +1158,11 @@ class CustomLayoutManager:
                 overlay.set_active_guides(
                     vertical=[(guide.position, guide.kind) for guide in snap_resolution.vertical_guides],
                     horizontal=[(guide.position, guide.kind) for guide in snap_resolution.horizontal_guides],
+                    vertical_assists=[(guide.position, guide.kind) for guide in vertical_assists],
+                    horizontal_assists=[(guide.position, guide.kind) for guide in horizontal_assists],
                 )
             else:
-                overlay.set_active_guides(vertical=(), horizontal=())
+                overlay.set_active_guides(vertical=(), horizontal=(), vertical_assists=(), horizontal_assists=())
 
     def _resolve_target_screen_for_rect(
         self,

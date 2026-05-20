@@ -61,6 +61,7 @@ class CustomLayoutEntry:
 class SnapGuide:
     position: int
     kind: str
+    distance: int = 0
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,8 @@ class SnapResolution:
     rect: QRect
     vertical_guides: tuple[SnapGuide, ...] = ()
     horizontal_guides: tuple[SnapGuide, ...] = ()
+    vertical_assists: tuple[SnapGuide, ...] = ()
+    horizontal_assists: tuple[SnapGuide, ...] = ()
 
 
 def get_screen_signature(screen: QScreen | None) -> str:
@@ -529,10 +532,57 @@ def _snap_axis_position(
             best_delta = delta
             best_kind = kind
             best_guide = guide_position
-    guides: tuple[SnapGuide, ...] = ()
-    if best != current:
-        guides = (SnapGuide(position=max(0, min(int(best_guide), max(0, boundary_span - 1))), kind=best_kind),)
-    return best, guides
+    guides: list[SnapGuide] = []
+    if best_delta <= threshold and best_kind:
+        guides.append(
+            SnapGuide(
+                position=max(0, min(int(best_guide), max(0, boundary_span - 1))),
+                kind=best_kind,
+                distance=int(best_delta),
+            )
+        )
+
+    return best, tuple(guides)
+
+
+def _collect_peer_assists_for_axis(
+    snapped_position: int,
+    span: int,
+    boundary_span: int,
+    peer_spans: list[tuple[int, int]],
+    *,
+    threshold_px: int,
+    primary_guide: SnapGuide | None,
+) -> tuple[SnapGuide, ...]:
+    threshold = max(0, int(threshold_px))
+    snapped_start = int(snapped_position)
+    snapped_end = int(snapped_position) + max(1, int(span))
+    max_guide_position = max(0, int(boundary_span) - 1)
+
+    assist_map: dict[int, SnapGuide] = {}
+    for peer_start, peer_end in peer_spans:
+        for guide_position in (int(peer_start), int(peer_end)):
+            distance = min(
+                abs(snapped_start - guide_position),
+                abs(snapped_end - guide_position),
+            )
+            if distance > threshold:
+                continue
+            if (
+                primary_guide is not None
+                and primary_guide.kind == "peer"
+                and primary_guide.position == guide_position
+            ):
+                continue
+            guide = SnapGuide(
+                position=max(0, min(guide_position, max_guide_position)),
+                kind="peer",
+                distance=int(distance),
+            )
+            prior = assist_map.get(guide.position)
+            if prior is None or guide.distance < prior.distance:
+                assist_map[guide.position] = guide
+    return tuple(sorted(assist_map.values(), key=lambda guide: (guide.distance, guide.position)))
 
 
 def snap_local_rect_for_edit(
@@ -574,7 +624,7 @@ def resolve_snap_local_rect_for_edit(
 
     clamped = clamp_local_rect_to_bounds(rect, display_size, min_size=min_size)
     peer_list = [QRect(peer) for peer in peer_rects if isinstance(peer, QRect)]
-    x, vertical_guides = _snap_axis_position(
+    x, vertical_candidates = _snap_axis_position(
         clamped.x(),
         clamped.width(),
         display_size.width(),
@@ -582,13 +632,33 @@ def resolve_snap_local_rect_for_edit(
         threshold_px=threshold_px,
         gutter_px=gutter_px,
     )
-    y, horizontal_guides = _snap_axis_position(
+    y, horizontal_candidates = _snap_axis_position(
         clamped.y(),
         clamped.height(),
         display_size.height(),
         [(peer.y(), peer.y() + peer.height()) for peer in peer_list],
         threshold_px=threshold_px,
         gutter_px=gutter_px,
+    )
+    vertical_guides = vertical_candidates[:1]
+    vertical_primary = vertical_guides[0] if vertical_guides else None
+    vertical_assists = _collect_peer_assists_for_axis(
+        x,
+        clamped.width(),
+        display_size.width(),
+        [(peer.x(), peer.x() + peer.width()) for peer in peer_list],
+        threshold_px=threshold_px,
+        primary_guide=vertical_primary,
+    )
+    horizontal_guides = horizontal_candidates[:1]
+    horizontal_primary = horizontal_guides[0] if horizontal_guides else None
+    horizontal_assists = _collect_peer_assists_for_axis(
+        y,
+        clamped.height(),
+        display_size.height(),
+        [(peer.y(), peer.y() + peer.height()) for peer in peer_list],
+        threshold_px=threshold_px,
+        primary_guide=horizontal_primary,
     )
     return SnapResolution(
         rect=clamp_local_rect_to_bounds(
@@ -598,6 +668,8 @@ def resolve_snap_local_rect_for_edit(
         ),
         vertical_guides=vertical_guides,
         horizontal_guides=horizontal_guides,
+        vertical_assists=vertical_assists,
+        horizontal_assists=horizontal_assists,
     )
 
 
