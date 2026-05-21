@@ -614,6 +614,14 @@ class MediaWidget(BaseOverlayWidget):
         Called when the media widget shows or hides so the visualizer and
         volume widgets can show/hide accordingly.
         """
+        manager = getattr(self, "_widget_manager", None)
+        if manager is not None and hasattr(manager, "sync_spotify_dependents_for_media_widget"):
+            try:
+                manager.sync_spotify_dependents_for_media_widget(self)
+                return
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
         parent = self.parent()
         if parent is None:
             return

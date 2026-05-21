@@ -21,6 +21,7 @@ from rendering.widget_descriptors import (
     get_widget_runtime_descriptor_by_attr_name,
     is_custom_position_selected_for_widget,
 )
+from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor, compute_expected_overlays
 from rendering.fade_coordinator import FadeCoordinator
 from widgets.media_widget import MediaWidget
@@ -1848,6 +1849,38 @@ class WidgetManager:
             QTimer.singleShot(0, _run)
         except Exception:
             _run()
+
+    def sync_spotify_dependents_for_media_widget(self, media_widget: Optional[MediaWidget]) -> None:
+        """Sync all Spotify dependents anchored to *media_widget* across displays."""
+
+        if media_widget is None:
+            return
+
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to enumerate displays for Spotify dependent sync", exc_info=True)
+            instances = []
+
+        if self._parent is not None and self._parent not in instances:
+            instances.append(self._parent)
+
+        seen: set[int] = set()
+        for instance in instances:
+            for attr_name in ("spotify_visualizer_widget", "spotify_volume_widget", "mute_button_widget"):
+                widget = getattr(instance, attr_name, None)
+                if widget is None or id(widget) in seen:
+                    continue
+                seen.add(id(widget))
+                if getattr(widget, "_anchor_media", None) is not media_widget:
+                    continue
+                sync = getattr(widget, "sync_visibility_with_anchor", None)
+                if not callable(sync):
+                    continue
+                try:
+                    sync()
+                except Exception:
+                    logger.debug("[WIDGET_MANAGER] Failed to sync %s with media anchor", attr_name, exc_info=True)
 
     def _register_spotify_secondary_fade(self, widget: Optional[QWidget]) -> None:
         if widget is None:

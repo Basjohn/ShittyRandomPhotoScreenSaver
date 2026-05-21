@@ -72,6 +72,34 @@ class TestSettingsManagerBasics:
         )
         assert reloaded.get("persist.key") == "value123"
 
+    def test_widgets_map_persists_visualizer_custom_position_and_monitor(self, tmp_path: Path) -> None:
+        storage_root = tmp_path / "settings"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        widgets = manager.get_widgets_map()
+        widgets["media"] = {"enabled": True, "position": "Custom", "monitor": "2"}
+        widgets["spotify_visualizer"] = {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+            "mode": "bubble",
+        }
+        manager.set_widgets_map(widgets)
+        manager.save()
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        persisted = reloaded.get_widgets_map()["spotify_visualizer"]
+        assert persisted["position"] == "Custom"
+        assert persisted["monitor"] == "1"
+
 
 class TestSettingsManagerTypeConversion:
     def test_to_bool_true_values(self) -> None:

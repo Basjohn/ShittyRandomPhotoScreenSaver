@@ -764,6 +764,8 @@ class WidgetRuntimeDescriptor:
     supports_layout_resize_edit: bool = False
     requires_size_reset_affordance: bool = False
     custom_layout_resize_mode: str = "none"
+    writes_custom_position_key: bool = True
+    writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
@@ -782,6 +784,89 @@ class WidgetRuntimeDescriptor:
 
     def get_effective_monitor_settings_key(self) -> str:
         return self.monitor_settings_key or self.widget_id
+
+
+def _is_visualizer_custom_routing_selected(
+    widgets_config: Mapping[str, Any] | None,
+) -> bool:
+    if not isinstance(widgets_config, Mapping):
+        return False
+    section = widgets_config.get("spotify_visualizer", {})
+    if not isinstance(section, Mapping):
+        return False
+    return str(section.get("position", "") or "").strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
+
+
+def get_effective_position_settings_key_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+) -> str:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return widget_id
+    if widget_id == "spotify_visualizer":
+        return "spotify_visualizer" if _is_visualizer_custom_routing_selected(widgets_config) else "media"
+    return descriptor.get_effective_position_settings_key()
+
+
+def get_effective_monitor_settings_key_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+) -> str:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return widget_id
+    if widget_id == "spotify_visualizer":
+        return "spotify_visualizer" if _is_visualizer_custom_routing_selected(widgets_config) else "media"
+    return descriptor.get_effective_monitor_settings_key()
+
+
+def get_effective_monitor_value_for_widget(
+    widget_id: str,
+    widgets_config: Mapping[str, Any] | None,
+    *,
+    default: str = "ALL",
+) -> str:
+    if not isinstance(widgets_config, Mapping):
+        return default
+    settings_key = get_effective_monitor_settings_key_for_widget(widget_id, widgets_config)
+    section = widgets_config.get(settings_key, {})
+    if not isinstance(section, Mapping):
+        return default
+    value = str(section.get("monitor", default) or default).strip()
+    return value or default
+
+
+def get_custom_persistence_position_settings_key_for_widget(widget_id: str) -> str:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return widget_id
+    if widget_id == "spotify_visualizer":
+        return "spotify_visualizer"
+    return descriptor.get_effective_position_settings_key()
+
+
+def get_custom_persistence_monitor_settings_key_for_widget(widget_id: str) -> str:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return widget_id
+    if widget_id == "spotify_visualizer":
+        return "spotify_visualizer"
+    return descriptor.get_effective_monitor_settings_key()
+
+
+def widget_writes_custom_position_key(widget_id: str) -> bool:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return True
+    return bool(descriptor.writes_custom_position_key)
+
+
+def widget_writes_custom_monitor_key(widget_id: str) -> bool:
+    descriptor = get_widget_runtime_descriptor(widget_id)
+    if descriptor is None:
+        return True
+    return bool(descriptor.writes_custom_monitor_key)
 
 
 WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
@@ -959,9 +1044,11 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         startup_stage="secondary",
         anchor_dependent=True,
         live_refresh_handler="_refresh_spotify_visualizer_config",
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
         position_settings_key="media",
         monitor_settings_key="media",
         supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="visualizer_rect",
@@ -978,6 +1065,8 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         monitor_settings_key="media",
         live_refresh_handler="_refresh_media_config",
         supports_layout_edit_mode=True,
+        writes_custom_position_key=True,
+        writes_custom_monitor_key=False,
     ),
     WidgetRuntimeDescriptor(
         widget_id="mute_button",
@@ -1094,7 +1183,7 @@ def is_custom_position_selected_for_widget(
     descriptor = get_widget_runtime_descriptor(widget_id)
     if descriptor is None or not isinstance(widgets_config, Mapping):
         return False
-    settings_key = descriptor.get_effective_position_settings_key()
+    settings_key = get_effective_position_settings_key_for_widget(widget_id, widgets_config)
     section = widgets_config.get(settings_key, {})
     if not isinstance(section, Mapping):
         return False
@@ -1116,14 +1205,20 @@ def sync_custom_layout_restore_routes(
         if not descriptor.supports_custom_position_slot:
             continue
 
-        position_section = widgets_config.get(descriptor.get_effective_position_settings_key(), {})
+        position_section = widgets_config.get(
+            get_effective_position_settings_key_for_widget(descriptor.widget_id, widgets_config),
+            {},
+        )
         if not isinstance(position_section, Mapping):
             continue
         current_position = str(position_section.get("position", "") or "").strip()
         if not current_position or current_position.lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
             continue
 
-        monitor_section = widgets_config.get(descriptor.get_effective_monitor_settings_key(), {})
+        monitor_section = widgets_config.get(
+            get_effective_monitor_settings_key_for_widget(descriptor.widget_id, widgets_config),
+            {},
+        )
         if not isinstance(monitor_section, Mapping):
             monitor_section = {}
         current_monitor = str(monitor_section.get("monitor", "ALL") or "ALL").strip() or "ALL"

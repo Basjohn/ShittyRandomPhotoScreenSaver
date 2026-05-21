@@ -13,7 +13,12 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor
+from rendering.widget_descriptors import (
+    get_effective_monitor_value_for_widget,
+    is_custom_position_selected_for_widget,
+)
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -25,6 +30,55 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+def _resolve_visualizer_anchor_media_widget(
+    mgr: "WidgetManager",
+    widgets_config: Mapping[str, object],
+    screen_index: int,
+    local_media_widget: Optional[MediaWidget],
+) -> Optional[MediaWidget]:
+    media_settings = widgets_config.get("media", {}) if isinstance(widgets_config, Mapping) else {}
+    media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
+    media_monitor_sel = str(media_model.monitor or "ALL")
+
+    if media_monitor_sel == "ALL":
+        if local_media_widget is not None:
+            return local_media_widget
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to enumerate displays for visualizer anchor resolution", exc_info=True)
+            instances = []
+        for instance in instances:
+            candidate = getattr(instance, "media_widget", None)
+            if candidate is not None:
+                return candidate
+        return None
+
+    try:
+        target_screen_index = max(0, int(media_monitor_sel) - 1)
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] Invalid media monitor for visualizer anchor: %s", media_monitor_sel)
+        return local_media_widget
+
+    if local_media_widget is not None and screen_index == target_screen_index:
+        return local_media_widget
+
+    try:
+        instances = get_coordinator().get_all_instances()
+    except Exception:
+        logger.debug("[WIDGET_MANAGER] Failed to enumerate displays for visualizer anchor resolution", exc_info=True)
+        instances = []
+
+    for instance in instances:
+        if int(getattr(instance, "screen_index", -1)) != target_screen_index:
+            continue
+        candidate = getattr(instance, "media_widget", None)
+        if candidate is not None:
+            return candidate
+
+    return local_media_widget
 
 
 def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, apply_mode: bool = True) -> None:
@@ -417,9 +471,6 @@ def create_spotify_visualizer_widget(
     media_widget: Optional[MediaWidget] = None,
 ) -> Optional[SpotifyVisualizerWidget]:
     """Create and configure a Spotify visualizer widget."""
-    if media_widget is None:
-        return None
-
     media_settings = widgets_config.get('media', {}) if isinstance(widgets_config, dict) else {}
     media_model = MediaWidgetSettings.from_mapping(media_settings if isinstance(media_settings, Mapping) else {})
     spotify_vis_settings = widgets_config.get('spotify_visualizer', {}) if isinstance(widgets_config, dict) else {}
@@ -433,14 +484,29 @@ def create_spotify_visualizer_widget(
     )
     spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
 
-    media_monitor_sel = media_model.monitor
+    effective_monitor_sel = get_effective_monitor_value_for_widget(
+        "spotify_visualizer",
+        widgets_config if isinstance(widgets_config, Mapping) else None,
+        default=str(media_model.monitor or "ALL"),
+    )
+    custom_routing_active = is_custom_position_selected_for_widget(
+        "spotify_visualizer",
+        widgets_config if isinstance(widgets_config, Mapping) else None,
+    )
     try:
-        show_on_this = (media_monitor_sel == 'ALL') or (int(media_monitor_sel) == (screen_index + 1))
+        show_on_this = (effective_monitor_sel == 'ALL') or (int(effective_monitor_sel) == (screen_index + 1))
     except Exception as e:
         logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         show_on_this = False
 
-    if not (spotify_vis_enabled and show_on_this):
+    anchor_media_widget = _resolve_visualizer_anchor_media_widget(
+        mgr,
+        widgets_config if isinstance(widgets_config, Mapping) else {},
+        screen_index,
+        media_widget,
+    )
+
+    if not (spotify_vis_enabled and show_on_this and anchor_media_widget is not None):
         return None
 
     try:
@@ -462,15 +528,16 @@ def create_spotify_visualizer_widget(
         )
         if is_perf_metrics_enabled():
             logger.info(
-                "[SPOTIFY_VIS] Created visualizer widget (screen=%s, bar_count=%s, monitor=%s)",
+                "[SPOTIFY_VIS] Created visualizer widget (screen=%s, bar_count=%s, monitor=%s, custom_routing=%s)",
                 screen_index,
                 bar_count,
-                media_monitor_sel,
+                effective_monitor_sel,
+                custom_routing_active,
             )
 
         # Anchor geometry to media widget
         try:
-            vis.set_anchor_media_widget(media_widget)
+            vis.set_anchor_media_widget(anchor_media_widget)
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
@@ -541,14 +608,14 @@ def create_spotify_visualizer_widget(
         # Wire media state into visualizer
         try:
             if not getattr(vis, "_srpss_media_connected", False):
-                media_widget.media_updated.connect(vis.handle_media_update)
+                anchor_media_widget.media_updated.connect(vis.handle_media_update)
                 setattr(vis, "_srpss_media_connected", True)
                 # Fast path for already-warm media widgets: if metadata is
                 # already cached, seed the visualizer immediately. The
                 # authoritative cold-start seed still happens inside the
                 # visualizer lifecycle once startup ordering has settled.
                 try:
-                    seed_info = getattr(media_widget, '_last_info', None)
+                    seed_info = getattr(anchor_media_widget, '_last_info', None)
                     if seed_info is not None:
                         from dataclasses import asdict
                         seed_payload = asdict(seed_info)

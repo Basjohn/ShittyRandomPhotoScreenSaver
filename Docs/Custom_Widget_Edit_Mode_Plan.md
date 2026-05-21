@@ -89,12 +89,17 @@ What exists today:
   - runtime positioning honors that saved rect instead of always forcing the slider back to the media-card edge,
   - displayed volume is resynced from the real Spotify/MusicBee mixer session on activation, provider changes, and hidden→visible transitions without adding a high-frequency poll loop,
   - because it is currently move-only, CUSTOM snap/clamp/save/reapply must preserve the authored slider footprint rather than inheriting the generic resizable-widget minimum edit rect.
+- `spotify_visualizer` now uses a split routing contract:
+  - outside `Custom`, it stays exact `Follow Media` parity,
+  - in `Custom`, it owns its own numbered-display `position` / `monitor`,
+  - it may be created on a different display from Media while still anchoring content and visibility to the canonical media widget,
+  - leaving `Custom` preserves the saved visualizer custom display/rect dormant for later return.
 
 Important current limitation:
 - edit shells still never straddle two displays at once.
 - cross-display transfer is currently limited to numbered-monitor widget families.
 - `ALL` widgets remain intentionally display-locked during a single drag because `monitor` routing stays authoritative and we do not silently collapse `ALL` into a single-display binding.
-- `spotify_visualizer` still needs its final uniform-resize/reveal parity contract before the “every widget uniformly resizable” goal is fully complete.
+- `spotify_visualizer` still needs its final uniform-resize parity contract before the “every widget uniformly resizable” goal is fully complete.
 - `spotify_volume` is now move-safe in CUSTOM mode, but its own eventual uniform-resize contract is still separate follow-through work.
 
 ## 1. Purpose

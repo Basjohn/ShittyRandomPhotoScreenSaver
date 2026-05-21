@@ -1454,6 +1454,125 @@ class TestCreateTimeRefreshParity:
         assert vis is not None
         assert vis.call_order.index("activation_payload") < vis.call_order.index("thread_manager")
 
+    def test_create_spotify_visualizer_widget_can_anchor_to_media_on_other_display(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def __init__(self):
+                self.connected = []
+
+            def connect(self, callback):
+                self.connected.append(callback)
+
+        class FakeMediaWidget:
+            def __init__(self):
+                self.media_updated = FakeSignal()
+
+        remote_media = FakeMediaWidget()
+
+        class FakeDisplay:
+            def __init__(self, screen_index, media_widget=None):
+                self.screen_index = screen_index
+                self.media_widget = media_widget
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return [FakeDisplay(0, remote_media), FakeDisplay(1, None)]
+
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+                self._widgets = {}
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        vis = creators.create_spotify_visualizer_widget(
+            FakeManager(),
+            {
+                "media": {"enabled": True, "monitor": "1"},
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2", "mode": "bubble"},
+            },
+            shadows_config={},
+            screen_index=1,
+            thread_manager=None,
+            media_widget=None,
+        )
+
+        assert vis is not None
+        assert vis.anchor is remote_media
+
+    def test_create_spotify_visualizer_widget_requires_valid_media_anchor(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return []
+
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+        vis = creators.create_spotify_visualizer_widget(
+            FakeManager(),
+            {
+                "media": {"enabled": True, "monitor": "1"},
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+            },
+            shadows_config={},
+            screen_index=1,
+            thread_manager=None,
+            media_widget=None,
+        )
+
+        assert vis is None
+
 
 class TestDisplayFramePush:
     def test_push_spotify_visualizer_frame_preserves_spectrum_glow_and_osc_secondary_ghosts(self, monkeypatch):

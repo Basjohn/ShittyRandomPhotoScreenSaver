@@ -95,6 +95,7 @@ _CORE_SETTINGS_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "enabled": bool,
     "visualizers_enabled": bool,
     "monitor": str,
+    "position": str,
     "mode": str,
     "rainbow_enabled": bool,
     "rainbow_speed": float,
@@ -314,6 +315,7 @@ _CORE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "enabled": (False, bool),
     "visualizers_enabled": (True, bool),
     "monitor": ("ALL", str),
+    "position": ("Follow Media", str),
     "ghosting_enabled": (True, bool),
     "ghost_alpha": (0.4, float),
     "ghost_decay": (0.35, float),
@@ -1092,6 +1094,7 @@ class SpotifyVisualizerSettings:
     enabled: bool = False
     visualizers_enabled: bool = True
     monitor: str = "ALL"
+    position: str = "Follow Media"
     bar_count: int = 32
     bar_fill_color: list | None = None
     bar_border_color: list | None = None

@@ -33,10 +33,16 @@ from rendering.custom_layout_contract import (
     write_custom_layout_map,
 )
 from rendering.widget_descriptors import (
+    get_custom_persistence_monitor_settings_key_for_widget,
+    get_custom_persistence_position_settings_key_for_widget,
     WidgetRuntimeDescriptor,
+    get_effective_monitor_settings_key_for_widget,
+    get_effective_position_settings_key_for_widget,
     get_layout_edit_runtime_descriptors,
     is_custom_position_selected_for_widget,
     sync_custom_layout_restore_routes,
+    widget_writes_custom_monitor_key,
+    widget_writes_custom_position_key,
 )
 from rendering.multi_monitor_coordinator import get_coordinator
 from widgets.edit_grid_overlay_widget import EditGridOverlayWidget
@@ -314,14 +320,20 @@ class CustomLayoutManager:
                 if restore_entry is None:
                     continue
 
-                position_settings_key = state.descriptor.get_effective_position_settings_key()
+                position_settings_key = get_effective_position_settings_key_for_widget(
+                    widget_id,
+                    widgets_map,
+                )
                 position_section = widgets_map.get(position_settings_key, {})
                 if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
                     position_section = {}
                     widgets_map[position_settings_key] = position_section
                 position_section["position"] = restore_entry["position"]
 
-                monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
+                monitor_settings_key = get_effective_monitor_settings_key_for_widget(
+                    widget_id,
+                    widgets_map,
+                )
                 monitor_section = widgets_map.get(monitor_settings_key, {})
                 if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
                     monitor_section = {}
@@ -453,19 +465,21 @@ class CustomLayoutManager:
         )
         set_screen_layout_entry(custom_layout_map, target_signature, widget_id, entry)
 
-        position_settings_key = state.descriptor.get_effective_position_settings_key()
-        position_section = widgets_map.get(position_settings_key, {})
-        if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
-            position_section = {}
-            widgets_map[position_settings_key] = position_section
-        position_section["position"] = "Custom"
+        if widget_writes_custom_position_key(widget_id):
+            position_settings_key = get_custom_persistence_position_settings_key_for_widget(widget_id)
+            position_section = widgets_map.get(position_settings_key, {})
+            if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
+                position_section = {}
+                widgets_map[position_settings_key] = position_section
+            position_section["position"] = "Custom"
 
-        monitor_settings_key = state.descriptor.get_effective_monitor_settings_key()
-        monitor_section = widgets_map.get(monitor_settings_key, {})
-        if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
-            monitor_section = {}
-            widgets_map[monitor_settings_key] = monitor_section
-        monitor_section["monitor"] = monitor_value
+        if widget_writes_custom_monitor_key(widget_id):
+            monitor_settings_key = get_custom_persistence_monitor_settings_key_for_widget(widget_id)
+            monitor_section = widgets_map.get(monitor_settings_key, {})
+            if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
+                monitor_section = {}
+                widgets_map[monitor_settings_key] = monitor_section
+            monitor_section["monitor"] = monitor_value
 
     def _remove_widget_entries_from_other_displays(
         self,
@@ -897,7 +911,10 @@ class CustomLayoutManager:
         if settings_manager is None:
             return "ALL"
         widgets_map = settings_manager.get_widgets_map()
-        settings_key = descriptor.get_effective_monitor_settings_key()
+        settings_key = get_effective_monitor_settings_key_for_widget(
+            descriptor.widget_id,
+            widgets_map,
+        )
         section = widgets_map.get(settings_key, {})
         if not isinstance(section, dict):
             return "ALL"

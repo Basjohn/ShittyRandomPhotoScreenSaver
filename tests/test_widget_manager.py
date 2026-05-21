@@ -643,6 +643,41 @@ class TestStartupCoordination:
         assert manager._spotify_overlay_prewarm_attempted is False
         assert manager._spotify_overlay_prewarmed is False
 
+    def test_sync_spotify_dependents_for_media_widget_reaches_cross_display_visualizer(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+
+        class _Dependent:
+            def __init__(self, anchor):
+                self._anchor_media = anchor
+                self.sync_calls = 0
+
+            def sync_visibility_with_anchor(self):
+                self.sync_calls += 1
+
+        media_anchor = object()
+        local_display = SimpleNamespace(
+            spotify_visualizer_widget=None,
+            spotify_volume_widget=None,
+            mute_button_widget=None,
+        )
+        remote_visualizer = _Dependent(media_anchor)
+        remote_display = SimpleNamespace(
+            spotify_visualizer_widget=remote_visualizer,
+            spotify_volume_widget=None,
+            mute_button_widget=None,
+        )
+
+        class _CoordinatorStub:
+            def get_all_instances(self):
+                return [local_display, remote_display]
+
+        monkeypatch.setattr("rendering.widget_manager.get_coordinator", lambda: _CoordinatorStub())
+
+        manager = WidgetManager(local_display)
+        manager.sync_spotify_dependents_for_media_widget(media_anchor)
+
+        assert remote_visualizer.sync_calls == 1
+
 
 class TestCleanup:
     """Tests for cleanup operations."""
@@ -917,7 +952,7 @@ class TestSettingsRouting:
         assert vis._blob_width == pytest.approx(0.5)
         assert vis._geometry == (175, 400, 150, 280)
 
-    def test_position_spotify_visualizer_honors_custom_rect_when_media_position_is_custom(self):
+    def test_position_spotify_visualizer_honors_custom_rect_when_visualizer_position_is_custom(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
@@ -939,7 +974,10 @@ class TestSettingsRouting:
                 self.raised = True
 
         settings = MagicMock()
-        settings.get.return_value = {"media": {"position": "Custom"}}
+        settings.get.return_value = {
+            "media": {"position": "Bottom Left"},
+            "spotify_visualizer": {"position": "Custom"},
+        }
         manager = WidgetManager(MagicMock())
         manager._settings_manager = settings
 

@@ -12,7 +12,12 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
-from rendering.widget_descriptors import get_factory_widget_descriptors
+from rendering.multi_monitor_coordinator import get_coordinator
+from rendering.widget_descriptors import (
+    get_effective_monitor_value_for_widget,
+    get_factory_widget_descriptors,
+    is_custom_position_selected_for_widget,
+)
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
@@ -131,6 +136,73 @@ def setup_all_widgets(
         except Exception as exc:
             logger.warning("[WIDGET_MANAGER] Failed to inject ThreadManager into %s: %s", widget_name, exc)
 
+    def _reuse_existing_secondary(attr_name: str, registry_name: str) -> Optional[QWidget]:
+        parent = mgr._parent
+        if parent is None:
+            return None
+        try:
+            existing = getattr(parent, attr_name, None)
+        except Exception as exc:
+            logger.debug("[WIDGET_MANAGER] Failed to read %s for Spotify-secondary reuse: %s", attr_name, exc)
+            existing = None
+        if existing is None:
+            return None
+        mgr.register_widget(registry_name, existing)
+        mgr._bind_parent_attribute(attr_name, existing)
+        created[attr_name] = existing
+        _ensure_thread_manager(existing, registry_name)
+        return existing
+
+    def _start_secondary_widget(widget: Optional[QWidget], attr_name: str) -> None:
+        if widget is None:
+            return
+        _start_widgets({attr_name: widget})
+        try:
+            widget.raise_()
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to raise %s after deferred create", attr_name, exc_info=True)
+
+    def _ensure_remote_custom_visualizer() -> None:
+        if media_widget is None:
+            return
+        if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+            return
+        monitor_value = get_effective_monitor_value_for_widget("spotify_visualizer", widgets_config, default="ALL")
+        try:
+            target_screen_index = int(monitor_value) - 1
+        except Exception:
+            return
+        if target_screen_index == screen_index:
+            return
+        try:
+            instances = get_coordinator().get_all_instances()
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to enumerate displays for remote visualizer reconcile", exc_info=True)
+            return
+        target = next((inst for inst in instances if int(getattr(inst, "screen_index", -1)) == target_screen_index), None)
+        if target is None:
+            return
+        if getattr(target, "spotify_visualizer_widget", None) is not None:
+            return
+        target_manager = getattr(target, "_widget_manager", None)
+        if target_manager is None:
+            return
+        vis = target_manager.create_spotify_visualizer_widget(
+            widgets_config,
+            shadows_config,
+            target_screen_index,
+            thread_manager,
+            getattr(target, "media_widget", None),
+        )
+        if vis is None:
+            return
+        target_manager._register_spotify_secondary_fade(vis)
+        try:
+            target._apply_saved_custom_layouts()
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to apply saved custom layouts on remote visualizer reconcile", exc_info=True)
+        _start_secondary_widget(vis, "spotify_visualizer_widget")
+
     for descriptor in get_factory_widget_descriptors():
         if not descriptor.is_enabled_in_environment():
             continue
@@ -172,32 +244,40 @@ def setup_all_widgets(
         if widget is not None:
             _ensure_thread_manager(widget, descriptor.settings_key)
 
-    # Create Spotify widgets (require media widget) - still use direct methods
-    # as they have complex media widget anchoring logic
+    # Create Spotify widgets - volume/mute remain media-local, while the
+    # visualizer may resolve a cross-display media anchor when in Custom.
     media_widget = created.get('media_widget')
     if media_widget:
-        vol_widget = mgr.create_spotify_volume_widget(
-            widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-        )
+        vol_widget = _reuse_existing_secondary("spotify_volume_widget", "spotify_volume")
+        if vol_widget is None:
+            vol_widget = mgr.create_spotify_volume_widget(
+                widgets_config, shadows_config, screen_index, thread_manager, media_widget,
+            )
         if vol_widget:
             created['spotify_volume_widget'] = vol_widget
             mgr._register_spotify_secondary_fade(vol_widget)
 
-        vis_widget = mgr.create_spotify_visualizer_widget(
-            widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-        )
-        if vis_widget:
-            created['spotify_visualizer_widget'] = vis_widget
-            mgr._register_spotify_secondary_fade(vis_widget)
-
-        mute_btn = mgr.create_mute_button_widget(
-            widgets_config, screen_index, thread_manager, media_widget,
-        )
+        mute_btn = _reuse_existing_secondary("mute_button_widget", "mute_button")
+        if mute_btn is None:
+            mute_btn = mgr.create_mute_button_widget(
+                widgets_config, screen_index, thread_manager, media_widget,
+            )
         if mute_btn:
             created['mute_button_widget'] = mute_btn
             mgr._register_spotify_secondary_fade(mute_btn)
 
         mgr._queue_spotify_visibility_sync(media_widget)
+
+    vis_widget = _reuse_existing_secondary("spotify_visualizer_widget", "spotify_visualizer")
+    if vis_widget is None:
+        vis_widget = mgr.create_spotify_visualizer_widget(
+            widgets_config, shadows_config, screen_index, thread_manager, media_widget,
+        )
+    if vis_widget:
+        created['spotify_visualizer_widget'] = vis_widget
+        mgr._register_spotify_secondary_fade(vis_widget)
+
+    _ensure_remote_custom_visualizer()
 
     parent = mgr._parent
     if parent is not None:

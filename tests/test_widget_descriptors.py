@@ -31,6 +31,8 @@ from rendering.widget_descriptors import (
     load_widget_sections,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
+    widget_writes_custom_monitor_key,
+    widget_writes_custom_position_key,
 )
 from PySide6.QtWidgets import QButtonGroup
 
@@ -249,6 +251,40 @@ def test_spotify_volume_participates_in_custom_layout_via_media_contract():
     assert volume.get_effective_position_settings_key() == "media"
     assert volume.get_effective_monitor_settings_key() == "media"
     assert volume.supports_layout_resize_edit is False
+
+
+def test_spotify_visualizer_uses_media_routing_outside_custom():
+    from rendering.widget_descriptors import (
+        get_effective_monitor_settings_key_for_widget,
+        get_effective_position_settings_key_for_widget,
+        is_custom_position_selected_for_widget,
+    )
+
+    widgets_config = {
+        "media": {"position": "Bottom Left", "monitor": "2"},
+        "spotify_visualizer": {"position": "Top Right", "monitor": "1"},
+    }
+
+    assert is_custom_position_selected_for_widget("spotify_visualizer", widgets_config) is False
+    assert get_effective_position_settings_key_for_widget("spotify_visualizer", widgets_config) == "media"
+    assert get_effective_monitor_settings_key_for_widget("spotify_visualizer", widgets_config) == "media"
+
+
+def test_spotify_visualizer_uses_own_routing_in_custom():
+    from rendering.widget_descriptors import (
+        get_effective_monitor_settings_key_for_widget,
+        get_effective_position_settings_key_for_widget,
+        is_custom_position_selected_for_widget,
+    )
+
+    widgets_config = {
+        "media": {"position": "Bottom Left", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+    }
+
+    assert is_custom_position_selected_for_widget("spotify_visualizer", widgets_config) is True
+    assert get_effective_position_settings_key_for_widget("spotify_visualizer", widgets_config) == "spotify_visualizer"
+    assert get_effective_monitor_settings_key_for_widget("spotify_visualizer", widgets_config) == "spotify_visualizer"
 
 
 def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_dedupes():
@@ -483,6 +519,13 @@ def test_widget_position_option_labels_follow_runtime_descriptor_contract():
         "Bottom Center",
         "Bottom Right",
     )
+
+
+def test_media_owned_dependents_only_write_shared_custom_position_key():
+    assert widget_writes_custom_position_key("spotify_visualizer") is True
+    assert widget_writes_custom_monitor_key("spotify_visualizer") is True
+    assert widget_writes_custom_position_key("spotify_volume") is True
+    assert widget_writes_custom_monitor_key("spotify_volume") is False
 
 
 def test_custom_position_contract_helpers_follow_runtime_descriptor_metadata():
