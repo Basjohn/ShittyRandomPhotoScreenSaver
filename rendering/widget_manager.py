@@ -957,6 +957,18 @@ class WidgetManager:
         self._sync_media_provider_runtime(model.provider)
 
         try:
+            if hasattr(media_widget, 'set_font_family'):
+                media_widget.set_font_family(str(model.font_family))
+            if hasattr(media_widget, 'set_font_size'):
+                media_widget.set_font_size(int(model.font_size))
+            if hasattr(media_widget, 'set_artwork_size'):
+                media_widget.set_artwork_size(int(model.artwork_size))
+            if hasattr(media_widget, 'set_rounded_artwork_border'):
+                media_widget.set_rounded_artwork_border(SettingsManager.to_bool(model.rounded_artwork_border, True))
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to reapply media typography/artwork", exc_info=True)
+
+        try:
             if hasattr(media_widget, 'set_text_color'):
                 media_widget.set_text_color(parse_color_to_qcolor(model.color))
         except Exception:

@@ -13,7 +13,11 @@ from typing import Any, Callable, Dict, Mapping
 
 from PySide6.QtWidgets import QButtonGroup, QPushButton
 from rendering.custom_layout_contract import (
+    get_custom_layout_restore_entry,
+    load_custom_layout_map,
     load_custom_layout_restore_map,
+    write_custom_layout_map,
+    remove_screen_layout_entry,
     set_custom_layout_restore_entry,
     write_custom_layout_restore_map,
 )
@@ -1252,6 +1256,85 @@ def sync_custom_layout_restore_routes(
 
     write_custom_layout_restore_map(widgets_config, restore_map)
     return widgets_config
+
+
+def get_custom_layout_family_widget_ids(widget_id: str) -> tuple[str, ...]:
+    """Return the widget family affected by authored-layout restore actions."""
+
+    if widget_id in {"clock", "clock2", "clock3"}:
+        return ("clock", "clock2", "clock3")
+    if widget_id in {"reddit", "reddit2"}:
+        return ("reddit", "reddit2")
+    if widget_id == "media":
+        return ("media", "spotify_volume", "mute_button")
+    if widget_id == "spotify_visualizer":
+        return ("spotify_visualizer",)
+    if widget_id == "weather":
+        return ("weather",)
+    if widget_id == "gmail":
+        return ("gmail",)
+    if widget_id == "imgur":
+        return ("imgur",)
+    return (str(widget_id),)
+
+
+def restore_widget_family_to_authored_layout(
+    widgets_config: Dict[str, Any],
+    widget_id: str,
+) -> bool:
+    """Restore authored position/monitor routes and clear CUSTOM layout entries.
+
+    This is the shared settings-level mutation used by both runtime edit-mode
+    reset and the settings-dialog CUSTOM disable affordance.
+    """
+
+    family_widget_ids = get_custom_layout_family_widget_ids(widget_id)
+    restore_map = load_custom_layout_restore_map(widgets_config)
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    restored_any = False
+
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, dict):
+        displays = {}
+        custom_layout_map["displays"] = displays
+
+    for family_widget_id in family_widget_ids:
+        descriptor = get_widget_runtime_descriptor(family_widget_id)
+        if descriptor is not None and descriptor.supports_custom_position_slot:
+            restore_entry = get_custom_layout_restore_entry(restore_map, family_widget_id)
+            if restore_entry is not None:
+                position_settings_key = get_custom_persistence_position_settings_key_for_widget(
+                    family_widget_id
+                )
+                position_section = widgets_config.get(position_settings_key, {})
+                if not isinstance(position_section, dict) or position_settings_key not in widgets_config:
+                    position_section = {}
+                    widgets_config[position_settings_key] = position_section
+                if position_section.get("position") != restore_entry["position"]:
+                    restored_any = True
+                position_section["position"] = restore_entry["position"]
+
+                monitor_settings_key = get_custom_persistence_monitor_settings_key_for_widget(
+                    family_widget_id
+                )
+                monitor_section = widgets_config.get(monitor_settings_key, {})
+                if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_config:
+                    monitor_section = {}
+                    widgets_config[monitor_settings_key] = monitor_section
+                if monitor_section.get("monitor") != restore_entry["monitor"]:
+                    restored_any = True
+                monitor_section["monitor"] = restore_entry["monitor"]
+
+        for screen_signature, layouts in list(displays.items()):
+            if not isinstance(layouts, dict):
+                continue
+            if family_widget_id in layouts:
+                remove_screen_layout_entry(custom_layout_map, str(screen_signature), family_widget_id)
+                restored_any = True
+
+    if restored_any:
+        write_custom_layout_map(widgets_config, custom_layout_map)
+    return restored_any
 
 
 def get_layout_edit_runtime_descriptors() -> tuple[WidgetRuntimeDescriptor, ...]:

@@ -802,6 +802,67 @@ class TestSettingsRouting:
         manager._refresh_media_config.assert_not_called()
         manager._refresh_spotify_visualizer_config.assert_not_called()
 
+    def test_refresh_media_config_reapplies_artwork_font_and_rounding(self):
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeMediaWidget:
+            def __init__(self):
+                self.font_family = None
+                self.font_size = None
+                self.artwork_size = None
+                self.rounded_artwork = None
+                self.text_color = None
+                self.show_controls = None
+                self.show_header_frame = None
+
+            def set_font_family(self, value):
+                self.font_family = value
+
+            def set_font_size(self, value):
+                self.font_size = value
+
+            def set_artwork_size(self, value):
+                self.artwork_size = value
+
+            def set_rounded_artwork_border(self, value):
+                self.rounded_artwork = value
+
+            def set_text_color(self, value):
+                self.text_color = value
+
+            def set_show_controls(self, value):
+                self.show_controls = value
+
+            def set_show_header_frame(self, value):
+                self.show_header_frame = value
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        fake_media = _FakeMediaWidget()
+        fake_media._custom_layout_local_rect = object()
+        manager._widgets["media"] = fake_media
+
+        payload = {
+            "media": {
+                "font_family": "Inter",
+                "font_size": 31,
+                "artwork_size": 188,
+                "rounded_artwork_border": False,
+                "show_controls": False,
+                "show_header_frame": False,
+                "color": [1, 2, 3, 255],
+            }
+        }
+
+        manager._refresh_media_config(payload)
+
+        assert fake_media.font_family == "Inter"
+        assert fake_media.font_size == 31
+        assert fake_media.artwork_size == 188
+        assert fake_media.rounded_artwork is False
+        assert fake_media.show_controls is False
+        assert fake_media.show_header_frame is False
+
     def test_refresh_spotify_visualizer_config_repositions_using_live_growth_contract(self):
         from PySide6.QtCore import QRect
         from core.settings.visualizer_presets import get_custom_preset_index

@@ -40,6 +40,7 @@ from rendering.widget_descriptors import (
     get_effective_position_settings_key_for_widget,
     get_layout_edit_runtime_descriptors,
     is_custom_position_selected_for_widget,
+    restore_widget_family_to_authored_layout,
     sync_custom_layout_restore_routes,
     widget_writes_custom_monitor_key,
     widget_writes_custom_position_key,
@@ -201,7 +202,7 @@ class CustomLayoutManager:
     @classmethod
     def raise_all_active_shells(cls) -> None:
         for manager in cls._active_managers:
-            manager._raise_all_shells()
+            manager._normalize_session_stack()
 
     def is_active(self) -> bool:
         return bool(self._active)
@@ -322,50 +323,20 @@ class CustomLayoutManager:
             return False
 
         widgets_map = settings_manager.get_widgets_map()
-        restore_map = load_custom_layout_restore_map(widgets_map)
-        custom_layout_map = load_custom_layout_map(widgets_map)
         restored_any = False
 
         active_managers = list(CustomLayoutManager._active_managers)
-        for manager in active_managers:
-            for widget_id, state in manager._shell_states.items():
-                restore_entry = get_custom_layout_restore_entry(restore_map, widget_id)
-                if restore_entry is None:
-                    continue
-
-                position_settings_key = get_effective_position_settings_key_for_widget(
-                    widget_id,
-                    widgets_map,
-                )
-                position_section = widgets_map.get(position_settings_key, {})
-                if not isinstance(position_section, dict) or position_settings_key not in widgets_map:
-                    position_section = {}
-                    widgets_map[position_settings_key] = position_section
-                position_section["position"] = restore_entry["position"]
-
-                monitor_settings_key = get_effective_monitor_settings_key_for_widget(
-                    widget_id,
-                    widgets_map,
-                )
-                monitor_section = widgets_map.get(monitor_settings_key, {})
-                if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_map:
-                    monitor_section = {}
-                    widgets_map[monitor_settings_key] = monitor_section
-                monitor_section["monitor"] = restore_entry["monitor"]
-
-                manager._remove_widget_entries_from_other_displays(
-                    custom_layout_map,
-                    widget_id,
-                    exclude_signature="__none__",
-                )
-                for alias in get_screen_signature_aliases(state.current_screen or state.source_screen or manager._screen):
-                    remove_screen_layout_entry(custom_layout_map, alias, widget_id)
-                restored_any = True
+        widget_ids = {
+            widget_id
+            for manager in active_managers
+            for widget_id in manager._shell_states.keys()
+        }
+        for widget_id in widget_ids:
+            restored_any = restore_widget_family_to_authored_layout(widgets_map, widget_id) or restored_any
 
         if not restored_any:
             return False
 
-        write_custom_layout_map(widgets_map, custom_layout_map)
         settings_manager.set_widgets_map(widgets_map)
         settings_manager.save()
 
@@ -402,7 +373,6 @@ class CustomLayoutManager:
             self._set_shell_session_flag(widget, True)
             self._shell_states[descriptor.widget_id] = state
             state.shell.show()
-            state.shell.raise_()
             if descriptor.widget_id == "spotify_visualizer":
                 self._pause_visualizer_for_edit_mode(widget)
             if state.was_visible:
@@ -412,6 +382,7 @@ class CustomLayoutManager:
                     logger.debug("[CUSTOM_LAYOUT] Failed to hide %s during edit session", descriptor.widget_id, exc_info=True)
 
         if self._shell_states:
+            self._normalize_session_stack()
             return True
 
         self._finish_session()
@@ -557,6 +528,10 @@ class CustomLayoutManager:
                 gutter_px=CUSTOM_LAYOUT_SNAP_GUTTER_PX,
             )
             overlay.show()
+            try:
+                overlay.lower()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to lower edit grid overlay", exc_info=True)
             self._grid_overlay = overlay
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to create edit grid overlay", exc_info=True)
@@ -972,6 +947,16 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
 
+    def _normalize_session_stack(self) -> None:
+        overlay = self._grid_overlay
+        if overlay is not None:
+            try:
+                overlay.show()
+                overlay.lower()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to normalize edit grid overlay stack", exc_info=True)
+        self._raise_all_shells()
+
     def _raise_all_shells(self) -> None:
         for state in self._shell_states.values():
             if state.removed:
@@ -1115,6 +1100,7 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to hide removed duplicate shell", exc_info=True)
         self._refresh_duplicate_shell_remove_affordances_global()
+        self._raise_all_shells_globally()
 
     def _set_shell_geometry_silently(self, state: _ShellState, global_rect: QRect) -> None:
         widget_id = state.descriptor.widget_id

@@ -551,11 +551,17 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_a.shell._remove_btn.isVisible() is True
     assert state_b.shell._remove_btn.isVisible() is True
 
+    restack_events: list[str] = []
+    monkeypatch.setattr(manager_a._grid_overlay, "lower", lambda: restack_events.append("overlay_a"), raising=False)
+    monkeypatch.setattr(state_a.shell, "raise_", lambda: restack_events.append("shell_a"), raising=False)
+
     manager_b._on_shell_remove_requested("clock")
 
     assert state_b.removed is True
     assert state_b.shell.isVisible() is False
     assert state_a.shell._remove_btn.isVisible() is False
+    assert "overlay_a" in restack_events
+    assert "shell_a" in restack_events
 
     assert manager_a.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -584,6 +590,29 @@ def test_custom_layout_manager_creates_and_destroys_grid_overlay(qtbot):
 
     assert manager.cancel_session() is True
     assert manager._grid_overlay is None
+
+
+def test_custom_layout_manager_raise_all_active_shells_normalizes_overlay_stack(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    calls: list[str] = []
+    monkeypatch.setattr(manager._grid_overlay, "lower", lambda: calls.append("overlay"), raising=False)
+    monkeypatch.setattr(state.shell, "raise_", lambda: calls.append("shell"), raising=False)
+
+    CustomLayoutManager.raise_all_active_shells()
+
+    assert calls == ["overlay", "shell"]
 
 
 def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size(qtbot):

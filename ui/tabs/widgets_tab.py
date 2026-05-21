@@ -64,7 +64,9 @@ from rendering.widget_descriptors import (
     get_widget_settings_section_descriptors,
     get_widget_stack_preview_descriptors,
     has_saved_custom_layout_for_widget,
+    is_custom_position_selected_for_widget,
     load_widget_sections,
+    restore_widget_family_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
 )
@@ -80,7 +82,7 @@ from ui.tabs.shared_styles import (
     FORM_ROW_LABEL_STYLE,
     NoWheelSlider,  # noqa: F401 — re-exported
 )
-from ui.styled_popup import StyledColorPicker
+from ui.styled_popup import StyledColorPicker, StyledPopup
 from ui.widget_stack_predictor import WidgetType, get_position_status_for_widget
 from widgets.timezone_utils import get_local_timezone, get_common_timezones
 from ui.tabs.media.technical_controls import load_per_mode_technical_controls
@@ -187,6 +189,7 @@ class WidgetsTab(QWidget):
         self._subtab_content_built: set[int] = set()
         self._subtab_content_building: set[int] = set()
         self._subtab_host_layouts: list[QVBoxLayout | None] = []
+        self._custom_resize_lock_notice_labels: Dict[str, QLabel] = {}
         self._initialize_descriptor_default_attrs()
         self._visualizer_adv_state: Dict[str, bool] = self._load_adv_states()
         self._visualizer_tech_state: Dict[str, bool] = self._load_tech_states()
@@ -201,6 +204,7 @@ class WidgetsTab(QWidget):
         self._perf_log("_setup_ui", _ui_start)
         _load_start = time.perf_counter()
         self._load_settings()
+        self._refresh_custom_resize_lock_state()
         self._perf_log("_load_settings", _load_start)
         self._loading = False
         
@@ -212,6 +216,7 @@ class WidgetsTab(QWidget):
         try:
             self._load_settings()
             self._refresh_custom_position_option_state()
+            self._refresh_custom_resize_lock_state()
         finally:
             self._loading = False
         logger.debug("[WIDGETS_TAB] Reloaded from settings")
@@ -581,6 +586,158 @@ class WidgetsTab(QWidget):
             self._set_combo_item_enabled(combo, CUSTOM_POSITION_OPTION_LABEL, allow_custom)
             if not allow_custom and combo.currentText().strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
                 self._set_combo_text(combo, fallback)
+
+    def _iter_custom_resize_lock_bindings(self) -> tuple[dict[str, Any], ...]:
+        return (
+            {
+                "section_id": "clock",
+                "widget_ids": ("clock", "clock2", "clock3"),
+                "revert_widget_id": "clock",
+                "position_combo_attrs": ("clock_position", "clock2_position", "clock3_position"),
+                "control_attrs": ("clock_font_size",),
+                "anchor_attr": "clock_font_size",
+            },
+            {
+                "section_id": "weather",
+                "widget_ids": ("weather",),
+                "revert_widget_id": "weather",
+                "position_combo_attrs": ("weather_position",),
+                "control_attrs": ("weather_font_size", "weather_icon_size"),
+                "anchor_attr": "weather_font_size",
+            },
+            {
+                "section_id": "media",
+                "widget_ids": ("media",),
+                "revert_widget_id": "media",
+                "position_combo_attrs": ("media_position",),
+                "control_attrs": ("media_font_size", "media_artwork_size"),
+                "anchor_attr": "media_font_size",
+            },
+            {
+                "section_id": "reddit",
+                "widget_ids": ("reddit", "reddit2"),
+                "revert_widget_id": "reddit",
+                "position_combo_attrs": ("reddit_position", "reddit2_position"),
+                "control_attrs": ("reddit_font_size",),
+                "anchor_attr": "reddit_font_size",
+            },
+            {
+                "section_id": "gmail",
+                "widget_ids": ("gmail",),
+                "revert_widget_id": "gmail",
+                "position_combo_attrs": ("gmail_position",),
+                "control_attrs": ("gmail_font_size",),
+                "anchor_attr": "gmail_font_size",
+            },
+        )
+
+    def _widgets_config_for_custom_resize_lock_state(self) -> Mapping[str, Any]:
+        widgets_cfg = self._settings.get("widgets", {}) or {}
+        if not isinstance(widgets_cfg, Mapping):
+            widgets_cfg = {}
+        return widgets_cfg
+
+    def _is_custom_resize_lock_active(
+        self,
+        binding: Mapping[str, Any],
+        widgets_cfg: Mapping[str, Any],
+    ) -> bool:
+        for combo_attr in binding.get("position_combo_attrs", ()):
+            combo = getattr(self, combo_attr, None)
+            if combo is not None and str(combo.currentText()).strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
+                return True
+        return any(
+            is_custom_position_selected_for_widget(widget_id, widgets_cfg)
+            for widget_id in binding.get("widget_ids", ())
+        )
+
+    def _ensure_custom_resize_lock_notice(self, binding: Mapping[str, Any]) -> QLabel | None:
+        section_id = str(binding.get("section_id", ""))
+        if not section_id:
+            return None
+        existing = self._custom_resize_lock_notice_labels.get(section_id)
+        if existing is not None:
+            return existing
+
+        anchor_control = getattr(self, str(binding.get("anchor_attr", "")), None)
+        if anchor_control is None:
+            return None
+        row_widget = anchor_control.parentWidget()
+        parent_widget = row_widget.parentWidget() if row_widget is not None else None
+        parent_layout = parent_widget.layout() if parent_widget is not None else None
+        if row_widget is None or parent_layout is None:
+            return None
+
+        notice = QLabel(parent_widget)
+        notice.setWordWrap(True)
+        notice.setTextFormat(Qt.TextFormat.RichText)
+        notice.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+        notice.setOpenExternalLinks(False)
+        notice.setStyleSheet(
+            "color: rgba(255, 176, 82, 235);"
+            "font-size: 11px;"
+            "padding: 0 0 6px 0;"
+        )
+        notice.setText(
+            "<span style='color: rgba(255, 176, 82, 235);'>"
+            "<a href='disable-custom' style='color: rgba(255, 176, 82, 255); text-decoration: underline;'>"
+            "Disable Custom Mode</a> To Change!</span>"
+        )
+        notice.linkActivated.connect(lambda _link, sid=section_id: self._on_custom_resize_lock_link_activated(sid))
+        insert_index = parent_layout.indexOf(row_widget)
+        if insert_index < 0:
+            parent_layout.addWidget(notice)
+        else:
+            parent_layout.insertWidget(insert_index + 1, notice)
+        notice.hide()
+        self._custom_resize_lock_notice_labels[section_id] = notice
+        return notice
+
+    def _refresh_custom_resize_lock_state(self) -> None:
+        widgets_cfg = self._widgets_config_for_custom_resize_lock_state()
+        active_sections: set[str] = set()
+        for binding in self._iter_custom_resize_lock_bindings():
+            section_id = str(binding["section_id"])
+            lock_active = self._is_custom_resize_lock_active(binding, widgets_cfg)
+            controls = [getattr(self, attr, None) for attr in binding.get("control_attrs", ())]
+            controls = [control for control in controls if control is not None]
+            for control in controls:
+                control.setEnabled(not lock_active)
+            notice = self._ensure_custom_resize_lock_notice(binding)
+            if notice is not None:
+                notice.setVisible(bool(lock_active))
+            if lock_active:
+                active_sections.add(section_id)
+
+        for section_id, notice in list(self._custom_resize_lock_notice_labels.items()):
+            if section_id not in active_sections:
+                notice.hide()
+
+    def _on_custom_resize_lock_link_activated(self, section_id: str) -> None:
+        binding = next(
+            (entry for entry in self._iter_custom_resize_lock_bindings() if entry.get("section_id") == section_id),
+            None,
+        )
+        if binding is None:
+            return
+        confirmed = StyledPopup.question(
+            self,
+            "Disable Custom Mode",
+            "This will return your widgets to their last known good locations, are you sure?",
+            yes_text="Revert",
+            no_text="Nope",
+            default_to_yes=False,
+        )
+        if not confirmed:
+            return
+        widgets_cfg = self._settings.get("widgets", {}) or {}
+        if not isinstance(widgets_cfg, dict):
+            widgets_cfg = {}
+        if not restore_widget_family_to_authored_layout(widgets_cfg, str(binding["revert_widget_id"])):
+            return
+        self._settings.set("widgets", widgets_cfg)
+        self._settings.save()
+        self.load_from_settings()
 
     def _resolve_initial_subtab_id(self) -> int:
         """Resolve the first Widgets subtab to build/show."""
@@ -1356,6 +1513,7 @@ class WidgetsTab(QWidget):
         """
         if getattr(self, "_loading", False):
             return
+        self._refresh_custom_resize_lock_state()
         self._auto_switch_preset_to_custom()
         if not getattr(self, "_save_coalesce_pending", False):
             self._save_coalesce_pending = True
@@ -1443,6 +1601,7 @@ class WidgetsTab(QWidget):
         sync_custom_layout_restore_routes(existing_widgets)
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
+        self._refresh_custom_resize_lock_state()
 
     def _auto_switch_preset_to_custom(self) -> None:
         """Auto-switch to Custom preset when a visualizer-specific setting changes.

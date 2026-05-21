@@ -14,35 +14,33 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Spotify-dependent CUSTOM visualizer sizing redesign from the stable display-split baseline.
-Core value: keep the now-landed display split, but re-land CUSTOM visualizer adaptation from a stable baseline instead of mixing routing and sizing authority.
-- [ ] Re-test the exact normal-build runtime family:
-  - [ ] visualizer moved to a different display from Media in `Custom`
-  - [ ] Media moved cross-display while Volume is left untouched
+1. Post-parity runtime validation for CUSTOM sizing and settings UX.
+Core value: the core contracts are now green in targeted regressions, so the active work is proving the latest runtime family cold before pruning this milestone.
+- [ ] Normal build smoke:
+  - [ ] media `artwork_size` updates live again in non-`Custom`
+  - [ ] media `artwork_size` still updates the base content contract correctly while `Custom` resize is active
+  - [ ] visualizer can stay on a different display from Media in `Custom`
   - [ ] visualizer still hides with Media after separate-display save/reload
-  - [ ] visualizer CUSTOM mode/preset changes adapt card width/height consistently across preset and mode switches
-  - [ ] visualizer CUSTOM adaptation never jumps to stale max/full-height shapes for smaller presets or modes
+  - [ ] visualizer CUSTOM mode/preset changes adapt card width/height consistently without stale max/full-height jumps
   - [ ] visualizer CUSTOM adaptation preserves committed top-left/display ownership during preset and mode switches
+  - [ ] moving Media cross-display while leaving Volume untouched still rebuilds/fades correctly
   - [ ] non-media widgets still fade/reveal after CUSTOM save
-  - [ ] no volume artifact / no stale same-display visualizer fallback
-- [ ] Re-land visualizer CUSTOM adaptation with a single clear geometry authority:
-  - [ ] keep the display split/routing-mode contract intact
-  - [ ] keep widget-local preferred-height authority only for non-`Custom` `Follow Media` behavior
-  - [ ] keep `Custom` mode/preset size changes flowing through `WidgetManager` / `card_geometry.py` only
-  - [ ] preserve exact non-`Custom` `Follow Media` behavior
-  - [ ] keep resize input contract as plain scroll wheel only
-- [ ] Re-test the new duplicate-instance affordance:
-  - [ ] `ALL` widgets with live duplicates show a local `×` remove affordance only during edit mode
-  - [ ] removing one duplicate and saving promotes the survivor into a single-display `Custom` route cleanly
-- [ ] Run the same CUSTOM save/reload smoke in the MC profile once the normal build stays stable.
-- [ ] If the runtime family stays cold, prune this milestone instead of letting “recently landed” Spotify work linger in active tasks.
+- [ ] Settings-dialog smoke:
+  - [ ] CUSTOM-locked size controls disable only where the live result is truly derived
+  - [ ] the orange `Disable Custom Mode To Change!` notice appears once per affected section
+  - [ ] the styled revert popup restores the last authored route without any runtime edit-session side effects
+  - [ ] font family and unrelated behavior/style controls remain editable in `Custom`
+- [ ] MC profile smoke:
+  - [ ] repeat the CUSTOM save/reload + settings-lock checks once in the MC profile
+  - [ ] if MC stays cold too, prune this milestone aggressively
 
-2. Post-CUSTOM hygiene and maintainability.
-Core value: use the parity landing as the next pruning point instead of letting setup/routing helpers and supporting docs drift again.
-- [ ] Keep `Docs/Custom_Widget_Edit_Mode_Plan.md` as the detailed source of truth and update only live deltas there when runtime validation forces another contract change.
+2. Post-parity cleanup and follow-up hygiene.
+Core value: now that the resize/settings contract is coherent, keep the supporting helpers and docs tight instead of letting a second layer of drift build up.
+- [ ] Keep `Docs/Custom_Widget_Edit_Mode_Plan.md` as the detailed source of truth and record only live deltas there when runtime validation forces another contract change.
 - [ ] If another Spotify-dependent regression appears, tighten the setup/reconcile boundary in `rendering/widget_setup_all.py` before widening any feature work.
-- [ ] Do the deferred memory/doc drift cleanup after the Spotify-dependent parity path is validated.
-- [ ] Do the deferred test-maintainability pass after the Spotify-dependent parity path is validated.
+- [ ] Decide later whether Imgur needs matching CUSTOM-lock UX if/when direct size controls are surfaced in WidgetsTab.
+- [ ] Do the deferred memory/doc drift cleanup after the runtime validation above is truly cold.
+- [ ] Do the deferred test-maintainability pass after the runtime validation above is truly cold.
 
 ## Recently Completed / Not Active
 - CUSTOM edit mode foundation is materially landed: global shell session, numbered-monitor transfer, display-local normalized persistence, authored-route reset, stable snapping/grid/dimming UX, and canonical rebuild/reapply behavior are all in place.
@@ -51,7 +49,9 @@ Core value: use the parity landing as the next pruning point instead of letting 
 - `spotify_volume` now has real uniform-resize parity while remaining media-owned: its CUSTOM save path cannot clobber Media's monitor/display ownership, and runtime positioning now honors its saved custom rect size instead of forcing the authored slider footprint.
 - `ALL`-routed duplicate widget shells can now be collapsed intentionally during edit mode via a local `×` affordance on duplicate-capable shells; saving a single survivor promotes that widget cleanly into a numbered-display `Custom` route.
 - Visualizer CUSTOM shell participation is materially landed: composited shell capture, edit-session pause/hide behavior, committed custom-rect authority, independent numbered-monitor transfer while editing, and explicit outer-card CUSTOM rect clamping in `widgets/spotify_visualizer/card_geometry.py` are all in place.
-- Visualizer CUSTOM adaptive sizing is not closed yet. The stable display split is landed, but CUSTOM preset/mode adaptation still needs a clean single-authority redesign from that stable baseline.
+- Visualizer CUSTOM adaptive sizing has been re-landed on the cleaner single-authority contract: non-`Custom` still uses widget-local `Follow Media` behavior, while `Custom` defers final geometry to `WidgetManager` plus `widgets/spotify_visualizer/card_geometry.py`.
+- Base media settings remain canonical even in `Custom`: live refresh now reapplies media `font_size`, `artwork_size`, and rounded-artwork-border settings, while CUSTOM resize stays an overlay scale contract instead of replacing those authored inputs.
+- Settings-dialog CUSTOM size-lock UX is materially landed: affected size controls disable only while the owning widget family is `Custom`, the orange revert notice routes through a styled popup, and both runtime/context-menu reset and settings-dialog revert now share the same authored-layout restore mutation helper.
 - Widget/service/transition descriptor work is materially landed: WidgetsTab section ownership, runtime capability metadata, shared service lifecycle seams, and transition registry ownership should stay closed unless a concrete regression appears.
 
 ## Watchlist

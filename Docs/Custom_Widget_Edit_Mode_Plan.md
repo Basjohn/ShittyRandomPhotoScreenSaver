@@ -75,6 +75,10 @@ What exists today:
   - the last known non-`Custom` position + monitor route is persisted separately from CUSTOM geometry,
   - the edit-mode context menu now exposes a global reset-to-authored action,
   - that reset clears CUSTOM geometry and restores authored routing through a clean save + rebuild path instead of trying to visually fake every shell back into place first.
+- authored-route restore is now a shared settings-level mutation rather than a runtime-only branch:
+  - runtime edit-mode reset and settings-dialog `Disable Custom Mode` both call the same helper,
+  - the helper restores last-known authored `position` / `monitor` routes for the targeted widget family,
+  - and removes only that family’s CUSTOM geometry entries while preserving unrelated widget state.
 - local shell reset affordances are now explicit and split by responsibility:
   - `Reset Position` restores that shell to its session-start display/position while preserving any current resize state,
   - `Reset Size` restores that shell’s session-start size contract while preserving current position,
@@ -97,6 +101,12 @@ What exists today:
   - while remaining media-owned, its CUSTOM resize uses the authored slider scale contract rather than generic shell-only stretching,
   - resize preview now refreshes from the real widget snapshot instead of scaling a stale shell capture,
   - and the widget now relies on the slider track shadow alone rather than layering a second outer-card shadow that turns into a dark box under wider CUSTOM widths.
+- WidgetsTab now surfaces the CUSTOM resize authority contract directly:
+  - when a widget family is currently using `Custom`, only the size-driving controls that stop affecting the live result are disabled,
+  - the first disabled control in that section shows a small orange `Disable Custom Mode To Change!` notice,
+  - the underlined `Disable Custom Mode` link opens the styled confirmation popup,
+  - confirming the popup reverts that widget family to its last known authored route without going through runtime edit-session teardown semantics,
+  - and base authored settings such as Media `font_size` / `artwork_size` remain canonical saved inputs even while CUSTOM resize scales the live result on top of them.
 - `spotify_visualizer` now uses a split routing contract:
   - outside `Custom`, it stays exact `Follow Media` parity,
   - in `Custom`, it owns its own numbered-display `position` / `monitor`,

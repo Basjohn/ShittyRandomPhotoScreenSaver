@@ -211,6 +211,115 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_widgets_tab_disables_media_size_controls_when_custom_is_active(self, qt_app, settings_manager):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        }
+                    }
+                },
+            },
+        })
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            assert tab.media_font_size.isEnabled() is False
+            assert tab.media_artwork_size.isEnabled() is False
+            notice = tab._custom_resize_lock_notice_labels["media"]
+            assert notice.isHidden() is False
+            assert "Disable Custom Mode" in notice.text()
+            assert tab.media_font_combo.isEnabled() is True
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_disable_custom_mode_link_restores_authored_layout(self, qt_app, settings_manager, monkeypatch):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        },
+                        "spotify_volume": {
+                            "rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3},
+                            "size_payload": {"width": 32, "height": 180},
+                            "resize_mode": "volume_scale",
+                        },
+                    }
+                },
+            },
+            "custom_layout_restore": {
+                "version": 1,
+                "widgets": {
+                    "media": {"position": "Bottom Left", "monitor": "ALL"},
+                },
+            },
+        })
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.StyledPopup.question", lambda *args, **kwargs: True)
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._on_custom_resize_lock_link_activated("media")
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["media"]["position"] == "Bottom Left"
+            assert widgets_cfg["media"]["monitor"] == "ALL"
+            displays = widgets_cfg["custom_layout"]["displays"]
+            layouts = displays.get("screen:test", {})
+            assert "media" not in layouts
+            assert "spotify_volume" not in layouts
+            assert tab.media_font_size.isEnabled() is True
+            assert tab.media_artwork_size.isEnabled() is True
+            assert tab._custom_resize_lock_notice_labels["media"].isHidden() is True
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_disable_custom_mode_link_cancel_keeps_state(self, qt_app, settings_manager, monkeypatch):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        }
+                    }
+                },
+            },
+            "custom_layout_restore": {
+                "version": 1,
+                "widgets": {
+                    "media": {"position": "Bottom Left", "monitor": "ALL"},
+                },
+            },
+        })
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.StyledPopup.question", lambda *args, **kwargs: False)
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._on_custom_resize_lock_link_activated("media")
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["media"]["position"] == "Custom"
+            assert "media" in widgets_cfg["custom_layout"]["displays"]["screen:test"]
+            assert tab.media_font_size.isEnabled() is False
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_default_values(self, qt_app, tmp_path):
         """Default widget settings match canonical SettingsManager defaults."""
         mgr = SettingsManager(organization="Test", application=f"WidgetsTabTest_{uuid.uuid4().hex}", storage_base_dir=tmp_path)

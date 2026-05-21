@@ -29,6 +29,7 @@ from rendering.widget_descriptors import (
     has_saved_custom_layout_for_widget,
     is_custom_position_selected_for_widget,
     load_widget_sections,
+    restore_widget_family_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
     widget_writes_custom_monitor_key,
@@ -570,6 +571,73 @@ def test_sync_custom_layout_restore_routes_tracks_last_non_custom_authored_state
     assert restore_map["weather"]["position"] == "Bottom Left"
     assert restore_map["weather"]["monitor"] == "1"
     assert "gmail" not in restore_map
+
+
+def test_restore_widget_family_to_authored_layout_restores_media_route_and_clears_dependents():
+    widgets_cfg = {
+        "media": {"position": "Custom", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:a": {
+                    "media": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}},
+                    "spotify_volume": {"rect": {"x": 0.3, "y": 0.2, "width": 0.1, "height": 0.3}},
+                    "mute_button": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.05}},
+                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                }
+            },
+        },
+        "custom_layout_restore": {
+            "version": 1,
+            "widgets": {
+                "media": {"position": "Bottom Left", "monitor": "ALL"},
+                "spotify_visualizer": {"position": "Bottom Center", "monitor": "1"},
+            },
+        },
+    }
+
+    assert restore_widget_family_to_authored_layout(widgets_cfg, "media") is True
+
+    assert widgets_cfg["media"]["position"] == "Bottom Left"
+    assert widgets_cfg["media"]["monitor"] == "ALL"
+    layouts = widgets_cfg["custom_layout"]["displays"]["screen:a"]
+    assert "media" not in layouts
+    assert "spotify_volume" not in layouts
+    assert "mute_button" not in layouts
+    assert "gmail" in layouts
+    assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
+
+
+def test_restore_widget_family_to_authored_layout_restores_visualizer_without_touching_media():
+    widgets_cfg = {
+        "media": {"position": "Bottom Left", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:a": {
+                    "spotify_visualizer": {"rect": {"x": 0.1, "y": 0.2, "width": 0.2, "height": 0.2}},
+                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
+                }
+            },
+        },
+        "custom_layout_restore": {
+            "version": 1,
+            "widgets": {
+                "spotify_visualizer": {"position": "Bottom Center", "monitor": "2"},
+            },
+        },
+    }
+
+    assert restore_widget_family_to_authored_layout(widgets_cfg, "spotify_visualizer") is True
+
+    assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Center"
+    assert widgets_cfg["spotify_visualizer"]["monitor"] == "2"
+    layouts = widgets_cfg["custom_layout"]["displays"]["screen:a"]
+    assert "spotify_visualizer" not in layouts
+    assert "media" in layouts
+    assert widgets_cfg["media"]["position"] == "Bottom Left"
 
 
 def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkeypatch):
