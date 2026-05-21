@@ -1867,6 +1867,65 @@ def test_runtime_mode_switch_all_modes_replaces_poisoned_technical_state(qt_app,
 
 
 @pytest.mark.qt
+def test_visualizer_preferred_height_defers_direct_resize_when_custom_rect_active(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": {"position": "Custom"}}
+            return default
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._custom_layout_local_rect = QRect(10, 20, 300, 160)
+    widget._vis_mode = VisualizerMode.BLOB
+    widget.setGeometry(0, 0, 300, 160)
+
+    widget._apply_preferred_height()
+
+    assert widget.height() == 160
+
+
+@pytest.mark.qt
+def test_visualizer_request_reposition_uses_anchor_media_in_custom_without_local_media(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.resize(1280, 720)
+
+    calls: list[tuple[object | None, int, int]] = []
+
+    class _Settings:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"spotify_visualizer": {"position": "Custom"}}
+            return default
+
+    class _WidgetManager:
+        def __init__(self):
+            self._widgets = {}
+            self._settings_manager = _Settings()
+
+        def position_spotify_visualizer(self, vis, media, pw, ph):
+            calls.append((media, pw, ph))
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = _WidgetManager()
+    widget._custom_layout_local_rect = QRect(10, 20, 300, 160)
+    anchor_media = SimpleNamespace()
+    widget._anchor_media = anchor_media
+
+    widget._request_reposition()
+
+    assert calls == [(anchor_media, 1280, 720)]
+
+
+@pytest.mark.qt
 def test_runtime_switch_paths_reset_all_bleed_state_for_all_modes(qt_app, qtbot, np_module):
     from core.settings.visualizer_mode_registry import iter_visualizer_mode_descriptors
 

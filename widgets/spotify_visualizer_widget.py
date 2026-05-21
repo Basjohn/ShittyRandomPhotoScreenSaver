@@ -1027,10 +1027,32 @@ class SpotifyVisualizerWidget(QWidget):
             pw, ph = parent.width(), parent.height()
             # Find the media widget sibling for relative positioning
             media = wm._widgets.get('media')
-            if media is not None:
+            custom_active = self._is_custom_layout_active()
+            if media is None and custom_active:
+                media = getattr(self, "_anchor_media", None)
+            if media is not None or custom_active:
                 wm.position_spotify_visualizer(self, media, pw, ph)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Reposition after mode switch failed", exc_info=True)
+
+    def _is_custom_layout_active(self) -> bool:
+        """Return whether a committed CUSTOM layout currently owns geometry."""
+
+        try:
+            from PySide6.QtCore import QRect
+            from rendering.widget_descriptors import is_custom_position_selected_for_widget
+
+            custom_rect = getattr(self, "_custom_layout_local_rect", None)
+            if not isinstance(custom_rect, QRect) or custom_rect.width() <= 0 or custom_rect.height() <= 0:
+                return False
+
+            wm = getattr(self, "_widget_manager", None)
+            settings_manager = getattr(wm, "_settings_manager", None) if wm is not None else None
+            widgets_config = settings_manager.get("widgets", {}) if settings_manager is not None else {}
+            return is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM layout ownership", exc_info=True)
+            return False
 
     def _apply_preferred_height(self) -> None:
         """Resize the widget to match the preferred height for the current mode.
@@ -1044,6 +1066,12 @@ class SpotifyVisualizerWidget(QWidget):
             build_growth_map_from_widget,
             resolve_card_metrics,
         )
+
+        if self._is_custom_layout_active():
+            logger.debug(
+                "[SPOTIFY_VIS] Deferring preferred-height resize to WidgetManager while CUSTOM layout is active"
+            )
+            return
 
         mode = self._vis_mode_str
         metrics = resolve_card_metrics(
