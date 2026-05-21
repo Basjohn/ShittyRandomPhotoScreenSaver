@@ -4,6 +4,7 @@ from PySide6.QtCore import QRect
 
 from widgets.spotify_visualizer.card_geometry import (
     DEFAULT_GROWTH,
+    resolve_custom_card_size,
     resolve_card_metrics,
     resolve_relative_card_placement,
     should_place_below_media,
@@ -82,3 +83,46 @@ def test_relative_card_placement_centers_blob_width_factor():
 def test_should_place_below_media_handles_top_center_and_bottom_left():
     assert should_place_below_media("TOP_CENTER") is True
     assert should_place_below_media("BOTTOM_LEFT") is False
+
+
+def test_resolve_custom_card_size_uses_current_mode_metrics():
+    size = resolve_custom_card_size(
+        mode_id="spectrum",
+        media_width=300,
+        base_height=80,
+        growth_by_mode=DEFAULT_GROWTH,
+        width_scale=1.0,
+        height_scale=1.0,
+        maximum_envelope=False,
+    )
+    assert size.width() == 300
+    assert size.height() == 160
+
+
+def test_resolve_custom_card_size_maximum_envelope_uses_largest_mode_metrics():
+    size = resolve_custom_card_size(
+        mode_id="spectrum",
+        media_width=300,
+        base_height=80,
+        growth_by_mode=DEFAULT_GROWTH,
+        width_scale=1.0,
+        height_scale=1.0,
+        maximum_envelope=True,
+    )
+    assert size.width() == 300
+    assert size.height() == 280
+
+
+def test_resolve_custom_card_size_scales_blob_width_and_height_contract():
+    size = resolve_custom_card_size(
+        mode_id="blob",
+        media_width=280,
+        base_height=80,
+        growth_by_mode=DEFAULT_GROWTH,
+        blob_width=0.5,
+        width_scale=1.5,
+        height_scale=1.25,
+        maximum_envelope=False,
+    )
+    assert size.width() == 210
+    assert size.height() == 350

@@ -1238,7 +1238,49 @@ class WidgetManager:
                 and custom_rect.height() > 0
                 and is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
             ):
-                vis_widget.setGeometry(custom_rect)
+                from widgets.spotify_visualizer.card_geometry import (
+                    build_growth_map_from_widget,
+                    resolve_custom_card_rect,
+                    resolve_custom_card_size,
+                )
+
+                payload = getattr(vis_widget, "_custom_layout_visualizer_scale_payload", None)
+                if not isinstance(payload, Mapping):
+                    payload = {}
+                resolved_size = None
+                try:
+                    anchor_media = getattr(vis_widget, "_anchor_media", None)
+                    media_width = max(
+                        10,
+                        int(
+                            anchor_media.geometry().width()
+                            if anchor_media is not None
+                            else custom_rect.width()
+                        ),
+                    )
+                    resolved_size = resolve_custom_card_size(
+                        mode_id=str(getattr(vis_widget, "_vis_mode_str", "spectrum") or "spectrum"),
+                        media_width=media_width,
+                        base_height=int(getattr(vis_widget, "_base_height", 80)),
+                        growth_by_mode=build_growth_map_from_widget(vis_widget),
+                        blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
+                        width_scale=float(payload.get("width_scale", 1.0)),
+                        height_scale=float(payload.get("height_scale", 1.0)),
+                        maximum_envelope=False,
+                    )
+                except Exception:
+                    logger.debug("[WIDGET_MANAGER] Failed to resolve adaptive custom visualizer size", exc_info=True)
+                    resolved_size = None
+
+                resolved_custom_rect = resolve_custom_card_rect(
+                    custom_rect,
+                    parent_width=parent_width,
+                    parent_height=parent_height,
+                    size=resolved_size,
+                )
+                if resolved_custom_rect.isEmpty():
+                    return
+                vis_widget.setGeometry(resolved_custom_rect)
                 vis_widget.raise_()
                 return
 
@@ -1331,7 +1373,8 @@ class WidgetManager:
                 and custom_rect.height() > 0
                 and is_custom_position_selected_for_widget("spotify_volume", widgets_config)
             ):
-                width, height = _resolve_authored_size()
+                width = max(24, int(custom_rect.width()))
+                height = max(120, int(custom_rect.height()))
                 x = max(0, min(int(custom_rect.x()), max(0, parent_width - width)))
                 y = max(0, min(int(custom_rect.y()), max(0, parent_height - height)))
                 vol_widget.setGeometry(x, y, width, height)

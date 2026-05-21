@@ -786,6 +786,17 @@ class WidgetRuntimeDescriptor:
         return self.monitor_settings_key or self.widget_id
 
 
+#
+# Spotify visualizer routing-mode helpers
+# --------------------------------------
+# The visualizer is intentionally special:
+# - outside Custom it must resolve routing exactly through Media
+# - in Custom it owns its own position/monitor persistence
+# Keeping that split explicit here makes later setup/reconcile work much easier
+# to reason about than scattering ad hoc widget-id checks at call sites.
+#
+
+
 def _is_visualizer_custom_routing_selected(
     widgets_config: Mapping[str, Any] | None,
 ) -> bool:
@@ -797,6 +808,12 @@ def _is_visualizer_custom_routing_selected(
     return str(section.get("position", "") or "").strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
 
 
+def _resolve_visualizer_routing_settings_key(
+    widgets_config: Mapping[str, Any] | None,
+) -> str:
+    return "spotify_visualizer" if _is_visualizer_custom_routing_selected(widgets_config) else "media"
+
+
 def get_effective_position_settings_key_for_widget(
     widget_id: str,
     widgets_config: Mapping[str, Any] | None,
@@ -805,7 +822,7 @@ def get_effective_position_settings_key_for_widget(
     if descriptor is None:
         return widget_id
     if widget_id == "spotify_visualizer":
-        return "spotify_visualizer" if _is_visualizer_custom_routing_selected(widgets_config) else "media"
+        return _resolve_visualizer_routing_settings_key(widgets_config)
     return descriptor.get_effective_position_settings_key()
 
 
@@ -817,7 +834,7 @@ def get_effective_monitor_settings_key_for_widget(
     if descriptor is None:
         return widget_id
     if widget_id == "spotify_visualizer":
-        return "spotify_visualizer" if _is_visualizer_custom_routing_selected(widgets_config) else "media"
+        return _resolve_visualizer_routing_settings_key(widgets_config)
     return descriptor.get_effective_monitor_settings_key()
 
 
@@ -1065,6 +1082,9 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         monitor_settings_key="media",
         live_refresh_handler="_refresh_media_config",
         supports_layout_edit_mode=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="volume_scale",
         writes_custom_position_key=True,
         writes_custom_monitor_key=False,
     ),

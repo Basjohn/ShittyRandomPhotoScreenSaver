@@ -136,6 +136,35 @@ class SpotifyVolumeWidget(QWidget):
             self.update()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+
+    def apply_scale_contract(
+        self,
+        *,
+        width: int,
+        height: int,
+        track_width: int,
+        track_margin: int,
+    ) -> None:
+        """Apply the authored volume slider scale contract used by CUSTOM resize."""
+
+        next_width = max(24, int(width))
+        next_height = max(120, int(height))
+        next_track_width = max(10, min(next_width - 8, int(track_width)))
+        next_track_margin = max(2, min(24, int(track_margin)))
+
+        self._track_width = next_track_width
+        self._track_margin = next_track_margin
+        self.setMinimumWidth(next_width)
+        self.setMinimumHeight(next_height)
+        self._invalidate_painted_frame_shadow_cache()
+        try:
+            self.updateGeometry()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        try:
+            self.update()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
     
     def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:
         """Set the anchor media widget for visibility gating."""
@@ -342,6 +371,18 @@ class SpotifyVolumeWidget(QWidget):
     # Painted frame shadow
     # ------------------------------------------------------------------
 
+    def uses_outer_frame_shadow(self) -> bool:
+        """Return whether the slider should paint a full outer-card shadow.
+
+        The volume widget is visually a single slider track, not a framed card.
+        Its track shadow provides the intended depth cue; a second outer-card
+        shadow becomes a wide dark box once CUSTOM resize increases the widget
+        width. Keep the outer-card path disabled so the resize contract stays
+        clean and proportional.
+        """
+
+        return False
+
     def uses_painted_frame_shadow(self) -> bool:
         return bool(self._painted_frame_shadow_enabled)
 
@@ -361,7 +402,7 @@ class SpotifyVolumeWidget(QWidget):
         )
 
     def _ensure_painted_frame_shadow_pixmap(self) -> Optional[QPixmap]:
-        if not self.uses_painted_frame_shadow() or self.width() <= 0 or self.height() <= 0:
+        if not self.uses_outer_frame_shadow() or self.width() <= 0 or self.height() <= 0:
             return None
         try:
             dpr = max(1.0, float(self.devicePixelRatioF()))
@@ -413,7 +454,7 @@ class SpotifyVolumeWidget(QWidget):
         return pixmap
 
     def _paint_painted_frame_shadow(self) -> None:
-        if not self.uses_painted_frame_shadow():
+        if not self.uses_outer_frame_shadow():
             return
         painter = QPainter(self)
         try:
@@ -505,7 +546,7 @@ class SpotifyVolumeWidget(QWidget):
     # ------------------------------------------------------------------
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
-        if self.uses_painted_frame_shadow():
+        if self.uses_outer_frame_shadow():
             self._paint_painted_frame_shadow()
         else:
             super().paintEvent(event)

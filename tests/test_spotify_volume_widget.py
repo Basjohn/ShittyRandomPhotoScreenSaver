@@ -95,3 +95,12 @@ def test_spotify_volume_sync_visibility_requests_volume_sync_when_becoming_visib
     finally:
         anchor.deleteLater()
         widget.deleteLater()
+
+
+def test_spotify_volume_uses_track_shadow_without_outer_frame_box(qt_app):
+    widget = SpotifyVolumeWidget()
+    try:
+        assert widget.uses_outer_frame_shadow() is False
+        assert widget.uses_painted_frame_shadow() is True
+    finally:
+        widget.deleteLater()

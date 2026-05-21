@@ -37,9 +37,13 @@ What exists today:
   - these shells may still precision-snap against display edges,
   - but they cannot hand off to another display,
   - a blocked shell affordance explains the reason instead of silently failing,
+- duplicate-capable `ALL` widget shells now also expose a local `×` remove affordance during edit mode only:
+  - it appears only when the same widget family has more than one live shell across the active display set,
+  - removing one duplicate and saving promotes the survivor into a numbered-display `Custom` route,
+  - the affordance is intentionally not shown for media-owned secondaries like `spotify_volume`, which stay tied to their owning cluster route.
 - shared sticky custom-geometry reapply through `BaseOverlayWidget._update_position()` when `_custom_layout_local_rect` is present,
 - legacy authored widget stacking is explicitly disabled for any widget family currently using the `Custom` slot, so stack offsets cannot fight committed CUSTOM geometry after rebuild,
-- safe first-phase uniform `Ctrl + wheel` resize for:
+- safe first-phase uniform scroll-wheel resize for:
   - `clock`
   - `clock2`
   - `clock3`
@@ -51,12 +55,14 @@ What exists today:
   - `gmail`
 - phase-two uniform resize is now also landed for:
   - `imgur`
-- visualizer CUSTOM participation is now partially landed:
+- phase-two uniform resize is now also landed for:
+  - `spotify_volume`
+- visualizer CUSTOM participation is now materially landed:
   - it joins the global edit session,
   - its shell snapshot is now composed from the visualizer card plus the GL overlay framebuffer so the card/background/stencil shell is preserved without relying on whole-display grabs,
   - it pauses/hides the live overlay cleanly during edit mode,
-  - committed CUSTOM rects persist under the media-owned `Custom` slot,
-  - the normal runtime visualizer positioning path now honors that committed CUSTOM rect when `media.position == Custom` instead of always forcing the visualizer back into media-relative orbiting.
+  - committed CUSTOM rects persist under the visualizer-owned `Custom` slot when the visualizer is independently routed,
+  - the normal runtime visualizer positioning path now honors that committed CUSTOM rect through the outer-card geometry contract instead of always forcing the visualizer back into media-relative orbiting.
 - live widget visibility during edit sessions is now more strictly separated from shell state:
   - hidden runtime media/visualizer widgets should not use their ordinary fade/show visibility re-entry paths while `_custom_layout_edit_active` is true,
   - track-change updates during edit mode should therefore update runtime state silently rather than respawning a second live widget under the shell.
@@ -83,24 +89,30 @@ What exists today:
   - the global shell session is cancelled first,
   - shell windows are torn down before the normal engine stop/settings-dialog startup begins,
   - settings entry no longer relies on display teardown to clean up edit shells indirectly.
-- `spotify_volume` now participates in the same media-owned CUSTOM move contract as the visualizer:
+- `spotify_volume` now participates in the same media-owned CUSTOM move + resize contract as the visualizer family:
   - it joins the edit shell session,
   - committed custom rects persist under `media.position == Custom`,
-  - runtime positioning honors that saved rect instead of always forcing the slider back to the media-card edge,
+  - runtime positioning honors that saved rect and size instead of always forcing the slider back to the media-card edge,
   - displayed volume is resynced from the real Spotify/MusicBee mixer session on activation, provider changes, and hidden→visible transitions without adding a high-frequency poll loop,
-  - because it is currently move-only, CUSTOM snap/clamp/save/reapply must preserve the authored slider footprint rather than inheriting the generic resizable-widget minimum edit rect.
+  - while remaining media-owned, its CUSTOM resize uses the authored slider scale contract rather than generic shell-only stretching,
+  - resize preview now refreshes from the real widget snapshot instead of scaling a stale shell capture,
+  - and the widget now relies on the slider track shadow alone rather than layering a second outer-card shadow that turns into a dark box under wider CUSTOM widths.
 - `spotify_visualizer` now uses a split routing contract:
   - outside `Custom`, it stays exact `Follow Media` parity,
   - in `Custom`, it owns its own numbered-display `position` / `monitor`,
   - it may be created on a different display from Media while still anchoring content and visibility to the canonical media widget,
   - leaving `Custom` preserves the saved visualizer custom display/rect dormant for later return.
+- `spotify_visualizer` CUSTOM sizing is now adaptive instead of frozen:
+  - the edit shell uses the maximum current-scale visualizer envelope so users align against the largest footprint the current CUSTOM scales can demand,
+  - saved CUSTOM payload stores visualizer width/height scales rather than replaying one captured rect size forever,
+  - runtime re-resolves live mode/preset-authored card metrics and applies those saved scales while preserving committed top-left/display ownership.
 
 Important current limitation:
 - edit shells still never straddle two displays at once.
 - cross-display transfer is currently limited to numbered-monitor widget families.
 - `ALL` widgets remain intentionally display-locked during a single drag because `monitor` routing stays authoritative and we do not silently collapse `ALL` into a single-display binding.
-- `spotify_visualizer` still needs its final uniform-resize parity contract before the “every widget uniformly resizable” goal is fully complete.
-- `spotify_volume` is now move-safe in CUSTOM mode, but its own eventual uniform-resize contract is still separate follow-through work.
+- the visualizer/media split still needs runtime watch validation, but the CUSTOM move/resize foundation is now in place for every supported widget family.
+- the remaining visualizer follow-through is runtime cold-watch validation of the adaptive sizing contract, not another storage-model rewrite.
 
 ## 1. Purpose
 

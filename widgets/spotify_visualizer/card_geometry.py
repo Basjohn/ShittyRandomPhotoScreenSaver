@@ -4,6 +4,7 @@ This module intentionally owns only the *outer* card contract:
 - mode-driven preferred height
 - blob-specific width reduction
 - media-relative card placement
+- CUSTOM-mode outer card rect authority and clamping
 
 It does *not* own painted-card stencil math or per-mode inner render
 adaptation. Those remain separate so future edit-mode/custom-resize work
@@ -14,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Mapping
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QRect, QSize
 
 # Hard bounds to prevent absurd card sizes
 MIN_HEIGHT: int = 40
@@ -139,3 +140,95 @@ def resolve_relative_card_placement(
         height=int(card_height),
         place_below_media=place_below,
     )
+
+
+def resolve_mode_card_width(
+    *,
+    mode_id: str,
+    media_width: int,
+    blob_width: float = 1.0,
+) -> int:
+    """Resolve the authored card width for one mode."""
+
+    width = max(10, int(media_width))
+    if mode_id == "blob":
+        blob_width = max(0.1, min(1.0, float(blob_width)))
+        if blob_width < 1.0:
+            width = max(40, int(width * blob_width))
+    return width
+
+
+def resolve_custom_card_size(
+    *,
+    mode_id: str,
+    media_width: int,
+    base_height: int,
+    growth_by_mode: Mapping[str, float] | None = None,
+    blob_width: float = 1.0,
+    width_scale: float = 1.0,
+    height_scale: float = 1.0,
+    maximum_envelope: bool = False,
+) -> QSize:
+    """Resolve current or maximum-envelope CUSTOM visualizer outer-card size."""
+
+    width_scale = max(0.4, min(3.0, float(width_scale)))
+    height_scale = max(0.4, min(3.0, float(height_scale)))
+    growth_map = growth_by_mode or DEFAULT_GROWTH
+    authored_width = resolve_mode_card_width(
+        mode_id=mode_id,
+        media_width=media_width,
+        blob_width=blob_width,
+    )
+    authored_metrics = resolve_card_metrics(
+        mode_id,
+        base_height,
+        growth_map,
+    )
+
+    if maximum_envelope:
+        max_height = max(
+            resolve_card_metrics(candidate_mode, base_height, growth_map).preferred_height
+            for candidate_mode in growth_map.keys()
+        )
+        max_width = max(
+            resolve_mode_card_width(
+                mode_id=candidate_mode,
+                media_width=media_width,
+                blob_width=blob_width,
+            )
+            for candidate_mode in growth_map.keys()
+        )
+        authored_width = max_width
+        authored_height = max_height
+    else:
+        authored_height = authored_metrics.preferred_height
+
+    width = max(10, int(round(authored_width * width_scale)))
+    height = max(MIN_HEIGHT, int(round(authored_height * height_scale)))
+    return QSize(width, height)
+
+
+def resolve_custom_card_rect(
+    custom_rect: QRect,
+    *,
+    parent_width: int,
+    parent_height: int,
+    size: QSize | None = None,
+) -> QRect:
+    """Clamp a saved CUSTOM rect into the current display bounds.
+
+    In CUSTOM mode the visualizer's saved rect is the authoritative outer-card
+    geometry. The runtime should preserve that rect as faithfully as possible
+    while still keeping the card fully inside the owning display.
+    """
+
+    rect = QRect(custom_rect)
+    rect_size = size if isinstance(size, QSize) and size.width() > 0 and size.height() > 0 else rect.size()
+    if rect_size.width() <= 0 or rect_size.height() <= 0:
+        return QRect()
+
+    width = max(1, min(int(rect_size.width()), max(1, int(parent_width))))
+    height = max(1, min(int(rect_size.height()), max(1, int(parent_height))))
+    x = max(0, min(int(rect.x()), max(0, int(parent_width) - width)))
+    y = max(0, min(int(rect.y()), max(0, int(parent_height) - height)))
+    return QRect(x, y, width, height)

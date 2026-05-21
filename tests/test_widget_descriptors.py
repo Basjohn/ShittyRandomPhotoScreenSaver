@@ -250,7 +250,8 @@ def test_spotify_volume_participates_in_custom_layout_via_media_contract():
     assert volume.supports_layout_edit_mode is True
     assert volume.get_effective_position_settings_key() == "media"
     assert volume.get_effective_monitor_settings_key() == "media"
-    assert volume.supports_layout_resize_edit is False
+    assert volume.supports_layout_resize_edit is True
+    assert volume.custom_layout_resize_mode == "volume_scale"
 
 
 def test_spotify_visualizer_uses_media_routing_outside_custom():

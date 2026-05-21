@@ -956,9 +956,24 @@ class TestSettingsRouting:
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
+        class _FakeMedia:
+            def geometry(self):
+                return QRect(50, 50, 300, 100)
+
         class _FakeVisualizer:
             def __init__(self):
-                self._custom_layout_local_rect = QRect(333, 444, 555, 222)
+                self._custom_layout_local_rect = QRect(333, 444, 555, 280)
+                self._custom_layout_visualizer_scale_payload = {"width_scale": 1.0, "height_scale": 1.0}
+                self._vis_mode_str = "spectrum"
+                self._base_height = 80
+                self._blob_width = 1.0
+                self._spectrum_growth = 2.0
+                self._blob_growth = 3.5
+                self._osc_growth = 2.0
+                self._bubble_growth = 3.0
+                self._devcurve_growth = 3.0
+                self._sine_wave_growth = 2.0
+                self._anchor_media = _FakeMedia()
                 self._geometry = None
                 self.raised = False
 
@@ -985,7 +1000,55 @@ class TestSettingsRouting:
 
         manager.position_spotify_visualizer(vis, None, 1920, 1080)
 
-        assert vis._geometry == (333, 444, 555, 222)
+        assert vis._geometry == (333, 444, 300, 160)
+        assert vis.raised is True
+
+    def test_position_spotify_visualizer_custom_rect_uses_scale_payload(self):
+        from PySide6.QtCore import QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeMedia:
+            def geometry(self):
+                return QRect(0, 0, 280, 100)
+
+        class _FakeVisualizer:
+            def __init__(self):
+                self._custom_layout_local_rect = QRect(210, 310, 420, 280)
+                self._custom_layout_visualizer_scale_payload = {"width_scale": 1.5, "height_scale": 1.25}
+                self._vis_mode_str = "blob"
+                self._base_height = 80
+                self._blob_width = 0.5
+                self._spectrum_growth = 2.0
+                self._blob_growth = 3.5
+                self._osc_growth = 2.0
+                self._bubble_growth = 3.0
+                self._devcurve_growth = 3.0
+                self._sine_wave_growth = 2.0
+                self._anchor_media = _FakeMedia()
+                self._geometry = None
+                self.raised = False
+
+            def setGeometry(self, *args):
+                if len(args) == 1 and isinstance(args[0], QRect):
+                    rect = args[0]
+                    self._geometry = (rect.x(), rect.y(), rect.width(), rect.height())
+                else:
+                    x, y, w, h = args
+                    self._geometry = (x, y, w, h)
+
+            def raise_(self):
+                self.raised = True
+
+        settings = MagicMock()
+        settings.get.return_value = {"spotify_visualizer": {"position": "Custom"}}
+        manager = WidgetManager(MagicMock())
+        manager._settings_manager = settings
+
+        vis = _FakeVisualizer()
+
+        manager.position_spotify_visualizer(vis, None, 1920, 1080)
+
+        assert vis._geometry == (210, 310, 210, 350)
         assert vis.raised is True
 
     def test_position_spotify_volume_honors_custom_rect_when_media_position_is_custom(self):
@@ -1030,7 +1093,7 @@ class TestSettingsRouting:
 
         manager.position_spotify_volume(volume, None, 1920, 1080)
 
-        assert volume._geometry == (111, 222, 32, 180)
+        assert volume._geometry == (111, 222, 144, 320)
         assert volume.raised is True
 
 

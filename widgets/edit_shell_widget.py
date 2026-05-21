@@ -16,6 +16,7 @@ class EditShellWidget(QWidget):
     resize_wheel_requested = Signal(str, int)
     reset_size_requested = Signal(str)
     reset_position_requested = Signal(str)
+    remove_requested = Signal(str)
     context_menu_requested = Signal(QPoint)
 
     def __init__(
@@ -74,14 +75,41 @@ class EditShellWidget(QWidget):
             """
         self._reset_position_btn = QPushButton("Reset Position", self)
         self._reset_size_btn = QPushButton("Reset Size", self)
+        self._remove_btn = QPushButton("×", self)
         self._reset_size_btn.clicked.connect(self._on_reset_size_clicked)
         self._reset_position_btn.clicked.connect(self._on_reset_position_clicked)
+        self._remove_btn.clicked.connect(self._on_remove_clicked)
         self._reset_size_btn.installEventFilter(self)
         self._reset_position_btn.installEventFilter(self)
+        self._remove_btn.installEventFilter(self)
         self._reset_size_btn.setStyleSheet(button_stylesheet)
         self._reset_position_btn.setStyleSheet(button_stylesheet)
+        self._remove_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: rgba(65, 20, 20, 215);
+                color: rgba(255, 255, 255, 235);
+                border: 2px solid rgba(255, 255, 255, 220);
+                border-radius: 8px;
+                padding: 0px;
+                font-size: 14px;
+                font-family: 'Jost', 'Segoe UI', 'Arial', 'Sans Serif';
+                font-weight: 800;
+            }
+            QPushButton:hover {
+                background-color: rgba(110, 30, 30, 230);
+            }
+            QPushButton:disabled {
+                background-color: rgba(65, 20, 20, 120);
+                color: rgba(255, 255, 255, 120);
+                border-color: rgba(255, 255, 255, 120);
+            }
+            """
+        )
         self._reset_size_btn.setEnabled(False)
         self._reset_position_btn.setEnabled(False)
+        self._remove_btn.hide()
+        self._remove_btn.setEnabled(False)
 
         self.setGeometry(initial_global_rect)
         self._reposition_reset_button()
@@ -89,7 +117,8 @@ class EditShellWidget(QWidget):
     def eventFilter(self, watched, event):  # type: ignore[override]
         reset_size_btn = getattr(self, "_reset_size_btn", None)
         reset_position_btn = getattr(self, "_reset_position_btn", None)
-        if watched in (reset_size_btn, reset_position_btn):
+        remove_btn = getattr(self, "_remove_btn", None)
+        if watched in (reset_size_btn, reset_position_btn, remove_btn):
             if event.type() == QEvent.Type.MouseButtonPress:
                 if isinstance(watched, QPushButton) and watched.isEnabled():
                     self._pressed_button = watched
@@ -102,6 +131,8 @@ class EditShellWidget(QWidget):
                     self._on_reset_size_clicked()
                 elif pressed is self._reset_position_btn and self._reset_position_btn.isEnabled():
                     self._on_reset_position_clicked()
+                elif pressed is self._remove_btn and self._remove_btn.isEnabled():
+                    self._on_remove_clicked()
                 event.accept()
                 return True
         return super().eventFilter(watched, event)
@@ -144,19 +175,31 @@ class EditShellWidget(QWidget):
     def set_reset_position_enabled(self, enabled: bool) -> None:
         self._reset_position_btn.setEnabled(bool(enabled))
 
+    def set_remove_enabled(self, enabled: bool) -> None:
+        visible = bool(enabled)
+        self._remove_btn.setVisible(visible)
+        self._remove_btn.setEnabled(visible)
+        if visible:
+            self._remove_btn.raise_()
+
     def _reposition_reset_button(self) -> None:
         size_hint = self._reset_size_btn.sizeHint()
         pos_hint = self._reset_position_btn.sizeHint()
+        remove_size = self._remove_btn.sizeHint()
         self._reset_size_btn.resize(size_hint)
         self._reset_position_btn.resize(pos_hint)
+        self._remove_btn.resize(max(22, remove_size.width()), max(22, remove_size.height()))
         spacing = 8
         total_width = size_hint.width() + pos_hint.width() + spacing
         start_x = max(6, int((self.width() - total_width) / 2))
         y = max(6, self.height() - max(size_hint.height(), pos_hint.height()) - 10)
         self._reset_size_btn.move(start_x, y)
         self._reset_position_btn.move(start_x + size_hint.width() + spacing, y)
+        self._remove_btn.move(max(6, self.width() - self._remove_btn.width() - 8), 8)
         self._reset_size_btn.raise_()
         self._reset_position_btn.raise_()
+        if self._remove_btn.isVisible():
+            self._remove_btn.raise_()
 
     def _on_reset_size_clicked(self) -> None:
         self.reset_size_requested.emit(self.widget_id)
@@ -164,11 +207,15 @@ class EditShellWidget(QWidget):
     def _on_reset_position_clicked(self) -> None:
         self.reset_position_requested.emit(self.widget_id)
 
+    def _on_remove_clicked(self) -> None:
+        self.remove_requested.emit(self.widget_id)
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         local_pos = event.position().toPoint()
         if (
             self._reset_size_btn.geometry().contains(local_pos)
             or self._reset_position_btn.geometry().contains(local_pos)
+            or self._remove_btn.geometry().contains(local_pos)
         ):
             event.accept()
             return
@@ -203,6 +250,7 @@ class EditShellWidget(QWidget):
         if (
             self._reset_size_btn.geometry().contains(local_pos)
             or self._reset_position_btn.geometry().contains(local_pos)
+            or self._remove_btn.geometry().contains(local_pos)
         ):
             self._pressed_button = None
             event.accept()
@@ -224,7 +272,7 @@ class EditShellWidget(QWidget):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
-        if self._resizable and bool(event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+        if self._resizable:
             self.resize_wheel_requested.emit(self.widget_id, int(event.angleDelta().y()))
             event.accept()
             return

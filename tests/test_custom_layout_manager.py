@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt, QEvent
+import pytest
+
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, QEvent
 from PySide6.QtGui import QColor, QGuiApplication, QPixmap, QKeyEvent
 from PySide6.QtWidgets import QWidget
 
@@ -167,6 +169,13 @@ class _VisualizerLikeTestWidget(_EditableTestWidget):
         super().__init__(parent, font_size=14)
         self._base_height = 80
         self._vis_mode_str = "spectrum"
+        self._blob_width = 1.0
+        self._spectrum_growth = 2.0
+        self._blob_growth = 3.5
+        self._osc_growth = 2.0
+        self._bubble_growth = 3.0
+        self._devcurve_growth = 3.0
+        self._sine_wave_growth = 2.0
         self._started = True
         self.setGeometry(70, 360, 320, 160)
 
@@ -175,6 +184,27 @@ class _VisualizerLikeTestWidget(_EditableTestWidget):
 
     def start(self) -> None:
         self._started = True
+
+
+class _VolumeLikeTestWidget(_EditableTestWidget):
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, font_size=14)
+        self._track_width = 18
+        self._track_margin = 6
+        self.setGeometry(260, 80, 32, 180)
+
+    def apply_scale_contract(
+        self,
+        *,
+        width: int,
+        height: int,
+        track_width: int,
+        track_margin: int,
+    ) -> None:
+        self._track_width = int(track_width)
+        self._track_margin = int(track_margin)
+        self.setMinimumWidth(int(width))
+        self.setMinimumHeight(int(height))
 
 
 class _FakeCompositor:
@@ -416,8 +446,7 @@ def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot
     qtbot.addWidget(display)
     display.show()
 
-    volume = _EditableTestWidget(display, font_size=14)
-    volume.setGeometry(260, 80, 32, 180)
+    volume = _VolumeLikeTestWidget(display)
     display.spotify_volume_widget = volume
     qtbot.addWidget(volume)
 
@@ -426,8 +455,15 @@ def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_volume"]
-    updated_rect = QRect(state.current_global_rect.x() + 80, state.current_global_rect.y() + 24, 32, 180)
+    updated_rect = QRect(state.current_global_rect.x() + 80, state.current_global_rect.y() + 24, 144, 320)
     state.current_global_rect = QRect(updated_rect)
+    state.current_size_payload = {
+        "width": 144,
+        "height": 320,
+        "track_width": 28,
+        "track_margin": 10,
+    }
+    state.resize_scale = 1.35
     state.shell.set_shell_geometry(updated_rect)
 
     assert manager.save_session() is True
@@ -435,7 +471,13 @@ def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot
     assert widgets_map["media"]["position"] == "Custom"
     displays = widgets_map["custom_layout"]["displays"]
     payload = next(iter(displays.values()))["spotify_volume"]
-    assert payload["resize_mode"] == "none"
+    assert payload["resize_mode"] == "volume_scale"
+    assert payload["size_payload"] == {
+        "width": 144,
+        "height": 320,
+        "track_width": 28,
+        "track_margin": 10,
+    }
     assert display._runtime_reload_requests == 1
 
 
@@ -452,8 +494,7 @@ def test_custom_layout_manager_volume_save_does_not_clobber_media_monitor_route(
     display.media_widget = media
     qtbot.addWidget(media)
 
-    volume = _EditableTestWidget(display, font_size=14)
-    volume.setGeometry(260, 80, 32, 180)
+    volume = _VolumeLikeTestWidget(display)
     display.spotify_volume_widget = volume
     qtbot.addWidget(volume)
 
@@ -469,6 +510,61 @@ def test_custom_layout_manager_volume_save_does_not_clobber_media_monitor_route(
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
     assert widgets_map["media"]["monitor"] == "2"
+
+
+def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_display(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Left", "monitor": "ALL"}}
+
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    clock_a = _EditableTestWidget(display_a, font_size=48)
+    clock_b = _EditableTestWidget(display_b, font_size=48)
+    display_a.clock_widget = clock_a
+    display_b.clock_widget = clock_b
+    qtbot.addWidget(clock_a)
+    qtbot.addWidget(clock_b)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    state_a = manager_a._shell_states["clock"]
+    state_b = manager_b._shell_states["clock"]
+
+    assert state_a.shell._remove_btn.isVisible() is True
+    assert state_b.shell._remove_btn.isVisible() is True
+
+    manager_b._on_shell_remove_requested("clock")
+
+    assert state_b.removed is True
+    assert state_b.shell.isVisible() is False
+    assert state_a.shell._remove_btn.isVisible() is False
+
+    assert manager_a.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["clock"]["position"] == "Custom"
+    assert widgets_map["clock"]["monitor"] == "1"
+    displays = widgets_map["custom_layout"]["displays"]
+    assert len(displays) == 1
+    payload = next(iter(displays.values()))["clock"]
+    assert payload["resize_mode"] == "clock_font"
 
 
 def test_custom_layout_manager_creates_and_destroys_grid_overlay(qtbot):
@@ -501,9 +597,14 @@ def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size
             "displays": {
                 get_screen_signature(screen): {
                     "spotify_volume": {
-                        "rect": {"x": 0.4, "y": 0.2, "width": 0.25, "height": 0.55},
-                        "size_payload": {},
-                        "resize_mode": "none",
+                        "rect": {"x": 0.4, "y": 0.2, "width": 0.18, "height": 0.48},
+                        "size_payload": {
+                            "width": 144,
+                            "height": 288,
+                            "track_width": 26,
+                            "track_margin": 9,
+                        },
+                        "resize_mode": "volume_scale",
                     }
                 }
             },
@@ -513,8 +614,7 @@ def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size
     qtbot.addWidget(display)
     display.show()
 
-    volume = _EditableTestWidget(display, font_size=14)
-    volume.setGeometry(260, 80, 32, 180)
+    volume = _VolumeLikeTestWidget(display)
     display.spotify_volume_widget = volume
     qtbot.addWidget(volume)
 
@@ -524,8 +624,12 @@ def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size
 
     custom_rect = getattr(volume, "_custom_layout_local_rect", None)
     assert isinstance(custom_rect, QRect)
-    assert custom_rect.width() == 32
-    assert custom_rect.height() == 180
+    assert custom_rect.width() == 144
+    assert custom_rect.height() == 288
+    assert volume.minimumWidth() == 144
+    assert volume.minimumHeight() == 288
+    assert volume._track_width == 26
+    assert volume._track_margin == 9
 
 
 def test_custom_layout_manager_reset_position_restores_source_rect_without_resetting_size(qtbot):
@@ -1085,6 +1189,11 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
     )
     state.current_global_rect = QRect(updated_rect)
     state.resize_scale = 1.25
+    state.current_size_payload = manager._scale_size_payload(
+        state.descriptor,
+        state.baseline_size_payload,
+        state.resize_scale,
+    )
     state.shell.set_shell_geometry(updated_rect)
 
     assert manager.save_session() is True
@@ -1093,6 +1202,94 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
     assert widgets_map["spotify_visualizer"]["position"] == "Custom"
     payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]
     assert payload["resize_mode"] == "visualizer_rect"
+    assert payload["size_payload"]["width_scale"] == pytest.approx(1.25)
+    assert payload["size_payload"]["height_scale"] == pytest.approx(1.25)
+
+
+def test_custom_layout_manager_reapplies_visualizer_custom_rect_size(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Bottom Left", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.22, "y": 0.38, "width": 0.42, "height": 0.31},
+                        "size_payload": {"width_scale": 1.0, "height_scale": 1.0},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(visualizer, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 420
+    assert custom_rect.height() == 160
+
+
+def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert state.baseline_global_rect.width() == 320
+    assert state.baseline_global_rect.height() == 280
+    assert state.shell._snapshot.size() == QSize(320, 280)
+
+
+def test_custom_layout_manager_saves_visualizer_scale_payload(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    state.current_size_payload = {"width_scale": 1.4, "height_scale": 1.1}
+    state.resize_scale = 1.2
+
+    assert manager.save_session() is True
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["spotify_visualizer"]
+    assert payload["size_payload"] == {"width_scale": 1.4, "height_scale": 1.1}
 
 
 def test_custom_layout_manager_promotes_visualizer_from_follow_media_to_visualizer_custom_slot(qtbot):

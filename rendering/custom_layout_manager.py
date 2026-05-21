@@ -91,6 +91,7 @@ class _ShellState:
     current_screen_signature: str
     current_monitor_value: str
     last_drag_axis: str = "both"
+    removed: bool = False
 
 
 class CustomLayoutManager:
@@ -249,6 +250,7 @@ class CustomLayoutManager:
         if not started:
             return False
         CustomLayoutManager._active_managers = started
+        started[0]._refresh_duplicate_shell_remove_affordances_global()
         started[0]._install_global_key_filter()
         return True
 
@@ -266,10 +268,21 @@ class CustomLayoutManager:
         custom_layout_map = load_custom_layout_map(widgets_map)
 
         active_managers = list(CustomLayoutManager._active_managers)
+        grouped_states: dict[str, list[tuple["CustomLayoutManager", _ShellState]]] = {}
         for manager in active_managers:
             for widget_id, state in manager._shell_states.items():
+                grouped_states.setdefault(widget_id, []).append((manager, state))
+
+        for widget_id, entries in grouped_states.items():
+            survivors = [(manager, state) for manager, state in entries if not state.removed]
+            if not survivors:
+                continue
+            source_had_duplicates = len(entries) > 1
+            for manager, state in survivors:
                 monitor_value = state.current_monitor_value
-                if state.current_screen_signature != state.source_screen_signature:
+                if source_had_duplicates and len(survivors) == 1 and manager._monitor_value_is_all(state.source_monitor_value):
+                    monitor_value = manager._monitor_value_for_screen(state.current_screen)
+                elif state.current_screen_signature != state.source_screen_signature:
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
                 manager._write_widget_custom_layout(
                     widgets_map,
@@ -817,9 +830,24 @@ class CustomLayoutManager:
             logger.debug("[CUSTOM_LAYOUT] Failed to read geometry for %s", descriptor.widget_id, exc_info=True)
             return None
 
+        baseline_payload = self._capture_size_payload(descriptor, widget)
+        shell_local_rect = QRect(local_rect)
+        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+            shell_local_rect.setSize(
+                self._resolve_visualizer_custom_size(
+                    widget,
+                    baseline_payload,
+                    maximum_envelope=True,
+                    fallback_size=local_rect.size(),
+                )
+            )
         try:
             if descriptor.widget_id == "spotify_visualizer":
-                snapshot = self._capture_visualizer_shell_snapshot(widget, local_rect)
+                snapshot = self._capture_visualizer_shell_snapshot(
+                    widget,
+                    local_rect,
+                    canvas_size=shell_local_rect.size(),
+                )
             else:
                 snapshot = widget.grab()
         except Exception:
@@ -827,8 +855,7 @@ class CustomLayoutManager:
             return None
 
         global_top_left = self._display.mapToGlobal(local_rect.topLeft())
-        global_rect = QRect(global_top_left, local_rect.size())
-        baseline_payload = self._capture_size_payload(descriptor, widget)
+        global_rect = QRect(global_top_left, shell_local_rect.size())
         current_monitor_value = self._read_monitor_value_for_widget(descriptor)
         shell = EditShellWidget(
             widget_id=descriptor.widget_id,
@@ -847,9 +874,11 @@ class CustomLayoutManager:
         shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
         shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
         shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
+        shell.remove_requested.connect(self._on_shell_remove_requested)
         shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
         shell.set_reset_size_enabled(False)
         shell.set_reset_position_enabled(False)
+        shell.set_remove_enabled(False)
         return _ShellState(
             descriptor=descriptor,
             widget=widget,
@@ -869,11 +898,22 @@ class CustomLayoutManager:
             last_drag_axis="both",
         )
 
-    def _capture_visualizer_shell_snapshot(self, widget: Any, local_rect: QRect) -> QPixmap:
-        snapshot = widget.grab()
-        if snapshot.isNull():
-            snapshot = QPixmap(local_rect.size())
-            snapshot.fill()
+    def _capture_visualizer_shell_snapshot(
+        self,
+        widget: Any,
+        local_rect: QRect,
+        canvas_size: QSize | None = None,
+    ) -> QPixmap:
+        capture_size = QSize(canvas_size) if isinstance(canvas_size, QSize) and not canvas_size.isEmpty() else local_rect.size()
+        snapshot = QPixmap(max(1, capture_size.width()), max(1, capture_size.height()))
+        snapshot.fill(Qt.GlobalColor.transparent)
+        widget_snapshot = widget.grab()
+        if not widget_snapshot.isNull():
+            painter = QPainter(snapshot)
+            try:
+                painter.drawPixmap(0, 0, widget_snapshot)
+            finally:
+                painter.end()
 
         overlay = getattr(self._display, "_spotify_bars_overlay", None)
         if overlay is None:
@@ -934,6 +974,8 @@ class CustomLayoutManager:
 
     def _raise_all_shells(self) -> None:
         for state in self._shell_states.values():
+            if state.removed:
+                continue
             try:
                 state.shell.show()
                 state.shell.raise_()
@@ -1025,6 +1067,7 @@ class CustomLayoutManager:
         if target_screen is not None:
             next_rect = clamp_global_rect_to_screen(next_rect, target_screen)
         state.current_global_rect = QRect(next_rect)
+        self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
         state.shell.set_shell_geometry(next_rect)
 
     def _on_shell_reset_size_requested(self, widget_id: str) -> None:
@@ -1062,6 +1105,17 @@ class CustomLayoutManager:
         self._set_shell_geometry_silently(state, reset_rect)
         self._update_shell_reset_affordances(state)
 
+    def _on_shell_remove_requested(self, widget_id: str) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None or state.removed:
+            return
+        state.removed = True
+        try:
+            state.shell.hide()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to hide removed duplicate shell", exc_info=True)
+        self._refresh_duplicate_shell_remove_affordances_global()
+
     def _set_shell_geometry_silently(self, state: _ShellState, global_rect: QRect) -> None:
         widget_id = state.descriptor.widget_id
         self._suppress_live_feedback_widget_ids.add(widget_id)
@@ -1072,6 +1126,11 @@ class CustomLayoutManager:
         self._update_shell_reset_affordances(state)
 
     def _update_shell_reset_affordances(self, state: _ShellState) -> None:
+        if state.removed:
+            state.shell.set_reset_size_enabled(False)
+            state.shell.set_reset_position_enabled(False)
+            state.shell.set_remove_enabled(False)
+            return
         size_changed = abs(state.resize_scale - 1.0) > 1e-6
         position_changed = (
             state.current_screen_signature != state.source_screen_signature
@@ -1080,6 +1139,66 @@ class CustomLayoutManager:
         state.shell.set_reset_size_enabled(size_changed)
         state.shell.set_reset_position_enabled(position_changed)
 
+    def _refresh_duplicate_shell_remove_affordances_global(self) -> None:
+        grouped: dict[str, list[_ShellState]] = {}
+        for manager in CustomLayoutManager._active_managers:
+            for widget_id, state in manager._shell_states.items():
+                grouped.setdefault(widget_id, []).append(state)
+        for manager in CustomLayoutManager._active_managers:
+            for widget_id, state in manager._shell_states.items():
+                descriptor = state.descriptor
+                survivors = [entry for entry in grouped.get(widget_id, ()) if not entry.removed]
+                removable = bool(
+                    widget_writes_custom_monitor_key(widget_id)
+                    and len(survivors) > 1
+                    and not state.removed
+                )
+                state.shell.set_remove_enabled(removable)
+
+    def _refresh_shell_snapshot_for_resize_preview(self, state: _ShellState, shell_size: QSize) -> None:
+        if state.descriptor.custom_layout_resize_mode not in {"volume_scale", "visualizer_rect"}:
+            return
+        widget = state.widget
+        try:
+            original_geom = QRect(widget.geometry())
+            original_payload = self._capture_size_payload(state.descriptor, widget)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to capture original widget state for resize preview", exc_info=True)
+            return
+
+        try:
+            preview_local_rect = QRect(original_geom)
+            self._apply_size_payload(state.descriptor, widget, state.current_size_payload)
+            if state.descriptor.custom_layout_resize_mode == "visualizer_rect":
+                preview_local_rect.setSize(
+                    self._resolve_visualizer_custom_size(
+                        widget,
+                        state.current_size_payload,
+                        maximum_envelope=False,
+                        fallback_size=original_geom.size(),
+                    )
+                )
+                widget.setGeometry(preview_local_rect)
+                snapshot = self._capture_visualizer_shell_snapshot(
+                    widget,
+                    preview_local_rect,
+                    canvas_size=shell_size,
+                )
+            else:
+                preview_local_rect.setSize(shell_size)
+                widget.setGeometry(preview_local_rect)
+                snapshot = widget.grab()
+            if not snapshot.isNull():
+                state.shell.set_snapshot(snapshot)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to refresh shell snapshot for resize preview", exc_info=True)
+        finally:
+            try:
+                self._apply_size_payload(state.descriptor, widget, original_payload)
+                widget.setGeometry(original_geom)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to restore widget after resize preview refresh", exc_info=True)
+
     def _collect_peer_local_rects(self, exclude_widget_id: str, screen: Any) -> list[QRect]:
         if screen is None:
             return []
@@ -1087,6 +1206,8 @@ class CustomLayoutManager:
         peers: list[QRect] = []
         for widget_id, state in self._shell_states.items():
             if widget_id == exclude_widget_id:
+                continue
+            if state.removed:
                 continue
             if state.current_screen_signature != get_screen_signature(screen):
                 continue
@@ -1261,6 +1382,24 @@ class CustomLayoutManager:
                 "cell_base_width": int(getattr(widget, "_cell_base_width", 120)),
                 "image_border_width": int(getattr(widget, "_image_border_width", 2)),
             }
+        if mode == "volume_scale":
+            return {
+                "width": int(widget.width()),
+                "height": int(widget.height()),
+                "track_width": int(getattr(widget, "_track_width", 18)),
+                "track_margin": int(getattr(widget, "_track_margin", 6)),
+            }
+        if mode == "visualizer_rect":
+            payload = getattr(widget, "_custom_layout_visualizer_scale_payload", None)
+            if isinstance(payload, dict):
+                return {
+                    "width_scale": max(0.4, min(3.0, float(payload.get("width_scale", 1.0)))),
+                    "height_scale": max(0.4, min(3.0, float(payload.get("height_scale", 1.0)))),
+                }
+            return {
+                "width_scale": 1.0,
+                "height_scale": 1.0,
+            }
         return {}
 
     def _scale_size_payload(
@@ -1302,6 +1441,18 @@ class CustomLayoutManager:
                 "cell_base_width": max(80, int(round(int(baseline_payload.get("cell_base_width", 120)) * scale))),
                 "image_border_width": max(0, min(5, int(round(int(baseline_payload.get("image_border_width", 2)) * scale)))),
             }
+        if mode == "volume_scale":
+            return {
+                "width": max(24, int(round(int(baseline_payload.get("width", 32)) * scale))),
+                "height": max(120, int(round(int(baseline_payload.get("height", 180)) * scale))),
+                "track_width": max(10, int(round(int(baseline_payload.get("track_width", 18)) * scale))),
+                "track_margin": max(2, int(round(int(baseline_payload.get("track_margin", 6)) * scale))),
+            }
+        if mode == "visualizer_rect":
+            return {
+                "width_scale": max(0.4, min(3.0, float(baseline_payload.get("width_scale", 1.0)) * scale)),
+                "height_scale": max(0.4, min(3.0, float(baseline_payload.get("height_scale", 1.0)) * scale)),
+            }
         return dict(baseline_payload)
 
     def _apply_size_payload(self, descriptor: WidgetRuntimeDescriptor, widget: Any, payload: dict[str, Any]) -> None:
@@ -1331,6 +1482,24 @@ class CustomLayoutManager:
                 widget.set_cell_base_width(int(payload.get("cell_base_width", getattr(widget, "_cell_base_width", 120))))
                 widget.set_image_border_width(int(payload.get("image_border_width", getattr(widget, "_image_border_width", 2))))
                 return
+            if mode == "volume_scale":
+                widget.apply_scale_contract(
+                    width=int(payload.get("width", widget.width())),
+                    height=int(payload.get("height", widget.height())),
+                    track_width=int(payload.get("track_width", getattr(widget, "_track_width", 18))),
+                    track_margin=int(payload.get("track_margin", getattr(widget, "_track_margin", 6))),
+                )
+                return
+            if mode == "visualizer_rect":
+                setattr(
+                    widget,
+                    "_custom_layout_visualizer_scale_payload",
+                    {
+                        "width_scale": max(0.4, min(3.0, float(payload.get("width_scale", 1.0)))),
+                        "height_scale": max(0.4, min(3.0, float(payload.get("height_scale", 1.0)))),
+                    },
+                )
+                return
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply size payload for %s", descriptor.widget_id, exc_info=True)
 
@@ -1341,11 +1510,53 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to clear custom rect", exc_info=True)
         try:
+            if hasattr(widget, "_custom_layout_visualizer_scale_payload"):
+                delattr(widget, "_custom_layout_visualizer_scale_payload")
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to clear visualizer custom scale payload", exc_info=True)
+        try:
             update_position = getattr(widget, "_update_position", None)
             if callable(update_position):
                 update_position()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to restore default position after clearing custom layout", exc_info=True)
+
+    def _resolve_visualizer_custom_size(
+        self,
+        widget: Any,
+        payload: dict[str, Any],
+        *,
+        maximum_envelope: bool,
+        fallback_size: QSize,
+    ) -> QSize:
+        from widgets.spotify_visualizer.card_geometry import (
+            build_growth_map_from_widget,
+            resolve_custom_card_size,
+        )
+
+        try:
+            anchor = getattr(widget, "_anchor_media", None)
+            if anchor is not None:
+                media_width = max(10, int(anchor.geometry().width()))
+            else:
+                media_width = max(10, int(fallback_size.width()))
+        except Exception:
+            media_width = max(10, int(fallback_size.width()))
+
+        try:
+            return resolve_custom_card_size(
+                mode_id=str(getattr(widget, "_vis_mode_str", "spectrum") or "spectrum"),
+                media_width=media_width,
+                base_height=int(getattr(widget, "_base_height", max(40, fallback_size.height()))),
+                growth_by_mode=build_growth_map_from_widget(widget),
+                blob_width=float(getattr(widget, "_blob_width", 1.0)),
+                width_scale=float(payload.get("width_scale", 1.0)),
+                height_scale=float(payload.get("height_scale", 1.0)),
+                maximum_envelope=maximum_envelope,
+            )
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to resolve adaptive visualizer custom size", exc_info=True)
+            return QSize(max(1, fallback_size.width()), max(1, fallback_size.height()))
 
     def _apply_entry_to_widget(
         self,
@@ -1359,6 +1570,15 @@ class CustomLayoutManager:
             return
         self._apply_size_payload(descriptor, widget, entry.size_payload)
         local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
+        if descriptor.custom_layout_resize_mode == "visualizer_rect":
+            local_rect.setSize(
+                self._resolve_visualizer_custom_size(
+                    widget,
+                    entry.size_payload,
+                    maximum_envelope=False,
+                    fallback_size=local_rect.size(),
+                )
+            )
         if not descriptor.supports_layout_resize_edit:
             try:
                 local_rect.setSize(widget.geometry().size())
