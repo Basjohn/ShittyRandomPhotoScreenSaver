@@ -767,6 +767,77 @@ class TestCleanup:
         assert timer.stop_calls == 1
         assert manager._raise_timer is None
 
+    def test_prepare_for_runtime_pause_detaches_settings_stops_raise_and_widgets(self, monkeypatch):
+        """Runtime-pause prep should suppress late work without full cleanup."""
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeSignal:
+            def __init__(self):
+                self._callback = None
+
+            def connect(self, callback):
+                self._callback = callback
+
+        class _FakeTimer:
+            def __init__(self):
+                self.timeout = _FakeSignal()
+                self.single_shot = False
+                self.started_with = []
+                self.stop_calls = 0
+
+            def setSingleShot(self, value):
+                self.single_shot = bool(value)
+
+            def start(self, interval_ms):
+                self.started_with.append(int(interval_ms))
+
+            def stop(self):
+                self.stop_calls += 1
+
+        class _StoppableWidget(MockWidget):
+            def __init__(self, name="stoppable"):
+                super().__init__(name)
+                self.stop_calls = 0
+
+            def stop(self):
+                self.stop_calls += 1
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        settings = MockSettingsManager()
+        widget = _StoppableWidget()
+        manager.register_widget("test", widget)
+
+        fake_timer_instances = []
+
+        def _timer_factory():
+            timer = _FakeTimer()
+            fake_timer_instances.append(timer)
+            return timer
+
+        monkeypatch.setattr("rendering.widget_manager.QTimer", _timer_factory)
+
+        manager._attach_settings_manager(settings)
+        manager._last_raise_time = time.time()
+        manager.raise_all()
+        manager._pending_spotify_visibility_sync = True
+        manager._spotify_secondary_fade_starters = [lambda: None]
+
+        timer = fake_timer_instances[0]
+        assert manager._settings_manager is settings
+        assert manager._pending_raise is True
+
+        manager.prepare_for_runtime_pause()
+
+        assert manager._settings_manager is None
+        assert manager._pending_raise is False
+        assert manager._pending_spotify_visibility_sync is False
+        assert manager._spotify_secondary_fade_starters == []
+        assert manager._raise_timer is None
+        assert timer.stop_calls == 1
+        assert widget.stop_calls == 1
+        assert manager.get_widget("test") is widget
+
 
 class TestSettingsRouting:
     """Tests for descriptor-driven live settings routing."""

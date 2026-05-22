@@ -1514,13 +1514,7 @@ class WidgetManager:
     
     def cleanup(self) -> None:
         """Clean up all managed widgets."""
-        self._detach_settings_manager()
-        if self._raise_timer is not None:
-            try:
-                self._raise_timer.stop()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            self._raise_timer = None
+        self.prepare_for_runtime_pause()
         
         # Use lifecycle cleanup for widgets that support it
         for name, widget in list(self._widgets.items()):
@@ -1534,6 +1528,35 @@ class WidgetManager:
         self._widgets.clear()
         self._fade_callbacks.clear()
         logger.debug("[WIDGET_MANAGER] Cleanup complete")
+
+    def prepare_for_runtime_pause(self) -> None:
+        """Suppress late runtime work before displays/compositor are paused or torn down.
+
+        This intentionally does not invoke the dormant activate/deactivate lifecycle
+        system. It only detaches live settings updates, stops deferred raise work,
+        and asks widgets with explicit stop hooks to cease producing runtime work.
+        """
+        self._detach_settings_manager()
+        self._pending_spotify_visibility_sync = False
+        self._spotify_secondary_fade_starters = []
+        self._pending_raise = False
+
+        if self._raise_timer is not None:
+            try:
+                self._raise_timer.stop()
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            self._raise_timer = None
+
+        for name, widget in list(self._widgets.items()):
+            if widget is None:
+                continue
+            try:
+                stopper = getattr(widget, "stop", None)
+                if callable(stopper):
+                    stopper()
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to stop %s during runtime pause prep", name, exc_info=True)
 
     # =========================================================================
     # Lifecycle Integration (Dec 2025)

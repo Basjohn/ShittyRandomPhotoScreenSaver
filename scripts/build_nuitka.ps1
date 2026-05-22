@@ -165,6 +165,7 @@ $argsList = @(
     "--include-data-dir=images=images",
     "--include-data-files=resources/tutuogg.ogg=resources/tutuogg.ogg",
     "--include-data-dir=widgets/spotify_visualizer/shaders=widgets/spotify_visualizer/shaders",
+    "--include-package=ui.tabs",
     "--include-qt-plugins=multimedia",
     "--include-module=PySide6.QtMultimedia",
     "--include-module=winrt.windows.media.control",

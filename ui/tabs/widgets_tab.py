@@ -55,6 +55,7 @@ from rendering.widget_descriptors import (
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
+    get_widget_custom_position_option_descriptors,
     get_default_widget_section_index,
     get_widget_custom_resize_lock_descriptors,
     get_widget_default_init_descriptors,
@@ -557,14 +558,14 @@ class WidgetsTab(QWidget):
             item.setEnabled(bool(enabled))
 
     def _iter_custom_position_combo_bindings(self) -> tuple[tuple[str, str, str, str], ...]:
-        return (
-            ("clock", "clock", "clock_position", "Top Right"),
-            ("weather", "weather", "weather_position", "Top Left"),
-            ("media", "media", "media_position", "Bottom Left"),
-            ("reddit", "reddit", "reddit_position", "Bottom Right"),
-            ("reddit2", "reddit2", "reddit2_position", "Top Left"),
-            ("gmail", "gmail", "gmail_position", "Top Left"),
-            ("imgur", "imgur", "imgur_position", "Top Right"),
+        return tuple(
+            (
+                descriptor.widget_id,
+                descriptor.settings_key,
+                descriptor.combo_attr,
+                descriptor.fallback_position,
+            )
+            for descriptor in get_widget_custom_position_option_descriptors()
         )
 
     def _refresh_custom_position_option_state(self) -> None:
@@ -1031,26 +1032,9 @@ class WidgetsTab(QWidget):
                 widgets = {}
 
             # Collect all widget controls that need signal blocking
-            _base_signal_block_attrs = (
-                'visualizers_enabled', 'vis_enabled_checkbox',
-                'vis_border_opacity', 'vis_ghost_enabled',
-                'vis_ghost_opacity_slider', 'vis_ghost_decay_slider',
-                'devcurve_base_level',
-                'devcurve_motion_power', 'devcurve_idle_motion',
-                'devcurve_idle_speed',
-                'devcurve_smoothness',
-                'devcurve_growth',
-                'devcurve_active_layer_order',
-                'devcurve_active_layer_outline_width',
-                'devcurve_ghost_enabled', 'devcurve_ghost_opacity', 'devcurve_ghost_decay',
-                'devcurve_layer_bass_enabled', 'devcurve_layer_bass_alpha', 'devcurve_layer_bass_offset',
-                'devcurve_layer_vocals_enabled', 'devcurve_layer_vocals_alpha', 'devcurve_layer_vocals_offset',
-                'devcurve_layer_mids_enabled', 'devcurve_layer_mids_alpha', 'devcurve_layer_mids_offset',
-                'devcurve_layer_transients_enabled', 'devcurve_layer_transients_alpha', 'devcurve_layer_transients_offset',
-            )
             for widget in collect_widget_section_signal_block_targets(
                 self,
-                extra_attr_names=_base_signal_block_attrs + GMAIL_SIGNAL_BLOCK_ATTRS,
+                extra_attr_names=GMAIL_SIGNAL_BLOCK_ATTRS,
             ):
                 widget.blockSignals(True)
                 blockers.append(widget)

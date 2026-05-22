@@ -13,8 +13,8 @@ Canonical architecture and behavior contracts for SRPSS.
 - `main.py` and `main_mc.py` bootstrap runtime variants.
 - `ScreensaverEngine` owns source cycling, transition scheduling, and display lifecycle.
 - `DisplayWidget` is the fullscreen rendering presenter.
-- `WidgetManager` owns overlay widget lifecycle and staged startup coordination.
-- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches.
+- `WidgetManager` owns overlay widget lifecycle, staged startup coordination, and the narrow runtime-pause quiesce seam used before display teardown/settings entry.
+- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches, while keeping Spotify-dependent setup phases explicit rather than buried in incidental ordering.
 
 ## 3. Centralized Ownership Contracts
 - Async business work uses `ThreadManager`.
@@ -215,6 +215,7 @@ Active ids:
 - Input routing is centralized; no widget-specific ad hoc global key/mouse handlers.
 - Focused keyboard transport shortcuts should travel through the same centralized input contract as the other runtime hotkeys. `Space` is the focused play/pause hotkey, while `Left` and `Right` are the focused previous/next track hotkeys; all three should route through the media widget's transport-command/feedback path rather than bypassing the input contract.
 - Runtime interaction mode behavior must not break settings launch or shutdown paths.
+- Stop/settings-entry teardown must use the narrow quiesce boundary before displays are cleared or hidden: `ScreensaverEngine.stop(...)` should suppress new work through `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()` rather than relying on late cleanup side effects.
 - In MC builds, Interaction Mode is runtime policy, not an optional session toggle: MC startup and runtime reads treat it as enabled, and MC settings/context-menu surfaces must not offer a disable path that can strand the user outside the intended interaction model.
 
 ## 10. Build Variants

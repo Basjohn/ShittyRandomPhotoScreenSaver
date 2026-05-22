@@ -262,6 +262,16 @@ class WidgetCustomResizeLockDescriptor:
     anchor_attr: str
 
 
+@dataclass(frozen=True)
+class WidgetCustomPositionOptionDescriptor:
+    """Descriptor-owned WidgetsTab metadata for enabling the Custom position slot."""
+
+    widget_id: str
+    settings_key: str
+    combo_attr: str
+    fallback_position: str
+
+
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
     WidgetSettingsSectionDescriptor(
         section_id="clock",
@@ -340,6 +350,23 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_visualizers_container",
         builder_module="ui.tabs.widgets_tab_media",
         builder_name="build_visualizers_ui",
+        signal_block_attrs=(
+            "visualizers_enabled", "vis_enabled_checkbox",
+            "vis_border_opacity", "vis_ghost_enabled",
+            "vis_ghost_opacity_slider", "vis_ghost_decay_slider",
+            "devcurve_base_level",
+            "devcurve_motion_power", "devcurve_idle_motion",
+            "devcurve_idle_speed",
+            "devcurve_smoothness",
+            "devcurve_growth",
+            "devcurve_active_layer_order",
+            "devcurve_active_layer_outline_width",
+            "devcurve_ghost_enabled", "devcurve_ghost_opacity", "devcurve_ghost_decay",
+            "devcurve_layer_bass_enabled", "devcurve_layer_bass_alpha", "devcurve_layer_bass_offset",
+            "devcurve_layer_vocals_enabled", "devcurve_layer_vocals_alpha", "devcurve_layer_vocals_offset",
+            "devcurve_layer_mids_enabled", "devcurve_layer_mids_alpha", "devcurve_layer_mids_offset",
+            "devcurve_layer_transients_enabled", "devcurve_layer_transients_alpha", "devcurve_layer_transients_offset",
+        ),
         lazy_dependency_section_ids=("media",),
         programmatic_dependency_section_ids=("media", "defaults"),
     ),
@@ -491,6 +518,17 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
 )
 
 
+WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescriptor, ...] = (
+    WidgetCustomPositionOptionDescriptor("clock", "clock", "clock_position", "Top Right"),
+    WidgetCustomPositionOptionDescriptor("weather", "weather", "weather_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("media", "media", "media_position", "Bottom Left"),
+    WidgetCustomPositionOptionDescriptor("reddit", "reddit", "reddit_position", "Bottom Right"),
+    WidgetCustomPositionOptionDescriptor("reddit2", "reddit2", "reddit2_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("gmail", "gmail", "gmail_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("imgur", "imgur", "imgur_position", "Top Right"),
+)
+
+
 def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockDescriptor, ...]:
     """Return descriptor-owned CUSTOM size-lock metadata for WidgetsTab."""
 
@@ -499,6 +537,17 @@ def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockD
         descriptor
         for descriptor in WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS
         if descriptor.section_id in active_sections
+    )
+
+
+def get_widget_custom_position_option_descriptors() -> tuple[WidgetCustomPositionOptionDescriptor, ...]:
+    """Return descriptor-owned WidgetsTab metadata for enabling the Custom slot."""
+
+    active_widget_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
+    return tuple(
+        descriptor
+        for descriptor in WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS
+        if descriptor.widget_id in active_widget_ids
     )
 
 

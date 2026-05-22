@@ -10,6 +10,7 @@ from rendering.widget_descriptors import (
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
+    get_widget_custom_position_option_descriptors,
     get_default_widget_section_index,
     get_widget_custom_resize_lock_descriptors,
     get_layout_edit_runtime_descriptors,
@@ -146,6 +147,20 @@ def test_widget_custom_resize_lock_descriptors_follow_section_contract():
     assert media.anchor_attr == "media_font_size"
 
 
+def test_widget_custom_position_option_descriptors_follow_section_contract():
+    descriptors = get_widget_custom_position_option_descriptors()
+    widget_ids = [descriptor.widget_id for descriptor in descriptors]
+
+    assert "clock" in widget_ids
+    assert "media" in widget_ids
+    assert "gmail" in widget_ids
+
+    media = next(item for item in descriptors if item.widget_id == "media")
+    assert media.settings_key == "media"
+    assert media.combo_attr == "media_position"
+    assert media.fallback_position == "Bottom Left"
+
+
 def test_widget_section_index_resolution_prefers_stable_section_id():
     descriptors = get_widget_settings_section_descriptors()
     index_map = get_widget_section_index_map(descriptors)
@@ -202,6 +217,8 @@ def test_widget_section_signal_block_attrs_follow_descriptor_registry():
     assert "weather_enabled" in attrs
     assert "media_enabled" in attrs
     assert "reddit_enabled" in attrs
+    assert "vis_enabled_checkbox" in attrs
+    assert "devcurve_growth" in attrs
 
 
 def test_build_widget_section_buttons_uses_descriptor_metadata(qt_app):

@@ -44,7 +44,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_gmail_oauth.py`
   Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
-  Overlay re-raise ordering, deferred raise timer cleanup, `WidgetManager` startup/teardown coordination, fade-coordinator re-prime behavior for already-ready compositor rebuilds, stale fade-participant clearing on runtime rebuild, CUSTOM-position stacking exclusion, and live media refresh reapplication of authored font/artwork/rounded-border inputs.
+  Overlay re-raise ordering, deferred raise timer cleanup, `WidgetManager` startup/teardown coordination, explicit runtime-pause quiesce behavior before display teardown, fade-coordinator re-prime behavior for already-ready compositor rebuilds, stale fade-participant clearing on runtime rebuild, CUSTOM-position stacking exclusion, and live media refresh reapplication of authored font/artwork/rounded-border inputs.
 - `tests/test_widget_descriptors.py`
   Canonical factory-backed widget descriptor metadata, WidgetsTab section order, builder/load/save routing including the Defaults section, descriptor-owned load/save orchestration helpers, shared authored-layout restore mutation ownership, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, descriptor-owned lazy/programmatic dependency metadata for inter-section hydration, runtime capability ownership, descriptor-owned service-runtime contract participation, inheritance kwargs, config-injection contracts, live-refresh handler routing, canonical widget position-option/layout-edit metadata, explicit `Custom` slot availability/selection helpers, first-phase CUSTOM attr/resize-mode ownership, and descriptor-owned stack-preview/settings-composition field ownership.
 - `tests/test_custom_layout_contract.py`
@@ -91,7 +91,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_spotify_volume_widget.py`
   Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths, provider-switch volume resync, hidden→visible mixer-session resync without high-frequency polling, and authored scale-contract stability while remaining media-owned in CUSTOM layout mode.
 - `tests/test_s_hotkey_workflow.py`
-  Settings-entry regression coverage, including the rule that an active CUSTOM shell session is cancelled before the engine stop/settings-dialog startup path proceeds.
+  Settings-entry regression coverage, including the rule that an active CUSTOM shell session is cancelled before the engine stop/settings-dialog startup path proceeds and that the engine stop path quiesces displays before clear/hide.
 - `tests/test_gmail_widget.py`
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`

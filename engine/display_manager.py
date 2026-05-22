@@ -361,6 +361,15 @@ class DisplayManager(QObject):
             display.clear()
         self.current_images.clear()
         logger.info("All displays cleared")
+
+    def quiesce_all(self) -> None:
+        """Suppress late display/widget work before clear/hide/cleanup proceeds."""
+        for display in self.displays:
+            try:
+                display.quiesce_for_runtime_pause()
+            except Exception:
+                logger.debug("[DISPLAY_MANAGER] Failed to quiesce display before runtime pause", exc_info=True)
+        logger.info("All displays quiesced")
     
     def hide_all(self) -> None:
         """Hide all display widgets (for showing dialogs on top)."""

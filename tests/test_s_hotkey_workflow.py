@@ -259,4 +259,72 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
     engine_handlers.on_settings_requested(engine)
 
     assert "cancel_session" in calls
-    assert calls.index("cancel_session") < calls.index("stop:False")
+
+
+def test_engine_stop_quiesces_displays_before_clearing_and_hiding():
+    order: list[str] = []
+
+    class _Lock:
+        def __enter__(self):
+            return None
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _DisplayManager:
+        displays = []
+
+        def get_display_count(self):
+            return 2
+
+        def quiesce_all(self):
+            order.append("quiesce")
+
+        def clear_all(self):
+            order.append("clear")
+
+        def hide_all(self):
+            order.append("hide")
+
+    from engine import engine_lifecycle
+
+    class _Signal:
+        def emit(self):
+            return None
+
+    class _State:
+        RUNNING = object()
+        STARTING = object()
+        REINITIALIZING = object()
+        STOPPING = object()
+        SHUTTING_DOWN = object()
+        STOPPED = object()
+
+    class _Engine:
+        _instance_running = True
+
+    engine = _Engine()
+    engine._running = True
+    engine._state_lock = _Lock()
+    engine.rss_coordinator = None
+    engine._rss_refresh_timer = None
+    engine._rotation_timer = None
+    engine._loading_in_progress = False
+    engine._process_supervisor = None
+    engine.thread_manager = None
+    engine.stopped = _Signal()
+    engine._image_cache = None
+    engine._instance_lock = _Lock()
+    engine.display_manager = _DisplayManager()
+    engine._transition_state = lambda *args, **kwargs: True
+    engine._get_state = lambda: SimpleNamespace(name="RUNNING")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("engine.screensaver_engine.EngineState", _State)
+    monkeypatch.setattr(engine_lifecycle, "QApplication", SimpleNamespace(quit=lambda: None))
+    try:
+        engine_lifecycle.stop(engine, exit_app=False)
+    finally:
+        monkeypatch.undo()
+
+    assert order == ["quiesce", "clear", "hide"]

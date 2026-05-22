@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-05-18
+Last updated: 2026-05-22
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -41,6 +41,7 @@ No shadow frameworks or parallel ownership paths.
 - Do not remove custom styling to hide runtime issues.
 - Fix startup/focus/visibility bugs at root cause.
 - Respect staged startup contracts for dependent overlay widgets.
+- When settings entry, stop, or teardown is involved, suppress new runtime work through the explicit quiesce boundary (`ScreensaverEngine.stop` → `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()`) instead of layering more late cleanup side effects onto display clear/hide paths.
 
 ## 5.1 Widget Registry Safety
 - `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.

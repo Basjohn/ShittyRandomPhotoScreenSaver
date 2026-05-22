@@ -79,6 +79,18 @@ def test_nuitka_builds_include_images_directory():
         assert "--include-data-dir=images=images" in text
 
 
+def test_nuitka_builds_include_ui_tabs_package_for_descriptor_loaded_sections():
+    """Frozen builds must include dynamically imported WidgetsTab section modules."""
+    scripts = (
+        ROOT / "scripts" / "build_nuitka.ps1",
+        ROOT / "scripts" / "build_nuitka_mc_onedir.ps1",
+    )
+
+    for script in scripts:
+        text = script.read_text(encoding="utf-8")
+        assert "--include-package=ui.tabs" in text
+
+
 def test_builds_package_gmail_notification_sound_and_qt_multimedia():
     """Frozen builds need the default sound file and Qt multimedia plugins."""
     scripts = (

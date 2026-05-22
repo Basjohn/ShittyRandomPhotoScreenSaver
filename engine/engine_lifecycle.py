@@ -151,6 +151,11 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
                     logger.debug("[ENGINE] Failed to aggregate display states: %s", exc)
 
             try:
+                engine.display_manager.quiesce_all()
+            except Exception as e:
+                logger.debug("DisplayManager.quiesce_all() failed during stop: %s", e, exc_info=True)
+
+            try:
                 engine.display_manager.clear_all()
             except Exception as e:
                 logger.debug("DisplayManager.clear_all() failed during stop: %s", e, exc_info=True)

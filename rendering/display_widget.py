@@ -1139,6 +1139,17 @@ class DisplayWidget(QWidget):
 
         self.update()
 
+    def quiesce_for_runtime_pause(self) -> None:
+        """Suppress late display/widget work before runtime pause or teardown."""
+        self._pending_activation_refresh = False
+        self._transition_work_pending = False
+
+        if self._widget_manager is not None:
+            try:
+                self._widget_manager.prepare_for_runtime_pause()
+            except Exception:
+                logger.debug("[DISPLAY_WIDGET] WidgetManager runtime-pause prep failed", exc_info=True)
+
     def reset_after_settings(self) -> None:
         try:
             self.setUpdatesEnabled(False)
