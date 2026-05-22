@@ -12,11 +12,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 import re
-import sys
-import ctypes
-from ctypes import wintypes
 
 from core.logging.logger import get_logger
+from core.windows.browser_window_routing import try_bring_browser_window_to_front_by_keywords
 
 logger = get_logger(__name__)
 
@@ -121,73 +119,7 @@ def try_bring_reddit_window_to_front() -> None:
     introducing new focus or flicker problems.
     """
 
-    if sys.platform != "win32":  # pragma: no cover - platform guard
-        return
-
     try:
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+        try_bring_browser_window_to_front_by_keywords(("reddit",), preferred_display_index=0)
     except Exception as e:
         logger.debug("[REDDIT] Exception suppressed: %s", e)
-        return
-
-    try:
-        EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
-        return
-
-    try:
-        user32.EnumWindows.argtypes = [EnumWindowsProc, wintypes.LPARAM]
-        user32.IsWindowVisible.argtypes = [wintypes.HWND]
-        user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-        user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
-        return
-
-    candidates: list[wintypes.HWND] = []
-
-    @EnumWindowsProc
-    def _enum_proc(hwnd: wintypes.HWND, lparam: wintypes.LPARAM) -> bool:  # noqa: ARG001
-        try:
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            length = user32.GetWindowTextLengthW(hwnd)
-            if length <= 0:
-                return True
-            buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
-            title = buf.value or ""
-            if "reddit" in title.lower():
-                candidates.append(hwnd)
-        except Exception:
-            return True
-        return True
-
-    try:
-        user32.EnumWindows(_enum_proc, 0)
-    except Exception as e:
-        logger.debug("[REDDIT] Exception suppressed: %s", e)
-        return
-
-    if not candidates:
-        return
-
-    hwnd = candidates[0]
-    try:
-        ASFW_ANY = 0xFFFFFFFF
-        SW_RESTORE = 9
-        SW_SHOW = 5
-
-        if hasattr(user32, "AllowSetForegroundWindow"):
-            user32.AllowSetForegroundWindow(ASFW_ANY)
-
-        is_iconic = bool(user32.IsIconic(hwnd))
-        if is_iconic:
-            user32.ShowWindow(hwnd, SW_RESTORE)
-        else:
-            user32.ShowWindow(hwnd, SW_SHOW)
-
-        user32.SetForegroundWindow(hwnd)
-    except Exception:
-        return

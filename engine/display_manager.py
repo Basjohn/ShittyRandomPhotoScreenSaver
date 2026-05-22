@@ -757,6 +757,19 @@ class DisplayManager(QObject):
                     opened = QDesktopServices.openUrl(QUrl(url))
                     if opened:
                         logger.info("[REDDIT] MC flush opened: %s", url)
+                        try:
+                            from PySide6.QtCore import QTimer
+                            from core.windows.browser_window_routing import try_bring_browser_window_to_front
+                            QTimer.singleShot(
+                                800,
+                                lambda target=url: try_bring_browser_window_to_front(
+                                    target,
+                                    preferred_display_index=0,
+                                    fallback_keywords=("reddit",),
+                                ),
+                            )
+                        except Exception:
+                            logger.debug("[REDDIT] MC flush foreground preference setup failed", exc_info=True)
                     else:
                         logger.warning("[REDDIT] MC flush rejected: %s", url)
                 except Exception:

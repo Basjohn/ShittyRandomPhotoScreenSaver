@@ -42,6 +42,7 @@ No shadow frameworks or parallel ownership paths.
 - Fix startup/focus/visibility bugs at root cause.
 - Respect staged startup contracts for dependent overlay widgets.
 - When settings entry, stop, or teardown is involved, suppress new runtime work through the explicit quiesce boundary (`ScreensaverEngine.stop` → `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()`) instead of layering more late cleanup side effects onto display clear/hide paths.
+- Browser-window preference work must stay narrow and centralized: helper/SCR and MC direct-open flows may share a best-effort display-0 foreground preference, but widget click handlers must not grow their own browser/window-selection logic or broader automation behavior.
 
 ## 5.1 Widget Registry Safety
 - `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.

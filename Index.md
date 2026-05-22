@@ -128,6 +128,7 @@ Living map of the current SRPSS codebase.
 | REST API client | `core/gmail/gmail_client.py` | Gmail REST API — metadata, labels, read/unread/archive/spam/trash actions |
 | IMAP client | `core/gmail/gmail_imap.py` | IMAP + App Password — headers, unread count, selected-mailbox order, UID actions, and rejection of degraded partial fetch snapshots |
 | Deep-link helpers | `core/gmail/gmail_deeplinks.py` | Gmail inbox/thread/search URL builders; `X-GM-THRID` decimal-to-hex conversion |
+| Browser window routing | `core/windows/browser_window_routing.py` | Shared Windows browser-window keyword building, display-0 preference ranking, and best-effort foreground policy reused by helper and MC direct-open flows |
 | Unified backend | `core/gmail/gmail_backend.py` | Routes to OAuth/REST or IMAP based on config |
 | Widget components | `widgets/gmail_components.py` | Nine-position `GmailPosition` enum, date formatting modes, formatting/text cleanup utilities, punctuation-aware shortening, email cache |
 | Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, sender/subject cleanup controls, grouping toggle, deferred auth refresh, and Gmail-specific signal-block/visibility guardrails |

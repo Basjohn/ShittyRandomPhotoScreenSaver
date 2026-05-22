@@ -452,8 +452,12 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                     else:
                         def _bring_browser_foreground_mc():
                             try:
-                                from widgets.reddit_widget import _try_bring_reddit_window_to_front
-                                _try_bring_reddit_window_to_front()
+                                from core.windows.browser_window_routing import try_bring_browser_window_to_front
+                                try_bring_browser_window_to_front(
+                                    url_to_open,
+                                    preferred_display_index=0,
+                                    fallback_keywords=("reddit",),
+                                )
                                 logger.debug("[REDDIT] MC mode: browser foreground attempted")
                             except Exception as e:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)

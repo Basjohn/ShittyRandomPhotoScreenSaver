@@ -76,6 +76,20 @@ class TestQueueProcessing:
         assert opened == ["https://example.com/test"]
         assert not (tmp_path / "entry.json").exists()
 
+    def test_bring_browser_foreground_uses_shared_display_zero_routing(self, monkeypatch):
+        import helpers.reddit_helper_worker as worker
+
+        calls: list[tuple[str, int, tuple[str, ...]]] = []
+
+        def _fake_try(url: str, *, preferred_display_index: int = 0, fallback_keywords=()):
+            calls.append((url, preferred_display_index, tuple(fallback_keywords)))
+            return True
+
+        monkeypatch.setattr(worker, "try_bring_browser_window_to_front", _fake_try)
+
+        assert worker.bring_browser_foreground("https://www.reddit.com/r/test") is True
+        assert calls == [("https://www.reddit.com/r/test", 0, ())]
+
     def test_process_queue_renames_corrupt(self, tmp_path: Path):
         """Corrupt JSON files should be renamed to .corrupt."""
         (tmp_path / "bad.json").write_text("NOT JSON!", encoding="utf-8")

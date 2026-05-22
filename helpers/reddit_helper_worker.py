@@ -27,7 +27,6 @@ import webbrowser
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, Dict, Iterator
-from urllib.parse import urlparse
 
 from core.logging.logger import get_logger
 from core.constants.timing import (
@@ -35,6 +34,7 @@ from core.constants.timing import (
     RETRY_MAX_ATTEMPTS,
     RETRY_MAX_DELAY_MS,
 )
+from core.windows.browser_window_routing import try_bring_browser_window_to_front
 from core.windows.reddit_helper_runtime import (
     HEARTBEAT_FILE_NAME,
     SESSION_HELPER_SHUTDOWN_PREFIX,
@@ -80,17 +80,6 @@ BROWSER_WINDOW_CLASSES = {
 
 class ShellNotReadyError(RuntimeError):
     """Raised when the helper is alive but the interactive shell is not ready yet."""
-
-
-class WINDOWPLACEMENT(ctypes.Structure):
-    _fields_ = [
-        ("length", wintypes.UINT),
-        ("flags", wintypes.UINT),
-        ("showCmd", wintypes.UINT),
-        ("ptMinPosition", wintypes.POINT),
-        ("ptMaxPosition", wintypes.POINT),
-        ("rcNormalPosition", wintypes.RECT),
-    ]
 
 
 def configure_logging(log_dir: Path, verbose: bool) -> None:
@@ -1002,120 +991,17 @@ def _handle_open_settings(data: Dict[str, Any], signal_dir: Path) -> bool:
 
 def bring_browser_foreground(url: str) -> bool:
     """Attempt to foreground the browser window for the launched URL."""
-    if sys.platform != "win32":
-        return False
-
-    keywords = _build_keyword_list(url)
     deadline = time.perf_counter() + BROWSER_FOREGROUND_TIMEOUT
 
     while time.perf_counter() < deadline:
-        if _foreground_first_matching_window(keywords):
+        if try_bring_browser_window_to_front(
+            url,
+            preferred_display_index=0,
+        ):
             return True
         time.sleep(WINDOW_POLL_INTERVAL)
 
     return False
-
-
-def _build_keyword_list(url: str) -> list[str]:
-    keywords: list[str] = []
-    try:
-        parsed = urlparse(url)
-        host = (parsed.netloc or "").lower()
-        if host:
-            host = host.split("@")[-1]
-            host = host.split(":")[0]
-            tokens = [part for part in host.replace("-", ".").split(".") if part]
-            keywords.extend(token for token in tokens if token not in ("www", "m"))
-    except Exception as exc:
-        logger.debug("[REDDIT] Exception suppressed while building keywords: %s", exc)
-
-    if "reddit" not in keywords:
-        keywords.append("reddit")
-
-    seen = set()
-    deduped: list[str] = []
-    for kw in keywords:
-        if kw and kw not in seen:
-            deduped.append(kw)
-            seen.add(kw)
-
-    return deduped or ["reddit"]
-
-
-def _foreground_first_matching_window(keywords: list[str]) -> bool:
-    try:
-        user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-    except Exception as exc:
-        logger.debug("[REDDIT] Exception suppressed while acquiring user32: %s", exc)
-        return False
-
-    EnumWindowsProc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-    candidates: list[wintypes.HWND] = []
-
-    @EnumWindowsProc
-    def _enum_proc(hwnd: wintypes.HWND, lparam: wintypes.LPARAM) -> bool:  # noqa: ARG001
-        try:
-            if not user32.IsWindowVisible(hwnd):
-                return True
-
-            length = user32.GetWindowTextLengthW(hwnd)
-            if length <= 0:
-                return True
-
-            buf = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, buf, length + 1)
-            title = (buf.value or "").lower()
-
-            if any(kw in title for kw in keywords):
-                candidates.append(hwnd)
-                return False
-        except Exception as exc:
-            logger.debug("[REDDIT] Exception suppressed while enumerating windows: %s", exc)
-            return True
-
-        return True
-
-    try:
-        user32.EnumWindows(_enum_proc, 0)
-    except Exception as exc:
-        logger.debug("[REDDIT] Exception suppressed during EnumWindows: %s", exc)
-        return False
-
-    if not candidates:
-        return False
-
-    hwnd = candidates[0]
-
-    try:
-        if hasattr(user32, "AllowSetForegroundWindow"):
-            user32.AllowSetForegroundWindow(0xFFFFFFFF)
-
-        SW_RESTORE = 9
-        SW_SHOW = 5
-        SW_SHOWMAXIMIZED = 3
-
-        is_iconic = bool(user32.IsIconic(hwnd))
-        show_cmd = 0
-
-        try:
-            placement = WINDOWPLACEMENT()
-            placement.length = ctypes.sizeof(placement)
-            if user32.GetWindowPlacement(hwnd, ctypes.byref(placement)):
-                show_cmd = placement.showCmd
-        except Exception:
-            show_cmd = 0
-
-        if is_iconic:
-            user32.ShowWindow(hwnd, SW_RESTORE)
-        elif show_cmd == SW_SHOWMAXIMIZED:
-            user32.ShowWindow(hwnd, SW_SHOWMAXIMIZED)
-        else:
-            user32.ShowWindow(hwnd, SW_SHOW)
-
-        return bool(user32.SetForegroundWindow(hwnd))
-    except Exception as exc:
-        logger.debug("[REDDIT] Exception suppressed while foregrounding window: %s", exc)
-        return False
 
 
 if __name__ == "__main__":

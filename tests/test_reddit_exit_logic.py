@@ -277,6 +277,7 @@ class TestCleanQueueFlow:
     def test_mc_flush_opens_directly(self, qt_app, monkeypatch):
         """MC build flush opens URLs via QDesktopServices."""
         from engine.display_manager import DisplayManager
+        from PySide6.QtCore import QTimer
 
         manager = DisplayManager()
         manager._deferred_reddit_urls = ["https://example.com/mc-flush"]
@@ -293,10 +294,24 @@ class TestCleanQueueFlow:
             "engine.display_manager.QDesktopServices.openUrl",
             staticmethod(_open),
         )
+        helper_calls: list[tuple[str, int, tuple[str, ...]]] = []
+
+        monkeypatch.setattr(
+            "core.windows.browser_window_routing.try_bring_browser_window_to_front",
+            lambda url, *, preferred_display_index=0, fallback_keywords=(): helper_calls.append(
+                (url, preferred_display_index, tuple(fallback_keywords))
+            ) or True,
+        )
+        monkeypatch.setattr(
+            QTimer,
+            "singleShot",
+            staticmethod(lambda _ms, fn: fn()),
+        )
 
         manager.flush_deferred_reddit_urls()
 
         assert open_calls == ["https://example.com/mc-flush"]
+        assert helper_calls == [("https://example.com/mc-flush", 0, ("reddit",))]
 
     @pytest.mark.qt
     def test_scr_flush_queues_to_bridge(self, qt_app, monkeypatch):
