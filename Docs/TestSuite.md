@@ -59,8 +59,6 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
   Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, explicit `Custom` slot enable/disable behavior, section-level CUSTOM size-lock UX, styled `Disable Custom Mode` revert affordance behavior, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
-- `tests/test_widget_manager.py`
-  Descriptor-driven live settings routing parity, expected-overlay coordination, secondary-stage starter ownership, and manager cleanup behavior.
 - `tests/test_widget_visual_padding.py`
   BaseOverlayWidget visual-padding math plus `_custom_layout_local_rect` override behavior used by first-phase CUSTOM layout reapply.
 - `tests/test_spotify_visualizer_widget.py`
@@ -86,8 +84,6 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Weather retry timer cleanup, retry timer reuse, retry timeout state handling, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
 - `tests/test_imgur_widget.py`
   Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
-- `tests/test_custom_layout_manager.py`
-  CUSTOM size-payload persistence and reapply coverage now also includes Imgur’s authored resize contract (header scale, spacing, base cell width, and border weight), alongside the earlier clock/weather/media/Reddit/Gmail families; visualizer participation coverage now also asserts composited shell snapshot capture and visualizer-owned CUSTOM rect persistence without mutating Media’s authored route.
 - `tests/test_spotify_volume_widget.py`
   Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths, provider-switch volume resync, hidden→visible mixer-session resync without high-frequency polling, and authored scale-contract stability while remaining media-owned in CUSTOM layout mode.
 - `tests/test_s_hotkey_workflow.py`
@@ -100,8 +96,6 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Gmail IMAP UID action helpers, mailbox order preservation, and partial-fetch failure rejection so truncated IMAP snapshots cannot overwrite valid Gmail display/cache state.
 - `tests/test_settings_dialog.py`
   Settings-dialog destructive flows such as reset-defaults completion/auto-close behavior, plus lazy WidgetsTab programmatic access and hidden-close guardrails.
-- `tests/test_widgets_tab.py`
-  Widgets-tab bucketing persistence/default-collapsed behavior and visualizer/settings tab integration paths.
 - `tests/test_flicker_fix_integration.py`
   R-18 settings startup flicker/taskbar ghost regression guard.
 - `tests/test_display_tab.py`

@@ -52,6 +52,7 @@ from rendering.widget_descriptors import (
     build_widget_section_buttons,
     build_widget_stack_preview_config,
     collect_widget_section_containers,
+    collect_widget_section_save_result,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
@@ -67,6 +68,7 @@ from rendering.widget_descriptors import (
     get_widget_stack_preview_descriptors,
     has_saved_custom_layout_for_widget,
     is_custom_position_selected_for_widget,
+    load_widget_section,
     load_widget_sections,
     restore_all_custom_layouts_to_authored_layout,
     resolve_widget_section_index_from_view_state,
@@ -1020,8 +1022,6 @@ class WidgetsTab(QWidget):
         
         Delegates per-widget loading to extraction modules.
         """
-        from ui.tabs.widgets_tab_gmail import GMAIL_SIGNAL_BLOCK_ATTRS
-
         # Block all signals during load to prevent unintended saves
         blockers = []
         try:
@@ -1034,7 +1034,6 @@ class WidgetsTab(QWidget):
             # Collect all widget controls that need signal blocking
             for widget in collect_widget_section_signal_block_targets(
                 self,
-                extra_attr_names=GMAIL_SIGNAL_BLOCK_ATTRS,
             ):
                 widget.blockSignals(True)
                 blockers.append(widget)
@@ -1187,9 +1186,14 @@ class WidgetsTab(QWidget):
             return config
 
         try:
-            from ui.tabs.widgets_tab_media import save_media_settings
-
-            _, live_visualizer = save_media_settings(self)
+            save_result = collect_widget_section_save_result(
+                self,
+                "media",
+                descriptors=self._widget_section_descriptors,
+            )
+            if not isinstance(save_result, tuple) or len(save_result) < 2:
+                return config
+            _, live_visualizer = save_result
             if isinstance(live_visualizer, dict):
                 config.update(deepcopy(live_visualizer))
         except Exception:
@@ -1661,11 +1665,14 @@ class WidgetsTab(QWidget):
             if restored:
                 self._loading = True
                 try:
-                    from ui.tabs.widgets_tab_media import load_media_settings
-
                     full_widgets = dict(widgets_cfg)
                     full_widgets['spotify_visualizer'] = dict(spotify_vis_config)
-                    load_media_settings(self, full_widgets)
+                    load_widget_section(
+                        self,
+                        "media",
+                        full_widgets,
+                        descriptors=self._widget_section_descriptors,
+                    )
                     load_per_mode_technical_controls(self, spotify_vis_config)
                 finally:
                     self._loading = False
@@ -1705,8 +1712,12 @@ class WidgetsTab(QWidget):
             full_widgets['spotify_visualizer'] = dict(spotify_vis_config)
             self._loading = True
             try:
-                from ui.tabs.widgets_tab_media import load_media_settings
-                load_media_settings(self, full_widgets)
+                load_widget_section(
+                    self,
+                    "media",
+                    full_widgets,
+                    descriptors=self._widget_section_descriptors,
+                )
                 load_per_mode_technical_controls(self, spotify_vis_config)
             finally:
                 self._loading = False

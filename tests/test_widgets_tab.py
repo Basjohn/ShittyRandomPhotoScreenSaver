@@ -583,8 +583,7 @@ class TestWidgetsTab:
             assert len(calls) == 1
             owner, extra_attr_names = calls[0]
             assert owner is tab
-            assert "gmail_enabled" in extra_attr_names
-            assert "card_border_width_spin" not in extra_attr_names
+            assert extra_attr_names == ()
         finally:
             tab.deleteLater()
 
@@ -1645,6 +1644,96 @@ def test_move_to_custom_spectrum_flushes_custom_state_before_followup_edit(qt_ap
         assert saved_vis.get("spectrum_unique_colors") is True
         assert custom_cache[mode]["spectrum_render_mode"] == "bars"
         assert custom_cache[mode]["spectrum_unique_colors"] is True
+    finally:
+        tab.deleteLater()
+
+
+def test_build_current_spotify_visualizer_config_uses_descriptor_owned_media_saver(
+    qt_app,
+    settings_manager,
+    monkeypatch,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        base_config = {
+            "mode": "spectrum",
+            "spectrum_bar_count": 35,
+            "spectrum_glow_enabled": True,
+        }
+        captured = {}
+
+        def _fake_collect(owner, section_id, descriptors=None):
+            captured["owner"] = owner
+            captured["section_id"] = section_id
+            captured["descriptors"] = descriptors
+            return (
+                {"enabled": True},
+                {"mode": "bubble", "bubble_growth": 3.2},
+            )
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.collect_widget_section_save_result", _fake_collect)
+
+        result = tab._build_current_spotify_visualizer_config(base_config)
+
+        assert captured["owner"] is tab
+        assert captured["section_id"] == "media"
+        assert captured["descriptors"] == tab._widget_section_descriptors
+        assert result["mode"] == "bubble"
+        assert result["bubble_growth"] == pytest.approx(3.2)
+        assert result["spectrum_bar_count"] == 35
+    finally:
+        tab.deleteLater()
+
+
+def test_visualizer_preset_change_uses_descriptor_owned_media_loader(
+    qt_app,
+    settings_manager,
+    monkeypatch,
+):
+    tab = WidgetsTab(settings_manager)
+    try:
+        mode = "bubble"
+        tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData(mode))
+        slider = getattr(tab, "_bubble_preset_slider", None)
+        assert slider is not None
+        custom_index = slider.custom_index()
+
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            "preset_bubble": custom_index,
+            "bubble_growth": 3.7,
+        }
+        settings_manager.set("widgets", widgets_cfg)
+
+        tab._load_settings()
+
+        calls = []
+
+        def _fake_load(owner, section_id, widgets_config, descriptors=None):
+            calls.append(
+                {
+                    "owner": owner,
+                    "section_id": section_id,
+                    "widgets_config": dict(widgets_config),
+                    "descriptors": descriptors,
+                }
+            )
+            return True
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.load_widget_section", _fake_load)
+        monkeypatch.setattr("ui.tabs.widgets_tab.load_per_mode_technical_controls", lambda *args, **kwargs: None)
+        tab._save_settings = lambda: None
+
+        slider.set_preset_index(0)
+        tab._on_visualizer_preset_changed(mode, 0)
+
+        assert len(calls) == 1
+        assert calls[0]["owner"] is tab
+        assert calls[0]["section_id"] == "media"
+        assert calls[0]["descriptors"] == tab._widget_section_descriptors
+        assert calls[0]["widgets_config"]["spotify_visualizer"]["mode"] == mode
+        assert calls[0]["widgets_config"]["spotify_visualizer"]["preset_bubble"] == 0
     finally:
         tab.deleteLater()
 

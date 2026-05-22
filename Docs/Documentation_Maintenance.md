@@ -1,6 +1,6 @@
 # Documentation Maintenance
 
-Last updated: 2026-05-08
+Last updated: 2026-05-22
 
 Use this as the lightweight drift-check routine for SRPSS's canonical docs.
 
@@ -47,6 +47,9 @@ rg -n "resolve_visualizer_activation_payload|_get_mode_technical_config|GMAIL_SI
 rg -n "ThreadManager|ResourceManager|SettingsManager|AnimationManager|ProcessSupervisor" core Spec.md Index.md
 rg -n "_spotify_visualizer|from_settings|from_mapping|to_dict|Visualizer settings model" core Spec.md Index.md Docs/Guardrails.md Docs/Visualizer_Change_Checklist.md
 ```
+
+Notes:
+- `GMAIL_SIGNAL_BLOCK_ATTRS` now belongs to `rendering/widget_descriptors.py` and is re-used by `ui/tabs/widgets_tab_gmail.py`; drift checks should verify that shared ownership instead of assuming the Gmail tab module is still the canonical source.
 
 ### 4. Remove completed work from the active plan
 - If a task is implemented and its remaining work is only historical context, move that truth into `Spec.md`, `Index.md`, or `Docs/Historical_Bugs.md`.

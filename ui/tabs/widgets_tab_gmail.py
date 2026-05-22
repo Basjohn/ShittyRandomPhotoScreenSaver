@@ -16,7 +16,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
-from rendering.widget_descriptors import get_widget_position_option_labels
+from rendering.widget_descriptors import GMAIL_SIGNAL_BLOCK_ATTRS, get_widget_position_option_labels
 from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
 from ui.styled_popup import ColorSwatchButton, StyledPopup
@@ -38,54 +38,6 @@ logger = get_logger(__name__)
 
 LABEL_WIDTH = 140
 _MISSING_DEFAULT = object()
-GMAIL_SIGNAL_BLOCK_ATTRS = (
-    'gmail_enabled',
-    'gmail_backend_combo',
-    'gmail_imap_email',
-    'gmail_imap_password',
-    'gmail_monitor_combo',
-    'gmail_position',
-    'gmail_width',
-    'gmail_limit',
-    'gmail_refresh',
-    'gmail_header_logo_px_adjust',
-    'gmail_filter_label',
-    'gmail_account_slot',
-    'gmail_font_combo',
-    'gmail_font_size',
-    'gmail_margin',
-    'gmail_show_sender',
-    'gmail_show_subject',
-    'gmail_show_envelope',
-    'gmail_show_three_dot',
-    'gmail_show_refresh_spiral',
-    'gmail_show_unread_count',
-    'gmail_show_header_border',
-    'gmail_show_timestamp',
-    'gmail_date_display_mode',
-    'gmail_group_threads',
-    'gmail_auto_title_case',
-    'gmail_clean_sender_names',
-    'gmail_max_sender_words',
-    'gmail_sender_column_width',
-    'gmail_max_subject_words',
-    'gmail_max_subject_chars',
-    'gmail_desaturate',
-    'gmail_show_background',
-    'gmail_bg_opacity',
-    'gmail_color_btn',
-    'gmail_bg_color_btn',
-    'gmail_border_color_btn',
-    'gmail_border_opacity',
-    'gmail_show_separators',
-    'gmail_separator_color_btn',
-    'gmail_separator_thickness',
-    'gmail_boundary_separator_color_btn',
-    'gmail_boundary_separator_thickness',
-    'gmail_play_sound',
-    'gmail_sound_file',
-    'gmail_sound_volume',
-)
 
 
 def _set_visible_if_changed(widget: QWidget | None, visible: bool) -> None:

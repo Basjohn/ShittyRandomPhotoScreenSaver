@@ -6,6 +6,7 @@ from rendering.widget_descriptors import (
     build_widget_section_buttons,
     build_widget_stack_preview_config,
     collect_widget_section_containers,
+    collect_widget_section_save_result,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
@@ -21,6 +22,7 @@ from rendering.widget_descriptors import (
     get_service_runtime_contracts,
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
+    get_widget_settings_section_descriptor,
     get_widget_section_index_map,
     get_widget_section_signal_block_attrs,
     get_widget_ids_for_service_runtime_contract,
@@ -30,6 +32,7 @@ from rendering.widget_descriptors import (
     get_widget_settings_section_descriptors,
     has_saved_custom_layout_for_widget,
     is_custom_position_selected_for_widget,
+    load_widget_section,
     load_widget_sections,
     restore_all_custom_layouts_to_authored_layout,
     restore_widget_family_to_authored_layout,
@@ -110,6 +113,7 @@ def test_widget_settings_section_descriptors_capture_saver_routing():
     descriptors = get_widget_settings_section_descriptors()
     clock = next(item for item in descriptors if item.section_id == "clock")
     reddit = next(item for item in descriptors if item.section_id == "reddit")
+    gmail = next(item for item in descriptors if item.section_id == "gmail")
     defaults = next(item for item in descriptors if item.section_id == "defaults")
 
     assert clock.saver_module == "ui.tabs.widgets_tab_clock"
@@ -122,6 +126,8 @@ def test_widget_settings_section_descriptors_capture_saver_routing():
     assert defaults.saver_name == "save_defaults_settings"
     assert defaults.persisted_widget_keys == ("shadows", "global")
     assert defaults.bootstrap_in_lazy_mode is True
+    assert "gmail_enabled" in gmail.signal_block_attrs
+    assert "gmail_sound_volume" in gmail.signal_block_attrs
 
 
 def test_widget_settings_section_descriptors_expose_default_selected_section():
@@ -129,6 +135,17 @@ def test_widget_settings_section_descriptors_expose_default_selected_section():
     default_idx = get_default_widget_section_index(descriptors)
 
     assert descriptors[default_idx].section_id == "clock"
+
+
+def test_get_widget_settings_section_descriptor_uses_stable_section_id():
+    descriptors = get_widget_settings_section_descriptors()
+
+    media = get_widget_settings_section_descriptor("media", descriptors)
+    missing = get_widget_settings_section_descriptor("missing", descriptors)
+
+    assert media is not None
+    assert media.section_id == "media"
+    assert missing is None
 
 
 def test_widget_custom_resize_lock_descriptors_follow_section_contract():
@@ -389,6 +406,36 @@ def test_load_widget_sections_runs_descriptor_owned_loaders():
     assert calls == ["a:7"]
 
 
+def test_load_widget_section_runs_only_requested_loader():
+    calls: list[str] = []
+    owner = object()
+
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "clock",
+                "can_load_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_loader": lambda self: lambda current_owner, widgets: calls.append(f"clock:{widgets['x']}"),
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "media",
+                "can_load_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_loader": lambda self: lambda current_owner, widgets: calls.append(f"media:{widgets['x']}"),
+            },
+        )(),
+    )
+
+    assert load_widget_section(owner, "media", {"x": 7}, descriptors) is True
+    assert load_widget_section(owner, "missing", {"x": 7}, descriptors) is False
+    assert calls == ["media:7"]
+
+
 def test_collect_widget_section_save_results_runs_savers_and_preserves_unbuilt_sections():
     owner = object()
     descriptors = (
@@ -425,6 +472,36 @@ def test_collect_widget_section_save_results_runs_savers_and_preserves_unbuilt_s
         "clock2": {"enabled": False},
         "weather": {"location": "Johannesburg"},
     }
+
+
+def test_collect_widget_section_save_result_runs_requested_saver():
+    owner = object()
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "media",
+                "can_save_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_saver": lambda self: lambda current_owner: ({"enabled": True}, {"mode": "bubble"}),
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "clock",
+                "can_save_for_owner": lambda self, current_owner: current_owner is owner,
+                "resolve_saver": lambda self: lambda current_owner: {"enabled": False},
+            },
+        )(),
+    )
+
+    assert collect_widget_section_save_result(owner, "media", descriptors) == (
+        {"enabled": True},
+        {"mode": "bubble"},
+    )
+    assert collect_widget_section_save_result(owner, "missing", descriptors) is None
 
 
 def test_apply_widget_section_save_results_uses_descriptor_owned_persisted_keys():

@@ -14,34 +14,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Display-0 browser-window preference for Gmail and Reddit links.
-Core value: keep the current reliable URL-open behavior, but prefer a browser window on display 0 when multiple eligible browser windows exist.
-- [ ] Keep the decision logic centralized in the shared Windows/browser launch seam, not in Gmail/Reddit widget click handlers.
-- [ ] SCR/non-MC path: extend the helper foreground-selection logic in `helpers/reddit_helper_worker.py` so it prefers an already-open eligible browser window on display 0 before falling back to the current first-match behavior.
-- [ ] MC path: assess the direct `QDesktopServices.openUrl()` route and add a matching best-effort display-0 foreground preference after launch without weakening the current direct-open fallback.
-- [ ] Preserve the current fallback ladder in both builds: prefer display-0 eligible window, else current first-match behavior, else current shell/direct-open behavior.
-- [ ] Keep the implementation intentionally narrow. Do not turn browser routing into a “smart” multi-browser/session policy engine.
-
-2. Tighten `WidgetsTab` maintainability for future widget additions.
-Core value: keep adding widgets cheap by continuing to move standard UI ownership into descriptor-owned metadata rather than `WidgetsTab` branches.
-- [ ] Look for any remaining standard widget-section metadata in `ui/tabs/widgets_tab.py` that still belongs in `rendering/widget_descriptors.py`.
-- [ ] Keep special cases explicit only where the descriptor contract genuinely cannot express the behavior cleanly.
-- [ ] Preserve the current CUSTOM-lock / revert semantics while simplifying ownership, not by flattening special cases into opaque tables.
-- [x] Tighten the build/packaging contract for descriptor-loaded settings modules so frozen builds do not depend on ad hoc hidden-import fixes when section ownership moves into metadata.
-- [ ] Assess whether any remaining dynamic import families should declare packaging metadata centrally instead of relying on scattered build-script includes.
-
-3. Finish the deferred documentation and test-hygiene cleanup.
-Core value: the milestone is landed, so docs and tests should now read as current contracts rather than rollout archaeology.
-- [ ] Refresh long-lived reference docs after each cleanup item above if ownership or behavior claims move.
-- [ ] Do the deferred memory/doc drift cleanup now that the runtime validation is materially cold.
-- [ ] Do the deferred test-maintainability pass now that the runtime validation is materially cold.
-
-4. Parallelism policy for future performance work.
-Core value: do not add threads speculatively. Any further parallelism should be profiling-driven and respect the current UI-thread / pure-compute boundary.
-- [ ] If performance work is reopened, profile first and identify a real hotspot before changing thread/process counts.
-- [ ] Prefer moving isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths.
-- [ ] Treat visualizer mode work as eligible for more off-thread compute only when the work can be expressed as snapshot-in / result-out without thread-affinity side effects.
-- [ ] Treat another process as more likely than another generic Python thread if a future hotspot is both heavy and sufficiently isolated.
+- [ ] No active implementation tasks at the moment. Use the watchlist below for cold-validation pressure points, and reopen this plan only when a concrete regression or higher-value feature appears.
 
 ## Watchlist
 - While visualizer follow-through remains possible, first-bar / first-frame authority and settings/preset drift stay on the watchlist by default. Do not remove them from active watch coverage until the visualizer track is truly cold.
@@ -60,6 +33,11 @@ Core value: do not add threads speculatively. Any further parallelism should be 
 - The curated/custom preset drift family stays a standing watch item during settings-model refactors: preserve CLEAR-then-APPLY semantics and do not reintroduce a second post-overlay merge phase or entry-point-specific fallback path.
 
 ## Deferred / Not Active
+- Parallelism policy stays profiling-driven if performance work is reopened:
+  - profile first and identify a real hotspot before changing thread/process counts,
+  - prefer isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths,
+  - treat visualizer mode work as eligible for more off-thread compute only when it can be expressed as snapshot-in / result-out without thread-affinity side effects,
+  - treat another process as more likely than another generic Python thread if a future hotspot is both heavy and sufficiently isolated.
 - Legacy widget stacking is still intentionally active for authored anchor-based layouts. It is not a general removal candidate yet; only its interaction with `Custom` remains disabled by contract.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.

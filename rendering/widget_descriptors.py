@@ -251,6 +251,56 @@ class WidgetSettingsSectionDescriptor:
         return all(hasattr(owner, attr_name) for attr_name in self.saver_guard_attrs)
 
 
+GMAIL_SIGNAL_BLOCK_ATTRS: tuple[str, ...] = (
+    "gmail_enabled",
+    "gmail_backend_combo",
+    "gmail_imap_email",
+    "gmail_imap_password",
+    "gmail_monitor_combo",
+    "gmail_position",
+    "gmail_width",
+    "gmail_limit",
+    "gmail_refresh",
+    "gmail_header_logo_px_adjust",
+    "gmail_filter_label",
+    "gmail_account_slot",
+    "gmail_font_combo",
+    "gmail_font_size",
+    "gmail_margin",
+    "gmail_show_sender",
+    "gmail_show_subject",
+    "gmail_show_envelope",
+    "gmail_show_three_dot",
+    "gmail_show_refresh_spiral",
+    "gmail_show_unread_count",
+    "gmail_show_header_border",
+    "gmail_show_timestamp",
+    "gmail_date_display_mode",
+    "gmail_group_threads",
+    "gmail_auto_title_case",
+    "gmail_clean_sender_names",
+    "gmail_max_sender_words",
+    "gmail_sender_column_width",
+    "gmail_max_subject_words",
+    "gmail_max_subject_chars",
+    "gmail_desaturate",
+    "gmail_show_background",
+    "gmail_bg_opacity",
+    "gmail_color_btn",
+    "gmail_bg_color_btn",
+    "gmail_border_color_btn",
+    "gmail_border_opacity",
+    "gmail_show_separators",
+    "gmail_separator_color_btn",
+    "gmail_separator_thickness",
+    "gmail_boundary_separator_color_btn",
+    "gmail_boundary_separator_thickness",
+    "gmail_play_sound",
+    "gmail_sound_file",
+    "gmail_sound_volume",
+)
+
+
 @dataclass(frozen=True)
 class WidgetCustomResizeLockDescriptor:
     """Descriptor-owned WidgetsTab lock metadata for CUSTOM-derived size controls."""
@@ -411,6 +461,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         saver_name="save_gmail_settings",
         saver_guard_attrs=("gmail_enabled",),
         persisted_widget_keys=("gmail",),
+        signal_block_attrs=GMAIL_SIGNAL_BLOCK_ATTRS,
     ),
     WidgetSettingsSectionDescriptor(
         section_id="imgur",
@@ -608,6 +659,21 @@ def get_default_widget_section_index(
     return 0
 
 
+def get_widget_settings_section_descriptor(
+    section_id: str,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> WidgetSettingsSectionDescriptor | None:
+    """Return one WidgetsTab section descriptor by stable section id."""
+
+    if not isinstance(section_id, str) or not section_id:
+        return None
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    for descriptor in descriptor_iter:
+        if descriptor.section_id == section_id:
+            return descriptor
+    return None
+
+
 def resolve_widget_section_index_from_view_state(
     state: Mapping[str, Any] | None,
     descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
@@ -789,6 +855,24 @@ def load_widget_sections(
         loader(owner, widgets_config)
 
 
+def load_widget_section(
+    owner: Any,
+    section_id: str,
+    widgets_config: Mapping[str, Any],
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> bool:
+    """Run one descriptor-owned WidgetsTab loader by stable section id."""
+
+    descriptor = get_widget_settings_section_descriptor(section_id, descriptors)
+    if descriptor is None or not descriptor.can_load_for_owner(owner):
+        return False
+    loader = descriptor.resolve_loader()
+    if loader is None:
+        return False
+    loader(owner, widgets_config)
+    return True
+
+
 def collect_widget_section_save_results(
     owner: Any,
     existing_widgets: Mapping[str, Any],
@@ -828,6 +912,22 @@ def collect_widget_section_save_results(
                 results[key_name] = existing_value
 
     return results
+
+
+def collect_widget_section_save_result(
+    owner: Any,
+    section_id: str,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+) -> Any:
+    """Return one descriptor-owned WidgetsTab saver result by stable section id."""
+
+    descriptor = get_widget_settings_section_descriptor(section_id, descriptors)
+    if descriptor is None or not descriptor.can_save_for_owner(owner):
+        return None
+    saver = descriptor.resolve_saver()
+    if saver is None:
+        return None
+    return saver(owner)
 
 
 def apply_widget_section_save_results(
