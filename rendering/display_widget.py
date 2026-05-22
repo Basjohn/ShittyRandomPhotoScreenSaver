@@ -326,6 +326,9 @@ class DisplayWidget(QWidget):
             self._input_handler.next_image_requested.connect(self.next_requested)
             self._input_handler.previous_image_requested.connect(self.previous_requested)
             self._input_handler.cycle_transition_requested.connect(self.cycle_transition_requested)
+            self._input_handler.play_pause_requested.connect(self._on_play_pause_requested)
+            self._input_handler.previous_track_requested.connect(self._on_previous_track_requested)
+            self._input_handler.next_track_requested.connect(self._on_next_track_requested)
             self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
@@ -1358,6 +1361,94 @@ class DisplayWidget(QWidget):
         """Delegates to rendering.display_gl_init."""
         from rendering.display_gl_init import on_destroyed
         on_destroyed(self)
+
+    def _resolve_media_widget_for_transport(self) -> Optional[MediaWidget]:
+        """Return the best media widget candidate across active displays."""
+        media_widget = getattr(self, "media_widget", None)
+        if media_widget is not None:
+            return media_widget
+        widget_manager = getattr(self, "_widget_manager", None)
+        if widget_manager is not None:
+            try:
+                media_widget = widget_manager.get_widget("media") or widget_manager.get_widget("media_widget")
+            except Exception:
+                logger.debug("[DISPLAY_WIDGET] Media widget lookup via WidgetManager failed", exc_info=True)
+            if media_widget is not None:
+                return media_widget
+        try:
+            for widget in self.get_all_instances():
+                candidate = getattr(widget, "media_widget", None)
+                if candidate is not None:
+                    return candidate
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Cross-display media widget lookup failed", exc_info=True)
+        return None
+
+    def _on_play_pause_requested(self) -> None:
+        """Route the focused play/pause hotkey through the media widget contract."""
+        media_widget = self._resolve_media_widget_for_transport()
+        if media_widget is None:
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey ignored (no media widget)")
+            return
+        try:
+            handled = bool(
+                media_widget.handle_transport_command(
+                    "play",
+                    source="keyboard_space",
+                    execute=True,
+                )
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey dispatch failed", exc_info=True)
+            handled = False
+        if handled:
+            logger.info("[DISPLAY_WIDGET] Play/pause hotkey handled successfully")
+        else:
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey was not handled by media widget")
+
+    def _on_previous_track_requested(self) -> None:
+        """Route the focused previous-track hotkey through the media widget contract."""
+        media_widget = self._resolve_media_widget_for_transport()
+        if media_widget is None:
+            logger.debug("[DISPLAY_WIDGET] Previous-track hotkey ignored (no media widget)")
+            return
+        try:
+            handled = bool(
+                media_widget.handle_transport_command(
+                    "prev",
+                    source="keyboard_left",
+                    execute=True,
+                )
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Previous-track hotkey dispatch failed", exc_info=True)
+            handled = False
+        if handled:
+            logger.info("[DISPLAY_WIDGET] Previous-track hotkey handled successfully")
+        else:
+            logger.debug("[DISPLAY_WIDGET] Previous-track hotkey was not handled by media widget")
+
+    def _on_next_track_requested(self) -> None:
+        """Route the focused next-track hotkey through the media widget contract."""
+        media_widget = self._resolve_media_widget_for_transport()
+        if media_widget is None:
+            logger.debug("[DISPLAY_WIDGET] Next-track hotkey ignored (no media widget)")
+            return
+        try:
+            handled = bool(
+                media_widget.handle_transport_command(
+                    "next",
+                    source="keyboard_right",
+                    execute=True,
+                )
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Next-track hotkey dispatch failed", exc_info=True)
+            handled = False
+        if handled:
+            logger.info("[DISPLAY_WIDGET] Next-track hotkey handled successfully")
+        else:
+            logger.debug("[DISPLAY_WIDGET] Next-track hotkey was not handled by media widget")
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""

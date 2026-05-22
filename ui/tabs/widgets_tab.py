@@ -56,6 +56,7 @@ from rendering.widget_descriptors import (
     collect_widget_section_signal_block_targets,
     collect_widget_stack_status_targets,
     get_default_widget_section_index,
+    get_widget_custom_resize_lock_descriptors,
     get_widget_default_init_descriptors,
     get_widget_lazy_dependency_indices,
     get_widget_lazy_bootstrap_indices,
@@ -589,47 +590,15 @@ class WidgetsTab(QWidget):
                 self._set_combo_text(combo, fallback)
 
     def _iter_custom_resize_lock_bindings(self) -> tuple[dict[str, Any], ...]:
-        return (
+        return tuple(
             {
-                "section_id": "clock",
-                "widget_ids": ("clock", "clock2", "clock3"),
-                "revert_widget_id": "clock",
-                "position_combo_attrs": ("clock_position", "clock2_position", "clock3_position"),
-                "control_attrs": ("clock_font_size",),
-                "anchor_attr": "clock_font_size",
-            },
-            {
-                "section_id": "weather",
-                "widget_ids": ("weather",),
-                "revert_widget_id": "weather",
-                "position_combo_attrs": ("weather_position",),
-                "control_attrs": ("weather_font_size", "weather_icon_size"),
-                "anchor_attr": "weather_font_size",
-            },
-            {
-                "section_id": "media",
-                "widget_ids": ("media",),
-                "revert_widget_ids": ("media", "spotify_visualizer"),
-                "position_combo_attrs": ("media_position",),
-                "control_attrs": ("media_font_size", "media_artwork_size"),
-                "anchor_attr": "media_font_size",
-            },
-            {
-                "section_id": "reddit",
-                "widget_ids": ("reddit", "reddit2"),
-                "revert_widget_id": "reddit",
-                "position_combo_attrs": ("reddit_position", "reddit2_position"),
-                "control_attrs": ("reddit_font_size",),
-                "anchor_attr": "reddit_font_size",
-            },
-            {
-                "section_id": "gmail",
-                "widget_ids": ("gmail",),
-                "revert_widget_id": "gmail",
-                "position_combo_attrs": ("gmail_position",),
-                "control_attrs": ("gmail_font_size",),
-                "anchor_attr": "gmail_font_size",
-            },
+                "section_id": descriptor.section_id,
+                "widget_ids": descriptor.widget_ids,
+                "position_combo_attrs": descriptor.position_combo_attrs,
+                "control_attrs": descriptor.control_attrs,
+                "anchor_attr": descriptor.anchor_attr,
+            }
+            for descriptor in get_widget_custom_resize_lock_descriptors()
         )
 
     def _widgets_config_for_custom_resize_lock_state(self) -> Mapping[str, Any]:

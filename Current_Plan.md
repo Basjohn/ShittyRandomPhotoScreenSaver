@@ -14,33 +14,38 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-1. Post-milestone cleanup and watchful hardening.
-Core value: the CUSTOM edit-mode / resize / settings milestone is now runtime-validated and should stay pruned; only high-signal cleanup or regression response work belongs here.
-- [ ] Keep `Docs/Custom_Widget_Edit_Mode_Plan.md` as the detailed source of truth and record only genuine contract deltas there if another runtime regression forces a behavior change.
-- [ ] If another Spotify-dependent regression appears, tighten the setup/reconcile boundary in `rendering/widget_setup_all.py` before widening feature work.
-- [ ] Decide later whether Imgur needs matching CUSTOM-lock UX if direct size controls are ever surfaced in `WidgetsTab`.
+1. Cleanup the Spotify-dependent setup/reconcile boundary.
+Core value: this is still the highest-leverage runtime seam for future widget work, startup stability, and custom-layout reliability.
+- [ ] Audit `rendering/widget_setup_all.py` for responsibilities that can move back into descriptor-owned or manager-owned helpers without changing runtime behavior.
+- [ ] Make remote-anchor / dependent-widget setup order more explicit where Media, visualizer, volume, and mute still rely on subtle creation timing.
+- [ ] Keep the guardrail that ordinary factory-backed widgets extend descriptor metadata first, not handwritten setup branches.
+- [ ] Do not change visualizer render/audio behavior as part of this cleanup; this task is setup/reconcile hardening only.
+
+2. Add a clearer startup/close quiesce boundary.
+Core value: reduce teardown/startup churn by stopping new work before display/compositor shutdown proceeds.
+- [ ] Audit shutdown entry in engine/display/widget layers for timers, deferred single-shots, and late settings-driven refresh paths that can still enqueue work during close.
+- [ ] Define a narrow “quiescing” contract that stops new widget/service/runtime work before compositor/display teardown.
+- [ ] Preserve current runtime behavior and avoid broad focus/compositor rewrites; this is a work-suppression boundary, not a rendering redesign.
+- [ ] Add targeted regression coverage around any new quiesce hook before widening it.
+
+3. Tighten `WidgetsTab` maintainability for future widget additions.
+Core value: keep adding widgets cheap by continuing to move standard UI ownership into descriptor-owned metadata rather than `WidgetsTab` branches.
+- [ ] Look for any remaining standard widget-section metadata in `ui/tabs/widgets_tab.py` that still belongs in `rendering/widget_descriptors.py`.
+- [ ] Keep special cases explicit only where the descriptor contract genuinely cannot express the behavior cleanly.
+- [ ] Preserve the current CUSTOM-lock / revert semantics while simplifying ownership, not by flattening special cases into opaque tables.
+
+4. Finish the deferred documentation and test-hygiene cleanup.
+Core value: the milestone is landed, so docs and tests should now read as current contracts rather than rollout archaeology.
+- [ ] Refresh long-lived reference docs after each cleanup item above if ownership or behavior claims move.
 - [ ] Do the deferred memory/doc drift cleanup now that the runtime validation is materially cold.
 - [ ] Do the deferred test-maintainability pass now that the runtime validation is materially cold.
 
-2. Parallelism policy for future performance work.
+5. Parallelism policy for future performance work.
 Core value: do not add threads speculatively. Any further parallelism should be profiling-driven and respect the current UI-thread / pure-compute boundary.
 - [ ] If performance work is reopened, profile first and identify a real hotspot before changing thread/process counts.
 - [ ] Prefer moving isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths.
 - [ ] Treat visualizer mode work as eligible for more off-thread compute only when the work can be expressed as snapshot-in / result-out without thread-affinity side effects.
-
-## Recently Completed / Not Active
-- Normal-build runtime validation is materially cold for the CUSTOM milestone: repeated save/reload/edit/settings runs now hold up for media, visualizer, volume, settings-side revert, duplicate handling, snapping/grid/dimming, and the guarded visualizer separate-display contract.
-- CUSTOM edit mode foundation is materially landed: global shell session, numbered-monitor transfer, display-local normalized persistence, authored-route reset, stable snapping/grid/dimming UX, and canonical rebuild/reapply behavior are all in place.
-- CUSTOM move/resize parity is materially landed for the safe widget families: clocks, weather, media, Reddit, Gmail, Imgur, and Spotify dependents now participate through descriptor-owned edit contracts instead of shell-only hacks.
-- `spotify_visualizer` now uses the intended routing-mode contract: outside `Custom` it remains exact `Follow Media` parity, while in `Custom` it owns its own numbered-display `position` / `monitor` and still stays content/visibility-anchored to Media.
-- `spotify_volume` now has real uniform-resize parity while remaining media-owned: its CUSTOM save path cannot clobber Media's monitor/display ownership, and runtime positioning now honors its saved custom rect size instead of forcing the authored slider footprint.
-- `ALL`-routed duplicate widget shells can now be collapsed intentionally during edit mode via a local `×` affordance on duplicate-capable shells; saving a single survivor promotes that widget cleanly into a numbered-display `Custom` route.
-- Visualizer CUSTOM shell participation is materially landed: composited shell capture, edit-session pause/hide behavior, committed custom-rect authority, independent numbered-monitor transfer while editing, and explicit outer-card CUSTOM rect clamping in `widgets/spotify_visualizer/card_geometry.py` are all in place.
-- Visualizer CUSTOM adaptive sizing has been re-landed on the cleaner single-authority contract: non-`Custom` still uses widget-local `Follow Media` behavior, while `Custom` defers final geometry to `WidgetManager` plus `widgets/spotify_visualizer/card_geometry.py`.
-- Invalid visualizer `Custom + ALL` routing is now guarded at both save and startup: edit-mode save refuses to persist multi-display `ALL` survivors as an independent Custom visualizer route, and startup/create-time recovery will infer a single owner display from saved CUSTOM layout when possible instead of duplicating the visualizer across every screen.
-- Base media settings remain canonical even in `Custom`: live refresh now reapplies media `font_size`, `artwork_size`, and rounded-artwork-border settings, while CUSTOM resize stays an overlay scale contract instead of replacing those authored inputs.
-- Settings-dialog CUSTOM size-lock UX is materially landed: affected size controls disable only while the owning widget family is `Custom`, the orange revert notice routes through a styled popup, and both runtime/context-menu reset and settings-dialog revert now share the same authored-layout restore mutation helper.
-- Widget/service/transition descriptor work is materially landed: WidgetsTab section ownership, runtime capability metadata, shared service lifecycle seams, and transition registry ownership should stay closed unless a concrete regression appears.
+- [ ] Treat another process as more likely than another generic Python thread if a future hotspot is both heavy and sufficiently isolated.
 
 ## Watchlist
 - While visualizer follow-through remains possible, first-bar / first-frame authority and settings/preset drift stay on the watchlist by default. Do not remove them from active watch coverage until the visualizer track is truly cold.
@@ -59,7 +64,6 @@ Core value: do not add threads speculatively. Any further parallelism should be 
 - The curated/custom preset drift family stays a standing watch item during settings-model refactors: preserve CLEAR-then-APPLY semantics and do not reintroduce a second post-overlay merge phase or entry-point-specific fallback path.
 
 ## Deferred / Not Active
-- Detailed CUSTOM layout/edit-mode design still lives in `Docs/Custom_Widget_Edit_Mode_Plan.md`. Do not duplicate that design prose here; keep only live implementation deltas in the active section above.
 - Legacy widget stacking is still intentionally active for authored anchor-based layouts. It is not a general removal candidate yet; only its interaction with `Custom` remains disabled by contract.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
 - Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.

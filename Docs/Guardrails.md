@@ -60,14 +60,14 @@ No shadow frameworks or parallel ownership paths.
 - Do not treat `service_backed=True` as enough detail by itself when broadening shared widget behavior. Extend descriptor-owned service-runtime contract metadata first so widening stays explicit and reviewable.
 - Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
 
-## 5.3 Future Custom Layout Edit Mode Safety
-- If a custom widget layout edit mode is introduced later, it must extend the descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
-- Edit mode must pause transitions and visualizer activity while active.
-- Dragging must support explicit snapping; do not rely on freehand placement only.
-- Optional resize in that mode is acceptable only through descriptor-owned widget-logical controls. `Ctrl + wheel` must map to safe authored size axes for that widget, not a blind global scale transform.
-- Any widget that supports edit-mode resize must keep a clear settings-side size reset affordance for recovery.
-- Treat DPR and multi-monitor portability as a first-class constraint. Validate whether saved positions should be stored as logical/grid coordinates instead of brittle raw pixels before rollout.
-- Keep the current runtime positioning system as the fallback path. A future `CUSTOM` slot should stay unavailable/greyed out until the user has actually saved custom coordinates.
+## 5.3 CUSTOM Layout Safety
+- CUSTOM layout/edit mode must continue to extend descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
+- Edit mode remains a global active-display shell session; do not reintroduce display-local partial edit semantics.
+- Dragging must keep explicit snapping and compositor-backed-display target resolution; do not fall back to freehand or raw-screen heuristics.
+- Resize must remain widget-logical and descriptor-owned. Plain scroll wheel is the current resize gesture; do not reintroduce blind global transforms or modifier-dependent hidden rules.
+- Any widget that supports CUSTOM resize must keep clear recovery affordances: runtime edit-shell reset plus settings-side authored-layout revert.
+- Treat DPR and multi-monitor portability as a first-class constraint. Persist committed geometry through the shared CUSTOM layout contract, not ad hoc raw-pixel paths.
+- Keep the current runtime positioning system as the authored/default fallback path. `Custom` should remain unavailable until a real saved payload exists.
 - Prefer safe edit shells/bounds during editing if live widget behavior would introduce churn, network work, or rendering instability.
 
 ## 6. Testing and Validation

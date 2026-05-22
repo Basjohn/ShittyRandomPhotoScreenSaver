@@ -11,6 +11,7 @@ from rendering.widget_descriptors import (
     collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
     get_default_widget_section_index,
+    get_widget_custom_resize_lock_descriptors,
     get_layout_edit_runtime_descriptors,
     get_widget_default_init_descriptors,
     get_widget_lazy_dependency_indices,
@@ -127,6 +128,22 @@ def test_widget_settings_section_descriptors_expose_default_selected_section():
     default_idx = get_default_widget_section_index(descriptors)
 
     assert descriptors[default_idx].section_id == "clock"
+
+
+def test_widget_custom_resize_lock_descriptors_follow_section_contract():
+    descriptors = get_widget_custom_resize_lock_descriptors()
+
+    section_ids = [descriptor.section_id for descriptor in descriptors]
+
+    assert "clock" in section_ids
+    assert "media" in section_ids
+    assert "gmail" in section_ids
+
+    media = next(item for item in descriptors if item.section_id == "media")
+    assert media.widget_ids == ("media",)
+    assert media.position_combo_attrs == ("media_position",)
+    assert media.control_attrs == ("media_font_size", "media_artwork_size")
+    assert media.anchor_attr == "media_font_size"
 
 
 def test_widget_section_index_resolution_prefers_stable_section_id():

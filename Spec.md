@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-20
+Last updated: 2026-05-22
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -141,6 +141,7 @@ Active ids:
 - `rendering/widget_descriptors.py` should also own `WidgetsTab` section load routing where a section has a canonical loader, so build/load pairs do not drift back into handwritten imports and per-section dispatch chains inside `widgets_tab.py`.
 - `rendering/widget_descriptors.py` should also own `WidgetsTab` section save routing and preserved-widget-key ownership where a section has a canonical saver, so save/fallback behavior for lazily unbuilt sections does not drift back into handwritten per-section branches inside `widgets_tab.py`.
 - `rendering/widget_descriptors.py` should also own `WidgetsTab` section identity and lazy-bootstrap intent where that prevents fragile assumptions about numeric tab indices, fixed section order, or special “always build this last section” cases from drifting back into `widgets_tab.py`.
+- `rendering/widget_descriptors.py` should also own `WidgetsTab` CUSTOM size-lock metadata where a section's size controls become derived/no-op in `Custom`, so future widget additions do not have to reintroduce tab-local handwritten lock tables.
 - When a lazy-built section cannot hydrate or save correctly without another section's controls, that inter-section dependency should be explicit in descriptor metadata rather than hidden in tab order or constructor side effects. Mutual dependencies are acceptable if the lazy builder treats "currently building" sections as in-progress rather than recursively re-entering them.
 - `rendering/widget_descriptors.py` should also own the default selected `WidgetsTab` section where that prevents startup/reset behavior from quietly depending on a hardcoded “section 0” assumption.
 - The Defaults section should follow that same descriptor-owned builder/load/save path once shared widget shadow toggles and card-border-width persistence can be expressed there cleanly, rather than remaining a special inline branch in `widgets_tab.py`.
@@ -154,7 +155,7 @@ Active ids:
 - Canonical widget settings position options also belong in `rendering/widget_descriptors.py`. Widget settings builders must consume descriptor-owned position labels/capabilities instead of retyping the same 9-grid list in each tab module.
 - Descriptor-owned stack-preview/settings-composition metadata should drive `WidgetsTab` preview/save truth for standard widget families instead of per-widget handwritten UI reads where the descriptor can express the same contract.
 - Future custom layout/edit-mode capability metadata should extend the same descriptor layer rather than introducing a separate widget-position registry.
-- If future custom edit mode adds resize, it must remain descriptor-owned and widget-logical: `Ctrl + wheel` may adjust widget-owned size axes only where the widget can express that safely, and participating widgets must keep a settings-side size reset affordance.
+- CUSTOM resize must remain descriptor-owned and widget-logical: plain scroll wheel may adjust widget-owned size axes only where the widget can express that safely, and participating widgets must keep clear runtime/settings-side recovery affordances.
 - First meaningful CUSTOM edit-mode phase is now landed as a shell-driven global active-display session with explicit monitor-routing authority:
   - `rendering/custom_layout_contract.py` owns the normalized display-local rect contract and persistence helpers under `widgets.custom_layout`,
   - `rendering/custom_layout_manager.py` owns global session lifecycle across the active `DisplayWidget` set, temporary shell orchestration, save/cancel, runtime-update deferral, numbered-monitor ownership transfer between compositor-backed displays, and canonical post-save/revert rebuild across display instances,
@@ -212,6 +213,7 @@ Active ids:
 ## 9. Rendering and Input Contract
 - GL-first rendering path with safe fallback behavior.
 - Input routing is centralized; no widget-specific ad hoc global key/mouse handlers.
+- Focused keyboard transport shortcuts should travel through the same centralized input contract as the other runtime hotkeys. `Space` is the focused play/pause hotkey, while `Left` and `Right` are the focused previous/next track hotkeys; all three should route through the media widget's transport-command/feedback path rather than bypassing the input contract.
 - Runtime interaction mode behavior must not break settings launch or shutdown paths.
 - In MC builds, Interaction Mode is runtime policy, not an optional session toggle: MC startup and runtime reads treat it as enabled, and MC settings/context-menu surfaces must not offer a disable path that can strand the user outside the intended interaction model.
 

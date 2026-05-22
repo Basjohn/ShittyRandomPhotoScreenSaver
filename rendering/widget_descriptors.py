@@ -251,6 +251,17 @@ class WidgetSettingsSectionDescriptor:
         return all(hasattr(owner, attr_name) for attr_name in self.saver_guard_attrs)
 
 
+@dataclass(frozen=True)
+class WidgetCustomResizeLockDescriptor:
+    """Descriptor-owned WidgetsTab lock metadata for CUSTOM-derived size controls."""
+
+    section_id: str
+    widget_ids: tuple[str, ...]
+    position_combo_attrs: tuple[str, ...]
+    control_attrs: tuple[str, ...]
+    anchor_attr: str
+
+
 WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...] = (
     WidgetSettingsSectionDescriptor(
         section_id="clock",
@@ -438,6 +449,56 @@ def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDesc
         descriptor
         for descriptor in WIDGET_SETTINGS_SECTION_DESCRIPTORS
         if descriptor.is_enabled_in_environment()
+    )
+
+
+WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, ...] = (
+    WidgetCustomResizeLockDescriptor(
+        section_id="clock",
+        widget_ids=("clock", "clock2", "clock3"),
+        position_combo_attrs=("clock_position", "clock2_position", "clock3_position"),
+        control_attrs=("clock_font_size",),
+        anchor_attr="clock_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="weather",
+        widget_ids=("weather",),
+        position_combo_attrs=("weather_position",),
+        control_attrs=("weather_font_size", "weather_icon_size"),
+        anchor_attr="weather_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="media",
+        widget_ids=("media",),
+        position_combo_attrs=("media_position",),
+        control_attrs=("media_font_size", "media_artwork_size"),
+        anchor_attr="media_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="reddit",
+        widget_ids=("reddit", "reddit2"),
+        position_combo_attrs=("reddit_position", "reddit2_position"),
+        control_attrs=("reddit_font_size",),
+        anchor_attr="reddit_font_size",
+    ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="gmail",
+        widget_ids=("gmail",),
+        position_combo_attrs=("gmail_position",),
+        control_attrs=("gmail_font_size",),
+        anchor_attr="gmail_font_size",
+    ),
+)
+
+
+def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockDescriptor, ...]:
+    """Return descriptor-owned CUSTOM size-lock metadata for WidgetsTab."""
+
+    active_sections = {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
+    return tuple(
+        descriptor
+        for descriptor in WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS
+        if descriptor.section_id in active_sections
     )
 
 

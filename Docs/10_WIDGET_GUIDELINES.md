@@ -1,6 +1,6 @@
 # Widget Guidelines
 
-Last updated: 2026-05-17
+Last updated: 2026-05-22
 
 Canonical implementation guidelines for overlay widgets.
 
@@ -19,6 +19,7 @@ Canonical implementation guidelines for overlay widgets.
 - Positioning is centralized through rendering/widget positioning helpers.
 - Anchor-dependent widgets (for example mute/volume relative to media card) must follow shared dependent-visibility logic.
 - Widgets should not implement independent ad hoc geometry systems when a shared one exists.
+- If a widget family participates in `Custom`, its committed geometry must still reapply through the shared runtime seams rather than local one-off geometry patches.
 
 ## 4. Startup Staging Rules
 - Primary-stage and secondary-stage startup responsibilities must be respected.
@@ -34,11 +35,13 @@ Canonical implementation guidelines for overlay widgets.
 - Input routing remains centralized in rendering/input handlers.
 - Widget-specific click/gesture behavior should integrate through shared routing contracts.
 - Do not add global event hooks inside individual widgets unless architecture explicitly requires it.
+- Focused keyboard transport shortcuts should also integrate through the shared input contract; do not bypass that path with widget-local key handling when the action is part of runtime interaction policy.
 
 ## 7. Performance Rules
 - Keep paint/update work minimal and cache where appropriate.
 - Avoid expensive operations inside `paintEvent` and high-frequency callbacks.
 - Prefer coalesced updates over rapid repeated repaints.
+- Prefer snapshot-in / result-out compute seams for heavy background work. Do not move Qt/UI/OpenGL ownership paths off-thread just because a mode is expensive.
 
 ## 8. Change Checklist
 When adding/changing a widget, verify:
@@ -71,6 +74,7 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 - If a widget family already has a descriptor-owned live refresh handler, do not add a parallel handwritten prefix route in `rendering/widget_manager.py`.
 - Position-option ownership belongs there too. If a widget exposes the standard settings position chooser, consume descriptor-owned labels/capabilities instead of retyping the same 9-grid list in each settings builder.
 - If a widget may eventually participate in custom edit-mode resize, record that as descriptor-owned capability metadata and keep the size change tied to real widget-owned logical controls, with a clear settings-side reset affordance.
+- If a widget family has size controls that become derived/no-op in `Custom`, extend the descriptor-owned CUSTOM lock metadata instead of adding another `WidgetsTab`-local lock table.
 
 4.1 Service-backed lifecycle mechanics
 - For service-backed widgets such as Gmail, Reddit, and Weather-style overlays, reuse `widgets/service_widget_runtime.py` for parent transition probes, deferred single-shot timers, deferred refresh/result staging, spinner suspend/resume, fetch-in-progress begin/end guards, manual-refresh request flow, visible-fallback preservation for non-authoritative empty/error results, and timer-stop cleanup where that contract matches.
@@ -80,6 +84,7 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 5. Positioning and dependent geometry
 - Add positioning support in `rendering/widget_positioner.py`.
 - If the widget depends on another widget's geometry, follow the shared anchor/dependent-visibility contract instead of inventing ad hoc coordinate math.
+- If the widget participates in `Custom`, keep authored/default geometry rules and committed custom geometry layered cleanly rather than replacing one with the other.
 
 6. Effects, fade, and invalidation
 - Ensure the widget participates in the shared overlay fade/effect lifecycle through `rendering/widget_manager.py` and `rendering/widget_effects.py` when appropriate.
@@ -101,6 +106,7 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 - If the widget participates in standard section save/load ownership, prefer descriptor-owned persisted-key application helpers instead of reassigning those saved payloads manually inside `ui/tabs/widgets_tab.py`.
 - If the work touches shared widget defaults UI, keep the Defaults section on the same descriptor-owned builder/load/save path rather than growing a separate inline special-case subsection.
 - Respect settings-dialog flicker guardrails: no constructor-time show/hide churn, no broad update disabling, and preserve bucket-state persistence if the widget uses buckets.
+- If the widget needs CUSTOM-specific UI locking or revert affordances, route that through shared descriptor/state helpers and the styled-popup path rather than per-section ad hoc popups.
 
 10. Display/runtime integration
 - Update `rendering/display_widget.py` only when the widget needs display-level callbacks, transition-aware busy checks, or top-level runtime references.
@@ -109,3 +115,4 @@ Use this when adding a new widget family such as a future Steam widget. The goal
 11. Documentation and tests
 - Refresh `Spec.md`, `Index.md`, and `Docs/TestSuite.md` when the widget changes live contracts or adds regression coverage.
 - Add focused lifecycle, settings, and interaction tests before broad runtime/manual validation.
+- If the change affects startup/teardown behavior or custom-layout semantics, update the relevant guardrails/reference docs in the same sweep rather than leaving a temporary “we know it drifted” gap.

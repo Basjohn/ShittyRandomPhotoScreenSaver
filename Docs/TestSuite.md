@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-20
+Last updated: 2026-05-22
 
 Testing strategy, execution guidance, and minimum quality bar.
 

@@ -52,6 +52,9 @@ class InputHandler(QObject):
     next_image_requested = Signal()
     previous_image_requested = Signal()
     cycle_transition_requested = Signal()
+    play_pause_requested = Signal()
+    previous_track_requested = Signal()
+    next_track_requested = Signal()
     context_menu_requested = Signal(QPoint)  # Global position for menu popup
     
     # Exit threshold for mouse movement (pixels)
@@ -197,9 +200,17 @@ class InputHandler(QObject):
             logger.info("Z key pressed - previous image requested")
             self.previous_image_requested.emit()
             return True
+        if key == Qt.Key.Key_Left:
+            logger.info("Left key pressed - previous track requested")
+            self.previous_track_requested.emit()
+            return True
         if key_text == 'x' or key == Qt.Key.Key_X or native_vk == 0x58:
             logger.info("X key pressed - next image requested")
             self.next_image_requested.emit()
+            return True
+        if key == Qt.Key.Key_Right:
+            logger.info("Right key pressed - next track requested")
+            self.next_track_requested.emit()
             return True
         if key_text == 'c' or key == Qt.Key.Key_C or native_vk == 0x43:
             logger.info("C key pressed - cycle transition requested")
@@ -208,6 +219,10 @@ class InputHandler(QObject):
         if key_text == 's' or key == Qt.Key.Key_S or native_vk == 0x53:
             logger.info("S key pressed - settings requested")
             self.settings_requested.emit()
+            return True
+        if key == Qt.Key.Key_Space:
+            logger.info("Space key pressed - play/pause requested")
+            self.play_pause_requested.emit()
             return True
         
         # Exit keys (Esc/Q) should always be honoured
@@ -227,7 +242,27 @@ class InputHandler(QObject):
         self._exiting = True
         self.exit_requested.emit()
         return True
-    
+
+    def _resolve_media_widget(self):
+        """Return the best media widget candidate across the active display set."""
+        media_widget = None
+        if self._widget_manager is not None:
+            media_widget = self._widget_manager.get_widget("media") or self._widget_manager.get_widget("media_widget")
+        if media_widget is None:
+            media_widget = getattr(self._parent, "media_widget", None)
+        if media_widget is None:
+            try:
+                from rendering.display_widget import DisplayWidget
+                for widget in QApplication.topLevelWidgets():
+                    if isinstance(widget, DisplayWidget):
+                        candidate = getattr(widget, "media_widget", None)
+                        if candidate is not None:
+                            media_widget = candidate
+                            break
+            except Exception as e:
+                logger.debug("[INPUT_HANDLER] Exception searching for media widget: %s", e)
+        return media_widget
+
     def _is_media_key(self, event: QKeyEvent) -> bool:
         """Check if the key event is a media key."""
         key = event.key()
@@ -967,24 +1002,7 @@ class InputHandler(QObject):
             logger.info("[INPUT_HANDLER] Media key: command is None (key=%s), skipping", key)
             return
 
-        # Try to get media widget from widget_manager first, then fall back to parent
-        media_widget = None
-        if self._widget_manager is not None:
-            media_widget = self._widget_manager.get_widget("media") or self._widget_manager.get_widget("media_widget")
-        if media_widget is None:
-            media_widget = getattr(self._parent, "media_widget", None)
-        # If still not found, search across all DisplayWidgets (multi-monitor setup)
-        if media_widget is None:
-            try:
-                from rendering.display_widget import DisplayWidget
-                for w in QApplication.topLevelWidgets():
-                    if isinstance(w, DisplayWidget):
-                        mw = getattr(w, "media_widget", None)
-                        if mw is not None:
-                            media_widget = mw
-                            break
-            except Exception as e:
-                logger.debug("[INPUT_HANDLER] Exception searching for media widget: %s", e)
+        media_widget = self._resolve_media_widget()
         logger.debug("[INPUT_HANDLER] Media widget lookup: widget=%s", media_widget)
         if media_widget is None:
             logger.debug("[INPUT_HANDLER] Media key %s ignored (no media widget)", command)

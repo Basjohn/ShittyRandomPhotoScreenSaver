@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 
+from rendering.display_widget import DisplayWidget
 from rendering.input_handler import InputHandler
 
 @pytest.fixture
@@ -63,6 +64,85 @@ def test_standard_keys_are_handled(input_handler):
     result = input_handler.handle_key_press(event)
     assert result is True, "Escape should be handled"
     mock_slot.assert_called_once()
+
+
+def test_space_key_routes_play_pause_signal(input_handler):
+    """Verify Space is treated as a focused play/pause hotkey."""
+    event = create_key_event(Qt.Key.Key_Space)
+
+    mock_slot = MagicMock()
+    input_handler.play_pause_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Space should be handled as a hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_left_key_routes_previous_track_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_Left)
+
+    mock_slot = MagicMock()
+    input_handler.previous_track_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Left should be handled as a focused transport hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_right_key_routes_next_track_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_Right)
+
+    mock_slot = MagicMock()
+    input_handler.next_track_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Right should be handled as a focused transport hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_display_widget_play_pause_hotkey_dispatches_media_feedback():
+    media_widget = MagicMock()
+    media_widget.handle_transport_command.return_value = True
+    stub = MagicMock()
+    stub._resolve_media_widget_for_transport.return_value = media_widget
+
+    DisplayWidget._on_play_pause_requested(stub)
+
+    media_widget.handle_transport_command.assert_called_once_with(
+        "play",
+        source="keyboard_space",
+        execute=True,
+    )
+
+
+def test_display_widget_previous_track_hotkey_dispatches_media_feedback():
+    media_widget = MagicMock()
+    media_widget.handle_transport_command.return_value = True
+    stub = MagicMock()
+    stub._resolve_media_widget_for_transport.return_value = media_widget
+
+    DisplayWidget._on_previous_track_requested(stub)
+
+    media_widget.handle_transport_command.assert_called_once_with(
+        "prev",
+        source="keyboard_left",
+        execute=True,
+    )
+
+
+def test_display_widget_next_track_hotkey_dispatches_media_feedback():
+    media_widget = MagicMock()
+    media_widget.handle_transport_command.return_value = True
+    stub = MagicMock()
+    stub._resolve_media_widget_for_transport.return_value = media_widget
+
+    DisplayWidget._on_next_track_requested(stub)
+
+    media_widget.handle_transport_command.assert_called_once_with(
+        "next",
+        source="keyboard_right",
+        execute=True,
+    )
 
 def test_native_virtual_key_recognition(input_handler):
     """Verify recognition via native virtual key codes (Windows)."""
