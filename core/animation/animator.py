@@ -311,7 +311,7 @@ class AnimationManager(QObject):
         try:
             from core.resources.manager import ResourceManager
             if self._resources is None:
-                self._resources = ResourceManager()
+                self._resources = ResourceManager.get_or_create_app_shared()
             try:
                 self._resources.register_qt(self._timer, description="AnimationManager timer")
             except Exception as e:

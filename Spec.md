@@ -23,6 +23,9 @@ Canonical architecture and behavior contracts for SRPSS.
 - Animations route through `AnimationManager`.
 - Cross-module publish/subscribe events use `EventSystem`.
 - Worker process orchestration uses `ProcessSupervisor`.
+- Engine-owned `ThreadManager` and `ResourceManager` instances are also the app-shared fallback managers for leaf/runtime helper code. Do not create ad hoc leaf managers when the shared seam can supply the same ownership cleanly.
+- When no app-shared `ThreadManager` is available, helper/UI fallbacks must stay intentionally narrow rather than silently creating another full-size compute-heavy manager.
+- `ThreadManager` active-task bookkeeping is authoritative at submit/complete/cancel/shutdown time and must not depend on a queued UI-thread mutation drain to become visible.
 
 ## 4. Settings Architecture
 

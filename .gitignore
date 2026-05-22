@@ -38,13 +38,13 @@ ENV/
 /tmp_dbg_settings/
 /tmp_dbg_appdata/
 /tests_tmp_appdata/
-Current_Plan.md
 
 # Coverage and test artifacts
 htmlcov/
 .coverage
 .coverage.*
 coverage.xml
+/logs/tests/test_inventory*.json
 
 # Runtime logs and local app data
 npm-debug.log*
@@ -63,6 +63,7 @@ yarn-error.log*
 /archive/
 /bak/
 /settings/
+/widgets/last_weather.json
 agent.md
 
 # Build/release binary artifacts
@@ -102,7 +103,6 @@ id_ed25519
 MyReuseableUtilityModules/
 
 # Codex / agent local noise
-# Track .agents/skills/; do NOT ignore .agents/.
 /.agent/
 /.agent
 /.codex-appdata/
@@ -139,7 +139,7 @@ MyReuseableUtilityModules/
 /temp_*.md
 /temp_search.txt
 
-# Repo-local agent / assistant metadata should stay private
+# Repo-local agent / assistant metadata should stay private, including local skills.
 /.agents/
 
 # Extra Python/tooling caches

@@ -18,6 +18,9 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Animation through `AnimationManager`.
 - Cross-module publish/subscribe events through `EventSystem`.
 - Worker process orchestration through `ProcessSupervisor`.
+- Leaf/runtime helper code should prefer the app-shared `ThreadManager` / `ResourceManager` seam rather than constructing ad hoc manager instances.
+- If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
+- Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
 
 No shadow frameworks or parallel ownership paths.
 

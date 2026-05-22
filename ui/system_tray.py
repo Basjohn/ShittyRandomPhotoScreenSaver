@@ -145,7 +145,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         # Register with the centralized ResourceManager so the icon
         # and its timers are cleaned up on shutdown with other Qt resources.
         try:
-            manager = ResourceManager()
+            manager = ResourceManager.get_or_create_app_shared()
             manager.register_qt(
                 self,
                 resource_type=ResourceType.GUI_COMPONENT,

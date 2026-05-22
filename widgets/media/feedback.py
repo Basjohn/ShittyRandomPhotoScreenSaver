@@ -35,7 +35,10 @@ def ensure_shared_feedback_timer(cls: type) -> None:
         cls._shared_feedback_timer = timer
         try:
             from core.resources.manager import ResourceManager
-            ResourceManager().register_qt(timer, description="MediaWidget shared feedback timer")
+            ResourceManager.get_or_create_app_shared().register_qt(
+                timer,
+                description="MediaWidget shared feedback timer",
+            )
         except Exception:
             pass
     if not timer.isActive():

@@ -69,7 +69,9 @@ class DisplayManager(QObject):
         self.display_mode = display_mode
         self.same_image_mode = same_image_mode
         self.settings_manager = settings_manager
-        self._resource_manager: ResourceManager | None = resource_manager or ResourceManager()
+        self._resource_manager: ResourceManager | None = (
+            resource_manager or ResourceManager.get_or_create_app_shared()
+        )
         self._thread_manager = thread_manager
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path

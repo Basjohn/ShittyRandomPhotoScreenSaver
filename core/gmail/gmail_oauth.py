@@ -21,6 +21,7 @@ from urllib.parse import urlencode, parse_qs, urlparse
 from PySide6.QtCore import QObject, Signal, QCoreApplication
 
 from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 from core.settings.storage_paths import get_app_data_dir
 from core.windows.dpapi import save_encrypted, load_encrypted
@@ -324,10 +325,15 @@ class GmailOAuthManager(QObject):
         """Return the owned ThreadManager used for OAuth network work."""
         manager = self._thread_manager
         if manager is None:
-            manager = ThreadManager()
+            manager = ThreadManager.get_app_shared()
+            owns_manager = manager is None
+            if manager is None:
+                manager = ThreadManager.create_helper_manager(
+                    resource_manager=ResourceManager.get_app_shared(),
+                )
             self._thread_manager = manager
             app = QCoreApplication.instance()
-            if app is not None:
+            if owns_manager and app is not None:
                 try:
                     app.aboutToQuit.connect(lambda m=manager: m.shutdown(wait=False))
                 except Exception as exc:

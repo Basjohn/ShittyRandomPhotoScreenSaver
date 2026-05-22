@@ -1616,7 +1616,7 @@ class SettingsDialog(QDialog):
             try:
                 from core.resources.manager import ResourceManager
                 from core.resources.types import ResourceType
-                ResourceManager().register_qt(
+                ResourceManager.get_or_create_app_shared().register_qt(
                     self._resize_timer,
                     resource_type=ResourceType.TIMER,
                     description="Settings dialog resize debounce timer",
@@ -1677,7 +1677,7 @@ class SettingsDialog(QDialog):
             try:
                 from core.resources.manager import ResourceManager
                 from core.resources.types import ResourceType
-                ResourceManager().register_qt(
+                ResourceManager.get_or_create_app_shared().register_qt(
                     self._move_timer,
                     resource_type=ResourceType.TIMER,
                     description="Settings dialog move debounce timer",

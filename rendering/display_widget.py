@@ -300,7 +300,7 @@ class DisplayWidget(QWidget):
         self._resource_manager: Optional[ResourceManager] = resource_manager
         if self._resource_manager is None:
             try:
-                self._resource_manager = ResourceManager()
+                self._resource_manager = ResourceManager.get_or_create_app_shared()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to create ResourceManager: %s", e)
                 self._resource_manager = None

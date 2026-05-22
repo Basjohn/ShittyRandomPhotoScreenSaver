@@ -36,6 +36,31 @@ class ResourceManager:
     # Pool configuration
     PIXMAP_POOL_MAX_SIZE = 8  # Max pooled pixmaps per size bucket
     IMAGE_POOL_MAX_SIZE = 8   # Max pooled images per size bucket
+    _app_shared_manager: Optional["ResourceManager"] = None
+    _app_shared_lock = threading.RLock()
+
+    @classmethod
+    def set_app_shared(cls, manager: Optional["ResourceManager"]) -> Optional["ResourceManager"]:
+        """Register the app-shared ResourceManager used by leaf/runtime fallback paths."""
+        with cls._app_shared_lock:
+            cls._app_shared_manager = manager
+            return cls._app_shared_manager
+
+    @classmethod
+    def get_app_shared(cls) -> Optional["ResourceManager"]:
+        """Return the currently registered app-shared ResourceManager, if any."""
+        with cls._app_shared_lock:
+            return cls._app_shared_manager
+
+    @classmethod
+    def get_or_create_app_shared(cls) -> "ResourceManager":
+        """Return the app-shared ResourceManager, creating one if necessary."""
+        with cls._app_shared_lock:
+            manager = cls._app_shared_manager
+            if manager is None or getattr(manager, "_shutdown", False):
+                manager = cls()
+                cls._app_shared_manager = manager
+            return manager
     
     def __init__(self):
         """Initialize the ResourceManager."""
@@ -530,6 +555,9 @@ class ResourceManager:
         
         self._logger.info("Cleaning up all resources...")
         self._shutdown = True
+        with self._app_shared_lock:
+            if self.__class__._app_shared_manager is self:
+                self.__class__._app_shared_manager = None
         
         with self._lock:
             # Group resources for deterministic cleanup ordering

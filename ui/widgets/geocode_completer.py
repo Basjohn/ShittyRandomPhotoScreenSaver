@@ -14,6 +14,7 @@ from PySide6.QtCore import Qt, QStringListModel, QObject, Signal
 from PySide6.QtWidgets import QCompleter, QLineEdit
 
 from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
 from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
@@ -59,9 +60,19 @@ class GeocodeCompleter(QCompleter):
         self._line_edit = line_edit
         self._pending_query: str = ""
         self._lock = threading.Lock()
-        self._threads = ThreadManager()
+        shared_threads = ThreadManager.get_app_shared()
+        self._threads = shared_threads or ThreadManager.create_helper_manager(
+            resource_manager=ResourceManager.get_app_shared(),
+        )
+        self._owns_threads = shared_threads is None
         self._signals = _GeocodeWorkerSignals()
         self._signals.results_ready.connect(self._on_results)
+
+        if self._owns_threads:
+            try:
+                self.destroyed.connect(lambda _obj=None, m=self._threads: m.shutdown(wait=False))
+            except Exception:
+                pass
 
         line_edit.textEdited.connect(self._on_text_edited)
         line_edit.setCompleter(self)

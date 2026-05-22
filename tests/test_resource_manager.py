@@ -202,6 +202,31 @@ class TestResourceCleanup:
         # Should not raise
         manager.cleanup_all()
 
+    def test_app_shared_manager_registration_roundtrip(self):
+        manager = ResourceManager()
+        try:
+            ResourceManager.set_app_shared(manager)
+            assert ResourceManager.get_app_shared() is manager
+        finally:
+            manager.shutdown()
+            ResourceManager.set_app_shared(None)
+
+    def test_get_or_create_app_shared_reuses_live_manager(self):
+        manager = ResourceManager()
+        try:
+            ResourceManager.set_app_shared(manager)
+            shared = ResourceManager.get_or_create_app_shared()
+            assert shared is manager
+        finally:
+            manager.shutdown()
+            ResourceManager.set_app_shared(None)
+
+    def test_cleanup_all_clears_app_shared_manager_when_owned(self):
+        manager = ResourceManager()
+        ResourceManager.set_app_shared(manager)
+        manager.cleanup_all()
+        assert ResourceManager.get_app_shared() is None
+
 
 class TestResourceManagerThreadSafety:
     """Thread safety tests."""

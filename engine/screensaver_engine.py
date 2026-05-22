@@ -338,10 +338,12 @@ class ScreensaverEngine(QObject):
             
             # Resource manager
             self.resource_manager = ResourceManager()
+            ResourceManager.set_app_shared(self.resource_manager)
             logger.debug("ResourceManager initialized")
             
             # Thread manager
-            self.thread_manager = ThreadManager()
+            self.thread_manager = ThreadManager(resource_manager=self.resource_manager)
+            ThreadManager.set_app_shared(self.thread_manager)
             logger.debug("ThreadManager initialized")
             
             # Settings manager (skip if pre-assigned, e.g. by tests)

@@ -232,7 +232,7 @@ class GLTextureManager:
         # Register texture with ResourceManager for VRAM leak prevention
         try:
             from core.resources.manager import ResourceManager
-            rm = ResourceManager()
+            rm = ResourceManager.get_or_create_app_shared()
             rm.register_gl_texture(tex_id, description=f"GLTextureManager {w}x{h}")
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
@@ -358,7 +358,7 @@ class GLTextureManager:
                 # Register PBO with ResourceManager for VRAM leak prevention
                 try:
                     from core.resources.manager import ResourceManager
-                    rm = ResourceManager()
+                    rm = ResourceManager.get_or_create_app_shared()
                     rm.register_gl_vbo(pbo_id, description=f"GLTextureManager PBO {required_size}B")
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical

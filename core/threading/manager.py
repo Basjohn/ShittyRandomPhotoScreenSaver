@@ -5,6 +5,7 @@ Centralized thread management with specialized pools for IO and compute operatio
 Adapted from SPQDocker reusable modules for screensaver use.
 """
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, Future, wait as wait_futures
 from dataclasses import dataclass
@@ -103,6 +104,56 @@ class ThreadManager:
     - UI thread dispatch utilities
     - Lock-free statistics
     """
+    _app_shared_manager: Optional["ThreadManager"] = None
+    _app_shared_lock = threading.RLock()
+
+    @classmethod
+    def set_app_shared(cls, manager: Optional["ThreadManager"]) -> Optional["ThreadManager"]:
+        """Register the app-shared ThreadManager used by runtime/helper fallback paths."""
+        with cls._app_shared_lock:
+            cls._app_shared_manager = manager
+            return cls._app_shared_manager
+
+    @classmethod
+    def get_app_shared(cls) -> Optional["ThreadManager"]:
+        """Return the currently registered app-shared ThreadManager, if any."""
+        with cls._app_shared_lock:
+            manager = cls._app_shared_manager
+            if manager is not None and getattr(manager, "_shutdown", False):
+                cls._app_shared_manager = None
+                return None
+            return manager
+
+    @classmethod
+    def get_or_create_app_shared(
+        cls,
+        *,
+        resource_manager: Optional[Any] = None,
+        config: Optional[Dict[ThreadPoolType, int]] = None,
+    ) -> "ThreadManager":
+        """Return the app-shared ThreadManager, creating one if necessary."""
+        with cls._app_shared_lock:
+            manager = cls._app_shared_manager
+            if manager is None or getattr(manager, "_shutdown", False):
+                manager = cls(config=config, resource_manager=resource_manager)
+                cls._app_shared_manager = manager
+            return manager
+
+    @classmethod
+    def create_helper_manager(
+        cls,
+        *,
+        resource_manager: Optional[Any] = None,
+        io_workers: int = 2,
+        compute_workers: int = 1,
+    ) -> "ThreadManager":
+        """Create a narrow helper manager for small UI-only/background helper tasks."""
+        config = {
+            ThreadPoolType.IO: max(1, int(io_workers)),
+            ThreadPoolType.COMPUTE: max(1, int(compute_workers)),
+        }
+        return cls(config=config, resource_manager=resource_manager)
+
     def __init__(self, config: Optional[Dict[ThreadPoolType, int]] = None, 
                  resource_manager: Optional[Any] = None):
         """
@@ -125,6 +176,7 @@ class ThreadManager:
         
         self._executors: Dict[ThreadPoolType, ThreadPoolExecutor] = {}
         self._active_tasks: Dict[str, Task] = {}
+        self._active_tasks_lock = threading.RLock()
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
         
@@ -242,7 +294,7 @@ class ThreadManager:
                 logger.error(f"Task {task.task_id} failed: {e}")
                 self._enqueue_mutation(('failed', pool_type.value))
             finally:
-                self._enqueue_mutation(('unregister_active', task.task_id))
+                self._unregister_active_task(task.task_id)
             
             # Execute callback
             if callback:
@@ -256,6 +308,7 @@ class ThreadManager:
         # Submit to executor
         future = executor.submit(wrapped_func)
         task.future = future
+        self._register_active_task(task)
         
         # Register with resource manager
         if self._resource_manager:
@@ -272,7 +325,6 @@ class ThreadManager:
                 logger.debug(f"Skipping resource registration for task {task.task_id}: {e}")
         
         # Update tracking
-        self._enqueue_mutation(('register_active', task))
         self._enqueue_mutation(('submitted', pool_type.value))
         
         if is_verbose_logging():
@@ -294,7 +346,8 @@ class ThreadManager:
 
     def get_task_result(self, task_id: str, timeout: Optional[float] = None) -> TaskResult:
         """Get the result of a specific task"""
-        task = self._active_tasks.get(task_id)
+        with self._active_tasks_lock:
+            task = self._active_tasks.get(task_id)
         if not task:
             raise KeyError(f"Task {task_id} not found")
         try:
@@ -304,18 +357,20 @@ class ThreadManager:
 
     def cancel_task(self, task_id: str) -> bool:
         """Attempt to cancel a task"""
-        task = self._active_tasks.get(task_id)
+        with self._active_tasks_lock:
+            task = self._active_tasks.get(task_id)
         if task and task.future:
             cancelled = task.future.cancel()
             if cancelled:
-                self._active_tasks.pop(task_id, None)
+                self._unregister_active_task(task_id)
                 logger.info(f"Cancelled task {task_id}")
             return cancelled
         return False
 
     def get_active_tasks(self) -> List[str]:
         """Get list of currently active task IDs"""
-        return list(self._active_tasks.keys())
+        with self._active_tasks_lock:
+            return list(self._active_tasks.keys())
 
     def get_pool_stats(self) -> Dict[str, Dict[str, int]]:
         """Get statistics for all thread pools"""
@@ -335,26 +390,32 @@ class ThreadManager:
         if self._shutdown:
             return
         self._shutdown = True
+        with self.__class__._app_shared_lock:
+            if self.__class__._app_shared_manager is self:
+                self.__class__._app_shared_manager = None
         
         # Cancel active tasks
-        active_ids = list(self._active_tasks.keys())
+        with self._active_tasks_lock:
+            active_ids = list(self._active_tasks.keys())
         if active_ids:
             logger.info("Cancelling %d active tasks before shutdown: %s", len(active_ids), active_ids)
         for task_id in active_ids:
             self.cancel_task(task_id)
         
         if wait and timeout is not None:
-            futures = [
-                task.future for task in self._active_tasks.values()
-                if task.future is not None
-            ]
+            with self._active_tasks_lock:
+                futures = [
+                    task.future for task in self._active_tasks.values()
+                    if task.future is not None
+                ]
             if futures:
                 done, not_done = wait_futures(futures, timeout=max(0.0, float(timeout)))
                 if not_done:
-                    stuck_ids = [
-                        task.task_id for task in self._active_tasks.values()
-                        if task.future in not_done
-                    ]
+                    with self._active_tasks_lock:
+                        stuck_ids = [
+                            task.task_id for task in self._active_tasks.values()
+                            if task.future in not_done
+                        ]
                     logger.warning(
                         "ThreadManager shutdown timed out after %.1fs with %d active tasks: %s",
                         float(timeout),
@@ -368,8 +429,9 @@ class ThreadManager:
         # Shutdown executors
         for pool_type, executor in self._executors.items():
             try:
-                pool_active = [t.task_id for t in self._active_tasks.values()
-                               if getattr(t, 'pool_type', None) == pool_type]
+                with self._active_tasks_lock:
+                    pool_active = [t.task_id for t in self._active_tasks.values()
+                                   if getattr(t, 'pool_type', None) == pool_type]
                 if pool_active:
                     logger.info("Pool %s has %d pending tasks during shutdown: %s",
                                 pool_type.value, len(pool_active), pool_active)
@@ -386,9 +448,20 @@ class ThreadManager:
         
         # Clear executors to release references
         self._executors.clear()
-        self._active_tasks.clear()
+        with self._active_tasks_lock:
+            self._active_tasks.clear()
         
         logger.info("Thread manager shut down complete")
+
+    def _register_active_task(self, task: Task) -> None:
+        """Synchronously register an in-flight task so bookkeeping is immediately authoritative."""
+        with self._active_tasks_lock:
+            self._active_tasks[task.task_id] = task
+
+    def _unregister_active_task(self, task_id: str) -> None:
+        """Synchronously remove an in-flight task from the authoritative registry."""
+        with self._active_tasks_lock:
+            self._active_tasks.pop(task_id, None)
 
     # Internal: mutation queue -------------------------------------------
     def _enqueue_mutation(self, ev: tuple) -> None:
@@ -400,11 +473,7 @@ class ThreadManager:
             # FIX: Log silent failure instead of ignoring
             logger.debug(f"Failed to push mutation to queue: {e}")
             return
-        
-        if isinstance(ev, tuple) and ev and ev[0] == 'register_active':
-            self._schedule_mutation_drain(0)
-        else:
-            self._schedule_mutation_drain()
+        self._schedule_mutation_drain()
 
     def _schedule_mutation_drain(self, delay_ms: int = 10) -> None:
         if self._shutdown or self._mut_drain_scheduled:
@@ -430,28 +499,15 @@ class ThreadManager:
                     logger.debug("[THREADING] Exception suppressed: %s", e)
                     continue
                 
-                if kind == 'register_active':
-                    try:
-                        task_obj = ev[1]
-                        if task_obj is not None:
-                            self._active_tasks[task_obj.task_id] = task_obj
-                    except Exception as e:
-                        logger.debug("[THREADING] Exception suppressed: %s", e)
-                elif kind == 'unregister_active':
-                    try:
-                        self._active_tasks.pop(ev[1], None)
-                    except Exception as e:
-                        logger.debug("[THREADING] Exception suppressed: %s", e)
-                else:
-                    # Stats mutations
-                    try:
-                        pool_value = ev[1]
-                        pt = next((p for p in ThreadPoolType if p.value == pool_value), None)
-                        if pt and kind in self._stats[pt]:
-                            self._stats[pt][kind] += 1
-                    except Exception as e:
-                        logger.debug("[THREADING] Exception suppressed: %s", e)
-                        continue
+                # Stats mutations
+                try:
+                    pool_value = ev[1]
+                    pt = next((p for p in ThreadPoolType if p.value == pool_value), None)
+                    if pt and kind in self._stats[pt]:
+                        self._stats[pt][kind] += 1
+                except Exception as e:
+                    logger.debug("[THREADING] Exception suppressed: %s", e)
+                    continue
         finally:
             if not self._shutdown and not self._mut_q.is_empty():
                 self._schedule_mutation_drain()

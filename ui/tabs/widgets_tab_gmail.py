@@ -16,6 +16,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from core.resources.manager import ResourceManager
 from rendering.widget_descriptors import GMAIL_SIGNAL_BLOCK_ATTRS, get_widget_position_option_labels
 from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
@@ -118,12 +119,18 @@ def _get_gmail_backend():
 def _get_gmail_thread_manager(tab: WidgetsTab) -> ThreadManager:
     manager = getattr(tab, "_gmail_thread_manager", None)
     if manager is None:
-        manager = ThreadManager()
+        manager = ThreadManager.get_app_shared()
+        owns_manager = manager is None
+        if manager is None:
+            manager = ThreadManager.create_helper_manager(
+                resource_manager=ResourceManager.get_app_shared(),
+            )
         tab._gmail_thread_manager = manager
-        try:
-            tab.destroyed.connect(lambda _obj=None, m=manager: m.shutdown(wait=False))
-        except Exception as exc:
-            logger.debug("[GMAIL_TAB] Failed to attach Gmail ThreadManager cleanup: %s", exc)
+        if owns_manager:
+            try:
+                tab.destroyed.connect(lambda _obj=None, m=manager: m.shutdown(wait=False))
+            except Exception as exc:
+                logger.debug("[GMAIL_TAB] Failed to attach Gmail ThreadManager cleanup: %s", exc)
     return manager
 
 

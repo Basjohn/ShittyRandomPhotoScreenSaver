@@ -644,7 +644,7 @@ class SpotifyVolumeWidget(QWidget):
         self._flush_timer = timer
         try:
             from core.resources.manager import ResourceManager
-            ResourceManager().register_qt(
+            ResourceManager.get_or_create_app_shared().register_qt(
                 timer, description="SpotifyVolumeWidget flush debounce timer",
             )
         except Exception:

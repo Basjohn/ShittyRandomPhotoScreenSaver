@@ -2372,7 +2372,7 @@ void main() {
         try:
             from core.resources.manager import ResourceManager
             from OpenGL import GL as _gl_mod
-            rm = ResourceManager()
+            rm = ResourceManager.get_or_create_app_shared()
             self._gl_vao_rid = rm.register_gl_handle(
                 vao, "vao",
                 lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
@@ -2512,7 +2512,7 @@ void main() {
             from core.resources.manager import ResourceManager
             from OpenGL import GL as _gl_mod
 
-            rm = ResourceManager()
+            rm = ResourceManager.get_or_create_app_shared()
             rid = rm.register_gl_handle(
                 prog, "program",
                 lambda h, _g=_gl_mod: _g.glDeleteProgram(h),

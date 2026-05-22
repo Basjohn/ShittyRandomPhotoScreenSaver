@@ -137,7 +137,7 @@ class GLGeometryManager:
             # Register GL handles with ResourceManager for VRAM leak prevention
             try:
                 from core.resources.manager import ResourceManager
-                rm = ResourceManager()
+                rm = ResourceManager.get_or_create_app_shared()
                 self._quad_vao_rid = rm.register_gl_vao(
                     self._quad_vao, description="GeometryManager quad VAO"
                 )
@@ -251,7 +251,7 @@ class GLGeometryManager:
             # Register GL handles with ResourceManager for VRAM leak prevention
             try:
                 from core.resources.manager import ResourceManager
-                rm = ResourceManager()
+                rm = ResourceManager.get_or_create_app_shared()
                 self._box_vao_rid = rm.register_gl_vao(
                     self._box_vao, description="GeometryManager box VAO"
                 )

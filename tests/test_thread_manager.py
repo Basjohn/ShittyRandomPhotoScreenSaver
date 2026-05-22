@@ -62,6 +62,39 @@ class TestThreadManagerInit:
         assert manager.config[ThreadPoolType.IO] == 4
         manager.shutdown()
 
+    def test_app_shared_manager_registration_roundtrip(self):
+        manager = ThreadManager()
+        try:
+            ThreadManager.set_app_shared(manager)
+            assert ThreadManager.get_app_shared() is manager
+        finally:
+            manager.shutdown()
+            ThreadManager.set_app_shared(None)
+
+    def test_get_or_create_app_shared_reuses_live_manager(self):
+        manager = ThreadManager()
+        try:
+            ThreadManager.set_app_shared(manager)
+            shared = ThreadManager.get_or_create_app_shared()
+            assert shared is manager
+        finally:
+            manager.shutdown()
+            ThreadManager.set_app_shared(None)
+
+    def test_create_helper_manager_uses_narrow_pool_sizes(self):
+        manager = ThreadManager.create_helper_manager(io_workers=2, compute_workers=1)
+        try:
+            assert manager.config[ThreadPoolType.IO] == 2
+            assert manager.config[ThreadPoolType.COMPUTE] == 1
+        finally:
+            manager.shutdown()
+
+    def test_shutdown_clears_app_shared_manager_when_owned(self):
+        manager = ThreadManager()
+        ThreadManager.set_app_shared(manager)
+        manager.shutdown()
+        assert ThreadManager.get_app_shared() is None
+
 
 class TestTaskClass:
     """Tests for Task wrapper class."""
@@ -234,6 +267,55 @@ class TestThreadManagerSubmit:
         with pytest.raises(RuntimeError):
             manager.submit_task(ThreadPoolType.IO, lambda: None)
 
+    def test_active_task_visible_immediately_after_submit(self):
+        """Active-task bookkeeping should not depend on the UI mutation drain."""
+        manager = ThreadManager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_task():
+            started.set()
+            release.wait(timeout=1.0)
+            return "done"
+
+        task_id = manager.submit_task(ThreadPoolType.IO, blocking_task)
+        assert started.wait(timeout=0.5)
+        assert task_id in manager.get_active_tasks()
+
+        release.set()
+        time.sleep(0.1)
+        manager.shutdown()
+
+    def test_get_task_result_works_without_ui_mutation_drain(self):
+        """Result retrieval should work for an active task even before Qt drains mutations."""
+        manager = ThreadManager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_task():
+            started.set()
+            release.wait(timeout=1.0)
+            return 123
+
+        task_id = manager.submit_task(ThreadPoolType.IO, blocking_task)
+        assert started.wait(timeout=0.5)
+
+        result_ready: list[TaskResult] = []
+
+        def waiter():
+            result_ready.append(manager.get_task_result(task_id, timeout=1.0))
+
+        t = threading.Thread(target=waiter)
+        t.start()
+        time.sleep(0.05)
+        release.set()
+        t.join(timeout=1.0)
+
+        assert len(result_ready) == 1
+        assert result_ready[0].success is True
+        assert result_ready[0].result == 123
+        manager.shutdown()
+
 
 class TestThreadManagerConvenience:
     """Convenience method tests."""
@@ -346,6 +428,30 @@ class TestThreadManagerShutdown:
         manager.shutdown()
         # Should not raise
         manager.shutdown()
+
+    def test_shutdown_waits_for_active_tasks_without_ui_drain(self):
+        """Shutdown should see in-flight tasks without requiring a queued registry update."""
+        manager = ThreadManager()
+        started = threading.Event()
+        release = threading.Event()
+        results = []
+
+        def slow_task():
+            started.set()
+            release.wait(timeout=1.0)
+            results.append("done")
+
+        manager.submit_task(ThreadPoolType.IO, slow_task)
+        assert started.wait(timeout=0.5)
+
+        def releaser():
+            time.sleep(0.05)
+            release.set()
+
+        threading.Thread(target=releaser, daemon=True).start()
+        manager.shutdown(wait=True, timeout=1.0)
+
+        assert results == ["done"]
 
 
 class TestThreadManagerStats:
