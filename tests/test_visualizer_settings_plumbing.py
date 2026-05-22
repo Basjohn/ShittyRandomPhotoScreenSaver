@@ -1483,6 +1483,11 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
         monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(
+            creators,
+            "get_screen_signature_aliases",
+            lambda screen: ("screen:name:Display-B",) if screen is target_screen else ("screen:name:Display-A",),
+        )
 
         class FakeSignal:
             def __init__(self):
@@ -1572,6 +1577,128 @@ class TestCreateTimeRefreshParity:
         )
 
         assert vis is None
+
+    def test_create_spotify_visualizer_widget_recovers_invalid_custom_all_from_single_saved_layout_display(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def __init__(self):
+                self.connected = []
+
+            def connect(self, callback):
+                self.connected.append(callback)
+
+        class FakeMediaWidget:
+            def __init__(self):
+                self.media_updated = FakeSignal()
+
+        class FakeScreen:
+            def __init__(self, name):
+                self._name = name
+
+            def name(self):
+                return self._name
+
+            def serialNumber(self):
+                return ""
+
+            def manufacturer(self):
+                return ""
+
+            def model(self):
+                return ""
+
+        remote_media = FakeMediaWidget()
+        target_screen = FakeScreen("Display-B")
+        monkeypatch.setattr(
+            creators,
+            "get_screen_signature_aliases",
+            lambda screen: ("screen:name:Display-B",) if screen is target_screen else ("screen:name:Display-A",),
+        )
+
+        class FakeDisplay:
+            def __init__(self, screen_index, screen, media_widget=None):
+                self.screen_index = screen_index
+                self._screen = screen
+                self.media_widget = media_widget
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return [
+                    FakeDisplay(0, FakeScreen("Display-A"), None),
+                    FakeDisplay(1, target_screen, remote_media),
+                ]
+
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = SimpleNamespace(_screen=target_screen)
+                self._widgets = {}
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        vis = creators.create_spotify_visualizer_widget(
+            FakeManager(),
+            {
+                "media": {"enabled": True, "monitor": "2"},
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "ALL", "mode": "bubble"},
+                "custom_layout": {
+                    "version": 1,
+                    "displays": {
+                        "screen:name:Display-B": {
+                            "spotify_visualizer": {
+                                "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}
+                            }
+                        }
+                    },
+                },
+            },
+            shadows_config={},
+            screen_index=1,
+            thread_manager=None,
+            media_widget=None,
+        )
+
+        assert vis is not None
+        assert vis.anchor is remote_media
 
 
 class TestDisplayFramePush:

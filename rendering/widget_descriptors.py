@@ -1337,6 +1337,33 @@ def restore_widget_family_to_authored_layout(
     return restored_any
 
 
+def restore_all_custom_layouts_to_authored_layout(
+    widgets_config: Dict[str, Any],
+) -> bool:
+    """Restore all currently active CUSTOM widget routes back to authored state.
+
+    This mirrors the context-menu global reset semantics: any widget family
+    currently participating in CUSTOM layout should be restored, regardless of
+    which settings section initiated the revert.
+    """
+
+    candidate_widget_ids: list[str] = []
+    for descriptor in get_widget_runtime_descriptors():
+        if not descriptor.supports_custom_position_slot:
+            continue
+        if (
+            is_custom_position_selected_for_widget(descriptor.widget_id, widgets_config)
+            or has_saved_custom_layout_for_widget(descriptor.widget_id, widgets_config)
+        ):
+            if descriptor.widget_id not in candidate_widget_ids:
+                candidate_widget_ids.append(descriptor.widget_id)
+
+    restored_any = False
+    for widget_id in candidate_widget_ids:
+        restored_any = restore_widget_family_to_authored_layout(widgets_config, widget_id) or restored_any
+    return restored_any
+
+
 def get_layout_edit_runtime_descriptors() -> tuple[WidgetRuntimeDescriptor, ...]:
     """Return runtime descriptors that currently participate in CUSTOM edit mode."""
 

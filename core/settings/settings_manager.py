@@ -1376,7 +1376,7 @@ class SettingsManager(QObject):
             return dict(value)
         return value
 
-    def set_section(self, section: str, value: Mapping[str, Any]) -> None:
+    def set_section(self, section: str, value: Mapping[str, Any], *, emit_change: bool = True) -> None:
         """Set a whole section value in one shot.
 
         This is primarily intended for mapping-backed sections like
@@ -1398,11 +1398,12 @@ class SettingsManager(QObject):
             if root_key in self._CRITICAL_KEYS or section in self._CRITICAL_KEYS:
                 self._settings.sync()
 
-        self.settings_changed.emit(section, mapping)
+        if emit_change:
+            self.settings_changed.emit(section, mapping)
         if is_verbose_logging():
-            logger.debug("Section changed: %s: %r -> %r", section, old_value, mapping)
+            logger.debug("Section changed%s: %s: %r -> %r", "" if emit_change else " (silent)", section, old_value, mapping)
         else:
-            logger.debug("Section changed: %s", section)
+            logger.debug("Section changed%s: %s", "" if emit_change else " (silent)", section)
 
     def get_widgets_map(self) -> Dict[str, Any]:
         """Return the full widgets map as a plain dict.
@@ -1414,14 +1415,14 @@ class SettingsManager(QObject):
         value = self.get_section('widgets', {})
         return dict(value) if isinstance(value, Mapping) else {}
 
-    def set_widgets_map(self, widgets: Mapping[str, Any]) -> None:
+    def set_widgets_map(self, widgets: Mapping[str, Any], *, emit_change: bool = True) -> None:
         """Replace the widgets map with the given mapping.
 
         This is a thin wrapper around set_section('widgets', ...) to keep
         callers from hard-coding the 'widgets' key.
         """
 
-        self.set_section('widgets', widgets)
+        self.set_section('widgets', widgets, emit_change=emit_change)
 
     def export_to_sst(self, path: str) -> bool:
         """Delegates to core.settings.sst_io."""

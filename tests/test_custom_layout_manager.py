@@ -661,6 +661,37 @@ def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size
     assert volume._track_margin == 9
 
 
+def test_custom_layout_manager_volume_resize_rect_uses_payload_dimensions(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"media": {"position": "Bottom Left", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    volume = _VolumeLikeTestWidget(display)
+    display.spotify_volume_widget = volume
+    qtbot.addWidget(volume)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_volume"]
+    state.resize_scale = 1.5
+    state.current_size_payload = {
+        "width": 48,
+        "height": 270,
+        "track_width": 22,
+        "track_margin": 8,
+    }
+
+    rect = manager._scaled_rect_from_baseline(state)
+    assert rect.width() == 48
+    assert rect.height() == 270
+    assert manager._min_size_for_state(state) == QSize(24, 120)
+
+
 def test_custom_layout_manager_reset_position_restores_source_rect_without_resetting_size(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
@@ -1355,6 +1386,80 @@ def test_custom_layout_manager_promotes_visualizer_from_follow_media_to_visualiz
     assert widgets_map["media"]["monitor"] == "2"
     assert widgets_map["spotify_visualizer"]["position"] == "Custom"
     assert widgets_map["spotify_visualizer"]["monitor"] == "1"
+
+
+def test_custom_layout_manager_promotes_visualizer_from_all_follow_media_to_numbered_custom_slot(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Bottom Left", "monitor": "ALL"},
+        "spotify_visualizer": {"enabled": True, "monitor": "ALL"},
+    }
+    display = _DisplayStub(settings_stub, screen_index=0)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert state.current_monitor_value == "ALL"
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["spotify_visualizer"]["position"] == "Custom"
+    assert widgets_map["spotify_visualizer"]["monitor"] == "1"
+
+
+def test_custom_layout_manager_does_not_persist_visualizer_custom_all_with_multiple_survivors(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Bottom Left", "monitor": "ALL"},
+        "spotify_visualizer": {"enabled": True, "monitor": "ALL"},
+    }
+
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    vis_a = _VisualizerLikeTestWidget(display_a)
+    vis_b = _VisualizerLikeTestWidget(display_b)
+    display_a.spotify_visualizer_widget = vis_a
+    display_b.spotify_visualizer_widget = vis_b
+    qtbot.addWidget(vis_a)
+    qtbot.addWidget(vis_b)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    assert manager_a.save_session() is True
+
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["spotify_visualizer"].get("position", "Follow Media") != "Custom"
+    assert widgets_map["spotify_visualizer"].get("monitor", "ALL") == "ALL"
+    displays = widgets_map.get("custom_layout", {}).get("displays", {})
+    for layouts in displays.values():
+        assert "spotify_visualizer" not in layouts
 
 
 def test_custom_layout_manager_reset_to_authored_layout_clears_custom_geometry_and_restores_route(qtbot, monkeypatch):

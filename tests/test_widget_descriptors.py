@@ -29,6 +29,7 @@ from rendering.widget_descriptors import (
     has_saved_custom_layout_for_widget,
     is_custom_position_selected_for_widget,
     load_widget_sections,
+    restore_all_custom_layouts_to_authored_layout,
     restore_widget_family_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
@@ -638,6 +639,41 @@ def test_restore_widget_family_to_authored_layout_restores_visualizer_without_to
     assert "spotify_visualizer" not in layouts
     assert "media" in layouts
     assert widgets_cfg["media"]["position"] == "Bottom Left"
+
+
+def test_restore_all_custom_layouts_to_authored_layout_restores_every_active_custom_family():
+    widgets_cfg = {
+        "media": {"position": "Custom", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "gmail": {"position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:a": {
+                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
+                    "spotify_volume": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}},
+                    "spotify_visualizer": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}},
+                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                }
+            },
+        },
+        "custom_layout_restore": {
+            "version": 1,
+            "widgets": {
+                "media": {"position": "Bottom Left", "monitor": "ALL"},
+                "spotify_visualizer": {"position": "Bottom Right", "monitor": "2"},
+                "gmail": {"position": "Top Left", "monitor": "2"},
+            },
+        },
+    }
+
+    assert restore_all_custom_layouts_to_authored_layout(widgets_cfg) is True
+
+    assert widgets_cfg["media"]["position"] == "Bottom Left"
+    assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Right"
+    assert widgets_cfg["gmail"]["position"] == "Top Left"
+    displays = widgets_cfg["custom_layout"]["displays"]
+    assert "screen:a" not in displays or not displays["screen:a"]
 
 
 def test_layout_edit_runtime_descriptors_capture_attr_and_resize_contract(monkeypatch):

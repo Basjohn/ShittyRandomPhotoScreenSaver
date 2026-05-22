@@ -279,11 +279,23 @@ class CustomLayoutManager:
             if not survivors:
                 continue
             source_had_duplicates = len(entries) > 1
+            if (
+                widget_id == "spotify_visualizer"
+                and len(survivors) > 1
+                and any(manager._monitor_value_is_all(state.source_monitor_value) for manager, state in survivors)
+            ):
+                logger.warning(
+                    "[CUSTOM_LAYOUT] Refusing to persist spotify_visualizer as Custom with multiple ALL-routed survivors; "
+                    "leave Follow Media active until one survivor display is chosen"
+                )
+                continue
             for manager, state in survivors:
                 monitor_value = state.current_monitor_value
                 if source_had_duplicates and len(survivors) == 1 and manager._monitor_value_is_all(state.source_monitor_value):
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
                 elif state.current_screen_signature != state.source_screen_signature:
+                    monitor_value = manager._monitor_value_for_screen(state.current_screen)
+                elif widget_id == "spotify_visualizer" and manager._monitor_value_is_all(monitor_value):
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
                 manager._write_widget_custom_layout(
                     widgets_map,
@@ -1171,7 +1183,12 @@ class CustomLayoutManager:
                     canvas_size=shell_size,
                 )
             else:
-                preview_local_rect.setSize(shell_size)
+                preview_local_rect.setSize(
+                    QSize(
+                        max(24, int(state.current_size_payload.get("width", shell_size.width()))),
+                        max(120, int(state.current_size_payload.get("height", shell_size.height()))),
+                    )
+                )
                 widget.setGeometry(preview_local_rect)
                 snapshot = widget.grab()
             if not snapshot.isNull():
@@ -1329,6 +1346,17 @@ class CustomLayoutManager:
         return current_screen
 
     def _scaled_rect_from_baseline(self, state: _ShellState) -> QRect:
+        if state.descriptor.custom_layout_resize_mode == "volume_scale":
+            current = state.current_global_rect
+            center = current.center()
+            rect = QRect(
+                0,
+                0,
+                max(24, int(state.current_size_payload.get("width", state.baseline_global_rect.width()))),
+                max(120, int(state.current_size_payload.get("height", state.baseline_global_rect.height()))),
+            )
+            rect.moveCenter(center)
+            return rect
         base = state.baseline_global_rect
         current = state.current_global_rect
         center = current.center()
@@ -1606,6 +1634,8 @@ class CustomLayoutManager:
             logger.debug("[CUSTOM_LAYOUT] Failed to set shell-active flag", exc_info=True)
 
     def _min_size_for_state(self, state: _ShellState) -> QSize:
+        if state.descriptor.custom_layout_resize_mode == "volume_scale":
+            return QSize(24, 120)
         if state.descriptor.supports_layout_resize_edit:
             return CUSTOM_LAYOUT_MIN_WIDGET_SIZE
         return QSize(

@@ -66,7 +66,7 @@ from rendering.widget_descriptors import (
     has_saved_custom_layout_for_widget,
     is_custom_position_selected_for_widget,
     load_widget_sections,
-    restore_widget_family_to_authored_layout,
+    restore_all_custom_layouts_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
 )
@@ -199,6 +199,7 @@ class WidgetsTab(QWidget):
         self._widget_bucket_state: Dict[str, bool] = self._load_widget_bucket_states()
         self._loading = True
         self._save_coalesce_pending = False
+        self._save_coalesce_token = 0
         _ui_start = time.perf_counter()
         self._setup_ui()
         self._perf_log("_setup_ui", _ui_start)
@@ -608,7 +609,7 @@ class WidgetsTab(QWidget):
             {
                 "section_id": "media",
                 "widget_ids": ("media",),
-                "revert_widget_id": "media",
+                "revert_widget_ids": ("media", "spotify_visualizer"),
                 "position_combo_attrs": ("media_position",),
                 "control_attrs": ("media_font_size", "media_artwork_size"),
                 "anchor_attr": "media_font_size",
@@ -730,12 +731,13 @@ class WidgetsTab(QWidget):
         )
         if not confirmed:
             return
-        widgets_cfg = self._settings.get("widgets", {}) or {}
-        if not isinstance(widgets_cfg, dict):
-            widgets_cfg = {}
-        if not restore_widget_family_to_authored_layout(widgets_cfg, str(binding["revert_widget_id"])):
+        widgets_cfg = self._settings.get_widgets_map()
+        restored_any = restore_all_custom_layouts_to_authored_layout(widgets_cfg)
+        if not restored_any:
             return
-        self._settings.set("widgets", widgets_cfg)
+        self._save_coalesce_token += 1
+        self._save_coalesce_pending = False
+        self._settings.set_widgets_map(widgets_cfg, emit_change=False)
         self._settings.save()
         self.load_from_settings()
 
@@ -1515,16 +1517,16 @@ class WidgetsTab(QWidget):
             return
         self._refresh_custom_resize_lock_state()
         self._auto_switch_preset_to_custom()
-        if not getattr(self, "_save_coalesce_pending", False):
-            self._save_coalesce_pending = True
-            from PySide6.QtCore import QTimer
-            QTimer.singleShot(self._SAVE_COALESCE_MS, self._save_settings_now)
-        # If already pending, the timer is already ticking — we just
-        # let it fire.  For very fast bursts this may occasionally
-        # coalesce 2 writes instead of 1, which is acceptable.
+        self._save_coalesce_pending = True
+        self._save_coalesce_token += 1
+        token = self._save_coalesce_token
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(self._SAVE_COALESCE_MS, lambda: self._save_settings_now(token))
 
-    def _save_settings_now(self) -> None:
+    def _save_settings_now(self, token: int | None = None) -> None:
         """Perform the actual settings save (called by coalesce timer)."""
+        if token is not None and token != getattr(self, "_save_coalesce_token", 0):
+            return
         self._save_coalesce_pending = False
         if getattr(self, "_loading", False):
             return

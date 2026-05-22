@@ -242,6 +242,7 @@ class TestWidgetsTab:
     def test_widgets_tab_disable_custom_mode_link_restores_authored_layout(self, qt_app, settings_manager, monkeypatch):
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "spotify_visualizer": {"position": "Custom", "monitor": "2"},
             "custom_layout": {
                 "version": 1,
                 "displays": {
@@ -256,6 +257,11 @@ class TestWidgetsTab:
                             "size_payload": {"width": 32, "height": 180},
                             "resize_mode": "volume_scale",
                         },
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
+                            "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
+                            "resize_mode": "visualizer_rect",
+                        },
                     }
                 },
             },
@@ -263,6 +269,7 @@ class TestWidgetsTab:
                 "version": 1,
                 "widgets": {
                     "media": {"position": "Bottom Left", "monitor": "ALL"},
+                    "spotify_visualizer": {"position": "Bottom Left", "monitor": "ALL"},
                 },
             },
         })
@@ -275,10 +282,13 @@ class TestWidgetsTab:
             widgets_cfg = settings_manager.get("widgets", {})
             assert widgets_cfg["media"]["position"] == "Bottom Left"
             assert widgets_cfg["media"]["monitor"] == "ALL"
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
+            assert widgets_cfg["spotify_visualizer"]["monitor"] == "ALL"
             displays = widgets_cfg["custom_layout"]["displays"]
             layouts = displays.get("screen:test", {})
             assert "media" not in layouts
             assert "spotify_volume" not in layouts
+            assert "spotify_visualizer" not in layouts
             assert tab.media_font_size.isEnabled() is True
             assert tab.media_artwork_size.isEnabled() is True
             assert tab._custom_resize_lock_notice_labels["media"].isHidden() is True
@@ -317,6 +327,101 @@ class TestWidgetsTab:
             assert widgets_cfg["media"]["position"] == "Custom"
             assert "media" in widgets_cfg["custom_layout"]["displays"]["screen:test"]
             assert tab.media_font_size.isEnabled() is False
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_disable_custom_mode_revert_invalidates_pending_stale_save(self, qt_app, settings_manager, monkeypatch):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "spotify_visualizer": {"position": "Custom", "monitor": "2"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        },
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
+                            "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
+                            "resize_mode": "visualizer_rect",
+                        },
+                    }
+                },
+            },
+            "custom_layout_restore": {
+                "version": 1,
+                "widgets": {
+                    "media": {"position": "Bottom Left", "monitor": "ALL"},
+                    "spotify_visualizer": {"position": "Bottom Left", "monitor": "ALL"},
+                },
+            },
+        })
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.StyledPopup.question", lambda *args, **kwargs: True)
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._save_coalesce_pending = True
+            tab._save_coalesce_token = 5
+            tab._on_custom_resize_lock_link_activated("media")
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["media"]["position"] == "Bottom Left"
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
+
+            tab._save_settings_now(5)
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["media"]["position"] == "Bottom Left"
+            assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Left"
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_disable_custom_mode_revert_is_silent_widgets_update(self, qt_app, settings_manager, monkeypatch):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "gmail": {"enabled": True, "position": "Custom", "monitor": "2"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        },
+                        "gmail": {
+                            "rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2},
+                            "size_payload": {"font_size": 15},
+                            "resize_mode": "gmail_font",
+                        }
+                    }
+                },
+            },
+            "custom_layout_restore": {
+                "version": 1,
+                "widgets": {
+                    "media": {"position": "Bottom Left", "monitor": "ALL"},
+                    "gmail": {"position": "Top Left", "monitor": "2"},
+                },
+            },
+        })
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.StyledPopup.question", lambda *args, **kwargs: True)
+        received: list[tuple[str, object]] = []
+        settings_manager.settings_changed.connect(lambda key, value: received.append((key, value)))
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            received.clear()
+            tab._on_custom_resize_lock_link_activated("media")
+            assert all(key != "widgets" for key, _value in received)
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg["media"]["position"] == "Bottom Left"
+            assert widgets_cfg["gmail"]["position"] == "Top Left"
         finally:
             tab.deleteLater()
 
