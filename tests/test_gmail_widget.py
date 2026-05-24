@@ -302,6 +302,52 @@ def test_gmail_custom_layout_rect_survives_content_height_recalc(qt_app):
         parent.deleteLater()
 
 
+def test_gmail_small_custom_height_does_not_paint_rows_past_bottom(qt_app):
+    from datetime import datetime
+
+    from PySide6.QtCore import QRect
+    from PySide6.QtGui import QPainter, QPixmap
+    from PySide6.QtWidgets import QWidget
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    parent = QWidget()
+    parent.resize(1200, 900)
+    widget = GmailWidget(parent)
+    try:
+        widget._custom_layout_local_rect = QRect(30, 30, 600, 220)
+        widget._emails = [
+            EmailMetadata(
+                id=f"msg_{index}",
+                thread_id=f"thread_{index}",
+                sender=f"Sender {index}",
+                subject=f"Subject {index}",
+                date=datetime.now(),
+                labels=("INBOX",),
+                is_unread=(index % 2 == 0),
+            )
+            for index in range(8)
+        ]
+        widget._rebuild_display_rows()
+        widget._update_position()
+
+        pixmap = QPixmap(widget.size())
+        pixmap.fill()
+        painter = QPainter(pixmap)
+        try:
+            widget._paint_emails(painter)
+        finally:
+            painter.end()
+
+        content_bottom = widget.height() - max(12, widget.contentsMargins().bottom())
+        assert widget._row_hit_rects
+        assert all(rect.bottom() <= content_bottom for rect, *_rest in widget._row_hit_rects)
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
 def test_gmail_empty_state_paints_below_header(qt_app):
     """Worst-case empty-state copy must render below the header frame area."""
     from widgets.gmail_widget import GmailWidget

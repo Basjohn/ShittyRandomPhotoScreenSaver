@@ -1294,6 +1294,7 @@ class GmailWidget(BaseOverlayWidget):
             1,
             self.width() - left - margins.right() - self._content_padding_right,
         )
+        content_bottom = self.height() - max(12, margins.bottom())
         visible_rows = self._display_rows[: self._limit]
         action_width = 24 if self._show_three_dot_menu else 0
         env_slot_width = (
@@ -1316,10 +1317,19 @@ class GmailWidget(BaseOverlayWidget):
             configured_sender_width = max(40, int(self._sender_column_width))
             sender_slot_width = min(configured_sender_width, max_sender_width)
         prev_unread = None
+        painter.save()
+        painter.setClipRect(QRect(left, row_y, max(1, available_width), max(0, content_bottom - row_y)))
         for i, row in enumerate(visible_rows):
             email = row.email
+            subject_font = QFont(self._font_family, base_font_pt, QFont.Weight(600) if email.is_unread else QFont.Weight(400))
+            subject_fm = QFontMetrics(subject_font)
+            line_height = subject_fm.height() + 6
+            if row_y + line_height > content_bottom:
+                break
             if prev_unread is not None and prev_unread != email.is_unread and self._show_separators:
                 sep_y = row_y - 1
+                if sep_y > content_bottom:
+                    break
                 painter.setPen(QPen(self._boundary_separator_color, self._boundary_separator_thickness))
                 painter.drawLine(left, sep_y, left + available_width, sep_y)
                 row_y += 2
@@ -1333,9 +1343,6 @@ class GmailWidget(BaseOverlayWidget):
                 time_text = self._format_email_date(email.date)
             env_x = left
             env_width = env_slot_width
-            subject_font = QFont(self._font_family, base_font_pt, subject_weight)
-            subject_fm = QFontMetrics(subject_font)
-            line_height = subject_fm.height() + 6
             if self._show_envelope_icon and self._envelope_pixmap is not None:
                 env_pm = self._envelope_for_email(email)
                 if env_pm is not None:
@@ -1409,8 +1416,9 @@ class GmailWidget(BaseOverlayWidget):
                 )
             if self._show_separators and i < len(visible_rows) - 1:
                 sep_y = row_y + line_height
-                painter.setPen(QPen(self._separator_color, self._separator_thickness))
-                painter.drawLine(left, sep_y, left + available_width, sep_y)
+                if sep_y <= content_bottom:
+                    painter.setPen(QPen(self._separator_color, self._separator_thickness))
+                    painter.drawLine(left, sep_y, left + available_width, sep_y)
             row_rect = QRect(left, row_y, available_width, line_height)
             self._row_hit_rects.append((row_rect, email.id, email.subject))
             if self._show_three_dot_menu:
@@ -1424,6 +1432,7 @@ class GmailWidget(BaseOverlayWidget):
                     painter.drawEllipse(QPoint(dot_x, dot_y + j * 6), 2, 2)
             prev_unread = email.is_unread
             row_y += line_height + self._row_vertical_spacing
+        painter.restore()
 
     @staticmethod
     def _group_count_suffix(row: DisplayRow) -> str:
