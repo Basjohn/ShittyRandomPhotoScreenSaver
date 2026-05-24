@@ -14,9 +14,14 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-- None right now.
-  - The current hardening audit wave is materially landed.
-  - Re-open this section only when a concrete regression, new architectural migration, or profiling-backed performance target appears.
+- Stabilize recreated-display input/startup regressions from the latest CUSTOM/settings runtime reload path.
+  - Verify stale pointer events cannot hit newly recreated fullscreen displays after save/revert/settings entry.
+  - Verify first-image startup on cold/recreated displays uses bounded immediate retry instead of leaving a display blank until the long rotation timer.
+  - Verify edit-mode restack/menu paths do not force-show or force-update overlays/shells in ways that flash the grid or flicker widgets.
+  - Expected outcome:
+    - revert/settings reload returns all displays/compositors cleanly,
+    - left-click/double-click cannot destroy or hide freshly recreated displays,
+    - right-click no longer flashes the grid or broad-flickers widgets.
 
 ## Watchlist
 - Keep visualizer preset/settings drift in view during later audits:

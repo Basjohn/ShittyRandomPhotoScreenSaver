@@ -84,7 +84,11 @@ def show_context_menu(widget, global_pos) -> None:
             widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
             try:
                 widget._context_menu.aboutToShow.connect(lambda: widget._invalidate_overlay_effects("menu_about_to_show"))
-                widget._context_menu.aboutToShow.connect(lambda: CustomLayoutManager.raise_all_active_shells() if CustomLayoutManager.is_any_session_active() else None)
+                widget._context_menu.aboutToShow.connect(
+                    lambda: CustomLayoutManager.schedule_raise_all_active_shells()
+                    if CustomLayoutManager.is_any_session_active()
+                    else None
+                )
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
@@ -165,7 +169,7 @@ def show_context_menu(widget, global_pos) -> None:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
                         if CustomLayoutManager.is_any_session_active():
-                            CustomLayoutManager.raise_all_active_shells()
+                            CustomLayoutManager.schedule_raise_all_active_shells()
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
@@ -222,14 +226,18 @@ def show_context_menu(widget, global_pos) -> None:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
             if CustomLayoutManager.is_any_session_active():
-                CustomLayoutManager.raise_all_active_shells()
+                CustomLayoutManager.schedule_raise_all_active_shells()
             widget._context_menu.popup(global_pos)
+            if CustomLayoutManager.is_any_session_active():
+                CustomLayoutManager.schedule_raise_all_active_shells()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
                 if CustomLayoutManager.is_any_session_active():
-                    CustomLayoutManager.raise_all_active_shells()
+                    CustomLayoutManager.schedule_raise_all_active_shells()
                 widget._context_menu.popup(QCursor.pos())
+                if CustomLayoutManager.is_any_session_active():
+                    CustomLayoutManager.schedule_raise_all_active_shells()
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 

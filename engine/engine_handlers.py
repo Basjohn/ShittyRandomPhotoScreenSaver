@@ -16,6 +16,7 @@ from core.logging.logger import get_logger
 from core.animation import AnimationManager
 from core.settings import SettingsManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
+from rendering.display_widget import DisplayWidget
 from ui.settings_dialog import SettingsDialog
 
 if TYPE_CHECKING:
@@ -202,6 +203,11 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             except Exception:
                 logger.debug("Coordinator cleanup after settings failed", exc_info=True)
 
+            DisplayWidget.suppress_pointer_input_globally(
+                700,
+                reason="settings_display_recreation",
+            )
+
             # Reinitialize displays using current settings
             if not engine._initialize_display():
                 logger.error("Failed to reinitialize displays after settings; quitting")
@@ -247,6 +253,11 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             coordinator.cleanup()
         except Exception:
             logger.debug("Coordinator cleanup after custom layout reload failed", exc_info=True)
+
+        DisplayWidget.suppress_pointer_input_globally(
+            700,
+            reason="custom_layout_runtime_reload",
+        )
 
         if not engine._initialize_display():
             logger.error("Failed to reinitialize displays after custom layout reload; quitting")

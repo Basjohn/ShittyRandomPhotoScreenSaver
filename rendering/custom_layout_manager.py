@@ -105,6 +105,7 @@ class CustomLayoutManager:
     _active_managers: list["CustomLayoutManager"] = []
     _key_filter: _CustomLayoutSessionKeyFilter | None = None
     _EDIT_MODE_MIN_DIM_OPACITY = 0.5
+    _restack_scheduled: bool = False
 
     def __init__(self, display_widget) -> None:
         self._display = display_widget
@@ -206,8 +207,32 @@ class CustomLayoutManager:
 
     @classmethod
     def raise_all_active_shells(cls) -> None:
-        for manager in cls._active_managers:
-            manager._normalize_session_stack()
+        managers = list(cls._active_managers)
+        for manager in managers:
+            overlay = getattr(manager, "_grid_overlay", None)
+            if overlay is None:
+                continue
+            try:
+                if overlay.isVisible():
+                    overlay.raise_()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to raise edit grid overlay", exc_info=True)
+        for manager in managers:
+            manager._raise_all_shells()
+
+    @classmethod
+    def schedule_raise_all_active_shells(cls, delay_ms: int = 0) -> None:
+        if cls._restack_scheduled:
+            return
+        cls._restack_scheduled = True
+
+        def _run() -> None:
+            cls._restack_scheduled = False
+            if not cls.is_any_session_active():
+                return
+            cls.raise_all_active_shells()
+
+        QTimer.singleShot(max(0, int(delay_ms)), _run)
 
     def is_active(self) -> bool:
         return bool(self._active)
@@ -548,7 +573,7 @@ class CustomLayoutManager:
             )
             overlay.show()
             self._grid_overlay = overlay
-            self._normalize_session_stack()
+            self._raise_all_shells_globally()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to create edit grid overlay", exc_info=True)
             self._grid_overlay = None
@@ -1018,32 +1043,20 @@ class CustomLayoutManager:
     def _on_shell_context_menu_requested(self, global_pos: QPoint) -> None:
         try:
             self._display._show_context_menu(global_pos)
-            QTimer.singleShot(0, self._raise_all_shells_globally)
+            CustomLayoutManager.schedule_raise_all_active_shells()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
 
     def _normalize_session_stack(self) -> None:
-        try:
-            self._display.raise_()
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to raise display before overlay stack normalize", exc_info=True)
-        overlay = self._grid_overlay
-        if overlay is not None:
-            try:
-                overlay.show()
-                overlay.raise_()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to normalize edit grid overlay stack", exc_info=True)
-        self._raise_all_shells()
+        self._raise_all_shells_globally()
 
     def _raise_all_shells(self) -> None:
         for state in self._shell_states.values():
             if state.removed:
                 continue
             try:
-                state.shell.show()
-                state.shell.raise_()
-                state.shell.update()
+                if state.shell.isVisible():
+                    state.shell.raise_()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to raise edit shell", exc_info=True)
 

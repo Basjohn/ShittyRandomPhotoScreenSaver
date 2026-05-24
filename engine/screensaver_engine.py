@@ -793,7 +793,7 @@ class ScreensaverEngine(QObject):
             # Show first image immediately
             if not self._show_next_image():
                 logger.warning("[FALLBACK] Failed to show first image")
-                # Continue anyway, timer will retry
+                self._schedule_startup_first_image_retry()
             
             # Start rotation timer
             if self._rotation_timer:
@@ -897,6 +897,41 @@ class ScreensaverEngine(QObject):
             except Exception as pending_exc:
                 logger.debug("[TRANSITION] Failed to clear transition work pending: %s", pending_exc)
             return False
+
+    def _schedule_startup_first_image_retry(self, attempt: int = 1) -> None:
+        """Best-effort bounded retry for startup image display failures.
+
+        This is intentionally narrow: it is only for the startup/recreation
+        window where the first immediate `_show_next_image()` call failed.
+        """
+        max_attempts = 4
+        if attempt > max_attempts:
+            return
+
+        delay_ms = 180
+
+        def _retry() -> None:
+            if self._is_state(EngineState.STOPPING, EngineState.SHUTTING_DOWN, EngineState.UNINITIALIZED):
+                return
+            if self.display_manager is None:
+                return
+            if self._loading_in_progress:
+                logger.info(
+                    "[FALLBACK] Startup first-image retry deferred; load still in progress (attempt %s/%s)",
+                    attempt,
+                    max_attempts,
+                )
+                self._schedule_startup_first_image_retry(attempt + 1)
+                return
+            if any(getattr(display, "current_image_path", None) for display in getattr(self.display_manager, "displays", [])):
+                return
+            if self._show_next_image():
+                logger.info("[FALLBACK] Startup first-image retry succeeded (attempt %s/%s)", attempt, max_attempts)
+                return
+            logger.warning("[FALLBACK] Startup first-image retry failed (attempt %s/%s)", attempt, max_attempts)
+            self._schedule_startup_first_image_retry(attempt + 1)
+
+        QTimer.singleShot(delay_ms, _retry)
     
     def _load_image_via_worker(
         self,

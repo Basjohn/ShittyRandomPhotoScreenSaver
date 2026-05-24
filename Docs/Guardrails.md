@@ -49,7 +49,9 @@ No shadow frameworks or parallel ownership paths.
 - Do not remove custom styling to hide runtime issues.
 - Fix startup/focus/visibility bugs at root cause.
 - Respect staged startup contracts for dependent overlay widgets.
+- If startup or a display-recreation path cannot show the first image immediately, use a bounded immediate retry seam before falling back to the long rotation timer. Do not leave recreated/cold startup displays blank just because a transient load was already in progress.
 - When settings entry, stop, or teardown is involved, suppress new runtime work through the explicit quiesce boundary (`ScreensaverEngine.stop` → `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()`) instead of layering more late cleanup side effects onto display clear/hide paths.
+- Settings-driven and CUSTOM-driven display recreation must arm a short recreated-display pointer-input suppression window so the save/revert/settings click that triggered the rebuild cannot be re-consumed by the newly created fullscreen displays.
 - Browser-window preference work must stay narrow and centralized: helper/SCR and MC direct-open flows may share a best-effort display-0 foreground preference, but widget click handlers must not grow their own browser/window-selection logic or broader automation behavior.
 - Do not over-centralize tiny widget-local effect fades just for purity. `AnimationManager` should own shared timeline/tick animation seams; tightly local `QVariantAnimation`/effect fades may remain widget-local when they are explicitly owned, cleaned up, and not recreating a second broader animation registry.
 

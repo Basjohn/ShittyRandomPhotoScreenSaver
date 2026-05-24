@@ -739,7 +739,6 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.shell._remove_btn.isVisible() is True
 
     restack_events: list[str] = []
-    monkeypatch.setattr(display_a, "raise_", lambda: restack_events.append("display_a"), raising=False)
     monkeypatch.setattr(manager_a._grid_overlay, "raise_", lambda: restack_events.append("overlay_a"), raising=False)
     monkeypatch.setattr(state_a.shell, "raise_", lambda: restack_events.append("shell_a"), raising=False)
 
@@ -748,7 +747,6 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.removed is True
     assert state_b.shell.isVisible() is False
     assert state_a.shell._remove_btn.isVisible() is False
-    assert "display_a" in restack_events
     assert "overlay_a" in restack_events
     assert "shell_a" in restack_events
 
@@ -796,13 +794,112 @@ def test_custom_layout_manager_raise_all_active_shells_normalizes_overlay_stack(
 
     state = manager._shell_states["clock"]
     calls: list[str] = []
-    monkeypatch.setattr(display, "raise_", lambda: calls.append("display"), raising=False)
     monkeypatch.setattr(manager._grid_overlay, "raise_", lambda: calls.append("overlay"), raising=False)
     monkeypatch.setattr(state.shell, "raise_", lambda: calls.append("shell"), raising=False)
 
     CustomLayoutManager.raise_all_active_shells()
 
-    assert calls == ["display", "overlay", "shell"]
+    assert calls == ["overlay", "shell"]
+
+
+def test_custom_layout_manager_raise_all_active_shells_does_not_force_show_or_update(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    forced_calls: list[str] = []
+    monkeypatch.setattr(manager._grid_overlay, "show", lambda: forced_calls.append("overlay_show"), raising=False)
+    monkeypatch.setattr(state.shell, "show", lambda: forced_calls.append("shell_show"), raising=False)
+    monkeypatch.setattr(state.shell, "update", lambda: forced_calls.append("shell_update"), raising=False)
+
+    CustomLayoutManager.raise_all_active_shells()
+
+    assert forced_calls == []
+
+
+def test_custom_layout_manager_global_restack_keeps_cross_display_shells_in_shell_phase(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+    display_a.clock_widget = _EditableTestWidget(display_a)
+    display_b.clock_widget = _EditableTestWidget(display_b)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    state_a = manager_a._shell_states["clock"]
+    state_b = manager_b._shell_states["clock"]
+    state_a.current_screen = screen_b
+    state_a.current_screen_signature = get_screen_signature(screen_b)
+
+    calls: list[str] = []
+    monkeypatch.setattr(manager_a._grid_overlay, "raise_", lambda: calls.append("overlay_a"), raising=False)
+    monkeypatch.setattr(manager_b._grid_overlay, "raise_", lambda: calls.append("overlay_b"), raising=False)
+    monkeypatch.setattr(state_a.shell, "raise_", lambda: calls.append("shell_a"), raising=False)
+    monkeypatch.setattr(state_b.shell, "raise_", lambda: calls.append("shell_b"), raising=False)
+
+    CustomLayoutManager.raise_all_active_shells()
+
+    assert calls[:2] == ["overlay_a", "overlay_b"]
+    assert calls[2:] == ["shell_a", "shell_b"]
+
+
+def test_custom_layout_manager_schedule_raise_all_active_shells_coalesces(monkeypatch):
+    _reset_custom_layout_manager_state()
+    scheduled: list[int] = []
+    invocations: list[str] = []
+    queued_callbacks: list[object] = []
+
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.QTimer.singleShot",
+        lambda delay_ms, callback: (scheduled.append(int(delay_ms)), queued_callbacks.append(callback)),
+    )
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "is_any_session_active",
+        classmethod(lambda cls: True),
+    )
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "raise_all_active_shells",
+        classmethod(lambda cls: invocations.append("raised")),
+    )
+
+    CustomLayoutManager._restack_scheduled = False
+    CustomLayoutManager.schedule_raise_all_active_shells()
+    CustomLayoutManager.schedule_raise_all_active_shells()
+    assert scheduled == [0]
+    assert invocations == []
+
+    queued_callbacks.pop(0)()
+
+    assert invocations == ["raised"]
 
 
 def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size(qtbot):

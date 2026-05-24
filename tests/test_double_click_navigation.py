@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, PropertyMock
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import QWidget
+from types import SimpleNamespace
+from PySide6.QtCore import Qt
 
 # Ensure project root is in path for running as script or via pytest
 if __name__ == "__main__":
@@ -12,6 +14,7 @@ if __name__ == "__main__":
     sys.exit(pytest.main(["-v", __file__]))
 
 from rendering.input_handler import InputHandler
+from rendering.display_widget import DisplayWidget
 from rendering.widget_manager import WidgetManager
 
 
@@ -107,6 +110,57 @@ def test_widget_manager_dispatch_exception_falls_back():
 
     assert result is True
     mock_slot.assert_called_once()
+
+
+def test_display_widget_mouse_double_click_suppressed_during_recreation_guard(monkeypatch):
+    DisplayWidget.suppress_pointer_input_globally(500, reason="test_guard")
+
+    accepted = []
+    event = MagicMock(spec=QMouseEvent)
+    event.accept.side_effect = lambda: accepted.append("accepted")
+    handler = MagicMock()
+
+    class _PointerGuardStub:
+        _pointer_input_suppressed_until_ts = 0.0
+        _pointer_input_suppression_reason = ""
+
+        def __init__(self):
+            self.screen_index = 0
+            self._input_handler = handler
+
+        def _should_suppress_runtime_pointer_input(self, source: str) -> bool:
+            self.__class__._pointer_input_suppressed_until_ts = DisplayWidget._pointer_input_suppressed_until_ts
+            self.__class__._pointer_input_suppression_reason = DisplayWidget._pointer_input_suppression_reason
+            return DisplayWidget._should_suppress_runtime_pointer_input(self, source)
+
+    stub = _PointerGuardStub()
+
+    DisplayWidget.mouseDoubleClickEvent(stub, event)
+
+    assert accepted == ["accepted"]
+    handler.handle_mouse_double_click.assert_not_called()
+    DisplayWidget.clear_pointer_input_suppression()
+
+
+def test_display_widget_edit_mode_background_click_schedules_global_restack(monkeypatch):
+    scheduled: list[str] = []
+    event = MagicMock()
+    event.button.return_value = Qt.MouseButton.LeftButton
+    event.accept.side_effect = lambda: scheduled.append("accepted")
+
+    monkeypatch.setattr(
+        "rendering.display_widget.CustomLayoutManager.schedule_raise_all_active_shells",
+        classmethod(lambda cls: scheduled.append("restack")),
+    )
+
+    stub = SimpleNamespace(
+        _custom_layout_edit_active=True,
+        _should_suppress_runtime_pointer_input=lambda source: False,
+    )
+
+    DisplayWidget.mousePressEvent(stub, event)
+
+    assert scheduled == ["restack", "accepted"]
 
 
 # ======================================================================

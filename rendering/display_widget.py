@@ -174,6 +174,8 @@ class DisplayWidget(QWidget):
     _event_filter_owner: Optional["DisplayWidget"] = None  # DEPRECATED
     _instances_by_screen: Dict[Any, "DisplayWidget"] = {}  # DEPRECATED: Use get_coordinator().get_all_instances()
     _focus_owner: Optional["DisplayWidget"] = None  # DEPRECATED: Use get_coordinator().focus_owner
+    _pointer_input_suppressed_until_ts: float = 0.0
+    _pointer_input_suppression_reason: str = ""
     
     @classmethod
     def get_all_instances(cls) -> List["DisplayWidget"]:
@@ -183,6 +185,37 @@ class DisplayWidget(QWidget):
         Returns a copy of the values to avoid modification during iteration.
         """
         return get_coordinator().get_all_instances()
+
+    @classmethod
+    def suppress_pointer_input_globally(cls, duration_ms: int = 700, *, reason: str = "") -> None:
+        duration_sec = max(0.0, float(duration_ms) / 1000.0)
+        cls._pointer_input_suppressed_until_ts = max(
+            cls._pointer_input_suppressed_until_ts,
+            time.monotonic() + duration_sec,
+        )
+        cls._pointer_input_suppression_reason = str(reason or "").strip()
+
+    @classmethod
+    def clear_pointer_input_suppression(cls) -> None:
+        cls._pointer_input_suppressed_until_ts = 0.0
+        cls._pointer_input_suppression_reason = ""
+
+    def _should_suppress_runtime_pointer_input(self, source: str) -> bool:
+        deadline = float(type(self)._pointer_input_suppressed_until_ts or 0.0)
+        if deadline <= 0.0:
+            return False
+        now = time.monotonic()
+        if now >= deadline:
+            type(self).clear_pointer_input_suppression()
+            return False
+        logger.debug(
+            "[INPUT_GUARD] Suppressed %s on screen=%s during display recreation window (reason=%s, remaining_ms=%.1f)",
+            source,
+            self.screen_index,
+            type(self)._pointer_input_suppression_reason or "unspecified",
+            max(0.0, (deadline - now) * 1000.0),
+        )
+        return True
 
     def __init__(
         self,
@@ -950,6 +983,9 @@ class DisplayWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Handle mouse double click."""
+        if self._should_suppress_runtime_pointer_input("mouseDoubleClickEvent"):
+            event.accept()
+            return
         if self._input_handler is not None:
             self._input_handler.handle_mouse_double_click(event)
 
@@ -1526,9 +1562,15 @@ class DisplayWidget(QWidget):
     
     def mousePressEvent(self, event) -> None:
         """Delegates to rendering.display_input."""
+        if self._should_suppress_runtime_pointer_input("mousePressEvent"):
+            event.accept()
+            return
         if self._custom_layout_edit_active:
             if event.button() == Qt.MouseButton.RightButton:
                 self._show_context_menu(event.globalPosition().toPoint())
+                CustomLayoutManager.schedule_raise_all_active_shells()
+            else:
+                CustomLayoutManager.schedule_raise_all_active_shells()
             event.accept()
             return
         from rendering.display_input import handle_mousePressEvent
@@ -1536,6 +1578,9 @@ class DisplayWidget(QWidget):
 
     def mouseMoveEvent(self, event) -> None:
         """Delegates to rendering.display_input."""
+        if self._should_suppress_runtime_pointer_input("mouseMoveEvent"):
+            event.accept()
+            return
         if self._custom_layout_edit_active:
             event.accept()
             return
@@ -1544,6 +1589,9 @@ class DisplayWidget(QWidget):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         """Handle mouse release; end Spotify volume drags in interaction mode."""
+        if self._should_suppress_runtime_pointer_input("mouseReleaseEvent"):
+            event.accept()
+            return
         if self._custom_layout_edit_active:
             event.accept()
             return

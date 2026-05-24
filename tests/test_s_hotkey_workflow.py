@@ -18,6 +18,7 @@ import uuid
 from types import SimpleNamespace
 
 from core.settings import SettingsManager
+from engine.screensaver_engine import EngineState
 from engine.screensaver_engine import ScreensaverEngine
 
 
@@ -234,6 +235,11 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
 
     monkeypatch.setattr(engine_handlers, "SettingsDialog", _FakeDialog)
     monkeypatch.setattr(engine_handlers, "AnimationManager", lambda **kwargs: object())
+    guard_calls: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        "rendering.display_widget.DisplayWidget.suppress_pointer_input_globally",
+        classmethod(lambda cls, duration_ms=700, reason="": guard_calls.append((int(duration_ms), str(reason)))),
+    )
 
     class _Coordinator:
         def set_settings_dialog_active(self, active):
@@ -257,8 +263,64 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
     )
 
     engine_handlers.on_settings_requested(engine)
+    assert guard_calls == [(700, "settings_display_recreation")]
 
-    assert "cancel_session" in calls
+
+def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
+    from engine import engine_handlers
+
+    guard_calls: list[tuple[int, str]] = []
+    monkeypatch.setattr(
+        "rendering.display_widget.DisplayWidget.suppress_pointer_input_globally",
+        classmethod(lambda cls, duration_ms=700, reason="": guard_calls.append((int(duration_ms), str(reason)))),
+    )
+
+    class _Coordinator:
+        def cleanup(self):
+            return None
+
+    monkeypatch.setattr(
+        "rendering.multi_monitor_coordinator.get_coordinator",
+        lambda: _Coordinator(),
+    )
+
+    engine = SimpleNamespace(
+        display_manager=SimpleNamespace(cleanup=lambda: None),
+        _display_initialized=True,
+        stop=lambda exit_app=False: None,
+        _initialize_display=lambda: True,
+        _setup_rotation_timer=lambda: None,
+        start=lambda: True,
+    )
+
+    engine_handlers.on_custom_layout_reload_requested(engine)
+
+    assert guard_calls == [(700, "custom_layout_runtime_reload")]
+
+
+def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
+    engine = ScreensaverEngine()
+    engine._state = EngineState.STOPPED
+    engine._rotation_timer = None
+    engine.display_manager = SimpleNamespace(displays=[])
+
+    show_calls: list[bool] = []
+    monkeypatch.setattr(engine, "_prepare_random_transition_if_needed", lambda: None)
+
+    def _show_next_image():
+        show_calls.append(True)
+        return False
+
+    monkeypatch.setattr(engine, "_show_next_image", _show_next_image)
+    scheduled: list[int] = []
+    monkeypatch.setattr(
+        "engine.screensaver_engine.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append(int(delay_ms)),
+    )
+
+    assert engine.start() is True
+    assert len(show_calls) == 1
+    assert scheduled == [180]
 
 
 def test_engine_stop_quiesces_displays_before_clearing_and_hiding():
