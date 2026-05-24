@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-05-22
+Last updated: 2026-05-24
 
 This file tracks active work only. Ongoing architecture truth belongs in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -14,23 +14,40 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-- [ ] No active implementation tasks at the moment. Use the watchlist below for cold-validation pressure points, and reopen this plan only when a concrete regression or higher-value feature appears.
+- [ ] 1. Audit `core/animation/animator.py`.
+  - Why this is next:
+    - it is central enough to affect fades, timers, and lifecycle behavior,
+    - the higher-risk settings/descriptors/setup seams are now materially tightened,
+    - it is the next best shared-timing/lifecycle authority to verify before future feature work stacks more behavior on top.
+  - Audit checklist:
+    - verify animation registration and cleanup ownership are centralized and consistent,
+    - identify any widgets or helpers still bypassing the central animation/lifecycle seam in risky ways,
+    - assess timer churn, cleanup behavior, and whether any fade/animation responsibilities have drifted outward.
+  - Guardrails:
+    - preserve current working visual/fade behavior unless the audit proves a contract violation.
+  - Hopeful outcome:
+    - cleaner animation ownership and lower long-term timing/leak risk.
+
+- [ ] 2. Audit `core/process/supervisor.py`.
+  - Why this follows animator:
+    - it matters for startup/close reliability and any future performance/process work,
+    - but it is less entangled with day-to-day widget-extension cost than the items above.
+  - Audit checklist:
+    - verify worker lifecycle ownership, restart/cleanup boundaries, and failure handling are explicit,
+    - identify any quiet process ownership assumptions that could affect close reliability or future workload expansion,
+    - assess whether image/rss/transition worker seams are still the right abstractions.
+  - Guardrails:
+    - no speculative concurrency expansion from this audit alone,
+    - preserve current worker behavior unless a real lifecycle defect is found.
+  - Hopeful outcome:
+    - more confidence in startup/close/process cleanup behavior and a clearer basis for future perf/process decisions.
 
 ## Watchlist
-- While visualizer follow-through remains possible, first-bar / first-frame authority and settings/preset drift stay on the watchlist by default. Do not remove them from active watch coverage until the visualizer track is truly cold.
-- Closure evidence to keep handy for that watch family:
-  - tests:
-    - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
-    - `tests/test_spotify_visualizer_mode_transition.py`
-    - `tests/test_ghost_isolation.py -k "TestOverlayModeResetIsolation"`
-  - logs:
-    - `FIRST_FRAME_GUARD`
-    - `before_first_overlay_push`
-    - `after_first_overlay_push`
-    - `MODE_RESET_ASSERT`
-    - `No technical config available`
-- Gmail/OAuth is not an active blocker for planning purposes.
-- The curated/custom preset drift family stays a standing watch item during settings-model refactors: preserve CLEAR-then-APPLY semantics and do not reintroduce a second post-overlay merge phase or entry-point-specific fallback path.
+- Keep visualizer preset/settings drift in view during later audits:
+  - preserve CLEAR-then-APPLY semantics,
+  - do not reintroduce a second post-overlay merge phase,
+  - do not reintroduce entry-point-specific fallback behavior for visualizer settings.
+- Visualizer first-frame / first-bar authority remains a cold watch item, not active implementation work, unless one of the audits above exposes a concrete regression path touching it.
 
 ## Deferred / Not Active
 - Parallelism policy stays profiling-driven if performance work is reopened:

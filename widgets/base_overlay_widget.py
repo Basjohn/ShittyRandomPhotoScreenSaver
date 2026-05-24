@@ -19,7 +19,7 @@ from abc import abstractmethod
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
 try:
@@ -229,6 +229,8 @@ class BaseOverlayWidget(QLabel):
         
         # Stack offset for widget stacking
         self._stack_offset = QPoint(0, 0)
+        self._custom_layout_geometry_reentry = False
+        self._custom_layout_geometry_reapply_pending = False
         
         # Visual padding - accounts for widget chrome vs visible content
         # Used to align the visible card edge (not QLabel frame) to margins
@@ -466,6 +468,28 @@ class BaseOverlayWidget(QLabel):
             dy = self._visual_padding_bottom
         
         return QPoint(dx, dy)
+
+    def _active_custom_layout_rect(self) -> Optional[QRect]:
+        if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return None
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return None
+        if custom_rect.width() <= 0 or custom_rect.height() <= 0:
+            return None
+        return QRect(custom_rect)
+
+    def _resolve_custom_locked_width(self, width: int) -> int:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return int(width)
+        return int(custom_rect.width())
+
+    def _resolve_custom_locked_height(self, height: int) -> int:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return int(height)
+        return int(custom_rect.height())
     
     def _update_position(self) -> None:
         """Update widget position based on current settings."""
@@ -560,7 +584,61 @@ class BaseOverlayWidget(QLabel):
                 parent.update(old_geo.united(new_geo))
             except Exception as e:
                 logger.debug("[OVERLAY] Exception suppressed: %s", e)
-    
+
+    def _reapply_custom_layout_geometry_now(self) -> bool:
+        self._custom_layout_geometry_reapply_pending = False
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(self):
+                    return False
+            except Exception:
+                return False
+        return self._enforce_custom_layout_geometry_if_active()
+
+    def _enforce_custom_layout_geometry_if_active(self) -> bool:
+        """Reassert the saved CUSTOM rect when live widget sizing drifts.
+
+        Some widgets legitimately recalculate their own minimum/maximum size
+        from content updates, font changes, or refresh results. When a saved
+        CUSTOM rect is active, that rect remains authoritative and those
+        widget-local recalculations must not silently resize the live widget.
+        """
+        if self._custom_layout_geometry_reentry:
+            return False
+        if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return False
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return False
+        if custom_rect.width() <= 0 or custom_rect.height() <= 0:
+            return False
+        try:
+            current = self.geometry()
+        except Exception:
+            logger.debug("[OVERLAY] Failed to read geometry while enforcing custom layout", exc_info=True)
+            return False
+        if current == custom_rect:
+            return False
+        try:
+            self._custom_layout_geometry_reentry = True
+            self.setGeometry(custom_rect)
+            return True
+        except Exception:
+            logger.debug("[OVERLAY] Failed to reassert custom layout geometry", exc_info=True)
+            return False
+        finally:
+            self._custom_layout_geometry_reentry = False
+
+    def _schedule_custom_layout_geometry_reapply(self) -> None:
+        if self._custom_layout_geometry_reapply_pending:
+            return
+        self._custom_layout_geometry_reapply_pending = True
+        try:
+            QTimer.singleShot(0, self._reapply_custom_layout_geometry_now)
+        except Exception:
+            self._custom_layout_geometry_reapply_pending = False
+            logger.debug("[OVERLAY] Failed to schedule custom layout geometry reapply", exc_info=True)
+
     # -------------------------------------------------------------------------
     # Shadow Management
     # -------------------------------------------------------------------------
@@ -746,6 +824,20 @@ class BaseOverlayWidget(QLabel):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         self._invalidate_painted_frame_shadow_cache()
         super().resizeEvent(event)
+        if self._active_custom_layout_rect() is not None:
+            self._schedule_custom_layout_geometry_reapply()
+
+    def setMinimumWidth(self, minw: int) -> None:  # type: ignore[override]
+        super().setMinimumWidth(self._resolve_custom_locked_width(minw))
+
+    def setMaximumWidth(self, maxw: int) -> None:  # type: ignore[override]
+        super().setMaximumWidth(self._resolve_custom_locked_width(maxw))
+
+    def setMinimumHeight(self, minh: int) -> None:  # type: ignore[override]
+        super().setMinimumHeight(self._resolve_custom_locked_height(minh))
+
+    def setMaximumHeight(self, maxh: int) -> None:  # type: ignore[override]
+        super().setMaximumHeight(self._resolve_custom_locked_height(maxh))
     
     # -------------------------------------------------------------------------
     # Thread Manager Integration

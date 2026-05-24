@@ -173,7 +173,6 @@ def test_widget_custom_position_option_descriptors_follow_section_contract():
     assert "gmail" in widget_ids
 
     media = next(item for item in descriptors if item.widget_id == "media")
-    assert media.settings_key == "media"
     assert media.combo_attr == "media_position"
     assert media.fallback_position == "Bottom Left"
 

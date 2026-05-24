@@ -167,7 +167,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
                                 merged_widgets[name] = cfg
                             widgets_dict = _normalize_widgets_mapping(merged_widgets)
 
-                    mgr._settings.setValue('widgets', widgets_dict)
+                    mgr._store_widgets_root_locked(widgets_dict)
                     continue
 
                 if section_key == 'transitions':
@@ -183,7 +183,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
                             merged_t.update(transitions_dict)
                             transitions_dict = merged_t
 
-                    mgr._settings.setValue('transitions', transitions_dict)
+                    mgr._store_transitions_root_locked(transitions_dict)
                     continue
 
                 if section_key in {'display', 'timing', 'input', 'sources', 'cache'} and not isinstance(section_value, Mapping):

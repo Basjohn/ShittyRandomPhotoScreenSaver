@@ -559,50 +559,36 @@ class WidgetsTab(QWidget):
         if item is not None and hasattr(item, "setEnabled"):
             item.setEnabled(bool(enabled))
 
-    def _iter_custom_position_combo_bindings(self) -> tuple[tuple[str, str, str, str], ...]:
-        return tuple(
-            (
-                descriptor.widget_id,
-                descriptor.settings_key,
-                descriptor.combo_attr,
-                descriptor.fallback_position,
-            )
-            for descriptor in get_widget_custom_position_option_descriptors()
-        )
+    def _iter_custom_position_combo_bindings(self):
+        return get_widget_custom_position_option_descriptors()
 
     def _refresh_custom_position_option_state(self) -> None:
         widgets_cfg = self._settings.get("widgets", {}) or {}
         if not isinstance(widgets_cfg, Mapping):
             widgets_cfg = {}
 
-        for widget_id, settings_key, combo_attr, fallback in self._iter_custom_position_combo_bindings():
-            combo = getattr(self, combo_attr, None)
+        for binding in self._iter_custom_position_combo_bindings():
+            combo = getattr(self, binding.combo_attr, None)
             if combo is None:
                 continue
-            descriptor = get_widget_runtime_descriptor(widget_id)
+            descriptor = get_widget_runtime_descriptor(binding.widget_id)
             if descriptor is None or not descriptor.supports_custom_position_slot:
                 continue
+            settings_key = descriptor.get_effective_position_settings_key()
             current_section = widgets_cfg.get(settings_key, {})
             if not isinstance(current_section, Mapping):
                 current_section = {}
-            current_position = str(current_section.get("position", fallback) or fallback)
-            has_custom = has_saved_custom_layout_for_widget(widget_id, widgets_cfg)
+            current_position = str(
+                current_section.get("position", binding.fallback_position) or binding.fallback_position
+            )
+            has_custom = has_saved_custom_layout_for_widget(binding.widget_id, widgets_cfg)
             allow_custom = has_custom or current_position.strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower()
             self._set_combo_item_enabled(combo, CUSTOM_POSITION_OPTION_LABEL, allow_custom)
             if not allow_custom and combo.currentText().strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
-                self._set_combo_text(combo, fallback)
+                self._set_combo_text(combo, binding.fallback_position)
 
-    def _iter_custom_resize_lock_bindings(self) -> tuple[dict[str, Any], ...]:
-        return tuple(
-            {
-                "section_id": descriptor.section_id,
-                "widget_ids": descriptor.widget_ids,
-                "position_combo_attrs": descriptor.position_combo_attrs,
-                "control_attrs": descriptor.control_attrs,
-                "anchor_attr": descriptor.anchor_attr,
-            }
-            for descriptor in get_widget_custom_resize_lock_descriptors()
-        )
+    def _iter_custom_resize_lock_bindings(self):
+        return get_widget_custom_resize_lock_descriptors()
 
     def _widgets_config_for_custom_resize_lock_state(self) -> Mapping[str, Any]:
         widgets_cfg = self._settings.get("widgets", {}) or {}
@@ -612,27 +598,27 @@ class WidgetsTab(QWidget):
 
     def _is_custom_resize_lock_active(
         self,
-        binding: Mapping[str, Any],
+        binding,
         widgets_cfg: Mapping[str, Any],
     ) -> bool:
-        for combo_attr in binding.get("position_combo_attrs", ()):
+        for combo_attr in binding.position_combo_attrs:
             combo = getattr(self, combo_attr, None)
             if combo is not None and str(combo.currentText()).strip().lower() == CUSTOM_POSITION_OPTION_LABEL.lower():
                 return True
         return any(
             is_custom_position_selected_for_widget(widget_id, widgets_cfg)
-            for widget_id in binding.get("widget_ids", ())
+            for widget_id in binding.widget_ids
         )
 
-    def _ensure_custom_resize_lock_notice(self, binding: Mapping[str, Any]) -> QLabel | None:
-        section_id = str(binding.get("section_id", ""))
+    def _ensure_custom_resize_lock_notice(self, binding) -> QLabel | None:
+        section_id = str(binding.section_id)
         if not section_id:
             return None
         existing = self._custom_resize_lock_notice_labels.get(section_id)
         if existing is not None:
             return existing
 
-        anchor_control = getattr(self, str(binding.get("anchor_attr", "")), None)
+        anchor_control = getattr(self, str(binding.anchor_attr), None)
         if anchor_control is None:
             return None
         row_widget = anchor_control.parentWidget()
@@ -670,9 +656,9 @@ class WidgetsTab(QWidget):
         widgets_cfg = self._widgets_config_for_custom_resize_lock_state()
         active_sections: set[str] = set()
         for binding in self._iter_custom_resize_lock_bindings():
-            section_id = str(binding["section_id"])
+            section_id = str(binding.section_id)
             lock_active = self._is_custom_resize_lock_active(binding, widgets_cfg)
-            controls = [getattr(self, attr, None) for attr in binding.get("control_attrs", ())]
+            controls = [getattr(self, attr, None) for attr in binding.control_attrs]
             controls = [control for control in controls if control is not None]
             for control in controls:
                 control.setEnabled(not lock_active)
@@ -688,7 +674,7 @@ class WidgetsTab(QWidget):
 
     def _on_custom_resize_lock_link_activated(self, section_id: str) -> None:
         binding = next(
-            (entry for entry in self._iter_custom_resize_lock_bindings() if entry.get("section_id") == section_id),
+            (entry for entry in self._iter_custom_resize_lock_bindings() if entry.section_id == section_id),
             None,
         )
         if binding is None:

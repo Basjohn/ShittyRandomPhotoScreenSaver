@@ -554,7 +554,7 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
     descriptors = get_factory_widget_descriptors()
     descriptor_names = [descriptor.settings_key for descriptor in descriptors]
 
-    assert descriptor_names == [
+    expected = [
         "clock",
         "clock2",
         "clock3",
@@ -562,9 +562,12 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
         "media",
         "reddit",
         "reddit2",
-        "imgur",
         "gmail",
     ]
+    if any(descriptor.settings_key == "imgur" for descriptor in descriptors):
+        expected.insert(7, "imgur")
+
+    assert descriptor_names == expected
 
     gmail = next(descriptor for descriptor in descriptors if descriptor.settings_key == "gmail")
     reddit2 = next(descriptor for descriptor in descriptors if descriptor.settings_key == "reddit2")
@@ -606,3 +609,56 @@ def test_setup_all_widgets_routes_gmail_through_descriptor_shadow_injection(monk
 
     assert "gmail_widget" in created
     assert captured["config"]["_shadows_config"] == {"enabled": True, "blur_radius": 19}
+
+
+def test_setup_all_widgets_runs_spotify_setup_phases_in_explicit_order(monkeypatch):
+    from rendering import widget_setup_all
+
+    manager = _create_manager()
+    settings = _StubSettingsManager(
+        {
+            "media": {"enabled": True, "monitor": "ALL"},
+            "spotify_visualizer": {"enabled": True, "monitor": "ALL"},
+        }
+    )
+
+    phase_calls: list[str] = []
+
+    monkeypatch.setattr(
+        widget_setup_all,
+        "_create_factory_widgets",
+        lambda mgr, created, widgets_config, shadows_config, screen_index: (
+            phase_calls.append("factory"),
+            created.__setitem__("media_widget", _StubMediaWidget(mgr._parent, MediaPosition.TOP_LEFT)),
+        )[-1],
+    )
+    monkeypatch.setattr(
+        widget_setup_all,
+        "_setup_media_owned_spotify_dependents",
+        lambda *args, **kwargs: phase_calls.append("spotify_media_owned_dependents"),
+    )
+    monkeypatch.setattr(
+        widget_setup_all,
+        "_setup_spotify_visualizer",
+        lambda *args, **kwargs: phase_calls.append("spotify_visualizer_local"),
+    )
+    monkeypatch.setattr(
+        widget_setup_all,
+        "_reconcile_remote_custom_visualizer",
+        lambda *args, **kwargs: phase_calls.append("spotify_visualizer_remote_reconcile"),
+    )
+    monkeypatch.setattr(
+        widget_setup_all,
+        "_finalize_widget_startup",
+        lambda mgr, created: phase_calls.append("finalize"),
+    )
+
+    widget_setup_all.setup_all_widgets(manager, settings, screen_index=0, thread_manager=None)
+
+    assert phase_calls == [
+        "factory",
+        "spotify_media_owned_dependents",
+        "spotify_visualizer_local",
+        "spotify_visualizer_remote_reconcile",
+        "finalize",
+    ]

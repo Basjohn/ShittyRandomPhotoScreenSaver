@@ -276,6 +276,32 @@ def test_gmail_error_state_height_exceeds_single_row_height(qt_app):
         widget.cleanup()
 
 
+def test_gmail_custom_layout_rect_survives_content_height_recalc(qt_app):
+    """Custom Gmail geometry must remain authoritative after content-driven height updates."""
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QWidget
+
+    from widgets.gmail_widget import GmailWidget
+
+    parent = QWidget()
+    parent.resize(1200, 900)
+    widget = GmailWidget(parent)
+    try:
+        custom_rect = QRect(30, 30, 600, 322)
+        widget._custom_layout_local_rect = QRect(custom_rect)
+        widget._limit = 10
+        widget._update_position()
+
+        widget.set_font_size(28)
+        widget._update_card_height_from_content(10)
+        QApplication.processEvents()
+
+        assert widget.geometry() == custom_rect
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
 def test_gmail_empty_state_paints_below_header(qt_app):
     """Worst-case empty-state copy must render below the header frame area."""
     from widgets.gmail_widget import GmailWidget

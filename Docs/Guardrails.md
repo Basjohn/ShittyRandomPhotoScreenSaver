@@ -27,6 +27,8 @@ No shadow frameworks or parallel ownership paths.
 ## 3. Settings Safety
 - Canonical defaults are single-source.
 - Section/root writes must invalidate descendant cache entries.
+- Root `widgets` writes, widgets-map replacement helpers, and SST widget imports must share one widgets-map normalization/schema contract. Do not allow `set("widgets", ...)`, `set_widgets_map(...)`, or import flows to drift into different visualizer-schema or default-merge behavior.
+- Public settings mutation APIs should not drift in sync/signal semantics. If `set`/`set_section` notify runtime listeners and flush critical roots, do not leave `remove`/`clear` behind as silent special cases unless that silence is a deliberate documented contract.
 - Reset/import preserve behavior uses one shared preservation contract.
 - Retired global preset schema keys stay retired.
 
@@ -50,9 +52,12 @@ No shadow frameworks or parallel ownership paths.
 ## 5.1 Widget Registry Safety
 - `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.
 - Do not add new handwritten setup branches in `rendering/widget_setup_all.py` for ordinary factory-backed widgets when the descriptor registry can own the same truth.
+- Keep the remaining Spotify-dependent setup special cases explicit as one ordered setup plan, not as scattered helper-call coincidence. If a future widget introduces a real startup/reconcile dependency, add it as an explicit phase or extend descriptor truth; do not hide it in ad hoc local ordering.
 - When a widget needs base-settings inheritance, shadow-config injection, or environment gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
 - `ui/tabs/widgets_tab.py` must use descriptor-owned standard-section signal-block target collection during load-time population instead of re-scanning standard section attr names inline. Keep only genuinely special non-standard control groups explicit where the descriptor layer would not improve clarity.
+- Descriptor-layer cleanup should reduce fragmented helper surfaces and duplicate UI truth, not invent a second level of implicit magic. If a UI descriptor needs routing authority, prefer deriving it from the runtime descriptor contract instead of storing a second settings-key truth.
+- Cached active descriptor views are acceptable, but they must stay environment-aware so dev-gated families such as Imgur do not go stale across tests or runtime toggles.
 - `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
 - Descriptor-owned service-runtime contract participation also belongs in `rendering/widget_descriptors.py`. Do not widen shared service-backed behavior based only on `service_backed=True` when the finer-grained contract can be recorded explicitly.
 - `WidgetsTab` preview/save truth for standard widget families should prefer descriptor-owned stack-preview/settings-composition metadata over handwritten per-widget UI reads. If a widget field must stay special-cased, document why the descriptor contract could not express it.
@@ -72,6 +77,7 @@ No shadow frameworks or parallel ownership paths.
 - Resize must remain widget-logical and descriptor-owned. Plain scroll wheel is the current resize gesture; do not reintroduce blind global transforms or modifier-dependent hidden rules.
 - Any widget that supports CUSTOM resize must keep clear recovery affordances: runtime edit-shell reset plus settings-side authored-layout revert.
 - Treat DPR and multi-monitor portability as a first-class constraint. Persist committed geometry through the shared CUSTOM layout contract, not ad hoc raw-pixel paths.
+- While a saved CUSTOM rect is active, widget-local content/typography refresh logic must not become a second geometry authority. If a widget recalculates its own minimum/maximum size, the shared overlay/custom-layout seam must reassert the committed rect rather than letting the live widget silently resize itself.
 - Keep the current runtime positioning system as the authored/default fallback path. `Custom` should remain unavailable until a real saved payload exists.
 - Prefer safe edit shells/bounds during editing if live widget behavior would introduce churn, network work, or rendering instability.
 

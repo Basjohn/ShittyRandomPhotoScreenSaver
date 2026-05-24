@@ -332,6 +332,20 @@ class SettingsManager(QObject):
             )
         return widgets
 
+    def _store_widgets_root_locked(self, value: Any) -> Dict[str, Any]:
+        """Persist the canonical widgets root under the current lock."""
+        normalized = self._normalize_widgets_mapping(value)
+        widgets_dict = dict(normalized) if isinstance(normalized, Mapping) else {}
+        self._settings.setValue('widgets', widgets_dict)
+        self._mark_visualizer_schema_current_locked()
+        return widgets_dict
+
+    def _store_transitions_root_locked(self, value: Any) -> Dict[str, Any]:
+        """Persist the canonical transitions root under the current lock."""
+        transitions_dict = dict(value) if isinstance(value, Mapping) else {}
+        self._settings.setValue('transitions', transitions_dict)
+        return transitions_dict
+
     def _apply_profile_overrides(self, defaults: Dict[str, Any]) -> None:
         """Apply per-profile default overrides before merging canonical values."""
         app_name = getattr(self, "_application", "")
@@ -377,7 +391,7 @@ class SettingsManager(QObject):
                     )
                     if dict(vis_section) != normalized_vis:
                         widgets_dict['spotify_visualizer'] = normalized_vis
-                        self._settings.setValue('widgets', widgets_dict)
+                        self._store_widgets_root_locked(widgets_dict)
 
             self._mark_visualizer_schema_current_locked()
             self._settings.sync()
@@ -406,7 +420,7 @@ class SettingsManager(QObject):
 
             changed = merge(transitions, default_transitions)
             if changed or not isinstance(raw_transitions, Mapping):
-                self._settings.setValue('transitions', transitions)
+                self._store_transitions_root_locked(transitions)
                 self._settings.sync()
 
     def _ensure_widgets_defaults(self, default_widgets: Dict[str, Any]) -> None:
@@ -454,10 +468,11 @@ class SettingsManager(QObject):
                     widgets[section_name] = section_dict
                     changed = True
 
-            if changed or not isinstance(raw_widgets, Mapping):
+            if not isinstance(raw_widgets, Mapping):
+                self._store_widgets_root_locked(widgets)
+                self._settings.sync()
+            elif changed:
                 self._settings.setValue('widgets', widgets)
-                if isinstance(widgets.get('spotify_visualizer'), Mapping):
-                    self._mark_visualizer_schema_current_locked()
                 self._settings.sync()
 
     def get_widget_defaults(self, section: str) -> Dict[str, Any]:
@@ -674,7 +689,7 @@ class SettingsManager(QObject):
                     if section_copy != section:
                         widgets_copy[section_name] = section_copy
                 if widgets_changed:
-                    self._settings.setValue("widgets", widgets_copy)
+                    self._store_widgets_root_locked(widgets_copy)
             if removed:
                 self._clear_cache_locked()
                 self._settings.sync()
@@ -702,8 +717,15 @@ class SettingsManager(QObject):
         with self._lock:
             handled, old_value = self._set_structured_value_locked(key, value)
             if not handled:
-                old_value = self._settings.value(key)
-                self._settings.setValue(key, value)
+                if key == "widgets" and isinstance(value, Mapping):
+                    old_value = self._settings.value(key)
+                    value = self._store_widgets_root_locked(dict(value))
+                elif key == "transitions" and isinstance(value, Mapping):
+                    old_value = self._settings.value(key)
+                    value = self._store_transitions_root_locked(dict(value))
+                else:
+                    old_value = self._settings.value(key)
+                    self._settings.setValue(key, value)
 
             # Invalidate cache entries for this key/root (P2 optimization)
             self._invalidate_cache_for_key_locked(key)
@@ -948,7 +970,7 @@ class SettingsManager(QObject):
                                 widget_name,
                             )
                 if changed:
-                    self._settings.setValue('widgets', widgets_copy)
+                    self._store_widgets_root_locked(widgets_copy)
                     self._settings.sync()
 
             # Validate widgets - must be dict
@@ -959,12 +981,12 @@ class SettingsManager(QObject):
                     from core.settings.defaults import get_default_settings
                     canonical_widgets = get_default_settings().get('widgets', {})
                     if isinstance(canonical_widgets, Mapping):
-                        self._settings.setValue('widgets', dict(canonical_widgets))
+                        self._store_widgets_root_locked(dict(canonical_widgets))
                     else:
-                        self._settings.setValue('widgets', {})
+                        self._store_widgets_root_locked({})
                 except Exception as exc:
                     logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
-                    self._settings.setValue('widgets', {})
+                    self._store_widgets_root_locked({})
                 repairs['widgets'] = f"Invalid type: {type(widgets).__name__}"
             elif isinstance(widgets, Mapping):
                 vis_section = widgets.get('spotify_visualizer')  # type: ignore[index]
@@ -990,8 +1012,7 @@ class SettingsManager(QObject):
                                     )
                         widgets_copy = dict(widgets)
                         widgets_copy['spotify_visualizer'] = normalized_vis
-                        self._settings.setValue('widgets', widgets_copy)
-                        self._mark_visualizer_schema_current_locked()
+                        self._store_widgets_root_locked(widgets_copy)
                         widgets = widgets_copy
                         repairs['widgets.spotify_visualizer'] = "Normalized visualizer section"
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
@@ -1006,12 +1027,12 @@ class SettingsManager(QObject):
                     from core.settings.defaults import get_default_settings
                     canonical_transitions = get_default_settings().get('transitions', {})
                     if isinstance(canonical_transitions, Mapping):
-                        self._settings.setValue('transitions', dict(canonical_transitions))
+                        self._store_transitions_root_locked(dict(canonical_transitions))
                     else:
-                        self._settings.setValue('transitions', {})
+                        self._store_transitions_root_locked({})
                 except Exception as exc:
                     logger.debug("[SETTINGS] Exception suppressed: %s", exc, exc_info=True)
-                    self._settings.setValue('transitions', {})
+                    self._store_transitions_root_locked({})
                 repairs['transitions'] = f"Invalid type: {type(transitions).__name__}"
             
             if repairs:
@@ -1058,7 +1079,7 @@ class SettingsManager(QObject):
 
         if changed:
             widgets_copy['spotify_visualizer'] = vis_config
-            self._settings.setValue('widgets', widgets_copy)
+            self._store_widgets_root_locked(widgets_copy)
 
         return repairs
     
@@ -1156,7 +1177,12 @@ class SettingsManager(QObject):
                     continue
                 if section in nested_sections:
                     # Store as nested dict
-                    self._settings.setValue(section, value)
+                    if section == 'widgets':
+                        self._store_widgets_root_locked(value)
+                    elif section == 'transitions':
+                        self._store_transitions_root_locked(value)
+                    else:
+                        self._settings.setValue(section, value)
                 elif isinstance(value, dict):
                     # Flatten to dot-notation keys
                     flat = flatten_dict(value, section)
@@ -1181,8 +1207,7 @@ class SettingsManager(QObject):
                         vis_defaults,
                         apply_preset_overlay=False,
                     )
-                    self._settings.setValue('widgets', widgets_dict)
-                    self._mark_visualizer_schema_current_locked()
+                    self._store_widgets_root_locked(widgets_dict)
             
             self._settings.sync()
             self._cache.clear()
@@ -1222,6 +1247,11 @@ class SettingsManager(QObject):
             if not removed:
                 self._settings.remove(key)
             self._invalidate_cache_for_key_locked(str(key))
+            root_key = key.split('.')[0] if '.' in key else key
+            if root_key in self._CRITICAL_KEYS or key in self._CRITICAL_KEYS:
+                self._settings.sync()
+
+        self.settings_changed.emit(key, None)
 
         logger.debug(f"Removed setting: {key}")
     
@@ -1230,6 +1260,8 @@ class SettingsManager(QObject):
         with self._lock:
             self._settings.clear()
             self._clear_cache_locked()
+            self._settings.sync()
+        self.settings_changed.emit('*', None)
         logger.warning("All settings cleared")
 
     # ------------------------------------------------------------------
@@ -1301,9 +1333,11 @@ class SettingsManager(QObject):
             return False, self._MISSING
 
         if root == "widgets":
-            mapping = self._normalize_widgets_mapping(mapping)
-            self._mark_visualizer_schema_current_locked()
-        self._settings.setValue(root, mapping)
+            mapping = self._store_widgets_root_locked(mapping)
+        elif root == "transitions":
+            mapping = self._store_transitions_root_locked(mapping)
+        else:
+            self._settings.setValue(root, mapping)
         return True, old_value
 
     def _contains_structured_key_locked(self, key: str) -> Optional[bool]:
@@ -1385,13 +1419,14 @@ class SettingsManager(QObject):
         """
 
         mapping = dict(value) if isinstance(value, Mapping) else value
-        if section == "widgets":
-            mapping = self._normalize_widgets_mapping(mapping)
         with self._lock:
             old_value = self._settings.value(section)
-            self._settings.setValue(section, mapping)
             if section == "widgets":
-                self._mark_visualizer_schema_current_locked()
+                mapping = self._store_widgets_root_locked(mapping)
+            elif section == "transitions":
+                mapping = self._store_transitions_root_locked(mapping)
+            else:
+                self._settings.setValue(section, mapping)
             self._invalidate_cache_for_key_locked(section)
 
             root_key = section.split('.')[0] if '.' in section else section

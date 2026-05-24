@@ -6,6 +6,7 @@ all overlay widgets based on settings.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Dict, Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
@@ -25,6 +26,22 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class _WidgetSetupContext:
+    """Shared setup context for one display/widget-manager setup run."""
+
+    mgr: "WidgetManager"
+    created: Dict[str, QWidget]
+    widgets_config: dict
+    shadows_config: dict
+    screen_index: int
+    thread_manager: Optional["ThreadManager"]
+
+    @property
+    def media_widget(self) -> Optional[QWidget]:
+        return self.created.get("media_widget")
 
 
 def _resolve_widgets_config(settings_manager: SettingsManager) -> dict:
@@ -313,6 +330,37 @@ def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) 
                 logger.debug("Failed to raise %s: %s", attr_name, e)
 
 
+def _run_spotify_setup_phases(context: _WidgetSetupContext) -> None:
+    """Run the explicit Spotify-dependent setup phases in contract order."""
+
+    _setup_media_owned_spotify_dependents(
+        context.mgr,
+        context.created,
+        context.widgets_config,
+        context.shadows_config,
+        context.screen_index,
+        context.thread_manager,
+        context.media_widget,
+    )
+    _setup_spotify_visualizer(
+        context.mgr,
+        context.created,
+        context.widgets_config,
+        context.shadows_config,
+        context.screen_index,
+        context.thread_manager,
+        context.media_widget,
+    )
+    _reconcile_remote_custom_visualizer(
+        context.mgr,
+        context.widgets_config,
+        context.shadows_config,
+        context.screen_index,
+        context.thread_manager,
+        context.media_widget,
+    )
+
+
 def setup_all_widgets(
     mgr: "WidgetManager",
     settings_manager: SettingsManager,
@@ -353,19 +401,20 @@ def setup_all_widgets(
 
     created: Dict[str, QWidget] = {}
     _create_factory_widgets(mgr, created, widgets_config, shadows_config, screen_index)
+    context = _WidgetSetupContext(
+        mgr=mgr,
+        created=created,
+        widgets_config=widgets_config,
+        shadows_config=shadows_config,
+        screen_index=screen_index,
+        thread_manager=thread_manager,
+    )
 
-    # Create Spotify widgets - volume/mute remain media-local, while the
-    # visualizer may resolve a cross-display media anchor when in Custom.
-    media_widget = created.get('media_widget')
-    _setup_media_owned_spotify_dependents(
-        mgr, created, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-    )
-    _setup_spotify_visualizer(
-        mgr, created, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-    )
-    _reconcile_remote_custom_visualizer(
-        mgr, widgets_config, shadows_config, screen_index, thread_manager, media_widget,
-    )
+    # Spotify-dependent setup remains explicit and phased:
+    # 1. media-owned dependents (volume/mute)
+    # 2. local visualizer
+    # 3. remote Custom visualizer reconcile
+    _run_spotify_setup_phases(context)
     _finalize_widget_startup(mgr, created)
 
     logger.info(f"Widget setup complete: {len(created)} widgets created and started via factories for screen {screen_index}")

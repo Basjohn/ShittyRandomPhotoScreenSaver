@@ -149,6 +149,32 @@ class TestSettingsManagerNestedKeys:
 
 
 class TestSettingsManagerCacheInvalidation:
+    def test_set_widgets_root_normalizes_visualizer_section_and_marks_schema_current(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.update_metadata(visualizer_schema_version=0)
+
+        manager.set(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "enabled": True,
+                    "mode": "bubble",
+                    "monitor": "ALL",
+                }
+            },
+        )
+
+        visualizer = manager.get("widgets")["spotify_visualizer"]
+        assert visualizer["position"] == "Follow Media"
+        assert "bubble_input_gain" in visualizer
+        assert (
+            manager._settings.metadata().get("visualizer_schema_version")
+            == SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
+
     def test_set_widgets_root_invalidates_dotted_cache(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
         manager.set("widgets", {"clock": {"enabled": True}})
@@ -177,6 +203,30 @@ class TestSettingsManagerCacheInvalidation:
         manager.clear()
 
         assert manager.get("test.key", "fallback") == "fallback"
+
+    def test_remove_emits_change_and_invalidates_cache(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("widgets.clock.enabled", True)
+        assert manager.get("widgets.clock.enabled") is True
+
+        received: list[tuple[str, object]] = []
+        manager.settings_changed.connect(lambda k, v: received.append((k, v)))
+
+        manager.remove("widgets.clock.enabled")
+
+        assert manager.get("widgets.clock.enabled", "missing") == "missing"
+        assert received == [("widgets.clock.enabled", None)]
+
+    def test_clear_emits_global_change(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set("test.key", "value")
+
+        received: list[tuple[str, object]] = []
+        manager.settings_changed.connect(lambda k, v: received.append((k, v)))
+
+        manager.clear()
+
+        assert received == [("*", None)]
 
     def test_cleanup_obsolete_settings_clears_cached_retired_widget_shadow_keys(
         self,
@@ -232,6 +282,37 @@ class TestSettingsManagerCacheInvalidation:
         assert manager.get("display.mode") == "fit"
         assert manager.get("widgets.clock.enabled") is False
         assert manager.get("widgets.gmail.enabled", "missing") == "missing"
+
+    def test_import_from_sst_marks_visualizer_schema_current_after_widget_normalization(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.update_metadata(visualizer_schema_version=0)
+
+        snapshot_path = tmp_path / "visualizer_schema_import.sst"
+        snapshot_payload = {
+            "snapshot": {
+                "widgets": {
+                    "spotify_visualizer": {
+                        "enabled": True,
+                        "mode": "bubble",
+                        "monitor": "ALL",
+                    }
+                }
+            }
+        }
+        snapshot_path.write_text(json.dumps(snapshot_payload), encoding="utf-8")
+
+        assert manager.import_from_sst(str(snapshot_path), merge=True) is True
+
+        visualizer = manager.get("widgets")["spotify_visualizer"]
+        assert visualizer["position"] == "Follow Media"
+        assert "bubble_input_gain" in visualizer
+        assert (
+            manager._settings.metadata().get("visualizer_schema_version")
+            == SettingsManager._VISUALIZER_SCHEMA_VERSION
+        )
 
     def test_preview_import_from_sst_replace_mode_reports_removed_sections(
         self,
@@ -396,7 +477,7 @@ class TestSettingsManagerDefaults:
         vis = widgets["spotify_visualizer"]
 
         assert vis["enabled"] is True
-        assert vis["mode"] == "spectrum"
+        assert vis["mode"] == "bubble"
         assert vis["preset_spectrum"] == 0
 
         repairs = manager.validate_and_repair()
@@ -571,7 +652,7 @@ class TestSettingsManagerValidation:
 class TestSettingsManagerManualFloorClamp:
     def test_validate_and_repair_clamps_global_manual_floor(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
-        manager.set(
+        manager._settings.setValue(
             "widgets",
             {
                 "spotify_visualizer": {
@@ -592,7 +673,7 @@ class TestSettingsManagerManualFloorClamp:
 
     def test_validate_and_repair_clamps_per_mode_manual_floors(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
-        manager.set(
+        manager._settings.setValue(
             "widgets",
             {
                 "spotify_visualizer": {

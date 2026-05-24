@@ -46,15 +46,37 @@ class TestVisualPaddingSetterGetter:
         parent = QWidget()
         parent.resize(800, 600)
         qtbot.addWidget(parent)
+        parent.show()
 
         widget = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
         qtbot.addWidget(widget)
         widget.resize(100, 50)
+        widget.show()
 
         widget._custom_layout_local_rect = QRect(123, 234, 160, 90)
         widget._update_position()
 
         assert widget.geometry() == QRect(123, 234, 160, 90)
+
+    def test_custom_layout_rect_stays_authoritative_after_live_resize(self, qtbot):
+        parent = QWidget()
+        parent.resize(800, 600)
+        qtbot.addWidget(parent)
+        parent.show()
+
+        widget = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        qtbot.addWidget(widget)
+        widget.resize(100, 50)
+        widget.show()
+
+        custom_rect = QRect(123, 234, 160, 90)
+        widget._custom_layout_local_rect = QRect(custom_rect)
+        widget._update_position()
+
+        widget.resize(160, 140)
+        qtbot.wait(10)
+
+        assert widget.geometry() == custom_rect
     
     def test_set_visual_padding(self, qtbot):
         """Test setting visual padding."""

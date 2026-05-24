@@ -14,7 +14,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - `ScreensaverEngine` owns source cycling, transition scheduling, and display lifecycle.
 - `DisplayWidget` is the fullscreen rendering presenter.
 - `WidgetManager` owns overlay widget lifecycle, staged startup coordination, and the narrow runtime-pause quiesce seam used before display teardown/settings entry.
-- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches, while keeping Spotify-dependent setup phases explicit rather than buried in incidental ordering.
+- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches. Spotify-dependent setup remains intentionally explicit and phased in this order: media-owned dependents, local visualizer, remote Custom visualizer reconcile, then final startup.
 
 ## 3. Centralized Ownership Contracts
 - Async business work uses `ThreadManager`.
@@ -33,6 +33,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Canonical persistence file: `%APPDATA%/SRPSS/settings_v2.json` (MC: `%APPDATA%/SRPSS_MC/settings_v2.json`).
 - Structured roots: `widgets`, `transitions`, `ui`.
 - Dotted-key API remains available via `SettingsManager`.
+- Root `widgets` writes, widgets-map replacement helpers, and SST widget imports must all converge on the same widgets-map normalization/schema contract. Do not let `set("widgets", ...)`, `set_widgets_map(...)`, or import flows drift into different visualizer-schema or default-merge behavior.
 
 ### 4.2 Legacy global preset retirement
 - Legacy top-level global preset keys are retired: `preset`, `custom_preset_backup`.
@@ -42,6 +43,7 @@ Canonical architecture and behavior contracts for SRPSS.
 ### 4.3 Cache invalidation safety
 - Section/root writes (`set('widgets', ...)`, `set('transitions', ...)`, `set_section(...)`) must invalidate descendant dotted-key cache entries.
 - New settings APIs must preserve equivalent invalidation behavior.
+- Public mutation APIs (`set`, `set_section`, `remove`, `clear`) must keep sync/change-notification behavior coherent enough that runtime/UI consumers do not need to guess which write paths emit `settings_changed` or flush critical roots.
 
 ### 4.4 Reset/import preservation
 - Preserve-on-reset keys are centralized in `core/settings/defaults.py`.
@@ -140,11 +142,14 @@ Active ids:
 - `rendering/widget_descriptors.py` is the canonical registry for factory-backed overlay widgets.
 - Descriptor metadata must own at least widget identity, parent attribute name, factory routing, startup-stage intent, environment gating, and any shared setup extras such as base-settings inheritance or shadow-config injection.
 - `rendering/widget_setup_all.py` may orchestrate creation, reuse, expected-overlay tracking, and ThreadManager injection, but it must not reintroduce handwritten per-family registration truth that duplicates descriptor metadata.
+- That orchestrator should keep its special Spotify phases explicit as one named setup plan rather than scattering ordering across incidental helper call sites. Future widget work may extend those phases, but should not hide new startup/reconcile dependencies behind ad hoc call order.
 - `rendering/widget_descriptors.py` also owns the canonical `WidgetsTab` section registry for section order, labels, dev gating, and builder routing. `ui/tabs/widgets_tab.py` may orchestrate lazy/non-lazy mounting, but it must not keep a second handwritten family list for those same sections.
 - `rendering/widget_descriptors.py` owns `WidgetsTab` standard-section load routing through descriptor-owned section and single-section helper seams, so build/load pairs do not drift back into handwritten imports and per-section dispatch chains inside `widgets_tab.py`.
 - `rendering/widget_descriptors.py` owns `WidgetsTab` standard-section save routing and preserved-widget-key ownership, including single-section saver access for preview/live-config composition, so save/fallback behavior for lazily unbuilt sections does not drift back into handwritten per-section branches inside `widgets_tab.py`.
 - `rendering/widget_descriptors.py` owns `WidgetsTab` section identity, lazy-bootstrap intent, and default-selection policy so fragile assumptions about numeric tab indices, fixed section order, or special “always build this last section” cases do not drift back into `widgets_tab.py`.
 - `rendering/widget_descriptors.py` owns `WidgetsTab` CUSTOM size-lock metadata where a section's size controls become derived/no-op in `Custom`, so future widget additions do not have to reintroduce tab-local handwritten lock tables.
+- Descriptor helpers may be numerous, but they should stay grouped around one canonical registry truth rather than turning back into parallel ownership. Active descriptor views and descriptor-index lookups may be cached, but that cache must remain environment-aware so dev-gated widget families do not become stale across settings/tests/build paths.
+- WidgetsTab-specific descriptor metadata should not duplicate runtime routing truth unnecessarily. For example, a custom-position UI binding may own the combo attr and authored fallback label, but effective position-key ownership should still come from the runtime descriptor contract.
 - When a lazy-built section cannot hydrate or save correctly without another section's controls, that inter-section dependency should be explicit in descriptor metadata rather than hidden in tab order or constructor side effects. Mutual dependencies are acceptable if the lazy builder treats "currently building" sections as in-progress rather than recursively re-entering them.
 - The default selected `WidgetsTab` section is descriptor-owned so startup/reset behavior does not quietly depend on a hardcoded “section 0” assumption.
 - The Defaults section now follows that same descriptor-owned builder/load/save path for shared widget shadow toggles and card-border-width persistence instead of remaining a special inline branch in `widgets_tab.py`.
@@ -185,6 +190,7 @@ Active ids:
 - CUSTOM edit mode itself is global to the active display set. Entering it from one display should activate shells on every live compositor-backed `DisplayWidget`, and cross-display handoff targets must come from that active display set rather than every raw OS screen.
 - The normal visualizer runtime placement path must honor committed CUSTOM rect authority when the owning media slot is set to `Custom`; otherwise post-save/runtime rebuilds will silently re-anchor the visualizer back to the media card and fight saved geometry.
 - Saved CUSTOM geometry must reapply through shared runtime seams, not one-off widget patches. `BaseOverlayWidget` therefore treats `_custom_layout_local_rect` as an authoritative local-geometry override, while `DisplayWidget`/`WidgetManager` reapply saved custom layouts after widget setup, resize, and live widget refreshes.
+- Saved CUSTOM geometry must also survive live widget self-resize pressure. If a CUSTOM-positioned overlay recalculates its own minimum/maximum size from content, refresh, or typography changes, the saved `_custom_layout_local_rect` remains authoritative and must be reasserted through the shared overlay seam instead of letting the widget quietly grow/shrink itself out of the committed rect.
 - CUSTOM layout screen ownership must use live display binding, not constructor-time guesses. `CustomLayoutManager` should re-sync against the owning `DisplayWidget` screen binding before session start, save, and runtime reapply so edit-mode persistence does not depend on whether `_screen` happened to be populated during `DisplayWidget.__init__`.
 - During widget rebuild/setup, saved CUSTOM geometry should be applied before widget activation/fade startup so settings-entry and edit-mode rebuilds do not briefly expose authored-anchor positions before the real reveal path.
 - CUSTOM save/reset now commits through the canonical widget rebuild path so reveal/fade behavior matches ordinary runtime setup instead of depending on per-widget live refresh seams.

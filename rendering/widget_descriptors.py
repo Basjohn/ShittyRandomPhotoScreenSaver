@@ -7,6 +7,7 @@ factory routing, inheritance wiring, and startup-stage intent.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from importlib import import_module
 import os
 from typing import Any, Callable, Dict, Mapping
@@ -35,6 +36,13 @@ STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
     "Bottom Right",
 )
 CUSTOM_POSITION_OPTION_LABEL = "Custom"
+
+
+def _descriptor_env_signature() -> tuple[tuple[str, str | None], ...]:
+    """Return the relevant environment signature for descriptor activation."""
+
+    env_names = ("SRPSS_ENABLE_DEV",)
+    return tuple((name, os.getenv(name)) for name in env_names)
 
 
 @dataclass(frozen=True)
@@ -182,7 +190,18 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
 def get_factory_widget_descriptors() -> tuple[FactoryWidgetDescriptor, ...]:
     """Return the canonical registry for factory-backed overlay widgets."""
 
-    return FACTORY_WIDGET_DESCRIPTORS
+    return _get_active_factory_widget_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_factory_widget_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[FactoryWidgetDescriptor, ...]:
+    return tuple(
+        descriptor
+        for descriptor in FACTORY_WIDGET_DESCRIPTORS
+        if descriptor.is_enabled_in_environment()
+    )
 
 
 @dataclass(frozen=True)
@@ -317,7 +336,6 @@ class WidgetCustomPositionOptionDescriptor:
     """Descriptor-owned WidgetsTab metadata for enabling the Custom position slot."""
 
     widget_id: str
-    settings_key: str
     combo_attr: str
     fallback_position: str
 
@@ -523,6 +541,13 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
 def get_widget_settings_section_descriptors() -> tuple[WidgetSettingsSectionDescriptor, ...]:
     """Return the canonical WidgetsTab section registry for the current environment."""
 
+    return _get_active_widget_settings_section_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_widget_settings_section_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[WidgetSettingsSectionDescriptor, ...]:
     return tuple(
         descriptor
         for descriptor in WIDGET_SETTINGS_SECTION_DESCRIPTORS
@@ -570,19 +595,26 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
 
 
 WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescriptor, ...] = (
-    WidgetCustomPositionOptionDescriptor("clock", "clock", "clock_position", "Top Right"),
-    WidgetCustomPositionOptionDescriptor("weather", "weather", "weather_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("media", "media", "media_position", "Bottom Left"),
-    WidgetCustomPositionOptionDescriptor("reddit", "reddit", "reddit_position", "Bottom Right"),
-    WidgetCustomPositionOptionDescriptor("reddit2", "reddit2", "reddit2_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("gmail", "gmail", "gmail_position", "Top Left"),
-    WidgetCustomPositionOptionDescriptor("imgur", "imgur", "imgur_position", "Top Right"),
+    WidgetCustomPositionOptionDescriptor("clock", "clock_position", "Top Right"),
+    WidgetCustomPositionOptionDescriptor("weather", "weather_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("media", "media_position", "Bottom Left"),
+    WidgetCustomPositionOptionDescriptor("reddit", "reddit_position", "Bottom Right"),
+    WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("gmail", "gmail_position", "Top Left"),
+    WidgetCustomPositionOptionDescriptor("imgur", "imgur_position", "Top Right"),
 )
 
 
 def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockDescriptor, ...]:
     """Return descriptor-owned CUSTOM size-lock metadata for WidgetsTab."""
 
+    return _get_active_widget_custom_resize_lock_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_widget_custom_resize_lock_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[WidgetCustomResizeLockDescriptor, ...]:
     active_sections = {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
     return tuple(
         descriptor
@@ -594,6 +626,13 @@ def get_widget_custom_resize_lock_descriptors() -> tuple[WidgetCustomResizeLockD
 def get_widget_custom_position_option_descriptors() -> tuple[WidgetCustomPositionOptionDescriptor, ...]:
     """Return descriptor-owned WidgetsTab metadata for enabling the Custom slot."""
 
+    return _get_active_widget_custom_position_option_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_widget_custom_position_option_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[WidgetCustomPositionOptionDescriptor, ...]:
     active_widget_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
     return tuple(
         descriptor
@@ -627,10 +666,22 @@ def get_widget_section_index_map(
 ) -> dict[str, int]:
     """Return section id -> subtab index mapping for the active descriptor set."""
 
-    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    if descriptors is None:
+        return dict(_get_default_widget_section_index_map(_descriptor_env_signature()))
+    descriptor_iter = descriptors
     return {
         descriptor.section_id: idx
         for idx, descriptor in enumerate(descriptor_iter)
+    }
+
+
+@lru_cache(maxsize=1)
+def _get_default_widget_section_index_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, int]:
+    return {
+        descriptor.section_id: idx
+        for idx, descriptor in enumerate(get_widget_settings_section_descriptors())
     }
 
 
@@ -652,7 +703,10 @@ def get_default_widget_section_index(
 ) -> int:
     """Return the descriptor-owned default WidgetsTab section index."""
 
-    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    if descriptors is None:
+        descriptor_iter = get_widget_settings_section_descriptors()
+    else:
+        descriptor_iter = descriptors
     for idx, descriptor in enumerate(descriptor_iter):
         if descriptor.default_selected:
             return idx
@@ -667,11 +721,23 @@ def get_widget_settings_section_descriptor(
 
     if not isinstance(section_id, str) or not section_id:
         return None
-    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    if descriptors is None:
+        return _get_default_widget_settings_section_descriptor_map(_descriptor_env_signature()).get(section_id)
+    descriptor_iter = descriptors
     for descriptor in descriptor_iter:
         if descriptor.section_id == section_id:
             return descriptor
     return None
+
+
+@lru_cache(maxsize=1)
+def _get_default_widget_settings_section_descriptor_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, WidgetSettingsSectionDescriptor]:
+    return {
+        descriptor.section_id: descriptor
+        for descriptor in get_widget_settings_section_descriptors()
+    }
 
 
 def resolve_widget_section_index_from_view_state(
@@ -1318,6 +1384,13 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
 def get_widget_runtime_descriptors() -> tuple[WidgetRuntimeDescriptor, ...]:
     """Return the canonical runtime capability descriptors."""
 
+    return _get_active_widget_runtime_descriptors(_descriptor_env_signature())
+
+
+@lru_cache(maxsize=1)
+def _get_active_widget_runtime_descriptors(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> tuple[WidgetRuntimeDescriptor, ...]:
     return tuple(
         descriptor
         for descriptor in WIDGET_RUNTIME_DESCRIPTORS
@@ -1352,10 +1425,17 @@ def get_live_refresh_handlers() -> tuple[str, ...]:
 def get_widget_runtime_descriptor(widget_id: str) -> WidgetRuntimeDescriptor | None:
     """Return the canonical runtime descriptor for one widget id."""
 
-    for descriptor in get_widget_runtime_descriptors():
-        if descriptor.widget_id == widget_id:
-            return descriptor
-    return None
+    return _get_widget_runtime_descriptor_map(_descriptor_env_signature()).get(widget_id)
+
+
+@lru_cache(maxsize=1)
+def _get_widget_runtime_descriptor_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, WidgetRuntimeDescriptor]:
+    return {
+        descriptor.widget_id: descriptor
+        for descriptor in get_widget_runtime_descriptors()
+    }
 
 
 def get_service_runtime_contracts(widget_id: str) -> tuple[str, ...]:
@@ -1590,10 +1670,17 @@ def get_widget_runtime_descriptor_by_attr_name(attr_name: str) -> WidgetRuntimeD
     target = str(attr_name or "").strip()
     if not target:
         return None
-    for descriptor in get_widget_runtime_descriptors():
-        if descriptor.attr_name == target:
-            return descriptor
-    return None
+    return _get_widget_runtime_descriptor_attr_map(_descriptor_env_signature()).get(target)
+
+
+@lru_cache(maxsize=1)
+def _get_widget_runtime_descriptor_attr_map(
+    _env_signature: tuple[tuple[str, str | None], ...],
+) -> dict[str, WidgetRuntimeDescriptor]:
+    return {
+        descriptor.attr_name: descriptor
+        for descriptor in get_widget_runtime_descriptors()
+    }
 
 
 @dataclass(frozen=True)

@@ -1582,7 +1582,6 @@ class CustomLayoutManager:
             self._sync_display_screen_binding()
         if self._screen is None:
             return
-        self._apply_size_payload(descriptor, widget, entry.size_payload)
         local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
         if descriptor.custom_layout_resize_mode == "visualizer_rect":
             local_rect.setSize(
@@ -1604,6 +1603,7 @@ class CustomLayoutManager:
             min_size=local_rect.size(),
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
+        self._apply_size_payload(descriptor, widget, entry.size_payload)
         try:
             set_stack_offset = getattr(widget, "set_stack_offset", None)
             if callable(set_stack_offset):
