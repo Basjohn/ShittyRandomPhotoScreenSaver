@@ -177,7 +177,7 @@ class TransitionProfiler:
         if profile is None:
             return
         
-        if not PERF_METRICS_ENABLED:
+        if not is_perf_metrics_enabled():
             return
         
         if profile.start_ts is None:

@@ -321,5 +321,4 @@ def perform_activation_refresh(widget, reason: str) -> None:
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    widget._schedule_effect_invalidation(f"activate_refresh:{reason}")
 

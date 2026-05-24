@@ -75,30 +75,6 @@ def ensure_context_menu(
         menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
         menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
         menu.exit_requested.connect(widget._on_context_exit_requested)
-        try:
-            menu.aboutToShow.connect(
-                lambda: None if CustomLayoutManager.is_any_session_active() else widget._invalidate_overlay_effects("menu_about_to_show")
-            )
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            submenu = getattr(menu, "_transition_menu", None)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            submenu = None
-        if submenu is not None:
-            try:
-                submenu.aboutToShow.connect(
-                    lambda: None if CustomLayoutManager.is_any_session_active() else widget._invalidate_overlay_effects("menu_sub_about_to_show")
-                )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                submenu.aboutToHide.connect(
-                    lambda: None if CustomLayoutManager.is_any_session_active() else widget._schedule_effect_invalidation("menu_sub_after_hide")
-                )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         setattr(widget, "_context_menu_hooks_connected", True)
 
     return menu
@@ -177,12 +153,6 @@ def show_context_menu(widget, global_pos) -> None:
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
-                        if not CustomLayoutManager.is_any_session_active():
-                            widget._invalidate_overlay_effects("menu_after_hide")
-                            widget._schedule_effect_invalidation("menu_after_hide")
-                    except Exception as e:
-                        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    try:
                         if CustomLayoutManager.is_any_session_active():
                             CustomLayoutManager.end_menu_interaction()
                     except Exception as e:
@@ -236,14 +206,6 @@ def show_context_menu(widget, global_pos) -> None:
                     CustomLayoutManager.restore_shells_for_display(widget)
                 CustomLayoutManager.begin_menu_interaction()
                 menu_session_begun = True
-            else:
-                # Outside edit mode, keep the historical broad effect invalidation path.
-                from rendering.multi_monitor_coordinator import get_coordinator
-                try:
-                    widget._invalidate_overlay_effects("menu_before_popup")
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
             widget._context_menu.popup(global_pos)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)

@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-05-14
+Last updated: 2026-05-25
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -12,17 +12,19 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-2. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-3. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-4. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-5. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-6. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-7. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-8. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-9. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-10. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-11. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+2. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+3. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+4. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+5. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+6. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+7. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+8. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+9. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+10. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+11. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+12. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+13. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -45,6 +47,74 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="R-24"></a>
+### [R-24] 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final resolved state:** the old shadow-corruption workaround no longer drives normal runtime menu/focus/display-change behavior. Overlay-effect refresh is now a narrow transient-opacity seam only.
+- **Observed failure pattern:**
+  - broad menu-time and focus-time invalidation paths were still toggling/recreating `QGraphicsOpacityEffect`
+  - this churn survived the painted-shadow migration even though card/text/header shadows were no longer effect-owned
+  - the stale path contributed to edit-mode/menu instability and left a large “cargo-cult fix” surface in place
+- **Root cause:** the old multi-monitor shadow corruption mitigation was never fully retired after painter-owned shadows replaced `QGraphicsDropShadowEffect` on overlay cards.
+- **What finally worked:**
+  - reduced `rendering/widget_effects.py` to a repaint-only helper for widgets that currently own a live opacity fade effect
+  - removed broad context-menu, input-handler, `focusInEvent`, `WM_DISPLAYCHANGE`, activation-refresh, and all-display-broadcast invalidation callers
+  - kept the seam name/ownership centralized so runtime code did not splinter into new ad hoc refresh paths
+- **Why the final solution worked:**
+  - it matched the current architecture instead of the historical one
+  - painter-owned shadows no longer needed cache busting
+  - only transient opacity fades remained as legitimate live `QGraphicsOpacityEffect` owners
+- **Supporting evidence from the rollout:**
+  - `--geo` / `--life` sidecars stayed clean of the old menu/focus invalidation chatter
+  - focused tests now prove popup/hide no longer force invalidation and that live opacity effects are refreshed without recreation
+- **Takeaways:**
+  - do not reintroduce broad menu/focus/display cache busting just because a visual issue “looks like” old Qt corruption
+  - if a future opacity artifact appears, fix the live fade owner or backing-store issue directly
+
+
+<a id="R-23"></a>
+### [R-23] 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Final resolved state:** CUSTOM edit mode now behaves as a stable global child-surface session across displays: no shell loss, no grid stacking/flicker, reliable context menus, smooth drag, working corner/scroll resize, and clean bounded save/revert behavior.
+- **Observed failure pattern:**
+  - shell widgets could disappear after cross-display moves when clicking or right-clicking a destination/source display
+  - grid could flash, stack repeatedly, or appear above widgets/menu
+  - right-click could be swallowed or fight the menu stack
+  - drag movement felt sticky, laggy, or stalled behind the cursor, especially across display boundaries
+  - some CUSTOM geometry replays and minimum-size paths leaked content outside widget/display bounds
+- **Root cause family:**
+  - edit mode was still behaving unlike stable normal runtime by using separate top-level tool windows plus repeated `raise_()`-style correction
+  - geometry ownership was split between local child geometry and global display geometry after the shell/grid ownership shift
+  - live drag was doing too much correction/snap work per move frame
+- **What finally worked:**
+  - moved edit shells/grid to display-owned child surfaces with explicit cross-display reparenting
+  - made `EditShellWidget` speak global geometry outward and left global↔local translation solely to `CustomLayoutManager`
+  - kept drag live-clamped/guide-driven and deferred hard snap-to-grid/peer snap until release
+  - preserved resize through one shared widget-logical resize authority for scroll and corner drag
+  - cached the static grid and no-op'd unchanged guides/transfer-state updates to improve drag smoothness
+  - fixed Gmail small-height content clipping so constrained CUSTOM cards truncate instead of leaking below the card
+- **Why the final solution worked:**
+  - the fix aligned edit mode with the normal display-owned runtime model instead of layering more top-level z-order tricks
+  - geometry and display ownership became single-authority again
+  - hot-path repaint/update work was reduced enough for drag to feel fluid
+- **Useful diagnostics from this rollout:**
+  - `--geo` and `--life` sidecars plus targeted `[ZORDER]` traces were materially better than the old mixed verbose-only approach
+  - runtime validation remained essential; several intermediate “theory fixes” passed tests but failed the actual edit session feel
+- **Takeaways:**
+  - edit-mode surfaces should follow normal runtime ownership where possible
+  - do not let shell widgets emit local-parent geometry into a global layout contract
+  - drag feel is part of correctness for this feature family, not polish
 
 <a id="R-18"></a>
 ### [R-18] 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)

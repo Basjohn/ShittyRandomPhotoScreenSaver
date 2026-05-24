@@ -265,8 +265,8 @@ class TestDimmingOverlayZOrder:
 
 
 @pytest.mark.qt
-def test_context_menu_invalidates_effects_before_popup(qt_app, qtbot, settings_manager, monkeypatch):
-    """Context menu should invalidate overlay effects before popup."""
+def test_context_menu_popup_no_longer_forces_overlay_effect_invalidation(qt_app, qtbot, settings_manager, monkeypatch):
+    """Context menu popup should not trigger broad effect-cache churn."""
     from rendering.display_widget import DisplayWidget
     from rendering.custom_layout_manager import CustomLayoutManager
     from widgets.context_menu import ScreensaverContextMenu
@@ -285,21 +285,12 @@ def test_context_menu_invalidates_effects_before_popup(qt_app, qtbot, settings_m
 
     events: List[Tuple[str, object]] = []
 
-    orig_invalidate = widget._invalidate_overlay_effects  # type: ignore[attr-defined]
-
-    def _spy_invalidate(reason: str) -> None:
-        events.append(("invalidate", reason))
-        orig_invalidate(reason)
-
-    monkeypatch.setattr(widget, "_invalidate_overlay_effects", _spy_invalidate)
-
     last_popup_menu: List[object] = []
 
     def _spy_popup(self, pos):  # type: ignore[no-untyped-def]
         last_popup_menu.clear()
         last_popup_menu.append(self)
         events.append(("popup", pos))
-        assert any(e[0] == "invalidate" for e in events)
 
     monkeypatch.setattr(ScreensaverContextMenu, "popup", _spy_popup)
 
@@ -317,19 +308,14 @@ def test_context_menu_invalidates_effects_before_popup(qt_app, qtbot, settings_m
         assert isinstance(active_eff, QGraphicsDropShadowEffect)
         effect_ids.append(id(active_eff))
 
-        invalidate_idx = next(idx for idx, e in enumerate(events) if e[0] == "invalidate")
-        popup_idx = next(idx for idx, e in enumerate(events) if e[0] == "popup")
-        assert invalidate_idx < popup_idx
+        assert all(e[0] != "invalidate" for e in events)
 
         menu = last_popup_menu[0] if last_popup_menu else None
         assert menu is not None
         menu.aboutToHide.emit()
         qt_app.processEvents()
 
-        assert any(
-            e[0] == "invalidate" and str(e[1]).startswith("menu_after_hide")
-            for e in events
-        )
+        assert all(e[0] != "invalidate" for e in events)
 
     assert len(set(effect_ids)) >= 1
 

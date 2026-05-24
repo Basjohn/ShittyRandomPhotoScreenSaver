@@ -1,15 +1,17 @@
-"""Opacity-effect lifecycle management for WidgetManager.
+"""Transient opacity-effect refresh helpers for WidgetManager.
 
 Extracted from widget_manager.py (M-7 refactor) to reduce monolith size.
-Contains opacity-effect invalidation, recreation, and scheduled invalidation
-logic for fade effects.
+This module now owns only lightweight refresh behavior for widgets that
+currently have a live ``QGraphicsOpacityEffect`` attached (for example,
+while a shared fade helper is in flight). It no longer performs the old
+menu/focus-era cache-busting effect toggles/recreation that existed for the
+retired translucent shadow corruption path.
 """
 from __future__ import annotations
 
 import logging
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget, QGraphicsOpacityEffect
 
 from core.logging.logger import get_logger
@@ -22,17 +24,13 @@ win_diag_logger = logging.getLogger("win_diag")
 
 
 def invalidate_overlay_effects(mgr: "WidgetManager", reason: str) -> None:
-    """Invalidate and optionally recreate active opacity QGraphicsEffects.
+    """Refresh only live opacity-fade effects owned by runtime widgets.
 
-    Phase E Context:
-        This method centralizes effect cache-busting to prevent Qt's internal
-        cached pixmap/texture backing from becoming corrupt during rapid
-        focus/activation + popup menu sequencing across multi-monitor windows.
-
-    Args:
-        reason: Identifier for the trigger (e.g., "menu_about_to_show",
-                "menu_before_popup", "focus_in"). Menu-related reasons
-                trigger stronger invalidation with effect recreation.
+    Painter-owned card/text/header shadows no longer rely on QGraphicsEffect
+    cache busting, so menu/focus/display-change callers should not toggle or
+    recreate effects here. The remaining legitimate runtime use is to ask any
+    currently fading overlay to repaint once if a caller knows a refresh would
+    be helpful.
     """
     screen_idx = "?"
     try:
@@ -61,27 +59,6 @@ def invalidate_overlay_effects(mgr: "WidgetManager", reason: str) -> None:
             ", ".join(effect_states) if effect_states else "none",
         )
 
-    # Menu-related triggers warrant stronger invalidation (effect recreation)
-    try:
-        strong = "menu" in str(reason)
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        strong = False
-
-    refresh_effects = False
-    if strong:
-        try:
-            flip = bool(getattr(mgr, "_effect_refresh_flip", False))
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            flip = False
-        flip = not flip
-        try:
-            setattr(mgr, "_effect_refresh_flip", flip)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        refresh_effects = flip
-
     seen: set[int] = set()
     for name, widget in mgr._widgets.items():
         if widget is None:
@@ -90,7 +67,7 @@ def invalidate_overlay_effects(mgr: "WidgetManager", reason: str) -> None:
             seen.add(id(widget))
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        _invalidate_widget_effect(widget, name, refresh_effects)
+        _refresh_widget_opacity_effect(widget, name)
 
     for attr_name in (
         "clock_widget",
@@ -116,98 +93,22 @@ def invalidate_overlay_effects(mgr: "WidgetManager", reason: str) -> None:
                 continue
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        _invalidate_widget_effect(widget, attr_name, refresh_effects)
+        _refresh_widget_opacity_effect(widget, attr_name)
 
 
-def _invalidate_widget_effect(widget: QWidget, name: str, refresh: bool) -> None:
-    """Invalidate a single widget's graphics effect."""
+def _refresh_widget_opacity_effect(widget: QWidget, name: str) -> None:
+    """Request a repaint for a widget that currently owns an opacity effect."""
     try:
         eff = widget.graphicsEffect()
     except Exception as e:
         logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         eff = None
 
-    if isinstance(eff, QGraphicsOpacityEffect):
-        if refresh:
-            try:
-                anim = getattr(widget, "_shadowfade_anim", None)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                anim = None
-            if anim is None:
-                eff = _recreate_effect(widget, eff)
-
-        try:
-            eff.setEnabled(False)
-            eff.setEnabled(True)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+    if not isinstance(eff, QGraphicsOpacityEffect):
+        return
 
     try:
         if widget.isVisible():
             widget.update()
     except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-
-def _recreate_effect(widget: QWidget, old_eff: Any) -> Any:
-    """Recreate an opacity effect to bust Qt's internal cache."""
-    if isinstance(old_eff, QGraphicsOpacityEffect):
-        try:
-            opacity = old_eff.opacity()
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            opacity = None
-
-        try:
-            widget.setGraphicsEffect(None)
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-        try:
-            new_eff = QGraphicsOpacityEffect(widget)
-            if opacity is not None:
-                new_eff.setOpacity(opacity)
-            widget.setGraphicsEffect(new_eff)
-            return new_eff
-        except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-            try:
-                return widget.graphicsEffect()
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-                return old_eff
-
-    return old_eff
-
-
-def schedule_effect_invalidation(mgr: "WidgetManager", reason: str, delay_ms: int = 16) -> None:
-    """Schedule a deferred effect invalidation."""
-    try:
-        pending = getattr(mgr, "_pending_effect_invalidation", False)
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        pending = False
-
-    if pending:
-        return
-
-    try:
-        setattr(mgr, "_pending_effect_invalidation", True)
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-    def _run() -> None:
-        try:
-            invalidate_overlay_effects(mgr, reason)
-        finally:
-            try:
-                setattr(mgr, "_pending_effect_invalidation", False)
-            except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-
-    try:
-        QTimer.singleShot(max(0, delay_ms), _run)
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        _run()
+        logger.debug("[WIDGET_MANAGER] Failed to refresh live opacity effect for %s", name, exc_info=True)

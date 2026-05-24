@@ -25,6 +25,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
 - Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
 - Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
+- During display/widget startup, do not keep two lifecycle-start authorities alive. If `widget_setup_all` already initializes/activates the created widgets, display glue must not immediately run another initialize pass over the same set.
 
 No shadow frameworks or parallel ownership paths.
 
@@ -117,9 +118,9 @@ No shadow frameworks or parallel ownership paths.
 
 ### 7.4 Graphics Effect Recreation During Active Animations
 - **Never recreate or replace a `QGraphicsEffect` (opacity, shadow, etc.) while a `QVariantAnimation` is actively driving it.**
-- `_recreate_effect()` in `widget_effects.py` replaces effects to bust Qt's internal cache. If called mid-animation, the old animation's `valueChanged` callbacks continue manipulating the DETACHED old effect, while the new effect stays frozen at its initial value.
-- Result: widget becomes permanently invisible (opacity=0.0) or shows incorrect shadow because the animation never updates the new effect.
-- **Prevention**: Before recreating an effect, check for an active `_fade_anim` or `_shadowfade_anim` on the widget. Skip recreation if an animation is in-flight, OR reconnect the animation to the new effect.
+- Overlay card/text/header shadows are painter-owned now, so broad menu/focus/display-change effect-cache busting should stay retired.
+- `rendering/widget_effects.py` is a narrow transient-opacity refresh seam only: it may request repaint for widgets that currently own a live `QGraphicsOpacityEffect`, but it must not toggle, recreate, or broadcast effect churn just because a menu opened or focus changed.
+- If a future regression appears, fix the real fade/effect owner or visual backing-store issue instead of reintroducing global cache-busting.
 
 ## 8. Visualizer State Isolation (R-22 Lessons)
 

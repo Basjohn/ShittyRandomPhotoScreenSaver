@@ -180,11 +180,6 @@ def handle_nativeEvent(widget, eventType, message):
                                 screen = screens[idx]
                         if screen is not None:
                             inst._handle_screen_change(screen)
-                        # Force overlay visibility re-evaluation (fixes media widget fade on wake)
-                        try:
-                            inst._invalidate_overlay_effects("wm_displaychange")
-                        except Exception:
-                            pass
                         # Force Spotify playback state refresh if media widget exists
                         mw = getattr(inst, "media_widget", None)
                         if mw is not None and hasattr(mw, "refresh_playback_state"):

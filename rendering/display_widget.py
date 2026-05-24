@@ -58,7 +58,6 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from core.logging.overlay_telemetry import record_overlay_ready
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
-from core.threading.manager import ThreadManager
 from transitions.overlay_manager import (
     hide_all_overlays,
     any_overlay_ready_for_display,
@@ -1717,36 +1716,8 @@ class DisplayWidget(QWidget):
         from rendering.display_overlays import perform_activation_refresh
         perform_activation_refresh(self, reason)
 
-    def _schedule_effect_invalidation(self, reason: str) -> None:
-        try:
-            if getattr(self, "_pending_effect_invalidation", False):
-                return
-            self._pending_effect_invalidation = True
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            return
-
-        def _run() -> None:
-            try:
-                self._invalidate_overlay_effects(reason)
-            finally:
-                try:
-                    self._pending_effect_invalidation = False
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
-        try:
-            tm = getattr(self, "_thread_manager", None)
-            if tm is not None:
-                tm.single_shot(0, _run)
-            else:
-                ThreadManager.single_shot(0, _run)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            _run()
-
     def _invalidate_overlay_effects(self, reason: str) -> None:
-        """Delegate effect invalidation to WidgetManager (Phase E refactor)."""
+        """Delegate transient opacity-effect refresh to WidgetManager."""
         if self._widget_manager is not None:
             try:
                 self._widget_manager.invalidate_overlay_effects(reason)
@@ -1756,10 +1727,6 @@ class DisplayWidget(QWidget):
     def focusInEvent(self, event: QFocusEvent) -> None:  # type: ignore[override]
         try:
             self._debug_window_state("focusInEvent")
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            self._invalidate_overlay_effects("focus_in")
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         super().focusInEvent(event)

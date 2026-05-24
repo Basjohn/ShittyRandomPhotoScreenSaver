@@ -129,20 +129,8 @@ class InputHandler(QObject):
     
     def set_context_menu_active(self, active: bool) -> None:
         """Set context menu active state.
-        
-        Phase E: When the menu becomes inactive, triggers effect invalidation
-        through the WidgetManager to ensure consistent ordering.
         """
-        was_active = self._context_menu_active
         self._context_menu_active = active
-        
-        # Phase E: Trigger effect invalidation on menu close
-        if was_active and not active:
-            if self._widget_manager is not None:
-                try:
-                    self._widget_manager.schedule_effect_invalidation("menu_close", delay_ms=16)
-                except Exception as e:
-                    logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
     
     def is_context_menu_active(self) -> bool:
         """Check if context menu is currently active."""
@@ -329,14 +317,6 @@ class InputHandler(QObject):
             # Context menu available in Interaction Mode or with Ctrl held
             if interaction_mode_enabled or ctrl_mode_active:
                 global_pos = event.globalPos()
-                
-                # Phase E: Notify WidgetManager before menu popup
-                if self._widget_manager is not None:
-                    try:
-                        self._widget_manager.invalidate_overlay_effects("menu_before_popup")
-                    except Exception as e:
-                        logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
-                
                 self.context_menu_requested.emit(global_pos)
                 return True
         

@@ -13,13 +13,12 @@ from typing import Tuple
 
 APP_NAME: str = "ShittyRandomPhotoScreenSaver"
 APP_EXE_NAME: str = "SRPSS"
-APP_VERSION: str = "3.8"
+APP_VERSION: str = "4.0"
 # Short description is used for Windows file metadata (Task Manager shows this string).
 APP_DESCRIPTION: str = "ShittyRandomPhotoScreenSaver"
 # Preserve the long-form marketing description for release notes, website copy, etc.
 APP_TAGLINE: str = (
-    "ShittyRandomPhotoScreenSaver - Random Image Screensaver with several transitions, "
-    "OpenGL acceleration, support for disk, rss and json sources all at once."
+    "ShittyRandomPhotoScreenSaver - Random Image Screensaver & Media Centre. "
 )
 APP_COMPANY: str = "Jayde Ver Elst"
 

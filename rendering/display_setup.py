@@ -483,11 +483,6 @@ def setup_widgets(widget) -> None:
         for attr_name, child_widget in created.items():
             setattr(widget, attr_name, child_widget)
         logger.info("WidgetManager created %d widgets", len(created))
-
-        # Initialize all widgets via lifecycle system (Dec 2025)
-        initialized_count = widget._widget_manager.initialize_all_widgets()
-        if initialized_count > 0:
-            logger.debug("[LIFECYCLE] Initialized %d widgets via lifecycle system", initialized_count)
     else:
         logger.warning("No WidgetManager available - widgets will not be created")
         return

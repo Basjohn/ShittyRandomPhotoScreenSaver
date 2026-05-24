@@ -443,21 +443,6 @@ class MultiMonitorCoordinator(QObject):
             except Exception as e:
                 logger.debug("[COORDINATOR] Exception suppressed: %s", e)
 
-    def invalidate_all_effects(self, reason: str) -> None:
-        """Invalidate overlay effects on ALL displays.
-        
-        Phase E fix: Context menu on one display triggers Windows activation
-        cascade that corrupts QGraphicsEffect caches on OTHER displays.
-        This broadcasts invalidation to all displays to prevent corruption.
-        """
-        for widget in self.get_all_instances():
-            try:
-                invalidate_fn = getattr(widget, "_invalidate_overlay_effects", None)
-                if callable(invalidate_fn):
-                    invalidate_fn(reason)
-            except Exception as e:
-                logger.debug("[COORDINATOR] Exception suppressed: %s", e)
-    
     def cleanup(self) -> None:
         """Clean up all coordinator state."""
         with self._state_lock:

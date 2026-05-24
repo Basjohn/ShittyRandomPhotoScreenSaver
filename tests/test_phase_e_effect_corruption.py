@@ -106,9 +106,8 @@ class TestPhaseEEffectCorruption:
         # Check that focus owner tracking exists
         assert hasattr(DisplayWidget, '_focus_owner') or hasattr(DisplayWidget, '_coordinator')
 
-    def test_effect_invalidation_on_menu_close(self):
-        """Test that effects are invalidated after menu close."""
-        # The WidgetManager should call invalidate_overlay_effects on menu close
+    def test_transient_opacity_refresh_helper_exists(self):
+        """Transient opacity refresh helper should remain available centrally."""
         from rendering.widget_manager import WidgetManager
         
         assert hasattr(WidgetManager, 'invalidate_overlay_effects')

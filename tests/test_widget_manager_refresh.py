@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from core.resources.manager import ResourceManager
+from rendering import display_setup
 from rendering.widget_manager import WidgetManager
 from widgets.media_widget import MediaPosition
 from widgets.clock_widget import ClockPosition
@@ -662,3 +663,44 @@ def test_setup_all_widgets_runs_spotify_setup_phases_in_explicit_order(monkeypat
         "spotify_visualizer_remote_reconcile",
         "finalize",
     ]
+
+
+def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
+    lifecycle_initialize_calls: list[str] = []
+    spotify_calls: list[str] = []
+    stacking_calls: list[dict] = []
+
+    class _ManagerStub:
+        def configure_expected_overlays(self, widgets_config):
+            return None
+
+        def setup_all_widgets(self, settings_manager, screen_index, thread_manager):
+            return {"clock_widget": SimpleNamespace(name="clock")}
+
+        def initialize_all_widgets(self):
+            lifecycle_initialize_calls.append("initialize_all_widgets")
+            return 1
+
+    class _SettingsStub:
+        def get(self, key, default=None):
+            if key == "widgets":
+                return {"clock": {"enabled": True}}
+            return default
+
+    widget = SimpleNamespace(
+        settings_manager=_SettingsStub(),
+        screen_index=0,
+        _thread_manager=None,
+        _widget_manager=_ManagerStub(),
+        _setup_dimming=lambda: None,
+        _setup_spotify_widgets=lambda: spotify_calls.append("spotify"),
+        _setup_pixel_shift=lambda: None,
+        _apply_widget_stacking=lambda widgets: stacking_calls.append(dict(widgets)),
+    )
+
+    display_setup.setup_widgets(widget)
+
+    assert hasattr(widget, "clock_widget")
+    assert lifecycle_initialize_calls == []
+    assert spotify_calls == ["spotify"]
+    assert stacking_calls == [{"clock": {"enabled": True}}]

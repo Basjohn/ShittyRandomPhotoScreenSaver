@@ -1772,28 +1772,13 @@ class WidgetManager:
         return False
 
     # =========================================================================
-    # Phase E: Effect Invalidation (Cache Corruption Mitigation)
+    # Transient Opacity-Effect Refresh
     # =========================================================================
 
     def invalidate_overlay_effects(self, reason: str) -> None:
         """Delegates to rendering.widget_effects."""
         from rendering.widget_effects import invalidate_overlay_effects
         invalidate_overlay_effects(self, reason)
-
-    def _invalidate_widget_effect(self, widget: QWidget, name: str, refresh: bool) -> None:
-        """Delegates to rendering.widget_effects."""
-        from rendering.widget_effects import _invalidate_widget_effect
-        _invalidate_widget_effect(widget, name, refresh)
-
-    def _recreate_effect(self, widget: QWidget, old_eff: Any) -> Any:
-        """Delegates to rendering.widget_effects."""
-        from rendering.widget_effects import _recreate_effect
-        return _recreate_effect(widget, old_eff)
-
-    def schedule_effect_invalidation(self, reason: str, delay_ms: int = 16) -> None:
-        """Delegates to rendering.widget_effects."""
-        from rendering.widget_effects import schedule_effect_invalidation
-        schedule_effect_invalidation(self, reason, delay_ms)
 
     # =========================================================================
     # Overlay Fade Coordination
