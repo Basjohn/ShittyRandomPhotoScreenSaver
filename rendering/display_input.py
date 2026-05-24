@@ -14,6 +14,7 @@ from PySide6.QtCore import QTimer, Qt, QPoint
 from PySide6.QtGui import QGuiApplication, QMouseEvent
 
 from core.logging.logger import get_logger
+from rendering.custom_layout_manager import CustomLayoutManager
 from widgets.cursor_halo import CursorHaloWidget
 
 if TYPE_CHECKING:
@@ -168,6 +169,10 @@ def show_ctrl_cursor_hint(widget, pos, mode: str = "none") -> None:
     ensure_ctrl_cursor_hint(widget, )
     hint = widget._ctrl_cursor_hint
     if hint is None:
+        return
+
+    if CustomLayoutManager.is_any_session_active():
+        hide_ctrl_cursor_hint(widget, immediate=True)
         return
 
     # Do not show the halo while the settings dialog is active.

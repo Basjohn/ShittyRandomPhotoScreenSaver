@@ -93,6 +93,10 @@ class _ShellState:
     current_monitor_value: str
     last_drag_axis: str = "both"
     removed: bool = False
+    resize_origin_rect: QRect | None = None
+    resize_origin_scale: float = 1.0
+    resize_origin_payload: dict[str, Any] | None = None
+    resize_corner: str | None = None
 
 
 class CustomLayoutManager:
@@ -114,6 +118,7 @@ class CustomLayoutManager:
         self._deferred_processed_image: tuple[QPixmap, QPixmap, str] | None = None
         self._suppress_live_feedback_widget_ids: set[str] = set()
         self._edit_mode_dimming_restore: tuple[bool, float] | None = None
+        self._display_cursor_restore_shape: Qt.CursorShape | None = None
 
     def _get_available_screens(self) -> list[Any]:
         instances = self._get_global_display_instances()
@@ -373,6 +378,8 @@ class CustomLayoutManager:
 
         self._active = True
         setattr(self._display, "_custom_layout_edit_active", True)
+        self._suspend_interaction_cursor_state()
+        self._apply_edit_cursor_policy()
         self._apply_edit_mode_dimming()
         target_widget_ids = {descriptor.widget_id for descriptor, _widget in targets}
         self._hide_special_widgets(target_widget_ids)
@@ -540,11 +547,8 @@ class CustomLayoutManager:
                 gutter_px=CUSTOM_LAYOUT_SNAP_GUTTER_PX,
             )
             overlay.show()
-            try:
-                overlay.lower()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to lower edit grid overlay", exc_info=True)
             self._grid_overlay = overlay
+            self._normalize_session_stack()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to create edit grid overlay", exc_info=True)
             self._grid_overlay = None
@@ -681,6 +685,7 @@ class CustomLayoutManager:
         self._shell_states.clear()
         self._destroy_grid_overlay()
         self._restore_edit_mode_dimming()
+        self._restore_display_cursor_policy()
 
         if restore_special_widgets:
             self._restore_special_widgets()
@@ -697,6 +702,61 @@ class CustomLayoutManager:
             CustomLayoutManager._uninstall_global_key_filter()
         setattr(self._display, "_custom_layout_edit_active", False)
         self.flush_deferred_processed_image()
+
+    def _suspend_interaction_cursor_state(self) -> None:
+        coordinator = get_coordinator()
+        try:
+            coordinator.set_ctrl_held(False)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to clear coordinator Ctrl state for edit mode", exc_info=True)
+        try:
+            coordinator.clear_halo_owner()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to clear halo owner for edit mode", exc_info=True)
+
+        for instance in self._get_global_display_instances():
+            try:
+                setattr(instance, "_ctrl_held", False)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to clear local Ctrl state for edit mode", exc_info=True)
+            try:
+                input_handler = getattr(instance, "_input_handler", None)
+                if input_handler is not None:
+                    input_handler.set_ctrl_held(False)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to clear input-handler Ctrl state for edit mode", exc_info=True)
+            try:
+                hint = getattr(instance, "_ctrl_cursor_hint", None)
+                if hint is not None:
+                    try:
+                        hint.cancel_animation()
+                    except Exception:
+                        logger.debug("[CUSTOM_LAYOUT] Failed to cancel halo animation for edit mode", exc_info=True)
+                    hint.hide()
+                    try:
+                        hint.setOpacity(0.0)
+                    except Exception:
+                        logger.debug("[CUSTOM_LAYOUT] Failed to reset halo opacity for edit mode", exc_info=True)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to hide halo for edit mode", exc_info=True)
+
+    def _apply_edit_cursor_policy(self) -> None:
+        try:
+            self._display_cursor_restore_shape = self._display.cursor().shape()
+        except Exception:
+            self._display_cursor_restore_shape = None
+        try:
+            self._display.setCursor(Qt.CursorShape.ArrowCursor)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to apply edit-mode cursor policy", exc_info=True)
+
+    def _restore_display_cursor_policy(self) -> None:
+        cursor_shape = self._display_cursor_restore_shape
+        self._display_cursor_restore_shape = None
+        try:
+            self._display.setCursor(cursor_shape or Qt.CursorShape.BlankCursor)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to restore display cursor policy", exc_info=True)
 
     def _apply_edit_mode_dimming(self) -> None:
         comp = getattr(self._display, "_gl_compositor", None)
@@ -859,6 +919,9 @@ class CustomLayoutManager:
         shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
         shell.drag_finished.connect(self._on_shell_drag_finished)
         shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
+        shell.resize_drag_started.connect(self._on_shell_resize_drag_started)
+        shell.resize_drag_live_changed.connect(self._on_shell_resize_drag_live_changed)
+        shell.resize_drag_finished.connect(self._on_shell_resize_drag_finished)
         shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
         shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
         shell.remove_requested.connect(self._on_shell_remove_requested)
@@ -960,11 +1023,15 @@ class CustomLayoutManager:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
 
     def _normalize_session_stack(self) -> None:
+        try:
+            self._display.raise_()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to raise display before overlay stack normalize", exc_info=True)
         overlay = self._grid_overlay
         if overlay is not None:
             try:
                 overlay.show()
-                overlay.lower()
+                overlay.raise_()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to normalize edit grid overlay stack", exc_info=True)
         self._raise_all_shells()
@@ -1042,6 +1109,33 @@ class CustomLayoutManager:
         self._update_shell_reset_affordances(state)
         self._set_shell_geometry_silently(state, committed)
 
+    def _on_shell_resize_drag_started(self, widget_id: str, corner: str, global_rect: QRect) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return
+        state.resize_origin_rect = QRect(global_rect)
+        state.resize_origin_scale = float(state.resize_scale)
+        state.resize_origin_payload = dict(state.current_size_payload)
+        state.resize_corner = str(corner or "")
+
+    def _on_shell_resize_drag_live_changed(
+        self,
+        widget_id: str,
+        corner: str,
+        global_rect: QRect,
+        cursor_global: QPoint,
+    ) -> None:
+        self._apply_resize_drag(widget_id, corner, global_rect, cursor_global=cursor_global, finalize=False)
+
+    def _on_shell_resize_drag_finished(
+        self,
+        widget_id: str,
+        corner: str,
+        global_rect: QRect,
+        cursor_global: QPoint,
+    ) -> None:
+        self._apply_resize_drag(widget_id, corner, global_rect, cursor_global=cursor_global, finalize=True)
+
     def _on_shell_resize_wheel_requested(self, widget_id: str, angle_delta_y: int) -> None:
         state = self._shell_states.get(widget_id)
         if state is None or not state.descriptor.supports_layout_resize_edit:
@@ -1066,6 +1160,55 @@ class CustomLayoutManager:
         state.current_global_rect = QRect(next_rect)
         self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
         state.shell.set_shell_geometry(next_rect)
+
+    def _apply_resize_drag(
+        self,
+        widget_id: str,
+        corner: str,
+        global_rect: QRect,
+        *,
+        cursor_global: QPoint,
+        finalize: bool,
+    ) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None or not state.descriptor.supports_layout_resize_edit:
+            return
+        origin_rect = state.resize_origin_rect or QRect(state.current_global_rect)
+        resolved_corner = str(corner or state.resize_corner or "")
+        if not resolved_corner:
+            return
+        next_scale = self._resolve_resize_drag_scale_for_corner(
+            state,
+            origin_rect,
+            resolved_corner,
+            cursor_global,
+        )
+        state.resize_scale = max(0.7, min(2.4, next_scale))
+        state.current_size_payload = self._scale_size_payload(
+            state.descriptor,
+            state.baseline_size_payload,
+            state.resize_scale,
+        )
+        next_rect = self._scaled_rect_from_anchor(
+            state,
+            origin_rect,
+            resolved_corner,
+            next_scale=state.resize_scale,
+        )
+        next_rect = self._resolve_resize_drag_rect_on_fixed_screen(
+            state,
+            next_rect,
+            snap_to_grid=finalize,
+        )
+        state.current_global_rect = QRect(next_rect)
+        self._update_shell_reset_affordances(state)
+        self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
+        self._set_shell_geometry_silently(state, next_rect)
+        if finalize:
+            state.resize_origin_rect = None
+            state.resize_origin_payload = None
+            state.resize_origin_scale = state.resize_scale
+            state.resize_corner = None
 
     def _on_shell_reset_size_requested(self, widget_id: str) -> None:
         state = self._shell_states.get(widget_id)
@@ -1365,6 +1508,134 @@ class CustomLayoutManager:
         rect = QRect(0, 0, next_width, next_height)
         rect.moveCenter(center)
         return rect
+
+    def _resolve_resize_drag_scale_for_corner(
+        self,
+        state: _ShellState,
+        origin_rect: QRect,
+        corner: str,
+        cursor_global: QPoint,
+    ) -> float:
+        screen = state.current_screen or self._screen
+        if screen is None:
+            return state.resize_scale
+        geom = screen.geometry()
+        min_size = self._min_size_for_state(state)
+        left = origin_rect.x()
+        top = origin_rect.y()
+        right = origin_rect.x() + origin_rect.width()
+        bottom = origin_rect.y() + origin_rect.height()
+
+        base_width = max(1, origin_rect.width())
+        base_height = max(1, origin_rect.height())
+        base_diag = max(1.0, (float(base_width * base_width + base_height * base_height)) ** 0.5)
+
+        if corner == "top_left":
+            left = max(geom.x(), min(int(cursor_global.x()), right - min_size.width()))
+            top = max(geom.y(), min(int(cursor_global.y()), bottom - min_size.height()))
+            target_width = max(min_size.width(), right - left)
+            target_height = max(min_size.height(), bottom - top)
+        elif corner == "top_right":
+            right = min(geom.x() + geom.width(), max(int(cursor_global.x()), left + min_size.width()))
+            top = max(geom.y(), min(int(cursor_global.y()), bottom - min_size.height()))
+            target_width = max(min_size.width(), right - left)
+            target_height = max(min_size.height(), bottom - top)
+        elif corner == "bottom_left":
+            left = max(geom.x(), min(int(cursor_global.x()), right - min_size.width()))
+            bottom = min(geom.y() + geom.height(), max(int(cursor_global.y()), top + min_size.height()))
+            target_width = max(min_size.width(), right - left)
+            target_height = max(min_size.height(), bottom - top)
+        else:
+            right = min(geom.x() + geom.width(), max(int(cursor_global.x()), left + min_size.width()))
+            bottom = min(geom.y() + geom.height(), max(int(cursor_global.y()), top + min_size.height()))
+            target_width = max(min_size.width(), right - left)
+            target_height = max(min_size.height(), bottom - top)
+
+        target_diag = max(1.0, (float(target_width * target_width + target_height * target_height)) ** 0.5)
+        return max(0.7, min(2.4, state.resize_origin_scale * (target_diag / base_diag)))
+
+    def _resolve_resize_drag_rect_on_fixed_screen(
+        self,
+        state: _ShellState,
+        global_rect: QRect,
+        *,
+        snap_to_grid: bool,
+    ) -> QRect:
+        target_screen = state.current_screen or self._screen
+        if target_screen is None:
+            return QRect(global_rect)
+        target_signature = get_screen_signature(target_screen)
+        geom = target_screen.geometry()
+        local_rect = QRect(
+            global_rect.x() - geom.x(),
+            global_rect.y() - geom.y(),
+            global_rect.width(),
+            global_rect.height(),
+        )
+        local_rect = clamp_local_rect_to_bounds(
+            local_rect,
+            geom.size(),
+            min_size=self._min_size_for_state(state),
+        )
+        snap_resolution = resolve_snap_local_rect_for_edit(
+            local_rect,
+            geom.size(),
+            peer_rects=self._collect_peer_local_rects(state.descriptor.widget_id, target_screen),
+            threshold_px=6 if not snap_to_grid else 10,
+            min_size=self._min_size_for_state(state),
+        )
+        local_rect = snap_resolution.rect
+        state.current_screen = target_screen
+        state.current_screen_signature = target_signature
+        self._update_grid_guides(state, target_screen, snap_resolution)
+        return QRect(
+            geom.x() + local_rect.x(),
+            geom.y() + local_rect.y(),
+            local_rect.width(),
+            local_rect.height(),
+        )
+
+    def _scaled_rect_from_anchor(
+        self,
+        state: _ShellState,
+        origin_rect: QRect,
+        corner: str,
+        *,
+        next_scale: float,
+    ) -> QRect:
+        next_payload = state.current_size_payload
+        if state.descriptor.custom_layout_resize_mode == "volume_scale":
+            width = max(24, int(next_payload.get("width", origin_rect.width())))
+            height = max(120, int(next_payload.get("height", origin_rect.height())))
+        elif state.descriptor.custom_layout_resize_mode == "visualizer_rect":
+            fallback_size = origin_rect.size()
+            width_height = self._resolve_visualizer_custom_size(
+                state.widget,
+                next_payload,
+                maximum_envelope=True,
+                fallback_size=fallback_size,
+            )
+            width = max(48, int(width_height.width()))
+            height = max(32, int(width_height.height()))
+        else:
+            width = max(48, int(round(state.baseline_global_rect.width() * next_scale)))
+            height = max(32, int(round(state.baseline_global_rect.height() * next_scale)))
+
+        if corner == "top_left":
+            right = origin_rect.x() + origin_rect.width()
+            bottom = origin_rect.y() + origin_rect.height()
+            return QRect(right - width, bottom - height, width, height)
+        if corner == "top_right":
+            left = origin_rect.x()
+            bottom = origin_rect.y() + origin_rect.height()
+            return QRect(left, bottom - height, width, height)
+        if corner == "bottom_left":
+            right = origin_rect.x() + origin_rect.width()
+            top = origin_rect.y()
+            return QRect(right - width, top, width, height)
+        left = origin_rect.x()
+        top = origin_rect.y()
+        return QRect(left, top, width, height)
 
     def _capture_size_payload(
         self,

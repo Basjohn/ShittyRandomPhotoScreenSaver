@@ -18,6 +18,7 @@ from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QWidget, QApplication
 
 from core.logging.logger import get_logger
+from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.display_widget import (
     DisplayWidget,
     WM_APPCOMMAND,
@@ -245,6 +246,18 @@ def handle_nativeEvent(widget, eventType, message):
 
     return QWidget.nativeEvent(widget, eventType, message)
 
+
+def _interaction_cursor_suppressed_for_edit_mode(widget) -> bool:
+    if not CustomLayoutManager.is_any_session_active():
+        return False
+    try:
+        owner = widget._coordinator.halo_owner
+        if owner is not None:
+            owner._hide_ctrl_cursor_hint(immediate=True)
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    return True
+
 def extract_win_msg(widget, raw_message):
     try:
         msg_ptr = int(raw_message)
@@ -433,8 +446,16 @@ def handle_eventFilter(widget, watched, event):
                 if owner is not None:
                     owner._hide_ctrl_cursor_hint(immediate=True)
             except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             return QWidget.eventFilter(widget, watched, event)
+
+        if _interaction_cursor_suppressed_for_edit_mode(widget):
+            if event is not None and event.type() in (
+                QEvent.Type.KeyPress,
+                QEvent.Type.KeyRelease,
+                QEvent.Type.MouseMove,
+            ):
+                return QWidget.eventFilter(widget, watched, event)
 
         if event is not None and event.type() == QEvent.Type.KeyPress:
             try:

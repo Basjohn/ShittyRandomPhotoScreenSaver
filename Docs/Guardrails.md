@@ -23,6 +23,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Leaf/runtime animation helpers should prefer the app-shared `AnimationManager` seam rather than constructing ad hoc managers when they only need ordinary shared-timeline animation ownership.
 - If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
 - Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
+- Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
 
 No shadow frameworks or parallel ownership paths.
 
@@ -76,8 +77,9 @@ No shadow frameworks or parallel ownership paths.
 ## 5.3 CUSTOM Layout Safety
 - CUSTOM layout/edit mode must continue to extend descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
 - Edit mode remains a global active-display shell session; do not reintroduce display-local partial edit semantics.
+- While a CUSTOM edit session is active, treat the real system cursor as the only cursor authority. Suspend interaction-mode / Ctrl halo state for the whole session and restore only the ordinary hidden-cursor screensaver policy when the session exits.
 - Dragging must keep explicit snapping and compositor-backed-display target resolution; do not fall back to freehand or raw-screen heuristics.
-- Resize must remain widget-logical and descriptor-owned. Plain scroll wheel is the current resize gesture; do not reintroduce blind global transforms or modifier-dependent hidden rules.
+- Resize must remain widget-logical and descriptor-owned. Plain scroll wheel and corner-drag resize are the current resize gestures; both must flow through the same widget-logical resize authority, and corner drag should keep the opposite corner anchored instead of inventing a separate freeform transform path.
 - Any widget that supports CUSTOM resize must keep clear recovery affordances: runtime edit-shell reset plus settings-side authored-layout revert.
 - Treat DPR and multi-monitor portability as a first-class constraint. Persist committed geometry through the shared CUSTOM layout contract, not ad hoc raw-pixel paths.
 - While a saved CUSTOM rect is active, widget-local content/typography refresh logic must not become a second geometry authority. If a widget recalculates its own minimum/maximum size, the shared overlay/custom-layout seam must reassert the committed rect rather than letting the live widget silently resize itself.

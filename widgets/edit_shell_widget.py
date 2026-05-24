@@ -4,16 +4,25 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 from PySide6.QtCore import QPoint, QRect, Qt, QEvent, Signal
-from PySide6.QtGui import QColor, QMouseEvent, QPaintEvent, QPainter, QPen, QPixmap, QWheelEvent
+from PySide6.QtGui import QColor, QCursor, QMouseEvent, QPaintEvent, QPainter, QPen, QPixmap, QWheelEvent
 from PySide6.QtWidgets import QPushButton, QWidget
 
 
 class EditShellWidget(QWidget):
     """Top-level temporary shell that mirrors a widget snapshot during edit mode."""
 
+    _CORNER_CURSOR_GUTTER_PX = 28
+    _RESIZE_CORNER_TOP_LEFT = "top_left"
+    _RESIZE_CORNER_TOP_RIGHT = "top_right"
+    _RESIZE_CORNER_BOTTOM_LEFT = "bottom_left"
+    _RESIZE_CORNER_BOTTOM_RIGHT = "bottom_right"
+
     drag_finished = Signal(str, QRect, QPoint)
     geometry_live_changed = Signal(str, QRect)
     resize_wheel_requested = Signal(str, int)
+    resize_drag_started = Signal(str, str, QRect)
+    resize_drag_live_changed = Signal(str, str, QRect, QPoint)
+    resize_drag_finished = Signal(str, str, QRect, QPoint)
     reset_size_requested = Signal(str)
     reset_position_requested = Signal(str)
     remove_requested = Signal(str)
@@ -43,6 +52,8 @@ class EditShellWidget(QWidget):
         self._snapshot = snapshot
         self._resizable = bool(resizable)
         self._dragging = False
+        self._resizing = False
+        self._resize_corner: str | None = None
         self._drag_offset = QPoint()
         self._pressed_button: QPushButton | None = None
         self._transfer_blocked = False
@@ -84,6 +95,8 @@ class EditShellWidget(QWidget):
         self._remove_btn.installEventFilter(self)
         self._reset_size_btn.setStyleSheet(button_stylesheet)
         self._reset_position_btn.setStyleSheet(button_stylesheet)
+        self._reset_size_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._reset_position_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._remove_btn.setStyleSheet(
             """
             QPushButton {
@@ -106,6 +119,7 @@ class EditShellWidget(QWidget):
             }
             """
         )
+        self._remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reset_size_btn.setEnabled(False)
         self._reset_position_btn.setEnabled(False)
         self._remove_btn.hide()
@@ -113,6 +127,7 @@ class EditShellWidget(QWidget):
 
         self.setGeometry(initial_global_rect)
         self._reposition_reset_button()
+        self._update_hover_cursor()
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         reset_size_btn = getattr(self, "_reset_size_btn", None)
@@ -210,6 +225,61 @@ class EditShellWidget(QWidget):
     def _on_remove_clicked(self) -> None:
         self.remove_requested.emit(self.widget_id)
 
+    def _resize_corner_cursor_for_pos(self, local_pos: QPoint) -> Qt.CursorShape | None:
+        corner = self._resize_corner_for_pos(local_pos)
+        if corner in (self._RESIZE_CORNER_TOP_LEFT, self._RESIZE_CORNER_BOTTOM_RIGHT):
+            return Qt.CursorShape.SizeFDiagCursor
+        if corner in (self._RESIZE_CORNER_TOP_RIGHT, self._RESIZE_CORNER_BOTTOM_LEFT):
+            return Qt.CursorShape.SizeBDiagCursor
+        return None
+
+    def _resize_corner_for_pos(self, local_pos: QPoint) -> str | None:
+        if not self._resizable:
+            return None
+        gutter = max(16, min(self._CORNER_CURSOR_GUTTER_PX, min(self.width(), self.height()) // 3 or 16))
+        near_left = local_pos.x() <= gutter
+        near_right = local_pos.x() >= max(0, self.width() - gutter)
+        near_top = local_pos.y() <= gutter
+        near_bottom = local_pos.y() >= max(0, self.height() - gutter)
+
+        if near_top and near_left:
+            return self._RESIZE_CORNER_TOP_LEFT
+        if near_top and near_right:
+            return self._RESIZE_CORNER_TOP_RIGHT
+        if near_bottom and near_left:
+            return self._RESIZE_CORNER_BOTTOM_LEFT
+        if near_bottom and near_right:
+            return self._RESIZE_CORNER_BOTTOM_RIGHT
+        return None
+
+    def _resolve_cursor_shape(self, local_pos: QPoint) -> Qt.CursorShape:
+        if self._resizing:
+            resize_corner = self._resize_corner
+            if resize_corner in (self._RESIZE_CORNER_TOP_LEFT, self._RESIZE_CORNER_BOTTOM_RIGHT):
+                return Qt.CursorShape.SizeFDiagCursor
+            if resize_corner in (self._RESIZE_CORNER_TOP_RIGHT, self._RESIZE_CORNER_BOTTOM_LEFT):
+                return Qt.CursorShape.SizeBDiagCursor
+            resize_cursor = self._resize_corner_cursor_for_pos(local_pos)
+            if resize_cursor is not None:
+                return resize_cursor
+        if self._dragging:
+            return Qt.CursorShape.ClosedHandCursor
+        if self._reset_size_btn.geometry().contains(local_pos):
+            return Qt.CursorShape.PointingHandCursor
+        if self._reset_position_btn.geometry().contains(local_pos):
+            return Qt.CursorShape.PointingHandCursor
+        if self._remove_btn.isVisible() and self._remove_btn.geometry().contains(local_pos):
+            return Qt.CursorShape.PointingHandCursor
+        resize_cursor = self._resize_corner_cursor_for_pos(local_pos)
+        if resize_cursor is not None:
+            return resize_cursor
+        return Qt.CursorShape.OpenHandCursor
+
+    def _update_hover_cursor(self, local_pos: QPoint | None = None) -> None:
+        if local_pos is None:
+            local_pos = self.mapFromGlobal(QCursor.pos())
+        self.setCursor(self._resolve_cursor_shape(local_pos))
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         local_pos = event.position().toPoint()
         if (
@@ -224,14 +294,33 @@ class EditShellWidget(QWidget):
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
+            resize_corner = self._resize_corner_for_pos(local_pos)
+            if resize_corner is not None:
+                self._resizing = True
+                self._resize_corner = resize_corner
+                self.resize_drag_started.emit(self.widget_id, resize_corner, QRect(self.geometry()))
+                self._update_hover_cursor(local_pos)
+                event.accept()
+                return
             self._dragging = True
             self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._resizing:
+            self.resize_drag_live_changed.emit(
+                self.widget_id,
+                str(self._resize_corner or ""),
+                QRect(self.geometry()),
+                event.globalPosition().toPoint(),
+            )
+            event.accept()
+            return
         if not self._dragging:
+            self._update_hover_cursor(event.position().toPoint())
             super().mouseMoveEvent(event)
             return
         top_left = event.globalPosition().toPoint() - self._drag_offset
@@ -255,6 +344,15 @@ class EditShellWidget(QWidget):
             self._pressed_button = None
             event.accept()
             return
+        if self._resizing and event.button() == Qt.MouseButton.LeftButton:
+            self._resizing = False
+            resize_corner = str(self._resize_corner or "")
+            self._resize_corner = None
+            global_pos = event.globalPosition().toPoint()
+            self._update_hover_cursor(local_pos)
+            self.resize_drag_finished.emit(self.widget_id, resize_corner, QRect(self.geometry()), global_pos)
+            event.accept()
+            return
         if self._dragging and event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
             global_pos = event.globalPosition().toPoint()
@@ -264,11 +362,13 @@ class EditShellWidget(QWidget):
                     self.setGeometry(next_rect)
                 except Exception:
                     pass
+            self._update_hover_cursor(local_pos)
             self.drag_finished.emit(self.widget_id, QRect(self.geometry()), global_pos)
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
             self._pressed_button = None
+            self._update_hover_cursor(local_pos)
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event: QWheelEvent) -> None:
@@ -281,6 +381,15 @@ class EditShellWidget(QWidget):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._reposition_reset_button()
+        self._update_hover_cursor()
+
+    def enterEvent(self, event) -> None:  # type: ignore[override]
+        super().enterEvent(event)
+        self._update_hover_cursor()
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        super().leaveEvent(event)
+        self.unsetCursor()
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)

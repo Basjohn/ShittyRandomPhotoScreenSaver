@@ -88,6 +88,8 @@ class _DisplayStub(QWidget):
         self._dimming_enabled = False
         self._dimming_opacity = 0.0
         self._gl_compositor = None
+        self._ctrl_cursor_hint = None
+        self._input_handler = None
         self.clock_widget: _EditableTestWidget | None = None
         self.clock2_widget = None
         self.clock3_widget = None
@@ -215,6 +217,30 @@ class _FakeCompositor:
         self.calls.append((bool(enabled), float(opacity)))
 
 
+class _HaloStub:
+    def __init__(self) -> None:
+        self.cancelled = False
+        self.hidden = False
+        self.opacity = None
+
+    def cancel_animation(self) -> None:
+        self.cancelled = True
+
+    def hide(self) -> None:
+        self.hidden = True
+
+    def setOpacity(self, value: float) -> None:
+        self.opacity = float(value)
+
+
+class _InputHandlerStub:
+    def __init__(self) -> None:
+        self.ctrl_states: list[bool] = []
+
+    def set_ctrl_held(self, held: bool) -> None:
+        self.ctrl_states.append(bool(held))
+
+
 def _reset_custom_layout_manager_state() -> None:
     CustomLayoutManager._active_managers = []
 
@@ -337,6 +363,167 @@ def test_edit_shell_reset_buttons_emit_requests(qtbot):
 
     assert size_emitted == ["clock"]
     assert position_emitted == ["clock"]
+
+
+def test_edit_shell_cursor_policy_uses_hand_and_all_corner_resize_shapes(qtbot):
+    pm = QPixmap(300, 160)
+    pm.fill(QColor("black"))
+    shell = EditShellWidget(
+        widget_id="clock",
+        snapshot=pm,
+        initial_global_rect=QRect(0, 0, 300, 160),
+        resizable=True,
+    )
+    qtbot.addWidget(shell)
+    shell.show()
+
+    assert shell._resolve_cursor_shape(QPoint(120, 70)) == Qt.CursorShape.OpenHandCursor
+    assert shell._resolve_cursor_shape(QPoint(4, 4)) == Qt.CursorShape.SizeFDiagCursor
+    assert shell._resolve_cursor_shape(QPoint(shell.width() - 4, 4)) == Qt.CursorShape.SizeBDiagCursor
+    assert shell._resolve_cursor_shape(QPoint(4, shell.height() - 4)) == Qt.CursorShape.SizeBDiagCursor
+    assert shell._resolve_cursor_shape(QPoint(shell.width() - 4, shell.height() - 4)) == Qt.CursorShape.SizeFDiagCursor
+    shell._resizing = True
+    shell._resize_corner = shell._RESIZE_CORNER_TOP_LEFT
+    assert shell._resolve_cursor_shape(QPoint(120, 70)) == Qt.CursorShape.SizeFDiagCursor
+
+
+def test_custom_layout_session_suspends_halo_and_restores_blank_cursor(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    display.setCursor(Qt.CursorShape.BlankCursor)
+    display._ctrl_held = True
+    display._ctrl_cursor_hint = _HaloStub()
+    display._input_handler = _InputHandlerStub()
+    display.clock_widget = _EditableTestWidget(display)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+
+    class _CoordinatorStub:
+        def __init__(self) -> None:
+            self.ctrl_states: list[bool] = []
+            self.cleared = False
+
+        def get_all_instances(self):
+            return [display]
+
+        def set_ctrl_held(self, held: bool) -> None:
+            self.ctrl_states.append(bool(held))
+
+        def clear_halo_owner(self):
+            self.cleared = True
+            return None
+
+    coordinator = _CoordinatorStub()
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: coordinator)
+
+    assert manager.start_session() is True
+    assert display.cursor().shape() == Qt.CursorShape.ArrowCursor
+    assert display._ctrl_held is False
+    assert display._input_handler.ctrl_states[-1] is False
+    assert coordinator.ctrl_states[-1] is False
+    assert coordinator.cleared is True
+    assert display._ctrl_cursor_hint.cancelled is True
+    assert display._ctrl_cursor_hint.hidden is True
+    assert display._ctrl_cursor_hint.opacity == 0.0
+
+    assert manager.cancel_session() is True
+    assert display.cursor().shape() == Qt.CursorShape.BlankCursor
+
+
+def test_custom_layout_corner_drag_resize_scales_from_opposite_corner(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    origin_rect = QRect(state.current_global_rect)
+    fixed_bottom_right = origin_rect.topLeft() + QPoint(origin_rect.width(), origin_rect.height())
+
+    manager._on_shell_resize_drag_started("clock", "top_left", origin_rect)
+    manager._on_shell_resize_drag_live_changed(
+        "clock",
+        "top_left",
+        QRect(origin_rect),
+        origin_rect.topLeft() - QPoint(20, 10),
+    )
+
+    assert state.resize_scale > 1.0
+    assert state.current_size_payload["font_size"] > state.baseline_size_payload["font_size"]
+    assert state.current_global_rect.topLeft().x() < origin_rect.topLeft().x()
+    assert state.current_global_rect.topLeft().y() < origin_rect.topLeft().y()
+    snapped_bottom_right = state.current_global_rect.topLeft() + QPoint(
+        state.current_global_rect.width(),
+        state.current_global_rect.height(),
+    )
+    assert abs(snapped_bottom_right.x() - fixed_bottom_right.x()) <= 12
+    assert abs(snapped_bottom_right.y() - fixed_bottom_right.y()) <= 12
+
+    manager._on_shell_resize_drag_finished(
+        "clock",
+        "top_left",
+        QRect(state.current_global_rect),
+        state.current_global_rect.topLeft(),
+    )
+    assert state.resize_corner is None
+    assert state.resize_origin_rect is None
+
+
+def test_custom_layout_corner_resize_stays_on_current_screen(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    clock_a = _EditableTestWidget(display_a, font_size=48)
+    display_a.clock_widget = clock_a
+    qtbot.addWidget(clock_a)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    state = manager_a._shell_states["clock"]
+    origin_signature = state.current_screen_signature
+    manager_a._on_shell_resize_drag_started("clock", "top_right", QRect(state.current_global_rect))
+    manager_a._on_shell_resize_drag_live_changed(
+        "clock",
+        "top_right",
+        QRect(state.current_global_rect),
+        QPoint(screen_b.geometry().x() + 10, state.current_global_rect.y() - 10),
+    )
+
+    assert state.current_screen_signature == origin_signature
 
 
 def test_custom_layout_manager_escape_cancels_active_session(qtbot):
@@ -552,7 +739,8 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.shell._remove_btn.isVisible() is True
 
     restack_events: list[str] = []
-    monkeypatch.setattr(manager_a._grid_overlay, "lower", lambda: restack_events.append("overlay_a"), raising=False)
+    monkeypatch.setattr(display_a, "raise_", lambda: restack_events.append("display_a"), raising=False)
+    monkeypatch.setattr(manager_a._grid_overlay, "raise_", lambda: restack_events.append("overlay_a"), raising=False)
     monkeypatch.setattr(state_a.shell, "raise_", lambda: restack_events.append("shell_a"), raising=False)
 
     manager_b._on_shell_remove_requested("clock")
@@ -560,6 +748,7 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.removed is True
     assert state_b.shell.isVisible() is False
     assert state_a.shell._remove_btn.isVisible() is False
+    assert "display_a" in restack_events
     assert "overlay_a" in restack_events
     assert "shell_a" in restack_events
 
@@ -607,12 +796,13 @@ def test_custom_layout_manager_raise_all_active_shells_normalizes_overlay_stack(
 
     state = manager._shell_states["clock"]
     calls: list[str] = []
-    monkeypatch.setattr(manager._grid_overlay, "lower", lambda: calls.append("overlay"), raising=False)
+    monkeypatch.setattr(display, "raise_", lambda: calls.append("display"), raising=False)
+    monkeypatch.setattr(manager._grid_overlay, "raise_", lambda: calls.append("overlay"), raising=False)
     monkeypatch.setattr(state.shell, "raise_", lambda: calls.append("shell"), raising=False)
 
     CustomLayoutManager.raise_all_active_shells()
 
-    assert calls == ["overlay", "shell"]
+    assert calls == ["display", "overlay", "shell"]
 
 
 def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size(qtbot):

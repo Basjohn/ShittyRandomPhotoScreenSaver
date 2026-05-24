@@ -187,7 +187,10 @@ def show_context_menu(widget, global_pos) -> None:
                             interaction_mode = SettingsManager.to_bool(
                                 widget.settings_manager.get("input.interaction_mode", False), False
                             )
-                        if interaction_mode or widget._coordinator.ctrl_held:
+                        if (
+                            not CustomLayoutManager.is_any_session_active()
+                            and (interaction_mode or widget._coordinator.ctrl_held)
+                        ):
                             # Re-show halo at current cursor position
                             global_pos = QCursor.pos()
                             local_pos = widget.mapFromGlobal(global_pos)
