@@ -333,6 +333,14 @@ def cleanup(engine: ScreensaverEngine) -> None:
             except Exception as e:
                 logger.warning("ThreadManager.shutdown() failed during engine cleanup: %s", e, exc_info=True)
 
+        # Cleanup shared animation manager
+        if engine.animation_manager:
+            try:
+                engine.animation_manager.cleanup()
+                logger.debug("Animation manager cleaned up")
+            except Exception as e:
+                logger.warning("AnimationManager.cleanup() failed during engine cleanup: %s", e, exc_info=True)
+
         # Cleanup resource manager
         if engine.resource_manager:
             try:

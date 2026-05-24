@@ -20,9 +20,11 @@ Canonical architecture and behavior contracts for SRPSS.
 - Async business work uses `ThreadManager`.
 - Qt object lifecycle uses `ResourceManager`.
 - Settings read/write/migration uses `SettingsManager`.
-- Animations route through `AnimationManager`.
+- Shared timeline/tick-driven runtime animations route through `AnimationManager`. Small widget-local effect animations may remain local when they are explicitly owned and cleaned up by the widget.
+- Engine-owned `AnimationManager` is also the app-shared fallback manager for runtime leaf/widget animation paths that do not need their own display-scoped transition manager.
 - Cross-module publish/subscribe events use `EventSystem`.
 - Worker process orchestration uses `ProcessSupervisor`.
+- `ProcessSupervisor` owns correlated worker-response waiting/buffering for shared response queues. Runtime callers must not reach into raw worker response queues directly, and the dormant callback-listener facade is not part of the live contract.
 - Engine-owned `ThreadManager` and `ResourceManager` instances are also the app-shared fallback managers for leaf/runtime helper code. Do not create ad hoc leaf managers when the shared seam can supply the same ownership cleanly.
 - When no app-shared `ThreadManager` is available, helper/UI fallbacks must stay intentionally narrow rather than silently creating another full-size compute-heavy manager.
 - `ThreadManager` active-task bookkeeping is authoritative at submit/complete/cancel/shutdown time and must not depend on a queued UI-thread mutation drain to become visible.

@@ -6,6 +6,7 @@ Manages lifecycle of worker processes including:
 - Health monitoring via heartbeat
 - Exponential backoff restart policy
 - Graceful shutdown integration with ResourceManager
+- Supervisor-owned correlated response waiting/buffering for shared worker queues
 """
 from __future__ import annotations
 
@@ -32,10 +33,6 @@ from core.process.types import (
 
 logger = get_logger(__name__)
 
-# Type alias for response callbacks
-ResponseCallback = Callable[[WorkerResponse], None]
-
-
 class ProcessSupervisor:
     """
     Supervisor for managing worker processes.
@@ -45,6 +42,7 @@ class ProcessSupervisor:
     - Health monitoring with heartbeat
     - Exponential backoff restart policy
     - Non-blocking message passing
+    - Supervisor-owned correlated response waiting/buffering
     - Integration with ResourceManager for cleanup
     - Settings-based worker enable/disable
     
@@ -93,8 +91,11 @@ class ProcessSupervisor:
         self._heartbeat_timer: Optional[threading.Timer] = None
         self._heartbeat_interval_s = HealthStatus.HEARTBEAT_INTERVAL_MS / 1000.0
         
-        # Async response handling - disabled, using poll_responses() instead
-        self._response_callbacks: dict[str, ResponseCallback] = {}
+        # Correlated response buffering so one caller cannot steal another
+        # worker response from the shared queue.
+        self._buffered_responses: dict[WorkerType, dict[str, list[WorkerResponse]]] = {
+            wt: {} for wt in WorkerType
+        }
         
         # Initialize health status for all worker types
         for wt in WorkerType:
@@ -429,43 +430,24 @@ class ProcessSupervisor:
             List of WorkerResponse objects
         """
         responses = []
-        
+
+        responses.extend(self._pop_buffered_responses(worker_type, max_count))
+        if len(responses) >= max_count:
+            return responses[:max_count]
+
         with self._lock:
             resp_queue = self._response_queues.get(worker_type)
             if not resp_queue:
                 return responses
         
         # Poll outside lock to avoid blocking
-        for _ in range(max_count):
+        for _ in range(max(0, max_count - len(responses))):
             try:
                 data = resp_queue.get_nowait()
                 response = WorkerResponse.from_dict(data)
-                responses.append(response)
-                
-                # Skip ready signals (consumed during start())
-                if response.msg_type == MessageType.WORKER_READY:
+                if self._process_internal_response(worker_type, response):
                     continue
-                
-                # Handle heartbeat acks
-                if response.msg_type == MessageType.HEARTBEAT_ACK:
-                    with self._lock:
-                        self._health[worker_type].record_heartbeat()
-                
-                # Handle worker busy/idle state changes
-                elif response.msg_type == MessageType.WORKER_BUSY:
-                    with self._lock:
-                        self._health[worker_type].set_busy(True)
-                        if is_perf_metrics_enabled():
-                            logger.debug(
-                                "[PERF] [WORKER] %s marked as BUSY",
-                                worker_type.value,
-                            )
-                
-                elif response.msg_type == MessageType.WORKER_IDLE:
-                    with self._lock:
-                        self._health[worker_type].set_busy(False)
-                        self._health[worker_type].record_heartbeat()  # Reset heartbeat on idle
-                        
+                responses.append(response)
             except QueueEmpty:
                 # Normal condition - queue is empty, stop polling
                 break
@@ -475,6 +457,78 @@ class ProcessSupervisor:
                 break
         
         return responses
+
+    def await_response(
+        self,
+        worker_type: WorkerType,
+        correlation_id: str,
+        *,
+        timeout_ms: int = 5000,
+        poll_slice_ms: int = 50,
+    ) -> Optional[WorkerResponse]:
+        """Wait for a correlated worker response without stealing others.
+
+        Unmatched non-internal responses are buffered so later callers or
+        pollers can still consume them.
+        """
+        buffered = self._pop_buffered_response(worker_type, correlation_id)
+        if buffered is not None:
+            return buffered
+
+        with self._lock:
+            resp_queue = self._response_queues.get(worker_type)
+            if not resp_queue:
+                return None
+
+        deadline = time.time() + max(0.0, timeout_ms / 1000.0)
+        timeout_s = max(0.0, poll_slice_ms / 1000.0)
+
+        while time.time() < deadline:
+            remaining = deadline - time.time()
+            if remaining <= 0.0:
+                break
+            try:
+                data = resp_queue.get(timeout=min(timeout_s, remaining))
+                response = WorkerResponse.from_dict(data)
+            except QueueEmpty:
+                continue
+            except Exception as e:
+                logger.debug("[WORKER] Error awaiting response: %s", e)
+                return None
+
+            if self._process_internal_response(worker_type, response):
+                continue
+
+            if response.correlation_id == correlation_id:
+                return response
+
+            self._buffer_response(worker_type, response)
+
+        return self._pop_buffered_response(worker_type, correlation_id)
+
+    def send_request_and_await_response(
+        self,
+        worker_type: WorkerType,
+        msg_type: MessageType,
+        payload: dict[str, Any],
+        *,
+        timeout_ms: int = 5000,
+        correlation_id: Optional[str] = None,
+    ) -> Optional[WorkerResponse]:
+        """Send a worker request and wait for its correlated response."""
+        corr_id = self.send_message(
+            worker_type,
+            msg_type,
+            payload,
+            correlation_id=correlation_id,
+        )
+        if not corr_id:
+            return None
+        return self.await_response(
+            worker_type,
+            corr_id,
+            timeout_ms=timeout_ms,
+        )
     
     def is_running(self, worker_type: WorkerType) -> bool:
         """Check if a worker is currently running.
@@ -603,80 +657,6 @@ class ProcessSupervisor:
                     diag.get("state", "UNKNOWN"),
                 )
     
-    def register_response_callback(
-        self,
-        correlation_id: str,
-        callback: ResponseCallback,
-        timeout_ms: int = 5000,
-    ) -> None:
-        """
-        Register a callback for async response handling (DISABLED).
-
-        This method is retained for API compatibility but the async callback
-        system is not currently functional. All worker communication uses
-        synchronous polling via poll_responses().
-
-        Args:
-            correlation_id: The correlation ID to match
-            callback: Function to call with the WorkerResponse (never called)
-            timeout_ms: Ignored - no callback will be invoked
-        """
-        # Disabled: Async callback system not in use
-        # Callbacks are stored but never invoked without response listener
-        with self._lock:
-            self._response_callbacks[correlation_id] = callback
-
-        # Schedule cleanup to prevent memory leak from stored callbacks
-        def _timeout_cleanup():
-            with self._lock:
-                self._response_callbacks.pop(correlation_id, None)
-
-        timer = threading.Timer(timeout_ms / 1000.0, _timeout_cleanup)
-        timer.daemon = True
-        timer.start()
-    
-    def send_message_async(
-        self,
-        worker_type: WorkerType,
-        msg_type: MessageType,
-        payload: dict[str, Any],
-        callback: ResponseCallback,
-        timeout_ms: int = 5000,
-    ) -> Optional[str]:
-        """
-        Send a message and register a callback for the response.
-        
-        This is the preferred method for non-blocking worker communication.
-        The callback will be invoked from a background thread when the
-        response arrives.
-        
-        Args:
-            worker_type: Target worker type
-            msg_type: Message type
-            payload: Message payload
-            callback: Function to call with the response
-            timeout_ms: Timeout for response
-            
-        Returns:
-            Correlation ID if sent, None if failed
-        """
-        correlation_id = self.send_message(worker_type, msg_type, payload)
-        if correlation_id:
-            self.register_response_callback(correlation_id, callback, timeout_ms)
-        return correlation_id
-    
-    def _ensure_response_listener(self) -> None:
-        """Response listener disabled - using poll_responses() pattern instead.
-
-        The async callback system is not currently used. All worker communication
-        uses synchronous polling via poll_responses().
-        """
-        pass  # Disabled - see class docstring for communication pattern
-
-    def _response_listener_loop(self) -> None:
-        """Disabled - response listener not used."""
-        pass
-    
     def shutdown(self, timeout: float = 10.0) -> None:
         """
         Shutdown all workers and cleanup.
@@ -689,18 +669,15 @@ class ProcessSupervisor:
         
         logger.info("ProcessSupervisor shutting down...")
         self._shutdown = True
-        
-        # Stop response listener (disabled - no-op)
-        self._response_callbacks.clear()
-        
+
         # Stop heartbeat monitoring
         if self._heartbeat_timer:
             self._heartbeat_timer.cancel()
             self._heartbeat_timer = None
-        
-        # Clear pending callbacks
+
         with self._lock:
-            self._response_callbacks.clear()
+            for worker_type in WorkerType:
+                self._buffered_responses[worker_type].clear()
         
         # Stop all workers
         per_worker_timeout = timeout / max(len(self._workers), 1)
@@ -720,6 +697,78 @@ class ProcessSupervisor:
         """Get next sequence number for worker (must hold lock)."""
         self._seq_counters[worker_type] += 1
         return self._seq_counters[worker_type]
+
+    def _process_internal_response(self, worker_type: WorkerType, response: WorkerResponse) -> bool:
+        """Apply supervisor-owned side effects for internal worker responses."""
+        if response.msg_type == MessageType.WORKER_READY:
+            return True
+
+        if response.msg_type == MessageType.HEARTBEAT_ACK:
+            with self._lock:
+                self._health[worker_type].record_heartbeat()
+            return True
+
+        if response.msg_type == MessageType.WORKER_BUSY:
+            with self._lock:
+                self._health[worker_type].set_busy(True)
+                if is_perf_metrics_enabled():
+                    logger.debug(
+                        "[PERF] [WORKER] %s marked as BUSY",
+                        worker_type.value,
+                    )
+            return True
+
+        if response.msg_type == MessageType.WORKER_IDLE:
+            with self._lock:
+                self._health[worker_type].set_busy(False)
+                self._health[worker_type].record_heartbeat()
+            return True
+
+        return False
+
+    def _buffer_response(self, worker_type: WorkerType, response: WorkerResponse) -> None:
+        """Buffer a correlated response for later retrieval."""
+        corr_id = response.correlation_id
+        if not corr_id:
+            return
+        with self._lock:
+            worker_buffer = self._buffered_responses[worker_type]
+            worker_buffer.setdefault(corr_id, []).append(response)
+
+    def _pop_buffered_response(
+        self,
+        worker_type: WorkerType,
+        correlation_id: str,
+    ) -> Optional[WorkerResponse]:
+        """Pop one buffered response for a specific correlation id."""
+        with self._lock:
+            worker_buffer = self._buffered_responses[worker_type]
+            queue = worker_buffer.get(correlation_id)
+            if not queue:
+                return None
+            response = queue.pop(0)
+            if not queue:
+                worker_buffer.pop(correlation_id, None)
+            return response
+
+    def _pop_buffered_responses(
+        self,
+        worker_type: WorkerType,
+        max_count: int,
+    ) -> list[WorkerResponse]:
+        """Pop buffered responses in FIFO correlation order for polling callers."""
+        responses: list[WorkerResponse] = []
+        with self._lock:
+            worker_buffer = self._buffered_responses[worker_type]
+            for corr_id in list(worker_buffer.keys()):
+                queue = worker_buffer.get(corr_id)
+                while queue and len(responses) < max_count:
+                    responses.append(queue.pop(0))
+                if not queue:
+                    worker_buffer.pop(corr_id, None)
+                if len(responses) >= max_count:
+                    break
+        return responses
     
     def _is_worker_enabled(self, worker_type: WorkerType) -> bool:
         """Check if worker is enabled in settings."""
@@ -761,6 +810,7 @@ class ProcessSupervisor:
         
         self._health[worker_type].state = WorkerState.STOPPED
         self._health[worker_type].pid = None
+        self._buffered_responses[worker_type].clear()
         self._broadcast_health(worker_type)
     
     def _ensure_heartbeat_monitoring(self) -> None:

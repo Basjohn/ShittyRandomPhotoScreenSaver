@@ -15,10 +15,12 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Threading through `ThreadManager`.
 - Qt lifecycle through `ResourceManager`.
 - Settings through `SettingsManager`.
-- Animation through `AnimationManager`.
+- Shared timeline/tick-driven runtime animation through `AnimationManager`.
 - Cross-module publish/subscribe events through `EventSystem`.
 - Worker process orchestration through `ProcessSupervisor`.
+- Worker-process callers should consume supervisor-owned correlated response helpers or polling surfaces, not raw response queues. Do not keep a second queue-drain contract in engine/rendering code, and do not reintroduce the dormant callback-listener facade as if it were a live runtime path.
 - Leaf/runtime helper code should prefer the app-shared `ThreadManager` / `ResourceManager` seam rather than constructing ad hoc manager instances.
+- Leaf/runtime animation helpers should prefer the app-shared `AnimationManager` seam rather than constructing ad hoc managers when they only need ordinary shared-timeline animation ownership.
 - If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
 - Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
 
@@ -48,6 +50,7 @@ No shadow frameworks or parallel ownership paths.
 - Respect staged startup contracts for dependent overlay widgets.
 - When settings entry, stop, or teardown is involved, suppress new runtime work through the explicit quiesce boundary (`ScreensaverEngine.stop` → `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()`) instead of layering more late cleanup side effects onto display clear/hide paths.
 - Browser-window preference work must stay narrow and centralized: helper/SCR and MC direct-open flows may share a best-effort display-0 foreground preference, but widget click handlers must not grow their own browser/window-selection logic or broader automation behavior.
+- Do not over-centralize tiny widget-local effect fades just for purity. `AnimationManager` should own shared timeline/tick animation seams; tightly local `QVariantAnimation`/effect fades may remain widget-local when they are explicitly owned, cleaned up, and not recreating a second broader animation registry.
 
 ## 5.1 Widget Registry Safety
 - `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.

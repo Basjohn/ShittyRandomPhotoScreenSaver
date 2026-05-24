@@ -16,9 +16,8 @@ from PySide6.QtGui import QPixmap, QImage
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_ASYNC
 from core.constants.timing import TRANSITION_STAGGER_MS
-from core.process.types import WorkerResponse, WorkerType, MessageType
+from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
-from queue import Empty as QueueEmpty
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
 from sources.base_provider import ImageMetadata
@@ -71,8 +70,7 @@ def load_image_via_worker(
             if isinstance(use_lanczos, str):
                 use_lanczos = use_lanczos.lower() == 'true'
 
-        # Send prescale request to ImageWorker
-        _correlation_id = engine._process_supervisor.send_message(
+        response = engine._process_supervisor.send_request_and_await_response(
             WorkerType.IMAGE,
             MessageType.IMAGE_PRESCALE,
             payload={
@@ -83,96 +81,68 @@ def load_image_via_worker(
                 "use_lanczos": use_lanczos,
                 "sharpen": sharpen,
             },
+            timeout_ms=timeout_ms,
         )
 
-        if not _correlation_id:
-            logger.debug(f"{TAG_WORKER} Failed to send message to ImageWorker")
+        if not response:
+            logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
             return None
 
-        # Wait for response with blocking get - more efficient than busy-polling
-        start_time = time.time()
-        timeout_s = timeout_ms / 1000.0
+        if response.success:
+            payload = response.payload
+            width = payload.get("width", 0)
+            height = payload.get("height", 0)
 
-        while (time.time() - start_time) < timeout_s:
-            # Use blocking get with short timeout - worker wakes us when response arrives
-            try:
-                resp_queue = engine._process_supervisor._response_queues.get(WorkerType.IMAGE)
-                if not resp_queue:
-                    return None
-                # Blocking get with 50ms timeout - efficient waiting
-                data = resp_queue.get(timeout=0.05)
-                response = WorkerResponse.from_dict(data)
-
-                # Handle internal messages (heartbeat, busy/idle)
-                if response.msg_type in (MessageType.WORKER_READY, MessageType.WORKER_BUSY, MessageType.WORKER_IDLE, MessageType.HEARTBEAT_ACK):
-                    continue
-
-                if response.correlation_id == _correlation_id:
-                    if response.success:
-                        payload = response.payload
-                        width = payload.get("width", 0)
-                        height = payload.get("height", 0)
-
-                        if width <= 0 or height <= 0:
-                            logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
-                            return None
-
-                        # Check for shared memory response (large images)
-                        shm_name = payload.get("shared_memory_name")
-                        if shm_name:
-                            try:
-                                from multiprocessing.shared_memory import SharedMemory
-                                shm_size = payload.get("shared_memory_size", width * height * 4)
-                                shm = SharedMemory(name=shm_name, create=False)
-                                rgba_data = bytes(shm.buf[:shm_size])
-                                shm.close()
-                                # Don't unlink - worker will clean up
-
-                                if is_perf_metrics_enabled():
-                                    logger.debug(
-                                        f"{TAG_PERF} {TAG_WORKER} ImageWorker used shared memory: %.1f MB",
-                                        shm_size / (1024 * 1024)
-                                    )
-                            except Exception as shm_err:
-                                logger.warning(f"{TAG_WORKER} Failed to read shared memory: %s", shm_err)
-                                return None
-                        else:
-                            # Queue-based transfer (smaller images)
-                            rgba_data = payload.get("rgba_data")
-
-                        if rgba_data and width > 0 and height > 0:
-                            qimage = QImage(
-                                rgba_data,
-                                width,
-                                height,
-                                width * 4,  # bytes per line
-                                QImage.Format.Format_RGBA8888,
-                            )
-                            # Make a deep copy since rgba_data may be invalidated
-                            qimage = qimage.copy()
-
-                            if is_perf_metrics_enabled():
-                                proc_time = response.processing_time_ms or 0
-                                logger.info(
-                                    f"{TAG_PERF} {TAG_WORKER} ImageWorker prescale: %dx%d in %.1fms",
-                                    width, height, proc_time
-                                )
-
-                            return qimage
-                    else:
-                        error = response.error or "Unknown error"
-                        logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
-                        return None
-
-            except QueueEmpty:
-                # Timeout on blocking get - check if we've exceeded total timeout
-                continue
-            except Exception as e:
-                logger.debug(f"{TAG_WORKER} Error waiting for response: %s", e)
+            if width <= 0 or height <= 0:
+                logger.warning(f"{TAG_WORKER} ImageWorker returned invalid dimensions")
                 return None
 
-        logger.warning(f"{TAG_WORKER} ImageWorker timeout after %dms", timeout_ms)
-        return None
+            # Check for shared memory response (large images)
+            shm_name = payload.get("shared_memory_name")
+            if shm_name:
+                try:
+                    from multiprocessing.shared_memory import SharedMemory
+                    shm_size = payload.get("shared_memory_size", width * height * 4)
+                    shm = SharedMemory(name=shm_name, create=False)
+                    rgba_data = bytes(shm.buf[:shm_size])
+                    shm.close()
+                    # Don't unlink - worker will clean up
+
+                    if is_perf_metrics_enabled():
+                        logger.debug(
+                            f"{TAG_PERF} {TAG_WORKER} ImageWorker used shared memory: %.1f MB",
+                            shm_size / (1024 * 1024)
+                        )
+                except Exception as shm_err:
+                    logger.warning(f"{TAG_WORKER} Failed to read shared memory: %s", shm_err)
+                    return None
+            else:
+                # Queue-based transfer (smaller images)
+                rgba_data = payload.get("rgba_data")
+
+            if rgba_data and width > 0 and height > 0:
+                qimage = QImage(
+                    rgba_data,
+                    width,
+                    height,
+                    width * 4,  # bytes per line
+                    QImage.Format.Format_RGBA8888,
+                )
+                # Make a deep copy since rgba_data may be invalidated
+                qimage = qimage.copy()
+
+                if is_perf_metrics_enabled():
+                    proc_time = response.processing_time_ms or 0
+                    logger.info(
+                        f"{TAG_PERF} {TAG_WORKER} ImageWorker prescale: %dx%d in %.1fms",
+                        width, height, proc_time
+                    )
+
+                return qimage
+        else:
+            error = response.error or "Unknown error"
+            logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
+            return None
 
     except Exception as e:
         logger.warning(f"{TAG_WORKER} ImageWorker error: %s", e)

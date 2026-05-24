@@ -126,7 +126,7 @@ class CursorHaloWidget(QWidget):
         self._opacity = 1.0
         self._shape: str = DEFAULT_HALO_SHAPE
         self._animation_id: Optional[str] = None
-        self._animation_manager = AnimationManager()
+        self._animation_manager = AnimationManager.get_or_create_app_shared()
         self._is_fading_out = False  # Track fade state to prevent interference
         self._last_perf_log_ts: float = 0.0
         self._perf_log_threshold_ms: float = HALO_PERF_LOG_MIN_MS

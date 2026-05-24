@@ -14,33 +14,9 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-- [ ] 1. Audit `core/animation/animator.py`.
-  - Why this is next:
-    - it is central enough to affect fades, timers, and lifecycle behavior,
-    - the higher-risk settings/descriptors/setup seams are now materially tightened,
-    - it is the next best shared-timing/lifecycle authority to verify before future feature work stacks more behavior on top.
-  - Audit checklist:
-    - verify animation registration and cleanup ownership are centralized and consistent,
-    - identify any widgets or helpers still bypassing the central animation/lifecycle seam in risky ways,
-    - assess timer churn, cleanup behavior, and whether any fade/animation responsibilities have drifted outward.
-  - Guardrails:
-    - preserve current working visual/fade behavior unless the audit proves a contract violation.
-  - Hopeful outcome:
-    - cleaner animation ownership and lower long-term timing/leak risk.
-
-- [ ] 2. Audit `core/process/supervisor.py`.
-  - Why this follows animator:
-    - it matters for startup/close reliability and any future performance/process work,
-    - but it is less entangled with day-to-day widget-extension cost than the items above.
-  - Audit checklist:
-    - verify worker lifecycle ownership, restart/cleanup boundaries, and failure handling are explicit,
-    - identify any quiet process ownership assumptions that could affect close reliability or future workload expansion,
-    - assess whether image/rss/transition worker seams are still the right abstractions.
-  - Guardrails:
-    - no speculative concurrency expansion from this audit alone,
-    - preserve current worker behavior unless a real lifecycle defect is found.
-  - Hopeful outcome:
-    - more confidence in startup/close/process cleanup behavior and a clearer basis for future perf/process decisions.
+- None right now.
+  - The current hardening audit wave is materially landed.
+  - Re-open this section only when a concrete regression, new architectural migration, or profiling-backed performance target appears.
 
 ## Watchlist
 - Keep visualizer preset/settings drift in view during later audits:
@@ -55,10 +31,9 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - prefer isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths,
   - treat visualizer mode work as eligible for more off-thread compute only when it can be expressed as snapshot-in / result-out without thread-affinity side effects,
   - treat another process as more likely than another generic Python thread if a future hotspot is both heavy and sufficiently isolated.
-- Legacy widget stacking is still intentionally active for authored anchor-based layouts. It is not a general removal candidate yet; only its interaction with `Custom` remains disabled by contract.
 - Imgur raise-path cleanup/testing is not active work while Imgur remains inactive. Revisit only if the widget is reactivated or if a shared overlay-system change would otherwise leave the dormant path stale.
-- Reassessing residual opacity-effect invalidation is not active work. Revisit only if a concrete shadow/effect corruption issue resurfaces.
-- Further visualizer residue reduction is deferred. Only reopen `_spotify_visualizer.py`, `spotify_visualizer_widget.py`, or deeper `spotify_bars_gl_overlay.py` work if a concrete regression appears or a clearly higher-value feature cannot proceed safely without it.
+
+
 
 ## Documentation Rule
 - Architecture: `Spec.md`

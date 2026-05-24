@@ -126,7 +126,7 @@ class DimmingOverlay(QWidget):
         """Get or create AnimationManager instance."""
         if self._animation_manager is None:
             try:
-                self._animation_manager = AnimationManager()
+                self._animation_manager = AnimationManager.get_or_create_app_shared()
             except Exception as e:
                 logger.debug("[DIMMING] Exception suppressed: %s", e)
         return self._animation_manager

@@ -116,6 +116,12 @@ def test_media_widget_no_hidden_qlabel_render_shadow_path() -> None:
     assert "label.render" not in source
 
 
+def test_media_widget_artwork_fade_uses_app_shared_animation_manager() -> None:
+    source = Path("widgets/media_widget.py").read_text(encoding="utf-8")
+
+    assert "AnimationManager.get_or_create_app_shared()" in source
+
+
 def test_media_header_expands_into_artwork_gap_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

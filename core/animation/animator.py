@@ -2,7 +2,9 @@
 Centralized animation framework.
 
 Provides the AnimationManager for coordinating ALL animations in the application.
-NO raw QPropertyAnimation or QTimer should be used outside this module.
+Shared timeline/tick-driven runtime animations should route through this module.
+Small widget-local effect animations may still use local Qt animation primitives
+when they are explicitly owned and cleaned up by the widget.
 
 FRAME PACING: Animations now support decoupled rendering via FrameState. When
 a frame_state is attached, progress samples are pushed with timestamps, and
@@ -11,8 +13,9 @@ even when timer callbacks are delayed.
 """
 import time
 import uuid
+import threading
 from typing import Any, Dict, Optional, Callable, TYPE_CHECKING
-from PySide6.QtCore import QObject, QTimer, Signal, Qt
+from PySide6.QtCore import QObject, QTimer, Signal, Qt, QThread
 from core.animation.types import (
     AnimationState, EasingCurve,
     PropertyAnimationConfig, CustomAnimationConfig, AnimationGroupConfig
@@ -264,14 +267,50 @@ class AnimationManager(QObject):
     """
     Centralized animation manager.
     
-    ALL animations in the application MUST go through this manager.
-    NO raw QPropertyAnimation or QTimer should be used elsewhere.
+    Shared timeline/tick-driven runtime animations should go through this
+    manager. Small widget-local effect animations may stay local when they are
+    explicitly owned and cleaned up by the widget.
     """
     
     # Signals for global animation events
     animation_started = Signal(str)  # animation_id
     animation_completed = Signal(str)  # animation_id
     animation_cancelled = Signal(str)  # animation_id
+
+    _app_shared_manager: Optional["AnimationManager"] = None
+    _app_shared_lock = threading.RLock()
+
+    @classmethod
+    def set_app_shared(cls, manager: Optional["AnimationManager"]) -> Optional["AnimationManager"]:
+        """Register the app-shared AnimationManager used by runtime leaf paths."""
+        with cls._app_shared_lock:
+            cls._app_shared_manager = manager
+            return cls._app_shared_manager
+
+    @classmethod
+    def get_app_shared(cls) -> Optional["AnimationManager"]:
+        """Return the currently registered app-shared AnimationManager, if any."""
+        with cls._app_shared_lock:
+            manager = cls._app_shared_manager
+            if manager is not None and getattr(manager, "_shutdown", False):
+                cls._app_shared_manager = None
+                return None
+            return manager
+
+    @classmethod
+    def get_or_create_app_shared(
+        cls,
+        *,
+        fps: int = 60,
+        resource_manager: Optional["ResourceManager"] = None,
+    ) -> "AnimationManager":
+        """Return the app-shared AnimationManager, creating one if necessary."""
+        with cls._app_shared_lock:
+            manager = cls._app_shared_manager
+            if manager is None or getattr(manager, "_shutdown", False):
+                manager = cls(fps=fps, resource_manager=resource_manager)
+                cls._app_shared_manager = manager
+            return manager
     
     def __init__(self, fps: int = 60, resource_manager: Optional["ResourceManager"] = None):
         """
@@ -281,6 +320,7 @@ class AnimationManager(QObject):
             fps: Target frames per second for updates
         """
         super().__init__()
+        self._shutdown = False
         
         self.fps = fps
         self.frame_time = 1.0 / fps
@@ -365,10 +405,10 @@ class AnimationManager(QObject):
         happen on the UI thread.
         """
         try:
-            # Check if we're on the UI thread by checking timer's thread affinity
-            if self._timer.thread() != QTimer().thread():
-                # We're on a different thread - schedule stop on UI thread
-                QTimer.singleShot(0, self._do_stop)
+            timer_thread = self._timer.thread()
+            if timer_thread is not None and QThread.currentThread() is not timer_thread:
+                from core.threading.manager import ThreadManager
+                ThreadManager.run_on_ui_thread(self._do_stop)
             else:
                 self._do_stop()
         except Exception as e:
@@ -387,14 +427,15 @@ class AnimationManager(QObject):
         """Clean up animation manager resources."""
         # FIX: Add proper cleanup method for timer and animations
         logger.debug("Cleaning up AnimationManager")
-        
-        # Stop timer
-        self.stop()
+        self._shutdown = True
         
         # Cancel all animations
         animation_ids = list(self._animations.keys())
         for anim_id in animation_ids:
             self.cancel_animation(anim_id)
+
+        # Stop timer
+        self.stop()
         
         # Clean up timer
         if self._timer:
@@ -402,6 +443,10 @@ class AnimationManager(QObject):
                 self._timer.deleteLater()
             except RuntimeError:
                 pass
+
+        with self._app_shared_lock:
+            if self._app_shared_manager is self:
+                self._app_shared_manager = None
         
         logger.info("AnimationManager cleanup complete")
 
@@ -455,6 +500,8 @@ class AnimationManager(QObject):
         Returns:
             Animation ID
         """
+        if self._shutdown:
+            raise RuntimeError("Cannot start animation on cleaned-up AnimationManager")
         animation_id = str(uuid.uuid4())
         
         config = PropertyAnimationConfig(
@@ -497,6 +544,8 @@ class AnimationManager(QObject):
         Returns:
             Animation ID
         """
+        if self._shutdown:
+            raise RuntimeError("Cannot start animation on cleaned-up AnimationManager")
         animation_id = str(uuid.uuid4())
         
         config = CustomAnimationConfig(
@@ -572,8 +621,9 @@ class AnimationManager(QObject):
                         self.stop()
                 except Exception as e:
                     logger.debug("[ANIMATOR] Timer check from wrong thread: %s", e)
-                    # Timer check from wrong thread - schedule stop
-                    QTimer.singleShot(0, self._do_stop)
+                    # Timer check from wrong thread - schedule stop on UI thread
+                    from core.threading.manager import ThreadManager
+                    ThreadManager.run_on_ui_thread(self._do_stop)
             return True
         return False
     

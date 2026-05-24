@@ -61,6 +61,19 @@ class TestDimmingOverlayAttributes:
         overlay2 = DimmingOverlay(None, opacity=-10)
         assert overlay2._target_opacity == 0
 
+    def test_dimming_overlay_uses_app_shared_animation_manager(self, qt_app):
+        from core.animation.animator import AnimationManager
+        from widgets.dimming_overlay import DimmingOverlay
+
+        manager = AnimationManager(fps=60)
+        try:
+            AnimationManager.set_app_shared(manager)
+            overlay = DimmingOverlay(None, opacity=50)
+            assert overlay._get_animation_manager() is manager
+        finally:
+            manager.cleanup()
+            AnimationManager.set_app_shared(None)
+
 
 class TestCtrlHaloAttributes:
     """Test that ctrl cursor halo uses correct attributes for transparency."""
@@ -74,6 +87,20 @@ class TestCtrlHaloAttributes:
 
         assert halo.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         assert not halo.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+
+    def test_halo_uses_app_shared_animation_manager(self, qt_app):
+        from core.animation.animator import AnimationManager
+        from widgets.cursor_halo import CursorHaloWidget
+
+        manager = AnimationManager(fps=60)
+        parent = QWidget()
+        try:
+            AnimationManager.set_app_shared(manager)
+            halo = CursorHaloWidget(parent)
+            assert halo._animation_manager is manager
+        finally:
+            manager.cleanup()
+            AnimationManager.set_app_shared(None)
 
     def test_display_input_ctrl_gate_uses_all_ctrl_state_sources(self, qt_app):
         """Mouse-exit suppression should survive local/global/handler ctrl-state drift."""

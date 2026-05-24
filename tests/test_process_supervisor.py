@@ -473,6 +473,94 @@ class TestProcessSupervisor:
         assert resp_queue.joined is True
         assert supervisor.get_health(WorkerType.IMAGE).state == WorkerState.STOPPED
 
+    def test_await_response_buffers_unmatched_responses_for_later_poll(self):
+        supervisor = ProcessSupervisor()
+
+        class FakeQueue:
+            def __init__(self, items):
+                self._items = list(items)
+
+            def get(self, timeout=None):
+                if not self._items:
+                    raise Exception("empty")
+                return self._items.pop(0)
+
+            def get_nowait(self):
+                if not self._items:
+                    raise Exception("empty")
+                return self._items.pop(0)
+
+        supervisor._response_queues[WorkerType.IMAGE] = FakeQueue([
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=1,
+                correlation_id="other",
+                success=True,
+                payload={"value": "other"},
+            ).to_dict(),
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=2,
+                correlation_id="wanted",
+                success=True,
+                payload={"value": "wanted"},
+            ).to_dict(),
+        ])
+
+        response = supervisor.await_response(WorkerType.IMAGE, "wanted", timeout_ms=50, poll_slice_ms=1)
+
+        assert response is not None
+        assert response.correlation_id == "wanted"
+
+        later = supervisor.poll_responses(WorkerType.IMAGE, max_count=5)
+        assert len(later) == 1
+        assert later[0].correlation_id == "other"
+
+        supervisor.shutdown()
+
+    def test_await_response_processes_internal_messages_without_returning_them(self):
+        supervisor = ProcessSupervisor()
+
+        class FakeQueue:
+            def __init__(self, items):
+                self._items = list(items)
+
+            def get(self, timeout=None):
+                if not self._items:
+                    raise Exception("empty")
+                return self._items.pop(0)
+
+            def get_nowait(self):
+                if not self._items:
+                    raise Exception("empty")
+                return self._items.pop(0)
+
+        supervisor._health[WorkerType.IMAGE].state = WorkerState.RUNNING
+        supervisor._health[WorkerType.IMAGE].missed_heartbeats = 2
+        supervisor._response_queues[WorkerType.IMAGE] = FakeQueue([
+            WorkerResponse(
+                msg_type=MessageType.HEARTBEAT_ACK,
+                seq_no=1,
+                correlation_id="hb",
+                success=True,
+            ).to_dict(),
+            WorkerResponse(
+                msg_type=MessageType.IMAGE_RESULT,
+                seq_no=2,
+                correlation_id="wanted",
+                success=True,
+                payload={"value": "wanted"},
+            ).to_dict(),
+        ])
+
+        response = supervisor.await_response(WorkerType.IMAGE, "wanted", timeout_ms=50, poll_slice_ms=1)
+
+        assert response is not None
+        assert response.correlation_id == "wanted"
+        assert supervisor.get_health(WorkerType.IMAGE).missed_heartbeats == 0
+
+        supervisor.shutdown()
+
 
 class TestWorkerContracts:
     """Tests for worker contract validation."""

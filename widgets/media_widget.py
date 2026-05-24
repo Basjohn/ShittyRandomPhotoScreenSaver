@@ -1505,7 +1505,7 @@ class MediaWidget(BaseOverlayWidget):
             from core.animation.animator import AnimationManager
             from core.animation.types import EasingCurve
             
-            anim_mgr = AnimationManager()
+            anim_mgr = AnimationManager.get_or_create_app_shared()
             
             def _on_tick(progress: float) -> None:
                 try:

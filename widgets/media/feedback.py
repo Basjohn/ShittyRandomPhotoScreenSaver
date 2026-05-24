@@ -208,7 +208,7 @@ def start_feedback_animation(widget: "MediaWidget", key: str) -> None:
         from core.animation.types import EasingCurve
 
         if widget._feedback_anim_mgr is None:
-            widget._feedback_anim_mgr = AnimationManager()
+            widget._feedback_anim_mgr = AnimationManager.get_or_create_app_shared()
 
         mgr = widget._feedback_anim_mgr
         widget._controls_feedback_progress[key] = 1.0

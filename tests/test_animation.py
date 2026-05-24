@@ -34,6 +34,59 @@ def test_animation_manager_initialization(animation_manager):
     assert animation_manager.get_active_count() == 0
 
 
+def test_animation_manager_app_shared_registration_roundtrip(qt_app):
+    manager = AnimationManager(fps=60)
+    try:
+        AnimationManager.set_app_shared(manager)
+        assert AnimationManager.get_app_shared() is manager
+    finally:
+        manager.cleanup()
+        AnimationManager.set_app_shared(None)
+
+
+def test_animation_manager_get_or_create_app_shared_reuses_live_manager(qt_app):
+    manager = AnimationManager(fps=60)
+    try:
+        AnimationManager.set_app_shared(manager)
+        shared = AnimationManager.get_or_create_app_shared()
+        assert shared is manager
+    finally:
+        manager.cleanup()
+        AnimationManager.set_app_shared(None)
+
+
+def test_animation_manager_cleanup_clears_app_shared_manager_when_owned(qt_app):
+    manager = AnimationManager(fps=60)
+    AnimationManager.set_app_shared(manager)
+    manager.cleanup()
+    assert AnimationManager.get_app_shared() is None
+
+
+def test_animation_manager_stop_uses_ui_dispatch_when_called_off_timer_thread(qt_app, monkeypatch):
+    from core.threading.manager import ThreadManager
+
+    manager = AnimationManager(fps=60)
+    calls = []
+    original_do_stop = manager._do_stop
+
+    try:
+        monkeypatch.setattr(manager._timer, "thread", lambda: object())
+
+        def _fake_run_on_ui_thread(func, *args, **kwargs):
+            calls.append(func)
+
+        monkeypatch.setattr(ThreadManager, "run_on_ui_thread", staticmethod(_fake_run_on_ui_thread))
+        monkeypatch.setattr(manager, "_do_stop", lambda: calls.append("stop"))
+
+        manager.stop()
+
+        assert calls
+        assert callable(calls[0])
+    finally:
+        monkeypatch.setattr(manager, "_do_stop", original_do_stop)
+        manager.cleanup()
+
+
 def test_property_animation(animation_manager, test_widget):
     """Test basic property animation."""
     widget, opacity_effect = test_widget
