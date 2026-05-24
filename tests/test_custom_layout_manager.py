@@ -1422,10 +1422,51 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
         clock_state.current_global_rect.height(),
     )
     manager._on_shell_geometry_live_changed("clock", proposal)
-    snapped = manager._shell_states["clock"].current_global_rect
+    resolved = manager._shell_states["clock"].current_global_rect
 
-    assert snapped != proposal
-    assert manager._shell_states["clock"].shell.current_global_rect() == snapped
+    assert resolved == proposal
+    assert manager._shell_states["clock"].shell.current_global_rect() == resolved
+    assert manager._shell_states["clock"].shell._active_vertical_guides
+
+
+def test_custom_layout_manager_live_drag_guides_without_forcing_snap(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    weather = _EditableTestWidget(display, font_size=18)
+    weather.setGeometry(320, 60, 180, 80)
+    display.clock_widget = clock
+    display.weather_widget = weather
+    qtbot.addWidget(clock)
+    qtbot.addWidget(weather)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    weather_state = manager._shell_states["weather"]
+    proposal = QRect(
+        weather_state.current_global_rect.x() - clock_state.current_global_rect.width() - 6,
+        weather_state.current_global_rect.y() + 7,
+        clock_state.current_global_rect.width(),
+        clock_state.current_global_rect.height(),
+    )
+
+    resolved = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=False,
+    )
+
+    assert resolved == proposal
+    assert clock_state.shell.current_global_rect() == clock_state.current_global_rect
+    assert clock_state.shell._active_vertical_guides
 
 
 def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reloads(qtbot, monkeypatch):
@@ -2071,5 +2112,5 @@ def test_custom_layout_manager_live_drag_uses_softer_snap_threshold(qtbot):
     manager._on_shell_geometry_live_changed("clock", proposal)
     not_snapped = manager._shell_states["clock"].current_global_rect
 
-    assert not_snapped == QRect(120, 120, 180, 80)
+    assert not_snapped == proposal
     assert clock.isVisible() is False

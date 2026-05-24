@@ -12,6 +12,7 @@ from rendering.custom_layout_contract import (
     CUSTOM_LAYOUT_GRID_STEP_PX,
     CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
     CUSTOM_LAYOUT_SNAP_GUTTER_PX,
+    CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX,
     canonicalize_screen_layout_bucket,
     CustomLayoutEntry,
     choose_best_screen_for_global_rect,
@@ -1159,6 +1160,9 @@ class CustomLayoutManager:
             state.shell.setParent(target_display)
             if was_visible:
                 state.shell.show()
+            refresh_grab = getattr(state.shell, "_refresh_active_pointer_grab", None)
+            if callable(refresh_grab):
+                refresh_grab()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to reparent shell to target display", exc_info=True)
 
@@ -1533,7 +1537,12 @@ class CustomLayoutManager:
         snap_to_grid: bool,
         cursor_global: QPoint | None,
     ) -> QRect:
-        target_screen = self._resolve_target_screen_for_rect(state, global_rect, cursor_global=cursor_global)
+        target_screen = self._resolve_target_screen_for_rect(
+            state,
+            global_rect,
+            cursor_global=cursor_global,
+            transfer_threshold_px=8 if not snap_to_grid else None,
+        )
         if target_screen is None:
             return QRect(global_rect)
         target_signature = get_screen_signature(target_screen)
@@ -1556,7 +1565,8 @@ class CustomLayoutManager:
             threshold_px=8 if not snap_to_grid else 24,
             min_size=self._min_size_for_state(state),
         )
-        local_rect = snap_resolution.rect
+        if snap_to_grid:
+            local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
         self._update_grid_guides(state, target_screen, snap_resolution)
@@ -1597,6 +1607,7 @@ class CustomLayoutManager:
         global_rect: QRect,
         *,
         cursor_global: QPoint | None,
+        transfer_threshold_px: int | None = None,
     ) -> Any:
         screens = self._get_available_screens()
         if not screens:
@@ -1619,6 +1630,7 @@ class CustomLayoutManager:
             current_screen=current_screen,
             candidate_screen=candidate,
             cursor_global=cursor_global,
+            threshold_px=transfer_threshold_px if transfer_threshold_px is not None else CUSTOM_LAYOUT_TRANSFER_THRESHOLD_PX,
         ):
             state.shell.set_transfer_blocked(False, "")
             return current_screen

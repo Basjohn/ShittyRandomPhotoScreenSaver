@@ -296,6 +296,14 @@ class EditShellWidget(QWidget):
             local_pos = self.mapFromGlobal(QCursor.pos())
         self.setCursor(self._resolve_cursor_shape(local_pos))
 
+    def _refresh_active_pointer_grab(self) -> None:
+        if not (self._dragging or self._resizing):
+            return
+        try:
+            self.grabMouse()
+        except Exception:
+            pass
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         local_pos = event.position().toPoint()
         if (
@@ -314,12 +322,14 @@ class EditShellWidget(QWidget):
             if resize_corner is not None:
                 self._resizing = True
                 self._resize_corner = resize_corner
+                self._refresh_active_pointer_grab()
                 self.resize_drag_started.emit(self.widget_id, resize_corner, self.current_global_rect())
                 self._update_hover_cursor(local_pos)
                 event.accept()
                 return
             self._dragging = True
             self._drag_offset = event.globalPosition().toPoint() - self.current_global_rect().topLeft()
+            self._refresh_active_pointer_grab()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
@@ -370,6 +380,10 @@ class EditShellWidget(QWidget):
             resize_corner = str(self._resize_corner or "")
             self._resize_corner = None
             global_pos = event.globalPosition().toPoint()
+            try:
+                self.releaseMouse()
+            except Exception:
+                pass
             self._update_hover_cursor(local_pos)
             self.resize_drag_finished.emit(self.widget_id, resize_corner, self.current_global_rect(), global_pos)
             event.accept()
@@ -377,6 +391,10 @@ class EditShellWidget(QWidget):
         if self._dragging and event.button() == Qt.MouseButton.LeftButton:
             self._dragging = False
             global_pos = event.globalPosition().toPoint()
+            try:
+                self.releaseMouse()
+            except Exception:
+                pass
             if callable(self._live_geometry_resolver):
                 try:
                     next_rect = QRect(self._live_geometry_resolver(self.current_global_rect(), global_pos))
