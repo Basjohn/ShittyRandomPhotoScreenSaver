@@ -165,10 +165,18 @@ class EditShellWidget(QWidget):
         return super().eventFilter(watched, event)
 
     def set_shell_geometry(self, global_rect: QRect) -> None:
-        self.setGeometry(self._global_rect_to_local(global_rect))
-        self._reposition_reset_button()
+        local_rect = self._global_rect_to_local(global_rect)
+        current = QRect(self.geometry())
+        if current == local_rect:
+            return
+        size_changed = current.size() != local_rect.size()
+        if size_changed:
+            self.setGeometry(local_rect)
+            self._reposition_reset_button()
+            self.update()
+        else:
+            self.move(local_rect.topLeft())
         self.geometry_live_changed.emit(self.widget_id, self.current_global_rect())
-        self.update()
 
     def current_global_rect(self) -> QRect:
         parent = self.parentWidget()
@@ -178,8 +186,12 @@ class EditShellWidget(QWidget):
         return QRect(parent.mapToGlobal(local_rect.topLeft()), local_rect.size())
 
     def set_transfer_blocked(self, blocked: bool, reason: str = "") -> None:
-        self._transfer_blocked = bool(blocked)
-        self._transfer_block_reason = str(reason or "")
+        next_blocked = bool(blocked)
+        next_reason = str(reason or "")
+        if self._transfer_blocked == next_blocked and self._transfer_block_reason == next_reason:
+            return
+        self._transfer_blocked = next_blocked
+        self._transfer_block_reason = next_reason
         self.update()
 
     def set_snapshot(self, snapshot: QPixmap) -> None:
@@ -194,10 +206,21 @@ class EditShellWidget(QWidget):
         vertical_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
         horizontal_assists: tuple[tuple[int, str], ...] | list[tuple[int, str]],
     ) -> None:
-        self._active_vertical_guides = tuple((int(pos), str(kind)) for pos, kind in vertical)
-        self._active_horizontal_guides = tuple((int(pos), str(kind)) for pos, kind in horizontal)
-        self._active_vertical_assists = tuple((int(pos), str(kind)) for pos, kind in vertical_assists)
-        self._active_horizontal_assists = tuple((int(pos), str(kind)) for pos, kind in horizontal_assists)
+        next_vertical = tuple((int(pos), str(kind)) for pos, kind in vertical)
+        next_horizontal = tuple((int(pos), str(kind)) for pos, kind in horizontal)
+        next_vertical_assists = tuple((int(pos), str(kind)) for pos, kind in vertical_assists)
+        next_horizontal_assists = tuple((int(pos), str(kind)) for pos, kind in horizontal_assists)
+        if (
+            next_vertical == self._active_vertical_guides
+            and next_horizontal == self._active_horizontal_guides
+            and next_vertical_assists == self._active_vertical_assists
+            and next_horizontal_assists == self._active_horizontal_assists
+        ):
+            return
+        self._active_vertical_guides = next_vertical
+        self._active_horizontal_guides = next_horizontal
+        self._active_vertical_assists = next_vertical_assists
+        self._active_horizontal_assists = next_horizontal_assists
         self.update()
 
     def set_reset_size_enabled(self, enabled: bool) -> None:
