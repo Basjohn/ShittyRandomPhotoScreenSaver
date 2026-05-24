@@ -49,18 +49,21 @@ def _detect_frozen_environment() -> bool:
 _IS_FROZEN: bool = _detect_frozen_environment()
 
 _VERBOSE: bool = False
-# PERF metrics default to False for production builds. Script mode (development)
-# can enable via SRPSS_PERF_METRICS=1 env var; Nuitka builds use .perf.cfg files.
+# PERF metrics default to False for production builds. Script mode and frozen
+# builds opt in explicitly through CLI/config, not environment toggles.
 _PERF_METRICS_ENABLED: bool = False
 # Widget PERF verbosity flag controls whether per-call summaries land in main log
 _WIDGET_PERF_VERBOSE: bool = False
-# Visualizer logging defaults to False (opt-in via --viz or SRPSS_VIZ_LOGGING=1).
-# When enabled, logs [SPOTIFY_VIS] and [SPOTIFY_VOL] detailed metrics.
+# Visualizer logging defaults to False (opt-in via --viz). When enabled, logs
+# [SPOTIFY_VIS] and [SPOTIFY_VOL] detailed metrics.
 _VIZ_LOGGING_ENABLED: bool = False
 # Spotify visualizer diagnostics flag (high-volume DSP traces)
 _VIZ_DIAGNOSTICS_ENABLED: bool = False
+_GEOMETRY_LOGGING_ENABLED: bool = False
+_SETTINGS_LOGGING_ENABLED: bool = False
+_LIFECYCLE_LOGGING_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
-# env vars or .logging.cfg files next to the executable.
+# the general logging config file next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
 # Base directory for logs and related artefacts. This is initialised to the
 # project root by default and updated by setup_logging() for frozen builds so
@@ -92,42 +95,12 @@ def _read_bool_flag_file(path: Path) -> Optional[bool]:
         return None
 
 
-_env_perf = os.getenv("SRPSS_PERF_METRICS")
-if _env_perf is not None:
-    try:
-        if str(_env_perf).strip().lower() in ("0", "false", "off", "no"):
-            _PERF_METRICS_ENABLED = False
-        elif str(_env_perf).strip().lower() in ("1", "true", "on", "yes"):
-            _PERF_METRICS_ENABLED = True
-    except Exception:
-        pass  # Keep default (False) on parse failure
-
-# Parse visualizer logging flag from environment
 _env_widget_perf_verbose = os.getenv("SRPSS_WIDGET_PERF_VERBOSE")
 if _env_widget_perf_verbose is not None:
     try:
         parsed = _parse_bool_token(str(_env_widget_perf_verbose))
         if parsed is not None:
             _WIDGET_PERF_VERBOSE = parsed
-    except Exception:
-        pass
-
-_env_viz = os.getenv("SRPSS_VIZ_LOGGING")
-if _env_viz is not None:
-    try:
-        if str(_env_viz).strip().lower() in ("0", "false", "off", "no"):
-            _VIZ_LOGGING_ENABLED = False
-        elif str(_env_viz).strip().lower() in ("1", "true", "on", "yes"):
-            _VIZ_LOGGING_ENABLED = True
-    except Exception:
-        pass  # Keep default (False) on parse failure
-
-_env_viz_diag = os.getenv("SRPSS_VIZ_DIAGNOSTICS")
-if _env_viz_diag is not None:
-    try:
-        parsed_diag = _parse_bool_token(str(_env_viz_diag))
-        if parsed_diag is not None:
-            _VIZ_DIAGNOSTICS_ENABLED = parsed_diag
     except Exception:
         pass
 
@@ -511,6 +484,113 @@ class NonSpotifyFilter(logging.Filter):
         return "[SPOTIFY_VIS]" not in msg and "[SPOTIFY_VOL]" not in msg
 
 
+class GeometryLogFilter(logging.Filter):
+    """Filter for geometry/z-order/CUSTOM-layout diagnostic records."""
+
+    _NAME_PREFIXES = (
+        "win_diag",
+        "rendering.custom_layout_manager",
+        "rendering.display_context_menu",
+        "rendering.display_setup",
+        "rendering.widget_positioner",
+    )
+    _NAME_EXACT = {
+        "rendering.display",
+    }
+    _MESSAGE_TOKENS = (
+        "[CUSTOM_LAYOUT]",
+        "[INPUT_GUARD]",
+        "[MENU_OPEN]",
+        "[ZORDER]",
+        "[REFRESH_DIAG]",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        name = str(getattr(record, "name", "") or "")
+        if name in self._NAME_EXACT or any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
+class SettingsLogFilter(logging.Filter):
+    """Filter for settings mutation/import/schema diagnostics."""
+
+    _NAME_PREFIXES = (
+        "core.settings",
+        "ui.tabs.settings_binding",
+    )
+    _NAME_EXACT = {
+        "SettingsManager",
+    }
+    _MESSAGE_TOKENS = (
+        "[SETTINGS]",
+        "[SST]",
+        "SettingsManager",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        name = str(getattr(record, "name", "") or "")
+        if name in self._NAME_EXACT or any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
+class LifecycleLogFilter(logging.Filter):
+    """Filter for widget/worker/engine lifecycle diagnostics."""
+
+    _NAME_PREFIXES = (
+        "core.process.supervisor",
+        "engine.engine_lifecycle",
+        "rendering.widget_setup_all",
+        "rendering.display_setup",
+    )
+    _MESSAGE_TOKENS = (
+        "[LIFECYCLE]",
+        "ProcessSupervisor initialized",
+        "ProcessSupervisor shutting down",
+        "ProcessSupervisor shutdown complete",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        name = str(getattr(record, "name", "") or "")
+        if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
+class DedicatedFamilySuppressFilter(logging.Filter):
+    """Suppress INFO/DEBUG records from a family when its sidecar log is active."""
+
+    def __init__(self, family_filter: logging.Filter, enabled_getter):
+        super().__init__()
+        self._family_filter = family_filter
+        self._enabled_getter = enabled_getter
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            enabled = bool(self._enabled_getter())
+        except Exception:
+            enabled = False
+        if not enabled or record.levelno >= logging.WARNING:
+            return True
+        try:
+            return not bool(self._family_filter.filter(record))
+        except Exception:
+            return True
+
+
 class VerboseLogFilter(logging.Filter):
     """Filter for verbose debug log - accepts DEBUG and INFO, excludes PERF.
     
@@ -722,8 +802,12 @@ def _select_log_dir(
 def setup_logging(
     debug: bool = False,
     verbose: bool = False,
+    perf: bool = False,
     viz: bool = False,
     viz_diag: bool = False,
+    geo: bool = False,
+    settings_trace: bool = False,
+    lifecycle: bool = False,
 ) -> None:
     """
     Configure application logging with file rotation.
@@ -733,12 +817,17 @@ def setup_logging(
         verbose: When True, enables additional high-volume debug logs in
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
+        perf: Enables performance/PERF logging families.
         viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
-            [SPOTIFY_VOL]). High-volume, only useful for visualizer debugging.
-        viz_diag: Enables Spotify visualizer DSP diagnostics (noise floor,
-            FFT scheduling, raw bar dumps). Off by default to avoid log spam.
+            [SPOTIFY_VOL]) and visualizer diagnostics.
+        viz_diag: Legacy alias for enabling Spotify visualizer DSP diagnostics.
+        geo: Enables geometry/z-order/CUSTOM-layout sidecar diagnostics.
+        settings_trace: Enables settings mutation/import/schema sidecar diagnostics.
+        lifecycle: Enables widget/worker/engine lifecycle sidecar diagnostics.
     """
-    global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
+    global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
+    global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
+    global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
     debug_enabled = debug or verbose
     # Create logs directory. In frozen builds (Nuitka/PyInstaller) we prefer
@@ -762,24 +851,6 @@ def setup_logging(
             if exe_path_valid is not None:
                 base_dir = exe_path_valid.parent
                 try:
-                    cfg_name = exe_path_valid.stem + ".perf.cfg"
-                    cfg_path = exe_path_valid.parent / cfg_name
-                    cfg_value = _read_bool_flag_file(cfg_path)
-                    if cfg_value is not None:
-                        _PERF_METRICS_ENABLED = cfg_value
-                except Exception:
-                    # On any failure, keep existing _PERF_METRICS_ENABLED value.
-                    pass
-                # Check for visualizer logging config
-                try:
-                    viz_cfg_name = exe_path_valid.stem + ".viz.cfg"
-                    viz_cfg_path = exe_path_valid.parent / viz_cfg_name
-                    viz_cfg_value = _read_bool_flag_file(viz_cfg_path)
-                    if viz_cfg_value is not None:
-                        _VIZ_LOGGING_ENABLED = viz_cfg_value
-                except Exception:
-                    pass
-                try:
                     if forced_dir is None:
                         log_cfg_name = exe_path_valid.stem + ".logdir.cfg"
                         log_cfg_path = exe_path_valid.parent / log_cfg_name
@@ -797,11 +868,20 @@ def setup_logging(
     except Exception:
         exe_path_valid = None
 
-    # Command-line flag overrides config file
+    # Command-line flag overrides config file / environment fallback.
+    if perf:
+        _PERF_METRICS_ENABLED = True
     if viz:
         _VIZ_LOGGING_ENABLED = True
+        _VIZ_DIAGNOSTICS_ENABLED = True
     if viz_diag:
         _VIZ_DIAGNOSTICS_ENABLED = True
+    if geo:
+        _GEOMETRY_LOGGING_ENABLED = True
+    if settings_trace:
+        _SETTINGS_LOGGING_ENABLED = True
+    if lifecycle:
+        _LIFECYCLE_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     global _LOGGING_DISABLED
@@ -830,6 +910,15 @@ def setup_logging(
 
     log_dir = _select_log_dir(forced_dir, base_dir)
     
+    # Reset root handlers on re-entry so repeated setup calls do not duplicate output.
+    root_logger = logging.getLogger()
+    for handler in list(root_logger.handlers):
+        try:
+            handler.close()
+        except Exception:
+            pass
+        root_logger.removeHandler(handler)
+
     log_file = log_dir / "screensaver.log"
     
     # Root logger must be DEBUG in debug/verbose modes so the verbose handler
@@ -862,7 +951,11 @@ def setup_logging(
     # drop them from the main screensaver.log to reduce noise and keep
     # per-run logs smaller and easier to inspect.
     main_handler.addFilter(NonPerfFilter())
-    main_handler.addFilter(NonSpotifyFilter())
+    main_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
@@ -880,11 +973,14 @@ def setup_logging(
         console_handler.setFormatter(console_formatter)
     console_handler.setLevel(main_level)
     console_handler.addFilter(NonPerfFilter())
-    console_handler.addFilter(NonSpotifyFilter())
+    console_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     console_handler.addFilter(WidgetPerfVisibilityFilter())
     
     # Configure root logger
-    root_logger = logging.getLogger()
     root_logger.setLevel(root_level)
     root_logger.addHandler(main_handler)
     
@@ -894,19 +990,19 @@ def setup_logging(
     # Dedicated PERF metrics log capturing any record whose message contains
     # the "[PERF]" tag. This keeps performance summaries readable even when
     # the main log is busy with other diagnostics.
-    perf_log_file = log_dir / "screensaver_perf.log"
-    perf_handler = DeduplicatingRotatingFileHandler(
-        perf_log_file,
-        maxBytes=1 * 1024 * 1024,  # 1MB
-        backupCount=5,
-        encoding='utf-8',
-    )
-    perf_handler.setFormatter(formatter)
-    perf_handler.setLevel(logging.INFO)
-    perf_handler.addFilter(PerfLogFilter())
-    root_logger.addHandler(perf_handler)
-
     if _PERF_METRICS_ENABLED:
+        perf_log_file = log_dir / "screensaver_perf.log"
+        perf_handler = DeduplicatingRotatingFileHandler(
+            perf_log_file,
+            maxBytes=1 * 1024 * 1024,  # 1MB
+            backupCount=5,
+            encoding='utf-8',
+        )
+        perf_handler.setFormatter(formatter)
+        perf_handler.setLevel(logging.INFO)
+        perf_handler.addFilter(PerfLogFilter())
+        root_logger.addHandler(perf_handler)
+
         widget_perf_log_file = log_dir / "perf_widgets.log"
         widget_perf_handler = DeduplicatingRotatingFileHandler(
             widget_perf_log_file,
@@ -919,29 +1015,69 @@ def setup_logging(
         widget_perf_handler.addFilter(WidgetPerfLogFilter())
         root_logger.addHandler(widget_perf_handler)
 
-    spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
-    spotify_vis_handler = DeduplicatingRotatingFileHandler(
-        spotify_vis_log_file,
-        maxBytes=1 * 1024 * 1024,  # 1MB
-        backupCount=5,
-        encoding='utf-8',
-    )
-    spotify_vis_handler.setFormatter(spaced_formatter)
-    spotify_vis_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
-    spotify_vis_handler.addFilter(SpotifyVisLogFilter())
-    root_logger.addHandler(spotify_vis_handler)
+    if _VIZ_LOGGING_ENABLED:
+        spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
+        spotify_vis_handler = DeduplicatingRotatingFileHandler(
+            spotify_vis_log_file,
+            maxBytes=1 * 1024 * 1024,  # 1MB
+            backupCount=5,
+            encoding='utf-8',
+        )
+        spotify_vis_handler.setFormatter(spaced_formatter)
+        spotify_vis_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        spotify_vis_handler.addFilter(SpotifyVisLogFilter())
+        root_logger.addHandler(spotify_vis_handler)
 
-    spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
-    spotify_vol_handler = DeduplicatingRotatingFileHandler(
-        spotify_vol_log_file,
-        maxBytes=1 * 1024 * 1024,  # 1MB
-        backupCount=5,
-        encoding='utf-8',
-    )
-    spotify_vol_handler.setFormatter(formatter)
-    spotify_vol_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
-    spotify_vol_handler.addFilter(SpotifyVolLogFilter())
-    root_logger.addHandler(spotify_vol_handler)
+        spotify_vol_log_file = log_dir / "screensaver_spotify_vol.log"
+        spotify_vol_handler = DeduplicatingRotatingFileHandler(
+            spotify_vol_log_file,
+            maxBytes=1 * 1024 * 1024,  # 1MB
+            backupCount=5,
+            encoding='utf-8',
+        )
+        spotify_vol_handler.setFormatter(formatter)
+        spotify_vol_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        spotify_vol_handler.addFilter(SpotifyVolLogFilter())
+        root_logger.addHandler(spotify_vol_handler)
+
+    if _GEOMETRY_LOGGING_ENABLED:
+        geometry_log_file = log_dir / "screensaver_geometry.log"
+        geometry_handler = DeduplicatingRotatingFileHandler(
+            geometry_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        geometry_handler.setFormatter(formatter)
+        geometry_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        geometry_handler.addFilter(GeometryLogFilter())
+        root_logger.addHandler(geometry_handler)
+
+    if _SETTINGS_LOGGING_ENABLED:
+        settings_log_file = log_dir / "screensaver_settings.log"
+        settings_handler = DeduplicatingRotatingFileHandler(
+            settings_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        settings_handler.setFormatter(formatter)
+        settings_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        settings_handler.addFilter(SettingsLogFilter())
+        root_logger.addHandler(settings_handler)
+
+    if _LIFECYCLE_LOGGING_ENABLED:
+        lifecycle_log_file = log_dir / "screensaver_lifecycle.log"
+        lifecycle_handler = DeduplicatingRotatingFileHandler(
+            lifecycle_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        lifecycle_handler.setFormatter(formatter)
+        lifecycle_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        lifecycle_handler.addFilter(LifecycleLogFilter())
+        root_logger.addHandler(lifecycle_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
@@ -963,6 +1099,11 @@ def setup_logging(
         verbose_handler.setFormatter(formatter)
         verbose_handler.setLevel(logging.DEBUG)
         verbose_handler.addFilter(VerboseLogFilter())
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVisLogFilter(), is_viz_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(SpotifyVolLogFilter(), is_viz_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
         root_logger.addHandler(verbose_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
@@ -1036,10 +1177,31 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s)",
         debug_enabled,
         _VERBOSE,
+        _PERF_METRICS_ENABLED,
+        _VIZ_LOGGING_ENABLED,
+        _GEOMETRY_LOGGING_ENABLED,
+        _SETTINGS_LOGGING_ENABLED,
+        _LIFECYCLE_LOGGING_ENABLED,
     )
+    root_logger.info(
+        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log"
+    )
+    active_specific_logs: list[str] = []
+    if _PERF_METRICS_ENABLED:
+        active_specific_logs.append("perf=screensaver_perf.log")
+    if _VIZ_LOGGING_ENABLED:
+        active_specific_logs.append("viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log")
+    if _GEOMETRY_LOGGING_ENABLED:
+        active_specific_logs.append("geo=screensaver_geometry.log")
+    if _SETTINGS_LOGGING_ENABLED:
+        active_specific_logs.append("set=screensaver_settings.log")
+    if _LIFECYCLE_LOGGING_ENABLED:
+        active_specific_logs.append("life=screensaver_lifecycle.log")
+    if active_specific_logs:
+        root_logger.info("Specific logs active: %s", ", ".join(active_specific_logs))
     root_logger.info("=" * 60)
 
 
@@ -1224,9 +1386,8 @@ def is_widget_perf_verbose() -> bool:
 def is_viz_logging_enabled() -> bool:
     """Return True when visualizer logging is enabled globally.
     
-    Visualizer logs ([SPOTIFY_VIS], [SPOTIFY_VOL]) are high-volume and
-    only useful when debugging visualizer issues. Use --viz flag or
-    SRPSS_VIZ_LOGGING=1 to enable.
+    Visualizer logs ([SPOTIFY_VIS], [SPOTIFY_VOL]) are high-volume and only
+    useful when debugging visualizer issues. Use the --viz flag to enable.
     """
     return _VIZ_LOGGING_ENABLED
 
@@ -1235,3 +1396,21 @@ def is_viz_diagnostics_enabled() -> bool:
     """Return True when Spotify visualizer diagnostics logging is enabled."""
 
     return _VIZ_DIAGNOSTICS_ENABLED
+
+
+def is_geometry_logging_enabled() -> bool:
+    """Return True when geometry/z-order diagnostics are enabled."""
+
+    return _GEOMETRY_LOGGING_ENABLED
+
+
+def is_settings_logging_enabled() -> bool:
+    """Return True when settings diagnostics are enabled."""
+
+    return _SETTINGS_LOGGING_ENABLED
+
+
+def is_lifecycle_logging_enabled() -> bool:
+    """Return True when lifecycle diagnostics are enabled."""
+
+    return _LIFECYCLE_LOGGING_ENABLED

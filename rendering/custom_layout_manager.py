@@ -106,6 +106,8 @@ class CustomLayoutManager:
     _key_filter: _CustomLayoutSessionKeyFilter | None = None
     _EDIT_MODE_MIN_DIM_OPACITY = 0.5
     _restack_scheduled: bool = False
+    _menu_interaction_depth: int = 0
+    _restack_pending_during_menu: bool = False
 
     def __init__(self, display_widget) -> None:
         self._display = display_widget
@@ -209,19 +211,13 @@ class CustomLayoutManager:
     def raise_all_active_shells(cls) -> None:
         managers = list(cls._active_managers)
         for manager in managers:
-            overlay = getattr(manager, "_grid_overlay", None)
-            if overlay is None:
-                continue
-            try:
-                if overlay.isVisible():
-                    overlay.raise_()
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to raise edit grid overlay", exc_info=True)
-        for manager in managers:
             manager._raise_all_shells()
 
     @classmethod
     def schedule_raise_all_active_shells(cls, delay_ms: int = 0) -> None:
+        if cls.is_menu_interaction_active():
+            cls._restack_pending_during_menu = True
+            return
         if cls._restack_scheduled:
             return
         cls._restack_scheduled = True
@@ -233,6 +229,35 @@ class CustomLayoutManager:
             cls.raise_all_active_shells()
 
         QTimer.singleShot(max(0, int(delay_ms)), _run)
+
+    @classmethod
+    def begin_menu_interaction(cls) -> None:
+        cls._menu_interaction_depth += 1
+        logger.debug("[ZORDER] begin_menu_interaction depth=%s", cls._menu_interaction_depth)
+
+    @classmethod
+    def end_menu_interaction(cls) -> None:
+        if cls._menu_interaction_depth > 0:
+            cls._menu_interaction_depth -= 1
+        logger.debug("[ZORDER] end_menu_interaction depth=%s", cls._menu_interaction_depth)
+        if cls._menu_interaction_depth == 0 and cls._restack_pending_during_menu:
+            cls._restack_pending_during_menu = False
+            cls.schedule_raise_all_active_shells()
+
+    @classmethod
+    def is_menu_interaction_active(cls) -> bool:
+        return cls._menu_interaction_depth > 0
+
+    @classmethod
+    def has_cross_display_shells(cls) -> bool:
+        for manager in cls._active_managers:
+            manager_signature = str(getattr(manager, "_screen_signature", "") or "")
+            for state in getattr(manager, "_shell_states", {}).values():
+                if getattr(state, "removed", False):
+                    continue
+                if str(getattr(state, "current_screen_signature", "") or "") != manager_signature:
+                    return True
+        return False
 
     def is_active(self) -> bool:
         return bool(self._active)
@@ -570,6 +595,7 @@ class CustomLayoutManager:
                 global_rect=global_rect,
                 grid_step_px=CUSTOM_LAYOUT_GRID_STEP_PX,
                 gutter_px=CUSTOM_LAYOUT_SNAP_GUTTER_PX,
+                parent=self._display,
             )
             overlay.show()
             self._grid_overlay = overlay
@@ -940,6 +966,11 @@ class CustomLayoutManager:
                 cursor_global=cursor,
                 snap_to_grid=False,
             ),
+            live_geometry_applier=lambda rect, _widget_id=descriptor.widget_id: self._apply_live_shell_geometry_for_widget_id(
+                _widget_id,
+                rect,
+            ),
+            parent=self._display,
         )
         shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
         shell.drag_finished.connect(self._on_shell_drag_finished)
@@ -1043,7 +1074,6 @@ class CustomLayoutManager:
     def _on_shell_context_menu_requested(self, global_pos: QPoint) -> None:
         try:
             self._display._show_context_menu(global_pos)
-            CustomLayoutManager.schedule_raise_all_active_shells()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to open context menu from shell", exc_info=True)
 
@@ -1063,6 +1093,75 @@ class CustomLayoutManager:
     def _raise_all_shells_globally(self) -> None:
         CustomLayoutManager.raise_all_active_shells()
 
+    @classmethod
+    def restore_shells_for_display(cls, display_widget: Any) -> None:
+        manager = getattr(display_widget, "_custom_layout_manager", None)
+        if not isinstance(manager, CustomLayoutManager):
+            return
+        if not cls.is_any_session_active():
+            return
+        manager._restore_shells_for_current_display()
+
+    def _restore_shells_for_current_display(self) -> None:
+        self._sync_display_screen_binding()
+        current_signature = str(self._screen_signature or "")
+        restored = 0
+        for manager in list(CustomLayoutManager._active_managers):
+            for state in manager._shell_states.values():
+                if state.removed:
+                    continue
+                if str(getattr(state, "current_screen_signature", "") or "") != current_signature:
+                    continue
+                try:
+                    manager._sync_shell_parent_to_state(state)
+                    if state.shell.isVisible():
+                        state.shell.raise_()
+                        restored += 1
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to restore shell for current display", exc_info=True)
+        logger.debug(
+            "[ZORDER] restore_shells_for_display screen=%s restored=%s",
+            current_signature,
+            restored,
+        )
+
+    def _sync_shell_parent_to_state(self, state: _ShellState) -> None:
+        self._apply_shell_global_rect_to_shell(state, state.current_global_rect, suppress_feedback=True)
+
+    def _apply_shell_global_rect_to_shell(
+        self,
+        state: _ShellState,
+        global_rect: QRect,
+        *,
+        suppress_feedback: bool,
+    ) -> None:
+        widget_id = state.descriptor.widget_id
+        if suppress_feedback:
+            self._suppress_live_feedback_widget_ids.add(widget_id)
+        try:
+            self._reparent_shell_to_target_display_if_needed(state)
+            state.shell.set_shell_geometry(global_rect)
+        finally:
+            if suppress_feedback:
+                self._suppress_live_feedback_widget_ids.discard(widget_id)
+
+    def _reparent_shell_to_target_display_if_needed(self, state: _ShellState) -> None:
+        target_screen = state.current_screen or self._screen
+        if target_screen is None:
+            return
+        target_display = self._get_display_instance_for_screen(target_screen)
+        if target_display is None:
+            return
+        if state.shell.parentWidget() is target_display:
+            return
+        try:
+            was_visible = state.shell.isVisible()
+            state.shell.setParent(target_display)
+            if was_visible:
+                state.shell.show()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to reparent shell to target display", exc_info=True)
+
     def _resolve_shell_geometry_for_widget_id(
         self,
         widget_id: str,
@@ -1074,12 +1173,30 @@ class CustomLayoutManager:
         state = self._shell_states.get(widget_id)
         if state is None:
             return QRect(global_rect)
-        return self._resolve_shell_global_rect(
+        resolved = self._resolve_shell_global_rect(
             state,
             global_rect,
             snap_to_grid=snap_to_grid,
             cursor_global=cursor_global,
         )
+        self._reparent_shell_to_target_display_if_needed(state)
+        return resolved
+
+    def _apply_live_shell_geometry_for_widget_id(self, widget_id: str, global_rect: QRect) -> None:
+        state = self._shell_states.get(widget_id)
+        if state is None:
+            return
+        dx = abs(global_rect.x() - state.current_global_rect.x())
+        dy = abs(global_rect.y() - state.current_global_rect.y())
+        if dx > dy:
+            state.last_drag_axis = "x"
+        elif dy > dx:
+            state.last_drag_axis = "y"
+        else:
+            state.last_drag_axis = "both"
+        state.current_global_rect = QRect(global_rect)
+        self._apply_shell_global_rect_to_shell(state, global_rect, suppress_feedback=True)
+        self._update_shell_reset_affordances(state)
 
     def _on_shell_geometry_live_changed(self, widget_id: str, global_rect: QRect) -> None:
         state = self._shell_states.get(widget_id)
@@ -1103,6 +1220,7 @@ class CustomLayoutManager:
             cursor_global=self._get_cursor_global_pos(),
         )
         state.current_global_rect = QRect(resolved)
+        self._sync_shell_parent_to_state(state)
         self._update_shell_reset_affordances(state)
         if resolved != global_rect:
             self._set_shell_geometry_silently(state, resolved)
@@ -1119,6 +1237,7 @@ class CustomLayoutManager:
             cursor_global=cursor_global,
         )
         state.current_global_rect = QRect(committed)
+        self._sync_shell_parent_to_state(state)
         self._update_shell_reset_affordances(state)
         self._set_shell_geometry_silently(state, committed)
 
@@ -1172,7 +1291,7 @@ class CustomLayoutManager:
             next_rect = clamp_global_rect_to_screen(next_rect, target_screen)
         state.current_global_rect = QRect(next_rect)
         self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
-        state.shell.set_shell_geometry(next_rect)
+        self._set_shell_geometry_silently(state, next_rect)
 
     def _apply_resize_drag(
         self,
@@ -1271,13 +1390,24 @@ class CustomLayoutManager:
         self._raise_all_shells_globally()
 
     def _set_shell_geometry_silently(self, state: _ShellState, global_rect: QRect) -> None:
-        widget_id = state.descriptor.widget_id
-        self._suppress_live_feedback_widget_ids.add(widget_id)
-        try:
-            state.shell.set_shell_geometry(global_rect)
-        finally:
-            self._suppress_live_feedback_widget_ids.discard(widget_id)
+        self._apply_shell_global_rect_to_shell(state, global_rect, suppress_feedback=True)
         self._update_shell_reset_affordances(state)
+
+    def _min_size_for_descriptor(self, descriptor: WidgetRuntimeDescriptor, widget: Any | None = None) -> QSize:
+        if descriptor.custom_layout_resize_mode == "volume_scale":
+            return QSize(24, 120)
+        if descriptor.supports_layout_resize_edit:
+            return QSize(
+                int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width()),
+                int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height()),
+            )
+        if widget is not None:
+            try:
+                geom = widget.geometry()
+                return QSize(max(1, int(geom.width())), max(1, int(geom.height())))
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to read authored size for move-only widget", exc_info=True)
+        return QSize(1, 1)
 
     def _update_shell_reset_affordances(self, state: _ShellState) -> None:
         if state.removed:
@@ -1884,7 +2014,7 @@ class CustomLayoutManager:
         local_rect = clamp_local_rect_to_bounds(
             local_rect,
             self._screen.geometry().size(),
-            min_size=local_rect.size(),
+            min_size=self._min_size_for_descriptor(descriptor, widget),
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
         self._apply_size_payload(descriptor, widget, entry.size_payload)

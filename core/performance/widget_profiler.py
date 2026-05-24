@@ -3,7 +3,7 @@
 This module centralises the lightweight counters we emit for overlay widgets
 so we can spot idle timers or expensive paint events. Metrics are aggregated
 per widget/metric pair and periodically flushed to the dedicated
-``perf_widgets.log`` file when ``SRPSS_PERF_METRICS`` is enabled.
+``perf_widgets.log`` file when PERF logging is enabled for the runtime.
 """
 from __future__ import annotations
 

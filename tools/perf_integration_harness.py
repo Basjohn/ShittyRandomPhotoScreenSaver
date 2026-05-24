@@ -15,18 +15,18 @@ import gc
 from typing import Optional, List
 from dataclasses import dataclass, field
 
-# Set perf metrics before imports
-os.environ['SRPSS_PERF_METRICS'] = '1'
-
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import QTimer, Qt
 
+from core.logging.logger import setup_logging
 from core.threading.manager import ThreadManager
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
+
+setup_logging(perf=True)
 
 
 # Default threshold for most tests. Audio-related tests use a higher threshold

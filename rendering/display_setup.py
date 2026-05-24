@@ -23,7 +23,7 @@ except ImportError:
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from widgets.pixel_shift_manager import PixelShiftManager
-from widgets.context_menu import ScreensaverContextMenu
+from rendering.display_context_menu import ensure_context_menu
 from transitions.overlay_manager import (
     set_overlay_geometry,
     raise_overlay,
@@ -230,36 +230,14 @@ def prewarm_context_menu(widget) -> None:
         except Exception:
             pass
 
-        widget._context_menu = ScreensaverContextMenu(
-            parent=widget,
+        widget._context_menu = ensure_context_menu(
+            widget,
             current_transition=current_transition,
             random_enabled=random_enabled,
             dimming_enabled=dimming_enabled,
-            interaction_mode_enabled=interaction_mode,
-            is_mc_build=widget._is_mc_build,
-            always_on_top=widget._always_on_top,
-            current_visualizer=current_vis,
+            interaction_mode=interaction_mode,
+            current_vis=current_vis,
         )
-        # Connect signals once during construction
-        widget._context_menu.previous_requested.connect(widget.previous_requested.emit)
-        widget._context_menu.next_requested.connect(widget.next_requested.emit)
-        widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
-        widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
-        widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
-        widget._context_menu.edit_mode_requested.connect(widget._on_context_edit_mode_requested)
-        widget._context_menu.save_edit_mode_requested.connect(widget._on_context_save_edit_mode_requested)
-        widget._context_menu.cancel_edit_mode_requested.connect(widget._on_context_cancel_edit_mode_requested)
-        widget._context_menu.reset_edit_mode_requested.connect(widget._on_context_reset_edit_mode_requested)
-        widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
-        widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
-        widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
-        widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
-
-        try:
-            widget._context_menu.aboutToShow.connect(lambda: widget._invalidate_overlay_effects("menu_about_to_show"))
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-
         try:
             widget._context_menu.ensurePolished()
         except Exception as e:

@@ -7,20 +7,18 @@ single reusable profiler that tracks frame timing and emits PERF logs.
 from __future__ import annotations
 
 import logging
-import os
 import time
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from core.logging.logger import is_perf_metrics_enabled as _logging_perf_enabled
 
-# Environment variable to enable PERF metrics logging
-PERF_METRICS_ENABLED = os.environ.get("SRPSS_PERF_METRICS", "0") == "1"
+logger = logging.getLogger(__name__)
 
 
 def is_perf_metrics_enabled() -> bool:
-    """Check if PERF metrics are enabled via environment variable."""
-    return PERF_METRICS_ENABLED
+    """Check if PERF metrics logging is enabled for this runtime."""
+    return _logging_perf_enabled()
 
 
 @dataclass

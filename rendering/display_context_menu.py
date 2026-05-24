@@ -38,9 +38,77 @@ def _get_current_visualizer_mode(widget) -> str:
     return "spectrum"
 
 
+def ensure_context_menu(
+    widget,
+    *,
+    current_transition: str,
+    random_enabled: bool,
+    dimming_enabled: bool,
+    interaction_mode: bool,
+    current_vis: str,
+) -> ScreensaverContextMenu:
+    """Create and wire the shared context menu once for this display widget."""
+    if widget._context_menu is None:
+        widget._context_menu = ScreensaverContextMenu(
+            parent=widget,
+            current_transition=current_transition,
+            random_enabled=random_enabled,
+            dimming_enabled=dimming_enabled,
+            interaction_mode_enabled=interaction_mode,
+            is_mc_build=widget._is_mc_build,
+            always_on_top=widget._always_on_top,
+            current_visualizer=current_vis,
+        )
+    menu = widget._context_menu
+
+    if not bool(getattr(widget, "_context_menu_hooks_connected", False)):
+        menu.previous_requested.connect(widget.previous_requested.emit)
+        menu.next_requested.connect(widget.next_requested.emit)
+        menu.transition_selected.connect(widget._on_context_transition_selected)
+        menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
+        menu.settings_requested.connect(widget.settings_requested.emit)
+        menu.edit_mode_requested.connect(widget._on_context_edit_mode_requested)
+        menu.save_edit_mode_requested.connect(widget._on_context_save_edit_mode_requested)
+        menu.cancel_edit_mode_requested.connect(widget._on_context_cancel_edit_mode_requested)
+        menu.reset_edit_mode_requested.connect(widget._on_context_reset_edit_mode_requested)
+        menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
+        menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
+        menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
+        menu.exit_requested.connect(widget._on_context_exit_requested)
+        try:
+            menu.aboutToShow.connect(
+                lambda: None if CustomLayoutManager.is_any_session_active() else widget._invalidate_overlay_effects("menu_about_to_show")
+            )
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        try:
+            submenu = getattr(menu, "_transition_menu", None)
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            submenu = None
+        if submenu is not None:
+            try:
+                submenu.aboutToShow.connect(
+                    lambda: None if CustomLayoutManager.is_any_session_active() else widget._invalidate_overlay_effects("menu_sub_about_to_show")
+                )
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+            try:
+                submenu.aboutToHide.connect(
+                    lambda: None if CustomLayoutManager.is_any_session_active() else widget._schedule_effect_invalidation("menu_sub_after_hide")
+                )
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        setattr(widget, "_context_menu_hooks_connected", True)
+
+    return menu
+
+
 def show_context_menu(widget, global_pos) -> None:
     """Show the context menu at the given global position."""
     try:
+        menu_session_begun = False
+        edit_mode_active = bool(CustomLayoutManager.is_any_session_active())
         current_transition, random_enabled = widget._refresh_transition_state_from_settings()
         
         interaction_mode = widget._is_interaction_mode_enabled()
@@ -55,73 +123,19 @@ def show_context_menu(widget, global_pos) -> None:
         # Read current visualizer mode for the submenu
         current_vis = _get_current_visualizer_mode(widget)
         
-        # Create menu if needed (lazy init for performance)
-        if widget._context_menu is None:
-            current_transition, random_enabled = widget._refresh_transition_state_from_settings()
-            widget._context_menu = ScreensaverContextMenu(
-                parent=widget,
-                current_transition=current_transition,
-                random_enabled=random_enabled,
-                dimming_enabled=dimming_enabled,
-                interaction_mode_enabled=interaction_mode,
-                is_mc_build=widget._is_mc_build,
-                always_on_top=widget._always_on_top,
-                current_visualizer=current_vis,
-            )
-            # Connect signals
-            widget._context_menu.previous_requested.connect(widget.previous_requested.emit)
-            widget._context_menu.next_requested.connect(widget.next_requested.emit)
-            widget._context_menu.transition_selected.connect(widget._on_context_transition_selected)
-            widget._context_menu.visualizer_selected.connect(widget._on_context_visualizer_selected)
-            widget._context_menu.settings_requested.connect(widget.settings_requested.emit)
-            widget._context_menu.edit_mode_requested.connect(widget._on_context_edit_mode_requested)
-            widget._context_menu.save_edit_mode_requested.connect(widget._on_context_save_edit_mode_requested)
-            widget._context_menu.cancel_edit_mode_requested.connect(widget._on_context_cancel_edit_mode_requested)
-            widget._context_menu.reset_edit_mode_requested.connect(widget._on_context_reset_edit_mode_requested)
-            widget._context_menu.dimming_toggled.connect(widget._on_context_dimming_toggled)
-            widget._context_menu.interaction_mode_toggled.connect(widget._on_context_interaction_mode_toggled)
-            widget._context_menu.always_on_top_toggled.connect(widget._on_context_always_on_top_toggled)
-            widget._context_menu.exit_requested.connect(widget._on_context_exit_requested)
-            try:
-                widget._context_menu.aboutToShow.connect(lambda: widget._invalidate_overlay_effects("menu_about_to_show"))
-                widget._context_menu.aboutToShow.connect(
-                    lambda: CustomLayoutManager.schedule_raise_all_active_shells()
-                    if CustomLayoutManager.is_any_session_active()
-                    else None
-                )
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                submenu = getattr(widget._context_menu, "_transition_menu", None)
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                submenu = None
-            try:
-                connected_sub = bool(getattr(widget, "_context_menu_sub_connected", False))
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                connected_sub = False
-            if submenu is not None and not connected_sub:
-                try:
-                    submenu.aboutToShow.connect(lambda: widget._invalidate_overlay_effects("menu_sub_about_to_show"))
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    submenu.aboutToHide.connect(lambda: widget._schedule_effect_invalidation("menu_sub_after_hide"))
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                try:
-                    setattr(widget, "_context_menu_sub_connected", True)
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        else:
-            # Update state before showing
-            current_transition, random_enabled = widget._refresh_transition_state_from_settings()
-            widget._context_menu.update_transition_state(current_transition, random_enabled)
-            widget._context_menu.update_dimming_state(dimming_enabled)
-            widget._context_menu.update_interaction_mode_state(interaction_mode)
-            widget._context_menu.update_always_on_top_state(widget._always_on_top)
-            widget._context_menu.update_visualizer_state(current_vis)
+        widget._context_menu = ensure_context_menu(
+            widget,
+            current_transition=current_transition,
+            random_enabled=random_enabled,
+            dimming_enabled=dimming_enabled,
+            interaction_mode=interaction_mode,
+            current_vis=current_vis,
+        )
+        widget._context_menu.update_transition_state(current_transition, random_enabled)
+        widget._context_menu.update_dimming_state(dimming_enabled)
+        widget._context_menu.update_interaction_mode_state(interaction_mode)
+        widget._context_menu.update_always_on_top_state(widget._always_on_top)
+        widget._context_menu.update_visualizer_state(current_vis)
         widget._context_menu.update_edit_mode_state(CustomLayoutManager.is_any_session_active())
         
         try:
@@ -163,13 +177,14 @@ def show_context_menu(widget, global_pos) -> None:
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
-                        widget._invalidate_overlay_effects("menu_after_hide")
-                        widget._schedule_effect_invalidation("menu_after_hide")
+                        if not CustomLayoutManager.is_any_session_active():
+                            widget._invalidate_overlay_effects("menu_after_hide")
+                            widget._schedule_effect_invalidation("menu_after_hide")
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
                         if CustomLayoutManager.is_any_session_active():
-                            CustomLayoutManager.schedule_raise_all_active_shells()
+                            CustomLayoutManager.end_menu_interaction()
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
                     try:
@@ -216,29 +231,36 @@ def show_context_menu(widget, global_pos) -> None:
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         try:
-            # Phase E: Broadcast effect invalidation to ALL displays
-            # Context menu on one display triggers Windows activation cascade
-            # that corrupts QGraphicsEffect caches on OTHER displays
-            from rendering.multi_monitor_coordinator import get_coordinator
-            try:
-                widget._invalidate_overlay_effects("menu_before_popup")
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
-            if CustomLayoutManager.is_any_session_active():
-                CustomLayoutManager.schedule_raise_all_active_shells()
+            if edit_mode_active:
+                if CustomLayoutManager.has_cross_display_shells():
+                    CustomLayoutManager.restore_shells_for_display(widget)
+                CustomLayoutManager.begin_menu_interaction()
+                menu_session_begun = True
+            else:
+                # Outside edit mode, keep the historical broad effect invalidation path.
+                from rendering.multi_monitor_coordinator import get_coordinator
+                try:
+                    widget._invalidate_overlay_effects("menu_before_popup")
+                except Exception as e:
+                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                get_coordinator().invalidate_all_effects("menu_before_popup_broadcast")
             widget._context_menu.popup(global_pos)
-            if CustomLayoutManager.is_any_session_active():
-                CustomLayoutManager.schedule_raise_all_active_shells()
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
-                if CustomLayoutManager.is_any_session_active():
-                    CustomLayoutManager.schedule_raise_all_active_shells()
+                if menu_session_begun:
+                    CustomLayoutManager.end_menu_interaction()
+                    menu_session_begun = False
+                if edit_mode_active:
+                    CustomLayoutManager.begin_menu_interaction()
+                    menu_session_begun = True
                 widget._context_menu.popup(QCursor.pos())
-                if CustomLayoutManager.is_any_session_active():
-                    CustomLayoutManager.schedule_raise_all_active_shells()
             except Exception as e:
+                if menu_session_begun:
+                    try:
+                        CustomLayoutManager.end_menu_interaction()
+                    except Exception:
+                        logger.debug("[DISPLAY_WIDGET] Failed to unwind menu interaction after popup failure", exc_info=True)
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
     except Exception:

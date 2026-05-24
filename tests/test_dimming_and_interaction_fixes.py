@@ -228,6 +228,15 @@ class TestSettingsDotNotation:
         # Must NOT use nested dict access pattern
         assert "acc_cfg.get" not in source or "dim_cfg.get" not in source
 
+    def test_prewarm_context_menu_uses_shared_builder(self, qt_app):
+        """Prewarm should share the same menu wiring path as runtime popup."""
+        from rendering.display_setup import prewarm_context_menu
+
+        source = inspect.getsource(prewarm_context_menu)
+
+        assert "ensure_context_menu(" in source
+        assert "aboutToShow.connect(lambda: widget._invalidate_overlay_effects" not in source
+
 
 class TestDimmingOverlayZOrder:
     """Test that dimming overlay is properly included in Z-order management."""
@@ -259,8 +268,10 @@ class TestDimmingOverlayZOrder:
 def test_context_menu_invalidates_effects_before_popup(qt_app, qtbot, settings_manager, monkeypatch):
     """Context menu should invalidate overlay effects before popup."""
     from rendering.display_widget import DisplayWidget
+    from rendering.custom_layout_manager import CustomLayoutManager
     from widgets.context_menu import ScreensaverContextMenu
 
+    CustomLayoutManager._active_managers = []
     widget = DisplayWidget(screen_index=0, display_mode=None, settings_manager=settings_manager)
     qtbot.addWidget(widget)
     widget.resize(640, 360)

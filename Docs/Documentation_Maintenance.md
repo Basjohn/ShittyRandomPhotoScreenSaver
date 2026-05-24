@@ -31,6 +31,7 @@ Use this as the lightweight drift-check routine for SRPSS's canonical docs.
 Suggested commands:
 ```powershell
 rg -n "Gmail_Widget_Plan\.md|Documentation_Maintenance|Harness_Index" Docs Current_Plan.md Index.md Spec.md AGENTS.md
+rg -n "Logging_Guide|--perf|--viz|--geo|--set|--life" Docs Current_Plan.md Index.md Spec.md main.py core/logging/logger.py
 rg --files Docs tools core widgets ui rendering
 ```
 

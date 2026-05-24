@@ -10,6 +10,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - `Current_Plan.md` for active work only.
 - `Docs/Historical_Bugs.md` for dated bug narratives.
 - `Docs/Visualizer_Change_Checklist.md` for visualizer setting changes.
+- Runtime logging families should present a CLI-first operator surface. Prefer explicit flags such as `--perf`, `--viz`, `--geo`, `--set`, and `--life`; do not reintroduce environment-variable activation for diagnostic families.
 
 ## 2. Centralized Ownership
 - Threading through `ThreadManager`.
@@ -79,12 +80,16 @@ No shadow frameworks or parallel ownership paths.
 ## 5.3 CUSTOM Layout Safety
 - CUSTOM layout/edit mode must continue to extend descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
 - Edit mode remains a global active-display shell session; do not reintroduce display-local partial edit semantics.
+- Edit-mode shell/grid ownership should follow normal runtime where possible: prefer display-owned child surfaces with explicit cross-display reparenting over separate top-level tool windows plus repeated `raise_()` correction.
+- In edit mode, keep geometry authority clean too: `EditShellWidget` should emit/request global rects only, and `CustomLayoutManager` should own the live apply path plus global-to-local conversion instead of letting the shell move against an old parent first and then correcting it afterward.
 - While a CUSTOM edit session is active, treat the real system cursor as the only cursor authority. Suspend interaction-mode / Ctrl halo state for the whole session and restore only the ordinary hidden-cursor screensaver policy when the session exits.
+- Edit-mode stack ownership should stay session-level, not caller-level. Background clicks, shell context-menu requests, and menu show/hide should request one shared deferred restack contract, and active context menus should suspend shell/grid restacks until the menu closes.
 - Dragging must keep explicit snapping and compositor-backed-display target resolution; do not fall back to freehand or raw-screen heuristics.
 - Resize must remain widget-logical and descriptor-owned. Plain scroll wheel and corner-drag resize are the current resize gestures; both must flow through the same widget-logical resize authority, and corner drag should keep the opposite corner anchored instead of inventing a separate freeform transform path.
 - Any widget that supports CUSTOM resize must keep clear recovery affordances: runtime edit-shell reset plus settings-side authored-layout revert.
 - Treat DPR and multi-monitor portability as a first-class constraint. Persist committed geometry through the shared CUSTOM layout contract, not ad hoc raw-pixel paths.
 - While a saved CUSTOM rect is active, widget-local content/typography refresh logic must not become a second geometry authority. If a widget recalculates its own minimum/maximum size, the shared overlay/custom-layout seam must reassert the committed rect rather than letting the live widget silently resize itself.
+- Saved CUSTOM rect replay must still respect real display bounds. Do not preserve a denormalized saved size so literally that replay can leak a widget past the target display edge.
 - Keep the current runtime positioning system as the authored/default fallback path. `Custom` should remain unavailable until a real saved payload exists.
 - Prefer safe edit shells/bounds during editing if live widget behavior would introduce churn, network work, or rendering instability.
 

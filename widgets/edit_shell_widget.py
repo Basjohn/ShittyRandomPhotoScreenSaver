@@ -36,15 +36,19 @@ class EditShellWidget(QWidget):
         initial_global_rect: QRect,
         resizable: bool,
         live_geometry_resolver: Optional[Callable[[QRect, QPoint], QRect]] = None,
+        live_geometry_applier: Optional[Callable[[QRect], None]] = None,
         parent: Optional[QWidget] = None,
     ) -> None:
-        flags = (
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        super().__init__(parent, flags)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        if parent is not None:
+            super().__init__(parent)
+        else:
+            flags = (
+                Qt.WindowType.Tool
+                | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowStaysOnTopHint
+            )
+            super().__init__(parent, flags)
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setMouseTracking(True)
 
@@ -59,6 +63,7 @@ class EditShellWidget(QWidget):
         self._transfer_blocked = False
         self._transfer_block_reason = ""
         self._live_geometry_resolver = live_geometry_resolver
+        self._live_geometry_applier = live_geometry_applier
         self._active_vertical_guides: tuple[tuple[int, str], ...] = ()
         self._active_horizontal_guides: tuple[tuple[int, str], ...] = ()
         self._active_vertical_assists: tuple[tuple[int, str], ...] = ()
@@ -125,9 +130,16 @@ class EditShellWidget(QWidget):
         self._remove_btn.hide()
         self._remove_btn.setEnabled(False)
 
-        self.setGeometry(initial_global_rect)
+        self.set_shell_geometry(initial_global_rect)
         self._reposition_reset_button()
         self._update_hover_cursor()
+
+    def _global_rect_to_local(self, global_rect: QRect) -> QRect:
+        parent = self.parentWidget()
+        if parent is None:
+            return QRect(global_rect)
+        local_top_left = parent.mapFromGlobal(global_rect.topLeft())
+        return QRect(local_top_left, global_rect.size())
 
     def eventFilter(self, watched, event):  # type: ignore[override]
         reset_size_btn = getattr(self, "_reset_size_btn", None)
@@ -153,13 +165,17 @@ class EditShellWidget(QWidget):
         return super().eventFilter(watched, event)
 
     def set_shell_geometry(self, global_rect: QRect) -> None:
-        self.setGeometry(global_rect)
+        self.setGeometry(self._global_rect_to_local(global_rect))
         self._reposition_reset_button()
-        self.geometry_live_changed.emit(self.widget_id, QRect(self.geometry()))
+        self.geometry_live_changed.emit(self.widget_id, self.current_global_rect())
         self.update()
 
     def current_global_rect(self) -> QRect:
-        return QRect(self.geometry())
+        parent = self.parentWidget()
+        local_rect = QRect(self.geometry())
+        if parent is None:
+            return local_rect
+        return QRect(parent.mapToGlobal(local_rect.topLeft()), local_rect.size())
 
     def set_transfer_blocked(self, blocked: bool, reason: str = "") -> None:
         self._transfer_blocked = bool(blocked)
@@ -298,12 +314,12 @@ class EditShellWidget(QWidget):
             if resize_corner is not None:
                 self._resizing = True
                 self._resize_corner = resize_corner
-                self.resize_drag_started.emit(self.widget_id, resize_corner, QRect(self.geometry()))
+                self.resize_drag_started.emit(self.widget_id, resize_corner, self.current_global_rect())
                 self._update_hover_cursor(local_pos)
                 event.accept()
                 return
             self._dragging = True
-            self._drag_offset = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            self._drag_offset = event.globalPosition().toPoint() - self.current_global_rect().topLeft()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
             event.accept()
             return
@@ -314,7 +330,7 @@ class EditShellWidget(QWidget):
             self.resize_drag_live_changed.emit(
                 self.widget_id,
                 str(self._resize_corner or ""),
-                QRect(self.geometry()),
+                self.current_global_rect(),
                 event.globalPosition().toPoint(),
             )
             event.accept()
@@ -330,8 +346,13 @@ class EditShellWidget(QWidget):
                 next_rect = QRect(self._live_geometry_resolver(QRect(next_rect), event.globalPosition().toPoint()))
             except Exception:
                 next_rect = QRect(top_left, self.size())
-        self.setGeometry(next_rect)
-        self.geometry_live_changed.emit(self.widget_id, QRect(self.geometry()))
+        if callable(self._live_geometry_applier):
+            try:
+                self._live_geometry_applier(QRect(next_rect))
+            except Exception:
+                self.set_shell_geometry(next_rect)
+        else:
+            self.set_shell_geometry(next_rect)
         event.accept()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
@@ -350,7 +371,7 @@ class EditShellWidget(QWidget):
             self._resize_corner = None
             global_pos = event.globalPosition().toPoint()
             self._update_hover_cursor(local_pos)
-            self.resize_drag_finished.emit(self.widget_id, resize_corner, QRect(self.geometry()), global_pos)
+            self.resize_drag_finished.emit(self.widget_id, resize_corner, self.current_global_rect(), global_pos)
             event.accept()
             return
         if self._dragging and event.button() == Qt.MouseButton.LeftButton:
@@ -358,12 +379,15 @@ class EditShellWidget(QWidget):
             global_pos = event.globalPosition().toPoint()
             if callable(self._live_geometry_resolver):
                 try:
-                    next_rect = QRect(self._live_geometry_resolver(QRect(self.geometry()), global_pos))
-                    self.setGeometry(next_rect)
+                    next_rect = QRect(self._live_geometry_resolver(self.current_global_rect(), global_pos))
+                    if callable(self._live_geometry_applier):
+                        self._live_geometry_applier(QRect(next_rect))
+                    else:
+                        self.set_shell_geometry(next_rect)
                 except Exception:
                     pass
             self._update_hover_cursor(local_pos)
-            self.drag_finished.emit(self.widget_id, QRect(self.geometry()), global_pos)
+            self.drag_finished.emit(self.widget_id, self.current_global_rect(), global_pos)
             event.accept()
             return
         if event.button() == Qt.MouseButton.LeftButton:
@@ -404,7 +428,7 @@ class EditShellWidget(QWidget):
             painter.drawPixmap(self.rect(), self._snapshot)
 
         assist_pen = QPen(QColor(180, 110, 255, 235), 3.0)
-        shell_rect = self.geometry()
+        shell_rect = self.current_global_rect()
         primary_vertical_local = None
         primary_horizontal_local = None
         if self._active_vertical_guides:

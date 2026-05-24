@@ -72,7 +72,8 @@ Reindex contract:
 - Runtime CUSTOM sizing should stay single-authority: live mode/preset card metrics come from the visualizer geometry policy, while committed CUSTOM placement/scale comes from the shared runtime reapply path.
 
 ## 7. Diagnostics
-- Use `SRPSS_VIZ_DIAGNOSTICS=1` or `--viz-diagnostics`.
+- Use `--viz` for ordinary visualizer diagnostics.
+- `--viz-diagnostics` and `--viz-diag` remain accepted aliases, but `--viz` is the preferred operator flag.
 - For transport bugs, verify:
   - model normalization,
   - config-applier kwargs,

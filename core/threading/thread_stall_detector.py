@@ -2,7 +2,7 @@
 Thread stall detection for performance monitoring.
 
 Detects when threads or workers are blocked/stalled beyond acceptable thresholds.
-All profiling is gated behind SRPSS_PERF_METRICS environment variable.
+All profiling is gated behind the runtime PERF logging contract.
 """
 import threading
 import time

@@ -1568,9 +1568,8 @@ class DisplayWidget(QWidget):
         if self._custom_layout_edit_active:
             if event.button() == Qt.MouseButton.RightButton:
                 self._show_context_menu(event.globalPosition().toPoint())
-                CustomLayoutManager.schedule_raise_all_active_shells()
-            else:
-                CustomLayoutManager.schedule_raise_all_active_shells()
+            elif CustomLayoutManager.has_cross_display_shells():
+                CustomLayoutManager.restore_shells_for_display(self)
             event.accept()
             return
         from rendering.display_input import handle_mousePressEvent

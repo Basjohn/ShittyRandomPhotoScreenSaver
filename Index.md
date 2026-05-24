@@ -16,6 +16,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
+| `Docs/Logging_Guide.md` | CLI-first logging flags, sidecar files, and correlation workflow |
 | `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
 | `Docs/00_PROJECT_OVERVIEW.md` | High-level orientation to the documentation set and main runtime areas |
@@ -172,8 +173,6 @@ Living map of the current SRPSS codebase.
 | Variable | Purpose |
 |---|---|
 | `SRPSS_ENABLE_DEV` | Enable dev-only features (non-mode-gate features) |
-| `SRPSS_VIZ_DIAGNOSTICS` | Enable verbose visualizer diagnostics |
-| `SRPSS_PERF_METRICS` | Enable perf metrics logging |
 | `SRPSS_DISABLE_LOGGING` / `SRPSS_DISABLE_LOGS` | Disable runtime logging |
 | `SRPSS_FORCE_LOG_DIR` | Override log directory |
 | `SRPSS_FORCE_SOUNDDEVICE` | Force sounddevice audio backend |
@@ -183,9 +182,13 @@ Living map of the current SRPSS codebase.
 | Flag | Purpose |
 |---|---|
 | `--debug`, `-d` | Debug logging |
-| `--viz` | Visualizer logging |
-| `--viz-diagnostics`, `--viz-diag` | Enable diagnostics and set env toggle |
+| `--verbose`, `-v` | Full verbose DEBUG/INFO stream in `screensaver_verbose.log` |
+| `--perf` | Performance telemetry sidecar logs |
+| `--viz` | Visualizer logging plus visualizer diagnostics sidecars |
+| `--geo` | Geometry/z-order/CUSTOM-layout sidecar logs |
+| `--set` | Settings mutation/import/schema sidecar logs |
+| `--life` | Widget/worker/engine lifecycle sidecar logs |
+| `--viz-diagnostics`, `--viz-diag` | Legacy compatibility alias for extra visualizer diagnostics |
 | `--fresh` | Clear runtime logs at startup |
 | `-devblob` | Enable blob mode gate |
 | `--devcurve` | Compatibility no-op alias |
-| Tick helpers | `widgets/spotify_visualizer/tick_helpers.py` | Transition context, FPS retuning, steady-timer ownership, AnimationManager tick-listener lifecycle, geometry cache, visual smoothing, and perf snapshot logging |

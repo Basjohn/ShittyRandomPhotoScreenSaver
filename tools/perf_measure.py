@@ -25,17 +25,11 @@ class PerformanceMeasurement:
     def start_app(self) -> bool:
         """Start the application and get process handle."""
         try:
-            # Start app with perf metrics enabled
-            env = {
-                "SRPSS_PERF_METRICS": "1",
-                "SRPSS_DISABLE_LOGGING": "0",
-            }
-            
-            cmd = [sys.executable, str(self.app_path / "main.py")]
+            # Start app with PERF logging enabled through the canonical CLI.
+            cmd = [sys.executable, str(self.app_path / "main.py"), "--perf"]
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(self.app_path),
-                env={**subprocess.os.environ, **env},
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )

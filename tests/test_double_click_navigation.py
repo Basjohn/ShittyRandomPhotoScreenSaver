@@ -142,15 +142,19 @@ def test_display_widget_mouse_double_click_suppressed_during_recreation_guard(mo
     DisplayWidget.clear_pointer_input_suppression()
 
 
-def test_display_widget_edit_mode_background_click_schedules_global_restack(monkeypatch):
+def test_display_widget_edit_mode_background_click_restores_shells_for_current_display(monkeypatch):
     scheduled: list[str] = []
     event = MagicMock()
     event.button.return_value = Qt.MouseButton.LeftButton
     event.accept.side_effect = lambda: scheduled.append("accepted")
 
     monkeypatch.setattr(
-        "rendering.display_widget.CustomLayoutManager.schedule_raise_all_active_shells",
-        classmethod(lambda cls: scheduled.append("restack")),
+        "rendering.display_widget.CustomLayoutManager.restore_shells_for_display",
+        classmethod(lambda cls, widget: scheduled.append("restore")),
+    )
+    monkeypatch.setattr(
+        "rendering.display_widget.CustomLayoutManager.has_cross_display_shells",
+        classmethod(lambda cls: True),
     )
 
     stub = SimpleNamespace(
@@ -160,7 +164,32 @@ def test_display_widget_edit_mode_background_click_schedules_global_restack(monk
 
     DisplayWidget.mousePressEvent(stub, event)
 
-    assert scheduled == ["restack", "accepted"]
+    assert scheduled == ["restore", "accepted"]
+
+
+def test_display_widget_edit_mode_background_click_skips_restack_without_cross_display_shells(monkeypatch):
+    scheduled: list[str] = []
+    event = MagicMock()
+    event.button.return_value = Qt.MouseButton.LeftButton
+    event.accept.side_effect = lambda: scheduled.append("accepted")
+
+    monkeypatch.setattr(
+        "rendering.display_widget.CustomLayoutManager.restore_shells_for_display",
+        classmethod(lambda cls, widget: scheduled.append("restore")),
+    )
+    monkeypatch.setattr(
+        "rendering.display_widget.CustomLayoutManager.has_cross_display_shells",
+        classmethod(lambda cls: False),
+    )
+
+    stub = SimpleNamespace(
+        _custom_layout_edit_active=True,
+        _should_suppress_runtime_pointer_input=lambda source: False,
+    )
+
+    DisplayWidget.mousePressEvent(stub, event)
+
+    assert scheduled == ["accepted"]
 
 
 # ======================================================================

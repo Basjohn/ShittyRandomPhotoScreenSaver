@@ -3,12 +3,11 @@
 Summarises `[PERF] [SPOTIFY_VIS] Tick/Paint metrics` and
 `[PERF] [GL COMPOSITOR] Slide metrics` from a single PERF log file.
 
-Intended for ad-hoc use when `SRPSS_PERF_METRICS=1` is enabled.
+Intended for ad-hoc use after a `--perf` run has produced `screensaver_perf.log`.
 """
 from __future__ import annotations
 
 import argparse
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
@@ -203,12 +202,6 @@ def _summarize_slide(slide: List[Tuple[str, PerfSample]]) -> None:
 
 
 def main() -> int:
-    # Only run when PERF metrics were enabled for the session.
-    perf_env = os.environ.get("SRPSS_PERF_METRICS", "0").strip().lower()
-    if perf_env not in {"1", "true", "yes"}:
-        print("SRPSS_PERF_METRICS is not enabled; this script is intended for PERF runs only.")
-        return 1
-
     parser = _build_parser()
     # When invoked from main.py, additional flags such as --debug may be
     # present in sys.argv. Treat them as opaque and ignore them here so

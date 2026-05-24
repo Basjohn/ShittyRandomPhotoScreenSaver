@@ -151,6 +151,10 @@ class ScreensaverContextMenu(QMenu):
         
         self.setStyleSheet(MENU_STYLE)
         try:
+            self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
+        except Exception as e:
+            logger.debug("[CONTEXT_MENU] Exception suppressed: %s", e)
+        try:
             self.setWindowFlag(Qt.WindowType.WindowDoesNotAcceptFocus, True)
         except Exception as e:
             logger.debug("[CONTEXT_MENU] Exception suppressed: %s", e)

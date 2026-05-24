@@ -114,8 +114,13 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     
     Debug flags (ignored here, handled earlier):
     - --debug, -d - Enable debug logging
-    - --viz - Enable visualizer logging
-    - --viz-diagnostics (or --viz-diag) - Enable Spotify visualizer diagnostics
+    - --verbose, -v - Enable full verbose log stream
+    - --perf - Enable performance logging
+    - --viz - Enable visualizer logging and diagnostics
+    - --geo - Enable geometry/z-order/edit-layout diagnostics
+    - --set - Enable settings mutation/import/schema diagnostics
+    - --life - Enable widget/worker/engine lifecycle diagnostics
+    - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
     
@@ -124,7 +129,8 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--viz", "--viz-diagnostics", "--viz-diag",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life",
+        "--viz-diagnostics", "--viz-diag",
         "--fresh", "-devblob", "--devcurve",
     }
     args = [arg for arg in sys.argv if arg not in _filtered]
@@ -511,9 +517,22 @@ def main():
     # Setup logging first
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
+    perf_mode = '--perf' in sys.argv
     viz_mode = '--viz' in sys.argv
-    viz_diag_mode = '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
-    setup_logging(debug=debug_mode, verbose=verbose_mode, viz=viz_mode, viz_diag=viz_diag_mode)
+    geo_mode = '--geo' in sys.argv
+    settings_trace_mode = '--set' in sys.argv
+    lifecycle_mode = '--life' in sys.argv
+    viz_diag_mode = viz_mode or '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
+    setup_logging(
+        debug=debug_mode,
+        verbose=verbose_mode,
+        perf=perf_mode,
+        viz=viz_mode,
+        viz_diag=viz_diag_mode,
+        geo=geo_mode,
+        settings_trace=settings_trace_mode,
+        lifecycle=lifecycle_mode,
+    )
     if fresh_result is not None:
         fresh_log_dir, fresh_deleted = fresh_result
         logger.info(
@@ -523,7 +542,7 @@ def main():
         )
     
     # GC tracking for performance debugging
-    if os.environ.get('SRPSS_PERF_METRICS') == '1':
+    if perf_mode:
         _gc_start_time = [0.0]
         def _gc_callback(phase: str, info: dict) -> None:
             if phase == 'start':
@@ -685,8 +704,7 @@ def main():
     # from the dedicated screensaver_perf.log. This is a best-effort helper
     # and failures are logged at DEBUG only so normal runs are unaffected.
     try:
-        perf_flag = os.getenv("SRPSS_PERF_METRICS", "").strip().lower()
-        if perf_flag in ("1", "true", "on", "yes"):
+        if perf_mode:
             try:
                 from scripts import spotify_vis_metrics_parser as _sv  # type: ignore[import]
                 _sv.main()

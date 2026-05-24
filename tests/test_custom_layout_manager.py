@@ -242,7 +242,14 @@ class _InputHandlerStub:
 
 
 def _reset_custom_layout_manager_state() -> None:
+    try:
+        CustomLayoutManager._uninstall_global_key_filter()
+    except Exception:
+        pass
     CustomLayoutManager._active_managers = []
+    CustomLayoutManager._menu_interaction_depth = 0
+    CustomLayoutManager._restack_scheduled = False
+    CustomLayoutManager._restack_pending_during_menu = False
 
 
 def _attach_manager(display: _DisplayStub, manager: CustomLayoutManager) -> None:
@@ -544,7 +551,7 @@ def test_custom_layout_manager_escape_cancels_active_session(qtbot):
     assert manager.is_active() is False
 
 
-def test_custom_layout_manager_enter_saves_active_session(qtbot):
+def test_custom_layout_manager_enter_saves_active_session(qtbot, monkeypatch):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
@@ -557,6 +564,11 @@ def test_custom_layout_manager_enter_saves_active_session(qtbot):
     _attach_manager(display, manager)
     assert manager.start_session() is True
     assert CustomLayoutManager._key_filter is not None
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "active_manager",
+        classmethod(lambda cls: manager),
+    )
 
     event = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
     assert CustomLayoutManager._key_filter.eventFilter(display, event) is True
@@ -739,7 +751,6 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.shell._remove_btn.isVisible() is True
 
     restack_events: list[str] = []
-    monkeypatch.setattr(manager_a._grid_overlay, "raise_", lambda: restack_events.append("overlay_a"), raising=False)
     monkeypatch.setattr(state_a.shell, "raise_", lambda: restack_events.append("shell_a"), raising=False)
 
     manager_b._on_shell_remove_requested("clock")
@@ -747,7 +758,6 @@ def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_disp
     assert state_b.removed is True
     assert state_b.shell.isVisible() is False
     assert state_a.shell._remove_btn.isVisible() is False
-    assert "overlay_a" in restack_events
     assert "shell_a" in restack_events
 
     assert manager_a.save_session() is True
@@ -794,12 +804,11 @@ def test_custom_layout_manager_raise_all_active_shells_normalizes_overlay_stack(
 
     state = manager._shell_states["clock"]
     calls: list[str] = []
-    monkeypatch.setattr(manager._grid_overlay, "raise_", lambda: calls.append("overlay"), raising=False)
     monkeypatch.setattr(state.shell, "raise_", lambda: calls.append("shell"), raising=False)
 
     CustomLayoutManager.raise_all_active_shells()
 
-    assert calls == ["overlay", "shell"]
+    assert calls == ["shell"]
 
 
 def test_custom_layout_manager_raise_all_active_shells_does_not_force_show_or_update(qtbot, monkeypatch):
@@ -859,15 +868,159 @@ def test_custom_layout_manager_global_restack_keeps_cross_display_shells_in_shel
     state_a.current_screen_signature = get_screen_signature(screen_b)
 
     calls: list[str] = []
-    monkeypatch.setattr(manager_a._grid_overlay, "raise_", lambda: calls.append("overlay_a"), raising=False)
-    monkeypatch.setattr(manager_b._grid_overlay, "raise_", lambda: calls.append("overlay_b"), raising=False)
     monkeypatch.setattr(state_a.shell, "raise_", lambda: calls.append("shell_a"), raising=False)
     monkeypatch.setattr(state_b.shell, "raise_", lambda: calls.append("shell_b"), raising=False)
 
     CustomLayoutManager.raise_all_active_shells()
 
-    assert calls[:2] == ["overlay_a", "overlay_b"]
-    assert calls[2:] == ["shell_a", "shell_b"]
+    assert calls == ["shell_a", "shell_b"]
+
+
+def test_custom_layout_manager_restore_shells_for_display_targets_only_current_display(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+    display_a.clock_widget = _EditableTestWidget(display_a)
+    display_b.clock_widget = _EditableTestWidget(display_b)
+
+    manager_a = CustomLayoutManager(display_a)
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_a, manager_a)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_a.start_session() is True
+    state_a = manager_a._shell_states["clock"]
+    state_b = manager_b._shell_states["clock"]
+    state_a.current_screen = screen_b
+    state_a.current_screen_signature = get_screen_signature(screen_b)
+
+    calls: list[str] = []
+    monkeypatch.setattr(state_a.shell, "raise_", lambda: calls.append("shell_a"), raising=False)
+    monkeypatch.setattr(state_b.shell, "raise_", lambda: calls.append("shell_b"), raising=False)
+
+    CustomLayoutManager.restore_shells_for_display(display_b)
+
+    assert calls == ["shell_a", "shell_b"]
+
+
+def test_edit_shell_widget_child_parent_preserves_global_geometry(qtbot):
+    host = QWidget()
+    host.setGeometry(200, 120, 600, 400)
+    qtbot.addWidget(host)
+    host.show()
+
+    snapshot = QPixmap(100, 60)
+    snapshot.fill(QColor(20, 20, 20, 180))
+    shell = EditShellWidget(
+        widget_id="clock",
+        snapshot=snapshot,
+        initial_global_rect=QRect(260, 190, 100, 60),
+        resizable=True,
+        parent=host,
+    )
+    qtbot.addWidget(shell)
+    shell.show()
+
+    assert shell.current_global_rect() == QRect(260, 190, 100, 60)
+
+    shell.set_shell_geometry(QRect(320, 240, 120, 70))
+
+    assert shell.current_global_rect() == QRect(320, 240, 120, 70)
+
+
+def test_custom_layout_manager_reparents_shell_to_target_display(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen_a = _FakeScreen("Screen A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Screen B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    display_a.clock_widget = _EditableTestWidget(display_a)
+    manager = CustomLayoutManager(display_a)
+    _attach_manager(display_a, manager)
+    assert manager._start_session_local() is True
+
+    state = manager._shell_states["clock"]
+    assert state.shell.parentWidget() is display_a
+
+    target_rect = QRect(860, 90, state.current_global_rect.width(), state.current_global_rect.height())
+    state.current_screen = screen_b
+    state.current_screen_signature = get_screen_signature(screen_b)
+    state.current_global_rect = QRect(target_rect)
+    manager._get_display_instance_for_screen = lambda screen: display_b if screen is screen_b else display_a  # type: ignore[method-assign]
+
+    manager._sync_shell_parent_to_state(state)
+
+    assert state.shell.parentWidget() is display_b
+    assert state.shell.current_global_rect().size() == target_rect.size()
+
+
+def test_custom_layout_manager_live_apply_reparents_shell_before_cross_display_drag_commits(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock2": {"position": "Bottom Right", "monitor": "2"}}
+    screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    screen1 = _FakeScreen("screen1", QRect(800, 0, 800, 600))
+    display0 = _DisplayStub(settings_stub, screen=screen0, screen_index=0)
+    display1 = _DisplayStub(settings_stub, screen=screen1, screen_index=1)
+    qtbot.addWidget(display0)
+    qtbot.addWidget(display1)
+    display0.show()
+    display1.show()
+
+    clock = _EditableTestWidget(display1, font_size=32)
+    display1.clock2_widget = clock
+    qtbot.addWidget(clock)
+
+    manager0 = CustomLayoutManager(display0)
+    manager1 = CustomLayoutManager(display1)
+    _attach_manager(display0, manager0)
+    _attach_manager(display1, manager1)
+    monkeypatch.setattr(
+        manager1,
+        "_get_display_instance_for_screen",
+        lambda screen: display0 if screen is screen0 else display1,
+    )
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display0, display1]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager1.start_session() is True
+    state = manager1._shell_states["clock2"]
+    target_rect = QRect(120, 90, state.current_global_rect.width(), state.current_global_rect.height())
+    resolved = manager1._resolve_shell_geometry_for_widget_id(
+        "clock2",
+        target_rect,
+        cursor_global=target_rect.center(),
+        snap_to_grid=False,
+    )
+    manager1._apply_live_shell_geometry_for_widget_id("clock2", resolved)
+
+    assert state.current_screen is screen0
+    assert state.shell.parentWidget() is display0
+    assert state.shell.current_global_rect() == resolved
 
 
 def test_custom_layout_manager_schedule_raise_all_active_shells_coalesces(monkeypatch):
@@ -890,6 +1043,11 @@ def test_custom_layout_manager_schedule_raise_all_active_shells_coalesces(monkey
         "raise_all_active_shells",
         classmethod(lambda cls: invocations.append("raised")),
     )
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "is_any_session_active",
+        classmethod(lambda cls: True),
+    )
 
     CustomLayoutManager._restack_scheduled = False
     CustomLayoutManager.schedule_raise_all_active_shells()
@@ -900,6 +1058,47 @@ def test_custom_layout_manager_schedule_raise_all_active_shells_coalesces(monkey
     queued_callbacks.pop(0)()
 
     assert invocations == ["raised"]
+
+
+def test_custom_layout_manager_schedule_raise_all_active_shells_defers_during_menu(monkeypatch):
+    _reset_custom_layout_manager_state()
+    scheduled: list[int] = []
+    invocations: list[str] = []
+
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.QTimer.singleShot",
+        lambda delay_ms, callback: scheduled.append(int(delay_ms)),
+    )
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "raise_all_active_shells",
+        classmethod(lambda cls: invocations.append("raised")),
+    )
+    monkeypatch.setattr(
+        CustomLayoutManager,
+        "is_any_session_active",
+        classmethod(lambda cls: True),
+    )
+
+    CustomLayoutManager._menu_interaction_depth = 1
+    CustomLayoutManager._restack_pending_during_menu = False
+    CustomLayoutManager._restack_scheduled = False
+
+    CustomLayoutManager.schedule_raise_all_active_shells()
+
+    assert scheduled == []
+    assert invocations == []
+    assert CustomLayoutManager._restack_pending_during_menu is True
+
+    monkeypatch.setattr(
+        "rendering.custom_layout_manager.QTimer.singleShot",
+        lambda delay_ms, callback: callback(),
+    )
+    CustomLayoutManager.end_menu_interaction()
+
+    assert invocations == ["raised"]
+    assert CustomLayoutManager._menu_interaction_depth == 0
+    assert CustomLayoutManager._restack_pending_during_menu is False
 
 
 def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size(qtbot):
@@ -1153,6 +1352,46 @@ def test_custom_layout_manager_reapplies_legacy_signature_after_late_screen_bind
     assert isinstance(custom_rect, QRect)
     assert custom_rect.width() > 0
     assert custom_rect.height() > 0
+
+
+def test_custom_layout_manager_apply_saved_layouts_clamps_rect_within_display_bounds(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("screen0", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "gmail": {"position": "Custom"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "gmail": {
+                        "rect": {"x": 0.7, "y": 0.75, "width": 0.45, "height": 0.4},
+                        "size_payload": {"font_size": 20},
+                        "resize_mode": "gmail_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen, screen_index=0)
+    qtbot.addWidget(display)
+    display.show()
+
+    gmail = _GmailLikeTestWidget(display, font_size=13)
+    display.gmail_widget = gmail
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(gmail, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.x() >= 0
+    assert custom_rect.y() >= 0
+    assert custom_rect.right() <= screen.geometry().width() - 1
+    assert custom_rect.bottom() <= screen.geometry().height() - 1
 
 
 def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):

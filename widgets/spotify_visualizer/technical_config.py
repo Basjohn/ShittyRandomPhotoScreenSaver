@@ -213,9 +213,9 @@ def apply_technical_config_for_mode(widget: Any, mode: VisualizerMode, *, reason
         overlay._osc_transient_width_mix = widget._osc_transient_width_mix
 
     try:
-        from os import getenv
+        from core.logging.logger import is_viz_diagnostics_enabled
 
-        if getenv("SRPSS_VIZ_DIAGNOSTICS", "false").lower() == "true":
+        if is_viz_diagnostics_enabled():
             logger.info(
                 "[SPOTIFY_VIS][TECHNICAL] mode=%s reason=%s bar_count=%d dyn_floor=%s manual_floor=%.2f adaptive=%s sensitivity=%.2f block=%d dyn_range=%s energy_boost=%.2f",
                 mode.name,

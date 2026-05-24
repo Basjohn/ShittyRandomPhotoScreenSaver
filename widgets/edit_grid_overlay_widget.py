@@ -22,13 +22,16 @@ class EditGridOverlayWidget(QWidget):
         gutter_px: int,
         parent: QWidget | None = None,
     ) -> None:
-        flags = (
-            Qt.WindowType.Tool
-            | Qt.WindowType.FramelessWindowHint
-            | Qt.WindowType.WindowStaysOnTopHint
-        )
-        super().__init__(parent, flags)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        if parent is not None:
+            super().__init__(parent)
+        else:
+            flags = (
+                Qt.WindowType.Tool
+                | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowStaysOnTopHint
+            )
+            super().__init__(parent, flags)
+            self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._grid_step_px = max(4, int(grid_step_px))
@@ -37,7 +40,10 @@ class EditGridOverlayWidget(QWidget):
         self._active_horizontal_guides: tuple[tuple[int, str], ...] = ()
         self._active_vertical_assists: tuple[tuple[int, str], ...] = ()
         self._active_horizontal_assists: tuple[tuple[int, str], ...] = ()
-        self.setGeometry(global_rect)
+        if parent is not None:
+            self.setGeometry(0, 0, max(1, global_rect.width()), max(1, global_rect.height()))
+        else:
+            self.setGeometry(global_rect)
 
     def set_active_guides(
         self,
@@ -56,6 +62,9 @@ class EditGridOverlayWidget(QWidget):
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
 
         major_step = self._grid_step_px * 4
         minor_pen = QPen(QColor(255, 255, 255, 28), 1)
