@@ -19,7 +19,11 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Confirm hidden deferred warmup is covering both remaining transition-program compile and representative transition-resource/state prep strongly enough that first-use transitions do not fall back to expensive visible-surface warmup work in normal startup runs.
   - [ ] Confirm first-use non-crossfade transitions still compile/bind and run correctly even if deferred startup warmup is skipped or incomplete on a given compositor.
   - [ ] Confirm transition start does not pay redundant compositor `makeCurrent()` / ensure-bind work once deferred warmup has already populated the pipeline attrs for that transition.
+  - [ ] Confirm the async image path is now consuming prefetched `|scaled:WxH` cache variants instead of unnecessarily round-tripping through `ImageWorker` prescale on every image change.
+  - [ ] Validate the broadened shared compositor-side desync across non-crossfade transition families and confirm the delay remains imperceptible while reducing same-instant multi-display start overhead.
+  - [ ] Verify whether the documented `ImagePrefetcher` post-transition delay contract is actually exercised in runtime; if it is still inert, fix that at the shared prefetch/display seam instead of layering transition-specific throttles.
   - [ ] Keep this on the shared GL lifecycle seam only; do not reintroduce live-surface startup warmup or transition-specific ad hoc compile hacks.
+  - [ ] Re-check Block Puzzle Flip after the CPU-side region simulation retirement; if it is still disproportionately expensive, treat that as a transition-specific redesign/perf follow-up rather than reintroducing dead controller bookkeeping.
 
 - [ ] Re-audit opt-in non-`Custom` authored stacking against live `--geo` traces before trusting it beyond experimental use.
   - [ ] Keep the feature default-off until the left-column `weather` / `reddit` / `gmail` case stops preserving dead air and stops pushing `gmail` below the display despite a fit being possible.

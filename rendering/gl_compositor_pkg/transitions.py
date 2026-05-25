@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Optional, Callable, TYPE_CHECKING
 
-from PySide6.QtCore import QPoint
+from PySide6.QtCore import QPoint, QTimer
 from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger
@@ -41,6 +41,32 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _start_with_desync(
+    widget,
+    *,
+    duration_ms: int,
+    starter: Callable[[int], Optional[str]],
+    transition_label: str,
+) -> Optional[str]:
+    """Spread transition-start overhead without changing perceived pacing."""
+    delay_ms, compensated_duration = widget._apply_desync_strategy(duration_ms)
+    if delay_ms <= 0:
+        return starter(compensated_duration)
+
+    def deferred_start() -> None:
+        try:
+            starter(compensated_duration)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Deferred %s start failed after desync delay",
+                transition_label,
+                exc_info=True,
+            )
+
+    QTimer.singleShot(delay_ms, deferred_start)
+    return None
+
+
 def start_crossfade(
     widget,
     old_pixmap: Optional[QPixmap],
@@ -65,29 +91,19 @@ def start_crossfade(
         if widget._handle_no_old_image(new_pixmap, on_finished, "crossfade"):
             return None
 
-    # Apply desync strategy: random delay with duration compensation
-    delay_ms, compensated_duration = widget._apply_desync_strategy(duration_ms)
-    
-    if delay_ms > 0:
-        # Use the exact pixmaps we were asked to transition between; do not mutate the
-        # compositor base until the animation actually starts.
-        from PySide6.QtCore import QTimer
-
-        def deferred_start():
-            if old_pixmap is None or old_pixmap.isNull():
-                # If the caller did not provide a previous frame, we cannot animate.
-                widget._handle_no_old_image(new_pixmap, on_finished, "crossfade")
-                return
-            widget._start_crossfade_impl(
-                old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
-            )
-
-        QTimer.singleShot(delay_ms, deferred_start)
-        return None  # Animation ID will be set when transition actually starts
-    else:
+    def _start_crossfade(compensated_duration: int) -> Optional[str]:
+        if old_pixmap is None or old_pixmap.isNull():
+            widget._handle_no_old_image(new_pixmap, on_finished, "crossfade")
+            return None
         return widget._start_crossfade_impl(
             old_pixmap, new_pixmap, compensated_duration, easing, animation_manager, on_finished
         )
+    return _start_with_desync(
+        widget,
+        duration_ms=duration_ms,
+        starter=_start_crossfade,
+        transition_label="crossfade",
+    )
 
 def start_warp(
     widget,
@@ -108,16 +124,18 @@ def start_warp(
         if widget._handle_no_old_image(new_pixmap, on_finished, "warp"):
             return None
 
-    widget._clear_all_transitions()
-    widget._warp = WarpState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
-    widget._pre_upload_textures(widget._prepare_warp_textures)
-    widget._profiler.start("warp")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_warp_update,
-        lambda: widget._on_warp_complete(on_finished),
-        transition_label="warp",
-    )
+    def _start_warp(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._warp = WarpState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0)
+        widget._pre_upload_textures(widget._prepare_warp_textures)
+        widget._profiler.start("warp")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_warp_update,
+            lambda: widget._on_warp_complete(on_finished),
+            transition_label="warp",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_warp, transition_label="warp")
 
 def start_raindrops(
     widget,
@@ -145,20 +163,22 @@ def start_raindrops(
             return None
 
     import random as _rng
-    widget._clear_all_transitions()
-    widget._raindrops = RaindropsState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
-        ripple_count=max(1, min(8, int(ripple_count))),
-        ripple_seed=_rng.random() * 1000.0,
-    )
-    widget._pre_upload_textures(widget._prepare_raindrops_textures)
-    widget._profiler.start("raindrops")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_raindrops_update,
-        lambda: widget._on_raindrops_complete(on_finished),
-        transition_label="raindrops",
-    )
+    def _start_raindrops(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._raindrops = RaindropsState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
+            ripple_count=max(1, min(8, int(ripple_count))),
+            ripple_seed=_rng.random() * 1000.0,
+        )
+        widget._pre_upload_textures(widget._prepare_raindrops_textures)
+        widget._profiler.start("raindrops")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_raindrops_update,
+            lambda: widget._on_raindrops_complete(on_finished),
+            transition_label="raindrops",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_raindrops, transition_label="raindrops")
 
 # NOTE: start_shuffle_shader() and start_shooting_stars() removed - these transitions are retired.
 
@@ -182,16 +202,18 @@ def start_wipe(
         if widget._handle_no_old_image(new_pixmap, on_finished, "wipe"):
             return None
 
-    widget._clear_all_transitions()
-    widget._wipe = WipeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0)
-    widget._pre_upload_textures(widget._prepare_wipe_textures)
-    widget._profiler.start("wipe")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_wipe_update,
-        lambda: widget._on_wipe_complete(on_finished),
-        transition_label="wipe",
-    )
+    def _start_wipe(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._wipe = WipeState(old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0)
+        widget._pre_upload_textures(widget._prepare_wipe_textures)
+        widget._profiler.start("wipe")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_wipe_update,
+            lambda: widget._on_wipe_complete(on_finished),
+            transition_label="wipe",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_wipe, transition_label="wipe")
 
 def start_slide(
     widget,
@@ -216,20 +238,22 @@ def start_slide(
         if widget._handle_no_old_image(new_pixmap, on_finished, "slide"):
             return None
 
-    widget._clear_all_transitions()
-    widget._slide = SlideState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap,
-        old_start=old_start, old_end=old_end,
-        new_start=new_start, new_end=new_end, progress=0.0,
-    )
-    widget._pre_upload_textures(widget._prepare_slide_textures)
-    widget._profiler.start("slide")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_slide_update,
-        lambda: widget._on_slide_complete(on_finished),
-        transition_label="slide",
-    )
+    def _start_slide(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._slide = SlideState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap,
+            old_start=old_start, old_end=old_end,
+            new_start=new_start, new_end=new_end, progress=0.0,
+        )
+        widget._pre_upload_textures(widget._prepare_slide_textures)
+        widget._profiler.start("slide")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_slide_update,
+            lambda: widget._on_slide_complete(on_finished),
+            transition_label="slide",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_slide, transition_label="slide")
 
 def start_block_flip(
     widget,
@@ -254,31 +278,33 @@ def start_block_flip(
         if widget._handle_no_old_image(new_pixmap, on_finished, "block flip"):
             return None
 
-    widget._clear_all_transitions()
-    widget._blockflip = BlockFlipState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
-        cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
-        rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
-        direction=direction,
-    )
-    widget._pre_upload_textures(widget._prepare_blockflip_textures)
-    widget._profiler.start("blockflip")
+    def _start_blockflip(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._blockflip = BlockFlipState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
+            cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
+            rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+            direction=direction,
+        )
+        widget._pre_upload_textures(widget._prepare_blockflip_textures)
+        widget._profiler.start("blockflip")
 
-    def _blockflip_profiled_update(progress: float, *, _inner=update_callback) -> None:
-        widget._profiler.tick("blockflip")
-        try:
-            if widget._blockflip is not None:
-                widget._blockflip.progress = max(0.0, min(1.0, float(progress)))
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-        _inner(progress)
+        def _blockflip_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            widget._profiler.tick("blockflip")
+            try:
+                if widget._blockflip is not None:
+                    widget._blockflip.progress = max(0.0, min(1.0, float(progress)))
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            _inner(progress)
 
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        _blockflip_profiled_update,
-        lambda: widget._on_blockflip_complete(on_finished),
-        transition_label="blockflip",
-    )
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            _blockflip_profiled_update,
+            lambda: widget._on_blockflip_complete(on_finished),
+            transition_label="blockflip",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockflip, transition_label="blockflip")
 
 def start_block_spin(
     widget,
@@ -300,18 +326,20 @@ def start_block_spin(
         if widget._handle_no_old_image(new_pixmap, on_finished, "block spin"):
             return None
 
-    widget._clear_all_transitions()
-    widget._blockspin = BlockSpinState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0,
-    )
-    widget._pre_upload_textures(widget._prepare_blockspin_textures)
-    widget._profiler.start("blockspin")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_blockspin_update,
-        lambda: widget._on_blockspin_complete(on_finished),
-        transition_label="blockspin",
-    )
+    def _start_blockspin(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._blockspin = BlockSpinState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, direction=direction, progress=0.0,
+        )
+        widget._pre_upload_textures(widget._prepare_blockspin_textures)
+        widget._profiler.start("blockspin")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_blockspin_update,
+            lambda: widget._on_blockspin_complete(on_finished),
+            transition_label="blockspin",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockspin, transition_label="blockspin")
 
 def start_diffuse(
     widget,
@@ -341,31 +369,33 @@ def start_diffuse(
         (shape or "").strip().lower(), 0
     )
 
-    widget._clear_all_transitions()
-    widget._diffuse = DiffuseState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
-        cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
-        rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
-        shape_mode=int(shape_mode),
-    )
-    widget._pre_upload_textures(widget._prepare_diffuse_textures)
-    widget._profiler.start("diffuse")
+    def _start_diffuse(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._diffuse = DiffuseState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
+            cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
+            rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+            shape_mode=int(shape_mode),
+        )
+        widget._pre_upload_textures(widget._prepare_diffuse_textures)
+        widget._profiler.start("diffuse")
 
-    def _diffuse_profiled_update(progress: float, *, _inner=update_callback) -> None:
-        widget._profiler.tick("diffuse")
-        try:
-            if widget._diffuse is not None:
-                widget._diffuse.progress = max(0.0, min(1.0, float(progress)))
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-        _inner(progress)
+        def _diffuse_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            widget._profiler.tick("diffuse")
+            try:
+                if widget._diffuse is not None:
+                    widget._diffuse.progress = max(0.0, min(1.0, float(progress)))
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            _inner(progress)
 
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        _diffuse_profiled_update,
-        lambda: widget._on_diffuse_complete(on_finished),
-        transition_label="diffuse",
-    )
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            _diffuse_profiled_update,
+            lambda: widget._on_diffuse_complete(on_finished),
+            transition_label="diffuse",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_diffuse, transition_label="diffuse")
 
 def start_blinds(
     widget,
@@ -391,32 +421,34 @@ def start_blinds(
         if widget._handle_no_old_image(new_pixmap, on_finished, "blinds"):
             return None
 
-    widget._clear_all_transitions()
-    widget._blinds = BlindsState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
-        cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
-        rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
-        feather=max(0.001, min(0.5, float(feather))),
-        direction=int(direction),
-    )
-    widget._pre_upload_textures(widget._prepare_blinds_textures)
-    widget._profiler.start("blinds")
+    def _start_blinds(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        widget._blinds = BlindsState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, region=None,
+            cols=int(grid_cols) if grid_cols is not None and grid_cols > 0 else 0,
+            rows=int(grid_rows) if grid_rows is not None and grid_rows > 0 else 0,
+            feather=max(0.001, min(0.5, float(feather))),
+            direction=int(direction),
+        )
+        widget._pre_upload_textures(widget._prepare_blinds_textures)
+        widget._profiler.start("blinds")
 
-    def _blinds_profiled_update(progress: float, *, _inner=update_callback) -> None:
-        widget._profiler.tick("blinds")
-        try:
-            if widget._blinds is not None:
-                widget._blinds.progress = max(0.0, min(1.0, float(progress)))
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-        _inner(progress)
+        def _blinds_profiled_update(progress: float, *, _inner=update_callback) -> None:
+            widget._profiler.tick("blinds")
+            try:
+                if widget._blinds is not None:
+                    widget._blinds.progress = max(0.0, min(1.0, float(progress)))
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            _inner(progress)
 
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        _blinds_profiled_update,
-        lambda: widget._on_blinds_complete(on_finished),
-        transition_label="blinds",
-    )
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            _blinds_profiled_update,
+            lambda: widget._on_blinds_complete(on_finished),
+            transition_label="blinds",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blinds, transition_label="blinds")
 
 def start_crumble(
     widget,
@@ -444,28 +476,30 @@ def start_crumble(
         if widget._handle_no_old_image(new_pixmap, on_finished, "crumble"):
             return None
 
-    widget._clear_all_transitions()
-    actual_seed = seed if seed is not None else _random.random() * 1000.0
-    widget._crumble = CrumbleState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
-        seed=actual_seed, piece_count=float(max(4, piece_count)),
-        crack_complexity=max(0.5, min(2.0, crack_complexity)),
-        mosaic_mode=mosaic_mode, weight_mode=max(0.0, min(4.0, float(weight_mode))),
-    )
-    widget._pre_upload_textures(widget._prepare_crumble_textures)
-    widget._profiler.start("crumble")
+    def _start_crumble(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        actual_seed = seed if seed is not None else _random.random() * 1000.0
+        widget._crumble = CrumbleState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
+            seed=actual_seed, piece_count=float(max(4, piece_count)),
+            crack_complexity=max(0.5, min(2.0, crack_complexity)),
+            mosaic_mode=mosaic_mode, weight_mode=max(0.0, min(4.0, float(weight_mode))),
+        )
+        widget._pre_upload_textures(widget._prepare_crumble_textures)
+        widget._profiler.start("crumble")
 
-    def _crumble_update(progress: float) -> None:
-        widget._profiler.tick("crumble")
-        if widget._crumble is not None:
-            widget._crumble.progress = max(0.0, min(1.0, float(progress)))
+        def _crumble_update(progress: float) -> None:
+            widget._profiler.tick("crumble")
+            if widget._crumble is not None:
+                widget._crumble.progress = max(0.0, min(1.0, float(progress)))
 
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        _crumble_update,
-        lambda: widget._on_crumble_complete(on_finished),
-        transition_label="crumble",
-    )
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            _crumble_update,
+            lambda: widget._on_crumble_complete(on_finished),
+            transition_label="crumble",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_crumble, transition_label="crumble")
 
 def start_particle(
     widget,
@@ -517,38 +551,40 @@ def start_particle(
         if widget._handle_no_old_image(new_pixmap, on_finished, "particle"):
             return None
 
-    widget._clear_all_transitions()
-    actual_seed = seed if seed is not None else _random.random() * 1000.0
-    widget._particle = ParticleState(
-        old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
-        seed=actual_seed, mode=mode, direction=direction,
-        particle_radius=max(8.0, particle_radius),
-        overlap=max(0.0, overlap),
-        trail_length=max(0.0, min(1.0, trail_length)),
-        trail_strength=max(0.0, min(1.0, trail_strength)),
-        swirl_strength=max(0.0, swirl_strength),
-        swirl_turns=max(0.5, swirl_turns),
-        use_3d_shading=use_3d_shading,
-        texture_mapping=texture_mapping,
-        wobble=wobble,
-        gloss_size=max(16.0, min(128.0, gloss_size)),
-        light_direction=max(0, min(4, light_direction)),
-        swirl_order=max(0, min(2, swirl_order)),
-    )
-    widget._pre_upload_textures(widget._prepare_particle_textures)
-    widget._profiler.start("particle")
+    def _start_particle(compensated_duration: int) -> Optional[str]:
+        widget._clear_all_transitions()
+        actual_seed = seed if seed is not None else _random.random() * 1000.0
+        widget._particle = ParticleState(
+            old_pixmap=old_pixmap, new_pixmap=new_pixmap, progress=0.0,
+            seed=actual_seed, mode=mode, direction=direction,
+            particle_radius=max(8.0, particle_radius),
+            overlap=max(0.0, overlap),
+            trail_length=max(0.0, min(1.0, trail_length)),
+            trail_strength=max(0.0, min(1.0, trail_strength)),
+            swirl_strength=max(0.0, swirl_strength),
+            swirl_turns=max(0.5, swirl_turns),
+            use_3d_shading=use_3d_shading,
+            texture_mapping=texture_mapping,
+            wobble=wobble,
+            gloss_size=max(16.0, min(128.0, gloss_size)),
+            light_direction=max(0, min(4, light_direction)),
+            swirl_order=max(0, min(2, swirl_order)),
+        )
+        widget._pre_upload_textures(widget._prepare_particle_textures)
+        widget._profiler.start("particle")
 
-    def _particle_update(progress: float) -> None:
-        widget._profiler.tick("particle")
-        if widget._particle is not None:
-            widget._particle.progress = max(0.0, min(1.0, float(progress)))
+        def _particle_update(progress: float) -> None:
+            widget._profiler.tick("particle")
+            if widget._particle is not None:
+                widget._particle.progress = max(0.0, min(1.0, float(progress)))
 
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        _particle_update,
-        lambda: widget._on_particle_complete(on_finished),
-        transition_label="particle",
-    )
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            _particle_update,
+            lambda: widget._on_particle_complete(on_finished),
+            transition_label="particle",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_particle, transition_label="particle")
 
 def start_burn(
     widget,
@@ -585,31 +621,33 @@ def start_burn(
         if widget._handle_no_old_image(new_pixmap, on_finished, "burn"):
             return None
 
-    actual_seed = seed if seed is not None else _rng.random() * 1000.0
-    widget._clear_all_transitions()
-    widget._burn = BurnState(
-        old_pixmap=old_pixmap,
-        new_pixmap=new_pixmap,
-        progress=0.0,
-        direction=max(0, min(5, int(direction))),
-        jaggedness=max(0.0, min(1.0, float(jaggedness))),
-        glow_intensity=max(0.0, min(1.0, float(glow_intensity))),
-        glow_color=tuple(glow_color),
-        char_width=max(0.1, min(1.0, float(char_width))),
-        smoke_enabled=bool(smoke_enabled),
-        smoke_density=max(0.0, min(1.0, float(smoke_density))),
-        ash_enabled=bool(ash_enabled),
-        ash_density=max(0.0, min(1.0, float(ash_density))),
-        seed=float(actual_seed),
-    )
-    widget._pre_upload_textures(widget._prepare_burn_textures)
-    widget._profiler.start("burn")
-    return widget._start_transition_animation(
-        duration_ms, easing, animation_manager,
-        widget._on_burn_update,
-        lambda: widget._on_burn_complete(on_finished),
-        transition_label="burn",
-    )
+    def _start_burn(compensated_duration: int) -> Optional[str]:
+        actual_seed = seed if seed is not None else _rng.random() * 1000.0
+        widget._clear_all_transitions()
+        widget._burn = BurnState(
+            old_pixmap=old_pixmap,
+            new_pixmap=new_pixmap,
+            progress=0.0,
+            direction=max(0, min(5, int(direction))),
+            jaggedness=max(0.0, min(1.0, float(jaggedness))),
+            glow_intensity=max(0.0, min(1.0, float(glow_intensity))),
+            glow_color=tuple(glow_color),
+            char_width=max(0.1, min(1.0, float(char_width))),
+            smoke_enabled=bool(smoke_enabled),
+            smoke_density=max(0.0, min(1.0, float(smoke_density))),
+            ash_enabled=bool(ash_enabled),
+            ash_density=max(0.0, min(1.0, float(ash_density))),
+            seed=float(actual_seed),
+        )
+        widget._pre_upload_textures(widget._prepare_burn_textures)
+        widget._profiler.start("burn")
+        return widget._start_transition_animation(
+            compensated_duration, easing, animation_manager,
+            widget._on_burn_update,
+            lambda: widget._on_burn_complete(on_finished),
+            transition_label="burn",
+        )
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_burn, transition_label="burn")
 
 
 # ------------------------------------------------------------------

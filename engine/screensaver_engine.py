@@ -621,6 +621,12 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import schedule_prefetch
         schedule_prefetch(self)
 
+    def _on_display_transition_completed(self, screen_index: int) -> None:
+        """Notify the shared prefetch pipeline when a display transition finishes."""
+        from engine.image_pipeline import notify_transition_complete
+
+        notify_transition_complete(self, screen_index)
+
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
         try:
@@ -643,6 +649,7 @@ class ScreensaverEngine(QObject):
             
             # Connect exit signal
             self.display_manager.exit_requested.connect(self._on_exit_requested)
+            self.display_manager.transition_completed.connect(self._on_display_transition_completed)
             
             # Connect hotkey signals
             self.display_manager.previous_requested.connect(self._on_previous_requested)

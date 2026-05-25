@@ -413,9 +413,10 @@ class GLCompositorWidget(QOpenGLWidget):
     def _apply_desync_strategy(self, base_duration_ms: int) -> tuple[int, int]:
         """Apply desync strategy to spread transition start overhead.
         
-        OPTIMIZATION: Each compositor gets a random delay (0-500ms) to avoid
+        OPTIMIZATION: Each compositor gets a small random delay to avoid
         simultaneous GPU uploads and transition starts. Duration is compensated
-        so all displays complete at the same visual state.
+        so the spread stays effectively imperceptible to users while still
+        preventing lockstep start overhead across displays.
         
         Args:
             base_duration_ms: Original transition duration
@@ -427,7 +428,8 @@ class GLCompositorWidget(QOpenGLWidget):
             Display 0: delay=0ms, duration=5000ms → completes at T+5000ms
             Display 1: delay=300ms, duration=5300ms → completes at T+5600ms (same visual state)
         """
-        delay_ms = self._desync_delay_ms
+        delay_cap_ms = max(0, min(180, int(base_duration_ms * 0.06)))
+        delay_ms = min(self._desync_delay_ms, delay_cap_ms)
         # Compensate duration: add delay so transition completes at same visual state
         compensated_duration_ms = base_duration_ms + delay_ms
         
@@ -630,23 +632,14 @@ class GLCompositorWidget(QOpenGLWidget):
     def set_base_pixmap(self, pixmap: Optional[QPixmap]) -> None:
         """Set the base image when no transition is active.
         
-        OPTIMIZATION: Pre-upload texture to GPU now, not at transition start.
-        This spreads the upload cost across idle time instead of blocking transitions.
+        Keep startup/runtime warmup on the compositor-owned GL lifecycle seam.
+        Do not touch the legacy global texture-manager singleton here; textures
+        are context-owned and should only be warmed via the compositor's own
+        hidden/quiescent lifecycle paths.
         """
         self._base_pixmap = pixmap
-        
-        # Pre-upload texture to GPU cache for future transitions
-        # This happens during idle time, not during transition start
-        if pixmap is not None and not pixmap.isNull():
-            try:
-                from rendering.gl_programs.texture_manager import get_texture_manager
-                tex_mgr = get_texture_manager()
-                if tex_mgr.is_initialized():
-                    # Cache the texture - will be reused when transition starts
-                    tex_mgr.get_or_create_texture(pixmap)
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Texture pre-upload failed: %s", e)
 
+        if pixmap is not None and not pixmap.isNull():
             try:
                 from rendering.gl_compositor_pkg.gl_lifecycle import _schedule_deferred_transition_resource_warmup
 

@@ -156,6 +156,7 @@ class DisplayWidget(QWidget):
     
     exit_requested = Signal()
     image_displayed = Signal(str)  # image path
+    transition_completed = Signal()
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode

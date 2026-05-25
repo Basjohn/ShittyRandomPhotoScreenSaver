@@ -250,6 +250,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget._current_transition_name = transition.__class__.__name__
                     widget._current_transition_first_run = (
                         widget._current_transition_name not in widget._warmed_transition_types
+                        and widget._current_transition_name not in widget._prewarmed_transition_types
                     )
                     if hasattr(widget, "set_transition_work_pending"):
                         widget.set_transition_work_pending(False)
@@ -376,6 +377,10 @@ def _on_transition_finished(
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     widget.current_image_path = image_path
+    try:
+        widget.transition_completed.emit()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Transition completed signal failed: %s", e)
     widget.image_displayed.emit(image_path)
     widget._pending_transition_finish_args = None
 

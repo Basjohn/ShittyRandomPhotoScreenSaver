@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition as BlockPuzzleFlipTransition
+from transitions.base_transition import TransitionState
 
 
 @pytest.fixture
@@ -62,7 +63,36 @@ def test_block_puzzle_cleanup(qapp, test_widget, test_pixmap, test_pixmap2):
     t.start(test_pixmap, test_pixmap2, test_widget)
     t.stop()
     t.cleanup()
-    assert t._blocks == []
+    assert t._animation_id is None
+
+
+def test_block_puzzle_shader_grid_is_computed_without_cpu_blocks():
+    t = BlockPuzzleFlipTransition(duration_ms=3000, grid_rows=4, grid_cols=6, flip_duration_ms=500)
+    t._create_shader_grid(400, 300)
+
+    assert t._shader_cols == 12
+    assert t._shader_rows == 9
+
+
+def test_block_puzzle_anim_update_does_not_require_region_updates():
+    class _StubCompositor:
+        region_calls = 0
+
+        def set_blockflip_region(self, region):
+            self.region_calls += 1
+
+    t = BlockPuzzleFlipTransition(duration_ms=3000, grid_rows=4, grid_cols=6, flip_duration_ms=500)
+    t._compositor = _StubCompositor()
+    t._set_state(TransitionState.RUNNING)
+
+    progress = []
+    t.progress.connect(progress.append)
+
+    t._on_anim_update(0.5)
+
+    assert progress
+    assert progress[-1] == pytest.approx(0.5)
+    assert t._compositor.region_calls == 0
 
 
 def test_block_puzzle_invalid_pixmap(qapp, test_widget):

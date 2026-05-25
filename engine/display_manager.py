@@ -42,6 +42,7 @@ class DisplayManager(QObject):
     
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
+    transition_completed = Signal(int)  # screen index
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
@@ -251,6 +252,9 @@ class DisplayManager(QObject):
             # FIX: Use default args to capture screen_index by value (not by reference)
             display.image_displayed.connect(
                 lambda path, idx=screen_index: self._on_image_displayed(idx, path)
+            )
+            display.transition_completed.connect(
+                lambda idx=screen_index: self.transition_completed.emit(idx)
             )
             
             # Connect hotkey signals

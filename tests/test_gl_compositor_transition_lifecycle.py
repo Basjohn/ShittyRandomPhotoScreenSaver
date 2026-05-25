@@ -179,6 +179,48 @@ def test_transition_start_ensures_program_ready_on_first_use(qt_app, monkeypatch
 
 
 @pytest.mark.qt_no_exception_capture
+def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    anim_mgr = AnimationManager(fps=60)
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
+    scheduled: list[int] = []
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
+        lambda delay, callback: scheduled.append(delay),
+    )
+
+    start_calls: list[int] = []
+    monkeypatch.setattr(comp, "_clear_all_transitions", lambda: start_calls.append(-1))
+    monkeypatch.setattr(comp, "_prepare_wipe_textures", lambda: True)
+    monkeypatch.setattr(comp, "_pre_upload_textures", lambda prep_fn: prep_fn())
+    monkeypatch.setattr(
+        comp,
+        "_start_transition_animation",
+        lambda duration_ms, *args, **kwargs: start_calls.append(duration_ms) or "anim-1",
+    )
+
+    anim_id = comp.start_wipe(
+        old_pm,
+        new_pm,
+        direction=WipeDirection.LEFT_TO_RIGHT,
+        duration_ms=120,
+        easing=EasingCurve.LINEAR,
+        animation_manager=anim_mgr,
+        on_finished=None,
+    )
+
+    assert anim_id is None
+    assert scheduled == [75]
+    assert start_calls == []
+
+    anim_mgr.cancel_all()
+    anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
 def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, monkeypatch):
     parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
     old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)

@@ -29,6 +29,55 @@ logger = get_logger(__name__)
 
 
 # ------------------------------------------------------------------
+# Cache helpers
+# ------------------------------------------------------------------
+
+def _get_cached_pixmap_variants(
+    engine: ScreensaverEngine,
+    image_path: str,
+    target_width: int,
+    target_height: int,
+) -> tuple[Optional[QPixmap], Optional[QPixmap]]:
+    """Return cached processed/original pixmaps when available.
+
+    The async display path historically ignored the pre-scaled cache variants and
+    always paid ImageWorker prescale cost on image change. This helper keeps one
+    cache contract for both the sync and async paths:
+    - prefer `path|scaled:WxH` for the processed pixmap
+    - fall back to the raw-path cached image for the original pixmap
+    """
+    cache = getattr(engine, "_image_cache", None)
+    if cache is None or not image_path:
+        return None, None
+
+    processed_pixmap: Optional[QPixmap] = None
+    original_pixmap: Optional[QPixmap] = None
+    scaled_key = f"{image_path}|scaled:{target_width}x{target_height}"
+
+    def _coerce_cached_pixmap(cache_key: str) -> Optional[QPixmap]:
+        cached = cache.get(cache_key)
+        if isinstance(cached, QPixmap) and not cached.isNull():
+            return cached
+        if isinstance(cached, QImage) and not cached.isNull():
+            try:
+                pm = QPixmap.fromImage(cached)
+                if not pm.isNull():
+                    cache.put(cache_key, pm)
+                    return pm
+            except Exception as e:
+                logger.debug("[ASYNC] Failed to convert cached QImage for %s: %s", cache_key, e)
+        return None
+
+    processed_pixmap = _coerce_cached_pixmap(scaled_key)
+    original_pixmap = _coerce_cached_pixmap(image_path)
+
+    if processed_pixmap is not None and original_pixmap is None:
+        original_pixmap = processed_pixmap
+
+    return processed_pixmap, original_pixmap
+
+
+# ------------------------------------------------------------------
 # ImageWorker-based loading
 # ------------------------------------------------------------------
 
@@ -375,57 +424,68 @@ def load_and_display_image_async(
                     display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
                     display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
 
-                    # Try ImageWorker (separate process, avoids GIL)
-                    processed_qimage = None
+                    processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
+                        engine,
+                        img_path,
+                        target_size.width(),
+                        target_size.height(),
+                    )
 
-                    if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
-                        worker_qimage = load_image_via_worker(
-                            engine,
-                            img_path,
-                            target_size.width(),
-                            target_size.height(),
-                            display_mode=display_mode_str,
-                            sharpen=sharpen,
-                            timeout_ms=3000,
-                        )
-                        if worker_qimage and not worker_qimage.isNull():
-                            processed_qimage = worker_qimage
-                            logger.debug(f"{TAG_ASYNC} Image loaded via ImageWorker for display {i}")
-                        else:
-                            logger.warning(f"{TAG_ASYNC} ImageWorker failed for display {i}, skipping image")
-                            continue
-                    else:
-                        if qimage is not None and not qimage.isNull():
-                            processed_qimage = AsyncImageProcessor.process_qimage(
-                                qimage,
-                                target_size,
-                                display_mode,
-                                use_lanczos=False,
+                    if processed_pixmap is None or processed_pixmap.isNull():
+                        # Try ImageWorker (separate process, avoids GIL)
+                        processed_qimage = None
+
+                        if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                            worker_qimage = load_image_via_worker(
+                                engine,
+                                img_path,
+                                target_size.width(),
+                                target_size.height(),
+                                display_mode=display_mode_str,
                                 sharpen=sharpen,
+                                timeout_ms=3000,
                             )
+                            if worker_qimage and not worker_qimage.isNull():
+                                processed_qimage = worker_qimage
+                                logger.debug(f"{TAG_ASYNC} Image loaded via ImageWorker for display {i}")
+                            else:
+                                logger.warning(f"{TAG_ASYNC} ImageWorker failed for display {i}, skipping image")
+                                continue
                         else:
-                            logger.warning(f"{TAG_ASYNC} No ImageWorker and no cache for display {i}, skipping")
-                            continue
+                            if qimage is not None and not qimage.isNull():
+                                processed_qimage = AsyncImageProcessor.process_qimage(
+                                    qimage,
+                                    target_size,
+                                    display_mode,
+                                    use_lanczos=False,
+                                    sharpen=sharpen,
+                                )
+                            else:
+                                logger.warning(f"{TAG_ASYNC} No ImageWorker and no cache for display {i}, skipping")
+                                continue
 
-                    # Convert to QPixmap on worker thread (Qt 6 allows this)
-                    _conv_start = time.time()
-                    processed_pixmap = QPixmap.fromImage(processed_qimage)
-                    _conv_elapsed = (time.time() - _conv_start) * 1000
-                    if _conv_elapsed > 50 and is_perf_metrics_enabled():
-                        logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
-                    # Clear QImage reference to free memory (Section 1.1 fix)
-                    processed_qimage = None
-
-                    if qimage is None or qimage.isNull():
-                        original_pixmap = processed_pixmap
-                    else:
-                        _conv2_start = time.time()
-                        original_pixmap = QPixmap.fromImage(qimage)
-                        _conv2_elapsed = (time.time() - _conv2_start) * 1000
-                        if _conv2_elapsed > 50 and is_perf_metrics_enabled():
-                            logger.warning(f"[PERF] [ASYNC] Original QPixmap.fromImage took {_conv2_elapsed:.1f}ms for display {i}")
+                        # Convert to QPixmap on worker thread (Qt 6 allows this)
+                        _conv_start = time.time()
+                        processed_pixmap = QPixmap.fromImage(processed_qimage)
+                        _conv_elapsed = (time.time() - _conv_start) * 1000
+                        if _conv_elapsed > 50 and is_perf_metrics_enabled():
+                            logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
                         # Clear QImage reference to free memory (Section 1.1 fix)
-                        qimage = None
+                        processed_qimage = None
+                    else:
+                        logger.debug(f"{TAG_ASYNC} Using cached scaled variant for display {i}")
+
+                    if original_pixmap is None or original_pixmap.isNull():
+                        if qimage is None or qimage.isNull():
+                            original_pixmap = processed_pixmap
+                        else:
+                            _conv2_start = time.time()
+                            original_pixmap = QPixmap.fromImage(qimage)
+                            _conv2_elapsed = (time.time() - _conv2_start) * 1000
+                            if _conv2_elapsed > 50 and is_perf_metrics_enabled():
+                                logger.warning(f"[PERF] [ASYNC] Original QPixmap.fromImage took {_conv2_elapsed:.1f}ms for display {i}")
+                            # Clear QImage reference to free memory (Section 1.1 fix)
+                            qimage = None
 
                     processed_images[i] = {
                         'pixmap': processed_pixmap,
@@ -639,26 +699,36 @@ def load_and_display_image_async_with_metas(
                     display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
                     display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
 
-                    processed_qimage = None
-                    if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
-                        worker_qimage = load_image_via_worker(
-                            engine, img_path, target_size.width(), target_size.height(),
-                            display_mode=display_mode_str, sharpen=sharpen, timeout_ms=3000,
-                        )
-                        if worker_qimage and not worker_qimage.isNull():
-                            processed_qimage = worker_qimage
+                    processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
+                        engine,
+                        img_path,
+                        target_size.width(),
+                        target_size.height(),
+                    )
+
+                    if processed_pixmap is None or processed_pixmap.isNull():
+                        processed_qimage = None
+                        if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                            worker_qimage = load_image_via_worker(
+                                engine, img_path, target_size.width(), target_size.height(),
+                                display_mode=display_mode_str, sharpen=sharpen, timeout_ms=3000,
+                            )
+                            if worker_qimage and not worker_qimage.isNull():
+                                processed_qimage = worker_qimage
+                            else:
+                                continue
+                        elif qimage is not None and not qimage.isNull():
+                            processed_qimage = AsyncImageProcessor.process_qimage(
+                                qimage, target_size, display_mode, use_lanczos=False, sharpen=sharpen,
+                            )
                         else:
                             continue
-                    elif qimage is not None and not qimage.isNull():
-                        processed_qimage = AsyncImageProcessor.process_qimage(
-                            qimage, target_size, display_mode, use_lanczos=False, sharpen=sharpen,
-                        )
-                    else:
-                        continue
 
-                    processed_pixmap = QPixmap.fromImage(processed_qimage)
-                    processed_qimage = None
-                    original_pixmap = QPixmap.fromImage(qimage) if (qimage and not qimage.isNull()) else processed_pixmap
+                        processed_pixmap = QPixmap.fromImage(processed_qimage)
+                        processed_qimage = None
+
+                    if original_pixmap is None or original_pixmap.isNull():
+                        original_pixmap = QPixmap.fromImage(qimage) if (qimage and not qimage.isNull()) else processed_pixmap
 
                     processed_images[i] = {
                         'pixmap': processed_pixmap,
@@ -856,6 +926,16 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
     try:
         if not engine.image_queue or not engine._prefetcher or engine._prefetch_ahead <= 0:
             return
+        try:
+            if engine.display_manager and (
+                engine.display_manager.has_running_transition()
+                or engine.display_manager.has_transition_work_pending()
+            ):
+                if is_verbose_logging():
+                    logger.debug("Prefetch deferred: transition still active or pending")
+                return
+        except Exception as e:
+            logger.debug("[ENGINE] Exception suppressed: %s", e)
         upcoming = engine.image_queue.peek_many(engine._prefetch_ahead)
         paths = []
         for m in upcoming:
@@ -950,3 +1030,44 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
     except Exception as e:
         logger.debug(f"Prefetch schedule failed: {e}")
+
+
+def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional[int] = None) -> None:
+    """Notify the prefetch pipeline that a display transition has completed.
+
+    This is the shared seam that makes the documented post-transition prefetch
+    delay real in runtime instead of purely advisory:
+    - mark transition completion on the prefetcher
+    - schedule one delayed prefetch pass after the configured cool-down
+    """
+    prefetcher = getattr(engine, "_prefetcher", None)
+    if prefetcher is None:
+        return
+
+    try:
+        prefetcher.notify_transition_complete()
+    except Exception as e:
+        logger.debug("[PREFETCH] Failed to mark transition completion: %s", e)
+        return
+
+    scheduled = bool(getattr(engine, "_prefetch_resume_scheduled", False))
+    if scheduled:
+        return
+
+    delay_ms = 0
+    try:
+        delay_ms = max(0, int(prefetcher.get_post_transition_delay_ms()))
+    except Exception as e:
+        logger.debug("[PREFETCH] Failed to read post-transition delay: %s", e)
+        delay_ms = 0
+
+    engine._prefetch_resume_scheduled = True
+
+    def _resume_prefetch() -> None:
+        try:
+            engine._prefetch_resume_scheduled = False
+            schedule_prefetch(engine)
+        except Exception:
+            logger.debug("[PREFETCH] Deferred resume failed", exc_info=True)
+
+    QTimer.singleShot(delay_ms, _resume_prefetch)

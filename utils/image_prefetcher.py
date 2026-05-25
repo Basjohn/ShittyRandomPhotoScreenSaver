@@ -55,6 +55,10 @@ class ImagePrefetcher:
         elapsed_ms = (time.time() - self._transition_end_time) * 1000
         return elapsed_ms < self._post_transition_delay_ms
 
+    def get_post_transition_delay_ms(self) -> int:
+        """Return the configured post-transition delay in whole milliseconds."""
+        return max(0, int(round(self._post_transition_delay_ms)))
+
     def get_cached(self, path: str) -> Optional[QImage]:
         img = self._cache.get(path)
         if isinstance(img, QImage):
