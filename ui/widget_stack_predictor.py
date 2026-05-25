@@ -14,6 +14,18 @@ from enum import Enum
 from typing import Dict, List, Tuple
 
 from core.logging.logger import get_logger
+from core.settings.widget_capacity_policy import clamp_list_capacity
+from widgets.spotify_visualizer.card_geometry import (
+    build_growth_map_from_widget,
+    resolve_card_metrics,
+)
+from rendering.widget_stacking import (
+    StackObstacle,
+    StackParticipant,
+    build_stack_plan,
+    get_stack_band,
+    get_stack_lane,
+)
 
 logger = get_logger(__name__)
 
@@ -267,13 +279,71 @@ def estimate_reddit_size(font_size: int, item_count: int) -> Tuple[int, int]:
     return (width, height)
 
 
-def estimate_spotify_vis_size(bar_count: int = 16) -> Tuple[int, int]:
-    """Estimate Spotify visualizer size."""
-    # Visualizer is positioned relative to media widget
-    # but for collision purposes, estimate its footprint
-    width = bar_count * 8 + 20
-    height = 60
-    return (width, height)
+def estimate_gmail_size(font_size: int, item_count: int, width: int = 600) -> Tuple[int, int]:
+    """Estimate Gmail widget size based on settings."""
+    try:
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtGui import QFont, QFontMetrics
+
+        app = QApplication.instance()
+        if app is not None:
+            header_font = QFont("Segoe UI", font_size, QFont.Weight.Bold)
+            header_metrics = QFontMetrics(header_font)
+            row_font = QFont("Segoe UI", font_size, QFont.Weight.Normal)
+            row_metrics = QFontMetrics(row_font)
+            header_height = header_metrics.height() + 28
+            line_height = row_metrics.height() + 6
+            row_spacing = 4
+            card_padding = 26
+            return (
+                max(200, min(1200, int(width))),
+                header_height
+                + (item_count * line_height)
+                + (max(0, item_count - 1) * row_spacing)
+                + card_padding,
+            )
+    except Exception as e:
+        logger.debug("[UI] Exception suppressed: %s", e)
+
+    actual_font_height = int(font_size * 2.0)
+    header_height = actual_font_height + 28
+    line_height = actual_font_height + 6
+    row_spacing = 4
+    card_padding = 26
+    return (
+        max(200, min(1200, int(width))),
+        header_height
+        + (item_count * line_height)
+        + (max(0, item_count - 1) * row_spacing)
+        + card_padding,
+    )
+
+
+def estimate_spotify_vis_size(
+    vis_settings: Dict,
+    *,
+    media_width: int,
+) -> Tuple[int, int]:
+    """Estimate Spotify visualizer authored card size."""
+    mode_id = str(vis_settings.get("mode", "bubble") or "bubble").strip().lower()
+    growth_holder = type(
+        "_GrowthHolder",
+        (),
+        {
+            "_spectrum_growth": float(vis_settings.get("spectrum_growth", 2.0)),
+            "_osc_growth": float(vis_settings.get("osc_growth", 2.0)),
+            "_blob_growth": float(vis_settings.get("blob_growth", 3.5)),
+            "_sine_wave_growth": float(vis_settings.get("sine_wave_growth", 2.0)),
+            "_bubble_growth": float(vis_settings.get("bubble_growth", 3.0)),
+            "_devcurve_growth": float(vis_settings.get("devcurve_growth", 3.5)),
+        },
+    )()
+    metrics = resolve_card_metrics(
+        mode_id,
+        int(vis_settings.get("base_height", 80)),
+        build_growth_map_from_widget(growth_holder),
+    )
+    return (max(10, int(media_width)), int(metrics.preferred_height))
 
 
 def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
@@ -385,7 +455,7 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
     if reddit2.get('enabled', False) and str(reddit2.get('position', '')).strip().lower() != "custom":
         # Reddit 2 inherits font from Reddit 1
         font_size = reddit.get('font_size', 18)
-        item_count = reddit2.get('limit', 4)
+        item_count = clamp_list_capacity(reddit2.get('limit', 20), default=20)
         w, h = estimate_reddit_size(font_size, item_count)
         estimates.append(WidgetEstimate(
             widget_type=WidgetType.REDDIT2,
@@ -395,11 +465,48 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
             estimated_width=w,
             estimated_height=h,
         ))
+
+    # Gmail
+    gmail = settings.get('gmail', {})
+    if gmail.get('enabled', False) and str(gmail.get('position', '')).strip().lower() != "custom":
+        font_size = gmail.get('font_size', 18)
+        item_count = clamp_list_capacity(gmail.get('limit', 5), default=5)
+        width = max(200, min(1200, int(gmail.get('width', gmail.get('min_width', gmail.get('max_width', 600))))))
+        width, h = estimate_gmail_size(font_size, item_count, width)
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.GMAIL,
+            position=gmail.get('position', 'Top Left'),
+            monitor=str(gmail.get('monitor', 'ALL')),
+            enabled=True,
+            estimated_width=width,
+            estimated_height=h,
+        ))
     
-    # NOTE: Spotify Visualizer is NOT included in stacking estimates.
-    # It's a companion widget that floats above Media, not a separate
-    # stackable widget. Including it would cause false "Will stack!"
-    # messages for Media widget.
+    # Spotify visualizer reserves authored lane space relative to Media
+    # even though it is not independently stackable.
+    spotify_vis = settings.get('spotify_visualizer', {})
+    if (
+        media.get('enabled', False)
+        and str(media.get('position', '')).strip().lower() != "custom"
+        and spotify_vis.get('visualizers_enabled', True)
+        and spotify_vis.get('enabled', True)
+        and str(spotify_vis.get('position', '')).strip().lower() != "custom"
+    ):
+        media_font_size = media.get('font_size', 14)
+        artwork_size = media.get('artwork_size', 80)
+        media_width, media_height = estimate_media_size(media_font_size, artwork_size)
+        vis_width, vis_height = estimate_spotify_vis_size(
+            spotify_vis,
+            media_width=media_width,
+        )
+        estimates.append(WidgetEstimate(
+            widget_type=WidgetType.SPOTIFY_VIS,
+            position=media.get('position', 'Bottom Right'),
+            monitor=str(media.get('monitor', 'ALL')),
+            enabled=True,
+            estimated_width=vis_width,
+            estimated_height=vis_height,
+        ))
     
     return estimates
 
@@ -414,6 +521,8 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.MEDIA: "Media",
         WidgetType.REDDIT: "Reddit",
         WidgetType.REDDIT2: "Reddit 2",
+        WidgetType.GMAIL: "Gmail",
+        WidgetType.SPOTIFY_VIS: "Spotify Visualizer",
     }
     return names.get(widget_type, widget_type.value)
 
@@ -440,21 +549,15 @@ def predict_stacking_status(
         - (True, "Will stack with X!", [X]) if stacking is possible
         - (False, "Conflicts with X!", [X]) if cannot stack
     """
-    # Normalize position for comparison
     target_pos_key = target_position.lower().replace(" ", "_")
-    
-    # Find other widgets at the same position that would be visible on same monitor
-    conflicting: List[WidgetEstimate] = []
+    target_lane = get_stack_lane(target_pos_key)
+    if target_lane is None:
+        return (True, "", [])
+
+    lane_members: List[WidgetEstimate] = []
     for est in estimates:
-        if est.widget_type == target_widget:
-            continue  # Skip self
         if not est.enabled:
             continue
-        if est.position_key() != target_pos_key:
-            continue
-        
-        # Check monitor overlap
-        # "ALL" conflicts with everything, specific numbers only conflict with same or "ALL"
         monitors_overlap = (
             target_monitor == "ALL" or
             est.monitor == "ALL" or
@@ -462,90 +565,91 @@ def predict_stacking_status(
         )
         if not monitors_overlap:
             continue
-        
-        conflicting.append(est)
-    
-    if not conflicting:
-        return (True, "", [])  # No conflict, no message needed
-    
-    # Build list of conflicting widget types for return
-    conflicting_types = [est.widget_type for est in conflicting]
-    
-    # Build human-readable names for message
-    conflict_names = [_get_widget_display_name(est.widget_type) for est in conflicting]
-    conflict_str = ", ".join(conflict_names)
-    
-    # Calculate if stacking is possible
-    # Get the target widget's estimated size
+        lane = get_stack_lane(est.position_key())
+        if lane != target_lane:
+            continue
+        lane_members.append(est)
+
     target_est = None
     for est in estimates:
         if est.widget_type == target_widget:
             target_est = est
             break
-    
     if target_est is None:
-        # Widget not in estimates yet (being configured), use default size
-        target_height = 100
-    else:
-        target_height = target_est.estimated_height
-    
-    # Calculate total height needed for widgets at this position
-    total_height = target_height
-    spacing = 10
-    for est in conflicting:
-        total_height += est.estimated_height + spacing
-    
-    # Also check for widgets on the opposite vertical edge of the same horizontal edge
-    # e.g., bottom_right widgets can conflict with top_right widgets if combined height
-    # exceeds screen height
-    opposite_height = 0
-    is_bottom = 'bottom' in target_pos_key
-    is_top = 'top' in target_pos_key
-    is_right = 'right' in target_pos_key
-    is_left = 'left' in target_pos_key
-    
-    for est in estimates:
-        if not est.enabled:
-            continue
-        est_pos = est.position_key()
-        
-        # Check monitor overlap
-        monitors_overlap = (
-            target_monitor == "ALL" or
-            est.monitor == "ALL" or
-            target_monitor == est.monitor
+        target_est = WidgetEstimate(
+            widget_type=target_widget,
+            position=target_position,
+            monitor=target_monitor,
+            enabled=True,
+            estimated_width=350,
+            estimated_height=100,
         )
-        if not monitors_overlap:
+        lane_members.append(target_est)
+
+    conflicting = [est for est in lane_members if est.widget_type != target_widget]
+    if not conflicting:
+        return (True, "", [])
+
+    def _estimate_base_y(est: WidgetEstimate) -> int:
+        pos_key = est.position_key()
+        if "top" in pos_key:
+            return 20
+        if "bottom" in pos_key:
+            return screen_height - est.estimated_height - 20
+        return (screen_height - est.estimated_height) // 2
+
+    sorted_members = sorted(lane_members, key=lambda item: item.widget_type.value)
+    media_est = next((est for est in sorted_members if est.widget_type == WidgetType.MEDIA), None)
+    vis_est = next((est for est in sorted_members if est.widget_type == WidgetType.SPOTIFY_VIS), None)
+
+    obstacles: list[StackObstacle] = []
+    excluded_types: set[WidgetType] = set()
+    if media_est is not None and vis_est is not None:
+        media_top = _estimate_base_y(media_est)
+        vis_top = _estimate_base_y(vis_est)
+        block_top = min(media_top, vis_top)
+        block_bottom = max(
+            media_top + media_est.estimated_height,
+            vis_top + vis_est.estimated_height,
+        )
+        obstacles.append(
+            StackObstacle(
+                key="spotify_media_visualizer_block",
+                lane=target_lane,
+                top_y=block_top,
+                height=max(0, block_bottom - block_top),
+            )
+        )
+        excluded_types.update({WidgetType.MEDIA, WidgetType.SPOTIFY_VIS})
+
+    participants = []
+    for index, est in enumerate(sorted_members):
+        if est.widget_type in excluded_types:
             continue
-        
-        # Check if on opposite vertical edge of same horizontal edge
-        est_is_bottom = 'bottom' in est_pos
-        est_is_top = 'top' in est_pos
-        est_is_right = 'right' in est_pos
-        est_is_left = 'left' in est_pos
-        
-        same_horizontal_edge = (is_right and est_is_right) or (is_left and est_is_left)
-        opposite_vertical = (is_bottom and est_is_top) or (is_top and est_is_bottom)
-        
-        if same_horizontal_edge and opposite_vertical:
-            opposite_height += est.estimated_height + spacing
-    
-    # Check against available space (screen height minus margins)
-    margin = 40  # Top + bottom margins
-    available = screen_height - margin
-    
-    # Total space needed is our stack + opposite edge widgets
-    combined_height = total_height + opposite_height
-    
-    if combined_height <= available:
+        participants.append(
+            StackParticipant(
+                key=est.widget_type.value,
+                lane=target_lane,
+                band=get_stack_band(est.position_key()) or "middle",
+                base_y=_estimate_base_y(est),
+                height=est.estimated_height,
+                order=index,
+            )
+        )
+
+    plan = build_stack_plan(
+        participants,
+        obstacles=obstacles or None,
+        container_height=screen_height,
+        spacing=10,
+    )
+
+    conflicting_types = [est.widget_type for est in conflicting]
+    conflict_names = [_get_widget_display_name(est.widget_type) for est in conflicting]
+    conflict_str = ", ".join(conflict_names)
+    if plan.lane_fit.get(target_lane, True):
         return (True, f"Will stack with {conflict_str}!", conflicting_types)
-    else:
-        # Determine if it's a same-position conflict or cross-edge conflict
-        if total_height > available:
-            return (False, f"Conflicts with {conflict_str}!", conflicting_types)
-        else:
-            # Cross-edge conflict - mention the opposite edge widgets
-            return (False, f"Conflicts with {conflict_str} (screen too small)!", conflicting_types)
+    return (False, f"Conflicts with {conflict_str}!", conflicting_types)
 
 
 def get_position_status_for_widget(
@@ -569,6 +673,11 @@ def get_position_status_for_widget(
         Tuple of (can_stack: bool, status_message: str)
     """
     if str(position or "").strip().lower() == "custom":
+        return (True, "")
+    global_cfg = settings.get("global", {})
+    if not isinstance(global_cfg, dict):
+        global_cfg = {}
+    if not bool(global_cfg.get("stacking_enabled", False)):
         return (True, "")
 
     estimates = build_widget_estimates(settings)

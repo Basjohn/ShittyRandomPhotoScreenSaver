@@ -10,6 +10,7 @@ import ctypes
 import time
 from typing import TYPE_CHECKING
 from PySide6.QtCore import QTimer
+from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
 try:
     from OpenGL import GL as gl  # type: ignore[import]
@@ -23,7 +24,11 @@ from rendering.gl_state_manager import GLContextState
 from rendering.gl_programs.program_cache import get_program_cache, GLProgramCache
 from rendering.gl_programs.geometry_manager import GLGeometryManager
 from rendering.gl_programs.texture_manager import GLTextureManager
-from rendering.transition_registry import get_transition_program_specs
+from rendering.transition_registry import (
+    iter_transition_descriptors,
+    get_transition_descriptor_for_runtime_identity,
+    get_transition_program_specs,
+)
 
 if TYPE_CHECKING:
     pass
@@ -44,6 +49,87 @@ def deferred_transition_program_specs() -> list[tuple[str, str, str]]:
     return get_transition_program_specs(startup_only=False)
 
 
+def deferred_transition_resource_identities() -> list[str]:
+    identities: list[str] = []
+    for descriptor in iter_transition_descriptors():
+        if descriptor.startup_compile:
+            continue
+        if descriptor.compositor_transition_class and descriptor.gl_program_key:
+            identities.append(descriptor.compositor_transition_class)
+    return identities
+
+
+def _has_live_visible_base_surface(widget) -> bool:
+    try:
+        base_pixmap = getattr(widget, "_base_pixmap", None)
+        has_live_base = bool(base_pixmap is not None and not base_pixmap.isNull())
+    except Exception:
+        has_live_base = False
+    try:
+        is_visible = bool(widget.isVisible())
+    except Exception:
+        is_visible = False
+    frame_state = getattr(widget, "_frame_state", None)
+    has_active_transition = bool(
+        frame_state is not None
+        and getattr(frame_state, "started", False)
+        and not getattr(frame_state, "completed", True)
+    )
+    return is_visible and has_live_base and not has_active_transition
+
+
+def _ensure_hidden_shared_warmup_context(
+    widget,
+) -> tuple[QOpenGLContext, QOffscreenSurface] | None:
+    try:
+        existing_ctx = getattr(widget, "_deferred_warmup_context", None)
+        existing_surface = getattr(widget, "_deferred_warmup_surface", None)
+        if (
+            isinstance(existing_ctx, QOpenGLContext)
+            and isinstance(existing_surface, QOffscreenSurface)
+            and existing_ctx.isValid()
+            and existing_surface.isValid()
+        ):
+            return existing_ctx, existing_surface
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to reuse deferred warmup context", exc_info=True)
+
+    share_ctx = None
+    try:
+        share_ctx = widget.context()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to access compositor context for deferred warmup", exc_info=True)
+    if share_ctx is None:
+        return None
+
+    try:
+        fmt = share_ctx.format()
+        surface = QOffscreenSurface()
+        surface.setFormat(fmt)
+        surface.create()
+        if not surface.isValid():
+            logger.warning("[GL COMPOSITOR] Offscreen surface creation failed for deferred warmup")
+            return None
+
+        context = QOpenGLContext()
+        context.setFormat(fmt)
+        context.setShareContext(share_ctx)
+        if not context.create() or not context.isValid():
+            logger.warning("[GL COMPOSITOR] Shared offscreen context creation failed for deferred warmup")
+            try:
+                surface.destroy()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
+            return None
+
+        widget._deferred_warmup_context = context
+        widget._deferred_warmup_surface = surface
+        return context, surface
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Hidden shared deferred warmup context creation failed", exc_info=True)
+        return None
+
+
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
     cache = get_program_cache()
     program_id = cache.get_program(program_name)
@@ -54,17 +140,103 @@ def _compile_transition_program(widget, program_name: str, program_attr: str, un
     return True
 
 
+def _resolve_transition_program_binding(identity: object) -> tuple[str, str, str] | None:
+    descriptor = get_transition_descriptor_for_runtime_identity(identity)
+    if descriptor is None:
+        return None
+    if descriptor.program_attr is None or descriptor.uniforms_attr is None or descriptor.gl_program_key is None:
+        return None
+    return descriptor.gl_program_key, descriptor.program_attr, descriptor.uniforms_attr
+
+
+def _bind_transition_program_for_identity(widget, identity: object) -> bool:
+    binding = _resolve_transition_program_binding(identity)
+    if binding is None:
+        return True
+    if widget._gl_pipeline is None:
+        return False
+    program_name, program_attr, uniforms_attr = binding
+    if getattr(widget._gl_pipeline, program_attr, 0):
+        return True
+    return _compile_transition_program(
+        widget,
+        program_name,
+        program_attr,
+        uniforms_attr,
+    )
+
+
+def bind_transition_program_for_current_context(widget, identity: object) -> bool:
+    """Bind shader attrs for a transition identity while the caller owns the current GL context."""
+    try:
+        return _bind_transition_program_for_identity(widget, identity)
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Transition program bind failed for %s", identity, exc_info=True)
+        return False
+
+
+def ensure_transition_program_ready(widget, identity: object) -> bool:
+    """Ensure shader program attrs are bound for a transition identity."""
+    if getattr(widget, "_gl_disabled_for_session", False) or gl is None:
+        return False
+    if widget._gl_pipeline is None or not getattr(widget._gl_pipeline, "initialized", False):
+        return False
+    binding = _resolve_transition_program_binding(identity)
+    if binding is None:
+        return True
+    _, program_attr, _ = binding
+    if getattr(widget._gl_pipeline, program_attr, 0):
+        return True
+
+    try:
+        widget.makeCurrent()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to make compositor context current for transition program ensure", exc_info=True)
+        return False
+
+    try:
+        return bind_transition_program_for_current_context(widget, identity)
+    finally:
+        try:
+            widget.doneCurrent()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] doneCurrent failed after transition program ensure", exc_info=True)
+
+
 def _warm_next_transition_program(widget) -> None:
     if getattr(widget, "_gl_disabled_for_session", False):
         return
     queue = getattr(widget, "_startup_transition_warm_queue", None)
     if not queue:
         return
-    try:
-        widget.makeCurrent()
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to make context current for deferred shader warmup", exc_info=True)
-        return
+
+    release_current = None
+    acquired = False
+    warmup_target = _ensure_hidden_shared_warmup_context(widget)
+    if warmup_target is not None:
+        context, surface = warmup_target
+        try:
+            acquired = bool(context.makeCurrent(surface))
+            if acquired:
+                release_current = context.doneCurrent
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to make hidden shared context current for deferred shader warmup", exc_info=True)
+            acquired = False
+
+    if not acquired:
+        if _has_live_visible_base_surface(widget):
+            logger.info(
+                "[GL COMPOSITOR] Hidden deferred warmup context unavailable; preserving live surface and deferring remaining programs to first-use ensure"
+            )
+            return
+        try:
+            widget.makeCurrent()
+            acquired = True
+            release_current = widget.doneCurrent
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to make compositor context current for deferred shader warmup", exc_info=True)
+            return
+
     try:
         while queue:
             program_name, program_attr, uniforms_attr = queue.pop(0)
@@ -75,12 +247,15 @@ def _warm_next_transition_program(widget) -> None:
             logger.debug("[GL COMPOSITOR] Deferred compile failed for %s", program_name)
     finally:
         try:
-            widget.doneCurrent()
+            if release_current is not None:
+                release_current()
         except Exception:
             logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred shader warmup", exc_info=True)
 
     if queue:
         QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
+    else:
+        _schedule_deferred_transition_resource_warmup(widget)
 
 
 def schedule_deferred_transition_program_warmup(widget) -> None:
@@ -88,9 +263,131 @@ def schedule_deferred_transition_program_warmup(widget) -> None:
         return
     remaining = deferred_transition_program_specs()
     if not remaining:
+        _schedule_deferred_transition_resource_warmup(widget)
         return
     widget._startup_transition_warm_queue = list(remaining)
     QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
+
+
+def _schedule_deferred_transition_resource_warmup(widget) -> None:
+    if getattr(widget, "_gl_disabled_for_session", False):
+        return
+    base_pixmap = getattr(widget, "_base_pixmap", None)
+    if base_pixmap is None:
+        return
+    try:
+        if base_pixmap.isNull():
+            return
+    except Exception:
+        return
+    if getattr(widget, "_startup_transition_warm_queue", None):
+        return
+
+    warmed = getattr(widget, "_startup_transition_resource_warm_types", None)
+    if not isinstance(warmed, set):
+        warmed = set()
+        widget._startup_transition_resource_warm_types = warmed
+
+    if getattr(widget, "_startup_transition_resource_warm_queue", None):
+        return
+
+    remaining = [
+        identity
+        for identity in deferred_transition_resource_identities()
+        if identity not in warmed
+    ]
+    if not remaining:
+        return
+
+    widget._startup_transition_resource_warm_queue = list(remaining)
+    QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
+
+
+def _warm_next_transition_resources(widget) -> None:
+    if getattr(widget, "_gl_disabled_for_session", False):
+        return
+    if getattr(widget, "_startup_transition_warm_queue", None):
+        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
+        return
+
+    queue = getattr(widget, "_startup_transition_resource_warm_queue", None)
+    if not queue:
+        return
+
+    base_pixmap = getattr(widget, "_base_pixmap", None)
+    if base_pixmap is None:
+        widget._startup_transition_resource_warm_queue = []
+        return
+    try:
+        if base_pixmap.isNull():
+            widget._startup_transition_resource_warm_queue = []
+            return
+    except Exception:
+        widget._startup_transition_resource_warm_queue = []
+        return
+
+    warmed = getattr(widget, "_startup_transition_resource_warm_types", None)
+    if not isinstance(warmed, set):
+        warmed = set()
+        widget._startup_transition_resource_warm_types = warmed
+
+    release_current = None
+    acquired = False
+    warmup_target = _ensure_hidden_shared_warmup_context(widget)
+    if warmup_target is not None:
+        context, surface = warmup_target
+        try:
+            acquired = bool(context.makeCurrent(surface))
+            if acquired:
+                release_current = context.doneCurrent
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to make hidden shared context current for deferred resource warmup", exc_info=True)
+            acquired = False
+
+    if not acquired:
+        if _has_live_visible_base_surface(widget):
+            logger.info(
+                "[GL COMPOSITOR] Hidden deferred resource warmup context unavailable; preserving live surface and deferring remaining resources to first-use warmup"
+            )
+            return
+        try:
+            widget.makeCurrent()
+            acquired = True
+            release_current = widget.doneCurrent
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to make compositor context current for deferred resource warmup", exc_info=True)
+            return
+
+    try:
+        while queue:
+            identity = queue.pop(0)
+            if identity in warmed:
+                continue
+            if not bind_transition_program_for_current_context(widget, identity):
+                logger.debug("[GL COMPOSITOR] Deferred transition resource warmup could not bind %s", identity)
+                break
+            try:
+                textures_ready = widget._warm_pixmap_textures_in_current_context(base_pixmap, base_pixmap)
+                state_ready = textures_ready and widget._warm_transition_state_in_current_context(
+                    identity,
+                    base_pixmap,
+                    base_pixmap,
+                )
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Deferred transition resource warmup failed for %s", identity, exc_info=True)
+                break
+            if textures_ready and state_ready:
+                warmed.add(identity)
+            break
+    finally:
+        try:
+            if release_current is not None:
+                release_current()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred resource warmup", exc_info=True)
+
+    if queue:
+        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
 
 
 def handle_initializeGL(widget) -> None:  # type: ignore[override]
@@ -252,9 +549,12 @@ def init_gl_pipeline(widget) -> None:
 
 def cleanup_gl_pipeline(widget) -> None:
     if gl is None or widget._gl_pipeline is None:
+        _cleanup_deferred_warmup_resources(widget)
         return
     try:
         widget._startup_transition_warm_queue = []
+        widget._startup_transition_resource_warm_queue = []
+        widget._startup_transition_resource_warm_types = set()
     except Exception:
         pass
 
@@ -316,6 +616,27 @@ def cleanup_gl_pipeline(widget) -> None:
             widget.doneCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        _cleanup_deferred_warmup_resources(widget)
+
+
+def _cleanup_deferred_warmup_resources(widget) -> None:
+    context = getattr(widget, "_deferred_warmup_context", None)
+    surface = getattr(widget, "_deferred_warmup_surface", None)
+    try:
+        widget._deferred_warmup_context = None
+        widget._deferred_warmup_surface = None
+    except Exception:
+        pass
+    try:
+        if isinstance(surface, QOffscreenSurface):
+            surface.destroy()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
+    try:
+        if isinstance(context, QOpenGLContext):
+            context.doneCurrent()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to release deferred warmup context", exc_info=True)
 
 def create_card_flip_program(widget) -> int:
     """Compile and link the basic textured card-flip shader program."""

@@ -78,6 +78,18 @@ def test_reddit_format_age_variants():
 
 
 @pytest.mark.qt
+def test_reddit_item_limit_clamps_to_shared_capacity_policy(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    widget.set_item_limit(4)
+    assert widget.configured_capacity == 5
+
+    widget.set_item_limit(30)
+    assert widget.configured_capacity == 25
+
+
+@pytest.mark.qt
 def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
     """On fetch error before any valid data, the widget should hide itself."""
 

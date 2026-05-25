@@ -105,6 +105,7 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
         "widget_shadows_enabled",
         "widget_text_shadows_enabled",
         "widget_header_shadows_enabled",
+        "widget_stacking_enabled",
         "card_border_width_spin",
     )
 

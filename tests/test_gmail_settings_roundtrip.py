@@ -128,6 +128,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
     assert not any("password" in key.lower() for key in gmail)
     assert not any("email" in key.lower() for key in gmail)
     assert not any("token" in key.lower() for key in gmail)
+    assert gmail["limit"] == 5
 
 
 def test_reddit_refresh_spiral_default_comes_from_defaults() -> None:
@@ -219,6 +220,12 @@ def test_gmail_signal_blocker_blocks_and_unblocks_all_present_controls() -> None
         assert all(control.calls == [True] for control in controls.values())
 
     assert all(control.calls == [True, False] for control in controls.values())
+
+
+def test_gmail_limit_spinbox_uses_shared_capacity_range() -> None:
+    source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
+
+    assert "tab.gmail_limit.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)" in source
 
 
 def test_gmail_visibility_helper_uses_explicit_hidden_state() -> None:

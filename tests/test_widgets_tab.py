@@ -666,6 +666,7 @@ class TestWidgetsTab:
                 },
                 "global": {
                     "card_border_width_px": 6,
+                    "stacking_enabled": False,
                 },
             })
 
@@ -674,11 +675,13 @@ class TestWidgetsTab:
             assert tab.widget_shadows_enabled.isChecked() is False
             assert tab.widget_text_shadows_enabled.isChecked() is False
             assert tab.widget_header_shadows_enabled.isChecked() is True
+            assert tab.widget_stacking_enabled.isChecked() is False
             assert tab.card_border_width_spin.value() == 6
 
             tab.widget_shadows_enabled.setChecked(True)
             tab.widget_text_shadows_enabled.setChecked(True)
             tab.widget_header_shadows_enabled.setChecked(False)
+            tab.widget_stacking_enabled.setChecked(True)
             tab.card_border_width_spin.setValue(4)
             tab._save_settings_now()
 
@@ -689,6 +692,7 @@ class TestWidgetsTab:
                 "header_enabled": False,
             }
             assert widgets_cfg["global"]["card_border_width_px"] == 4
+            assert widgets_cfg["global"]["stacking_enabled"] is True
         finally:
             tab.deleteLater()
 

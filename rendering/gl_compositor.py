@@ -646,6 +646,13 @@ class GLCompositorWidget(QOpenGLWidget):
                     tex_mgr.get_or_create_texture(pixmap)
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Texture pre-upload failed: %s", e)
+
+            try:
+                from rendering.gl_compositor_pkg.gl_lifecycle import _schedule_deferred_transition_resource_warmup
+
+                _schedule_deferred_transition_resource_warmup(self)
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to schedule deferred transition resource warmup", exc_info=True)
         
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
@@ -748,6 +755,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
         self._cancel_current_animation()
+        if transition_label:
+            self._ensure_transition_program_ready(transition_label)
         duration_sec = max(0.001, duration_ms / 1000.0)
         
         # Create frame state but defer render strategy start
@@ -893,6 +902,11 @@ class GLCompositorWidget(QOpenGLWidget):
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
+    def _ensure_transition_program_ready(self, identity: object) -> bool:
+        """Delegate program binding to the shared GL lifecycle seam."""
+        from rendering.gl_compositor_pkg.gl_lifecycle import ensure_transition_program_ready
+        return ensure_transition_program_ready(self, identity)
+
     def _with_temp_state(self, attr_name: str, state, prep_fn: Callable[[], bool]) -> bool:
         """Assign a temporary state, invoke prep_fn, then restore the original state."""
         original = getattr(self, attr_name, None)
@@ -921,6 +935,31 @@ class GLCompositorWidget(QOpenGLWidget):
         new_pixmap: QPixmap,
     ) -> bool:
         """Prime transition-specific state so heavy prep work is done before first run."""
+        try:
+            self.makeCurrent()
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            return False
+
+        try:
+            return self._warm_transition_state_in_current_context(
+                transition_name,
+                old_pixmap,
+                new_pixmap,
+            )
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+
+    def _warm_transition_state_in_current_context(
+        self,
+        transition_name: str,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: QPixmap,
+    ) -> bool:
+        """Prime transition-specific state while the caller owns the current GL context."""
         warm_old = old_pixmap or new_pixmap
         if warm_old is None or warm_old.isNull() or new_pixmap.isNull():
             return False
@@ -942,12 +981,6 @@ class GLCompositorWidget(QOpenGLWidget):
             return True
 
         try:
-            self.makeCurrent()
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            return False
-
-        try:
             self._ensure_texture_manager()
             return warmer(warm_old, new_pixmap)
         except Exception:
@@ -957,11 +990,6 @@ class GLCompositorWidget(QOpenGLWidget):
                 exc_info=True,
             )
             return False
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def _warm_blockflip_state(self, old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
         cols, rows = self._estimate_grid_dimensions(new_pixmap, min_cols=6)
@@ -1049,16 +1077,30 @@ class GLCompositorWidget(QOpenGLWidget):
         new_pixmap: Optional[QPixmap],
     ) -> bool:
         """Upload/cache the provided pixmaps so textures are ready when needed."""
-        if gl is None or self._gl_disabled_for_session:
-            return False
-
-        if (old_pixmap is None or old_pixmap.isNull()) and (new_pixmap is None or new_pixmap.isNull()):
-            return False
-
         try:
             self.makeCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            return False
+
+        try:
+            return self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
+        finally:
+            try:
+                self.doneCurrent()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+
+    def _warm_pixmap_textures_in_current_context(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+    ) -> bool:
+        """Upload/cache the provided pixmaps while the caller owns the current GL context."""
+        if gl is None or self._gl_disabled_for_session:
+            return False
+
+        if (old_pixmap is None or old_pixmap.isNull()) and (new_pixmap is None or new_pixmap.isNull()):
             return False
 
         try:
@@ -1076,11 +1118,6 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
             return False
-        finally:
-            try:
-                self.doneCurrent()
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def start_crossfade(
         self,
@@ -1525,19 +1562,35 @@ class GLCompositorWidget(QOpenGLWidget):
             warm_old = new_pixmap
         if not self._ensure_gl_pipeline_ready():
             return False
-        program_key = self._transition_program_map.get(transition_name)
-        if program_key:
+        try:
+            self.makeCurrent()
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            return False
+
+        try:
+            from rendering.gl_compositor_pkg.gl_lifecycle import bind_transition_program_for_current_context
+
+            if not bind_transition_program_for_current_context(self, transition_name):
+                logger.debug("[GL COMPOSITOR] Transition program ensure incomplete for %s", transition_name)
+            textures_ready = self._warm_pixmap_textures_in_current_context(warm_old, new_pixmap)
+            state_ready = textures_ready and self._warm_transition_state_in_current_context(
+                transition_name,
+                warm_old,
+                new_pixmap,
+            )
+            if not state_ready:
+                logger.debug("[GL COMPOSITOR] Transition warmup incomplete for %s", transition_name)
+            return state_ready
+        finally:
             try:
-                cache = get_program_cache()
-                if not cache.is_compiled(program_key):
-                    cache.get_program(program_key)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to precompile shader program for %s", transition_name, exc_info=True)
-        textures_ready = self._warm_pixmap_textures(warm_old, new_pixmap)
-        state_ready = textures_ready and self._warm_transition_state(transition_name, warm_old, new_pixmap)
-        if not state_ready:
-            logger.debug("[GL COMPOSITOR] Transition warmup incomplete for %s", transition_name)
-        return state_ready
+                self.doneCurrent()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+
+    def has_transition_resources_warmed(self, transition_name: str) -> bool:
+        warmed = getattr(self, "_startup_transition_resource_warm_types", None)
+        return isinstance(warmed, set) and transition_name in warmed
 
     # ------------------------------------------------------------------
     # Texture preparation — delegates to shader_dispatch

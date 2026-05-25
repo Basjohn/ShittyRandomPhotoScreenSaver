@@ -492,7 +492,9 @@ class GeometryLogFilter(logging.Filter):
         "rendering.custom_layout_manager",
         "rendering.display_context_menu",
         "rendering.display_setup",
+        "rendering.widget_manager",
         "rendering.widget_positioner",
+        "widgets.base_overlay_widget",
     )
     _NAME_EXACT = {
         "rendering.display",

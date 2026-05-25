@@ -38,6 +38,12 @@ from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.performance import widget_paint_sample
+from core.settings.widget_capacity_policy import (
+    LIST_WIDGET_MAX_CAPACITY,
+    LIST_WIDGET_MIN_CAPACITY,
+    build_progressive_capacity_stages,
+    clamp_list_capacity,
+)
 from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import (
@@ -114,22 +120,22 @@ class RedditWidget(BaseOverlayWidget):
         self._reddit_position = position  # Keep original enum for compatibility
         self._subreddit: str = self._normalise_subreddit(subreddit)
         self._sort: str = "hot"
-        self._limit: int = 10  # Target limit (may be reduced during progressive loading)
-        self._target_limit: int = 10  # User's desired limit
+        self._configured_capacity: int = clamp_list_capacity(10, default=10)
+        self._effective_visible_capacity: int = self._configured_capacity
         self._refresh_interval = timedelta(minutes=5)  # 5 min refresh for fresher data
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
 
-        # Progressive loading: start with fewer posts, expand over time using cache
-        # Stages: 4 → 10 → target (if target > 10)
+        # Progressive loading: start with fewer posts, expand over time using cache.
+        # Stages follow the shared list-capacity policy: 5 -> 10 -> target.
         # Growth is time-based, fetches just refresh the cache
         self._progressive_stage: int = 0  # Always start at stage 0
-        self._progressive_stages: List[int] = [4, 10]  # Will add target if > 10
+        self._progressive_stages: List[int] = build_progressive_capacity_stages(self._configured_capacity)
         self._all_fetched_posts: List[RedditPost] = []  # Store all posts for progressive reveal
         
         # Time-based stage advancement (growth timer)
-        # Match refresh interval: show 4 immediately, 10 at +2min, 20 at +4min
+        # Match refresh interval: show 5 immediately, 10 at +2min, target at +4min
         self._growth_timer: Optional[QTimer] = None
         self._growth_stage_delays_minutes: List[int] = [0, 2, 4]  # Stage 0: immediate, Stage 1: +2min, Stage 2: +4min
 
@@ -247,17 +253,21 @@ class RedditWidget(BaseOverlayWidget):
             # Determine starting stage based on available cached posts
             num_cached = len(cached_posts)
             stage1_limit = self._progressive_stages[1] if len(self._progressive_stages) > 1 else 10
-            if num_cached >= self._target_limit and len(self._progressive_stages) > 2:
+            if num_cached >= self._configured_capacity and len(self._progressive_stages) > 2:
                 self._progressive_stage = 2
                 logger.info("[REDDIT] Starting at stage 2 (%d posts) - sufficient cache available", 
-                           self._target_limit)
+                           self._configured_capacity)
             elif num_cached >= stage1_limit and len(self._progressive_stages) > 1:
                 self._progressive_stage = 1
                 logger.info("[REDDIT] Starting at stage 1 (%d posts) - sufficient cache available", 
                            stage1_limit)
             else:
                 self._progressive_stage = 0
-                logger.info("[REDDIT] Starting at stage 0 (4 posts) - cache has %d posts", num_cached)
+                logger.info(
+                    "[REDDIT] Starting at stage 0 (%d posts) - cache has %d posts",
+                    self._progressive_stages[0],
+                    num_cached,
+                )
             
             # Display initial stage from cache
             self._display_progressive_posts(fade=False)
@@ -327,23 +337,27 @@ class RedditWidget(BaseOverlayWidget):
             self._all_fetched_posts = cached_posts
             
             # Determine starting stage based on available cached posts
-            # Stage 0 = 4 posts, Stage 1 = progressive_stages[1], Stage 2 = target posts
+            # Stage 0 = minimum posts, Stage 1 = progressive_stages[1], Stage 2 = target posts
             num_cached = len(cached_posts)
             stage1_limit = self._progressive_stages[1] if len(self._progressive_stages) > 1 else 10
-            if num_cached >= self._target_limit and len(self._progressive_stages) > 2:
+            if num_cached >= self._configured_capacity and len(self._progressive_stages) > 2:
                 # Have enough for final stage (target posts)
                 self._progressive_stage = 2
                 logger.info("[REDDIT] Starting at stage 2 (%d posts) - sufficient cache available", 
-                           self._target_limit)
+                           self._configured_capacity)
             elif num_cached >= stage1_limit and len(self._progressive_stages) > 1:
                 # Have enough for stage 1 (progressive_stages[1] posts)
                 self._progressive_stage = 1
                 logger.info("[REDDIT] Starting at stage 1 (%d posts) - sufficient cache available", 
                            stage1_limit)
             else:
-                # Start at stage 0 (4 posts)
+                # Start at stage 0 (minimum posts)
                 self._progressive_stage = 0
-                logger.info("[REDDIT] Starting at stage 0 (4 posts) - cache has %d posts", num_cached)
+                logger.info(
+                    "[REDDIT] Starting at stage 0 (%d posts) - cache has %d posts",
+                    self._progressive_stages[0],
+                    num_cached,
+                )
             
             # Display initial stage from cache
             self._display_progressive_posts(fade=False)
@@ -468,7 +482,7 @@ class RedditWidget(BaseOverlayWidget):
         self._header_logo_px_adjust = adjust
         self._sync_header_metrics()
         self._invalidate_paint_cache()
-        self._update_card_height_from_content(len(self._posts) or self._limit)
+        self._update_card_height_from_content(len(self._posts) or self._effective_visible_capacity)
         self.update()
 
     def set_show_refresh_spiral(self, show: bool) -> None:
@@ -482,13 +496,27 @@ class RedditWidget(BaseOverlayWidget):
         self.update()
 
     def set_item_limit(self, limit: int) -> None:
-        self._limit = max(1, min(int(limit), 25))
-        self._target_limit = self._limit  # Store user's desired limit
+        next_capacity = clamp_list_capacity(limit, default=self._configured_capacity)
+        if self._configured_capacity == next_capacity and self._effective_visible_capacity == next_capacity:
+            return
+        self._configured_capacity = next_capacity
+        self._effective_visible_capacity = next_capacity
+        self._setup_progressive_stages()
         self._update_card_height_from_limit()
         if self._enabled and self._posts:
             # Trim existing posts to the new visible limit
-            self._posts = self._posts[: self._limit]
+            self._posts = self._posts[: self._configured_capacity]
+            self._effective_visible_capacity = len(self._posts) or self._configured_capacity
+            self._invalidate_paint_cache()
             self.update()
+
+    @property
+    def configured_capacity(self) -> int:
+        return int(self._configured_capacity)
+
+    @property
+    def effective_visible_capacity(self) -> int:
+        return int(self._effective_visible_capacity)
 
     def set_font_size(self, size: int) -> None:  # type: ignore[override]
         before = self._font_size
@@ -497,7 +525,7 @@ class RedditWidget(BaseOverlayWidget):
             return
         self._sync_header_metrics()
         self._invalidate_paint_cache()
-        self._update_card_height_from_content(len(self._posts) or self._limit)
+        self._update_card_height_from_content(len(self._posts) or self._effective_visible_capacity)
 
     def set_font_family(self, family: str) -> None:  # type: ignore[override]
         before = self._font_family
@@ -505,7 +533,7 @@ class RedditWidget(BaseOverlayWidget):
         if self._font_family == before:
             return
         self._invalidate_paint_cache()
-        self._update_card_height_from_content(len(self._posts) or self._limit)
+        self._update_card_height_from_content(len(self._posts) or self._effective_visible_capacity)
 
     def _sync_header_metrics(self) -> None:
         base_font = max(6, int(self._font_size))
@@ -522,16 +550,12 @@ class RedditWidget(BaseOverlayWidget):
         """Setup progressive loading stages based on target limit.
         
         Progressive loading allows widgets to display partial data immediately
-        while respecting rate limits. Stages: 4 → 10 → target (if > 10).
+        while respecting rate limits. Stages: 5 -> 10 -> target (if > 10).
         """
-        self._progressive_stages = [4]
-        if self._target_limit > 4:
-            self._progressive_stages.append(min(10, self._target_limit))
-        if self._target_limit > 10:
-            self._progressive_stages.append(self._target_limit)
+        self._progressive_stages = build_progressive_capacity_stages(self._configured_capacity)
         self._progressive_stage = 0
         logger.debug("[REDDIT] Progressive stages setup: %s (target=%d)", 
-                    self._progressive_stages, self._target_limit)
+                    self._progressive_stages, self._configured_capacity)
 
     def _get_stage_for_post_count(self, post_count: int) -> int:
         """Get the appropriate stage index for a given post count."""
@@ -544,7 +568,7 @@ class RedditWidget(BaseOverlayWidget):
         """Get the post limit for the current progressive stage."""
         if self._progressive_stage < len(self._progressive_stages):
             return self._progressive_stages[self._progressive_stage]
-        return self._target_limit
+        return self._configured_capacity
 
     def _display_progressive_posts(self, fade: bool = False) -> None:
         """Display posts up to current progressive stage limit.
@@ -559,11 +583,15 @@ class RedditWidget(BaseOverlayWidget):
             return
         
         # Update posts and trigger fade sync or fade animation
+        self._effective_visible_capacity = max(
+            LIST_WIDGET_MIN_CAPACITY,
+            min(stage_limit, self._configured_capacity),
+        )
         self._update_posts_internal(posts_to_show, fade=fade)
         
         logger.debug("[REDDIT] Progressive display: stage=%d, showing %d/%d posts (target=%d, fade=%s)",
                     self._progressive_stage, len(posts_to_show), 
-                    len(self._all_fetched_posts), self._target_limit, fade)
+                    len(self._all_fetched_posts), self._configured_capacity, fade)
 
     def _prepare_posts_for_display(self, posts: List[RedditPost]) -> None:
         """Prepare posts data without showing widget (for startup with cached data)."""
@@ -582,6 +610,10 @@ class RedditWidget(BaseOverlayWidget):
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         
         stage_limit = self._get_current_stage_limit()
+        self._effective_visible_capacity = max(
+            LIST_WIDGET_MIN_CAPACITY,
+            min(stage_limit, self._configured_capacity),
+        )
         self._posts = posts[:stage_limit]
         self._row_hit_rects.clear()
         self._invalidate_paint_cache()
@@ -759,8 +791,8 @@ class RedditWidget(BaseOverlayWidget):
             # derived from the configured limit, but we always fetch the same
             # number of Reddit entries so that 4-item and 10-item modes share
             # a common candidate pool before recency sorting.
-            effective_limit = max(1, min(int(limit), 25))
-            fetch_limit = 25
+            effective_limit = clamp_list_capacity(limit)
+            fetch_limit = LIST_WIDGET_MAX_CAPACITY
 
             params = {"limit": fetch_limit}
 
@@ -838,14 +870,20 @@ class RedditWidget(BaseOverlayWidget):
 
         if tm is not None:
             try:
-                tm.submit_io_task(_do_fetch, self._subreddit, self._sort, self._limit, callback=_on_result)
+                tm.submit_io_task(
+                    _do_fetch,
+                    self._subreddit,
+                    self._sort,
+                    self._configured_capacity,
+                    callback=_on_result,
+                )
                 return True
             except Exception as exc:
                 logger.exception("[REDDIT] ThreadManager submission failed, falling back to sync fetch: %s", exc)
 
         # Fallback: synchronous fetch on UI thread (rare, but bounded by timeout)
         try:
-            posts_data = _do_fetch(self._subreddit, self._sort, self._limit)
+            posts_data = _do_fetch(self._subreddit, self._sort, self._configured_capacity)
             self._on_feed_fetched(posts_data)
             return True
         except Exception as exc:
@@ -1034,8 +1072,9 @@ class RedditWidget(BaseOverlayWidget):
         # Store all fetched posts for progressive loading
         self._all_fetched_posts = posts
         
-        # Save full post list (up to fetch_limit) to cache for next startup
-        # This enables growth from cache even if target_limit increases later
+        # Save the full fetched post window for next startup.
+        # This enables staged growth from cache even if configured capacity
+        # increases later without changing Reddit request frequency.
         self._save_cached_posts(posts)
 
         if not posts:
@@ -1114,12 +1153,6 @@ class RedditWidget(BaseOverlayWidget):
         
         if self.parent():
             self._update_position()
-            # Notify parent to recalculate stacking after height change
-            if hasattr(self.parent(), 'recalculate_stacking'):
-                try:
-                    self.parent().recalculate_stacking()
-                except Exception as e:
-                    logger.debug("[REDDIT] Exception suppressed: %s", e)
         
         # Trigger repaint if widget is visible
         if self.isVisible():
@@ -1641,9 +1674,9 @@ class RedditWidget(BaseOverlayWidget):
             logger.debug("[REDDIT] Exception suppressed: %s", e)
             rows = 0
         if rows <= 0:
-            rows = len(self._posts) or self._limit or 1
+            rows = len(self._posts) or self._effective_visible_capacity or 1
 
-        rows = max(1, min(rows, max(1, self._limit)))
+        rows = max(1, min(rows, max(1, self._effective_visible_capacity)))
 
         base_font_pt = max(8, int(self._font_size))
         header_font_pt = int(self._header_font_pt or base_font_pt)
@@ -1700,7 +1733,7 @@ class RedditWidget(BaseOverlayWidget):
 
     def _update_card_height_from_limit(self) -> None:
         # Fallback used when the limit changes before we have data.
-        self._update_card_height_from_content(self._limit)
+        self._update_card_height_from_content(self._configured_capacity)
 
     def _format_age(self, created_utc: float, now_ts: Optional[float] = None) -> str:
         if created_utc <= 0 and now_ts is None:

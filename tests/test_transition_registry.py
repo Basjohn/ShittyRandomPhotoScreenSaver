@@ -3,6 +3,7 @@ from __future__ import annotations
 from rendering.transition_registry import (
     canonicalize_transition_name,
     get_cycle_transition_names,
+    get_transition_descriptor_for_runtime_identity,
     get_hw_accel_transition_names,
     get_transition_program_map,
     get_transition_program_specs,
@@ -92,3 +93,13 @@ def test_transition_registry_program_map_covers_runtime_classes() -> None:
     assert program_map["GLCompositorCrossfadeTransition"] == "crossfade"
     assert program_map["GLCompositorBurnTransition"] == "burn"
     assert program_map["GLCompositorRainDropsTransition"] == "raindrops"
+
+
+def test_transition_registry_runtime_identity_resolves_internal_labels_and_classes() -> None:
+    assert get_transition_descriptor_for_runtime_identity("warp").stable_id == "warp_dissolve"
+    assert get_transition_descriptor_for_runtime_identity("raindrops").stable_id == "ripple"
+    assert get_transition_descriptor_for_runtime_identity("blockflip").stable_id == "block_flip"
+    assert (
+        get_transition_descriptor_for_runtime_identity("GLCompositorBurnTransition").stable_id
+        == "burn"
+    )

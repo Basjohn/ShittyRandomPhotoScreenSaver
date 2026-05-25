@@ -208,6 +208,56 @@ def get_transition_program_map() -> dict[str, str]:
     return result
 
 
+_RUNTIME_LABEL_TO_STABLE_ID = {
+    "crossfade": "crossfade",
+    "slide": "slide",
+    "wipe": "wipe",
+    "diffuse": "diffuse",
+    "blinds": "blinds",
+    "crumble": "crumble",
+    "particle": "particle",
+    "burn": "burn",
+    "warp": "warp_dissolve",
+    "raindrops": "ripple",
+    "ripple": "ripple",
+    "blockflip": "block_flip",
+    "block_flip": "block_flip",
+    "blockspin": "block_spins",
+    "block_spin": "block_spins",
+}
+
+
+def get_transition_descriptor_for_runtime_identity(value: object) -> Optional[TransitionDescriptor]:
+    """Resolve a descriptor from runtime-facing transition identities.
+
+    Accepts canonical setting names, stable ids, compositor transition class
+    names, and the compositor's short internal runtime labels such as
+    ``warp`` or ``raindrops``.
+    """
+    if not isinstance(value, str):
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+
+    if normalized in _BY_SETTING_NAME:
+        return _BY_SETTING_NAME[normalized]
+    if normalized in _BY_STABLE_ID:
+        return _BY_STABLE_ID[normalized]
+    if normalized in _LEGACY_TO_SETTING:
+        return _BY_SETTING_NAME.get(_LEGACY_TO_SETTING[normalized])
+
+    runtime_match = _RUNTIME_LABEL_TO_STABLE_ID.get(normalized.lower())
+    if runtime_match:
+        return _BY_STABLE_ID.get(runtime_match)
+
+    for item in _TRANSITION_DESCRIPTORS:
+        if item.compositor_transition_class == normalized:
+            return item
+    return None
+
+
 def resolve_transition_pool_names(names: Iterable[str]) -> list[str]:
     resolved: list[str] = []
     for name in names:

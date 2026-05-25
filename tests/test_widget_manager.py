@@ -602,10 +602,17 @@ class TestStartupCoordination:
         class _StackWidget:
             def __init__(self, position_name: str):
                 self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
                 self.stack_offsets: list[QPoint] = []
 
             def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
                 self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return 20 + self._stack_offset.y()
 
             def sizeHint(self):
                 return SimpleNamespace(isValid=lambda: True, height=lambda: 100)
@@ -614,6 +621,7 @@ class TestStartupCoordination:
                 return 100
 
         parent = MagicMock()
+        parent.height.return_value = 1000
         manager = WidgetManager(parent)
         clock = _StackWidget("TOP_RIGHT")
         weather = _StackWidget("TOP_RIGHT")
@@ -624,6 +632,7 @@ class TestStartupCoordination:
                 (weather, "weather_widget"),
             ],
             {
+                "global": {"stacking_enabled": True},
                 "clock": {"position": "Custom"},
                 "weather": {"position": "Top Right"},
             },
@@ -631,6 +640,530 @@ class TestStartupCoordination:
 
         assert clock.stack_offsets[-1] == QPoint(0, 0)
         assert weather.stack_offsets[-1] == QPoint(0, 0)
+
+    def test_apply_widget_stacking_is_disabled_by_default_and_clears_offsets(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._stack_offset = QPoint(0, 99)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return 100 + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 120)
+
+            def height(self):
+                return 120
+
+        parent = MagicMock()
+        parent.height.return_value = 1000
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT")
+        gmail = _StackWidget("MIDDLE_LEFT")
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": False},
+                "weather": {"position": "Top Left"},
+                "gmail": {"position": "Middle Left"},
+            },
+        )
+
+        assert weather.stack_offsets[-1] == QPoint(0, 0)
+        assert gmail.stack_offsets[-1] == QPoint(0, 0)
+
+    def test_apply_widget_stacking_reflows_same_column_across_top_middle_bottom(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1000
+        parent.screen_index = 0
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20, 220)
+        gmail = _StackWidget("MIDDLE_LEFT", 340, 320)
+        reddit = _StackWidget("BOTTOM_LEFT", 720, 260)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (gmail, "gmail_widget"),
+                (reddit, "reddit_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "gmail": {"position": "Middle Left"},
+                "reddit": {"position": "Bottom Left"},
+            },
+        )
+
+        assert weather.stack_offsets[-1] == QPoint(0, 0)
+        weather_top = weather.y()
+        gmail_top = gmail.y()
+        reddit_top = reddit.y()
+
+        assert gmail_top >= weather_top + weather._height
+        assert reddit_top >= gmail_top + gmail._height
+
+    def test_apply_widget_stacking_preserves_authored_positions_when_lane_already_fits(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1439
+        parent.screen_index = 1
+        manager = WidgetManager(parent)
+        clock = _StackWidget("TOP_RIGHT", 20, 491)
+        media = _StackWidget("BOTTOM_RIGHT", 1159, 260)
+
+        manager.apply_widget_stacking(
+            [
+                (clock, "clock_widget"),
+                (media, "media_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "clock": {"position": "Top Right"},
+                "media": {"position": "Bottom Right"},
+            },
+        )
+
+        assert clock.stack_offsets[-1] == QPoint(0, 0)
+        assert media.stack_offsets[-1] == QPoint(0, 0)
+
+    def test_apply_widget_stacking_compresses_only_when_needed_near_bottom_boundary(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1439
+        parent.screen_index = 1
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20, 267)
+        reddit = _StackWidget("MIDDLE_LEFT", 357, 724)
+        gmail = _StackWidget("BOTTOM_LEFT", 1066, 353)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (reddit, "reddit_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "reddit": {"position": "Middle Left"},
+                "gmail": {"position": "Bottom Left"},
+            },
+        )
+
+        weather_top = weather.y()
+        reddit_top = reddit.y()
+        gmail_top = gmail.y()
+
+        assert weather_top == 20
+        assert reddit_top < reddit._base_y
+        assert gmail_top >= reddit_top + reddit._height
+        assert gmail_top + gmail._height <= 1439 - 20
+
+    def test_apply_widget_stacking_preserves_top_middle_bottom_band_order_when_bottom_base_drifts_up(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1000
+        parent.screen_index = 0
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20, 220)
+        gmail = _StackWidget("MIDDLE_LEFT", 340, 320)
+        reddit = _StackWidget("BOTTOM_LEFT", 720, 260)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (gmail, "gmail_widget"),
+                (reddit, "reddit_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "gmail": {"position": "Middle Left"},
+                "reddit": {"position": "Bottom Left"},
+            },
+        )
+
+        weather_top = weather.y()
+        gmail_top = gmail.y()
+        reddit_top = reddit.y()
+
+        assert weather_top == 20
+        assert gmail_top >= weather_top + weather._height
+        assert reddit_top >= gmail_top + gmail._height
+
+    def test_apply_widget_stacking_keeps_bottom_band_anchored_when_middle_yields(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1439
+        parent.screen_index = 1
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20, 267)
+        reddit = _StackWidget("MIDDLE_LEFT", 357, 724)
+        gmail = _StackWidget("BOTTOM_LEFT", 1066, 353)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (reddit, "reddit_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "reddit": {"position": "Middle Left"},
+                "gmail": {"position": "Bottom Left"},
+            },
+        )
+
+        weather_top = weather.y()
+        reddit_top = reddit.y()
+        gmail_top = gmail.y()
+
+        assert weather_top == 20
+        assert gmail_top == 1066
+        assert reddit_top + reddit._height <= gmail_top - 10
+        assert reddit_top < reddit._base_y
+
+    def test_get_widget_stack_base_y_removes_existing_stack_and_pixel_shift(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self):
+                self._stack_offset = QPoint(0, -80)
+                self._pixel_shift_offset = QPoint(0, 6)
+
+            def y(self):
+                return 390 + self._stack_offset.y() + self._pixel_shift_offset.y()
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        assert manager._get_widget_stack_base_y(_StackWidget()) == 390
+
+    def test_get_widget_stack_base_y_uses_canonical_bottom_anchor_when_live_y_is_stale(self):
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self):
+                self._position = SimpleNamespace(name="BOTTOM_LEFT")
+                self._margin = 30
+
+            def y(self):
+                return 994
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 353)
+
+            def height(self):
+                return 353
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: 353)
+
+        parent = MagicMock()
+        parent.height.return_value = 1439
+        manager = WidgetManager(parent)
+
+        assert manager._get_widget_stack_base_y(_StackWidget()) == 1056
+
+    def test_get_widget_stack_height_prefers_live_runtime_height_when_larger_than_hint(self):
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: 260)
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 260)
+
+            def height(self):
+                return 420
+
+            def minimumHeight(self):
+                return 420
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        assert manager._get_widget_stack_height(_StackWidget()) == 420
+
+    def test_get_widget_stack_height_prefers_visible_stacking_footprint_over_shadow_inflation(self):
+        from PySide6.QtCore import QSize
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def get_stacking_footprint_size(self):
+                return QSize(600, 353)
+
+            def get_bounding_size(self):
+                return QSize(654, 407)
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 407)
+
+            def height(self):
+                return 353
+
+            def minimumHeight(self):
+                return 407
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+
+        assert manager._get_widget_stack_height(_StackWidget()) == 353
+
+    def test_reserved_media_visualizer_stack_obstacle_blocks_follow_media_footprint(self):
+        from PySide6.QtCore import QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _MediaWidget:
+            def __init__(self):
+                self._position = SimpleNamespace(name="BOTTOM_RIGHT")
+
+            def geometry(self):
+                return QRect(1930, 1073, 600, 336)
+
+        class _VisualizerWidget:
+            def __init__(self):
+                self._vis_mode_str = "devcurve"
+                self._base_height = 80
+                self._blob_width = 1.0
+
+        parent = MagicMock()
+        parent.width.return_value = 2560
+        parent.height.return_value = 1439
+        parent.media_widget = _MediaWidget()
+        parent.spotify_visualizer_widget = _VisualizerWidget()
+        manager = WidgetManager(parent)
+
+        obstacle = manager._build_reserved_media_visualizer_stack_obstacle(
+            {"global": {"stacking_enabled": True}, "media": {"position": "Bottom Right"}},
+        )
+
+        assert obstacle is not None
+        assert obstacle.lane == "right"
+        assert obstacle.top_y == 773
+        assert obstacle.height == 636
+
+    def test_apply_widget_stacking_keeps_media_fixed_and_moves_gmail_above_reserved_visualizer_block(self):
+        from PySide6.QtCore import QPoint, QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def geometry(self):
+                return QRect(1930, self._base_y, 600, self._height)
+
+        class _VisualizerWidget:
+            def __init__(self):
+                self._vis_mode_str = "devcurve"
+                self._base_height = 80
+                self._blob_width = 1.0
+
+        parent = MagicMock()
+        parent.width.return_value = 2560
+        parent.height.return_value = 1439
+        parent.screen_index = 1
+        clock = _StackWidget("TOP_RIGHT", 20, 491)
+        gmail = _StackWidget("BOTTOM_RIGHT", 1056, 353)
+        media = _StackWidget("BOTTOM_RIGHT", 1073, 336)
+        parent.media_widget = media
+        parent.spotify_visualizer_widget = _VisualizerWidget()
+        manager = WidgetManager(parent)
+
+        manager.apply_widget_stacking(
+            [
+                (clock, "clock_widget"),
+                (gmail, "gmail_widget"),
+                (media, "media_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "clock": {"position": "Top Right"},
+                "gmail": {"position": "Bottom Right"},
+                "media": {"position": "Bottom Right"},
+            },
+        )
+
+        assert media.y() == 1073
+        assert gmail.y() + gmail._height <= 773 - 10
 
     def test_spotify_overlay_prewarm_can_retry_after_early_unavailable_widget(self):
         from rendering.widget_manager import WidgetManager

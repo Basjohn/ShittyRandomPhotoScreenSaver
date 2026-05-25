@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Mapping, TYPE_CHECKING
 
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
+from core.settings.widget_capacity_policy import clamp_list_capacity
 
 if TYPE_CHECKING:
     from core.settings.settings_manager import SettingsManager
@@ -143,7 +144,7 @@ class RedditWidgetSettings:
             monitor=settings.get(f"{prefix}.monitor", "ALL"),
             position=position,
             subreddit=settings.get(f"{prefix}.subreddit", "technology"),
-            limit=int(settings.get(f"{prefix}.limit", 10)),
+            limit=clamp_list_capacity(settings.get(f"{prefix}.limit", 10), default=10),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),
             font_size=int(settings.get(f"{prefix}.font_size", 18)),
             text_color=settings.get(f"{prefix}.text_color", "#FFFFFF"),
@@ -174,7 +175,7 @@ class RedditWidgetSettings:
             monitor=_get("monitor", "ALL"),
             position=position,
             subreddit=_get("subreddit", "technology"),
-            limit=int(_get("limit", 10)),
+            limit=clamp_list_capacity(_get("limit", 10), default=10),
             font_family=_get("font_family", "Inter"),
             font_size=int(_get("font_size", 18)),
             text_color=_get("text_color", "#FFFFFF"),

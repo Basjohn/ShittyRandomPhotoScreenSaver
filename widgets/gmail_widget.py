@@ -28,6 +28,11 @@ from core.gmail.gmail_client import EmailMetadata, GmailLabel
 from core.gmail.gmail_deeplinks import gmail_inbox_url
 from core.logging.logger import get_logger
 from core.performance import record_widget_timer_result, widget_paint_sample, widget_timer_sample
+from core.settings.widget_capacity_policy import (
+    LIST_WIDGET_MAX_CAPACITY,
+    LIST_WIDGET_MIN_CAPACITY,
+    clamp_list_capacity,
+)
 from core.audio.sound_paths import default_notification_sound_path
 from core.settings.storage_paths import get_app_data_dir
 from core.threading.manager import ThreadManager
@@ -132,7 +137,9 @@ class GmailWidget(BaseOverlayWidget):
         self._has_displayed_valid_data = False
         self._last_error: Optional[str] = None
 
-        self._limit = 5
+        self._configured_capacity = LIST_WIDGET_MIN_CAPACITY
+        self._effective_visible_capacity = self._configured_capacity
+        self._fetch_window_capacity = LIST_WIDGET_MAX_CAPACITY
         self._refresh_interval = timedelta(minutes=5)
         self._filter_label = GmailLabel.INBOX.value
         self._group_threads = False
@@ -685,7 +692,7 @@ class GmailWidget(BaseOverlayWidget):
                 return
             label_ids = [self._filter_label]
             emails = self._gmail_client.list_messages(
-                max_results=self._limit, label_ids=label_ids
+                max_results=self._fetch_window_capacity, label_ids=label_ids
             )
             unread = sum(1 for e in emails if e.is_unread)
             try:
@@ -709,7 +716,7 @@ class GmailWidget(BaseOverlayWidget):
         try:
             label_ids = [self._filter_label]
             emails = self._gmail_client.list_messages(
-                max_results=self._limit, label_ids=label_ids
+                max_results=self._fetch_window_capacity, label_ids=label_ids
             )
             unread = sum(1 for e in emails if e.is_unread)
             self._on_emails_fetched(emails, unread)
@@ -789,11 +796,12 @@ class GmailWidget(BaseOverlayWidget):
 
     def _rebuild_display_rows(self) -> None:
         """Rebuild _display_rows from _emails, applying thread grouping if enabled."""
-        emails = self._emails[: self._limit]
+        emails = self._emails[: self._configured_capacity]
         if self._group_threads and emails:
-            self._display_rows = group_emails(emails)[: self._limit]
+            self._display_rows = group_emails(emails)[: self._configured_capacity]
         else:
             self._display_rows = [DisplayRow(email=e) for e in emails]
+        self._effective_visible_capacity = max(1, len(self._display_rows) or self._configured_capacity)
 
     def _detect_new_mail(self, emails: List[EmailMetadata]) -> None:
         """Detect newly-arrived unread messages and play notification sound.
@@ -928,8 +936,8 @@ class GmailWidget(BaseOverlayWidget):
             return
         rows = max(1, int(visible_rows)) if visible_rows is not None else 0
         if rows <= 0:
-            rows = len(self._emails) or self._limit or 1
-        rows = max(1, min(rows, max(1, self._limit)))
+            rows = len(self._display_rows) or self._configured_capacity or 1
+        rows = max(1, min(rows, max(1, self._configured_capacity)))
         base_font_pt = max(8, int(self._font_size))
         header_font_pt = int(self._header_font_pt or base_font_pt)
         header_font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
@@ -1295,7 +1303,7 @@ class GmailWidget(BaseOverlayWidget):
             self.width() - left - margins.right() - self._content_padding_right,
         )
         content_bottom = self.height() - max(12, margins.bottom())
-        visible_rows = self._display_rows[: self._limit]
+        visible_rows = self._display_rows[: self._configured_capacity]
         action_width = 24 if self._show_three_dot_menu else 0
         env_slot_width = (
             self._envelope_pixmap.width() + 6
@@ -1728,7 +1736,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_header_border(getattr(settings, "show_header_border", self._show_header_border))
         self.set_header_logo_px_adjust(getattr(settings, "header_logo_px_adjust", self._header_logo_px_adjust))
         self.set_account_slot(getattr(settings, "account_slot", self._account_slot))
-        self.set_limit(getattr(settings, "limit", self._limit))
+        self.set_limit(getattr(settings, "limit", self._configured_capacity))
         self.set_refresh_interval(getattr(settings, "refresh_minutes", 5))
         self.set_group_threads(getattr(settings, "group_threads", self._group_threads))
         self.set_show_sender(getattr(settings, "show_sender", self._show_sender))
@@ -1766,7 +1774,7 @@ class GmailWidget(BaseOverlayWidget):
         self.set_show_header_border(d.get("show_header_border", self._show_header_border))
         self.set_header_logo_px_adjust(d.get("header_logo_px_adjust", self._header_logo_px_adjust))
         self.set_account_slot(d.get("account_slot", self._account_slot))
-        self.set_limit(d.get("limit", self._limit))
+        self.set_limit(d.get("limit", self._configured_capacity))
         self.set_refresh_interval(d.get("refresh_minutes", 5))
         self.set_group_threads(d.get("group_threads", self._group_threads))
         self.set_show_sender(d.get("show_sender", self._show_sender))
@@ -1865,7 +1873,7 @@ class GmailWidget(BaseOverlayWidget):
         self._content_padding_left = 0
         self._content_padding_right = 0
         self._content_padding_top = 0
-        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
         self._invalidate_content_cache_and_update()
         self._update_position()
 
@@ -1874,14 +1882,14 @@ class GmailWidget(BaseOverlayWidget):
         if self._show_header_border == show:
             return
         self._show_header_border = show
-        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
         self._invalidate_content_cache_and_update()
 
     def set_font_size(self, size: int) -> None:
         super().set_font_size(size)
         self._sync_header_metrics()
         self._load_brand_pixmap()
-        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
         self._invalidate_content_cache_and_update()
 
     def set_header_logo_px_adjust(self, value: Any) -> None:
@@ -1895,7 +1903,7 @@ class GmailWidget(BaseOverlayWidget):
         self._header_logo_px_adjust = adjust
         self._sync_header_metrics()
         self._load_brand_pixmap()
-        self._update_card_height_from_content(len(self._emails) or self._limit)
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
         self._invalidate_content_cache_and_update()
 
     def set_account_slot(self, slot: Any) -> None:
@@ -1905,12 +1913,21 @@ class GmailWidget(BaseOverlayWidget):
             return
         self._account_slot = next_slot
 
+    @property
+    def configured_capacity(self) -> int:
+        return int(self._configured_capacity)
+
+    @property
+    def effective_visible_capacity(self) -> int:
+        return int(self._effective_visible_capacity)
+
     def set_limit(self, limit: int) -> None:
-        next_limit = max(5, min(10, limit))
-        if self._limit == next_limit:
+        next_limit = clamp_list_capacity(limit, default=self._configured_capacity)
+        if self._configured_capacity == next_limit:
             return
-        self._limit = next_limit
-        self._update_card_height_from_content(self._limit)
+        self._configured_capacity = next_limit
+        self._rebuild_display_rows()
+        self._update_card_height_from_content(len(self._display_rows) or self._configured_capacity)
         self._invalidate_content_cache_and_update()
 
     def set_refresh_interval(self, minutes: int) -> None:

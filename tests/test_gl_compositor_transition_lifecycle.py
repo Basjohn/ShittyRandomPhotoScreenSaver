@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QWidget
 from core.animation import AnimationManager, EasingCurve
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_compositor import GLCompositorWidget
+from transitions.base_transition import WipeDirection
 from tests._gl_test_utils import solid_pixmap
 
 
@@ -148,3 +149,76 @@ def test_cancel_current_transition_snaps_to_new_pixmap(qt_app, monkeypatch):
 
     anim_mgr.cancel_all()
     anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_transition_start_ensures_program_ready_on_first_use(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    anim_mgr = AnimationManager(fps=60)
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    ensured: list[object] = []
+    monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda identity: ensured.append(identity) or True)
+
+    anim_id = comp.start_wipe(
+        old_pm,
+        new_pm,
+        direction=WipeDirection.LEFT_TO_RIGHT,
+        duration_ms=120,
+        easing=EasingCurve.LINEAR,
+        animation_manager=anim_mgr,
+        on_finished=None,
+    )
+
+    assert anim_id is not None
+    assert "wipe" in ensured
+
+    anim_mgr.cancel_all()
+    anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    comp._gl_disabled_for_session = False
+    comp._gl_pipeline = type("_Pipeline", (), {"initialized": True})()
+
+    calls: list[str] = []
+    monkeypatch.setattr(comp, "_ensure_gl_pipeline_ready", lambda: True)
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.bind_transition_program_for_current_context",
+        lambda widget, identity: calls.append(f"bind:{identity}") or True,
+    )
+    monkeypatch.setattr(
+        comp,
+        "_warm_pixmap_textures_in_current_context",
+        lambda old_pixmap, new_pixmap: calls.append("textures") or True,
+    )
+    monkeypatch.setattr(
+        comp,
+        "_warm_transition_state_in_current_context",
+        lambda transition_name, old_pixmap, new_pixmap: calls.append(f"state:{transition_name}") or True,
+    )
+
+    make_current_calls = {"count": 0}
+    done_current_calls = {"count": 0}
+
+    monkeypatch.setattr(
+        comp,
+        "makeCurrent",
+        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+    )
+    monkeypatch.setattr(
+        comp,
+        "doneCurrent",
+        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+    )
+
+    assert comp.warm_transition_resources("GLCompositorSlideTransition", old_pm, new_pm) is True
+    assert calls == ["bind:GLCompositorSlideTransition", "textures", "state:GLCompositorSlideTransition"]
+    assert make_current_calls["count"] == 1
+    assert done_current_calls["count"] == 1

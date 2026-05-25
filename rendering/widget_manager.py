@@ -11,7 +11,12 @@ from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapp
 from PySide6.QtCore import QPoint, QRect, QTimer
 from PySide6.QtWidgets import QWidget
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_geometry_logging_enabled,
+    is_verbose_logging,
+    is_perf_metrics_enabled,
+)
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
@@ -41,6 +46,13 @@ from core.settings.visualizer_mode_registry import get_preset_key
 from core.threading.manager import ThreadManager
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
+from rendering.widget_stacking import (
+    StackObstacle,
+    StackParticipant,
+    build_stack_plan,
+    get_stack_band,
+    get_stack_lane,
+)
 from rendering.widget_factories import WidgetFactoryRegistry
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -49,6 +61,9 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+_STACK_RESERVED_MEDIA_VISUALIZER_KEY = "__reserved_spotify_media_visualizer"
 
 
 class WidgetManager:
@@ -1299,54 +1314,30 @@ class WidgetManager:
             if media_widget is None:
                 return
 
-            from widgets.spotify_visualizer.card_geometry import (
-                build_growth_map_from_widget,
-                resolve_card_metrics,
-                resolve_relative_card_placement,
-            )
-
-            media_geom = media_widget.geometry()
-            if media_geom.width() <= 0 or media_geom.height() <= 0:
-                return
-            vis_mode = getattr(vis_widget, '_vis_mode_str', 'spectrum')
-            metrics = resolve_card_metrics(
-                vis_mode,
-                int(getattr(vis_widget, "_base_height", 80)),
-                build_growth_map_from_widget(vis_widget),
-            )
-
-            position_name = ""
-            if hasattr(media_widget, "_position"):
-                pos = media_widget._position
-                if hasattr(pos, "name"):
-                    position_name = pos.name.upper()
-                else:
-                    position_name = str(pos).upper()
-
-            placement = resolve_relative_card_placement(
-                media_rect=media_geom,
+            resolved_rect = self._resolve_spotify_visualizer_authored_rect(
+                vis_widget,
+                media_widget,
                 parent_width=parent_width,
                 parent_height=parent_height,
-                mode_id=vis_mode,
-                card_height=metrics.preferred_height,
-                position_name=position_name,
-                blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
+                widgets_config=widgets_config,
             )
+            if resolved_rect is None or resolved_rect.isEmpty():
+                return
 
             vis_widget.setGeometry(
-                placement.x,
-                placement.y,
-                placement.width,
-                placement.height,
+                resolved_rect.x(),
+                resolved_rect.y(),
+                resolved_rect.width(),
+                resolved_rect.height(),
             )
             vis_widget.raise_()
             if is_perf_metrics_enabled():
                 logger.info(
                     "[SPOTIFY_VIS] Positioned visualizer widget geom=(%d,%d,%d,%d)",
-                    placement.x,
-                    placement.y,
-                    placement.width,
-                    placement.height,
+                    resolved_rect.x(),
+                    resolved_rect.y(),
+                    resolved_rect.width(),
+                    resolved_rect.height(),
                 )
             
             # NOTE: The visualizer card and its GL overlay are intentionally
@@ -1434,12 +1425,45 @@ class WidgetManager:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
     def apply_widget_stacking(self, widget_list: list, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
-        """Apply vertical stacking offsets to widgets sharing the same position."""
+        """Apply authored stacking offsets across shared left/center/right columns."""
         from PySide6.QtCore import QPoint
-        
-        position_groups: dict = {}
+
+        global_cfg = {}
+        if isinstance(widgets_config, Mapping):
+            candidate = widgets_config.get("global", {})
+            if isinstance(candidate, Mapping):
+                global_cfg = candidate
+        stacking_enabled = SettingsManager.to_bool(
+            global_cfg.get("stacking_enabled", False),
+            False,
+        )
+        if not stacking_enabled:
+            for widget, _attr_name in widget_list:
+                if widget is not None and hasattr(widget, "set_stack_offset"):
+                    widget.set_stack_offset(QPoint(0, 0))
+            if is_geometry_logging_enabled():
+                logger.info(
+                    "[STACK] screen=%s stacking disabled; clearing offsets for %d widgets",
+                    getattr(self._parent, "screen_index", "?"),
+                    len(widget_list),
+                )
+            return
+
+        reserved_obstacle = self._build_reserved_media_visualizer_stack_obstacle(
+            widgets_config,
+        )
+        participants: list[tuple[Any, str, StackParticipant]] = []
         for i, (widget, attr_name) in enumerate(widget_list):
             if widget is None:
+                continue
+            if (
+                reserved_obstacle is not None
+                and attr_name == "media_widget"
+                and self._get_widget_position_key(widget)
+                and get_stack_lane(self._get_widget_position_key(widget)) == reserved_obstacle.lane
+            ):
+                if hasattr(widget, 'set_stack_offset'):
+                    widget.set_stack_offset(QPoint(0, 0))
                 continue
             descriptor = get_widget_runtime_descriptor_by_attr_name(attr_name)
             if (
@@ -1453,34 +1477,67 @@ class WidgetManager:
             pos_key = self._get_widget_position_key(widget)
             if not pos_key:
                 continue
-            if pos_key not in position_groups:
-                position_groups[pos_key] = []
-            position_groups[pos_key].append((widget, attr_name, i))
-        
-        spacing = 10
-        for pos_key, widgets_at_pos in position_groups.items():
-            if len(widgets_at_pos) <= 1:
-                if widgets_at_pos and hasattr(widgets_at_pos[0][0], 'set_stack_offset'):
-                    widgets_at_pos[0][0].set_stack_offset(QPoint(0, 0))
+            lane = get_stack_lane(pos_key)
+            band = get_stack_band(pos_key)
+            if lane is None or band is None:
                 continue
-            
-            stack_down = 'top' in pos_key
-            widgets_at_pos.sort(key=lambda x: x[2], reverse=not stack_down)
-            
-            cumulative_offset = 0
-            for i, (widget, attr_name, _) in enumerate(widgets_at_pos):
-                if i == 0:
-                    if hasattr(widget, 'set_stack_offset'):
-                        widget.set_stack_offset(QPoint(0, 0))
-                    continue
-                
-                prev_widget = widgets_at_pos[i - 1][0]
-                prev_height = self._get_widget_stack_height(prev_widget)
-                cumulative_offset += prev_height + spacing
-                offset_y = cumulative_offset if stack_down else -cumulative_offset
-                
-                if hasattr(widget, 'set_stack_offset'):
-                    widget.set_stack_offset(QPoint(0, offset_y))
+            base_y = self._get_widget_stack_base_y(widget)
+            participants.append(
+                (
+                    widget,
+                    attr_name,
+                    StackParticipant(
+                        key=attr_name,
+                        lane=lane,
+                        band=band,
+                        base_y=base_y,
+                        height=self._get_widget_stack_height(widget),
+                        order=i,
+                    ),
+                )
+            )
+
+        if not participants:
+            return
+
+        spacing = 10
+        try:
+            container_height = int(self._parent.height()) if self._parent is not None else 1080
+        except Exception:
+            container_height = 1080
+        plan = build_stack_plan(
+            [participant for _widget, _attr_name, participant in participants],
+            obstacles=[reserved_obstacle] if reserved_obstacle is not None else None,
+            container_height=container_height,
+            spacing=spacing,
+        )
+
+        lane_reports: dict[str, list[str]] = {}
+        for widget, attr_name, participant in participants:
+            placement = plan.placements.get(attr_name)
+            offset_y = placement.offset_y if placement is not None else 0
+            desired_y = placement.desired_y if placement is not None else participant.base_y
+            if widget is not None and hasattr(widget, 'set_stack_offset'):
+                widget.set_stack_offset(QPoint(0, offset_y))
+            if is_geometry_logging_enabled():
+                lane_reports.setdefault(participant.lane, []).append(
+                    f"{attr_name}:base={participant.base_y}:desired={desired_y}:h={participant.height}:off={offset_y}"
+                )
+
+        if is_geometry_logging_enabled():
+            for lane, report in lane_reports.items():
+                if reserved_obstacle is not None and reserved_obstacle.lane == lane:
+                    report.append(
+                        f"{reserved_obstacle.key}:fixed={reserved_obstacle.top_y}:h={reserved_obstacle.height}"
+                    )
+                logger.info(
+                    "[STACK] screen=%s lane=%s fits=%s spacing=%s widgets=%s",
+                    getattr(self._parent, "screen_index", "?"),
+                    lane,
+                    plan.lane_fit.get(lane, True),
+                    plan.lane_spacing.get(lane, spacing),
+                    ", ".join(report),
+                )
 
     def _get_widget_position_key(self, widget) -> str:
         """Get normalized position key from widget."""
@@ -1499,18 +1556,218 @@ class WidgetManager:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
         return ""
 
+    def _get_widget_stack_base_y(self, widget) -> int:
+        """Return canonical authored/base Y for the widget's current anchor/size."""
+        position_key = self._get_widget_position_key(widget)
+        if position_key and self._parent is not None:
+            try:
+                parent_height = int(self._parent.height())
+            except Exception:
+                parent_height = 0
+            if parent_height > 0:
+                margin = 20
+                try:
+                    if hasattr(widget, "get_margin") and callable(widget.get_margin):
+                        margin = int(widget.get_margin())
+                    elif hasattr(widget, "_margin"):
+                        margin = int(getattr(widget, "_margin"))
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                height = self._get_widget_stack_height(widget)
+                try:
+                    visual_offset_y = 0
+                    visual_offset = getattr(widget, "_compute_visual_offset", None)
+                    if callable(visual_offset):
+                        offset = visual_offset()
+                        if hasattr(offset, "y"):
+                            visual_offset_y = int(offset.y())
+                    if "top" in position_key:
+                        base_y = margin
+                    elif "bottom" in position_key:
+                        base_y = parent_height - height - margin
+                    else:
+                        base_y = (parent_height - height) // 2
+                    base_y += visual_offset_y
+
+                    min_visible = 10
+                    max_y = parent_height - min_visible
+                    min_y = min_visible - height
+                    return max(min_y, min(base_y, max_y))
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+        # Fallback for widgets that cannot resolve canonical authored anchors.
+        try:
+            base_y = int(widget.y())
+        except Exception:
+            base_y = 0
+        try:
+            stack_offset = getattr(widget, "_stack_offset", None)
+            if stack_offset is not None and hasattr(stack_offset, "y"):
+                base_y -= int(stack_offset.y())
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        try:
+            pixel_shift = getattr(widget, "_pixel_shift_offset", None)
+            if pixel_shift is not None and hasattr(pixel_shift, "y"):
+                base_y -= int(pixel_shift.y())
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+        return base_y
+
     def _get_widget_stack_height(self, widget) -> int:
         """Get widget height for stacking calculations."""
         try:
-            if hasattr(widget, 'get_bounding_size'):
-                return widget.get_bounding_size().height()
+            measured_heights: list[int] = []
+            if hasattr(widget, 'get_stacking_footprint_size'):
+                try:
+                    footprint = widget.get_stacking_footprint_size()
+                    if footprint is not None and hasattr(footprint, "height"):
+                        footprint_height = int(footprint.height())
+                        if footprint_height > 0:
+                            measured_heights.append(footprint_height)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            actual_height = int(widget.height()) if widget.height() > 0 else 0
+            if actual_height > 0:
+                measured_heights.append(actual_height)
             hint = widget.sizeHint()
             if hint.isValid() and hint.height() > 0:
-                return hint.height()
-            return widget.height() if widget.height() > 0 else 100
+                measured_heights.append(int(hint.height()))
+            try:
+                min_height = int(widget.minimumHeight())
+                if min_height > 0:
+                    measured_heights.append(min_height)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            if not measured_heights and hasattr(widget, 'get_bounding_size'):
+                try:
+                    bounding_height = int(widget.get_bounding_size().height())
+                    if bounding_height > 0:
+                        measured_heights.append(bounding_height)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            if measured_heights:
+                resolved = measured_heights[0]
+                if is_geometry_logging_enabled():
+                    logger.info(
+                        "[STACK] measure widget=%s heights=%s resolved=%s",
+                        getattr(widget, "_overlay_name", widget.__class__.__name__),
+                        measured_heights,
+                        resolved,
+                    )
+                return resolved
+            return 100
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
             return 100
+
+    def _resolve_spotify_visualizer_authored_rect(
+        self,
+        vis_widget,
+        media_widget,
+        *,
+        parent_width: int,
+        parent_height: int,
+        widgets_config: Mapping[str, Any] | None,
+    ) -> Optional[QRect]:
+        """Resolve the non-CUSTOM authored runtime rect for the visualizer."""
+        if vis_widget is None or media_widget is None:
+            return None
+        if is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+            return None
+        if is_custom_position_selected_for_widget("media", widgets_config):
+            return None
+        try:
+            from widgets.spotify_visualizer.card_geometry import (
+                build_growth_map_from_widget,
+                resolve_card_metrics,
+                resolve_relative_card_placement,
+            )
+
+            media_geom = media_widget.geometry()
+            if media_geom.width() <= 0 or media_geom.height() <= 0:
+                return None
+
+            vis_mode = getattr(vis_widget, '_vis_mode_str', 'spectrum')
+            metrics = resolve_card_metrics(
+                vis_mode,
+                int(getattr(vis_widget, "_base_height", 80)),
+                build_growth_map_from_widget(vis_widget),
+            )
+
+            position_name = ""
+            if hasattr(media_widget, "_position"):
+                pos = media_widget._position
+                if hasattr(pos, "name"):
+                    position_name = pos.name.upper()
+                else:
+                    position_name = str(pos).upper()
+
+            placement = resolve_relative_card_placement(
+                media_rect=media_geom,
+                parent_width=parent_width,
+                parent_height=parent_height,
+                mode_id=vis_mode,
+                card_height=metrics.preferred_height,
+                position_name=position_name,
+                blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
+            )
+            return QRect(
+                int(placement.x),
+                int(placement.y),
+                int(placement.width),
+                int(placement.height),
+            )
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to resolve visualizer authored rect", exc_info=True)
+            return None
+
+    def _build_reserved_media_visualizer_stack_obstacle(
+        self,
+        widgets_config: Mapping[str, Any] | None,
+    ) -> Optional[StackObstacle]:
+        """Return fixed authored-lane occupancy for the follow-media visualizer + media block."""
+        if self._parent is None:
+            return None
+        try:
+            vis_widget = getattr(self._parent, "spotify_visualizer_widget", None)
+            media_widget = getattr(self._parent, "media_widget", None)
+            if vis_widget is None or media_widget is None:
+                return None
+            parent_width = int(self._parent.width())
+            parent_height = int(self._parent.height())
+            if parent_width <= 0 or parent_height <= 0:
+                return None
+            rect = self._resolve_spotify_visualizer_authored_rect(
+                vis_widget,
+                media_widget,
+                parent_width=parent_width,
+                parent_height=parent_height,
+                widgets_config=widgets_config,
+            )
+            if rect is None or rect.isEmpty():
+                return None
+
+            media_pos_key = self._get_widget_position_key(media_widget)
+            lane = get_stack_lane(media_pos_key)
+            if lane is None:
+                return None
+            media_geom = media_widget.geometry()
+            if media_geom.width() <= 0 or media_geom.height() <= 0:
+                return None
+            top = min(int(rect.top()), int(media_geom.top()))
+            bottom = max(int(rect.bottom()), int(media_geom.bottom()))
+            height = max(0, bottom - top + 1)
+            return StackObstacle(
+                key=_STACK_RESERVED_MEDIA_VISUALIZER_KEY,
+                lane=lane,
+                top_y=top,
+                height=height,
+            )
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to build reserved media/visualizer stack obstacle", exc_info=True)
+            return None
     
     def cleanup(self) -> None:
         """Clean up all managed widgets."""

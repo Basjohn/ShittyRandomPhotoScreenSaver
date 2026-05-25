@@ -64,6 +64,22 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     row.addStretch()
     content_layout.addLayout(row)
 
+    row = QHBoxLayout()
+    row.setContentsMargins(0, 8, 0, 8)
+    row.setSpacing(12)
+    tab.widget_stacking_enabled = QCheckBox("Enable Authored Widget Stacking")
+    tab.widget_stacking_enabled.setProperty("circleIndicator", True)
+    tab.widget_stacking_enabled.setToolTip(
+        "Opt-in only. When enabled, non-Custom authored widgets may be packed to reduce overlap, "
+        "but this can shift them away from their exact authored spacing."
+    )
+    tab.widget_stacking_enabled.setChecked(tab._default_bool("global", "stacking_enabled", False))
+    tab.widget_stacking_enabled.stateChanged.connect(tab._save_settings)
+    tab.widget_stacking_enabled.stateChanged.connect(tab._update_stack_status)
+    row.addWidget(tab.widget_stacking_enabled)
+    row.addStretch()
+    content_layout.addLayout(row)
+
     border_row, _ = add_aligned_row(
         content_layout,
         "Card Border Width:",
@@ -101,7 +117,9 @@ def load_defaults_settings(tab: WidgetsTab, widgets_config: Mapping[str, object]
     global_cfg = widgets_config.get("global", {}) if isinstance(widgets_config, Mapping) else {}
     border_width = tab._config_int("global", global_cfg, "card_border_width_px", 3)
     border_width = max(0, min(12, border_width))
+    stacking_enabled = tab._config_bool("global", global_cfg, "stacking_enabled", False)
     tab._global_card_border_width = border_width
+    tab.widget_stacking_enabled.setChecked(stacking_enabled)
     if hasattr(tab, "card_border_width_spin"):
         tab.card_border_width_spin.setValue(border_width)
 
@@ -115,5 +133,8 @@ def save_defaults_settings(tab: WidgetsTab) -> tuple[dict[str, object], dict[str
         "header_enabled": tab.widget_header_shadows_enabled.isChecked(),
     }
     border_width = getattr(tab, "_global_card_border_width", tab._widget_default("global", "card_border_width_px", 3))
-    global_config = {"card_border_width_px": int(border_width)}
+    global_config = {
+        "card_border_width_px": int(border_width),
+        "stacking_enabled": tab.widget_stacking_enabled.isChecked(),
+    }
     return shadows_config, global_config

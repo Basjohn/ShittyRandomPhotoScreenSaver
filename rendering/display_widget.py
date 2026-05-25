@@ -911,6 +911,13 @@ class DisplayWidget(QWidget):
         ):
             return
 
+        try:
+            if compositor.has_transition_resources_warmed(transition_name):
+                self._prewarmed_transition_types.add(transition_name)
+                return
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to inspect deferred transition resource warm state", exc_info=True)
+
         warm_old = old_pixmap
         if warm_old is None or warm_old.isNull():
             warm_old = new_pixmap

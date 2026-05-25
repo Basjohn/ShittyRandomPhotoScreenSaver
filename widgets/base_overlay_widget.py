@@ -229,6 +229,7 @@ class BaseOverlayWidget(QLabel):
         
         # Stack offset for widget stacking
         self._stack_offset = QPoint(0, 0)
+        self._stack_recalc_pending = False
         self._custom_layout_geometry_reentry = False
         self._custom_layout_geometry_reapply_pending = False
         
@@ -826,6 +827,48 @@ class BaseOverlayWidget(QLabel):
         super().resizeEvent(event)
         if self._active_custom_layout_rect() is not None:
             self._schedule_custom_layout_geometry_reapply()
+            return
+        try:
+            self._update_position()
+        except Exception:
+            logger.debug("[STACK] Failed to re-anchor overlay after resize", exc_info=True)
+        self._schedule_parent_stacking_recalc()
+
+    def _schedule_parent_stacking_recalc(self) -> None:
+        if self._stack_recalc_pending:
+            return
+        if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return
+        parent = self.parentWidget()
+        if parent is None or not hasattr(parent, "recalculate_stacking"):
+            return
+        self._stack_recalc_pending = True
+
+        def _run() -> None:
+            self._stack_recalc_pending = False
+            live_parent = self.parentWidget()
+            if live_parent is None:
+                return
+            recalc = getattr(live_parent, "recalculate_stacking", None)
+            if not callable(recalc):
+                return
+            try:
+                logger.debug(
+                    "[STACK] requesting shared stacking recalculation overlay=%s size=%sx%s position=%s",
+                    getattr(self, "_overlay_name", self.__class__.__name__),
+                    self.width(),
+                    self.height(),
+                    getattr(getattr(self, "_position", None), "name", getattr(self, "_position", None)),
+                )
+                recalc()
+            except Exception:
+                logger.debug("[STACK] Parent stacking recalculation failed", exc_info=True)
+
+        try:
+            QTimer.singleShot(0, _run)
+        except Exception:
+            self._stack_recalc_pending = False
+            logger.debug("[STACK] Failed to schedule parent stacking recalculation", exc_info=True)
 
     def setMinimumWidth(self, minw: int) -> None:  # type: ignore[override]
         super().setMinimumWidth(self._resolve_custom_locked_width(minw))
@@ -928,9 +971,18 @@ class BaseOverlayWidget(QLabel):
         
         Used for collision detection and stacking calculations.
         """
-        base_size = self.sizeHint()
-        if base_size.width() <= 0 or base_size.height() <= 0:
-            base_size = self.size()
+        hint_size = self.sizeHint()
+        live_size = self.size()
+        base_width = max(
+            int(hint_size.width()) if hint_size.width() > 0 else 0,
+            int(live_size.width()) if live_size.width() > 0 else 0,
+        )
+        base_height = max(
+            int(hint_size.height()) if hint_size.height() > 0 else 0,
+            int(live_size.height()) if live_size.height() > 0 else 0,
+            int(self.minimumHeight()) if self.minimumHeight() > 0 else 0,
+        )
+        base_size = QSize(base_width, base_height)
         
         # Add shadow padding if shadow is configured
         shadow_padding = 0
@@ -942,6 +994,33 @@ class BaseOverlayWidget(QLabel):
             base_size.width() + shadow_padding * 2,
             base_size.height() + shadow_padding * 2
         )
+
+    def get_stacking_footprint_size(self) -> QSize:
+        """Return the visible runtime footprint used by authored stacking.
+
+        This intentionally excludes painted shadow padding so authored
+        stacking reacts to the card's real occupied column height rather
+        than the larger collision/debug envelope.
+        """
+        hint_size = self.sizeHint()
+        live_size = self.size()
+        width = max(
+            int(live_size.width()) if live_size.width() > 0 else 0,
+            int(hint_size.width()) if hint_size.width() > 0 else 0,
+        )
+        height = max(
+            int(live_size.height()) if live_size.height() > 0 else 0,
+            int(hint_size.height()) if hint_size.height() > 0 else 0,
+        )
+        if width <= 0:
+            width = max(1, int(self.width()) if self.width() > 0 else 1)
+        if height <= 0:
+            try:
+                min_height = int(self.minimumHeight())
+            except Exception:
+                min_height = 0
+            height = max(1, min_height)
+        return QSize(width, height)
     
     def get_screen_rect(self) -> Tuple[int, int, int, int]:
         """Get widget rect in screen coordinates (x, y, width, height).

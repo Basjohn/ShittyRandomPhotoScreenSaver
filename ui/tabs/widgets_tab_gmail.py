@@ -17,6 +17,11 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from core.resources.manager import ResourceManager
+from core.settings.widget_capacity_policy import (
+    LIST_WIDGET_MAX_CAPACITY,
+    LIST_WIDGET_MIN_CAPACITY,
+    clamp_list_capacity,
+)
 from rendering.widget_descriptors import GMAIL_SIGNAL_BLOCK_ATTRS, get_widget_position_option_labels
 from core.audio.sound_paths import default_notification_sound_path
 from core.threading.manager import ThreadManager
@@ -650,8 +655,13 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     # Limit
     limit_row = _aligned_row(layout_inner, "Max Emails:")
     tab.gmail_limit = QSpinBox()
-    tab.gmail_limit.setRange(1, 10)
-    tab.gmail_limit.setValue(tab._default_int('gmail', 'limit', int(_gmail_default(tab, 'limit'))))
+    tab.gmail_limit.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)
+    tab.gmail_limit.setValue(
+        clamp_list_capacity(
+            tab._default_int('gmail', 'limit', int(_gmail_default(tab, 'limit'))),
+            default=int(_gmail_default(tab, 'limit')),
+        )
+    )
     tab.gmail_limit.setAccelerated(True)
     tab.gmail_limit.valueChanged.connect(tab._save_settings)
     limit_row.addWidget(tab.gmail_limit)
@@ -1126,7 +1136,12 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         if mon_idx >= 0:
             tab.gmail_monitor_combo.setCurrentIndex(mon_idx)
 
-        tab.gmail_limit.setValue(tab._config_int('gmail', gmail_config, 'limit', int(gmail_defaults['limit'])))
+        tab.gmail_limit.setValue(
+            clamp_list_capacity(
+                tab._config_int('gmail', gmail_config, 'limit', int(gmail_defaults['limit'])),
+                default=int(gmail_defaults['limit']),
+            )
+        )
         tab.gmail_refresh.setValue(tab._config_int('gmail', gmail_config, 'refresh_minutes', int(gmail_defaults['refresh_minutes'])))
         tab.gmail_filter_label.setText(tab._config_str('gmail', gmail_config, 'filter_label', str(gmail_defaults['filter_label'])))
         tab.gmail_account_slot.setValue(tab._config_int('gmail', gmail_config, 'account_slot', int(gmail_defaults['account_slot'])))
@@ -1222,7 +1237,7 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
     gmail_config = {
         'enabled': tab.gmail_enabled.isChecked(),
         'position': tab.gmail_position.currentText(),
-        'limit': tab.gmail_limit.value(),
+        'limit': clamp_list_capacity(tab.gmail_limit.value(), default=int(_gmail_default(tab, 'limit'))),
         'refresh_minutes': tab.gmail_refresh.value(),
         'filter_label': tab.gmail_filter_label.text().strip() or filter_default,
         'account_slot': str(tab.gmail_account_slot.value()),

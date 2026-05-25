@@ -507,9 +507,9 @@ def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:
         (getattr(widget, 'clock3_widget', None), 'clock3_widget'),
         (getattr(widget, 'weather_widget', None), 'weather_widget'),
         (getattr(widget, 'media_widget', None), 'media_widget'),
-        (getattr(widget, 'spotify_visualizer_widget', None), 'spotify_visualizer_widget'),
         (getattr(widget, 'reddit_widget', None), 'reddit_widget'),
         (getattr(widget, 'reddit2_widget', None), 'reddit2_widget'),
+        (getattr(widget, 'gmail_widget', None), 'gmail_widget'),
         (getattr(widget, 'imgur_widget', None), 'imgur_widget'),
     ]
     widget._widget_manager.apply_widget_stacking(

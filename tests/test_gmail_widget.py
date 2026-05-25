@@ -1,7 +1,7 @@
 """Tests for Gmail widget with Qt app (requires QCoreApplication)."""
 from __future__ import annotations
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 import pytest
 
 
@@ -94,6 +94,43 @@ def test_gmail_widget_cleanup_no_leaks(qt_app):
         assert True  # If we get here, cleanup succeeded
     except Exception as e:
         pytest.skip(f"Cleanup test skipped: {e}")
+
+
+def test_gmail_widget_limit_change_requests_shared_parent_stacking_recalc(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    class _Parent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.recalc_calls = 0
+
+        def recalculate_stacking(self) -> None:
+            self.recalc_calls += 1
+
+    parent = _Parent()
+    parent.resize(1600, 900)
+    widget = GmailWidget(parent=parent)
+    try:
+        widget.apply_settings(
+            {
+                "gmail.enabled": True,
+                "gmail.position": "MIDDLE_LEFT",
+                "gmail.limit": 5,
+                "gmail.width": 600,
+            }
+        )
+        parent.show()
+        widget.show()
+        qt_app.processEvents()
+        parent.recalc_calls = 0
+
+        widget.set_limit(25)
+        qt_app.processEvents()
+
+        assert parent.recalc_calls >= 1
+    finally:
+        widget.cleanup()
+        parent.close()
 
 
 def test_gmail_fallback_refresh_timer_is_cleared_on_cleanup(qt_app, monkeypatch):
@@ -254,6 +291,41 @@ def test_gmail_cache_max_age_is_two_weeks():
     from widgets.gmail_widget import CACHE_MAX_AGE_HOURS
 
     assert CACHE_MAX_AGE_HOURS == 24 * 14
+
+
+def test_gmail_limit_clamps_to_shared_capacity_policy(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.set_limit(4)
+        assert widget.configured_capacity == 5
+
+        widget.set_limit(30)
+        assert widget.configured_capacity == 25
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_fetch_uses_fixed_window_capacity(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+
+    class FakeClient:
+        def list_messages(self, *, max_results, label_ids):
+            calls.append((max_results, tuple(label_ids)))
+            return []
+
+    try:
+        widget._gmail_client = FakeClient()
+        widget.set_limit(7)
+        widget._fetch_emails_sync()
+
+        assert calls == [(25, ("INBOX",))]
+    finally:
+        widget.cleanup()
 
 
 def test_gmail_error_state_height_exceeds_single_row_height(qt_app):

@@ -16,6 +16,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
+from core.settings.widget_capacity_policy import (
+    LIST_WIDGET_MAX_CAPACITY,
+    LIST_WIDGET_MIN_CAPACITY,
+    clamp_list_capacity,
+)
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
@@ -167,21 +172,16 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     # Item count
     reddit_items_row = _aligned_row(feed_layout, "Items:")
-    tab.reddit_items = StyledComboBox(size_variant="compact")
-    tab.reddit_items.addItems(["4", "10", "20"])
+    tab.reddit_items = QSpinBox()
+    tab.reddit_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)
+    tab.reddit_items.setAccelerated(True)
     tab.reddit_items.setToolTip("Number of Reddit posts to display in the widget")
-    tab.reddit_items.currentTextChanged.connect(tab._save_settings)
-    tab.reddit_items.currentTextChanged.connect(tab._update_stack_status)
+    tab.reddit_items.valueChanged.connect(tab._save_settings)
+    tab.reddit_items.valueChanged.connect(tab._update_stack_status)
     tab.reddit_items.setMinimumWidth(80)
     reddit_items_row.addWidget(tab.reddit_items)
-    reddit_limit_default = tab._default_int('reddit', 'limit', 10)
-    if reddit_limit_default <= 5:
-        default_items_text = "4"
-    elif reddit_limit_default >= 20:
-        default_items_text = "20"
-    else:
-        default_items_text = "10"
-    tab._set_combo_text(tab.reddit_items, default_items_text)
+    reddit_limit_default = clamp_list_capacity(tab._default_int('reddit', 'limit', 10), default=10)
+    tab.reddit_items.setValue(reddit_limit_default)
     reddit_items_row.addStretch()
 
     # Position
@@ -369,12 +369,14 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_sub_row.addStretch()
 
     reddit2_items_row = _aligned_row(secondary_layout, "Items:")
-    tab.reddit2_items = StyledComboBox(size_variant="compact")
-    tab.reddit2_items.addItems(["4", "10", "20"])
+    tab.reddit2_items = QSpinBox()
+    tab.reddit2_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)
+    tab.reddit2_items.setAccelerated(True)
     tab.reddit2_items.setMinimumWidth(80)
-    tab.reddit2_items.currentTextChanged.connect(tab._save_settings)
-    tab.reddit2_items.currentTextChanged.connect(tab._update_stack_status)
+    tab.reddit2_items.valueChanged.connect(tab._save_settings)
+    tab.reddit2_items.valueChanged.connect(tab._update_stack_status)
     reddit2_items_row.addWidget(tab.reddit2_items)
+    tab.reddit2_items.setValue(clamp_list_capacity(tab._default_int('reddit2', 'limit', 20), default=20))
     reddit2_items_row.addStretch()
 
     reddit2_pos_row = _aligned_row(secondary_layout, "Position:")
@@ -448,16 +450,8 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     subreddit = tab._config_str('reddit', reddit_config, 'subreddit', 'All')
     tab.reddit_subreddit.setText(subreddit)
 
-    limit_val = tab._config_int('reddit', reddit_config, 'limit', 10)
-    if limit_val <= 5:
-        items_text = "4"
-    elif limit_val >= 20:
-        items_text = "20"
-    else:
-        items_text = "10"
-    idx_items = tab.reddit_items.findText(items_text)
-    if idx_items >= 0:
-        tab.reddit_items.setCurrentIndex(idx_items)
+    limit_val = clamp_list_capacity(tab._config_int('reddit', reddit_config, 'limit', 10), default=10)
+    tab.reddit_items.setValue(limit_val)
 
     reddit_pos = tab._config_str('reddit', reddit_config, 'position', 'Bottom Right')
     idx_pos = tab.reddit_position.findText(reddit_pos)
@@ -506,16 +500,8 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
     reddit2_config = widgets.get('reddit2', {})
     tab.reddit2_enabled.setChecked(tab._config_bool('reddit2', reddit2_config, 'enabled', False))
     tab.reddit2_subreddit.setText(tab._config_str('reddit2', reddit2_config, 'subreddit', ''))
-    reddit2_limit = tab._config_int('reddit2', reddit2_config, 'limit', 4)
-    if reddit2_limit <= 5:
-        reddit2_limit_text = "4"
-    elif reddit2_limit >= 20:
-        reddit2_limit_text = "20"
-    else:
-        reddit2_limit_text = "10"
-    reddit2_items_idx = tab.reddit2_items.findText(reddit2_limit_text)
-    if reddit2_items_idx >= 0:
-        tab.reddit2_items.setCurrentIndex(reddit2_items_idx)
+    reddit2_limit = clamp_list_capacity(tab._config_int('reddit2', reddit2_config, 'limit', 20), default=20)
+    tab.reddit2_items.setValue(reddit2_limit)
     reddit2_pos = tab._config_str('reddit2', reddit2_config, 'position', 'Top Left')
     reddit2_pos_idx = tab.reddit2_position.findText(reddit2_pos)
     if reddit2_pos_idx >= 0:
@@ -531,17 +517,11 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
 
 def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     """Return (reddit_config, reddit2_config) from current UI state."""
-    reddit_limit_text = tab.reddit_items.currentText().strip()
-    try:
-        reddit_limit = int(reddit_limit_text)
-    except Exception:
-        reddit_limit = 10
-
     reddit_config = {
         'enabled': tab.reddit_enabled.isChecked(),
         'exit_on_click': tab.reddit_exit_on_click.isChecked(),
         'subreddit': tab.reddit_subreddit.text().strip() or 'wallpapers',
-        'limit': reddit_limit,
+        'limit': clamp_list_capacity(tab.reddit_items.value(), default=10),
         'position': tab.reddit_position.currentText(),
         'font_family': tab.reddit_font_combo.currentFont().family(),
         'font_size': tab.reddit_font_size.value(),
@@ -562,14 +542,10 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     rmon_text = tab.reddit_monitor_combo.currentText()
     reddit_config['monitor'] = rmon_text if rmon_text == 'ALL' else int(rmon_text)
 
-    try:
-        reddit2_limit = int(tab.reddit2_items.currentText())
-    except Exception:
-        reddit2_limit = 4
     reddit2_config = {
         'enabled': tab.reddit2_enabled.isChecked(),
         'subreddit': tab.reddit2_subreddit.text().strip(),
-        'limit': reddit2_limit,
+        'limit': clamp_list_capacity(tab.reddit2_items.value(), default=20),
         'position': tab.reddit2_position.currentText(),
     }
     r2mon_text = tab.reddit2_monitor_combo.currentText()

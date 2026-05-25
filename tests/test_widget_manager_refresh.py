@@ -541,7 +541,7 @@ def test_reddit_widgets_support_inheritance_and_limit():
     assert isinstance(widget2, _StubRedditWidget)
     assert widget2.position == RedditPosition.BOTTOM_RIGHT
     assert widget2.subreddit == "python"
-    assert widget2.item_limit == 4
+    assert widget2.item_limit == 5
     # inherits styling from reddit1
     assert widget2.font_family == "Inter"
     assert widget2.header_logo_px_adjust == 5
@@ -704,3 +704,34 @@ def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
     assert lifecycle_initialize_calls == []
     assert spotify_calls == ["spotify"]
     assert stacking_calls == [{"clock": {"enabled": True}}]
+
+
+def test_display_setup_apply_widget_stacking_includes_gmail_widget():
+    from rendering import display_setup
+
+    captured: dict[str, object] = {}
+
+    class _ManagerStub:
+        def apply_widget_stacking(self, widget_list, widgets_config):
+            captured["attrs"] = [attr_name for _widget, attr_name in widget_list]
+            captured["widgets_config"] = widgets_config
+
+    widget = SimpleNamespace(
+        _widget_manager=_ManagerStub(),
+        clock_widget=None,
+        clock2_widget=None,
+        clock3_widget=None,
+        weather_widget=None,
+        media_widget=None,
+        spotify_visualizer_widget=None,
+        reddit_widget=None,
+        reddit2_widget=None,
+        gmail_widget=SimpleNamespace(),
+        imgur_widget=None,
+    )
+
+    display_setup.apply_widget_stacking(widget, {"gmail": {"enabled": True}})
+
+    assert "gmail_widget" in captured["attrs"]
+    assert "spotify_visualizer_widget" not in captured["attrs"]
+    assert captured["widgets_config"] == {"gmail": {"enabled": True}}

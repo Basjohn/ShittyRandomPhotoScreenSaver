@@ -248,7 +248,8 @@
             "timezone": "local"
         },
         "global": {
-            "card_border_width_px": 4
+            "card_border_width_px": 4,
+            "stacking_enabled": false
         },
         "gmail": {
             "account_slot": "0",

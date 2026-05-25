@@ -14,9 +14,33 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
-- No active implementation tasks.
+- [ ] Validate hidden/quiescent deferred transition warmup against fresh runtime startup/transition logs.
+  - [ ] Confirm the startup black flicker no longer appears around the deferred warmup window.
+  - [ ] Confirm hidden deferred warmup is covering both remaining transition-program compile and representative transition-resource/state prep strongly enough that first-use transitions do not fall back to expensive visible-surface warmup work in normal startup runs.
+  - [ ] Confirm first-use non-crossfade transitions still compile/bind and run correctly even if deferred startup warmup is skipped or incomplete on a given compositor.
+  - [ ] Confirm transition start does not pay redundant compositor `makeCurrent()` / ensure-bind work once deferred warmup has already populated the pipeline attrs for that transition.
+  - [ ] Keep this on the shared GL lifecycle seam only; do not reintroduce live-surface startup warmup or transition-specific ad hoc compile hacks.
+
+- [ ] Re-audit opt-in non-`Custom` authored stacking against live `--geo` traces before trusting it beyond experimental use.
+  - [ ] Keep the feature default-off until the left-column `weather` / `reddit` / `gmail` case stops preserving dead air and stops pushing `gmail` below the display despite a fit being possible.
+  - [ ] Verify the planner is using canonical authored anchor baselines plus real visible-footprint heights, not stale post-stack live `y` drift or shadow-inflated collision envelopes.
+  - [ ] Keep `spotify_visualizer` and other companion/media-relative widgets out of authored stacking.
+  - [ ] Keep known follow-media companion occupancy, especially the media+visualizer block, as a fixed obstacle in the shared lane planner so fade-in does not create a new overlap after authored widgets already stacked and the planner does not shove media off-screen trying to make room.
+  - [ ] Make `--geo` logs show the final runtime lane plan clearly enough to compare authored anchors, measured heights, and resolved offsets without needing screenshots alone.
+  - [ ] Do not disturb `Custom`; all rescue work stays on the authored non-`Custom` seam only.
+
+- [ ] Preserve the future Reddit/Gmail edge-resize contract before implementation so later work does not drift.
+  - [ ] Keep overall font/element size as the primary size authority.
+  - [ ] Keep wheel resize uniform-only.
+  - [ ] Keep corner resize uniform-only.
+  - [ ] Treat future top/bottom edge resize as a separate vertical-capacity gesture only; it may add/remove rows/posts/content but must not replace the overall size contract.
+  - [ ] Treat future left/right edge resize as a separate horizontal content-budget gesture only; it may widen/narrow text budgets/padding but must not replace the overall size contract.
+  - [ ] When that work starts, extend the canonical CUSTOM resize seam instead of adding widget-local alternate resize paths.
 
 ## Watchlist
+- Non-`Custom` authored stacking is now explicit opt-in and must stay default-off until a future re-audit proves the planner respects real authored screenshots plus `--geo` traces.
+  - Latest bad evidence showed left-column layouts preserving dead air while still pushing `gmail` too low, and right-column layouts pulling `media` far upward from authored bottom-right, which in turn dragged the media-relative visualizer with it.
+  - If stacking is reopened later, reassess authored intent vs runtime movement before tuning the planner again; do not silently re-enable it as a global default.
 - If `--perf` is enabled and a transition watchdog or compositor-complete failure reappears, check `rendering/gl_profiler.py` / `rendering/gl_compositor.py` before treating it as a transition-runtime regression.
 - Keep visualizer preset/settings drift in view during later audits:
   - preserve CLEAR-then-APPLY semantics,
