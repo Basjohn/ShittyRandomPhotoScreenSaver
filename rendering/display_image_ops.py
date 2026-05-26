@@ -190,18 +190,13 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 # Set previous pixmap for transition
                 widget.previous_pixmap = previous_pixmap_ref or processed_pixmap
                 
-                # For compositor-backed 3D Block Spins, seed with old image
+                # For compositor-backed transitions, keep the old frame visible
+                # until the delayed/shared desync start actually begins.
                 comp = getattr(widget, "_gl_compositor", None)
                 if isinstance(comp, GLCompositorWidget):
                     try:
                         if (
-                            transition.__class__.__name__ == "GLCompositorCrossfadeTransition"
-                            and previous_pixmap_ref is not None
-                            and not previous_pixmap_ref.isNull()
-                        ):
-                            comp.set_base_pixmap(previous_pixmap_ref)
-                        elif (
-                            transition.__class__.__name__ == "GLCompositorBlockSpinTransition"
+                            transition.__class__.__name__.startswith("GLCompositor")
                             and previous_pixmap_ref is not None
                             and not previous_pixmap_ref.isNull()
                         ):

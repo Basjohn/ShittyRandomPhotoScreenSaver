@@ -18,6 +18,7 @@ from core.logging.logger import get_logger
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.transition_registry import canonicalize_transition_name
 from core.settings.settings_manager import SettingsManager
+from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
 from widgets.context_menu import ScreensaverContextMenu
 
 if TYPE_CHECKING:
@@ -28,11 +29,25 @@ win_diag_logger = logging.getLogger("win_diag")
 
 
 def _get_current_visualizer_mode(widget) -> str:
-    """Read the current visualizer mode_id from the live widget."""
+    """Read the canonical current visualizer mode_id for the context menu."""
+    try:
+        settings_manager = getattr(widget, "settings_manager", None)
+        if settings_manager is not None:
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            if isinstance(widgets_cfg, dict):
+                vis_cfg = widgets_cfg.get("spotify_visualizer", {}) or {}
+                if isinstance(vis_cfg, dict):
+                    mode_id = vis_cfg.get("mode")
+                    if mode_id:
+                        return coerce_visualizer_mode_id(mode_id)
+    except Exception:
+        pass
     try:
         vis = getattr(widget, "spotify_visualizer_widget", None)
         if vis is not None:
-            return str(getattr(vis, "_vis_mode_str", "spectrum") or "spectrum")
+            mode_id = str(getattr(vis, "_vis_mode_str", "") or "").strip()
+            if mode_id:
+                return coerce_visualizer_mode_id(mode_id)
     except Exception:
         pass
     return "spectrum"

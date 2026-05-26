@@ -102,11 +102,27 @@ void main() {
     float colIndex = cell.x;
     float rowIndex = cell.y;
     bool horizontal = abs(dir.x) >= abs(dir.y);
+    bool diagonal = abs(dir.x) > 1e-3 && abs(dir.y) > 1e-3;
 
     // Base start timing from the leading edge, matching the CPU
     // BlockPuzzleFlip controller.
     float base = 0.0;
-    if (horizontal) {
+    if (diagonal) {
+        float maxDist = max(1.0, (cols - 1.0) + (rows - 1.0));
+        if (dir.x > 0.0 && dir.y > 0.0) {
+            // Diagonal TL->BR
+            base = (colIndex + rowIndex) / maxDist;
+        } else if (dir.x < 0.0 && dir.y > 0.0) {
+            // Diagonal TR->BL
+            base = ((cols - 1.0 - colIndex) + rowIndex) / maxDist;
+        } else if (dir.x > 0.0 && dir.y < 0.0) {
+            // Diagonal BL->TR
+            base = (colIndex + (rows - 1.0 - rowIndex)) / maxDist;
+        } else {
+            // Diagonal BR->TL
+            base = ((cols - 1.0 - colIndex) + (rows - 1.0 - rowIndex)) / maxDist;
+        }
+    } else if (horizontal) {
         // LEFT/RIGHT: wave travels across columns.
         if (dir.x > 0.0) {
             // SlideDirection.LEFT semantics: left→right.
@@ -139,19 +155,19 @@ void main() {
     // rather than a perfectly straight slit.
     float colNorm = (cols > 1.0) ? colIndex / (cols - 1.0) : 0.5;
     float rowNorm = (rows > 1.0) ? rowIndex / (rows - 1.0) : 0.5;
-    float ortho = horizontal ? abs(rowNorm - 0.5) : abs(colNorm - 0.5);
+    float ortho = diagonal ? abs((colNorm - rowNorm) * 0.5) : (horizontal ? abs(rowNorm - 0.5) : abs(colNorm - 0.5));
     float centerFactor = (0.5 - ortho) * 2.0; // 1 at center, 0 at edges.
     // Use a slightly stronger bias for vertical waves (fewer rows) so the
     // centre band feels more pronounced, while keeping horizontal behaviour
     // close to the original Block Puzzle Flip look.
-    float centerBiasStrength = horizontal ? 0.25 : 0.32;
+    float centerBiasStrength = diagonal ? 0.20 : (horizontal ? 0.25 : 0.32);
     base -= centerFactor * centerBiasStrength;
     base = clamp(base, 0.0, 1.0);
 
     // Small jitter so neighbouring blocks do not all start at exactly the
     // same moment; scaled by grid density so the wavefront remains coherent.
     float span = max(cols, rows);
-    float jitterBase = horizontal ? 0.18 : 0.10;
+    float jitterBase = diagonal ? 0.16 : (horizontal ? 0.18 : 0.10);
     float jitterSpan = span > 0.0 ? jitterBase / span : 0.0;
     if (jitterSpan > 0.0) {
         base += (hash1(cellIndex * 91.0 + 7.0) - 0.5) * jitterSpan;
@@ -305,6 +321,10 @@ void main() {
                 return (0.0, 1.0)
             elif direction == SlideDirection.UP:
                 return (0.0, -1.0)
+            elif direction == SlideDirection.DIAG_TL_BR:
+                return (1.0, 1.0)
+            elif direction == SlideDirection.DIAG_TR_BL:
+                return (-1.0, 1.0)
         except Exception as e:
             logger.debug("[MISC] Exception suppressed: %s", e)
         return (1.0, 0.0)

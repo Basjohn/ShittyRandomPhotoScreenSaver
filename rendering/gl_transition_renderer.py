@@ -218,7 +218,7 @@ class GLTransitionRenderer:
             gl.glUseProgram(0)
             gl.glDisable(gl.GL_DEPTH_TEST)
             gl.glDepthMask(gl.GL_FALSE)
-    
+
     def render_slide_shader(self, target: QRect, state: Any) -> None:
         """Render Slide transition with pre-computed coordinates."""
         pipeline = self._get_pipeline()

@@ -266,8 +266,7 @@ class OpenMeteoProvider:
             params = {
                 'latitude': latitude,
                 'longitude': longitude,
-                'current_weather': 'true',
-                'current': 'relative_humidity_2m,precipitation,rain',
+                'current': 'temperature_2m,weather_code,wind_speed_10m,is_day,relative_humidity_2m,precipitation,rain',
                 'hourly': 'precipitation_probability',
                 'daily': 'temperature_2m_max,temperature_2m_min,weathercode',
                 'forecast_days': 2,  # Today + tomorrow
@@ -283,28 +282,23 @@ class OpenMeteoProvider:
             # Log raw response structure for debugging
             logger.debug(f"[WEATHER_API] Response keys: {list(data.keys())}")
             
-            # Extract current weather (basic data: temp, wind, code)
-            current_weather = data.get('current_weather', {})
-            # Extended current data (humidity, precipitation) - requested via 'current' param
-            current_extended = data.get('current', {})
-            
-            logger.debug(f"[WEATHER_API] current_weather keys: {list(current_weather.keys()) if current_weather else 'None'}")
-            logger.debug(f"[WEATHER_API] current_extended keys: {list(current_extended.keys()) if current_extended else 'None'}")
-            
-            temperature = current_weather.get('temperature')
-            weather_code = current_weather.get('weathercode', 0)
-            windspeed = current_weather.get('windspeed', 0.0)
-            is_day = current_weather.get('is_day', 1)  # 1 = day, 0 = night
-            
-            # Extract humidity from the 'current' block (scalar value).
+            current_data = data.get('current', {})
+
+            logger.debug(f"[WEATHER_API] current keys: {list(current_data.keys()) if current_data else 'None'}")
+
+            temperature = current_data.get('temperature_2m')
+            weather_code = current_data.get('weather_code', 0)
+            windspeed = current_data.get('wind_speed_10m', 0.0)
+            is_day = current_data.get('is_day', 1)  # 1 = day, 0 = night
+
             humidity = None
             precipitation = None
-            if current_extended:
-                humidity = current_extended.get('relative_humidity_2m')
+            if current_data:
+                humidity = current_data.get('relative_humidity_2m')
                 logger.debug(
-                    f"[WEATHER_API] current_extended: humidity={humidity}, "
-                    f"rain={current_extended.get('rain')}, "
-                    f"precipitation={current_extended.get('precipitation')}"
+                    f"[WEATHER_API] current: humidity={humidity}, "
+                    f"rain={current_data.get('rain')}, "
+                    f"precipitation={current_data.get('precipitation')}"
                 )
             
             # precipitation_probability is only available in hourly data,
@@ -390,8 +384,7 @@ class OpenMeteoProvider:
             params = {
                 'latitude': latitude,
                 'longitude': longitude,
-                'current_weather': 'true',
-                'current': 'relative_humidity_2m',
+                'current': 'temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m',
                 'timezone': 'auto'
             }
             
@@ -401,17 +394,16 @@ class OpenMeteoProvider:
             data = response.json()
             
             # Extract current weather
-            current = data.get('current_weather', {})
-            current_units = data.get('current', {})
-            
-            temperature = current.get('temperature')
-            weather_code = current.get('weathercode', 0)
-            windspeed = current.get('windspeed', 0.0)
+            current = data.get('current', {})
+
+            temperature = current.get('temperature_2m')
+            weather_code = current.get('weather_code', 0)
+            windspeed = current.get('wind_speed_10m', 0.0)
             
             # Get humidity
             humidity = None
-            if 'relative_humidity_2m' in current_units:
-                humidity = current_units['relative_humidity_2m']
+            if 'relative_humidity_2m' in current:
+                humidity = current['relative_humidity_2m']
             
             # Map weather code to condition
             condition = self.WEATHER_CODES.get(weather_code, "Unknown")

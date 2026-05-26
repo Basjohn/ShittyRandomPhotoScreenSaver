@@ -4,7 +4,8 @@ from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from transitions.gl_compositor_blockflip_transition import GLCompositorBlockFlipTransition as BlockPuzzleFlipTransition
-from transitions.base_transition import TransitionState
+from transitions.base_transition import TransitionState, SlideDirection
+from rendering.gl_programs.blockflip_program import BlockFlipProgram
 
 
 @pytest.fixture
@@ -99,6 +100,17 @@ def test_block_puzzle_invalid_pixmap(qapp, test_widget):
     t = BlockPuzzleFlipTransition(duration_ms=100)
     null_pix = QPixmap()
     assert t.start(None, null_pix, test_widget) is False
+
+
+def test_block_puzzle_direction_vectors_include_diagonals():
+    helper = BlockFlipProgram()
+
+    class _State:
+        def __init__(self, direction):
+            self.direction = direction
+
+    assert helper._get_direction_vector(_State(SlideDirection.DIAG_TL_BR)) == (1.0, 1.0)
+    assert helper._get_direction_vector(_State(SlideDirection.DIAG_TR_BL)) == (-1.0, 1.0)
 
 
 def test_block_puzzle_set_flip_duration():

@@ -73,9 +73,10 @@ class WipeState(TransitionStateBase):
 @dataclass
 class BlockFlipState(TransitionStateBase):
     """State for a compositor-driven block flip transition.
-    
-    The detailed per-block progression is managed by the controller; the
-    compositor only needs the reveal region to clip the new pixmap.
+
+    The compositor shader is authoritative for the reveal. Region is retained
+    only as a compatibility field for older call sites/tools and should not be
+    treated as a required runtime hot-path input.
     """
     region: Optional[QRegion] = None
     cols: int = 0

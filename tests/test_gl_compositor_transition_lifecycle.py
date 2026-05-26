@@ -55,6 +55,7 @@ def _setup_compositor(monkeypatch) -> tuple[QWidget, GLCompositorWidget]:
     monkeypatch.setattr(comp, "_release_transition_textures", lambda *a, **k: None)
     monkeypatch.setattr(comp, "_start_render_timer", lambda *a, **k: None)
     monkeypatch.setattr(comp, "_stop_render_timer", lambda *a, **k: None)
+    comp._desync_delay_ms = 0
     return parent, comp
 
 

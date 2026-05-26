@@ -14,16 +14,40 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
+- [ ] Restore image-cache / prescale performance to a healthy runtime contract.
+  - [ ] Investigate why the latest heavy `--perf` runs are still ending with effectively dead cache usage (`ImageCache ... hits=0, misses=54` and then `hits=0, misses=42`) after the async cache-variant reuse work.
+  - [ ] Trace the real cache path used during runtime image changes and prove whether scaled cache variants are still being bypassed, invalidated too aggressively, keyed incorrectly, or simply never reused across ordinary rotations/rebuilds.
+  - [ ] Investigate the remaining large `ImageWorker prescale` spikes and identify whether they come from true cache misses, stale display-size churn, repeated rebuild/startup paths, prefetch timing gaps, or another shared image-pipeline seam.
+  - [ ] Verify whether the documented `ImagePrefetcher` post-transition delay contract is actually exercised in runtime; if it is still inert, fix that at the shared prefetch/display seam instead of layering transition-specific throttles.
+  - [ ] Fix this at the shared cache/prefetch/image-pipeline seam only; do not paper over it with transition-local hacks or lower-fidelity image processing.
+  - [ ] Re-run `--perf` validation and confirm the shutdown cache summary shows meaningful cache hits instead of another zero-hit run, while the big `ImageWorker prescale` spikes materially drop.
+
+- [ ] Re-audit general compositor transition performance after the warmup/desync rescue.
+  - [ ] Confirm the global display-level image handoff stagger plus the broadened compositor-side desync are both active for the transition families that matter in real use, not just crossfade.
+  - [ ] Verify the broadened desync remains imperceptible to users while reducing same-instant multi-display start overhead.
+  - [ ] Check for any remaining shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls that still drag frame pacing below the earlier same-day baseline.
+  - [ ] Use the new perf evidence as the baseline for this audit too: Burn and Slide are still showing timing drift and `Paint gap` spikes while GPU timings remain low, so prioritize CPU/main-thread churn before blaming shader cost.
+  - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
+
 - [ ] Validate hidden/quiescent deferred transition warmup against fresh runtime startup/transition logs.
   - [ ] Confirm the startup black flicker no longer appears around the deferred warmup window.
   - [ ] Confirm hidden deferred warmup is covering both remaining transition-program compile and representative transition-resource/state prep strongly enough that first-use transitions do not fall back to expensive visible-surface warmup work in normal startup runs.
   - [ ] Confirm first-use non-crossfade transitions still compile/bind and run correctly even if deferred startup warmup is skipped or incomplete on a given compositor.
   - [ ] Confirm transition start does not pay redundant compositor `makeCurrent()` / ensure-bind work once deferred warmup has already populated the pipeline attrs for that transition.
-  - [ ] Confirm the async image path is now consuming prefetched `|scaled:WxH` cache variants instead of unnecessarily round-tripping through `ImageWorker` prescale on every image change.
   - [ ] Validate the broadened shared compositor-side desync across non-crossfade transition families and confirm the delay remains imperceptible while reducing same-instant multi-display start overhead.
-  - [ ] Verify whether the documented `ImagePrefetcher` post-transition delay contract is actually exercised in runtime; if it is still inert, fix that at the shared prefetch/display seam instead of layering transition-specific throttles.
   - [ ] Keep this on the shared GL lifecycle seam only; do not reintroduce live-surface startup warmup or transition-specific ad hoc compile hacks.
-  - [ ] Re-check Block Puzzle Flip after the CPU-side region simulation retirement; if it is still disproportionately expensive, treat that as a transition-specific redesign/perf follow-up rather than reintroducing dead controller bookkeeping.
+  - [ ] Keep first-use transition correctness and transition performance as separate acceptance criteria; startup flicker is fixed, but the deferred warmup path is not done until it also stops contributing to the remaining perf regression.
+
+- [ ] Audit and, if justified, modernize Blinds on the same clean compositor contract.
+  - [ ] Confirm whether Blinds is still carrying dead CPU-side slat/`QRegion` work while the compositor shader is authoritative.
+  - [ ] If so, migrate Blinds toward the `Diffuse`/clean Blockflip pattern: controller supplies only grid/direction/feather hints while the shader owns the reveal path.
+  - [ ] Preserve the current visual fidelity; do not flatten or cheapen the look just to make the controller simpler.
+
+- [ ] Audit Rain Drops with special attention to shader-path truth and fallback removal.
+  - [ ] Confirm in real runtime/log evidence whether Rain Drops is ever falling back from its shader path to the diffuse-region path.
+  - [ ] If fallback is still being exercised under ordinary supported runtime conditions, treat that as a bug, not an acceptable steady-state contract.
+  - [ ] Remove or retire fallback usage where safe so Rain Drops stays on one authoritative shader path under normal supported operation; broad steady-state fallback behavior is explicitly unwanted here.
+  - [ ] Keep this aligned with the project guardrail that broad/steady-state fallbacks are harmful when they silently preserve poorer behavior.
 
 - [ ] Re-audit opt-in non-`Custom` authored stacking against live `--geo` traces before trusting it beyond experimental use.
   - [ ] Keep the feature default-off until the left-column `weather` / `reddit` / `gmail` case stops preserving dead air and stops pushing `gmail` below the display despite a fit being possible.
