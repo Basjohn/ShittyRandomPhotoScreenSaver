@@ -15,28 +15,30 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 ## Active Tasks
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
-  - [ ] Investigate why the latest heavy `--perf` runs are still ending with effectively dead cache usage (`ImageCache ... hits=0, misses=54` and then `hits=0, misses=42`) after the async cache-variant reuse work.
-  - [ ] Trace the real cache path used during runtime image changes and prove whether scaled cache variants are still being bypassed, invalidated too aggressively, keyed incorrectly, or simply never reused across ordinary rotations/rebuilds.
-  - [ ] Investigate the remaining large `ImageWorker prescale` spikes and identify whether they come from true cache misses, stale display-size churn, repeated rebuild/startup paths, prefetch timing gaps, or another shared image-pipeline seam.
-  - [ ] Verify whether the documented `ImagePrefetcher` post-transition delay contract is actually exercised in runtime; if it is still inert, fix that at the shared prefetch/display seam instead of layering transition-specific throttles.
-  - [ ] Fix this at the shared cache/prefetch/image-pipeline seam only; do not paper over it with transition-local hacks or lower-fidelity image processing.
-  - [ ] Re-run `--perf` validation and confirm the shutdown cache summary shows meaningful cache hits instead of another zero-hit run, while the big `ImageWorker prescale` spikes materially drop.
+  - [ ] Fix the prefetch authority contract: in mixed-source mode, lookahead must target the same upcoming images that `ImageQueue.next()` will actually serve under local/RSS ratio, history, and domain-diversity rules instead of peeking a divergent combined queue.
+  - [ ] Decide and implement one authoritative scaled-image reuse contract for ordinary rotations with no fidelity loss:
+  - [ ] Option A: prefetch materializes display-sized `path|scaled:WxH` variants ahead of time for the active display sizes and async display consumes those directly.
+  - [ ] Option B: raw-prefetched `QImage` is authoritative and the shared pipeline derives/stores the scaled variant off-thread before display time so runtime image changes do not fall back to repeated worker prescales.
+  - [ ] Choose the path with the least steady-state CPU/process churn and no image corruption, alignment drift, or quality regression; do not keep dual authorities alive long-term.
+  - [ ] Split cache telemetry into truthful buckets so runtime evidence can distinguish raw-cache reuse, scaled-variant reuse, and worker-prescale fallthrough instead of rolling all absent probes into one misleading miss total.
+  - [ ] Prove the transition-complete prefetch resume contract is real in runtime: transition completion should trigger exactly one delayed prefetch resume at the shared seam, and logs/metrics should make that visible without relying on ad hoc verbose-only detective work.
+  - [ ] Keep fixes on shared cache/prefetch/image-pipeline seams only; do not paper over this with transition-local hacks, lower-fidelity processing, or broad fallback behavior.
+  - [ ] Re-run clean `--perf` validation after the contract fix and confirm the shutdown cache summary shows real scaled/raw reuse while `ImageWorker prescale` spikes materially drop during startup and forced next-image churn.
 
 - [ ] Re-audit general compositor transition performance after the warmup/desync rescue.
   - [ ] Confirm the global display-level image handoff stagger plus the broadened compositor-side desync are both active for the transition families that matter in real use, not just crossfade.
   - [ ] Verify the broadened desync remains imperceptible to users while reducing same-instant multi-display start overhead.
   - [ ] Check for any remaining shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls that still drag frame pacing below the earlier same-day baseline.
-  - [ ] Use the new perf evidence as the baseline for this audit too: Burn and Slide are still showing timing drift and `Paint gap` spikes while GPU timings remain low, so prioritize CPU/main-thread churn before blaming shader cost.
+  - [ ] Use the current perf evidence as the baseline for this audit: startup shader-pipeline init, shared main-thread stalls, and cross-transition `Paint gap` / timing-drift patterns still point at CPU/main-thread churn before GPU shader cost.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
 
 - [ ] Validate hidden/quiescent deferred transition warmup against fresh runtime startup/transition logs.
-  - [ ] Confirm the startup black flicker no longer appears around the deferred warmup window.
   - [ ] Confirm hidden deferred warmup is covering both remaining transition-program compile and representative transition-resource/state prep strongly enough that first-use transitions do not fall back to expensive visible-surface warmup work in normal startup runs.
   - [ ] Confirm first-use non-crossfade transitions still compile/bind and run correctly even if deferred startup warmup is skipped or incomplete on a given compositor.
   - [ ] Confirm transition start does not pay redundant compositor `makeCurrent()` / ensure-bind work once deferred warmup has already populated the pipeline attrs for that transition.
   - [ ] Validate the broadened shared compositor-side desync across non-crossfade transition families and confirm the delay remains imperceptible while reducing same-instant multi-display start overhead.
   - [ ] Keep this on the shared GL lifecycle seam only; do not reintroduce live-surface startup warmup or transition-specific ad hoc compile hacks.
-  - [ ] Keep first-use transition correctness and transition performance as separate acceptance criteria; startup flicker is fixed, but the deferred warmup path is not done until it also stops contributing to the remaining perf regression.
+  - [ ] Keep first-use transition correctness and transition performance as separate acceptance criteria; the visible startup-flicker regression is holding positive, but deferred warmup is not done until it also stops contributing to the remaining startup/first-use perf stalls.
 
 - [ ] Audit and, if justified, modernize Blinds on the same clean compositor contract.
   - [ ] Confirm whether Blinds is still carrying dead CPU-side slat/`QRegion` work while the compositor shader is authoritative.
