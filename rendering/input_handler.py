@@ -55,6 +55,11 @@ class InputHandler(QObject):
     play_pause_requested = Signal()
     previous_track_requested = Signal()
     next_track_requested = Signal()
+    slider_volume_up_requested = Signal()
+    slider_volume_down_requested = Signal()
+    global_volume_up_requested = Signal()
+    global_volume_down_requested = Signal()
+    global_mute_toggle_requested = Signal()
     context_menu_requested = Signal(QPoint)  # Global position for menu popup
     
     # Exit threshold for mouse movement (pixels)
@@ -211,6 +216,30 @@ class InputHandler(QObject):
         if key == Qt.Key.Key_Space:
             logger.info("Space key pressed - play/pause requested")
             self.play_pause_requested.emit()
+            return True
+        if key == Qt.Key.Key_Up:
+            logger.info("Up key pressed - slider volume up requested")
+            self.slider_volume_up_requested.emit()
+            return True
+        if key == Qt.Key.Key_Down:
+            logger.info("Down key pressed - slider volume down requested")
+            self.slider_volume_down_requested.emit()
+            return True
+        if key == Qt.Key.Key_PageUp:
+            logger.info("Page Up key pressed - global volume up requested")
+            self.global_volume_up_requested.emit()
+            return True
+        if key == Qt.Key.Key_PageDown:
+            logger.info("Page Down key pressed - global volume down requested")
+            self.global_volume_down_requested.emit()
+            return True
+        if key == Qt.Key.Key_Home:
+            logger.info("Home key pressed - play/pause requested")
+            self.play_pause_requested.emit()
+            return True
+        if key == Qt.Key.Key_End:
+            logger.info("End key pressed - global mute toggle requested")
+            self.global_mute_toggle_requested.emit()
             return True
         
         # Exit keys (Esc/Q) should always be honoured

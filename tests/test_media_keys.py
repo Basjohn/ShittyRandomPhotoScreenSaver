@@ -1,6 +1,7 @@
 
 import pytest
 from unittest.mock import MagicMock
+from types import SimpleNamespace
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QKeyEvent
 
@@ -100,6 +101,72 @@ def test_right_key_routes_next_track_signal(input_handler):
     mock_slot.assert_called_once()
 
 
+def test_up_key_routes_slider_volume_up_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_Up)
+
+    mock_slot = MagicMock()
+    input_handler.slider_volume_up_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Up should be handled as a focused slider-volume hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_down_key_routes_slider_volume_down_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_Down)
+
+    mock_slot = MagicMock()
+    input_handler.slider_volume_down_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Down should be handled as a focused slider-volume hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_pageup_key_routes_global_volume_up_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_PageUp)
+
+    mock_slot = MagicMock()
+    input_handler.global_volume_up_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Page Up should be handled as a focused global-volume hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_pagedown_key_routes_global_volume_down_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_PageDown)
+
+    mock_slot = MagicMock()
+    input_handler.global_volume_down_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Page Down should be handled as a focused global-volume hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_home_key_routes_play_pause_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_Home)
+
+    mock_slot = MagicMock()
+    input_handler.play_pause_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "Home should be handled as a focused play/pause hotkey"
+    mock_slot.assert_called_once()
+
+
+def test_end_key_routes_global_mute_toggle_signal(input_handler):
+    event = create_key_event(Qt.Key.Key_End)
+
+    mock_slot = MagicMock()
+    input_handler.global_mute_toggle_requested.connect(mock_slot)
+
+    result = input_handler.handle_key_press(event)
+    assert result is True, "End should be handled as a focused global-mute hotkey"
+    mock_slot.assert_called_once()
+
+
 def test_display_widget_play_pause_hotkey_dispatches_media_feedback():
     media_widget = MagicMock()
     media_widget.handle_transport_command.return_value = True
@@ -143,6 +210,60 @@ def test_display_widget_next_track_hotkey_dispatches_media_feedback():
         source="keyboard_right",
         execute=True,
     )
+
+
+def test_display_widget_slider_volume_up_hotkey_dispatches_volume_widget():
+    volume_widget = MagicMock()
+    volume_widget.handle_step.return_value = True
+    stub = SimpleNamespace(_resolve_volume_widget_for_hotkeys=lambda: volume_widget)
+
+    DisplayWidget._handle_slider_volume_step(stub, 1, source="keyboard_up")
+
+    volume_widget.handle_step.assert_called_once_with(1)
+
+
+def test_display_widget_slider_volume_down_hotkey_dispatches_volume_widget():
+    volume_widget = MagicMock()
+    volume_widget.handle_step.return_value = True
+    stub = SimpleNamespace(_resolve_volume_widget_for_hotkeys=lambda: volume_widget)
+
+    DisplayWidget._handle_slider_volume_step(stub, -1, source="keyboard_down")
+
+    volume_widget.handle_step.assert_called_once_with(-1)
+
+
+def test_display_widget_resolves_cross_display_volume_widget_for_hotkeys():
+    remote_volume_widget = MagicMock()
+    remote_display = SimpleNamespace(spotify_volume_widget=remote_volume_widget)
+    stub = SimpleNamespace(
+        spotify_volume_widget=None,
+        _widget_manager=None,
+        get_all_instances=lambda: [remote_display],
+    )
+
+    resolved = DisplayWidget._resolve_volume_widget_for_hotkeys(stub)
+
+    assert resolved is remote_volume_widget
+
+
+def test_display_widget_global_volume_up_hotkey_uses_system_audio(monkeypatch):
+    refreshes = []
+    stub = SimpleNamespace(_refresh_mute_button_after_system_audio_change=lambda: refreshes.append(True))
+    monkeypatch.setattr("rendering.display_widget.system_mute.step_volume", lambda delta: 0.55)
+
+    DisplayWidget._handle_global_volume_step(stub, 0.05, source="keyboard_pageup")
+
+    assert refreshes == [True]
+
+
+def test_display_widget_global_mute_hotkey_uses_mute_button_when_available():
+    mute_button = MagicMock()
+    mute_button.handle_click.return_value = True
+    stub = SimpleNamespace(mute_button_widget=mute_button)
+
+    DisplayWidget._on_global_mute_toggle_requested(stub)
+
+    mute_button.handle_click.assert_called_once_with()
 
 def test_native_virtual_key_recognition(input_handler):
     """Verify recognition via native virtual key codes (Windows)."""

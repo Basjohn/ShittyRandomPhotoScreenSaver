@@ -64,6 +64,42 @@ def set_mute(muted: bool) -> bool:
         return False
 
 
+def get_volume() -> Optional[float]:
+    """Return current master volume in [0.0, 1.0], or None if unavailable."""
+    if not _available or _endpoint_volume is None:
+        return None
+    try:
+        return float(_endpoint_volume.GetMasterVolumeLevelScalar())
+    except Exception:
+        logger.debug("[SYSTEM_MUTE] GetMasterVolumeLevelScalar failed", exc_info=True)
+        return None
+
+
+def set_volume(level: float) -> bool:
+    """Set current master volume to ``level`` in [0.0, 1.0]."""
+    if not _available or _endpoint_volume is None:
+        return False
+    try:
+        clamped = max(0.0, min(1.0, float(level)))
+        _endpoint_volume.SetMasterVolumeLevelScalar(clamped, None)
+        logger.debug("[SYSTEM_MUTE] SetMasterVolumeLevelScalar(%.3f)", clamped)
+        return True
+    except Exception:
+        logger.debug("[SYSTEM_MUTE] SetMasterVolumeLevelScalar failed", exc_info=True)
+        return False
+
+
+def step_volume(delta: float) -> Optional[float]:
+    """Adjust master volume by ``delta`` and return the new level on success."""
+    current = get_volume()
+    if current is None:
+        return None
+    target = max(0.0, min(1.0, float(current) + float(delta)))
+    if set_volume(target):
+        return target
+    return None
+
+
 def toggle_mute() -> Optional[bool]:
     """Toggle system mute. Returns new mute state, or None on failure."""
     current = get_mute()

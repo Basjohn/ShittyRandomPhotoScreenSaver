@@ -94,15 +94,6 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Treat future left/right edge resize as a separate horizontal content-budget gesture only; it may widen/narrow text budgets/padding but must not replace the overall size contract.
   - [ ] When that work starts, extend the canonical CUSTOM resize seam instead of adding widget-local alternate resize paths.
 
-- [ ] Add the focused runtime hotkeys through the shared input contract.
-  - [ ] `Up` should route to the same mixer/slider volume-up behavior as the scroll wheel.
-  - [ ] `Down` should route to the same mixer/slider volume-down behavior as the scroll wheel.
-  - [ ] `PgUp` should route to global volume up.
-  - [ ] `PgDn` should route to global volume down.
-  - [ ] `Home` should route to play/pause.
-  - [ ] `End` should route to global mute toggle.
-  - [ ] Keep all of them on the existing focused-hotkey/input-routing seam instead of adding widget-local handlers.
-
 ## Watchlist
 - Non-`Custom` authored stacking is now explicit opt-in and must stay default-off until a future re-audit proves the planner respects real authored screenshots plus `--geo` traces.
   - Latest bad evidence showed left-column layouts preserving dead air while still pushing `gmail` too low, and right-column layouts pulling `media` far upward from authored bottom-right, which in turn dragged the media-relative visualizer with it.

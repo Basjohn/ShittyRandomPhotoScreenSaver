@@ -88,6 +88,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Spotify volume flush-timer reset parity across stop/deactivate/cleanup paths, provider-switch volume resync, hidden→visible mixer-session resync without high-frequency polling, and authored scale-contract stability while remaining media-owned in CUSTOM layout mode.
 - `tests/test_s_hotkey_workflow.py`
   Settings-entry regression coverage, including the rule that an active CUSTOM shell session is cancelled before the engine stop/settings-dialog startup path proceeds and that the engine stop path quiesces displays before clear/hide.
+- `tests/test_media_keys.py`
+  Focused hotkey/input-routing coverage for media transport and volume shortcuts, including `Space`/`Home` play-pause, `Left`/`Right` track navigation, `Up`/`Down` slider volume steps, and `PgUp`/`PgDn`/`End` system-audio intent routing through the shared input/display seams.
 - `tests/test_gmail_widget.py`
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`

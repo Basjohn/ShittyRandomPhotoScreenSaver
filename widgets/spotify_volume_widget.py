@@ -359,6 +359,17 @@ class SpotifyVolumeWidget(QWidget):
         if delta_y == 0:
             return False
 
+        return self._apply_step_delta(delta_y)
+
+    def handle_step(self, direction: int) -> bool:
+        """Adjust volume by one keyboard step using the same wheel contract."""
+        if direction == 0:
+            return False
+        delta_y = 120 if direction > 0 else -120
+        return self._apply_step_delta(delta_y)
+
+    def _apply_step_delta(self, delta_y: int) -> bool:
+        """Apply a standardized step delta shared by wheel and keyboard paths."""
         step = 0.05
         direction = 1 if delta_y > 0 else -1
         unclamped = self._volume + (step * direction)

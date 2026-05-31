@@ -104,3 +104,18 @@ def test_spotify_volume_uses_track_shadow_without_outer_frame_box(qt_app):
         assert widget.uses_painted_frame_shadow() is True
     finally:
         widget.deleteLater()
+
+
+def test_spotify_volume_keyboard_step_works_while_hidden(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    applied = []
+    try:
+        widget.hide()
+        monkeypatch.setattr(widget, "_apply_step_delta", lambda delta_y: applied.append(delta_y) or True)  # type: ignore[method-assign]
+
+        handled = widget.handle_step(1)
+
+        assert handled is True
+        assert applied == [120]
+    finally:
+        widget.deleteLater()

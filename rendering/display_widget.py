@@ -56,6 +56,7 @@ from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoo
 from rendering.custom_layout_manager import CustomLayoutManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.logging.overlay_telemetry import record_overlay_ready
+from core.media import system_mute
 from core.resources.manager import ResourceManager
 from core.settings.settings_manager import SettingsManager
 from transitions.overlay_manager import (
@@ -362,6 +363,11 @@ class DisplayWidget(QWidget):
             self._input_handler.play_pause_requested.connect(self._on_play_pause_requested)
             self._input_handler.previous_track_requested.connect(self._on_previous_track_requested)
             self._input_handler.next_track_requested.connect(self._on_next_track_requested)
+            self._input_handler.slider_volume_up_requested.connect(self._on_slider_volume_up_requested)
+            self._input_handler.slider_volume_down_requested.connect(self._on_slider_volume_down_requested)
+            self._input_handler.global_volume_up_requested.connect(self._on_global_volume_up_requested)
+            self._input_handler.global_volume_down_requested.connect(self._on_global_volume_down_requested)
+            self._input_handler.global_mute_toggle_requested.connect(self._on_global_mute_toggle_requested)
             self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
@@ -1438,6 +1444,31 @@ class DisplayWidget(QWidget):
             logger.debug("[DISPLAY_WIDGET] Cross-display media widget lookup failed", exc_info=True)
         return None
 
+    def _resolve_volume_widget_for_hotkeys(self) -> Optional[SpotifyVolumeWidget]:
+        """Return the best Spotify volume widget candidate across active displays."""
+        volume_widget = getattr(self, "spotify_volume_widget", None)
+        if volume_widget is not None:
+            return volume_widget
+        widget_manager = getattr(self, "_widget_manager", None)
+        if widget_manager is not None:
+            try:
+                volume_widget = (
+                    widget_manager.get_widget("spotify_volume")
+                    or widget_manager.get_widget("spotify_volume_widget")
+                )
+            except Exception:
+                logger.debug("[DISPLAY_WIDGET] Volume widget lookup via WidgetManager failed", exc_info=True)
+            if volume_widget is not None:
+                return volume_widget
+        try:
+            for widget in self.get_all_instances():
+                candidate = getattr(widget, "spotify_volume_widget", None)
+                if candidate is not None:
+                    return candidate
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Cross-display volume widget lookup failed", exc_info=True)
+        return None
+
     def _on_play_pause_requested(self) -> None:
         """Route the focused play/pause hotkey through the media widget contract."""
         media_widget = self._resolve_media_widget_for_transport()
@@ -1503,6 +1534,82 @@ class DisplayWidget(QWidget):
             logger.info("[DISPLAY_WIDGET] Next-track hotkey handled successfully")
         else:
             logger.debug("[DISPLAY_WIDGET] Next-track hotkey was not handled by media widget")
+
+    def _on_slider_volume_up_requested(self) -> None:
+        """Route focused slider-volume-up through the Spotify volume widget contract."""
+        self._handle_slider_volume_step(+1, source="keyboard_up")
+
+    def _on_slider_volume_down_requested(self) -> None:
+        """Route focused slider-volume-down through the Spotify volume widget contract."""
+        self._handle_slider_volume_step(-1, source="keyboard_down")
+
+    def _handle_slider_volume_step(self, direction: int, *, source: str) -> None:
+        volume_widget = self._resolve_volume_widget_for_hotkeys()
+        if volume_widget is None:
+            logger.debug("[DISPLAY_WIDGET] Slider-volume hotkey ignored (%s, no volume widget)", source)
+            return
+        try:
+            handled = bool(volume_widget.handle_step(direction))
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Slider-volume hotkey dispatch failed", exc_info=True)
+            handled = False
+        if handled:
+            logger.info("[DISPLAY_WIDGET] Slider-volume hotkey handled successfully (%s)", source)
+        else:
+            logger.debug("[DISPLAY_WIDGET] Slider-volume hotkey was not handled (%s)", source)
+
+    def _on_global_volume_up_requested(self) -> None:
+        """Increase the system master volume by one shared keyboard step."""
+        self._handle_global_volume_step(+0.05, source="keyboard_pageup")
+
+    def _on_global_volume_down_requested(self) -> None:
+        """Decrease the system master volume by one shared keyboard step."""
+        self._handle_global_volume_step(-0.05, source="keyboard_pagedown")
+
+    def _handle_global_volume_step(self, delta: float, *, source: str) -> None:
+        try:
+            result = system_mute.step_volume(delta)
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Global volume hotkey dispatch failed", exc_info=True)
+            result = None
+        if result is None:
+            logger.debug("[DISPLAY_WIDGET] Global volume hotkey ignored (%s)", source)
+            return
+        logger.info("[DISPLAY_WIDGET] Global volume hotkey handled successfully (%s -> %.3f)", source, result)
+        self._refresh_mute_button_after_system_audio_change()
+
+    def _on_global_mute_toggle_requested(self) -> None:
+        """Toggle system mute through the mute-button/system-audio contract."""
+        mute_button = getattr(self, "mute_button_widget", None)
+        if mute_button is not None:
+            try:
+                handled = bool(mute_button.handle_click())
+            except Exception:
+                logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed via mute button", exc_info=True)
+                handled = False
+            if handled:
+                logger.info("[DISPLAY_WIDGET] Global mute hotkey handled via mute button")
+                return
+        try:
+            result = system_mute.toggle_mute()
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Global mute hotkey dispatch failed", exc_info=True)
+            result = None
+        if result is None:
+            logger.debug("[DISPLAY_WIDGET] Global mute hotkey ignored")
+            return
+        logger.info("[DISPLAY_WIDGET] Global mute hotkey handled directly")
+        self._refresh_mute_button_after_system_audio_change()
+
+    def _refresh_mute_button_after_system_audio_change(self) -> None:
+        """Refresh mute-button UI after keyboard-driven system audio changes."""
+        mute_button = getattr(self, "mute_button_widget", None)
+        if mute_button is None:
+            return
+        try:
+            mute_button.poll_mute_state()
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to refresh mute button after system audio change", exc_info=True)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         """Handle key press - delegate to InputHandler."""
