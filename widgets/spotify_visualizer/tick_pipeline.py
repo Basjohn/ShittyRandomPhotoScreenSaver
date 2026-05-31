@@ -677,6 +677,7 @@ def push_gpu_frame(
     extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
 
     first_frame_probe_key = None
+    primer_problems: list[str] = []
     if first_frame:
         first_frame_probe_key = (
             str(mode_str or "unknown"),
@@ -694,6 +695,13 @@ def push_gpu_frame(
                 except Exception:
                     logger.debug("[SPOTIFY_VIS] Failed to log render state before first overlay push", exc_info=True)
             widget._first_overlay_push_probe_key = first_frame_probe_key
+        primer_problems = _collect_first_frame_primer_problems(widget, parent, mode_str)
+        if primer_problems and is_viz_logging_enabled():
+            logger.info(
+                "[SPOTIFY_VIS][FIRST_FRAME_PRIMER] mode=%s problems=%s",
+                mode_str,
+                ",".join(primer_problems),
+            )
 
     if (
         mode_str == 'sine_wave'
@@ -720,13 +728,15 @@ def push_gpu_frame(
 
     border_width_px = float(widget._border_width)
 
+    effective_fade = 0.0 if primer_problems else fade
+
     used_gpu = parent.push_spotify_visualizer_frame(
         bars=list(widget._display_bars),
         bar_count=widget._bar_count,
         segments=widget._dynamic_bar_segments(),
         fill_color=widget._bar_fill_color,
         border_color=widget._bar_border_color,
-        fade=fade,
+        fade=effective_fade,
         playing=widget._spotify_playing,
         ghosting_enabled=widget._ghosting_enabled,
         ghost_alpha=widget._ghost_alpha,
@@ -742,7 +752,7 @@ def push_gpu_frame(
     if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
 
-    if first_frame and used_gpu:
+    if first_frame and used_gpu and not primer_problems:
         log_render = getattr(widget, "_log_active_render_state_snapshot", None)
         if callable(log_render):
             try:
@@ -752,8 +762,6 @@ def push_gpu_frame(
         _warn_on_first_frame_guard_mismatch(widget, parent)
 
     if used_gpu:
-        widget._has_pushed_first_frame = True
-        widget._first_overlay_push_probe_key = None
         try:
             if current_geom is None:
                 current_geom = widget.geometry()
@@ -764,8 +772,40 @@ def push_gpu_frame(
         # Card/background/shadow still repaint via stylesheet
         if need_card_update:
             widget.update()
-        widget._on_first_frame_after_cold_start()
+        if not primer_problems:
+            widget._has_pushed_first_frame = True
+            widget._first_overlay_push_probe_key = None
+            widget._on_first_frame_after_cold_start()
     return used_gpu
+
+
+def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) -> list[str]:
+    """Return stale pre-push overlay state that requires a hidden priming push."""
+    overlay = getattr(parent, "_spotify_bars_overlay", None) if parent is not None else None
+    if overlay is None:
+        return []
+
+    problems: list[str] = []
+    mode_key = str(mode or "unknown").lower()
+    overlay_mode = str(getattr(overlay, "_vis_mode", "") or "").lower()
+    overlay_activation = getattr(overlay, "_activation_id", None)
+    overlay_generation = getattr(overlay, "_engine_generation", None)
+    display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
+    display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
+
+    if overlay_mode and overlay_mode != mode_key:
+        problems.append("overlay_mode_stale")
+
+    pending_mode_resets = getattr(overlay, "_pending_mode_resets", None)
+    if pending_mode_resets and mode_key in set(pending_mode_resets):
+        problems.append("overlay_pending_mode_reset")
+
+    if display_source_generation >= 0 and overlay_generation != display_source_generation:
+        problems.append("overlay_generation_stale")
+    if display_source_activation >= 0 and overlay_activation != display_source_activation:
+        problems.append("overlay_activation_stale")
+
+    return problems
 
 
 def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:

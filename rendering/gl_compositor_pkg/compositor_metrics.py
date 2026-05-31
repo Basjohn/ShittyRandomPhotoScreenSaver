@@ -22,6 +22,30 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _get_stall_context(widget) -> dict | None:
+    try:
+        if hasattr(widget, "describe_stall_context"):
+            return widget.describe_stall_context()
+    except Exception:
+        return None
+    return None
+
+
+def _is_active_transition_paint_window(stall_context: dict | None) -> bool:
+    """Return True when transition paint cadence should still be active."""
+    if not isinstance(stall_context, dict):
+        return False
+
+    if stall_context.get("current_transition") or bool(stall_context.get("has_frame_state")):
+        return True
+
+    display_transition = stall_context.get("display_transition")
+    if not isinstance(display_transition, dict):
+        return False
+
+    return bool(display_transition.get("running")) or bool(display_transition.get("pending"))
+
+
 # ------------------------------------------------------------------
 # Animation metrics
 # ------------------------------------------------------------------
@@ -130,14 +154,10 @@ def record_paint_metrics(widget, paint_duration_ms: float) -> None:
         return
     dt_seconds = metrics.record(paint_duration_ms)
     now = time.time()
+    stall_context = _get_stall_context(widget)
+    active_transition_window = _is_active_transition_paint_window(stall_context)
     if paint_duration_ms > widget._paint_slow_threshold_ms:
-        if now - widget._paint_warning_last_ts > 0.5:
-            stall_context = None
-            try:
-                if hasattr(widget, "describe_stall_context"):
-                    stall_context = widget.describe_stall_context()
-            except Exception:
-                stall_context = None
+        if active_transition_window and now - widget._paint_warning_last_ts > 0.5:
             logger.warning(
                 "[PERF] [GL PAINT] Slow paintGL %.2fms (transition=%s context=%s)",
                 paint_duration_ms,
@@ -146,13 +166,7 @@ def record_paint_metrics(widget, paint_duration_ms: float) -> None:
             )
             widget._paint_warning_last_ts = now
     if dt_seconds is not None and dt_seconds * 1000.0 > 120.0:
-        if now - widget._paint_warning_last_ts > 0.5:
-            stall_context = None
-            try:
-                if hasattr(widget, "describe_stall_context"):
-                    stall_context = widget.describe_stall_context()
-            except Exception:
-                stall_context = None
+        if active_transition_window and now - widget._paint_warning_last_ts > 0.5:
             logger.warning(
                 "[PERF] [GL PAINT] Paint gap %.2fms (transition=%s context=%s)",
                 dt_seconds * 1000.0,

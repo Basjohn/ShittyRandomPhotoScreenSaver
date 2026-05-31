@@ -1,6 +1,6 @@
 # Logging Guide
 
-Last updated: 2026-05-24
+Last updated: 2026-05-31
 
 Operator-facing logging guide for SRPSS.
 
@@ -63,6 +63,11 @@ Legacy compatibility:
   - `--life --geo`
 - Cache/prefetch/prescale investigations:
   - `--perf --cache`
+
+## Perf Semantics
+- Transition-scoped perf warnings should describe active-cadence problems, not intentional idle time.
+- Recurring-timer `Large gap` warnings are meant for unexpected steady-runtime cadence loss; if a widget intentionally hands cadence to a different owner during transitions, the resumed dedicated timer should not be treated as a catastrophic gap by itself.
+- Compositor `Paint gap` warnings are transition-paint diagnostics. Once a transition has completed and the compositor is intentionally idle/paused, later base-frame paints should not inherit the old transition label.
 
 ## Guardrails
 - Do not reintroduce environment-variable activation for diagnostic families.

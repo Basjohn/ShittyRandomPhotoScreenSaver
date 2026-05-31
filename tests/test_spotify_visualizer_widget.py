@@ -846,6 +846,30 @@ class _FakeDisplayParent(QWidget):
         self.frames.clear()
 
 
+class _PrimingOverlay:
+    def __init__(self) -> None:
+        self._vis_mode = "spectrum"
+        self._activation_id = 1
+        self._engine_generation = 1
+        self._pending_mode_resets = {"bubble"}
+
+
+class _PrimingDisplayParent(QWidget):
+    def __init__(self) -> None:
+        super().__init__()
+        self._spotify_bars_overlay = _PrimingOverlay()
+        self.frames: list[dict[str, object]] = []
+
+    def push_spotify_visualizer_frame(self, *_, **kwargs):
+        self.frames.append(kwargs)
+        overlay = self._spotify_bars_overlay
+        overlay._vis_mode = str(kwargs.get("vis_mode", overlay._vis_mode))
+        overlay._activation_id = kwargs.get("activation_id")
+        overlay._engine_generation = kwargs.get("engine_generation")
+        overlay._pending_mode_resets.discard(overlay._vis_mode)
+        return True
+
+
 class _BubbleDispatchThreadManager:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
@@ -1019,7 +1043,8 @@ def test_mode_switch_requests_overlay_reset_after_target_mode_lands(qt_app, qtbo
     parent._spotify_bars_overlay.reset_requests.clear()
     widget.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
 
-    assert parent._spotify_bars_overlay is None
+    assert parent._spotify_bars_overlay is not None
+    assert parent._spotify_bars_overlay.reset_requests == ["oscilloscope"]
     assert widget._vis_mode is VisualizerMode.OSCILLOSCOPE
     assert widget._waiting_for_fresh_engine_frame is True
 
@@ -2299,6 +2324,48 @@ def test_before_first_overlay_push_logs_once_per_source_signature(qt_app, qtbot)
 
     assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is False
     assert reasons == ["before_first_overlay_push", "before_first_overlay_push"]
+
+
+@pytest.mark.qt
+def test_first_frame_uses_hidden_primer_until_overlay_matches_current_activation(qt_app, qtbot):
+    parent = _PrimingDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    widget._display_bars = [0.35] * 6
+    widget._display_bars_source_generation = 12
+    widget._display_bars_source_activation = 34
+    widget._pending_engine_generation = 12
+    widget._pending_engine_activation_id = 34
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    reasons: list[str] = []
+
+    def _capture_render_state(*, reason: str):
+        reasons.append(reason)
+
+    widget._log_active_render_state_snapshot = _capture_render_state  # type: ignore[method-assign]
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is True
+    assert parent.frames[0]["fade"] == pytest.approx(0.0)
+    assert widget._has_pushed_first_frame is False
+    assert widget._waiting_for_fresh_frame is True
+    assert reasons == ["before_first_overlay_push"]
+
+    parent._spotify_bars_overlay._vis_mode = "bubble"
+    parent._spotify_bars_overlay._activation_id = 34
+    parent._spotify_bars_overlay._engine_generation = 12
+    parent._spotify_bars_overlay._pending_mode_resets.clear()
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is True
+    assert widget._has_pushed_first_frame is True
+    assert widget._waiting_for_fresh_frame is False
+    assert reasons == ["before_first_overlay_push", "after_first_overlay_push"]
 
 
 @pytest.mark.qt

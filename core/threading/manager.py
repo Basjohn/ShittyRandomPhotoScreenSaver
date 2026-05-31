@@ -54,6 +54,63 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
     return context
 
 
+def _should_suppress_large_timer_gap_warning(
+    gap_ms: float,
+    interval_ms: int,
+    context: dict | None,
+) -> bool:
+    """Return True when a recurring-timer gap is expected by shared transition ownership.
+
+    The visualizer hands steady cadence to AnimationManager during transitions and
+    resumes its dedicated recurring timer afterward. That intentional handoff should
+    not be logged as a pathological UI-thread stall.
+    """
+    if not isinstance(context, dict):
+        return False
+
+    display_transition = context.get("display_transition")
+    if isinstance(display_transition, dict):
+        if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
+            return True
+
+    compositor = context.get("compositor")
+    if not isinstance(compositor, dict):
+        return False
+
+    if compositor.get("current_transition") or bool(compositor.get("has_frame_state")):
+        return True
+
+    render_strategy = compositor.get("render_strategy")
+    timer_state = None
+    if isinstance(render_strategy, dict):
+        timer = render_strategy.get("timer")
+        if isinstance(timer, dict):
+            timer_state = timer.get("state")
+
+    if not isinstance(display_transition, dict):
+        return False
+
+    last_transition = display_transition.get("last_transition")
+    idle_age = display_transition.get("idle_age")
+    try:
+        idle_age_ms = max(0.0, float(idle_age) * 1000.0) if idle_age is not None else None
+    except Exception:
+        idle_age_ms = None
+
+    # Suppress the first resumed dedicated-timer tick after a transition if most
+    # of the measured gap clearly belonged to the transition-owned cadence window.
+    if (
+        last_transition
+        and timer_state in {"PAUSED", "IDLE"}
+        and idle_age_ms is not None
+        and gap_ms > max(100.0, float(interval_ms) * 2.0)
+        and idle_age_ms <= min(500.0, gap_ms * 0.25)
+    ):
+        return True
+
+    return False
+
+
 # UI-thread invoker for reliable main thread dispatch
 class _UiInvoker(QObject):
     invoke = Signal(object, object, object)
@@ -670,13 +727,14 @@ class ThreadManager:
                     threshold_ms = max(100.0, float(interval_ms) * 2.0)
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
                         context = _describe_timer_callable_context(func)
-                        logger.warning(
-                            "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms context=%s)",
-                            timer_desc,
-                            gap_ms,
-                            interval_ms,
-                            context,
-                        )
+                        if not _should_suppress_large_timer_gap_warning(gap_ms, interval_ms, context):
+                            logger.warning(
+                                "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms context=%s)",
+                                timer_desc,
+                                gap_ms,
+                                interval_ms,
+                                context,
+                            )
                 _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))
             except Exception as e:

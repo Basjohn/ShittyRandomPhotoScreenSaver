@@ -33,9 +33,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Keep all multi-display-specific checks explicitly open even while single-display testing is the only runtime available; one 1440p display cannot validate the real stagger/desync contract or clear same-instant sibling-display pressure.
   - [ ] Confirm the global display-level image handoff stagger plus the broadened compositor-side desync are both active for the transition families that matter in real use, not just crossfade.
   - [ ] Verify the broadened desync remains imperceptible to users while reducing same-instant multi-display start overhead.
-  - [ ] Check for any remaining shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls that still drag frame pacing below the earlier same-day baseline.
-  - [ ] Use the current perf evidence as the baseline for this audit: startup shader-pipeline init, shared main-thread stalls, and cross-transition `Paint gap` / timing-drift patterns still point at CPU/main-thread churn before GPU shader cost.
-  - [ ] Use the current single-display runs only for the parts they can genuinely prove: whether the shared main-thread stall signature still exists even without sibling displays, whether one-display transitions still starve visualizer/input cadence, and whether first-use transition prep remains too visible on cold start.
+  - [ ] Re-check for any real shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls once multi-display runtime is available again; the latest single-display run no longer shows the earlier alarming `Paint gap` / multi-second timer-gap pattern.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
 
 - [ ] Validate hidden/quiescent deferred transition warmup against fresh runtime startup/transition logs.
@@ -96,6 +94,15 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Treat future left/right edge resize as a separate horizontal content-budget gesture only; it may widen/narrow text budgets/padding but must not replace the overall size contract.
   - [ ] When that work starts, extend the canonical CUSTOM resize seam instead of adding widget-local alternate resize paths.
 
+- [ ] Add the focused runtime hotkeys through the shared input contract.
+  - [ ] `Up` should route to the same mixer/slider volume-up behavior as the scroll wheel.
+  - [ ] `Down` should route to the same mixer/slider volume-down behavior as the scroll wheel.
+  - [ ] `PgUp` should route to global volume up.
+  - [ ] `PgDn` should route to global volume down.
+  - [ ] `Home` should route to play/pause.
+  - [ ] `End` should route to global mute toggle.
+  - [ ] Keep all of them on the existing focused-hotkey/input-routing seam instead of adding widget-local handlers.
+
 ## Watchlist
 - Non-`Custom` authored stacking is now explicit opt-in and must stay default-off until a future re-audit proves the planner respects real authored screenshots plus `--geo` traces.
   - Latest bad evidence showed left-column layouts preserving dead air while still pushing `gmail` too low, and right-column layouts pulling `media` far upward from authored bottom-right, which in turn dragged the media-relative visualizer with it.
@@ -105,7 +112,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - preserve CLEAR-then-APPLY semantics,
   - do not reintroduce a second post-overlay merge phase,
   - do not reintroduce entry-point-specific fallback behavior for visualizer settings.
-- Visualizer first-frame / first-bar authority remains a cold watch item, not active implementation work, unless one of the audits above exposes a concrete regression path touching it.
+- Visualizer first-frame / first-bar authority is back to watch-item status after the hidden-primer fix and the latest clean logs; reopen it only if runtime reports or new logs show a concrete regression path.
 
 ## Deferred / Not Active
 - Parallelism policy stays profiling-driven if performance work is reopened:

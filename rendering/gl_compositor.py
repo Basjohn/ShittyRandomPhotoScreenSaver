@@ -855,6 +855,7 @@ class GLCompositorWidget(QOpenGLWidget):
             self._profiler.complete(name, viewport_size=(self.width(), self.height()))
             self._stop_frame_pacing()
             self._finalize_animation_metrics(outcome="complete")
+            self._finalize_paint_metrics(outcome="complete")
             if release_textures:
                 try:
                     self._release_transition_textures()

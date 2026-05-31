@@ -12,6 +12,7 @@ Tests the centralized threading functionality including:
 import threading
 import time
 import pytest
+from core.threading.manager import _should_suppress_large_timer_gap_warning
 
 from core.threading.manager import (
     ThreadManager,
@@ -629,6 +630,50 @@ class TestRecurringTimers:
         manager.shutdown()
 
         assert len(ticks) >= 1
+
+
+def test_large_timer_gap_warning_suppressed_during_transition_handoff():
+    context = {
+        "display_transition": {
+            "running": False,
+            "pending": False,
+            "last_transition": "GLCompositorRainDropsTransition",
+            "idle_age": 0.02,
+        },
+        "compositor": {
+            "current_transition": None,
+            "has_frame_state": False,
+            "render_strategy": {
+                "timer": {
+                    "state": "PAUSED",
+                }
+            },
+        },
+    }
+
+    assert _should_suppress_large_timer_gap_warning(7557.0, 16, context) is True
+
+
+def test_large_timer_gap_warning_not_suppressed_for_plain_idle_gap():
+    context = {
+        "display_transition": {
+            "running": False,
+            "pending": False,
+            "last_transition": "GLCompositorRainDropsTransition",
+            "idle_age": 1.8,
+        },
+        "compositor": {
+            "current_transition": None,
+            "has_frame_state": False,
+            "render_strategy": {
+                "timer": {
+                    "state": "RUNNING",
+                }
+            },
+        },
+    }
+
+    assert _should_suppress_large_timer_gap_warning(400.0, 16, context) is False
 
     @pytest.mark.qt_no_exception_capture
     def test_schedule_recurring_respects_description(self, qt_app):
