@@ -66,8 +66,10 @@ class FadeCoordinator:
     def request_fade(self, name: str, starter: Callable[[], None]) -> bool:
         """Request fade coordination for a widget.
         
-        If compositor ready and all participants registered, starts fade immediately.
-        Otherwise queues for later batch start.
+        Before compositor-ready, requests queue so startup participants can
+        reveal together once the first frame is real. After compositor-ready,
+        any widget that becomes genuinely ready for display should be allowed
+        to fade in immediately instead of waiting for unrelated participants.
         """
         # Auto-register if not already registered
         if name not in self._participants:
@@ -77,8 +79,10 @@ class FadeCoordinator:
         # Store locally for immediate check
         self._pending[name] = starter
         
-        # Check if we can start immediately (compositor ready + all participants)
-        if self._compositor_ready and len(self._pending) >= len(self._participants):
+        # After compositor-ready, a widget requesting fade is declaring itself
+        # ready for visible reveal. Start any queued reveals immediately rather
+        # than waiting for the full participant set.
+        if self._compositor_ready:
             self._start_all_fades()
             return True
         

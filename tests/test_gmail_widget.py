@@ -200,6 +200,55 @@ def test_gmail_no_auth_and_no_cache_does_not_request_fade(qt_app, monkeypatch):
         widget.cleanup()
 
 
+def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monkeypatch):
+    """Cached Gmail content may mark itself ready, but must not become visible early."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    class _FadeParent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.starters = []
+
+        def request_overlay_fade_sync(self, overlay_name, starter):
+            self.starters.append((overlay_name, starter))
+
+    parent = _FadeParent()
+    widget = GmailWidget(parent=parent)
+    show_calls = []
+    try:
+        cached = EmailMetadata(
+            id="cached_msg",
+            thread_id="cached_thread",
+            sender="Sender",
+            subject="Cached Subject",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=True,
+        )
+        monkeypatch.setattr(widget, "_load_email_cache", lambda: [cached])
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: None)
+        monkeypatch.setattr(widget, "_fetch_emails", lambda: False)
+        monkeypatch.setattr(widget, "show", lambda: show_calls.append("show"))
+
+        assert widget.isVisible() is False
+
+        widget._activate_impl()
+
+        assert widget._has_displayed_valid_data is True
+        assert [name for name, _ in parent.starters] == ["gmail"]
+        assert show_calls == []
+
+        parent.starters.pop(0)[1]()
+
+        assert show_calls
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
 def test_gmail_fetch_error_keeps_displayed_cache_visible(qt_app):
     """Fetch errors should not replace valid displayed mail with retry UI."""
     from datetime import datetime

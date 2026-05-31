@@ -235,7 +235,11 @@ def show_ctrl_cursor_hint(widget, pos, mode: str = "none") -> None:
 
         if should_move:
             widget._halo_last_local_pos = QPoint(local_point)
-            hint.move_to(local_point.x(), local_point.y())
+            hint.move_to(
+                local_point.x(),
+                local_point.y(),
+                immediate=(mode != "none" or halo_hidden),
+            )
 
         reset_halo_inactivity_timer(widget)
     else:

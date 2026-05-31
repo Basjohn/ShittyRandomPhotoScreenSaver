@@ -18,6 +18,42 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 logger = get_logger(__name__)
 
 
+def _describe_timer_callable_context(func: Callable) -> dict | None:
+    """Best-effort context for recurring-timer gap diagnostics."""
+    owner = getattr(func, "__self__", None)
+    if owner is None:
+        return None
+
+    context: Dict[str, Any] = {
+        "owner_type": owner.__class__.__name__,
+    }
+    try:
+        if hasattr(owner, "screen_index"):
+            context["screen_index"] = getattr(owner, "screen_index")
+    except Exception:
+        pass
+    try:
+        if hasattr(owner, "_vis_mode_str"):
+            context["vis_mode"] = getattr(owner, "_vis_mode_str")
+    except Exception:
+        pass
+    try:
+        if hasattr(owner, "_mode_transition_phase"):
+            context["vis_phase"] = getattr(owner, "_mode_transition_phase")
+    except Exception:
+        pass
+    try:
+        parent = owner.parent() if hasattr(owner, "parent") else None
+        if parent is not None and hasattr(parent, "get_transition_snapshot"):
+            context["display_transition"] = parent.get_transition_snapshot()
+        gl_compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
+        if gl_compositor is not None and hasattr(gl_compositor, "describe_stall_context"):
+            context["compositor"] = gl_compositor.describe_stall_context()
+    except Exception:
+        logger.debug("[THREADING] Failed to describe timer callable context", exc_info=True)
+    return context
+
+
 # UI-thread invoker for reliable main thread dispatch
 class _UiInvoker(QObject):
     invoke = Signal(object, object, object)
@@ -633,11 +669,13 @@ class ThreadManager:
                     # expected gaps that should not spam warnings.
                     threshold_ms = max(100.0, float(interval_ms) * 2.0)
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
+                        context = _describe_timer_callable_context(func)
                         logger.warning(
-                            "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms)",
+                            "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms context=%s)",
                             timer_desc,
                             gap_ms,
                             interval_ms,
+                            context,
                         )
                 _last_invoke_ts[0] = now
                 func(*args, **(kwargs or {}))

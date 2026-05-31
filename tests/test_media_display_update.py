@@ -128,8 +128,14 @@ class _StubMediaWidget:
     def _decode_artwork_pixmap(self, _artwork):
         return None
 
+    def painted_frame_shadow_card_shrink(self):
+        return (0, 0)
+
     def parent(self):
         return None
+
+    def parentWidget(self):
+        return self.parent()
 
 
 def test_handle_no_media_keeps_retained_snapshot_visible():
@@ -196,3 +202,35 @@ def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
     assert widget.notify_calls == 1
     assert widget._telemetry_last_visibility is True
     assert widget._emitted and widget._emitted[-1] is live_info
+
+
+def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
+    widget = _StubMediaWidget()
+    widget._has_seen_first_track = False
+
+    starters = []
+
+    class _FadeParent:
+        def request_overlay_fade_sync(self, overlay_name, starter):
+            starters.append((overlay_name, starter))
+
+    widget.parent = lambda: _FadeParent()
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+
+    live_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PLAYING,
+    )
+
+    display_update.update_display(widget, live_info)
+
+    assert widget.hide_called is True
+    assert widget.fade_in_calls == 0
+    assert [name for name, _ in starters] == ["media"]
+
+    starters.pop(0)[1]()
+
+    assert widget.fade_in_calls == 1
+    assert widget.notify_calls == 1

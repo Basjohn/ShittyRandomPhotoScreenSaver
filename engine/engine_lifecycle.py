@@ -244,6 +244,24 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
                         stats.get('hit_rate_percent', 0.0),
                         stats.get('evictions', 0),
                     )
+                cache_flow = getattr(engine, "_cache_runtime_stats", None)
+                if isinstance(cache_flow, dict):
+                    logger.info(
+                        "[PERF] ImageCacheFlow: raw_hits=%d raw_misses=%d scaled_hits=%d "
+                        "scaled_misses=%d worker_fallbacks=%d scaled_prefetch_requests=%d "
+                        "scaled_prefetch_completed=%d scaled_derivations=%d "
+                        "prefetch_resume_scheduled=%d prefetch_resume_runs=%d",
+                        int(cache_flow.get("raw_hits", 0)),
+                        int(cache_flow.get("raw_misses", 0)),
+                        int(cache_flow.get("scaled_hits", 0)),
+                        int(cache_flow.get("scaled_misses", 0)),
+                        int(cache_flow.get("worker_fallbacks", 0)),
+                        int(cache_flow.get("scaled_prefetch_requests", 0)),
+                        int(cache_flow.get("scaled_prefetch_completed", 0)),
+                        int(cache_flow.get("scaled_derivations", 0)),
+                        int(cache_flow.get("prefetch_resume_scheduled", 0)),
+                        int(cache_flow.get("prefetch_resume_runs", 0)),
+                    )
             except Exception as e:
                 logger.debug("[PERF] ImageCache summary logging failed: %s", e, exc_info=True)
 

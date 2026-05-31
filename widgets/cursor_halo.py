@@ -18,7 +18,7 @@ import os
 import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPointF, QRectF, QElapsedTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, QElapsedTimer, QTimer
 from PySide6.QtGui import (
     QColor,
     QMouseEvent,
@@ -130,6 +130,9 @@ class CursorHaloWidget(QWidget):
         self._is_fading_out = False  # Track fade state to prevent interference
         self._last_perf_log_ts: float = 0.0
         self._perf_log_threshold_ms: float = HALO_PERF_LOG_MIN_MS
+        self._pending_move_pos: Optional[tuple[int, int]] = None
+        self._move_flush_scheduled: bool = False
+        self._last_global_move_pos: Optional[tuple[int, int]] = None
 
     def set_parent_widget(self, parent: QWidget) -> None:
         """Refresh the parent widget reference after display rebuilds."""
@@ -586,13 +589,35 @@ class CursorHaloWidget(QWidget):
         self._move_internal(x, y)
         self.show()
     
-    def move_to(self, x: int, y: int) -> None:
+    def move_to(self, x: int, y: int, *, immediate: bool = False) -> None:
         """Move the halo to be centered at the given local position.
         
         Args:
             x, y: Position in parent widget coordinates (will be mapped to global)
         """
-        self._move_internal(x, y)
+        if immediate:
+            self._pending_move_pos = None
+            self._move_flush_scheduled = False
+            self._move_internal(x, y)
+            return
+
+        self._pending_move_pos = (int(x), int(y))
+        if self._move_flush_scheduled:
+            return
+
+        self._move_flush_scheduled = True
+
+        def _flush() -> None:
+            if not Shiboken.isValid(self):
+                return
+            self._move_flush_scheduled = False
+            pending = self._pending_move_pos
+            self._pending_move_pos = None
+            if pending is None:
+                return
+            self._move_internal(pending[0], pending[1])
+
+        QTimer.singleShot(0, _flush)
 
     # --- Helpers ---------------------------------------------------------
 
@@ -631,6 +656,10 @@ class CursorHaloWidget(QWidget):
             global_x = x - size.width() // 2 - anchor_x
             global_y = y - size.height() // 2 - anchor_y
 
+        next_global = (int(global_x), int(global_y))
+        if self._last_global_move_pos == next_global:
+            return
+        self._last_global_move_pos = next_global
         self.move(global_x, global_y)
 
     def _paint_shadow_ring(self, painter: QPainter, cx: int, cy: int, r: int) -> None:

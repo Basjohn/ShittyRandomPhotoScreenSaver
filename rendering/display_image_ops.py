@@ -14,6 +14,7 @@ from typing import Optional, TYPE_CHECKING
 
 import weakref
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QPixmap
 
 try:
@@ -39,6 +40,93 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+def _complete_startup_first_frame_ready(widget, image_path: str, token: int) -> None:
+    """Mark the startup first frame as truly ready after a presentation flush."""
+    if int(getattr(widget, "_pending_startup_frame_token", 0)) != token:
+        return
+
+    setattr(widget, "_pending_startup_frame_image_path", None)
+    setattr(widget, "_pending_startup_frame_token", 0)
+
+    widget.current_image_path = image_path
+    widget._has_rendered_first_frame = True
+    widget._first_frame_committed_ts = time.monotonic()
+    widget._first_frame_committed_image_path = image_path
+
+    requested_ts = getattr(widget, "_startup_first_frame_requested_ts", None)
+    elapsed_ms = None
+    if isinstance(requested_ts, (int, float)):
+        try:
+            elapsed_ms = (time.monotonic() - float(requested_ts)) * 1000.0
+        except Exception:
+            elapsed_ms = None
+    widget._startup_first_frame_requested_ts = None
+
+    if is_perf_metrics_enabled() or is_verbose_logging():
+        logger.info(
+            "[STARTUP] First frame committed on screen=%s image=%s elapsed_ms=%s",
+            getattr(widget, "screen_index", "?"),
+            image_path,
+            f"{elapsed_ms:.2f}" if elapsed_ms is not None else "N/A",
+        )
+
+    widget.image_displayed.emit(image_path)
+    if hasattr(widget, "set_transition_work_pending"):
+        widget.set_transition_work_pending(False)
+
+
+def _schedule_startup_first_frame_ready(widget, image_path: str) -> None:
+    """Defer startup readiness until the first frame crosses a paint boundary.
+
+    On startup we previously emitted `image_displayed` immediately after
+    `update()`, which only queues a repaint. Under a busier host environment
+    that let overlay fade coordination outrun the actual first frame.
+    """
+    token = int(getattr(widget, "_pending_startup_frame_token", 0)) + 1
+    setattr(widget, "_pending_startup_frame_token", token)
+    setattr(widget, "_pending_startup_frame_image_path", image_path)
+    setattr(widget, "_startup_first_frame_requested_ts", time.monotonic())
+
+    if is_verbose_logging():
+        logger.debug(
+            "[STARTUP] Arming first-frame ready flush on screen=%s image=%s token=%s",
+            getattr(widget, "screen_index", "?"),
+            image_path,
+            token,
+        )
+
+    def _flush_presentation() -> None:
+        if int(getattr(widget, "_pending_startup_frame_token", 0)) != token:
+            return
+
+        comp = getattr(widget, "_gl_compositor", None)
+        try:
+            if isinstance(comp, GLCompositorWidget) and comp.isVisible():
+                comp.update()
+                comp.repaint()
+                if is_verbose_logging():
+                    logger.debug(
+                        "[STARTUP] Flushed first-frame via GL compositor on screen=%s token=%s",
+                        getattr(widget, "screen_index", "?"),
+                        token,
+                    )
+            else:
+                widget.update()
+                widget.repaint()
+                if is_verbose_logging():
+                    logger.debug(
+                        "[STARTUP] Flushed first-frame via base widget paint on screen=%s token=%s",
+                        getattr(widget, "screen_index", "?"),
+                        token,
+                    )
+        except Exception:
+            logger.debug("[STARTUP] First-frame presentation flush failed", exc_info=True)
+
+        QTimer.singleShot(0, lambda: _complete_startup_first_frame_ready(widget, image_path, token))
+
+    QTimer.singleShot(0, _flush_presentation)
 
 
 def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
@@ -302,11 +390,13 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
             logger.debug(f"Image displayed: {image_path} ({processed_pixmap.width()}x{processed_pixmap.height()})")
-            widget.current_image_path = image_path
-            widget.image_displayed.emit(image_path)
-            widget._has_rendered_first_frame = True
-            if hasattr(widget, "set_transition_work_pending"):
-                widget.set_transition_work_pending(False)
+            if widget._has_rendered_first_frame:
+                widget.current_image_path = image_path
+                widget.image_displayed.emit(image_path)
+                if hasattr(widget, "set_transition_work_pending"):
+                    widget.set_transition_work_pending(False)
+            else:
+                _schedule_startup_first_frame_ready(widget, image_path)
 
 def _on_transition_finished(
     widget,

@@ -57,7 +57,14 @@ class ImageQueue:
     - Statistics
     """
     
-    def __init__(self, shuffle: bool = True, history_size: int = 50, local_ratio: int = 60):
+    def __init__(
+        self,
+        shuffle: bool = True,
+        history_size: int = 50,
+        local_ratio: int = 60,
+        *,
+        _log_init: bool = True,
+    ):
         """
         Initialize image queue.
         
@@ -103,8 +110,12 @@ class ImageQueue:
         
         # FIX: Add thread safety with RLock (reentrant for same thread)
         self._lock = threading.RLock()
+        self._rng = random.Random()
         
-        logger.info(f"ImageQueue initialized (shuffle={shuffle}, history_size={history_size}, local_ratio={local_ratio}%)")
+        if _log_init:
+            logger.info(
+                f"ImageQueue initialized (shuffle={shuffle}, history_size={history_size}, local_ratio={local_ratio}%)"
+            )
     
     def add_images(self, images: List[ImageMetadata]) -> int:
         """
@@ -145,15 +156,15 @@ class ImageQueue:
             if self.shuffle_enabled:
                 if local_new:
                     shuffled_local = local_new.copy()
-                    random.shuffle(shuffled_local)
+                    self._rng.shuffle(shuffled_local)
                     self._local_queue.extend(shuffled_local)
                 if rss_new:
                     shuffled_rss = rss_new.copy()
-                    random.shuffle(shuffled_rss)
+                    self._rng.shuffle(shuffled_rss)
                     self._rss_queue.extend(shuffled_rss)
                 # Combined queue for backwards compatibility
                 shuffled = images.copy()
-                random.shuffle(shuffled)
+                self._rng.shuffle(shuffled)
                 self._queue.extend(shuffled)
             else:
                 self._local_queue.extend(local_new)
@@ -227,13 +238,13 @@ class ImageQueue:
         # This prevents the same few RSS images from appearing over and over
         if rss_pool_size < 5:
             # 90% chance to use local when RSS pool is tiny
-            return random.randint(0, 99) < 90
+            return self._rng.randint(0, 99) < 90
         elif rss_pool_size < 10:
             # 80% chance to use local when RSS pool is small
-            return random.randint(0, 99) < 80
+            return self._rng.randint(0, 99) < 80
         
         # Normal ratio-based selection
-        return random.randint(0, 99) < self._local_ratio
+        return self._rng.randint(0, 99) < self._local_ratio
     
     def _rebuild_local_queue(self) -> None:
         """Rebuild local queue from local images."""
@@ -241,7 +252,7 @@ class ImageQueue:
             return
         if self.shuffle_enabled:
             shuffled = self._local_images.copy()
-            random.shuffle(shuffled)
+            self._rng.shuffle(shuffled)
             self._local_queue.extend(shuffled)
         else:
             self._local_queue.extend(self._local_images)
@@ -253,7 +264,7 @@ class ImageQueue:
             return
         if self.shuffle_enabled:
             shuffled = self._rss_images.copy()
-            random.shuffle(shuffled)
+            self._rng.shuffle(shuffled)
             self._rss_queue.extend(shuffled)
         else:
             self._rss_queue.extend(self._rss_images)
@@ -553,6 +564,41 @@ class ImageQueue:
                 return []
             ql = list(self._queue)
             return ql[:min(count, len(ql))]
+
+    def preview_upcoming(self, count: int = 1) -> List[ImageMetadata]:
+        """Preview the next N images using the same mixed-source contract as next()."""
+        if count <= 0:
+            return []
+
+        with self._lock:
+            preview_queue = ImageQueue(
+                shuffle=self.shuffle_enabled,
+                history_size=self.history_size,
+                local_ratio=self._local_ratio,
+                _log_init=False,
+            )
+            preview_queue._local_images = list(self._local_images)
+            preview_queue._rss_images = list(self._rss_images)
+            preview_queue._local_queue = deque(self._local_queue)
+            preview_queue._rss_queue = deque(self._rss_queue)
+            preview_queue._images = list(self._images)
+            preview_queue._queue = deque(self._queue)
+            preview_queue._history = deque(self._history, maxlen=self.history_size)
+            preview_queue._current_image = self._current_image
+            preview_queue._current_index = self._current_index
+            preview_queue._wrap_count = self._wrap_count
+            preview_queue._local_count = self._local_count
+            preview_queue._rss_count = self._rss_count
+            preview_queue._last_rss_domain = self._last_rss_domain
+            preview_queue._rng.setstate(self._rng.getstate())
+
+        upcoming: List[ImageMetadata] = []
+        for _ in range(count):
+            image = preview_queue.next()
+            if image is None:
+                break
+            upcoming.append(image)
+        return upcoming
     
     def _rebuild_queue(self) -> None:
         """Rebuild queue from original image list."""
@@ -563,7 +609,7 @@ class ImageQueue:
         if self.shuffle_enabled:
             # Shuffle
             shuffled = self._images.copy()
-            random.shuffle(shuffled)
+            self._rng.shuffle(shuffled)
             self._queue.extend(shuffled)
         else:
             # Keep original order
@@ -581,7 +627,7 @@ class ImageQueue:
             
             # Convert to list, shuffle, rebuild deque
             queue_list = list(self._queue)
-            random.shuffle(queue_list)
+            self._rng.shuffle(queue_list)
             self._queue = deque(queue_list)
             
             logger.info(f"Queue shuffled ({len(self._queue)} images)")
@@ -607,7 +653,7 @@ class ImageQueue:
                 self._queue.clear()
                 
                 if enabled:
-                    random.shuffle(remaining)
+                    self._rng.shuffle(remaining)
                 
                 self._queue.extend(remaining)
                 logger.debug("Queue rebuilt with new shuffle setting")
@@ -635,6 +681,7 @@ class ImageQueue:
             # Reset ratio tracking
             self._local_count = 0
             self._rss_count = 0
+            self._last_rss_domain = ""
             
             logger.info(f"Queue cleared ({count} images removed)")
     

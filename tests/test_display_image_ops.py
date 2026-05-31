@@ -72,3 +72,106 @@ def test_ensure_spotify_bars_overlay_seeds_ctor_mode_from_visualizer(monkeypatch
 
     assert overlay is not None
     assert calls[0] == ("ctor", "devcurve")
+
+
+def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
+    scheduled = []
+
+    monkeypatch.setattr(
+        display_image_ops.QTimer,
+        "singleShot",
+        staticmethod(lambda delay_ms, callback: scheduled.append((delay_ms, callback))),
+    )
+
+    emitted = []
+    pending = []
+
+    class _FakeSignal:
+        def emit(self, value):
+            emitted.append(value)
+
+    class _FakeCompositor:
+        def __init__(self) -> None:
+            self.update_calls = 0
+            self.repaint_calls = 0
+
+        def isVisible(self) -> bool:
+            return True
+
+        def update(self) -> None:
+            self.update_calls += 1
+
+        def repaint(self) -> None:
+            self.repaint_calls += 1
+
+    monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
+
+    widget = SimpleNamespace(
+        screen_index=1,
+        _gl_compositor=_FakeCompositor(),
+        _has_rendered_first_frame=False,
+        image_displayed=_FakeSignal(),
+        current_image_path=None,
+        set_transition_work_pending=lambda value: pending.append(value),
+    )
+
+    display_image_ops._schedule_startup_first_frame_ready(widget, "first.png")
+
+    assert len(scheduled) == 1
+    scheduled.pop(0)[1]()
+
+    assert widget._gl_compositor.update_calls == 1
+    assert widget._gl_compositor.repaint_calls == 1
+    assert len(scheduled) == 1
+
+    scheduled.pop(0)[1]()
+
+    assert widget._has_rendered_first_frame is True
+    assert widget.current_image_path == "first.png"
+    assert isinstance(widget._first_frame_committed_ts, float)
+    assert widget._first_frame_committed_image_path == "first.png"
+    assert emitted == ["first.png"]
+    assert pending == [False]
+
+
+def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
+    scheduled = []
+
+    monkeypatch.setattr(
+        display_image_ops.QTimer,
+        "singleShot",
+        staticmethod(lambda delay_ms, callback: scheduled.append(callback)),
+    )
+
+    emitted = []
+
+    class _FakeSignal:
+        def emit(self, value):
+            emitted.append(value)
+
+    widget = SimpleNamespace(
+        screen_index=0,
+        _gl_compositor=None,
+        _has_rendered_first_frame=False,
+        image_displayed=_FakeSignal(),
+        current_image_path=None,
+        update=lambda: None,
+        repaint=lambda: None,
+        set_transition_work_pending=lambda value: None,
+    )
+
+    display_image_ops._schedule_startup_first_frame_ready(widget, "first.png")
+    first_flush = scheduled.pop(0)
+    display_image_ops._schedule_startup_first_frame_ready(widget, "second.png")
+    second_flush = scheduled.pop(0)
+
+    first_flush()
+    assert emitted == []
+
+    second_flush()
+    assert len(scheduled) == 1
+    scheduled.pop(0)()
+
+    assert emitted == ["second.png"]
+    assert widget.current_image_path == "second.png"
+    assert widget._first_frame_committed_image_path == "second.png"

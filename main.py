@@ -120,6 +120,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
     - --life - Enable widget/worker/engine lifecycle diagnostics
+    - --cache - Enable image-cache/prefetch/cache-authority diagnostics
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
@@ -129,7 +130,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "-devblob", "--devcurve",
     }
@@ -522,6 +523,7 @@ def main():
     geo_mode = '--geo' in sys.argv
     settings_trace_mode = '--set' in sys.argv
     lifecycle_mode = '--life' in sys.argv
+    cache_trace_mode = '--cache' in sys.argv
     viz_diag_mode = viz_mode or '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
     setup_logging(
         debug=debug_mode,
@@ -532,11 +534,12 @@ def main():
         geo=geo_mode,
         settings_trace=settings_trace_mode,
         lifecycle=lifecycle_mode,
+        cache_trace=cache_trace_mode,
     )
     if fresh_result is not None:
         fresh_log_dir, fresh_deleted = fresh_result
         logger.info(
-            "[FRESH] Cleared %s log files from %s before startup (worker logs preserved)",
+            "[FRESH] Cleared %s log files from %s before startup",
             fresh_deleted,
             fresh_log_dir,
         )

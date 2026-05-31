@@ -132,18 +132,32 @@ def record_paint_metrics(widget, paint_duration_ms: float) -> None:
     now = time.time()
     if paint_duration_ms > widget._paint_slow_threshold_ms:
         if now - widget._paint_warning_last_ts > 0.5:
+            stall_context = None
+            try:
+                if hasattr(widget, "describe_stall_context"):
+                    stall_context = widget.describe_stall_context()
+            except Exception:
+                stall_context = None
             logger.warning(
-                "[PERF] [GL PAINT] Slow paintGL %.2fms (transition=%s)",
+                "[PERF] [GL PAINT] Slow paintGL %.2fms (transition=%s context=%s)",
                 paint_duration_ms,
                 metrics.label,
+                stall_context,
             )
             widget._paint_warning_last_ts = now
     if dt_seconds is not None and dt_seconds * 1000.0 > 120.0:
         if now - widget._paint_warning_last_ts > 0.5:
+            stall_context = None
+            try:
+                if hasattr(widget, "describe_stall_context"):
+                    stall_context = widget.describe_stall_context()
+            except Exception:
+                stall_context = None
             logger.warning(
-                "[PERF] [GL PAINT] Paint gap %.2fms (transition=%s)",
+                "[PERF] [GL PAINT] Paint gap %.2fms (transition=%s context=%s)",
                 dt_seconds * 1000.0,
                 metrics.label,
+                stall_context,
             )
             widget._paint_warning_last_ts = now
 

@@ -29,6 +29,7 @@ Notes:
 | `--geo` | `screensaver_geometry.log` | Geometry, z-order, CUSTOM layout, and display-stack diagnostics. |
 | `--set` | `screensaver_settings.log` | Settings mutations, imports, schema normalization, and settings-binding traces. |
 | `--life` | `screensaver_lifecycle.log` | Widget, worker, and engine lifecycle/setup/teardown diagnostics. |
+| `--cache` | `screensaver_cache.log` | Image-cache authority, prefetch targeting, scaled warmup, and worker-fallback classification traces. |
 
 Legacy compatibility:
 - `--viz-diagnostics` and `--viz-diag` remain accepted aliases for extra visualizer diagnostics, but `--viz` is the preferred operator flag.
@@ -38,6 +39,9 @@ Legacy compatibility:
 - Diagnostic family flags are intentionally composable. Example:
   - `python main.py --debug --geo --life`
   - `python main.py --perf --viz`
+  - `python main.py --perf --cache`
+- `--fresh` means a genuinely clean slate for the resolved runtime log directory:
+  all existing log files there are deleted before the new launch starts logging.
 - Startup logs should advertise both:
   - the available specific logs
   - the specific logs active for the current run
@@ -57,6 +61,8 @@ Legacy compatibility:
   - `--viz --perf`
 - Startup/teardown/recreation regressions:
   - `--life --geo`
+- Cache/prefetch/prescale investigations:
+  - `--perf --cache`
 
 ## Guardrails
 - Do not reintroduce environment-variable activation for diagnostic families.

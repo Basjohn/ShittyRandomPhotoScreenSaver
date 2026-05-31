@@ -8,16 +8,29 @@ Image prefetcher built on ThreadManager and ImageCache.
 """
 from __future__ import annotations
 
-from typing import List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 import threading
 import time
-from PySide6.QtGui import QImage
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QImage, QPixmap
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_cache_logging_enabled,
+    is_perf_metrics_enabled,
+    is_verbose_logging,
+)
 from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
+from rendering.display_modes import DisplayMode
+from rendering.image_processor_async import AsyncImageProcessor
 from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
+
+
+def _cache_trace(message: str, *args: Any) -> None:
+    if is_cache_logging_enabled():
+        logger.info("[CACHE] " + message, *args)
 
 
 class ImagePrefetcher:
@@ -32,6 +45,9 @@ class ImagePrefetcher:
         self._cache = cache
         self._max_concurrent = max(1, int(max_concurrent))
         self._inflight: Set[str] = set()
+        self._scaled_inflight: Optional[str] = None
+        self._pending_scaled_requests: List[Dict[str, Any]] = []
+        self._pending_scaled_keys: Set[str] = set()
         self._lock = threading.Lock()
         # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
@@ -47,6 +63,10 @@ class ImagePrefetcher:
         if is_perf_metrics_enabled():
             logger.debug("[PERF] ImagePrefetcher: transition complete, delaying prefetch for %.0fms",
                         self._post_transition_delay_ms)
+        _cache_trace(
+            "Prefetcher transition cool-down armed delay_ms=%d",
+            self.get_post_transition_delay_ms(),
+        )
 
     def _is_in_post_transition_delay(self) -> bool:
         """Check if we're still within the post-transition delay window."""
@@ -69,8 +89,12 @@ class ImagePrefetcher:
         """Clear the inflight set. Call when sources change to avoid stale paths."""
         with self._lock:
             self._inflight.clear()
+            self._scaled_inflight = None
+            self._pending_scaled_requests.clear()
+            self._pending_scaled_keys.clear()
         if is_verbose_logging():
             logger.debug("Prefetcher inflight set cleared")
+        _cache_trace("Cleared inflight and pending scaled-prefetch state")
 
     def prefetch_paths(self, paths: List[str]) -> None:
         if not paths:
@@ -96,6 +120,30 @@ class ImagePrefetcher:
             self._submit_load(p)
             submitted += 1
 
+    def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> None:
+        """Queue scaled-variant warmup requests and process them one at a time."""
+        if not requests:
+            return
+
+        queued_any = False
+        with self._lock:
+            for request in requests:
+                cache_key = str(request.get("cache_key") or "")
+                raw_path = str(request.get("path") or "")
+                if not cache_key or not raw_path:
+                    continue
+                if self._cache.contains(cache_key):
+                    continue
+                if cache_key == self._scaled_inflight or cache_key in self._pending_scaled_keys:
+                    continue
+                self._pending_scaled_requests.append(dict(request))
+                self._pending_scaled_keys.add(cache_key)
+                queued_any = True
+
+        if queued_any:
+            _cache_trace("Registered scaled prefetch requests pending=%d", len(requests))
+            self._pump_scaled_prefetch()
+
     def _submit_load(self, path: str) -> None:
         # inflight is already marked by caller under lock
         from utils.image_loader import ImageLoader
@@ -112,6 +160,7 @@ class ImagePrefetcher:
                         self._cache.put(path, img)
                         if is_verbose_logging():
                             logger.debug(f"Prefetched and cached: {path}")
+                        self._pump_scaled_prefetch(preferred_path=path)
                     except Exception as e:
                         logger.debug("[MISC] Exception suppressed: %s", e)
             finally:
@@ -130,3 +179,119 @@ class ImagePrefetcher:
             logger.debug(f"Prefetch submit failed for {path}: {e}")
             with self._lock:
                 self._inflight.discard(path)
+
+    def _pump_scaled_prefetch(self, preferred_path: Optional[str] = None) -> None:
+        if self._is_in_post_transition_delay():
+            return
+
+        request: Optional[Dict[str, Any]] = None
+        with self._lock:
+            if self._scaled_inflight is not None or not self._pending_scaled_requests:
+                return
+
+            candidate_index: Optional[int] = None
+            if preferred_path:
+                for idx, pending in enumerate(self._pending_scaled_requests):
+                    if pending.get("path") == preferred_path and self._cache.contains(str(pending.get("path") or "")):
+                        candidate_index = idx
+                        break
+
+            if candidate_index is None:
+                for idx, pending in enumerate(self._pending_scaled_requests):
+                    if self._cache.contains(str(pending.get("path") or "")):
+                        candidate_index = idx
+                        break
+
+            if candidate_index is None:
+                return
+
+            request = self._pending_scaled_requests.pop(candidate_index)
+            cache_key = str(request.get("cache_key") or "")
+            self._pending_scaled_keys.discard(cache_key)
+            self._scaled_inflight = cache_key
+
+        if request is not None:
+            _cache_trace(
+                "Dispatching scaled prefetch path=%s key=%s pending_remaining=%d",
+                request.get("path"),
+                request.get("cache_key"),
+                len(self._pending_scaled_requests),
+            )
+
+        self._submit_scaled_request(request)
+
+    def _submit_scaled_request(self, request: Dict[str, Any]) -> None:
+        raw_path = str(request.get("path") or "")
+        cache_key = str(request.get("cache_key") or "")
+        width = int(request.get("width") or 0)
+        height = int(request.get("height") or 0)
+        display_mode = request.get("display_mode", DisplayMode.FILL)
+        if not isinstance(display_mode, DisplayMode):
+            display_mode = DisplayMode.from_string(str(display_mode))
+        use_lanczos = bool(request.get("use_lanczos", False))
+        sharpen = bool(request.get("sharpen", False))
+
+        def _compute_scaled_variant() -> Optional[tuple[str, QPixmap]]:
+            try:
+                base = self._cache.get(raw_path)
+                if isinstance(base, QPixmap) and not base.isNull():
+                    base = base.toImage()
+                if not isinstance(base, QImage) or base.isNull():
+                    return None
+                scaled = AsyncImageProcessor.process_qimage(
+                    base,
+                    QSize(width, height),
+                    display_mode,
+                    use_lanczos=use_lanczos,
+                    sharpen=sharpen,
+                )
+                if scaled.isNull():
+                    return None
+                pixmap = QPixmap.fromImage(scaled)
+                if pixmap.isNull():
+                    return None
+                return cache_key, pixmap
+            except Exception as e:
+                logger.debug("Scaled prefetch compute failed for %s: %s", cache_key, e)
+                return None
+
+        def _on_done(res) -> None:
+            try:
+                payload = res.result if res and res.success else None
+                if payload:
+                    key, pixmap = payload
+                    self._cache.put(key, pixmap)
+                    stats = request.get("stats")
+                    if isinstance(stats, dict):
+                        stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1
+                    if is_perf_metrics_enabled():
+                        logger.info(
+                            "[PERF] [PREFETCH] Cached scaled variant %s (%dx%d, mode=%s)",
+                            key,
+                            width,
+                            height,
+                            display_mode.value,
+                        )
+                    _cache_trace(
+                        "Scaled prefetch completed key=%s target=%dx%d mode=%s",
+                        key,
+                        width,
+                        height,
+                        display_mode.value,
+                    )
+            finally:
+                with self._lock:
+                    self._scaled_inflight = None
+                self._pump_scaled_prefetch()
+
+        try:
+            self._threads.submit_compute_task(
+                _compute_scaled_variant,
+                priority=TaskPriority.LOW,
+                callback=_on_done,
+            )
+        except Exception as e:
+            logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
+            with self._lock:
+                self._scaled_inflight = None
+            self._pump_scaled_prefetch()

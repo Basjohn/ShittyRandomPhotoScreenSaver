@@ -453,7 +453,12 @@ class AdaptiveRenderStrategyManager:
                 self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
             result = self._timer.start()
         if is_perf_metrics_enabled():
-            logger.info("[PERF][ADAPTIVE_TIMER] manager_start result=%s state=%s", result, self.describe_state())
+            logger.info(
+                "[PERF][ADAPTIVE_TIMER] manager_start result=%s state=%s compositor=%s",
+                result,
+                self.describe_state(),
+                self._describe_compositor_state(),
+            )
         return result
     
     def pause(self) -> None:
@@ -462,7 +467,11 @@ class AdaptiveRenderStrategyManager:
             if self._timer is not None:
                 self._timer.pause()
         if is_perf_metrics_enabled():
-            logger.info("[PERF][ADAPTIVE_TIMER] manager_paused state=%s", self.describe_state())
+            logger.info(
+                "[PERF][ADAPTIVE_TIMER] manager_paused state=%s compositor=%s",
+                self.describe_state(),
+                self._describe_compositor_state(),
+            )
     
     def resume(self) -> None:
         """Resume timer for new transition."""
@@ -470,7 +479,11 @@ class AdaptiveRenderStrategyManager:
             if self._timer is not None:
                 self._timer.resume()
         if is_perf_metrics_enabled():
-            logger.info("[PERF][ADAPTIVE_TIMER] manager_resumed state=%s", self.describe_state())
+            logger.info(
+                "[PERF][ADAPTIVE_TIMER] manager_resumed state=%s compositor=%s",
+                self.describe_state(),
+                self._describe_compositor_state(),
+            )
     
     def stop(self) -> None:
         """Stop timer permanently."""
@@ -481,7 +494,11 @@ class AdaptiveRenderStrategyManager:
                 self._timer.stop()
                 self._timer = None
         if is_perf_metrics_enabled():
-            logger.info("[PERF][ADAPTIVE_TIMER] manager_stopped state=%s", self.describe_state())
+            logger.info(
+                "[PERF][ADAPTIVE_TIMER] manager_stopped state=%s compositor=%s",
+                self.describe_state(),
+                self._describe_compositor_state(),
+            )
     
     def request_frame(self) -> None:
         """Request immediate frame."""
@@ -503,3 +520,14 @@ class AdaptiveRenderStrategyManager:
             "config": config_snapshot,
             "timer": timer_state,
         }
+
+    def _describe_compositor_state(self) -> dict | None:
+        """Best-effort compositor context for timer state transitions."""
+        try:
+            if hasattr(self._compositor, "describe_stall_context"):
+                return self._compositor.describe_stall_context()
+            if hasattr(self._compositor, "describe_state"):
+                return self._compositor.describe_state()
+        except Exception:
+            logger.debug("[ADAPTIVE_TIMER] Failed to describe compositor state", exc_info=True)
+        return None

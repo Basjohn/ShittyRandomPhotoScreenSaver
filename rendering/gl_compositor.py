@@ -380,6 +380,20 @@ class GLCompositorWidget(QOpenGLWidget):
             "render_strategy": strategy_state,
         }
 
+    def describe_stall_context(self) -> dict:
+        """Return shared context for paint-gap / timer-stall diagnostics."""
+        context = self.describe_state()
+        parent_snapshot = None
+        try:
+            parent = self.parent()
+            if parent is not None and hasattr(parent, "get_transition_snapshot"):
+                parent_snapshot = parent.get_transition_snapshot()
+        except Exception as exc:
+            logger.debug("[GL COMPOSITOR] Parent transition snapshot failed: %s", exc)
+        if parent_snapshot is not None:
+            context["display_transition"] = parent_snapshot
+        return context
+
     def stop_rendering(self, reason: str = "unspecified") -> None:
         """Stop timers/animations driving this compositor."""
         if is_perf_metrics_enabled():

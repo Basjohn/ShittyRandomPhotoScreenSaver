@@ -11,6 +11,7 @@ Verifies that:
 import pytest
 import logging
 from core.logging.logger import (
+    CacheLogFilter,
     NonPerfFilter,
     NonSpotifyFilter,
     PerfLogFilter,
@@ -130,6 +131,33 @@ def test_perf_log_filter_accepts_only_perf():
     
     # Only PERF record should pass
     assert filter_obj.filter(perf_record) is True
+    assert filter_obj.filter(normal_record) is False
+
+
+def test_cache_log_filter_accepts_only_cache_tagged_records():
+    filter_obj = CacheLogFilter()
+
+    cache_record = logging.LogRecord(
+        name="engine.image_pipeline",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="[CACHE] Worker fallback reason=scaled_miss",
+        args=(),
+        exc_info=None,
+    )
+
+    normal_record = logging.LogRecord(
+        name="engine.image_pipeline",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="ordinary pipeline message",
+        args=(),
+        exc_info=None,
+    )
+
+    assert filter_obj.filter(cache_record) is True
     assert filter_obj.filter(normal_record) is False
 
 

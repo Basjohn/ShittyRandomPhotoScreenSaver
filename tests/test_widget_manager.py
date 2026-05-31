@@ -556,6 +556,56 @@ class TestStartupCoordination:
         assert widget.begin_calls == 1
         assert widget.sync_calls == 0
 
+    def test_overlay_fade_request_tracks_pending_until_compositor_ready(self):
+        from rendering.widget_manager import WidgetManager
+
+        class _Signal:
+            def connect(self, _callback):
+                return None
+
+        parent = MagicMock()
+        parent.screen_index = 0
+        parent._has_rendered_first_frame = False
+        parent.image_displayed = _Signal()
+        parent._overlay_fade_pending = {}
+
+        manager = WidgetManager(parent)
+        manager.add_expected_overlay("weather")
+
+        calls = []
+        manager.request_overlay_fade_sync("weather", lambda: calls.append("started"))
+
+        assert calls == []
+        assert set(parent._overlay_fade_pending.keys()) == {"weather"}
+
+        manager._on_compositor_ready("first-image")
+
+        assert calls == ["started"]
+        assert parent._overlay_fade_pending == {}
+
+    def test_overlay_fade_request_after_compositor_ready_starts_immediately(self):
+        from rendering.widget_manager import WidgetManager
+
+        class _Signal:
+            def connect(self, _callback):
+                return None
+
+        parent = MagicMock()
+        parent.screen_index = 1
+        parent._has_rendered_first_frame = True
+        parent.image_displayed = _Signal()
+        parent._overlay_fade_pending = {}
+        parent._first_frame_committed_ts = time.monotonic() - 0.25
+
+        manager = WidgetManager(parent)
+        manager.add_expected_overlay("gmail")
+
+        calls = []
+        manager.request_overlay_fade_sync("gmail", lambda: calls.append("started"))
+
+        assert calls == ["started"]
+        assert parent._overlay_fade_pending == {}
+
     def test_reset_fade_coordination_clears_spotify_overlay_prewarm_flags(self):
         from rendering.widget_manager import WidgetManager
 

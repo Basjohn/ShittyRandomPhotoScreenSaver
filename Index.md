@@ -192,7 +192,8 @@ Living map of the current SRPSS codebase.
 | `--geo` | Geometry/z-order/CUSTOM-layout sidecar logs |
 | `--set` | Settings mutation/import/schema sidecar logs |
 | `--life` | Widget/worker/engine lifecycle sidecar logs |
+| `--cache` | Image-cache/prefetch/cache-authority sidecar logs |
 | `--viz-diagnostics`, `--viz-diag` | Legacy compatibility alias for extra visualizer diagnostics |
-| `--fresh` | Clear runtime logs at startup |
+| `--fresh` | Clear all resolved runtime log files at startup |
 | `-devblob` | Enable blob mode gate |
 | `--devcurve` | Compatibility no-op alias |

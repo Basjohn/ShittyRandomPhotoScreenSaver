@@ -23,6 +23,35 @@ def sample_images():
     return images
 
 
+@pytest.fixture
+def mixed_source_images():
+    """Create a mixed local/RSS image set for preview/selection parity tests."""
+    from pathlib import Path
+
+    images = []
+    for i in range(6):
+        images.append(
+            ImageMetadata(
+                source_type=ImageSourceType.FOLDER,
+                source_id=f"/test/folder{i}",
+                image_id=f"local_{i}",
+                local_path=Path(f"/test/local_{i}.jpg"),
+                title=f"Local {i}",
+            )
+        )
+    for i in range(6):
+        images.append(
+            ImageMetadata(
+                source_type=ImageSourceType.RSS,
+                source_id=f"https://feed{i % 3}.example.com/rss",
+                image_id=f"rss_{i}",
+                url=f"https://feed{i % 3}.example.com/image_{i}.jpg",
+                title=f"RSS {i}",
+            )
+        )
+    return images
+
+
 def test_image_queue_initialization():
     """Test image queue initialization."""
     queue = ImageQueue(shuffle=True, history_size=20)
@@ -248,6 +277,16 @@ def test_clear_queue(sample_images):
     assert queue.is_empty() is True
     assert queue.current() is None
     assert len(queue.get_history()) == 0
+
+
+def test_preview_upcoming_matches_next_for_mixed_source_mode(mixed_source_images):
+    queue = ImageQueue(shuffle=True, history_size=20, local_ratio=55)
+    queue.add_images(mixed_source_images)
+
+    previewed = queue.preview_upcoming(6)
+    advanced = [queue.next() for _ in range(len(previewed))]
+
+    assert [img.image_id for img in previewed] == [img.image_id for img in advanced]
 
 
 def test_set_images_replaces_all(sample_images):

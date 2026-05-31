@@ -150,6 +150,27 @@ def test_analog_clock_framed_metrics_keep_larger_outer_ring_margin_than_unframed
     assert framed_outer_margin > unframed_outer_margin
 
 
+def test_analog_clock_font_size_refreshes_minimum_footprint(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_display_mode("analog")
+
+    initial_min_width = clock.minimumWidth()
+    initial_min_height = clock.minimumHeight()
+
+    clock.set_font_size(24)
+
+    assert clock.minimumWidth() < initial_min_width
+    assert clock.minimumHeight() < initial_min_height
+    assert clock.minimumWidth() == max(160, int(clock._font_size * 4.5))
+    assert clock.minimumHeight() == int(clock.minimumWidth() * 1.3)
+
+
 def test_analog_clock_unframed_metrics_use_tighter_numeral_shadow_offset(qtbot):
     parent = QWidget()
     parent.resize(800, 600)

@@ -708,17 +708,7 @@ class ClockWidget(BaseOverlayWidget):
             return
         self._display_mode = mode_l
 
-        # Digital mode uses automatic text sizing; analogue mode prefers a
-        # square footprint based on font size.
-        if self._display_mode == "analog":
-            # Allocate a larger footprint for the analogue clock so the
-            # face, numerals, and below-clock timezone have room without
-            # clipping.
-            base_side = max(160, int(self._font_size * 4.5))
-            self.setMinimumWidth(base_side)
-            self.setMinimumHeight(int(base_side * 1.3))
-        else:
-            self.setMinimumSize(0, 0)
+        self._apply_display_mode_size_constraints()
 
         # Rebuild stylesheet for new mode (padding differs between digital/analog)
         self._update_stylesheet()
@@ -740,6 +730,21 @@ class ClockWidget(BaseOverlayWidget):
                 self._update_position()
             except Exception as e:
                 logger.debug("[CLOCK] Exception suppressed: %s", e)
+
+    def _apply_display_mode_size_constraints(self) -> None:
+        """Keep the widget footprint contract aligned with the current display mode.
+
+        Analogue clocks derive their face geometry from the live widget rect, so
+        any later font-size change must also refresh the minimum footprint.
+        Otherwise CUSTOM resize can shrink the numerals while the underlying
+        clock face refuses to contract to the same scale.
+        """
+        if self._display_mode == "analog":
+            base_side = max(160, int(self._font_size * 4.5))
+            self.setMinimumWidth(base_side)
+            self.setMinimumHeight(int(base_side * 1.3))
+            return
+        self.setMinimumSize(0, 0)
     
     def set_position(self, position: ClockPosition) -> None:
         """
@@ -811,6 +816,7 @@ class ClockWidget(BaseOverlayWidget):
         # Use bold weight for clock
         font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
         self.setFont(font)
+        self._apply_display_mode_size_constraints()
         # Invalidate analog clock face cache since numerals use this font size
         self._invalidate_clock_face_cache()
         # Update timezone label font

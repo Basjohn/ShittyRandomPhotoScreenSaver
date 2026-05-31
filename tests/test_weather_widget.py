@@ -349,6 +349,41 @@ def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, paren
     assert "scheduled" in calls
 
 
+def test_weather_cached_startup_stays_hidden_until_fade_starter_runs(qapp, monkeypatch):
+    class _FadeParent(QWidget):
+        def __init__(self):
+            super().__init__()
+            self.starters = []
+
+        def request_overlay_fade_sync(self, overlay_name, starter):
+            self.starters.append((overlay_name, starter))
+
+    parent = _FadeParent()
+    weather = WeatherWidget(parent=parent)
+    show_calls = []
+    mock_thread_manager = Mock()
+    weather.set_thread_manager(mock_thread_manager)
+    weather._cached_data = {"temperature": 20, "condition": "Clear", "location": "London"}
+    weather._cache_time = object()
+
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: None)  # type: ignore[method-assign]
+    monkeypatch.setattr(weather, "show", lambda: show_calls.append("show"))  # type: ignore[method-assign]
+
+    assert weather.isVisible() is False
+
+    weather.start()
+
+    assert weather._has_displayed_valid_data is True
+    assert [name for name, _ in parent.starters] == ["weather"]
+    assert show_calls == []
+
+    parent.starters.pop(0)[1]()
+
+    assert show_calls == ["show"]
+    weather.cleanup()
+    parent.deleteLater()
+
+
 def test_weather_error_handling(qapp, parent_widget):
     """Test weather error handling."""
     weather = WeatherWidget(parent=parent_widget)

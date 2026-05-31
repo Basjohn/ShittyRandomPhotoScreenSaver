@@ -9,7 +9,6 @@ import os
 import sys
 import tempfile
 import threading
-from fnmatch import fnmatch
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Optional
@@ -62,6 +61,7 @@ _VIZ_DIAGNOSTICS_ENABLED: bool = False
 _GEOMETRY_LOGGING_ENABLED: bool = False
 _SETTINGS_LOGGING_ENABLED: bool = False
 _LIFECYCLE_LOGGING_ENABLED: bool = False
+_CACHE_LOGGING_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
 # the general logging config file next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
@@ -572,6 +572,32 @@ class LifecycleLogFilter(logging.Filter):
         return any(token in msg for token in self._MESSAGE_TOKENS)
 
 
+class CacheLogFilter(logging.Filter):
+    """Filter for image-cache/prefetch/cache-authority diagnostics."""
+
+    _NAME_PREFIXES = (
+        "engine.image_pipeline",
+        "utils.image_prefetcher",
+    )
+    _MESSAGE_TOKENS = (
+        "[CACHE]",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        name = str(getattr(record, "name", "") or "")
+        if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            try:
+                msg = record.getMessage()
+            except Exception:
+                msg = str(record.msg)
+            return any(token in msg for token in self._MESSAGE_TOKENS)
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
 class DedicatedFamilySuppressFilter(logging.Filter):
     """Suppress INFO/DEBUG records from a family when its sidecar log is active."""
 
@@ -730,19 +756,21 @@ def _resolve_runtime_log_dir() -> Path:
 
 
 def clear_logs_for_fresh_start() -> tuple[Path, int]:
-    """Delete log-folder contents before startup, preserving worker logs.
+    """Delete all log files in the resolved runtime log directory before startup.
 
     Returns:
         tuple[path, deleted_count]: resolved log dir and number of deleted files
     """
     log_dir = _resolve_runtime_log_dir()
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
     deleted = 0
-    skip_patterns = ("worker_*.log",)
 
     for path in log_dir.iterdir():
         if not path.is_file():
-            continue
-        if any(fnmatch(path.name, pattern) for pattern in skip_patterns):
             continue
         try:
             path.unlink(missing_ok=True)
@@ -810,6 +838,7 @@ def setup_logging(
     geo: bool = False,
     settings_trace: bool = False,
     lifecycle: bool = False,
+    cache_trace: bool = False,
 ) -> None:
     """
     Configure application logging with file rotation.
@@ -826,9 +855,11 @@ def setup_logging(
         geo: Enables geometry/z-order/CUSTOM-layout sidecar diagnostics.
         settings_trace: Enables settings mutation/import/schema sidecar diagnostics.
         lifecycle: Enables widget/worker/engine lifecycle sidecar diagnostics.
+        cache_trace: Enables image-cache/prefetch/cache-authority sidecar diagnostics.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
+    global _CACHE_LOGGING_ENABLED
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
     debug_enabled = debug or verbose
@@ -884,6 +915,8 @@ def setup_logging(
         _SETTINGS_LOGGING_ENABLED = True
     if lifecycle:
         _LIFECYCLE_LOGGING_ENABLED = True
+    if cache_trace:
+        _CACHE_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     global _LOGGING_DISABLED
@@ -958,6 +991,7 @@ def setup_logging(
     main_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
     main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
@@ -980,6 +1014,7 @@ def setup_logging(
     console_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
     console_handler.addFilter(WidgetPerfVisibilityFilter())
     
     # Configure root logger
@@ -1080,6 +1115,19 @@ def setup_logging(
         lifecycle_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         lifecycle_handler.addFilter(LifecycleLogFilter())
         root_logger.addHandler(lifecycle_handler)
+
+    if _CACHE_LOGGING_ENABLED:
+        cache_log_file = log_dir / "screensaver_cache.log"
+        cache_handler = DeduplicatingRotatingFileHandler(
+            cache_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        cache_handler.setFormatter(formatter)
+        cache_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        cache_handler.addFilter(CacheLogFilter())
+        root_logger.addHandler(cache_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
@@ -1106,6 +1154,7 @@ def setup_logging(
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(GeometryLogFilter(), is_geometry_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
         root_logger.addHandler(verbose_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
@@ -1179,7 +1228,7 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
@@ -1187,9 +1236,10 @@ def setup_logging(
         _GEOMETRY_LOGGING_ENABLED,
         _SETTINGS_LOGGING_ENABLED,
         _LIFECYCLE_LOGGING_ENABLED,
+        _CACHE_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log"
+        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
@@ -1202,6 +1252,8 @@ def setup_logging(
         active_specific_logs.append("set=screensaver_settings.log")
     if _LIFECYCLE_LOGGING_ENABLED:
         active_specific_logs.append("life=screensaver_lifecycle.log")
+    if _CACHE_LOGGING_ENABLED:
+        active_specific_logs.append("cache=screensaver_cache.log")
     if active_specific_logs:
         root_logger.info("Specific logs active: %s", ", ".join(active_specific_logs))
     root_logger.info("=" * 60)
@@ -1416,3 +1468,9 @@ def is_lifecycle_logging_enabled() -> bool:
     """Return True when lifecycle diagnostics are enabled."""
 
     return _LIFECYCLE_LOGGING_ENABLED
+
+
+def is_cache_logging_enabled() -> bool:
+    """Return True when cache/prefetch diagnostics are enabled."""
+
+    return _CACHE_LOGGING_ENABLED

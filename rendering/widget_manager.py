@@ -249,6 +249,13 @@ class WidgetManager:
             # Check if parent already has rendered first frame
             if getattr(self._parent, "_has_rendered_first_frame", False):
                 self._compositor_ready = True
+                try:
+                    self._fade_coordinator.signal_compositor_ready()
+                except Exception:
+                    logger.debug(
+                        "[WIDGET_MANAGER] Failed to prime fade coordinator for already-ready compositor",
+                        exc_info=True,
+                    )
                 return
             
             # Connect to image_displayed signal
@@ -2087,8 +2094,71 @@ class WidgetManager:
             overlay_name: Name of the overlay requesting fade
             starter: Callback to start the fade animation
         """
-        self._fade_coordinator.request_fade(overlay_name, starter)
-        logger.debug("[FADE_COORD] %s fade request registered", overlay_name)
+        request_ts = time.monotonic()
+        screen_idx = getattr(self._parent, "screen_index", "?")
+        compositor_ready = bool(self._compositor_ready)
+
+        parent_pending = None
+        if self._parent is not None:
+            try:
+                parent_pending = getattr(self._parent, "_overlay_fade_pending", None)
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                parent_pending = None
+
+        def _starter_wrapper() -> None:
+            reveal_delay_ms = max(0.0, (time.monotonic() - request_ts) * 1000.0)
+            first_frame_delay_ms = None
+            if self._parent is not None:
+                try:
+                    committed_ts = getattr(self._parent, "_first_frame_committed_ts", None)
+                    if isinstance(committed_ts, (int, float)) and committed_ts > 0:
+                        first_frame_delay_ms = max(
+                            0.0,
+                            (time.monotonic() - float(committed_ts)) * 1000.0,
+                        )
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+            if isinstance(parent_pending, dict):
+                try:
+                    parent_pending.pop(overlay_name, None)
+                except Exception as e:
+                    logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+            logger.info(
+                "[LIFECYCLE] Overlay reveal starter running "
+                "(screen=%s, overlay=%s, queued_ms=%.2f, since_first_frame_ms=%s, compositor_ready=%s)",
+                screen_idx,
+                overlay_name,
+                reveal_delay_ms,
+                f"{first_frame_delay_ms:.2f}" if first_frame_delay_ms is not None else "N/A",
+                self._compositor_ready,
+            )
+            starter()
+
+        if isinstance(parent_pending, dict):
+            try:
+                parent_pending[overlay_name] = _starter_wrapper
+            except Exception as e:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+
+        logger.info(
+            "[LIFECYCLE] Overlay ready-for-display requested "
+            "(screen=%s, overlay=%s, compositor_ready=%s, expected=%s, pending_before=%d)",
+            screen_idx,
+            overlay_name,
+            compositor_ready,
+            sorted(self._expected_overlays),
+            len(self._fade_coordinator.describe().get("pending", [])),
+        )
+
+        started_immediately = self._fade_coordinator.request_fade(overlay_name, _starter_wrapper)
+        logger.debug(
+            "[FADE_COORD] %s fade request registered (started_immediately=%s)",
+            overlay_name,
+            started_immediately,
+        )
 
     def register_spotify_secondary_fade(self, starter: Callable[[], None]) -> None:
         """Register a Spotify second-wave fade to run after primary overlays."""

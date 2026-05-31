@@ -6,7 +6,7 @@ import main
 from core.logging import logger as logger_mod
 
 
-def test_clear_logs_for_fresh_start_preserves_worker_logs(
+def test_clear_logs_for_fresh_start_clears_all_log_files(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
@@ -27,9 +27,8 @@ def test_clear_logs_for_fresh_start_preserves_worker_logs(
     resolved_dir, deleted_count = logger_mod.clear_logs_for_fresh_start()
 
     assert resolved_dir == log_dir
-    assert deleted_count == 4
-    assert preserved.exists()
-    assert sorted(path.name for path in log_dir.iterdir()) == ["worker_media.log"]
+    assert deleted_count == 5
+    assert sorted(path.name for path in log_dir.iterdir()) == []
 
 
 def test_parse_screensaver_args_ignores_fresh_flag(monkeypatch) -> None:

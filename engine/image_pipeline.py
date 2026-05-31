@@ -7,13 +7,18 @@ to preserve the original interface.
 
 from __future__ import annotations
 
-from typing import Optional, Dict, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import time
 
 from PySide6.QtCore import QSize, QTimer
 from PySide6.QtGui import QPixmap, QImage
 
-from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
+from core.logging.logger import (
+    get_logger,
+    is_cache_logging_enabled,
+    is_perf_metrics_enabled,
+    is_verbose_logging,
+)
 from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_ASYNC
 from core.constants.timing import TRANSITION_STAGGER_MS
 from core.process.types import WorkerType, MessageType
@@ -28,22 +33,235 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _cache_trace(message: str, *args: Any) -> None:
+    if is_cache_logging_enabled():
+        logger.info("[CACHE] " + message, *args)
+
+
 # ------------------------------------------------------------------
 # Cache helpers
 # ------------------------------------------------------------------
+
+def _normalize_display_mode(display_mode: Any) -> DisplayMode:
+    if isinstance(display_mode, DisplayMode):
+        return display_mode
+    return DisplayMode.from_string(str(display_mode or DisplayMode.FILL.value))
+
+
+def _build_scaled_cache_key(
+    image_path: str,
+    target_width: int,
+    target_height: int,
+    display_mode: DisplayMode,
+    use_lanczos: bool,
+    sharpen: bool,
+) -> str:
+    mode = _normalize_display_mode(display_mode)
+    return (
+        f"{image_path}|scaled:{mode.value}:{target_width}x{target_height}"
+        f":l{1 if use_lanczos else 0}:s{1 if sharpen else 0}"
+    )
+
+
+def _ensure_cache_runtime_stats(engine: ScreensaverEngine) -> Dict[str, int]:
+    stats = getattr(engine, "_cache_runtime_stats", None)
+    if isinstance(stats, dict):
+        return stats
+    stats = {
+        "raw_hits": 0,
+        "raw_misses": 0,
+        "scaled_hits": 0,
+        "scaled_misses": 0,
+        "worker_fallbacks": 0,
+        "prefetch_resume_scheduled": 0,
+        "prefetch_resume_runs": 0,
+        "scaled_prefetch_requests": 0,
+        "scaled_prefetch_completed": 0,
+        "scaled_derivations": 0,
+    }
+    setattr(engine, "_cache_runtime_stats", stats)
+    return stats
+
+
+def _bump_cache_runtime_stat(engine: ScreensaverEngine, key: str, amount: int = 1) -> None:
+    stats = _ensure_cache_runtime_stats(engine)
+    stats[key] = int(stats.get(key, 0)) + amount
+
+
+def _probe_cache(
+    engine: ScreensaverEngine,
+    cache_key: str,
+    *,
+    bucket: str,
+) -> Optional[QPixmap | QImage]:
+    cache = getattr(engine, "_image_cache", None)
+    if cache is None or not cache_key:
+        return None
+    cached = cache.get(cache_key)
+    if cached is None:
+        _bump_cache_runtime_stat(engine, f"{bucket}_misses")
+    else:
+        _bump_cache_runtime_stat(engine, f"{bucket}_hits")
+    return cached
+
+
+def _get_display_quality_settings(engine: ScreensaverEngine) -> tuple[bool, bool]:
+    use_lanczos = True
+    sharpen = False
+    if engine.settings_manager:
+        use_lanczos = SettingsManager.to_bool(
+            engine.settings_manager.get("display.use_lanczos", True),
+            True,
+        )
+        sharpen = SettingsManager.to_bool(
+            engine.settings_manager.get("display.sharpen_downscale", False),
+            False,
+        )
+    return use_lanczos, sharpen
+
+
+def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]]:
+    specs: List[Dict[str, Any]] = []
+    display_manager = getattr(engine, "display_manager", None)
+    displays = getattr(display_manager, "displays", None) or []
+    seen: set[tuple[int, int, str]] = set()
+    for display in displays:
+        try:
+            if hasattr(display, "get_target_size"):
+                target_size = display.get_target_size()
+            else:
+                dpr = getattr(display, "_device_pixel_ratio", 1.0)
+                target_size = QSize(
+                    int(display.width() * dpr),
+                    int(display.height() * dpr),
+                )
+            width = int(target_size.width())
+            height = int(target_size.height())
+            if width <= 0 or height <= 0:
+                continue
+            mode = _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL))
+            signature = (width, height, mode.value)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            specs.append(
+                {
+                    "width": width,
+                    "height": height,
+                    "display_mode": mode,
+                }
+            )
+        except Exception as e:
+            logger.debug("[PREFETCH] Failed to inspect display target size: %s", e)
+    return specs
+
+
+def _build_prefetch_scaled_requests(
+    engine: ScreensaverEngine,
+    paths: List[str],
+) -> List[Dict[str, Any]]:
+    cache = getattr(engine, "_image_cache", None)
+    if cache is None or not paths:
+        return []
+
+    use_lanczos, sharpen = _get_display_quality_settings(engine)
+    requests: List[Dict[str, Any]] = []
+    seen_keys: set[str] = set()
+    for path in paths:
+        for spec in _get_prefetch_target_specs(engine):
+            cache_key = _build_scaled_cache_key(
+                path,
+                spec["width"],
+                spec["height"],
+                spec["display_mode"],
+                use_lanczos,
+                sharpen,
+            )
+            if cache_key in seen_keys or cache.contains(cache_key):
+                continue
+            seen_keys.add(cache_key)
+            requests.append(
+                {
+                    "stats": _ensure_cache_runtime_stats(engine),
+                    "path": path,
+                    "cache_key": cache_key,
+                    "width": spec["width"],
+                    "height": spec["height"],
+                    "display_mode": spec["display_mode"],
+                    "use_lanczos": use_lanczos,
+                    "sharpen": sharpen,
+                }
+            )
+    if requests:
+        _cache_trace(
+            "Prepared scaled warmup requests count=%d unique_paths=%d",
+            len(requests),
+            len(paths),
+        )
+    return requests
+
+
+def _derive_scaled_pixmap_from_raw_cache(
+    engine: ScreensaverEngine,
+    image_path: str,
+    source_image: Optional[QImage],
+    target_size: QSize,
+    display_mode: DisplayMode,
+    use_lanczos: bool,
+    sharpen: bool,
+) -> Optional[QPixmap]:
+    if source_image is None or source_image.isNull():
+        return None
+    scaled_qimage = AsyncImageProcessor.process_qimage(
+        source_image,
+        target_size,
+        display_mode,
+        use_lanczos=use_lanczos,
+        sharpen=sharpen,
+    )
+    if scaled_qimage.isNull():
+        return None
+    scaled_pixmap = QPixmap.fromImage(scaled_qimage)
+    if scaled_pixmap.isNull():
+        return None
+    cache = getattr(engine, "_image_cache", None)
+    if cache is not None:
+        scaled_key = _build_scaled_cache_key(
+            image_path,
+            target_size.width(),
+            target_size.height(),
+            display_mode,
+            use_lanczos,
+            sharpen,
+        )
+        cache.put(scaled_key, scaled_pixmap)
+    _bump_cache_runtime_stat(engine, "scaled_derivations")
+    _cache_trace(
+        "Derived scaled variant from raw cache path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
+        image_path,
+        target_size.width(),
+        target_size.height(),
+        display_mode.value,
+        int(use_lanczos),
+        int(sharpen),
+    )
+    return scaled_pixmap
 
 def _get_cached_pixmap_variants(
     engine: ScreensaverEngine,
     image_path: str,
     target_width: int,
     target_height: int,
+    display_mode: DisplayMode,
+    use_lanczos: bool,
+    sharpen: bool,
 ) -> tuple[Optional[QPixmap], Optional[QPixmap]]:
     """Return cached processed/original pixmaps when available.
 
     The async display path historically ignored the pre-scaled cache variants and
     always paid ImageWorker prescale cost on image change. This helper keeps one
     cache contract for both the sync and async paths:
-    - prefer `path|scaled:WxH` for the processed pixmap
+    - prefer the display-ready scaled cache key for the processed pixmap
     - fall back to the raw-path cached image for the original pixmap
     """
     cache = getattr(engine, "_image_cache", None)
@@ -52,17 +270,26 @@ def _get_cached_pixmap_variants(
 
     processed_pixmap: Optional[QPixmap] = None
     original_pixmap: Optional[QPixmap] = None
-    scaled_key = f"{image_path}|scaled:{target_width}x{target_height}"
+    scaled_key = _build_scaled_cache_key(
+        image_path,
+        target_width,
+        target_height,
+        display_mode,
+        use_lanczos,
+        sharpen,
+    )
 
     def _coerce_cached_pixmap(cache_key: str) -> Optional[QPixmap]:
-        cached = cache.get(cache_key)
+        bucket = "scaled" if cache_key == scaled_key else "raw"
+        cached = _probe_cache(engine, cache_key, bucket=bucket)
         if isinstance(cached, QPixmap) and not cached.isNull():
             return cached
         if isinstance(cached, QImage) and not cached.isNull():
             try:
                 pm = QPixmap.fromImage(cached)
                 if not pm.isNull():
-                    cache.put(cache_key, pm)
+                    if cache_key == scaled_key:
+                        cache.put(cache_key, pm)
                     return pm
             except Exception as e:
                 logger.debug("[ASYNC] Failed to convert cached QImage for %s: %s", cache_key, e)
@@ -70,6 +297,27 @@ def _get_cached_pixmap_variants(
 
     processed_pixmap = _coerce_cached_pixmap(scaled_key)
     original_pixmap = _coerce_cached_pixmap(image_path)
+
+    if processed_pixmap is not None:
+        _cache_trace(
+            "Scaled cache hit path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
+            image_path,
+            target_width,
+            target_height,
+            display_mode.value,
+            int(use_lanczos),
+            int(sharpen),
+        )
+    else:
+        _cache_trace(
+            "Scaled cache miss path=%s target=%dx%d mode=%s lanczos=%s sharpen=%s",
+            image_path,
+            target_width,
+            target_height,
+            display_mode.value,
+            int(use_lanczos),
+            int(sharpen),
+        )
 
     if processed_pixmap is not None and original_pixmap is None:
         original_pixmap = processed_pixmap
@@ -238,9 +486,22 @@ def load_image_task(
             # Prefer a pre-scaled variant for this display if present
             try:
                 size = preferred_size or engine._get_primary_display_size()
+                use_lanczos, sharpen = _get_display_quality_settings(engine)
+                display_mode = _normalize_display_mode(
+                    engine.settings_manager.get("display.mode", DisplayMode.FILL.value)
+                    if engine.settings_manager
+                    else DisplayMode.FILL
+                )
                 if size:
                     w, h = size
-                    scaled_key = f"{image_path}|scaled:{w}x{h}"
+                    scaled_key = _build_scaled_cache_key(
+                        image_path,
+                        w,
+                        h,
+                        display_mode,
+                        use_lanczos,
+                        sharpen,
+                    )
                     scaled_cached = engine._image_cache.get(scaled_key)
                     if isinstance(scaled_cached, QPixmap):
                         pixmap = scaled_cached
@@ -263,7 +524,6 @@ def load_image_task(
                     try:
                         pm = QPixmap.fromImage(cached)
                         if not pm.isNull():
-                            engine._image_cache.put(image_path, pm)
                             pixmap = pm
                             # Clear QImage reference to free memory (Section 1.1 fix)
                             cached = None
@@ -365,11 +625,7 @@ def load_and_display_image_async(
             display_list = engine.display_manager.displays if engine.display_manager else []
 
             # Get quality settings
-            sharpen = False
-            if engine.settings_manager:
-                sharpen = engine.settings_manager.get('display.sharpen_downscale', False)
-                if isinstance(sharpen, str):
-                    sharpen = sharpen.lower() == 'true'
+            use_lanczos, sharpen = _get_display_quality_settings(engine)
 
             for i, display in enumerate(display_list):
                 meta = image_metas[i] if i < len(image_metas) else image_metas[0]
@@ -421,21 +677,49 @@ def load_and_display_image_async(
                         )
 
                     # Get display mode
-                    display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
-                    display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
+                    display_mode = _normalize_display_mode(getattr(display, 'display_mode', DisplayMode.FILL))
+                    display_mode_str = display_mode.value
 
                     processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
                         engine,
                         img_path,
                         target_size.width(),
                         target_size.height(),
+                        display_mode,
+                        use_lanczos,
+                        sharpen,
                     )
 
                     if processed_pixmap is None or processed_pixmap.isNull():
-                        # Try ImageWorker (separate process, avoids GIL)
                         processed_qimage = None
+                        fallback_reason = "scaled_miss"
 
-                        if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                        if qimage is not None and not qimage.isNull():
+                            processed_pixmap = _derive_scaled_pixmap_from_raw_cache(
+                                engine,
+                                img_path,
+                                qimage,
+                                target_size,
+                                display_mode,
+                                use_lanczos,
+                                sharpen,
+                            )
+                            if processed_pixmap is not None:
+                                fallback_reason = "derived_from_raw_cache"
+
+                        if processed_pixmap is None and engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                            _bump_cache_runtime_stat(engine, "worker_fallbacks")
+                            raw_state = "raw_cached" if qimage is not None and not qimage.isNull() else "raw_missing"
+                            _cache_trace(
+                                "Worker fallback display=%d reason=%s raw_state=%s path=%s target=%dx%d mode=%s",
+                                i,
+                                fallback_reason,
+                                raw_state,
+                                img_path,
+                                target_size.width(),
+                                target_size.height(),
+                                display_mode_str,
+                            )
                             worker_qimage = load_image_via_worker(
                                 engine,
                                 img_path,
@@ -451,29 +735,56 @@ def load_and_display_image_async(
                             else:
                                 logger.warning(f"{TAG_ASYNC} ImageWorker failed for display {i}, skipping image")
                                 continue
-                        else:
+                        elif processed_pixmap is None:
                             if qimage is not None and not qimage.isNull():
+                                _cache_trace(
+                                    "Compute-thread scale fallback display=%d reason=raw_available_no_worker path=%s target=%dx%d mode=%s",
+                                    i,
+                                    img_path,
+                                    target_size.width(),
+                                    target_size.height(),
+                                    display_mode_str,
+                                )
                                 processed_qimage = AsyncImageProcessor.process_qimage(
                                     qimage,
                                     target_size,
                                     display_mode,
-                                    use_lanczos=False,
+                                    use_lanczos=use_lanczos,
                                     sharpen=sharpen,
                                 )
                             else:
                                 logger.warning(f"{TAG_ASYNC} No ImageWorker and no cache for display {i}, skipping")
                                 continue
 
-                        # Convert to QPixmap on worker thread (Qt 6 allows this)
-                        _conv_start = time.time()
-                        processed_pixmap = QPixmap.fromImage(processed_qimage)
-                        _conv_elapsed = (time.time() - _conv_start) * 1000
-                        if _conv_elapsed > 50 and is_perf_metrics_enabled():
-                            logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
-                        # Clear QImage reference to free memory (Section 1.1 fix)
-                        processed_qimage = None
+                        if processed_pixmap is None:
+                            # Convert to QPixmap on worker thread (Qt 6 allows this)
+                            _conv_start = time.time()
+                            processed_pixmap = QPixmap.fromImage(processed_qimage)
+                            _conv_elapsed = (time.time() - _conv_start) * 1000
+                            if _conv_elapsed > 50 and is_perf_metrics_enabled():
+                                logger.warning(f"[PERF] [ASYNC] QPixmap.fromImage took {_conv_elapsed:.1f}ms for display {i}")
+                            # Clear QImage reference to free memory (Section 1.1 fix)
+                            processed_qimage = None
+                            if engine._image_cache is not None and processed_pixmap is not None and not processed_pixmap.isNull():
+                                scaled_key = _build_scaled_cache_key(
+                                    img_path,
+                                    target_size.width(),
+                                    target_size.height(),
+                                    display_mode,
+                                    use_lanczos,
+                                    sharpen,
+                                )
+                                engine._image_cache.put(scaled_key, processed_pixmap)
                     else:
                         logger.debug(f"{TAG_ASYNC} Using cached scaled variant for display {i}")
+                        _cache_trace(
+                            "Display consumed cached scaled variant display=%d path=%s target=%dx%d mode=%s",
+                            i,
+                            img_path,
+                            target_size.width(),
+                            target_size.height(),
+                            display_mode_str,
+                        )
 
                     if original_pixmap is None or original_pixmap.isNull():
                         if qimage is None or qimage.isNull():
@@ -663,10 +974,7 @@ def load_and_display_image_async_with_metas(
             processed_images = {}
             display_list = engine.display_manager.displays if engine.display_manager else []
             sharpen = False
-            if engine.settings_manager:
-                sharpen = engine.settings_manager.get('display.sharpen_downscale', False)
-                if isinstance(sharpen, str):
-                    sharpen = sharpen.lower() == 'true'
+            use_lanczos, sharpen = _get_display_quality_settings(engine)
 
             for i, display in enumerate(display_list):
                 meta = image_metas[i] if i < len(image_metas) else None
@@ -696,19 +1004,33 @@ def load_and_display_image_async_with_metas(
                         dpr = getattr(display, '_device_pixel_ratio', 1.0)
                         target_size = QSize(int(display.width() * dpr), int(display.height() * dpr))
 
-                    display_mode = getattr(display, 'display_mode', DisplayMode.FILL)
-                    display_mode_str = display_mode.value if hasattr(display_mode, 'value') else str(display_mode).lower()
+                    display_mode = _normalize_display_mode(getattr(display, 'display_mode', DisplayMode.FILL))
+                    display_mode_str = display_mode.value
 
                     processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
                         engine,
                         img_path,
                         target_size.width(),
                         target_size.height(),
+                        display_mode,
+                        use_lanczos,
+                        sharpen,
                     )
 
                     if processed_pixmap is None or processed_pixmap.isNull():
                         processed_qimage = None
-                        if engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                        if qimage is not None and not qimage.isNull():
+                            processed_pixmap = _derive_scaled_pixmap_from_raw_cache(
+                                engine,
+                                img_path,
+                                qimage,
+                                target_size,
+                                display_mode,
+                                use_lanczos,
+                                sharpen,
+                            )
+                        if processed_pixmap is None and engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
+                            _bump_cache_runtime_stat(engine, "worker_fallbacks")
                             worker_qimage = load_image_via_worker(
                                 engine, img_path, target_size.width(), target_size.height(),
                                 display_mode=display_mode_str, sharpen=sharpen, timeout_ms=3000,
@@ -717,15 +1039,26 @@ def load_and_display_image_async_with_metas(
                                 processed_qimage = worker_qimage
                             else:
                                 continue
-                        elif qimage is not None and not qimage.isNull():
+                        elif processed_pixmap is None and qimage is not None and not qimage.isNull():
                             processed_qimage = AsyncImageProcessor.process_qimage(
-                                qimage, target_size, display_mode, use_lanczos=False, sharpen=sharpen,
+                                qimage, target_size, display_mode, use_lanczos=use_lanczos, sharpen=sharpen,
                             )
-                        else:
+                        elif processed_pixmap is None:
                             continue
 
-                        processed_pixmap = QPixmap.fromImage(processed_qimage)
-                        processed_qimage = None
+                        if processed_pixmap is None:
+                            processed_pixmap = QPixmap.fromImage(processed_qimage)
+                            processed_qimage = None
+                            if engine._image_cache is not None and processed_pixmap is not None and not processed_pixmap.isNull():
+                                scaled_key = _build_scaled_cache_key(
+                                    img_path,
+                                    target_size.width(),
+                                    target_size.height(),
+                                    display_mode,
+                                    use_lanczos,
+                                    sharpen,
+                                )
+                                engine._image_cache.put(scaled_key, processed_pixmap)
 
                     if original_pixmap is None or original_pixmap.isNull():
                         original_pixmap = QPixmap.fromImage(qimage) if (qimage and not qimage.isNull()) else processed_pixmap
@@ -936,98 +1269,56 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
                 return
         except Exception as e:
             logger.debug("[ENGINE] Exception suppressed: %s", e)
-        upcoming = engine.image_queue.peek_many(engine._prefetch_ahead)
-        paths = []
+        preview_many = getattr(engine.image_queue, "preview_upcoming", None)
+        if callable(preview_many):
+            upcoming = preview_many(engine._prefetch_ahead)
+            preview_source = "preview_upcoming"
+        else:
+            upcoming = engine.image_queue.peek_many(engine._prefetch_ahead)
+            preview_source = "peek_many"
+
+        paths: List[str] = []
+        seen_paths: set[str] = set()
         for m in upcoming:
             try:
                 p = str(m.local_path) if m and m.local_path else (m.url or "")
-                if p:
+                if p and p not in seen_paths:
+                    seen_paths.add(p)
                     paths.append(p)
             except Exception as _e:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
                 continue
+        if not paths:
+            return
+
         engine._prefetcher.prefetch_paths(paths)
-        if paths and is_verbose_logging():
-            logger.debug(f"Prefetch scheduled for {len(paths)} upcoming images")
-            # Avoid heavy UI-side conversions while transitions are active.
-            skip_heavy_ui_work = False
-            try:
-                if engine.display_manager and hasattr(engine.display_manager, "has_running_transition"):
-                    skip_heavy_ui_work = engine.display_manager.has_running_transition()
-            except Exception as _e:
-                logger.debug("[ENGINE] Exception suppressed: %s", _e)
-                skip_heavy_ui_work = False
-            # UI warmup: convert first cached QImage to QPixmap to reduce on-demand conversion
-            # PERFORMANCE FIX: Move QPixmap.fromImage to compute pool (Qt 6 allows this)
-            try:
-                if not skip_heavy_ui_work and engine.thread_manager and engine._image_cache:
-                    first = paths[0]
-                    def _compute_convert():
-                        """Compute pool: Convert QImage to QPixmap (Qt 6 thread-safe)"""
-                        try:
-                            cached = engine._image_cache.get(first)
-                            if isinstance(cached, QImage):
-                                pm = QPixmap.fromImage(cached)
-                                if not pm.isNull():
-                                    # Clear QImage reference to free memory (Section 1.1 fix)
-                                    cached = None
-                                    return (first, pm)
-                        except Exception as e:
-                            logger.debug(f"Prefetch convert failed for {first}: {e}")
-                        return None
+        _cache_trace(
+            "Prefetch preview source=%s path_count=%d paths=%s",
+            preview_source,
+            len(paths),
+            " | ".join(paths[:5]),
+        )
+        scaled_requests = _build_prefetch_scaled_requests(engine, paths)
+        if scaled_requests:
+            _bump_cache_runtime_stat(engine, "scaled_prefetch_requests", len(scaled_requests))
+            register_scaled_requests = getattr(engine._prefetcher, "register_scaled_requests", None)
+            if callable(register_scaled_requests):
+                register_scaled_requests(scaled_requests)
+            _cache_trace(
+                "Queued scaled warmup request_count=%d preview_source=%s",
+                len(scaled_requests),
+                preview_source,
+            )
 
-                    def _ui_cache(result):
-                        """UI thread: Store result in cache"""
-                        try:
-                            if result and result.success and result.result:
-                                path, pixmap = result.result
-                                engine._image_cache.put(path, pixmap)
-                                logger.debug(f"Prefetch warmup: cached QPixmap for {path}")
-                        except Exception as e:
-                            logger.debug(f"Prefetch cache failed: {e}")
-
-                    engine.thread_manager.submit_compute_task(
-                        _compute_convert,
-                        callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _ui_cache(r))
-                    )
-            except Exception as e:
-                logger.debug("[PREFETCH] UI warmup failed: %s", e)
-            # Pre-scale proposal: safely compute scaled QImages for distinct display sizes
-            try:
-                if not skip_heavy_ui_work and engine.thread_manager and engine._image_cache:
-                    first_path = paths[0]
-                    sizes = engine._get_distinct_display_sizes()
-                    for (w, h) in sizes:
-                        scaled_key = f"{first_path}|scaled:{w}x{h}"
-                        try:
-                            if engine._image_cache.contains(scaled_key):
-                                continue
-                        except Exception as e:
-                            logger.debug("[ENGINE] Exception suppressed: %s", e)
-                        def _compute_prescale_wh(width=w, height=h, src_path=first_path, cache_key=scaled_key):
-                            """Compute-task: scale cached QImage to a target size and store in cache."""
-                            try:
-                                base = engine._image_cache.get(src_path)
-                                if isinstance(base, QImage) and not base.isNull():
-                                    scaled = AsyncImageProcessor._scale_image(
-                                        base,
-                                        width,
-                                        height,
-                                        use_lanczos=False,
-                                        sharpen=False,
-                                    )
-                                    if not scaled.isNull():
-                                        engine._image_cache.put(cache_key, scaled)
-                            except Exception as e:
-                                logger.debug(f"Pre-scale compute failed ({width}x{height}): {e}")
-                        try:
-                            submit = getattr(engine.thread_manager, 'submit_compute_task', None)
-                            if callable(submit):
-                                submit(_compute_prescale_wh)
-                        except Exception as e:
-                            logger.debug("[ENGINE] Exception suppressed: %s", e)
-            except Exception as _e:
-                logger.debug("[ENGINE] Exception suppressed: %s", _e)
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF] [PREFETCH] scheduled paths=%d scaled_requests=%d source=%s",
+                len(paths),
+                len(scaled_requests),
+                preview_source,
+            )
+        elif is_verbose_logging():
+            logger.debug("Prefetch scheduled for %d upcoming images", len(paths))
     except Exception as e:
         logger.debug(f"Prefetch schedule failed: {e}")
 
@@ -1062,10 +1353,24 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
         delay_ms = 0
 
     engine._prefetch_resume_scheduled = True
+    _bump_cache_runtime_stat(engine, "prefetch_resume_scheduled")
+    if is_perf_metrics_enabled():
+        logger.info(
+            "[PERF] [PREFETCH] transition_complete screen=%s delay_ms=%d",
+            screen_index if screen_index is not None else "shared",
+            delay_ms,
+        )
+    _cache_trace(
+        "Transition complete prefetch resume scheduled screen=%s delay_ms=%d",
+        screen_index if screen_index is not None else "shared",
+        delay_ms,
+    )
 
     def _resume_prefetch() -> None:
         try:
             engine._prefetch_resume_scheduled = False
+            _bump_cache_runtime_stat(engine, "prefetch_resume_runs")
+            _cache_trace("Transition-delayed prefetch resume running")
             schedule_prefetch(engine)
         except Exception:
             logger.debug("[PREFETCH] Deferred resume failed", exc_info=True)
