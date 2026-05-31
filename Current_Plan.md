@@ -15,15 +15,10 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 ## Active Tasks
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
-  - [ ] Keep the current fresh-run evidence anchored: steady-state cache reuse is now materially better (`ImageCacheFlow` shows real raw/scaled hits and delayed prefetch resumes), so do not throw away the shared contract while chasing separate startup-order bugs.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.
   - [ ] Validate the newly landed prefetch authority contract in runtime: mixed-source lookahead now mirrors `ImageQueue.next()` via preview state, so confirm the upcoming images being warmed are the images that actually appear under local/RSS ratio, history, and domain-diversity rules.
-  - [ ] Validate the newly landed scaled-image authority contract in runtime: display-ready scaled variants are now keyed by path + mode + target size + quality flags, raw-path cache entries should remain raw decode artifacts, and ordinary rotations should stop paying repeat worker prescale cost when scaled variants already exist.
-  - [ ] Use the current single-display fresh logs as the baseline for what is already measurably better: cache reuse is no longer dead, split telemetry is telling the truth, and post-transition prefetch resume is firing. Future work should target the remaining weak seams rather than re-litigating whether the contract works at all.
   - [ ] Focus the next single-display investigations on what this setup can still expose well: cold-start scaled misses, early manual-next worker fallthrough, scaled-hit growth during steady state, and whether cache-side work correlates with the shared frame-pacing stalls seen in `--perf`.
   - [ ] Validate the serialized/staggered scaled warmup path under aggressive multi-display use: confirm low-priority scaled warmup no longer bunches work across displays or noticeably drags UI-thread responsiveness, visualizer cadence, cursor halo smoothness, or input responsiveness.
-  - [ ] Validate the new split cache telemetry in fresh `--perf` runs: `ImageCacheFlow` should clearly distinguish raw hits/misses, scaled hits/misses, worker fallthrough, scaled-prefetch completions, scaled derivations, and delayed prefetch resumes without needing verbose-log archaeology.
-  - [ ] Use the newly landed `--cache` sidecar in the next focused cache runs: it now traces prefetch preview authority, scaled warmup queueing/completion, scaled-cache hits/misses, derived-from-raw reuse, and worker-fallback classification so cold-start and early-churn misses can be diagnosed without polluting the broader perf log.
   - [ ] Re-run clean `--perf` validation after the contract fix and confirm shutdown summaries show real scaled/raw reuse while `ImageWorker prescale` spikes materially drop during cold startup and forced early next-image churn, not just later steady-state rotations.
   - [ ] If startup ordering must be touched again for cache reasons, treat it as explicit shared startup work with separate validation rather than as an incidental cache side effect.
   - [ ] Keep fixes on shared cache/prefetch/image-pipeline seams first, but allow adjacent shared startup sequencing work only when the evidence shows the cache contract and first-frame contract are interacting in the same path.
@@ -33,16 +28,12 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Keep all multi-display-specific checks explicitly open even while single-display testing is the only runtime available; one 1440p display cannot validate the real stagger/desync contract or clear same-instant sibling-display pressure.
   - [ ] Confirm the global display-level image handoff stagger plus the broadened compositor-side desync are both active for the transition families that matter in real use, not just crossfade.
   - [ ] Verify the broadened desync remains imperceptible to users while reducing same-instant multi-display start overhead.
-  - [ ] Re-check for any real shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls once multi-display runtime is available again; the latest single-display run no longer shows the earlier alarming `Paint gap` / multi-second timer-gap pattern.
+  - [ ] Re-check for any real shared transition-start churn, texture/upload pressure, context/work duplication, or timer/pacing stalls once multi-display runtime is available again; current single-display logs are down to ordinary `Tick dt spike` warnings rather than the earlier fake catastrophic gap pattern.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
 
 - [ ] Validate hidden/quiescent deferred transition warmup against fresh runtime startup/transition logs.
   - [ ] Investigate the current startup flicker separately from cache work and keep ownership clear if it predates or outlives cache changes.
-  - [ ] Keep the startup-order audit split by what is actually known now: current single-display logs show the coordinated reveal gate behaving later than overlay activation, but they do not clear the earlier display-1/multi-display report that media could surface too early in real runtime.
-  - [ ] Tighten the startup visibility authority contract: lifecycle `ACTIVE` may remain an internal runtime state, but primary overlays must only enter a visible fade once they are actually ready for display and the compositor/first-frame gate is open.
-  - [ ] Trace cached-content startup paths (`gmail`, `reddit`, `reddit2`, `weather`, `media`) and any late update helpers that can call `show()` / request or restart a fade after activation, then identify which ones are legitimate post-start re-entry paths and which ones are bypassing the intended ready-for-display contract.
-  - [ ] Extend the startup test coverage from the newly landed focused visibility cases: keep proving cached-content widgets remain hidden until their coordinated fade starter actually runs, and keep proving late-ready primary overlays do not get stranded after compositor-ready as shared startup logic evolves.
-  - [ ] Trace display/compositor startup helpers for any layer-raising or placeholder/base-image behavior that can leave widgets visually ahead of the settled first frame even when fade coordination itself is behaving.
+  - [ ] Keep the startup-order audit split by what is actually known now: current single-display logs support the coordinated overlay reveal gate on screen 0, but they do not clear the earlier display-1/multi-display report that media could surface too early in real runtime.
   - [ ] Compare Codex-terminal launches versus ordinary terminal launches as a timing-sensitive startup variant, since the embedded terminal appears to amplify the race even though SRPSS does not branch on any `CODEX_*` env vars.
   - [ ] Keep `--fresh` semantics explicit in the audit and docs: the flag now clears all resolved runtime log files at each launch start, then records that fresh run normally. Do not treat multiple fresh launches in one file as stale residue unless the pre-launch clear marker is missing.
   - [ ] Confirm hidden deferred warmup is covering both remaining transition-program compile and representative transition-resource/state prep strongly enough that first-use transitions do not fall back to expensive visible-surface warmup work in normal startup runs.
@@ -51,8 +42,14 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Validate the broadened shared compositor-side desync across non-crossfade transition families and confirm the delay remains imperceptible while reducing same-instant multi-display start overhead.
   - [ ] Keep this on the shared GL lifecycle seam only; do not reintroduce live-surface startup warmup or transition-specific ad hoc compile hacks.
   - [ ] Keep first-use transition correctness and transition performance as separate acceptance criteria; startup must stay visually clean and policy-correct while deferred warmup also stops contributing to the remaining startup/first-use perf stalls.
-  - [ ] Validate the newly landed startup reveal diagnostics in runtime logs: first-frame commit now stamps a shared timestamp, overlay ready-for-display requests are logged, and coordinated reveal starters log their queue delay and time since first frame. Use that to correlate any remaining flicker or “widget surfaced too early” reports before widening instrumentation further.
-  - [ ] Use the current single-display evidence as a partial positive check only: the reveal diagnostics now support the contract on screen 0, but the earlier cross-display startup artifact remains open until multi-display runtime reproduces cleanly.
+  - [ ] Use the current single-display evidence as a partial positive check only: reveal diagnostics support the contract on screen 0, but the earlier cross-display startup artifact remains open until multi-display runtime reproduces cleanly.
+
+- [ ] Re-audit visualizer first-visible consistency across clean boot, CUSTOM reload, and settings-exit recreate paths.
+  - [ ] Keep the current good evidence anchored too: clean boot and CUSTOM layout reload both show the fresh-frame gate plus hidden primer behaving correctly before first visible push.
+  - [ ] Validate the newly landed shared fix in real runtime: reactive modes now keep waiting for a fresh post-reset engine frame, zero-source first pushes are forced through hidden primer instead of gaining visible authority, and accepted fresh zero-energy frames now still stamp current source generation/activation.
+  - [ ] Validate the seed-authority cleanup in real runtime: anchor seeding now prefers stronger live playing evidence from shared media cache over weaker local paused snapshots, and creator fast-path seeding now goes through the same canonical anchor-seed contract instead of directly replaying `_last_info`.
+  - [ ] Recompare `startup_create`, `settings_refresh`, `secondary_stage`, post-settings recreate, and hot mode switch logs after the fix; the family is only closed when those paths stay visually equivalent without needing settings round-trips to “repair” reactivity.
+  - [ ] Keep the fix on the shared activation/first-visible seam; do not special-case Bubble, Spectrum, or one preset path.
 
 - [ ] Audit long-runtime secure-desktop exit reliability with display wake/edit-mode/visualizer activity in mind.
   - [ ] Keep this fully open despite the current single-display focus; the real risk case is specifically long-runtime + wake + runtime activity under the real screensaver environment, and that cannot be waved away by cleaner ordinary exits in current local runs.
@@ -103,7 +100,6 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - preserve CLEAR-then-APPLY semantics,
   - do not reintroduce a second post-overlay merge phase,
   - do not reintroduce entry-point-specific fallback behavior for visualizer settings.
-- Visualizer first-frame / first-bar authority is back to watch-item status after the hidden-primer fix and the latest clean logs; reopen it only if runtime reports or new logs show a concrete regression path.
 
 ## Deferred / Not Active
 - Parallelism policy stays profiling-driven if performance work is reopened:

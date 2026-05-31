@@ -50,6 +50,16 @@ def _mode_requires_fresh_waveform(mode_str: str) -> bool:
     return str(mode_str or "").lower() in {"oscilloscope", "sine_wave"}
 
 
+def _mode_allows_idle_reveal_key(mode_str: str) -> bool:
+    """Return True when a mode may reveal or animate while paused."""
+    return str(mode_str or "").lower() in {"bubble", "sine_wave", "devcurve"}
+
+
+def _mode_requires_authoritative_first_source(mode_str: str) -> bool:
+    """Return True when first visible output must come from a fresh source-tracked frame."""
+    return not _mode_allows_idle_reveal_key(mode_str)
+
+
 # ------------------------------------------------------------------
 # Heartbeat transient detection (CPU-side)
 # ------------------------------------------------------------------
@@ -530,7 +540,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if (
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
-        and str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "oscilloscope", "spectrum", "devcurve"}
+        and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
     ):
         widget._waiting_for_fresh_engine_frame = False
         widget._pending_engine_generation = -1
@@ -615,10 +625,11 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
             any_nonzero = True
         display_bars[i] = new_val
 
-    # Update source tracking when bars are written from engine
-    if any_nonzero:
-        widget._display_bars_source_generation = engine_generation
-        widget._display_bars_source_activation = engine_activation
+    # Source tracking records the accepted engine frame even when the first
+    # fresh post-reset bars happen to be visually quiet. Reactive modes must
+    # still prove their first visible frame came from the current activation.
+    widget._display_bars_source_generation = engine_generation
+    widget._display_bars_source_activation = engine_activation
 
     # Force update during decay (when bars are non-zero but Spotify stopped)
     if any_nonzero and not widget._spotify_playing:
@@ -792,6 +803,7 @@ def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) ->
     overlay_generation = getattr(overlay, "_engine_generation", None)
     display_source_generation = int(getattr(widget, "_display_bars_source_generation", -1) or -1)
     display_source_activation = int(getattr(widget, "_display_bars_source_activation", -1) or -1)
+    requires_authoritative_source = _mode_requires_authoritative_first_source(mode_key)
 
     if overlay_mode and overlay_mode != mode_key:
         problems.append("overlay_mode_stale")
@@ -800,6 +812,10 @@ def _collect_first_frame_primer_problems(widget: Any, parent: Any, mode: str) ->
     if pending_mode_resets and mode_key in set(pending_mode_resets):
         problems.append("overlay_pending_mode_reset")
 
+    if requires_authoritative_source and display_source_generation < 0:
+        problems.append("display_source_generation_missing")
+    if requires_authoritative_source and display_source_activation < 0:
+        problems.append("display_source_activation_missing")
     if display_source_generation >= 0 and overlay_generation != display_source_generation:
         problems.append("overlay_generation_stale")
     if display_source_activation >= 0 and overlay_activation != display_source_activation:
@@ -818,6 +834,7 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
     waiting_engine = bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
     waiting_frame = bool(getattr(widget, "_waiting_for_fresh_frame", False))
     mode = str(getattr(widget, "_vis_mode_str", "unknown") or "unknown")
+    requires_authoritative_source = _mode_requires_authoritative_first_source(mode)
     try:
         display_max = max(getattr(widget, "_display_bars", []) or [0.0])
     except Exception:
@@ -826,6 +843,7 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
         display_max <= 0.01
         and display_source_generation < 0
         and not waiting_engine
+        and not requires_authoritative_source
     )
 
     if staged_zero_data:
@@ -834,6 +852,10 @@ def _warn_on_first_frame_guard_mismatch(widget: Any, parent: Any) -> None:
     problems: list[str] = []
     if waiting_engine:
         problems.append("waiting_engine_after_push")
+    if requires_authoritative_source and display_source_generation < 0:
+        problems.append("display_missing_source_generation")
+    if requires_authoritative_source and display_source_activation < 0:
+        problems.append("display_missing_source_activation")
     if display_max > 0.01 and display_source_generation < 0:
         problems.append("display_missing_source_generation")
     if display_source_generation >= 0 and overlay_generation != display_source_generation:

@@ -17,6 +17,20 @@ from core.logging.logger import get_logger, is_verbose_logging
 logger = get_logger(__name__)
 
 
+def _payload_state_rank(payload: Optional[dict]) -> int:
+    """Rank media payloads so live playing seeds outrank retained paused snapshots."""
+    if not isinstance(payload, dict):
+        return -1
+    state = str(payload.get("state", "") or "").lower()
+    if state == "playing":
+        return 2
+    if state == "paused":
+        return 1
+    if state == "stopped":
+        return 0
+    return -1
+
+
 def media_info_to_payload(info: object) -> Optional[dict]:
     """Convert cached media info objects into the payload shape used by updates."""
     if info is None:
@@ -55,26 +69,49 @@ def seed_playback_state_from_anchor(
 ) -> bool:
     """Seed playback state from the anchor media widget or its shared cache."""
     anchor = widget._anchor_media
-    candidate = getattr(anchor, "_last_info", None) if anchor is not None else None
+    best_payload: Optional[dict] = None
+    best_source = "<none>"
+    best_score = (-1, -1)
 
-    if candidate is None and anchor is not None:
+    def _consider(candidate: object, *, source: str, source_rank: int) -> None:
+        nonlocal best_payload, best_source, best_score
+        payload = media_info_to_payload(candidate)
+        if payload is None:
+            return
+        candidate_score = (_payload_state_rank(payload), source_rank)
+        if candidate_score > best_score:
+            best_payload = payload
+            best_source = source
+            best_score = candidate_score
+
+    if anchor is not None:
+        _consider(getattr(anchor, "_last_info", None), source="anchor._last_info", source_rank=2)
+
         try:
             shared_getter = getattr(type(anchor), "_get_shared_valid_info", None)
             if callable(shared_getter):
-                candidate = shared_getter()
+                _consider(shared_getter(), source="shared_valid_info", source_rank=3)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to read shared media cache", exc_info=True)
 
-    if candidate is None and anchor is not None:
         try:
-            candidate = getattr(type(anchor), "_shared_last_valid_info", None)
+            _consider(
+                getattr(type(anchor), "_shared_last_valid_info", None),
+                source="shared_last_valid_info",
+                source_rank=1,
+            )
         except Exception:
-            candidate = None
+            logger.debug("[SPOTIFY_VIS] Failed to read legacy shared media cache", exc_info=True)
 
-    payload = media_info_to_payload(candidate)
+    payload = best_payload
     if payload is not None:
         widget.handle_media_update(payload)
-        logger.debug("[SPOTIFY_VIS] Seeded playback state from anchor (%s)", reason)
+        logger.debug(
+            "[SPOTIFY_VIS] Seeded playback state from anchor (%s source=%s state=%s)",
+            reason,
+            best_source,
+            payload.get("state"),
+        )
         return True
 
     if request_refresh_if_missing and anchor is not None:

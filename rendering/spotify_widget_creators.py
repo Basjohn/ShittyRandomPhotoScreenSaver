@@ -681,12 +681,10 @@ def create_spotify_visualizer_widget(
                 # authoritative cold-start seed still happens inside the
                 # visualizer lifecycle once startup ordering has settled.
                 try:
-                    seed_info = getattr(anchor_media_widget, '_last_info', None)
-                    if seed_info is not None:
-                        from dataclasses import asdict
-                        seed_payload = asdict(seed_info)
-                        seed_payload["state"] = seed_info.state.value
-                        vis.handle_media_update(seed_payload)
+                    vis._seed_playback_state_from_anchor(
+                        reason="creator_fast_path",
+                        request_refresh_if_missing=False,
+                    )
                 except Exception as e:
                     logger.debug("[WIDGET_MANAGER] Exception suppressed during playback state seed: %s", e)
         except Exception as e:

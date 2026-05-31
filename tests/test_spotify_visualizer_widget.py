@@ -446,6 +446,7 @@ class _FakeEngine:
         self._bar_count = bar_count
         self._smoothed_bars = [0.0] * bar_count
         self._generation_id = 1
+        self._activation_id = 1
         self._latest_generation_with_frame = self._generation_id
         self.playback_states: list[bool] = []
         self.wake_calls = 0
@@ -487,6 +488,7 @@ class _FakeEngine:
     def reset_smoothing_state(self) -> None:
         self.reset_calls += 1
         self._generation_id += 1
+        self._activation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
         self._smoothed_bars = [0.0] * self._bar_count
@@ -505,6 +507,9 @@ class _FakeEngine:
 
     def get_generation_id(self) -> int:
         return self._generation_id
+
+    def get_activation_id(self) -> int:
+        return self._activation_id
 
     def get_latest_generation_with_frame(self) -> int:
         return self._latest_generation_with_frame
@@ -551,6 +556,7 @@ class _FakeEngine:
         self._bars_result_buffer = object()
         self._smoothed_bars = [0.0] * self._bar_count
         self._generation_id += 1
+        self._activation_id += 1
         self._latest_generation_with_frame = self._generation_id - 1
         self._latest_generation_with_waveform = self._generation_id - 1
 
@@ -1283,13 +1289,12 @@ def test_bubble_dispatch_keeps_idle_motion_while_paused(qt_app, qtbot, monkeypat
     "mode",
     [
         VisualizerMode.BUBBLE,
-        VisualizerMode.OSCILLOSCOPE,
         VisualizerMode.SINE_WAVE,
-        VisualizerMode.SPECTRUM,
+        VisualizerMode.DEVCURVE,
     ],
 )
 @pytest.mark.qt
-def test_paused_idle_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbot, monkeypatch, mode):
+def test_paused_idle_reveal_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbot, monkeypatch, mode):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -1310,6 +1315,37 @@ def test_paused_idle_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbot, monk
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert widget._pending_engine_generation == -1
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        VisualizerMode.OSCILLOSCOPE,
+        VisualizerMode.SPECTRUM,
+    ],
+)
+@pytest.mark.qt
+def test_paused_reactive_modes_keep_waiting_for_fresh_engine_frame(qt_app, qtbot, monkeypatch, mode):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(mode)
+    widget._spotify_playing = False
+    widget._waiting_for_fresh_engine_frame = True
+    widget._pending_engine_generation = 42
+
+    tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert widget._pending_engine_generation == 42
 
 
 @pytest.mark.qt
@@ -1436,6 +1472,35 @@ def test_fresh_engine_frame_gate_blocks_gpu_push_after_mode_reset(qt_app, qtbot,
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert parent.frames, "GPU push should stay blocked until a fresh post-reset engine frame publishes"
+
+
+@pytest.mark.qt
+def test_fresh_zero_engine_frame_still_stamps_current_source_generation(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget._spotify_playing = True
+    widget.start()
+    qt_app.processEvents()
+    widget._engine = fake_engine
+
+    widget._prepare_engine_for_mode_reset()
+    assert widget._waiting_for_fresh_engine_frame is True
+
+    fake_engine.publish_frame([0.0] * widget._bar_count)
+    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert changed is False
+    assert any_nonzero is False
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._display_bars_source_generation == fake_engine.get_generation_id()
+    assert widget._display_bars_source_activation == fake_engine.get_activation_id()
 
 
 @pytest.mark.qt
@@ -2260,7 +2325,7 @@ def test_first_frame_guard_does_not_warn_for_zero_data_staged_push(qt_app, qtbot
     qtbot.addWidget(widget)
     widget._enabled = True
     widget._spotify_playing = True
-    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._vis_mode = VisualizerMode.BUBBLE
     widget._display_bars = [0.0] * 6
     widget._display_bars_source_generation = -1
     widget._display_bars_source_activation = 12
@@ -2283,6 +2348,41 @@ def test_first_frame_guard_does_not_warn_for_zero_data_staged_push(qt_app, qtbot
     tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
 
     assert warnings == []
+
+
+@pytest.mark.qt
+def test_first_frame_guard_warns_for_zero_data_reactive_push(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.0] * 6
+    widget._display_bars_source_generation = -1
+    widget._display_bars_source_activation = -1
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    overlay = type("Overlay", (), {"_activation_id": 99, "_engine_generation": None})()
+    parent._spotify_bars_overlay = overlay
+
+    warnings: list[str] = []
+
+    def _capture_warning(msg, *args, **kwargs):
+        try:
+            warnings.append(msg % args if args else str(msg))
+        except Exception:
+            warnings.append(str(msg))
+
+    monkeypatch.setattr(tick_pipeline.logger, "warning", _capture_warning)
+
+    tick_pipeline._warn_on_first_frame_guard_mismatch(widget, parent)
+
+    assert any("display_missing_source_generation" in message for message in warnings)
+    assert any("display_missing_source_activation" in message for message in warnings)
 
 
 @pytest.mark.qt
@@ -2366,6 +2466,38 @@ def test_first_frame_uses_hidden_primer_until_overlay_matches_current_activation
     assert widget._has_pushed_first_frame is True
     assert widget._waiting_for_fresh_frame is False
     assert reasons == ["before_first_overlay_push", "after_first_overlay_push"]
+
+
+@pytest.mark.qt
+def test_reactive_first_frame_uses_hidden_primer_when_source_generation_missing(qt_app, qtbot):
+    parent = _PrimingDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.0] * 6
+    widget._display_bars_source_generation = -1
+    widget._display_bars_source_activation = -1
+    widget._pending_engine_generation = 12
+    widget._pending_engine_activation_id = 34
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    reasons: list[str] = []
+
+    def _capture_render_state(*, reason: str):
+        reasons.append(reason)
+
+    widget._log_active_render_state_snapshot = _capture_render_state  # type: ignore[method-assign]
+
+    assert tick_pipeline.push_gpu_frame(widget, parent, time.time(), changed=True, first_frame=True) is True
+    assert parent.frames[0]["fade"] == pytest.approx(0.0)
+    assert widget._has_pushed_first_frame is False
+    assert widget._waiting_for_fresh_frame is True
+    assert reasons == ["before_first_overlay_push"]
 
 
 @pytest.mark.qt
@@ -3891,6 +4023,61 @@ def test_spotify_visualizer_start_seeds_playback_from_anchor_cache(qt_app, qtbot
                 state=SimpleNamespace(value="playing"),
                 artwork_url="art://seed",
             )
+
+        def refresh_playback_state(self) -> None:
+            self.refresh_requests += 1
+
+    anchor = _Anchor(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: None)
+
+    vis.start()
+    qt_app.processEvents()
+
+    assert vis._spotify_playing is True
+    assert fake_engine.playback_states[-1] is True
+    assert anchor.refresh_requests == 0
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_start_prefers_live_shared_playing_seed_over_local_paused_cache(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    playing_info = SimpleNamespace(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=SimpleNamespace(value="playing"),
+        artwork_url="art://live",
+    )
+
+    class _Anchor(QWidget):
+        _shared_last_valid_info = playing_info
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.refresh_requests = 0
+            self._last_info = SimpleNamespace(
+                title="Track",
+                artist="Artist",
+                album="Album",
+                state=SimpleNamespace(value="paused"),
+                artwork_url="art://retained",
+            )
+
+        @classmethod
+        def _get_shared_valid_info(cls):
+            return cls._shared_last_valid_info
 
         def refresh_playback_state(self) -> None:
             self.refresh_requests += 1

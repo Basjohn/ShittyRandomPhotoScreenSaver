@@ -2054,6 +2054,7 @@ def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
         checks = (
             (tab._clock_controls_container, "Time Content", "clock", "time"),
             (tab._media_controls_container, "Transport & Volume", "media", "controls"),
+            (tab._reddit_controls_container, "Reddit 1", "reddit", "reddit1"),
             (tab._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
         )
         for container, text, section, bucket in checks:
@@ -2070,6 +2071,7 @@ def test_widget_bucket_state_roundtrip(qt_app, settings_manager):
         checks = (
             (reloaded._clock_controls_container, "Time Content", "clock", "time"),
             (reloaded._media_controls_container, "Transport & Volume", "media", "controls"),
+            (reloaded._reddit_controls_container, "Reddit 1", "reddit", "reddit1"),
             (reloaded._reddit_controls_container, "Reddit 2", "reddit", "secondary"),
         )
         for container, text, section, bucket in checks:

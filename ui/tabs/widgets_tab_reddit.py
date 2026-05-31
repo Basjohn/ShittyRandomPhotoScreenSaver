@@ -113,32 +113,52 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     _rc_layout.setContentsMargins(0, 0, 0, 12)
     _rc_layout.setSpacing(12)
 
-    feed_toggle, feed_body, feed_layout = build_bucket_toggle(
+    reddit1_default_expanded = (
+        tab.get_widget_bucket_state("reddit", "reddit1", default=False)
+        or tab.get_widget_bucket_state("reddit", "primary", default=False)
+    )
+    reddit1_toggle, reddit1_body, reddit1_layout = build_bucket_toggle(
         _rc_layout,
-        "Feed & Interaction",
-        expanded=tab.get_widget_bucket_state("reddit", "feed", default=False),
-        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "feed", checked),
+        "Reddit 1",
+        expanded=reddit1_default_expanded,
+        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "reddit1", checked),
         defer_initial_visibility=True,
     )
-    layout_toggle, layout_body, layout_layout = build_bucket_toggle(
-        _rc_layout,
-        "Layout",
-        expanded=tab.get_widget_bucket_state("reddit", "layout", default=False),
-        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "layout", checked),
-        defer_initial_visibility=True,
-    )
-    appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
-        _rc_layout,
-        "Appearance",
-        expanded=tab.get_widget_bucket_state("reddit", "appearance", default=False),
-        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "appearance", checked),
-        defer_initial_visibility=True,
-    )
-    secondary_toggle, secondary_body, secondary_layout = build_bucket_toggle(
+    reddit2_toggle, reddit2_body, reddit2_layout = build_bucket_toggle(
         _rc_layout,
         "Reddit 2",
         expanded=tab.get_widget_bucket_state("reddit", "secondary", default=False),
         on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "secondary", checked),
+        defer_initial_visibility=True,
+    )
+    interaction_toggle, interaction_body, interaction_layout = build_bucket_toggle(
+        _rc_layout,
+        "Link Behavior",
+        expanded=(
+            tab.get_widget_bucket_state("reddit", "interaction", default=False)
+            or tab.get_widget_bucket_state("reddit", "feed", default=False)
+        ),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "interaction", checked),
+        defer_initial_visibility=True,
+    )
+    shared_layout_toggle, shared_layout_body, shared_layout_layout = build_bucket_toggle(
+        _rc_layout,
+        "Shared Layout & Typography",
+        expanded=(
+            tab.get_widget_bucket_state("reddit", "shared_layout", default=False)
+            or tab.get_widget_bucket_state("reddit", "layout", default=False)
+        ),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "shared_layout", checked),
+        defer_initial_visibility=True,
+    )
+    appearance_toggle, appearance_body, appearance_layout = build_bucket_toggle(
+        _rc_layout,
+        "Shared Appearance",
+        expanded=(
+            tab.get_widget_bucket_state("reddit", "shared_appearance", default=False)
+            or tab.get_widget_bucket_state("reddit", "appearance", default=False)
+        ),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("reddit", "shared_appearance", checked),
         defer_initial_visibility=True,
     )
 
@@ -148,7 +168,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     reddit_info.setWordWrap(True)
     reddit_info.setStyleSheet(INFO_LABEL_STYLE)
-    feed_layout.addWidget(reddit_info)
+    interaction_layout.addWidget(reddit_info)
 
     tab.reddit_exit_on_click = QCheckBox("Exit Screensaver When Reddit Links Are Opened")
     tab.reddit_exit_on_click.setProperty("circleIndicator", True)
@@ -157,10 +177,10 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     )
     tab.reddit_exit_on_click.setChecked(tab._default_bool('reddit', 'exit_on_click', True))
     tab.reddit_exit_on_click.stateChanged.connect(tab._save_settings)
-    feed_layout.addWidget(tab.reddit_exit_on_click)
+    interaction_layout.addWidget(tab.reddit_exit_on_click)
 
     # Subreddit name
-    reddit_sub_row = _aligned_row(feed_layout, "Subreddit:")
+    reddit_sub_row = _aligned_row(reddit1_layout, "Subreddit:")
     tab.reddit_subreddit = QLineEdit()
     default_subreddit = tab._default_str('reddit', 'subreddit', 'wallpapers')
     tab.reddit_subreddit.setText(default_subreddit)
@@ -171,7 +191,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_sub_row.addStretch()
 
     # Item count
-    reddit_items_row = _aligned_row(feed_layout, "Items:")
+    reddit_items_row = _aligned_row(reddit1_layout, "Items:")
     tab.reddit_items = QSpinBox()
     tab.reddit_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)
     tab.reddit_items.setAccelerated(True)
@@ -185,7 +205,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_items_row.addStretch()
 
     # Position
-    reddit_pos_row = _aligned_row(layout_layout, "Position:")
+    reddit_pos_row = _aligned_row(reddit1_layout, "Position:")
     tab.reddit_position = StyledComboBox()
     tab.reddit_position.addItems(list(get_widget_position_option_labels("reddit")))
     tab.reddit_position.setToolTip("Screen position for the Reddit widget (9-grid layout)")
@@ -201,7 +221,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_pos_row.addStretch()
 
     # Display (monitor selection)
-    reddit_disp_row = _aligned_row(layout_layout, "Display:")
+    reddit_disp_row = _aligned_row(reddit1_layout, "Display:")
     tab.reddit_monitor_combo = StyledComboBox(size_variant="compact")
     tab.reddit_monitor_combo.addItems(["ALL", "1", "2", "3"])
     tab.reddit_monitor_combo.setToolTip("Which monitor(s) to show the Reddit widget on")
@@ -214,7 +234,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_disp_row.addStretch()
 
     # Font family
-    reddit_font_family_row = _aligned_row(layout_layout, "Font:")
+    reddit_font_family_row = _aligned_row(shared_layout_layout, "Font:")
     tab.reddit_font_combo = StyledFontComboBox(size_variant="hero")
     default_reddit_font = tab._default_str('reddit', 'font_family', 'Inter')
     tab.reddit_font_combo.setCurrentFont(QFont(default_reddit_font))
@@ -225,7 +245,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_font_family_row.addStretch()
 
     # Font size
-    reddit_font_row = _aligned_row(layout_layout, "Font Size:")
+    reddit_font_row = _aligned_row(shared_layout_layout, "Font Size:")
     tab.reddit_font_size = QSpinBox()
     tab.reddit_font_size.setRange(10, 72)
     tab.reddit_font_size.setValue(tab._default_int('reddit', 'font_size', 18))
@@ -240,7 +260,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_font_row.addStretch()
 
     # Margin
-    reddit_margin_row = _aligned_row(layout_layout, "Margin:")
+    reddit_margin_row = _aligned_row(shared_layout_layout, "Margin:")
     tab.reddit_margin = QSpinBox()
     tab.reddit_margin.setRange(0, 100)
     tab.reddit_margin.setValue(tab._default_int('reddit', 'margin', 30))
@@ -252,7 +272,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_margin_row.addWidget(reddit_margin_px)
     reddit_margin_row.addStretch()
 
-    reddit_logo_row = _aligned_row(layout_layout, "Header Logo:")
+    reddit_logo_row = _aligned_row(shared_layout_layout, "Header Logo:")
     tab.reddit_header_logo_px_adjust = QSpinBox()
     tab.reddit_header_logo_px_adjust.setRange(-12, 24)
     tab.reddit_header_logo_px_adjust.setSuffix(" px")
@@ -348,11 +368,11 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit_border_opacity_row.addWidget(tab.reddit_border_opacity_label)
 
     # Reddit 2
-    reddit2_label = QLabel("Reddit 2 (Inherits Styling from Reddit 1):")
+    reddit2_label = QLabel("Reddit 2 inherits typography and appearance from Reddit 1.")
     reddit2_label.setStyleSheet("color: #aaaaaa; font-size: 11px; margin-top: 8px;")
-    secondary_layout.addWidget(reddit2_label)
+    reddit2_layout.addWidget(reddit2_label)
 
-    reddit2_enable_row = _aligned_row(secondary_layout, "Reddit 2:")
+    reddit2_enable_row = _aligned_row(reddit2_layout, "Reddit 2:")
     tab.reddit2_enabled = QCheckBox("Enable Reddit 2")
     tab.reddit2_enabled.setProperty("circleIndicator", True)
     tab.reddit2_enabled.stateChanged.connect(tab._save_settings)
@@ -360,7 +380,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_enable_row.addWidget(tab.reddit2_enabled)
     reddit2_enable_row.addStretch()
 
-    reddit2_sub_row = _aligned_row(secondary_layout, "Subreddit:")
+    reddit2_sub_row = _aligned_row(reddit2_layout, "Subreddit:")
     tab.reddit2_subreddit = QLineEdit()
     tab.reddit2_subreddit.setPlaceholderText("e.g. earthporn")
     tab.reddit2_subreddit.setMinimumWidth(180)
@@ -368,7 +388,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_sub_row.addWidget(tab.reddit2_subreddit)
     reddit2_sub_row.addStretch()
 
-    reddit2_items_row = _aligned_row(secondary_layout, "Items:")
+    reddit2_items_row = _aligned_row(reddit2_layout, "Items:")
     tab.reddit2_items = QSpinBox()
     tab.reddit2_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)
     tab.reddit2_items.setAccelerated(True)
@@ -379,7 +399,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit2_items.setValue(clamp_list_capacity(tab._default_int('reddit2', 'limit', 20), default=20))
     reddit2_items_row.addStretch()
 
-    reddit2_pos_row = _aligned_row(secondary_layout, "Position:")
+    reddit2_pos_row = _aligned_row(reddit2_layout, "Position:")
     tab.reddit2_position = StyledComboBox()
     tab.reddit2_position.addItems(list(get_widget_position_option_labels("reddit2")))
     tab.reddit2_position.currentTextChanged.connect(tab._save_settings)
@@ -392,13 +412,14 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     reddit2_pos_row.addWidget(tab.reddit2_stack_status)
     reddit2_pos_row.addStretch()
 
-    reddit2_display_row = _aligned_row(secondary_layout, "Display:")
+    reddit2_display_row = _aligned_row(reddit2_layout, "Display:")
 
     for toggle, body in (
-        (feed_toggle, feed_body),
-        (layout_toggle, layout_body),
+        (reddit1_toggle, reddit1_body),
+        (reddit2_toggle, reddit2_body),
+        (interaction_toggle, interaction_body),
+        (shared_layout_toggle, shared_layout_body),
         (appearance_toggle, appearance_body),
-        (secondary_toggle, secondary_body),
     ):
         _finalize_bucket_body(toggle, body)
     tab.reddit2_monitor_combo = StyledComboBox(size_variant="compact")

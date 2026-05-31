@@ -231,3 +231,13 @@ def test_reddit_settings_spinboxes_use_shared_capacity_range():
 
     assert "tab.reddit_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)" in source
     assert "tab.reddit2_items.setRange(LIST_WIDGET_MIN_CAPACITY, LIST_WIDGET_MAX_CAPACITY)" in source
+
+
+def test_reddit_settings_are_bucketed_by_instance():
+    source = Path("ui/tabs/widgets_tab_reddit.py").read_text(encoding="utf-8")
+
+    assert '"Reddit 1"' in source
+    assert '"Reddit 2"' in source
+    assert '"Link Behavior"' in source
+    assert '"Shared Layout & Typography"' in source
+    assert '"Shared Appearance"' in source
