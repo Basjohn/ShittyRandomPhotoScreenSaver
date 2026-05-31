@@ -111,13 +111,13 @@ def test_visualizer_mode_transition_fade_forwards_duration_override(qt_app, monk
     widget.deleteLater()
 
 
-def test_spotify_visualizer_set_floor_config_clamps_and_snaps(np_module):
+def test_spotify_visualizer_set_floor_config_preserves_authored_low_floor_and_clamps_high(np_module):
     worker = _make_audio_worker(np_module)
     worker._raw_bass_avg = 3.5  # type: ignore[attr-defined]
 
-    worker.set_floor_config(dynamic_enabled=False, manual_floor=0.01)
+    worker.set_floor_config(dynamic_enabled=False, manual_floor=0.05)
     assert worker._use_dynamic_floor is False  # type: ignore[attr-defined]
-    assert worker._manual_floor == pytest.approx(worker._min_floor)  # type: ignore[attr-defined]
+    assert worker._manual_floor == pytest.approx(0.05)  # type: ignore[attr-defined]
     assert worker._raw_bass_avg == pytest.approx(worker._manual_floor)  # type: ignore[attr-defined]
 
     worker.set_floor_config(dynamic_enabled=True, manual_floor=99.0)
@@ -177,20 +177,23 @@ def test_sensitivity_config_api_exists(np_module):
 
 def test_audio_worker_block_size_change_restarts_running_capture(np_module):
     worker = _make_audio_worker(np_module)
-    backend = SimpleNamespace(_config=SimpleNamespace(block_size=256), restarts=0)
+    backend = SimpleNamespace(_config=SimpleNamespace(block_size=256), _negotiated_block_size=256, restarts=0)
 
     def _restart():
         backend.restarts += 1
+        backend._negotiated_block_size = 128
         return True
 
     backend.restart = _restart
     worker._backend = backend  # type: ignore[attr-defined]
     worker._running = True  # type: ignore[attr-defined]
     worker._preferred_block_size = 256  # type: ignore[attr-defined]
+    worker._effective_block_size = 256  # type: ignore[attr-defined]
 
     worker.set_audio_block_size(128)
 
     assert worker._preferred_block_size == 128  # type: ignore[attr-defined]
+    assert worker._effective_block_size == 128  # type: ignore[attr-defined]
     assert backend._config.block_size == 128
     assert backend.restarts == 1
 
@@ -213,6 +216,70 @@ def test_audio_worker_block_size_noop_does_not_restart_capture(np_module):
     assert worker._preferred_block_size == 256  # type: ignore[attr-defined]
     assert backend._config.block_size == 256
     assert backend.restarts == 0
+
+
+def test_live_activation_logs_parity_warning_on_worker_config_mismatch(monkeypatch):
+    from widgets.spotify_visualizer import activation_runtime
+
+    warning_calls: list[str] = []
+    monkeypatch.setattr(
+        activation_runtime.logger,
+        "warning",
+        lambda msg, *args: warning_calls.append(msg % args if args else msg),
+    )
+    monkeypatch.setattr(
+        activation_runtime.logger,
+        "info",
+        lambda *args, **kwargs: None,
+    )
+
+    overlay = SimpleNamespace(
+        _fill_color=None,
+        _border_color=None,
+        _peak_decay_per_sec=0.35,
+        _activation_id=4,
+        _engine_generation=4,
+    )
+    worker = SimpleNamespace(
+        _manual_floor=0.12,
+        _use_dynamic_floor=True,
+        _user_sensitivity=0.42,
+        _use_recommended=True,
+        _preferred_block_size=0,
+        _effective_block_size=128,
+        _input_gain=0.30,
+        _agc_strength=0.35,
+    )
+    engine = SimpleNamespace(
+        _audio_worker=worker,
+        get_generation_id=lambda: 4,
+        get_activation_id=lambda: 4,
+    )
+    widget = SimpleNamespace(
+        _technical_config_cache={"bubble": {"manual_floor": 0.07, "dynamic_floor": True, "adaptive_sensitivity": True, "sensitivity": 0.42, "audio_block_size": 0}},
+        _engine=engine,
+        parent=lambda: SimpleNamespace(_spotify_bars_overlay=overlay),
+        _bar_fill_color=QColor(255, 255, 255, 230),
+        _bar_border_color=QColor(255, 255, 255, 255),
+        _ghosting_enabled=False,
+        _ghost_alpha=0.08,
+        _ghost_decay_rate=0.35,
+    )
+    payload = SimpleNamespace(
+        preset_index=7,
+        is_custom=False,
+        preset_name="Preset 8 (Abyss)",
+        preset_path="preset_8_abyss.json",
+    )
+
+    activation_runtime.log_live_activation_state(
+        widget,
+        VisualizerMode.BUBBLE,
+        payload,
+        reason="preset_cycle",
+    )
+
+    assert any("[SPOTIFY_VIS][PARITY]" in msg and "manual_floor" in msg for msg in warning_calls)
 
 
 def test_update_timer_interval_does_not_thrash_same_target_when_actual_is_jittered():
@@ -2085,12 +2152,20 @@ def test_runtime_switch_paths_apply_target_technical_floor_for_all_modes(qt_app,
     spotify_cfg = {"mode": "spectrum"}
     expected_floor: dict[str, float] = {}
     expected_sensitivity: dict[str, float] = {}
+    authored_floors = {
+        "spectrum": 0.11,
+        "oscilloscope": 0.21,
+        "blob": 0.05,
+        "sine_wave": 0.24,
+        "bubble": 0.07,
+        "devcurve": 0.49,
+    }
     for idx, mode in enumerate(ordered_modes):
         mode_id = mode.name.lower()
         spotify_cfg[get_preset_key(mode_id)] = get_custom_preset_index(mode_id)
         spotify_cfg[f"{mode_id}_bar_count"] = 18 + idx
         spotify_cfg[f"{mode_id}_dynamic_floor"] = False
-        spotify_cfg[f"{mode_id}_manual_floor"] = 0.14 + idx * 0.07
+        spotify_cfg[f"{mode_id}_manual_floor"] = authored_floors.get(mode_id, 0.14 + idx * 0.07)
         spotify_cfg[f"{mode_id}_adaptive_sensitivity"] = False
         spotify_cfg[f"{mode_id}_sensitivity"] = 0.55 + idx * 0.11
         expected_floor[mode_id] = spotify_cfg[f"{mode_id}_manual_floor"]
@@ -2635,6 +2710,106 @@ def test_mode_switch_synthetic_audio_matches_fresh_worker_after_reset(qt_app, qt
 
 
 @pytest.mark.qt
+def test_mode_switch_low_floor_bubble_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    settings_manager,
+    np_module,
+    monkeypatch,
+):
+    from core.settings import visualizer_presets as vp
+
+    def _fake_get_preset_settings(mode_key, index):
+        if mode_key == "bubble":
+            if index == 0:
+                return {
+                    "bubble_manual_floor": 0.12,
+                    "bubble_audio_block_size": 256,
+                    "bubble_sensitivity": 0.40,
+                }
+            if index == 1:
+                return {
+                    "bubble_manual_floor": 0.07,
+                    "bubble_audio_block_size": 0,
+                    "bubble_sensitivity": 0.42,
+                }
+        return {}
+
+    monkeypatch.setattr(vp, "get_preset_settings", _fake_get_preset_settings)
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update(
+        {
+            "mode": "devcurve",
+            "preset_devcurve": 0,
+            "preset_bubble": 1,
+        }
+    )
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    live_engine = _SpotifyBeatEngine(35)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._widget_manager = SimpleNamespace(_settings_manager=settings_manager)
+    widget._engine = live_engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.DEVCURVE
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    target_samples = _synthetic_audio(np_module, hz=440.0, amp=0.08)
+
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    _poison_audio_worker_state(live_engine)
+
+    assert mode_transition.switch_to_mode(widget, "bubble") is True
+    now = widget._mode_transition_ts + widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(widget, now)
+
+    live_engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    live_engine.tick()
+    live_bars = live_engine.get_smoothed_bars()
+
+    fresh_engine = _SpotifyBeatEngine(35)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._widget_manager = SimpleNamespace(_settings_manager=settings_manager)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.BUBBLE
+    oracle_widget._apply_full_runtime_config_for_mode(VisualizerMode.BUBBLE, reason="oracle")
+
+    fresh_engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    fresh_engine.tick()
+    fresh_bars = fresh_engine.get_smoothed_bars()
+
+    assert live_engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert fresh_engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert live_engine._audio_worker._preferred_block_size == 0
+    assert fresh_engine._audio_worker._preferred_block_size == 0
+    assert live_bars == pytest.approx(fresh_bars, abs=0.025)
+
+
+@pytest.mark.qt
 def test_mode_switch_discards_stale_audio_buffer_before_next_frame(qt_app, qtbot, np_module):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -2855,6 +3030,112 @@ def test_widget_manager_preset_cycle_discards_real_engine_bleed_state(
     _assert_engine_runtime_state_reset(engine, old_audio_buffer, old_result_buffer)
     assert max(engine.get_smoothed_bars()) == pytest.approx(0.0)
     assert engine.get_latest_generation_with_frame() < engine.get_generation_id()
+
+
+@pytest.mark.qt
+def test_widget_manager_preset_cycle_low_floor_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    settings_manager,
+    np_module,
+    monkeypatch,
+):
+    from core.settings import visualizer_presets as vp
+    from rendering.widget_manager import WidgetManager
+
+    def _fake_get_preset_settings(mode_key, index):
+        if mode_key == "bubble":
+            if index == 0:
+                return {
+                    "bubble_manual_floor": 0.12,
+                    "bubble_audio_block_size": 256,
+                    "bubble_sensitivity": 0.40,
+                }
+            if index == 1:
+                return {
+                    "bubble_manual_floor": 0.07,
+                    "bubble_audio_block_size": 0,
+                    "bubble_sensitivity": 0.42,
+                }
+        return {}
+
+    monkeypatch.setattr(vp, "get_preset_settings", _fake_get_preset_settings)
+    monkeypatch.setattr("rendering.widget_manager.get_preset_count", lambda mode: 2)
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.screen_index = 0
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update(
+        {
+            "mode": "bubble",
+            "preset_bubble": 0,
+        }
+    )
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    engine = _SpotifyBeatEngine(20)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=20)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+
+    wm = WidgetManager(parent, resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._widgets["spotify_visualizer"] = widget
+    widget._widget_manager = wm
+    widget._apply_full_runtime_config_for_mode(VisualizerMode.BUBBLE, reason="seed")
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    target_samples = _synthetic_audio(np_module, hz=440.0, amp=0.08)
+
+    for _ in range(8):
+        engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        engine.tick()
+    _poison_audio_worker_state(engine)
+
+    assert wm.cycle_visualizer_preset("bubble", 1) is True
+
+    engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    engine.tick()
+    live_bars = engine.get_smoothed_bars()
+
+    fresh_engine = _SpotifyBeatEngine(20)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=parent, bar_count=20)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._widget_manager = SimpleNamespace(_settings_manager=settings_manager)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.BUBBLE
+    oracle_widget._apply_full_runtime_config_for_mode(VisualizerMode.BUBBLE, reason="oracle")
+
+    fresh_engine._audio_buffer.publish(_AudioFrame(samples=target_samples))
+    fresh_engine.tick()
+    fresh_bars = fresh_engine.get_smoothed_bars()
+
+    assert int(((settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}).get("preset_bubble", -1)) == 1
+    assert engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert fresh_engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert engine._audio_worker._preferred_block_size == 0
+    assert fresh_engine._audio_worker._preferred_block_size == 0
+    assert live_bars == pytest.approx(fresh_bars, abs=0.025)
 
 
 @pytest.mark.qt

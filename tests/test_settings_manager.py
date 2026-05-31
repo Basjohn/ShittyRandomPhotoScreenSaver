@@ -667,7 +667,7 @@ class TestSettingsManagerManualFloorClamp:
 
         widgets = manager.get("widgets")
         assert "manual_floor" not in widgets["spotify_visualizer"]
-        assert widgets["spotify_visualizer"]["bubble_manual_floor"] == pytest.approx(1.0)
+        assert widgets["spotify_visualizer"]["bubble_manual_floor"] == pytest.approx(0.12)
         assert widgets["spotify_visualizer"]["spectrum_manual_floor"] == pytest.approx(0.5)
         assert "widgets.spotify_visualizer.manual_floor" in repairs
 
@@ -688,10 +688,82 @@ class TestSettingsManagerManualFloorClamp:
 
         vis = manager.get("widgets")["spotify_visualizer"]
         assert vis["bubble_manual_floor"] == pytest.approx(1.0)
-        assert vis["spectrum_manual_floor"] == pytest.approx(0.12)
+        assert vis["spectrum_manual_floor"] == pytest.approx(0.05)
         assert vis["oscilloscope_manual_floor"] == pytest.approx(0.12)
         assert {
             "widgets.spotify_visualizer.bubble_manual_floor",
-            "widgets.spotify_visualizer.spectrum_manual_floor",
             "widgets.spotify_visualizer.oscilloscope_manual_floor",
         }.issubset(repairs.keys())
+        assert "widgets.spotify_visualizer.spectrum_manual_floor" not in repairs
+
+    def test_validate_and_repair_preserves_authored_low_manual_floor_values(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.setValue(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "bubble_manual_floor": 0.07,
+                    "blob_manual_floor": 0.05,
+                    "spectrum_manual_floor": 0.11,
+                }
+            },
+        )
+
+        repairs = manager.validate_and_repair()
+
+        vis = manager.get("widgets")["spotify_visualizer"]
+        assert vis["bubble_manual_floor"] == pytest.approx(0.07)
+        assert vis["blob_manual_floor"] == pytest.approx(0.05)
+        assert vis["spectrum_manual_floor"] == pytest.approx(0.11)
+        assert "widgets.spotify_visualizer.bubble_manual_floor" not in repairs
+        assert "widgets.spotify_visualizer.blob_manual_floor" not in repairs
+        assert "widgets.spotify_visualizer.spectrum_manual_floor" not in repairs
+
+    def test_validate_and_repair_preserves_visualizer_runtime_contract_while_stripping_legacy_globals(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from core.settings.models import SpotifyVisualizerSettings
+        from core.settings.visualizer_presets import get_custom_preset_index
+
+        manager = _make_manager(tmp_path)
+        custom_index = get_custom_preset_index("bubble")
+        manager._settings.setValue(
+            "widgets",
+            {
+                "spotify_visualizer": {
+                    "mode": "bubble",
+                    "preset_bubble": custom_index,
+                    "preset_spectrum": 1,
+                    "bubble_manual_floor": 0.07,
+                    "bubble_audio_block_size": 0,
+                    "bubble_input_gain": 0.33,
+                    "bubble_dynamic_floor": True,
+                    "bubble_adaptive_sensitivity": True,
+                    "bubble_sensitivity": 0.42,
+                    "manual_floor": 0.44,
+                    "audio_block_size": 256,
+                }
+            },
+        )
+
+        repairs = manager.validate_and_repair()
+
+        vis = manager.get("widgets")["spotify_visualizer"]
+        assert vis["preset_bubble"] == custom_index
+        assert vis["preset_spectrum"] == 1
+        assert vis["bubble_manual_floor"] == pytest.approx(0.07)
+        assert vis["bubble_audio_block_size"] == 0
+        assert vis["bubble_input_gain"] == pytest.approx(0.33)
+        assert "manual_floor" not in vis
+        assert "audio_block_size" not in vis
+        assert "widgets.spotify_visualizer" in repairs
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            vis,
+            apply_preset_overlay=False,
+            resolve_preset_indices=False,
+        )
+        assert model.resolve_manual_floor("bubble") == pytest.approx(0.07)
+        assert model.resolve_audio_block_size("bubble") == 0
+        assert model.resolve_input_gain("bubble") == pytest.approx(0.33)

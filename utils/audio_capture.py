@@ -112,6 +112,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         self._running = False
         self._sample_rate = self._config.sample_rate
         self._channels = self._config.channels
+        self._negotiated_block_size: int = 0
         self._np = None
         self._last_callback_ts: float = 0.0
         self._callback: Optional[Callable[[Any], None]] = None
@@ -261,6 +262,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
                 )
                 self._stream.start_stream()
                 self._running = True
+                self._negotiated_block_size = int(block_size)
                 logger.info(
                     "[AUDIO] PyAudioWPatch stream running (device=%s, negotiated_block=%d, preferred=%d)",
                     device.get("name", "<unknown>"),
@@ -313,6 +315,7 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
             except Exception as e:
                 logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._stream = None
+        self._negotiated_block_size = 0
         self._cleanup_pa()
     
     def is_running(self) -> bool:
@@ -337,6 +340,7 @@ class SounddeviceBackend(AudioCaptureBackend):
         self._running = False
         self._sample_rate = self._config.sample_rate
         self._channels = self._config.channels
+        self._negotiated_block_size: int = 0
         self._np = None
         self._last_callback_ts: float = 0.0
         self._callback: Optional[Callable[[Any], None]] = None
@@ -474,10 +478,11 @@ class SounddeviceBackend(AudioCaptureBackend):
             )
             self._stream.start()
             self._running = True
+            self._negotiated_block_size = int(self._config.block_size or 0)
             logger.info(
                 "[AUDIO] sounddevice started (device=%s, negotiated_block=%d, preferred=%d, rate=%dHz, channels=%d)",
                 device.get("name", "<unknown>") if isinstance(device, dict) else "<default>",
-                self._config.block_size,
+                self._negotiated_block_size,
                 self._config.block_size,
                 self._sample_rate,
                 self._channels,
@@ -496,6 +501,7 @@ class SounddeviceBackend(AudioCaptureBackend):
             except Exception as e:
                 logger.debug("[AUDIO] Exception suppressed: %s", e)
             self._stream = None
+        self._negotiated_block_size = 0
     
     def is_running(self) -> bool:
         return self._running

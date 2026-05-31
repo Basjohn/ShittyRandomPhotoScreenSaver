@@ -4480,6 +4480,74 @@ class TestBubbleSpecularDirection:
         }, apply_preset_overlay=False)
         assert model.bubble_gradient_direction == "bottom"
 
+
+def test_custom_bubble_activation_ignores_legacy_global_audio_block_size():
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import (
+        get_custom_preset_index,
+        resolve_visualizer_activation_payload,
+    )
+
+    payload = resolve_visualizer_activation_payload(
+        {
+            "mode": "bubble",
+            "preset_bubble": get_custom_preset_index("bubble"),
+            "audio_block_size": 0,
+            "bubble_manual_floor": 0.12,
+        }
+    )
+    model = SpotifyVisualizerSettings.from_mapping(
+        payload.resolved_config,
+        apply_preset_overlay=False,
+        resolve_preset_indices=False,
+    )
+
+    assert payload.is_custom is True
+    assert "audio_block_size" not in payload.resolved_config
+    assert model.resolve_audio_block_size("bubble") == 512
+
+
+def test_custom_bubble_activation_preserves_explicit_mode_owned_block_size_over_legacy_global():
+    from core.settings.models import SpotifyVisualizerSettings
+    from core.settings.visualizer_presets import (
+        get_custom_preset_index,
+        resolve_visualizer_activation_payload,
+    )
+
+    payload = resolve_visualizer_activation_payload(
+        {
+            "mode": "bubble",
+            "preset_bubble": get_custom_preset_index("bubble"),
+            "audio_block_size": 0,
+            "bubble_audio_block_size": 256,
+        }
+    )
+    model = SpotifyVisualizerSettings.from_mapping(
+        payload.resolved_config,
+        apply_preset_overlay=False,
+        resolve_preset_indices=False,
+    )
+
+    assert model.resolve_audio_block_size("bubble") == 256
+
+
+def test_normalized_visualizer_section_drops_legacy_global_technical_keys():
+    from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+
+    normalized = normalize_visualizer_section_mapping(
+        {
+            "mode": "bubble",
+            "preset_bubble": 0,
+            "audio_block_size": 0,
+            "manual_floor": 0.44,
+            "bubble_manual_floor": 0.22,
+        }
+    )
+
+    assert "audio_block_size" not in normalized
+    assert "manual_floor" not in normalized
+    assert normalized["bubble_manual_floor"] == pytest.approx(0.22)
+
     def test_versioned_gradient_direction_preserves_canonical_label(self):
         from core.settings.models import SpotifyVisualizerSettings
 

@@ -192,6 +192,40 @@ def test_widget_manager_refresh_applies_curated_contract_for_hotswap(settings_ma
     assert fake_vis.model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
 
 
+def test_widget_manager_refresh_ignores_legacy_global_technical_keys_for_custom_hotswap(settings_manager):
+    from core.settings.models import SpotifyVisualizerSettings
+
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+
+    class _FakeVis:
+        def __init__(self):
+            self.model = None
+
+        def set_settings_model(self, model):
+            self.model = model
+
+        def apply_vis_mode_config(self, **kwargs):
+            self.kwargs = dict(kwargs)
+
+    fake_vis = _FakeVis()
+    wm._widgets["spotify_visualizer"] = fake_vis
+
+    cfg = {
+        "spotify_visualizer": {
+            "mode": "bubble",
+            "preset_bubble": get_custom_preset_index("bubble"),
+            "audio_block_size": 0,
+            "bubble_manual_floor": 0.12,
+        }
+    }
+
+    wm._refresh_spotify_visualizer_config(cfg)
+
+    assert fake_vis.model is not None
+    assert fake_vis.model.resolve_audio_block_size("bubble") == 512
+
+
 def test_widget_manager_preset_cycle_forces_runtime_activation_reset(settings_manager):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)

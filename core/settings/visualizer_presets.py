@@ -41,6 +41,7 @@ from core.settings.visualizer_mode_registry import (
 from core.settings.visualizer_settings_contract import (
     LEGACY_GLOBAL_SHARED_VISUAL_KEYS,
     normalize_spectrum_render_mode,
+    strip_legacy_global_technical_keys,
 )
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
@@ -112,6 +113,7 @@ def extract_visualizer_snapshot(mode_key: str, spotify_vis_config: Mapping[str, 
 
 
 def build_normalized_custom_snapshot(mode_key: str, spotify_vis_config: Mapping[str, Any]) -> Dict[str, Any]:
+    spotify_vis_config = strip_legacy_global_technical_keys(spotify_vis_config)
     normalized_live = normalize_visualizer_section_mapping(
         dict(spotify_vis_config),
         apply_preset_overlay=False,
@@ -137,7 +139,7 @@ def resolve_visualizer_activation_payload(
     prefix: str = "widgets.spotify_visualizer",
 ) -> VisualizerActivationPayload:
     """Resolve one canonical runtime/settings activation payload."""
-    source = dict(config) if isinstance(config, Mapping) else {}
+    source = strip_legacy_global_technical_keys(config)
     normalized_live = normalize_visualizer_section_mapping(
         source,
         prefix=prefix,
@@ -191,6 +193,10 @@ def restore_visualizer_snapshot(
 ) -> bool:
     if not isinstance(payload, Mapping):
         return False
+    sanitized = strip_legacy_global_technical_keys(spotify_vis_config)
+    if dict(sanitized) != dict(spotify_vis_config):
+        spotify_vis_config.clear()
+        spotify_vis_config.update(sanitized)
     changed = False
     prefixes = MODE_KEY_PREFIXES.get(mode_key, [])
     for key in list(spotify_vis_config.keys()):

@@ -250,6 +250,28 @@ def migrate_legacy_global_technical_keys(
     return migrated
 
 
+def strip_legacy_global_technical_keys(
+    data: Mapping[str, Any] | None,
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Drop retired shared technical keys instead of honoring them.
+
+    Visualizer technical state is canonical only in mode-owned keys. Retired
+    shared keys like ``audio_block_size`` are legacy dirt that can silently
+    poison unrelated modes if they survive in live/runtime mappings.
+    """
+    if not isinstance(data, Mapping):
+        return {}
+
+    stripped = dict(data)
+    scoped_prefix = f"{prefix}."
+    for key in LEGACY_GLOBAL_TECHNICAL_KEYS:
+        stripped.pop(key, None)
+        stripped.pop(f"{scoped_prefix}{key}", None)
+    return stripped
+
+
 def migrate_legacy_global_visual_keys(
     data: Mapping[str, Any] | None,
     *,

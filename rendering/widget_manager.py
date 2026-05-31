@@ -43,6 +43,7 @@ from core.settings.visualizer_presets import (
     VISUALIZER_CUSTOM_STORAGE_KEY,
 )
 from core.settings.visualizer_mode_registry import get_preset_key
+from core.settings.visualizer_settings_contract import strip_legacy_global_technical_keys
 from core.threading.manager import ThreadManager
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from rendering.widget_positioner import WidgetPositioner, PositionAnchor
@@ -487,7 +488,7 @@ class WidgetManager:
         if not isinstance(spotify_vis_config, Mapping):
             spotify_vis_config = {}
 
-        vis_config = dict(spotify_vis_config)
+        vis_config = strip_legacy_global_technical_keys(spotify_vis_config)
         preset_key = get_preset_key(mode)
         current_idx = resolve_preset_index_from_mapping(mode, vis_config, prefix="widgets.spotify_visualizer")
         current_idx = max(0, min(preset_count - 1, current_idx))
@@ -567,7 +568,7 @@ class WidgetManager:
         widgets_cfg = settings.get('widgets', {}) or {}
         if not isinstance(widgets_cfg, Mapping):
             widgets_cfg = {}
-        vis_config = dict(widgets_cfg.get('spotify_visualizer', {}) or {})
+        vis_config = strip_legacy_global_technical_keys(widgets_cfg.get('spotify_visualizer', {}) or {})
 
         vis_config['mode'] = mode
         preset_key = get_preset_key(mode)

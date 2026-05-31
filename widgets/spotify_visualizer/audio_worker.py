@@ -200,7 +200,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         # Floor control configuration (dynamic/manual)
         self._use_dynamic_floor: bool = True
         self._manual_floor: float = 0.12
-        self._min_floor: float = 0.12
+        self._min_floor: float = 0.0
         self._max_floor: float = 1.0
         self._raw_bass_avg: float = 0.12
         # Slightly higher dynamic floor baseline (10% harder to peak).
@@ -270,6 +270,7 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._spectrum_shape_config = None  # SpectrumShapeConfig or None → uses defaults
         self._spectrum_mirrored: bool = True  # center-out mirrored layout
         self._spectrum_shape_nodes: list = [[0.0, 0.40], [0.35, 0.75], [0.65, 0.55], [1.0, 0.80]]
+        self._effective_block_size: int = 0
 
     def set_sensitivity_config(self, recommended: bool, sensitivity: float) -> None:
         try:
@@ -350,8 +351,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         restarted = self.restart_capture()
         if restarted:
             logger.info(
-                "[SPOTIFY_VIS] Audio capture restarted for block size change (preferred=%d)",
+                "[SPOTIFY_VIS] Audio capture restarted for block size change (preferred=%d effective=%d)",
                 value,
+                self._effective_block_size,
             )
         else:
             logger.warning(
@@ -582,11 +584,14 @@ class SpotifyVisualizerAudioWorker(QObject):
 
         if self._backend.start(_on_audio_samples):
             self._running = True
+            self._effective_block_size = int(getattr(self._backend, "_negotiated_block_size", 0) or 0)
             logger.info(
-                "[SPOTIFY_VIS] Audio worker started (%s, %dHz, %d channels)",
+                "[SPOTIFY_VIS] Audio worker started (%s, %dHz, %d channels, effective_block=%d, preferred=%d)",
                 self._backend.__class__.__name__,
                 self._backend.sample_rate,
                 self._backend.channels,
+                self._effective_block_size,
+                self._preferred_block_size,
             )
         else:
             logger.info("[SPOTIFY_VIS] Failed to start audio capture")
@@ -603,6 +608,7 @@ class SpotifyVisualizerAudioWorker(QObject):
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._backend = None
+        self._effective_block_size = 0
         logger.info("[SPOTIFY_VIS] Audio worker stopped")
 
     def is_capture_healthy(self) -> bool:
@@ -620,7 +626,10 @@ class SpotifyVisualizerAudioWorker(QObject):
             return False
         try:
             logger.info("[SPOTIFY_VIS] Restarting audio capture...")
-            return self._backend.restart()
+            restarted = self._backend.restart()
+            if restarted:
+                self._effective_block_size = int(getattr(self._backend, "_negotiated_block_size", 0) or 0)
+            return restarted
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to restart capture: %s", e)
             return False

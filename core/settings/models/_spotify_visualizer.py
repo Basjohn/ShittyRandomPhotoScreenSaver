@@ -24,13 +24,13 @@ from core.settings.visualizer_preset_indices import (
     resolve_preset_index_from_mapping,
 )
 from core.settings.visualizer_settings_contract import (
-    migrate_legacy_global_technical_keys,
     migrate_legacy_global_visual_keys,
     PER_MODE_BASELINE_KEYS,
     SPECIAL_PER_MODE_KEYS,
     resolve_visualizer_active_mode_rainbow_state,
     resolve_spectrum_render_mode,
     resolve_spectrum_unique_colors,
+    strip_legacy_global_technical_keys,
 )
 from core.settings.models._visualizer_helpers import (
     _normalize_visualizer_direction,
@@ -942,7 +942,7 @@ def _build_mapping_readers(
             value = _get(f"{active_mode}_{base_key}", sentinel)
             if value is not sentinel:
                 return value
-        return _get(base_key, default)
+        return default
 
     def _get_per_mode_value(mode: str, base_key: str, default: Any) -> Any:
         sentinel = object()
@@ -1625,10 +1625,8 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = migrate_legacy_global_visual_keys(
-            migrate_legacy_global_technical_keys(dict(data), prefix=prefix),
-            prefix=prefix,
-        )
+        _raw = strip_legacy_global_technical_keys(dict(data), prefix=prefix)
+        _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)
         _mode = coerce_visualizer_mode_id(
             _raw.get("mode", _raw.get(f"{prefix}.mode", "bubble"))
         )

@@ -101,11 +101,22 @@ def log_live_activation_state(
         engine = widget._engine
         worker = getattr(engine, "_audio_worker", None) if engine is not None else None
         overlay = getattr(widget.parent(), "_spotify_bars_overlay", None) if widget.parent() is not None else None
+        cache_manual = float(technical_cache.get("manual_floor", 0.12))
+        cache_dynamic = bool(technical_cache.get("dynamic_floor", True))
+        cache_adaptive = bool(technical_cache.get("adaptive_sensitivity", True))
+        cache_sensitivity = float(technical_cache.get("sensitivity", 1.0))
+        cache_block_pref = int(technical_cache.get("audio_block_size", 0) or 0)
+        worker_manual = float(getattr(worker, "_manual_floor", 0.12) if worker is not None else 0.12)
+        worker_dynamic = bool(getattr(worker, "_use_dynamic_floor", True) if worker is not None else True)
+        worker_sensitivity = float(getattr(worker, "_user_sensitivity", 1.0) if worker is not None else 1.0)
+        worker_recommended = bool(getattr(worker, "_use_recommended", True) if worker is not None else True)
+        worker_block_pref = int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0)
+        worker_block_effective = int(getattr(worker, "_effective_block_size", 0) if worker is not None else 0)
         logger.info(
             (
                 "[SPOTIFY_VIS][LIVE] reason=%s mode=%s preset_index=%d preset_kind=%s preset_name=%s "
                 "preset_path=%s cache_manual=%.3f worker_manual=%.3f worker_dynamic=%s worker_sensitivity=%.3f "
-                "worker_recommended=%s worker_block=%d worker_input_gain=%.3f worker_agc=%.3f "
+                "worker_recommended=%s worker_block=%d worker_block_pref=%d worker_input_gain=%.3f worker_agc=%.3f "
                 "widget_fill=%s widget_border=%s widget_border_opacity=%.3f "
                 "widget_ghost=%s widget_ghost_alpha=%.3f widget_ghost_decay=%.3f "
                 "overlay_fill=%s overlay_border=%s overlay_peak_decay=%.3f "
@@ -117,12 +128,13 @@ def log_live_activation_state(
             "custom" if payload.is_custom else "curated",
             payload.preset_name,
             payload.preset_path or "<custom>",
-            float(technical_cache.get("manual_floor", 0.12)),
-            float(getattr(worker, "_manual_floor", 0.12) if worker is not None else 0.12),
-            bool(getattr(worker, "_use_dynamic_floor", True) if worker is not None else True),
-            float(getattr(worker, "_user_sensitivity", 1.0) if worker is not None else 1.0),
-            bool(getattr(worker, "_use_recommended", True) if worker is not None else True),
-            int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0),
+            cache_manual,
+            worker_manual,
+            worker_dynamic,
+            worker_sensitivity,
+            worker_recommended,
+            worker_block_effective,
+            worker_block_pref,
             float(getattr(worker, "_input_gain", 1.0) if worker is not None else 1.0),
             float(getattr(worker, "_agc_strength", 0.5) if worker is not None else 0.5),
             widget._bar_fill_color.getRgb(),
@@ -139,6 +151,40 @@ def log_live_activation_state(
             getattr(overlay, "_activation_id", None),
             getattr(overlay, "_engine_generation", None),
         )
+        mismatches: list[str] = []
+        if abs(worker_manual - cache_manual) > 1e-4:
+            mismatches.append("manual_floor")
+        if worker_dynamic != cache_dynamic:
+            mismatches.append("dynamic_floor")
+        if worker_recommended != cache_adaptive:
+            mismatches.append("adaptive_sensitivity")
+        if abs(worker_sensitivity - cache_sensitivity) > 1e-4:
+            mismatches.append("sensitivity")
+        if cache_block_pref > 0 and worker_block_pref != cache_block_pref:
+            mismatches.append("preferred_block")
+        if mismatches:
+            logger.warning(
+                "[SPOTIFY_VIS][PARITY] reason=%s mode=%s preset_kind=%s preset_name=%s mismatches=%s "
+                "cache_manual=%.3f worker_manual=%.3f cache_dynamic=%s worker_dynamic=%s "
+                "cache_adaptive=%s worker_recommended=%s cache_sensitivity=%.3f worker_sensitivity=%.3f "
+                "cache_block_pref=%d worker_block_pref=%d worker_block_effective=%d",
+                reason,
+                mode_key,
+                "custom" if payload.is_custom else "curated",
+                payload.preset_name,
+                ",".join(mismatches),
+                cache_manual,
+                worker_manual,
+                cache_dynamic,
+                worker_dynamic,
+                cache_adaptive,
+                worker_recommended,
+                cache_sensitivity,
+                worker_sensitivity,
+                cache_block_pref,
+                worker_block_pref,
+                worker_block_effective,
+            )
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to log live activation state", exc_info=True)
 

@@ -111,6 +111,7 @@ Active ids:
 - Shared seams must remain neutral and explicit.
 - No hidden cross-mode dependency on authored mode keys.
 - Technical settings are mode-owned at runtime and in canonical persistence. Shared/global technical keys are legacy migration inputs only and must not remain in normalized settings, custom snapshots, or preset payloads.
+- Mode-owned technical values keep authored intent. In particular, valid low manual floors below `0.12` and authored `audio_block_size=0` automatic-selection requests must survive normalization, validation, startup, recreate, hot mode switch, and preset cycle unchanged; shared/global legacy technical keys may be stripped or migrated, but they must not poison current mode-owned values.
 - Preset-varying runtime visuals that affect activation or renderer state, including bar fill/border styling and legacy ghost controls, are mode-owned too. They must not travel through shared/global authored keys after normalization.
 - Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
 - Visualizer settings-model refactors must preserve ordered grouped section merges for both constructor assembly and persistence serialization. Do not reintroduce bespoke handwritten field families or entry-point-specific fallback paths once a group has been centralized.

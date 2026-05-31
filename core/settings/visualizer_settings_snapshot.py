@@ -11,8 +11,8 @@ from core.settings.visualizer_mode_registry import (
     get_setting_prefixes,
 )
 from core.settings.visualizer_settings_contract import (
-    migrate_legacy_global_technical_keys,
     migrate_legacy_global_visual_keys,
+    strip_legacy_global_technical_keys,
 )
 
 _PREFIX = "widgets.spotify_visualizer"
@@ -191,7 +191,7 @@ def normalize_visualizer_section_mapping(
         return {}
 
     migrated = _forward_migrate_alias_keys(data, prefix=prefix)
-    migrated = migrate_legacy_global_technical_keys(migrated, prefix=prefix)
+    migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
 
     model = SpotifyVisualizerSettings.from_mapping(

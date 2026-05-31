@@ -52,8 +52,9 @@ class SettingsManager(QObject):
         "input.hard_exit": "input.interaction_mode",
     }
     _MISSING = object()
-    _MANUAL_FLOOR_MIN = 0.12
+    _MANUAL_FLOOR_MIN = 0.0
     _MANUAL_FLOOR_MAX = 1.0
+    _MANUAL_FLOOR_FALLBACK = 0.12
     
     def __init__(
         self,
@@ -1064,7 +1065,7 @@ class SettingsManager(QObject):
             try:
                 numeric_value = float(value)
             except (TypeError, ValueError):
-                numeric_value = self._MANUAL_FLOOR_MIN
+                numeric_value = self._MANUAL_FLOOR_FALLBACK
                 needs_cast = True
 
             clamped = min(max(numeric_value, self._MANUAL_FLOOR_MIN), self._MANUAL_FLOOR_MAX)

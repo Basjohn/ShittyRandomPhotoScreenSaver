@@ -31,6 +31,7 @@ from core.settings.visualizer_settings_snapshot import (
     normalize_visualizer_mode_payload,
     normalize_visualizer_section_mapping,
 )
+from core.settings.visualizer_settings_contract import strip_legacy_global_technical_keys
 from core.settings.visualizer_presets import (
     GLOBAL_ALLOWED_KEYS,
     MODE_KEY_PREFIXES,
@@ -1155,7 +1156,7 @@ class WidgetsTab(QWidget):
         """
         config: dict[str, Any] = {}
         if isinstance(base_config, Mapping):
-            config.update(deepcopy(dict(base_config)))
+            config.update(strip_legacy_global_technical_keys(deepcopy(dict(base_config))))
 
         # This helper is used by stack-status/live-preview paths before every
         # lazy-built Media/Visualizer control necessarily exists. In that case,
