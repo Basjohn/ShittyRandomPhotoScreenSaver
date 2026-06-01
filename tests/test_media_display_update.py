@@ -252,6 +252,26 @@ def test_build_and_apply_metadata_reuses_existing_layout_for_same_track_identity
     assert widget._artwork_vertical_bias == 0.41
 
 
+def test_build_and_apply_metadata_shrinks_wrap_prone_metadata_more_aggressively():
+    widget = _StubMediaWidget()
+    info = MediaTrackInfo(
+        title="Ground Control (feat. Tegan And Sara)",
+        artist="All Time Low",
+        album="Last Young Renegade",
+        state=MediaPlaybackState.PLAYING,
+    )
+
+    display_update._build_and_apply_metadata(
+        widget,
+        info,
+        prev_info=None,
+        metadata_changed=True,
+    )
+
+    assert widget._metadata_paint["title_font"] < widget._font_size + 3
+    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
+
+
 def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
     widget = _StubMediaWidget()
     widget._has_seen_first_track = False

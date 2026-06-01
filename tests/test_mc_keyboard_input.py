@@ -43,4 +43,13 @@ def test_mc_interaction_clicks_reclaim_focus():
     source = inspect.getsource(display_input._restore_mc_input_focus)
     assert 'widget.activateWindow()' in source
     assert 'handle.requestActivate()' in source
-    assert 'widget.setFocus(Qt.FocusReason.MouseFocusReason)' in source
+    assert 'widget.setFocus(focus_reason)' in source
+
+
+def test_mc_startup_show_on_screen_reclaims_focus_after_widget_setup():
+    from rendering import display_setup
+
+    source = inspect.getsource(display_setup.show_on_screen)
+    assert 'startup_show_on_screen' in source
+    assert 'focus_reason=Qt.FocusReason.ActiveWindowFocusReason' in source
+    assert '_restore_mc_input_focus' in source

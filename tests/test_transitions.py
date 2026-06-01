@@ -9,8 +9,19 @@ import pytest
 from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
-from transitions.base_transition import TransitionState, SlideDirection, WipeDirection
+from transitions.base_transition import BaseTransition, TransitionState, SlideDirection, WipeDirection
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
+
+
+class _DummyTransition(BaseTransition):
+    def start(self, old_pixmap, new_pixmap, widget):
+        return True
+
+    def stop(self) -> None:
+        pass
+
+    def cleanup(self) -> None:
+        pass
 
 
 @pytest.fixture
@@ -118,6 +129,25 @@ def test_crossfade_invalid_pixmap(qapp, test_widget):
     
     result = transition.start(None, null_pixmap, test_widget)
     assert result is False
+
+
+def test_base_transition_actual_start_updates_widget_timing():
+    transition = _DummyTransition(duration_ms=200)
+    widget = QWidget()
+    controller = type("_Controller", (), {"_transition_started_at": 0.0})()
+    widget._transition_controller = controller
+    widget._current_transition_started_at = 0.0
+    widget._current_transition_expected_duration_ms = 0
+
+    transition._uses_deferred_start_telemetry = True
+    transition._widget = widget
+    transition._mark_compositor_actual_start(275)
+
+    assert transition.get_expected_duration_ms() == 275
+    assert transition._start_time is not None
+    assert widget._current_transition_started_at > 0.0
+    assert widget._current_transition_expected_duration_ms == 275
+    assert controller._transition_started_at == widget._current_transition_started_at
 
 
 def test_crossfade_easing_constructor():

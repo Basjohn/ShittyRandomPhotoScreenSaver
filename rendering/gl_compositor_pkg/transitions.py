@@ -47,14 +47,19 @@ def _start_with_desync(
     duration_ms: int,
     starter: Callable[[int], Optional[str]],
     transition_label: str,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Spread transition-start overhead without changing perceived pacing."""
     delay_ms, compensated_duration = widget._apply_desync_strategy(duration_ms)
     if delay_ms <= 0:
+        if on_started is not None:
+            on_started(compensated_duration)
         return starter(compensated_duration)
 
     def deferred_start() -> None:
         try:
+            if on_started is not None:
+                on_started(compensated_duration)
             starter(compensated_duration)
         except Exception:
             logger.debug(
@@ -76,6 +81,7 @@ def start_crossfade(
     easing: EasingCurve,
     animation_manager: AnimationManager,
     on_finished: Optional[Callable[[], None]] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a crossfade between two pixmaps using the compositor.
     
@@ -103,6 +109,7 @@ def start_crossfade(
         duration_ms=duration_ms,
         starter=_start_crossfade,
         transition_label="crossfade",
+        on_started=on_started,
     )
 
 def start_warp(
@@ -114,6 +121,7 @@ def start_warp(
     easing: EasingCurve,
     animation_manager: AnimationManager,
     on_finished: Optional[Callable[[], None]] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a warp dissolve between two pixmaps using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -135,7 +143,7 @@ def start_warp(
             lambda: widget._on_warp_complete(on_finished),
             transition_label="warp",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_warp, transition_label="warp")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_warp, transition_label="warp", on_started=on_started)
 
 def start_raindrops(
     widget,
@@ -147,6 +155,7 @@ def start_raindrops(
     animation_manager: AnimationManager,
     on_finished: Optional[Callable[[], None]] = None,
     ripple_count: int = 3,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a shader-driven raindrops transition. Returns None if shader unavailable."""
     if not new_pixmap or new_pixmap.isNull():
@@ -178,7 +187,7 @@ def start_raindrops(
             lambda: widget._on_raindrops_complete(on_finished),
             transition_label="raindrops",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_raindrops, transition_label="raindrops")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_raindrops, transition_label="raindrops", on_started=on_started)
 
 # NOTE: start_shuffle_shader() and start_shooting_stars() removed - these transitions are retired.
 
@@ -192,6 +201,7 @@ def start_wipe(
     easing: EasingCurve,
     animation_manager: AnimationManager,
     on_finished: Optional[Callable[[], None]] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a wipe between two pixmaps using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -213,7 +223,7 @@ def start_wipe(
             lambda: widget._on_wipe_complete(on_finished),
             transition_label="wipe",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_wipe, transition_label="wipe")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_wipe, transition_label="wipe", on_started=on_started)
 
 def start_slide(
     widget,
@@ -228,6 +238,7 @@ def start_slide(
     easing: EasingCurve,
     animation_manager: AnimationManager,
     on_finished: Optional[Callable[[], None]] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a slide between two pixmaps using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -253,7 +264,7 @@ def start_slide(
             lambda: widget._on_slide_complete(on_finished),
             transition_label="slide",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_slide, transition_label="slide")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_slide, transition_label="slide", on_started=on_started)
 
 def start_block_flip(
     widget,
@@ -268,6 +279,7 @@ def start_block_flip(
     grid_cols: Optional[int] = None,
     grid_rows: Optional[int] = None,
     direction: Optional[SlideDirection] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a block puzzle flip using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -304,7 +316,7 @@ def start_block_flip(
             lambda: widget._on_blockflip_complete(on_finished),
             transition_label="blockflip",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockflip, transition_label="blockflip")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockflip, transition_label="blockflip", on_started=on_started)
 
 def start_block_spin(
     widget,
@@ -316,6 +328,7 @@ def start_block_spin(
     animation_manager: AnimationManager,
     direction: SlideDirection = SlideDirection.LEFT,
     on_finished: Optional[Callable[[], None]] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a 3D block spin using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -339,7 +352,7 @@ def start_block_spin(
             lambda: widget._on_blockspin_complete(on_finished),
             transition_label="blockspin",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockspin, transition_label="blockspin")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blockspin, transition_label="blockspin", on_started=on_started)
 
 def start_diffuse(
     widget,
@@ -354,6 +367,7 @@ def start_diffuse(
     grid_cols: Optional[int] = None,
     grid_rows: Optional[int] = None,
     shape: Optional[str] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a diffuse reveal using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -395,7 +409,7 @@ def start_diffuse(
             lambda: widget._on_diffuse_complete(on_finished),
             transition_label="diffuse",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_diffuse, transition_label="diffuse")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_diffuse, transition_label="diffuse", on_started=on_started)
 
 def start_blinds(
     widget,
@@ -411,6 +425,7 @@ def start_blinds(
     grid_rows: Optional[int] = None,
     feather: float = 0.08,
     direction: int = 0,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a blinds reveal using the compositor."""
     if not new_pixmap or new_pixmap.isNull():
@@ -448,7 +463,7 @@ def start_blinds(
             lambda: widget._on_blinds_complete(on_finished),
             transition_label="blinds",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blinds, transition_label="blinds")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_blinds, transition_label="blinds", on_started=on_started)
 
 def start_crumble(
     widget,
@@ -464,6 +479,7 @@ def start_crumble(
     mosaic_mode: bool = False,
     weight_mode: float = 0.0,
     seed: Optional[float] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a crumble transition using the compositor."""
     import random as _random
@@ -499,7 +515,7 @@ def start_crumble(
             lambda: widget._on_crumble_complete(on_finished),
             transition_label="crumble",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_crumble, transition_label="crumble")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_crumble, transition_label="crumble", on_started=on_started)
 
 def start_particle(
     widget,
@@ -525,6 +541,7 @@ def start_particle(
     light_direction: int = 0,
     swirl_order: int = 0,
     seed: Optional[float] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a particle transition using the compositor.
     
@@ -584,7 +601,7 @@ def start_particle(
             lambda: widget._on_particle_complete(on_finished),
             transition_label="particle",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_particle, transition_label="particle")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_particle, transition_label="particle", on_started=on_started)
 
 def start_burn(
     widget,
@@ -605,6 +622,7 @@ def start_burn(
     ash_enabled: bool = True,
     ash_density: float = 0.5,
     seed: Optional[float] = None,
+    on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Begin a burn transition between two pixmaps using the compositor."""
     import random as _rng
@@ -647,7 +665,7 @@ def start_burn(
             lambda: widget._on_burn_complete(on_finished),
             transition_label="burn",
         )
-    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_burn, transition_label="burn")
+    return _start_with_desync(widget, duration_ms=duration_ms, starter=_start_burn, transition_label="burn", on_started=on_started)
 
 
 # ------------------------------------------------------------------

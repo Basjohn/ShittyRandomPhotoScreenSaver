@@ -198,7 +198,12 @@ class TransitionController(QObject):
         # Set up the new transition
         self._current_transition = transition
         self._current_overlay_key = overlay_key
-        self._transition_started_at = time.monotonic()
+        deferred_start = False
+        try:
+            deferred_start = bool(transition.uses_deferred_start_telemetry())
+        except Exception:
+            deferred_start = False
+        self._transition_started_at = 0.0 if deferred_start else time.monotonic()
         
         if overlay_key:
             self._overlay_timeouts[overlay_key] = self._transition_started_at

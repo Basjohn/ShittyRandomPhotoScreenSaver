@@ -44,6 +44,7 @@ class GLCompositorBlindsTransition(BaseTransition):
         direction: int = 0,
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._rows = slat_rows
         self._cols = slat_cols
         self._feather = max(0.001, min(0.5, float(feather)))
@@ -69,9 +70,6 @@ class GLCompositorBlindsTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # If there's no old image, just complete immediately.
         if old_pixmap is None or old_pixmap.isNull():
@@ -132,6 +130,7 @@ class GLCompositorBlindsTransition(BaseTransition):
             grid_rows=self._grid_rows or 0,
             feather=self._feather,
             direction=self._direction,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

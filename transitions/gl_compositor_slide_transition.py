@@ -40,6 +40,7 @@ class GLCompositorSlideTransition(BaseTransition):
         easing: str = "Auto",
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -60,9 +61,6 @@ class GLCompositorSlideTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # If there's no old image, just complete immediately.
         if old_pixmap is None or old_pixmap.isNull():
@@ -110,6 +108,7 @@ class GLCompositorSlideTransition(BaseTransition):
             easing=easing_curve,
             animation_manager=am,
             on_finished=_on_finished,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

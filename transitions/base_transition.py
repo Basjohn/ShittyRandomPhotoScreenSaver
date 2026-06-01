@@ -163,6 +163,8 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         # Telemetry tracking
         self._start_time: Optional[float] = None
         self._end_time: Optional[float] = None
+        self._effective_duration_ms: Optional[int] = None
+        self._uses_deferred_start_telemetry: bool = False
         
         # Shared resource manager wiring (assigned by caller)
         self._resource_manager: Optional["ResourceManager"] = None
@@ -241,7 +243,11 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         return self.duration_ms
     
     def get_expected_duration_ms(self) -> int:
-        return self.duration_ms
+        return int(self._effective_duration_ms or self.duration_ms)
+
+    def uses_deferred_start_telemetry(self) -> bool:
+        """Whether the transition reports start only after a deferred handoff."""
+        return bool(self._uses_deferred_start_telemetry)
     
     def _set_state(self, state: TransitionState) -> None:
         """
@@ -272,18 +278,54 @@ class BaseTransition(QObject, metaclass=QABCMeta):
         self.finished.emit()
 
     # --- Telemetry helpers (Phase 2.2) ---------------------------------------
-    def _mark_start(self) -> None:
+    def _mark_start(self, expected_duration_ms: Optional[int] = None) -> None:
         """Mark transition start time for telemetry.
 
         NOTE: This emits a debug-level ``"[PERF]"`` log. Grep for ``"[PERF]"``
         to locate or disable transition profiling when preparing production
         builds.
         """
-        if not is_perf_metrics_enabled():
-            return
+        if expected_duration_ms is not None:
+            self._effective_duration_ms = max(1, int(expected_duration_ms))
+        elif self._effective_duration_ms is None:
+            self._effective_duration_ms = int(self.duration_ms)
 
         self._start_time = time.time()
-        logger.debug(f"[PERF] {self.__class__.__name__} started")
+        if is_perf_metrics_enabled():
+            logger.debug(f"[PERF] {self.__class__.__name__} started")
+
+    def _mark_actual_widget_start(
+        self,
+        widget: Optional[QWidget],
+        *,
+        expected_duration_ms: Optional[int] = None,
+    ) -> None:
+        """Publish the real transition start after any deferred compositor handoff."""
+        self._mark_start(expected_duration_ms=expected_duration_ms)
+
+        if widget is None:
+            return
+
+        started_at = time.monotonic()
+        try:
+            setattr(widget, "_current_transition_started_at", started_at)
+            setattr(widget, "_current_transition_expected_duration_ms", self.get_expected_duration_ms())
+        except Exception as exc:
+            logger.debug("[TRANSITION] Failed to publish widget start timing: %s", exc)
+
+        try:
+            controller = getattr(widget, "_transition_controller", None)
+            if controller is not None:
+                setattr(controller, "_transition_started_at", started_at)
+        except Exception as exc:
+            logger.debug("[TRANSITION] Failed to publish controller start timing: %s", exc)
+
+    def _mark_compositor_actual_start(self, expected_duration_ms: Optional[int] = None) -> None:
+        """Shared callback for GL compositor transitions with deferred starts."""
+        self._mark_actual_widget_start(
+            getattr(self, "_widget", None),
+            expected_duration_ms=expected_duration_ms,
+        )
     
     def _mark_end(self) -> None:
         """Mark transition end time and log performance metrics.

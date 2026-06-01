@@ -295,6 +295,12 @@ def activate_impl(widget: Any) -> None:
 def deactivate_impl(widget: Any) -> None:
     """Deactivate visualizer — lifecycle hook."""
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+    from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
+
+    try:
+        clear_pending_playback_pause(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear pending playback pause on deactivate", exc_info=True)
 
     try:
         widget._reset_latency_diagnostics()
@@ -353,10 +359,15 @@ def start_legacy(widget: Any) -> None:
 def stop_legacy(widget: Any) -> None:
     """Legacy stop method."""
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+    from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
 
     if not widget._enabled:
         return
     widget._enabled = False
+    try:
+        clear_pending_playback_pause(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear pending playback pause on stop", exc_info=True)
     try:
         widget._reset_latency_diagnostics()
     except Exception:

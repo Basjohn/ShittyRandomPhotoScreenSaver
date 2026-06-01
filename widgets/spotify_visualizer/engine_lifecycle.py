@@ -18,6 +18,12 @@ logger = get_logger(__name__)
 def reset_engine_state(widget: Any, *, reason: str) -> None:
     """Hard-reset beat engine + widget bar/energy state after crossover."""
     from widgets.spotify_visualizer.beat_engine import get_shared_spotify_beat_engine
+    from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
+
+    try:
+        clear_pending_playback_pause(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear pending playback pause during engine reset", exc_info=True)
 
     try:
         widget._reset_latency_diagnostics()
@@ -64,6 +70,13 @@ def reset_engine_state(widget: Any, *, reason: str) -> None:
 
 def reset_runtime_activation_state(widget: Any, *, reason: str = "activation") -> None:
     """Cold-reset visualizer runtime state after a mode or preset activation."""
+    from widgets.spotify_visualizer.media_bridge import clear_pending_playback_pause
+
+    try:
+        clear_pending_playback_pause(widget)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to clear pending playback pause during runtime activation reset", exc_info=True)
+
     try:
         widget._reset_latency_diagnostics()
     except Exception:

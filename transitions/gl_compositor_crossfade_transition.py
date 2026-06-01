@@ -33,6 +33,7 @@ class GLCompositorCrossfadeTransition(BaseTransition):
 
     def __init__(self, duration_ms: int = 1000, easing: str = "Auto") -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -52,9 +53,6 @@ class GLCompositorCrossfadeTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # Resolve compositor from widget; fall back to immediate display if absent.
         comp = getattr(widget, "_gl_compositor", None)
@@ -88,6 +86,7 @@ class GLCompositorCrossfadeTransition(BaseTransition):
             easing=easing_curve,
             animation_manager=am,
             on_finished=_on_finished,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

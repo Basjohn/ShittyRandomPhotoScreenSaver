@@ -1035,13 +1035,10 @@ def on_tick(widget: Any) -> None:
     max_fps = widget._resolve_max_fps(transition_ctx)
     widget._update_timer_interval(max_fps)
 
-    min_dt = 1.0 / max_fps if max_fps > 0.0 else 0.0
     last = widget._last_update_ts
     dt_since_last = 0.0
     if last >= 0.0:
         dt_since_last = now_ts - last
-    if last >= 0.0 and dt_since_last < min_dt and not widget._waiting_for_fresh_engine_frame:
-        return
 
     widget._last_update_ts = now_ts
     _dt_spike_max_reasonable_ms: float = 1000.0

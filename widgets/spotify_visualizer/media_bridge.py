@@ -11,10 +11,13 @@ from __future__ import annotations
 import time
 from dataclasses import asdict, is_dataclass
 from typing import Any, Optional
+from PySide6.QtCore import QTimer
 
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
+
+_PLAYBACK_PAUSE_CONFIRM_MS = 700
 
 
 def _payload_state_rank(payload: Optional[dict]) -> int:
@@ -125,6 +128,75 @@ def seed_playback_state_from_anchor(
     return False
 
 
+def clear_pending_playback_pause(widget: Any) -> None:
+    """Cancel any pending deferred non-playing commit."""
+    timer = getattr(widget, "_pending_playback_pause_timer", None)
+    if timer is not None:
+        try:
+            timer.stop()
+            timer.deleteLater()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to clear pending pause timer", exc_info=True)
+    widget._pending_playback_pause_timer = None
+    widget._pending_playback_pause_state = None
+
+
+def _commit_playback_state(widget: Any, *, state: str, reason: str) -> None:
+    prev = bool(getattr(widget, "_spotify_playing", False))
+    is_playing = state == "playing"
+    widget._spotify_playing = is_playing
+    widget._last_media_state_ts = time.time()
+    widget._fallback_logged = False
+    if is_playing:
+        widget._startup_require_playing_before_reveal = False
+
+    if is_playing and not prev:
+        widget._trigger_wake(reason=reason)
+
+    try:
+        if widget._engine is not None:
+            widget._engine.set_playback_state(is_playing)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
+
+    if (
+        widget._spotify_playing
+        and widget._startup_reveal_pending
+        and widget._startup_hot_start_started
+        and not widget._waiting_for_fresh_frame
+    ):
+        widget._finish_staged_startup_reveal(reason="play_state_ready")
+
+    widget.sync_visibility_with_anchor()
+
+
+def _schedule_nonplaying_commit(widget: Any, *, state: str) -> None:
+    clear_pending_playback_pause(widget)
+    widget._pending_playback_pause_state = state
+
+    timer = QTimer(widget)
+    timer.setSingleShot(True)
+    timer.setInterval(_PLAYBACK_PAUSE_CONFIRM_MS)
+
+    def _on_timeout() -> None:
+        widget._pending_playback_pause_timer = None
+        pending_state = getattr(widget, "_pending_playback_pause_state", None)
+        widget._pending_playback_pause_state = None
+        if pending_state not in {"paused", "stopped"}:
+            return
+        _commit_playback_state(widget, state=pending_state, reason="play_state_pause_confirmed")
+
+    timer.timeout.connect(_on_timeout)
+    widget._pending_playback_pause_timer = timer
+    try:
+        register_resource = getattr(widget, "_register_resource", None)
+        if callable(register_resource):
+            register_resource(timer, "visualizer pending playback pause timer")
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to register pending pause timer", exc_info=True)
+    timer.start()
+
+
 def handle_media_update(widget: Any, payload: dict) -> None:
     """Receive media state from MediaWidget.
 
@@ -140,16 +212,24 @@ def handle_media_update(widget: Any, payload: dict) -> None:
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         state = ""
-    prev = widget._spotify_playing
-    widget._spotify_playing = state == "playing"
     widget._last_media_state_ts = time.time()
     widget._fallback_logged = False
-    if widget._spotify_playing:
-        widget._startup_require_playing_before_reveal = False
-
-    # WAKE TRIGGER: Play state transition from paused→playing
-    if widget._spotify_playing and not prev:
-        widget._trigger_wake(reason="play_state_transition")
+    prev = bool(getattr(widget, "_spotify_playing", False))
+    if state == "playing":
+        clear_pending_playback_pause(widget)
+        if not prev:
+            _commit_playback_state(widget, state="playing", reason="play_state_transition")
+        else:
+            widget._spotify_playing = True
+            widget._startup_require_playing_before_reveal = False
+    elif state in {"paused", "stopped"}:
+        if prev:
+            _schedule_nonplaying_commit(widget, state=state)
+        else:
+            clear_pending_playback_pause(widget)
+            _commit_playback_state(widget, state=state, reason="play_state_nonplaying")
+    else:
+        clear_pending_playback_pause(widget)
 
     # WAKE TRIGGER: Artwork changed (indicates track change, possibly during pause)
     artwork_url = payload.get("artwork_url", "")
@@ -159,13 +239,6 @@ def handle_media_update(widget: Any, payload: dict) -> None:
         if not widget._spotify_playing:
             # Artwork changed while paused - likely a wake event
             widget._trigger_wake(reason="paused_artwork_change")
-
-    # CRITICAL: Pass playback state to beat engine for audio processing gating
-    try:
-        if widget._engine is not None:
-            widget._engine.set_playback_state(widget._spotify_playing)
-    except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to set beat engine playback state", exc_info=True)
 
     first_media = not widget._has_seen_media
     if first_media:
@@ -184,15 +257,12 @@ def handle_media_update(widget: Any, payload: dict) -> None:
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
-    if (
-        widget._spotify_playing
-        and widget._startup_reveal_pending
-        and widget._startup_hot_start_started
-        and not widget._waiting_for_fresh_frame
-    ):
-        widget._finish_staged_startup_reveal(reason="play_state_ready")
-
-    widget.sync_visibility_with_anchor()
+    if state in {"paused", "stopped"} and prev and getattr(widget, "_pending_playback_pause_timer", None) is not None:
+        logger.debug(
+            "[SPOTIFY_VIS] Deferring %s media state for %dms to absorb playback-state wobble",
+            state,
+            _PLAYBACK_PAUSE_CONFIRM_MS,
+        )
 
 
 def sync_visibility_with_anchor(widget: Any) -> None:

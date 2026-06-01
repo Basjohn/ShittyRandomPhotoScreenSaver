@@ -62,10 +62,20 @@ def _ctrl_interaction_active(widget) -> bool:
     return local_ctrl or coordinator_ctrl or global_ctrl or handler_ctrl
 
 
-def _restore_mc_input_focus(widget, reason: str) -> None:
+def _restore_mc_input_focus(
+    widget,
+    reason: str,
+    *,
+    focus_reason: Qt.FocusReason = Qt.FocusReason.MouseFocusReason,
+) -> None:
     """Best-effort MC focus reclaim after interactive clicks."""
     if not bool(getattr(widget, "_is_mc_build", False)):
         return
+    try:
+        if not widget.isVisible() or bool(getattr(widget, "_exiting", False)):
+            return
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     try:
         widget.raise_()
     except Exception as e:
@@ -81,7 +91,7 @@ def _restore_mc_input_focus(widget, reason: str) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     try:
-        widget.setFocus(Qt.FocusReason.MouseFocusReason)
+        widget.setFocus(focus_reason)
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     try:

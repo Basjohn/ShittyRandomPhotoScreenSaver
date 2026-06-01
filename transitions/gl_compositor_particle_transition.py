@@ -73,6 +73,7 @@ class GLCompositorParticleTransition(BaseTransition):
         swirl_order: int = 0,
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         
         # Handle Random mode - resolve to actual mode and sub-options
         if mode == self.MODE_RANDOM:
@@ -123,9 +124,6 @@ class GLCompositorParticleTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # If there's no old image, just complete immediately.
         if old_pixmap is None or old_pixmap.isNull():
@@ -188,6 +186,7 @@ class GLCompositorParticleTransition(BaseTransition):
             gloss_size=self._gloss_size,
             light_direction=self._light_direction,
             swirl_order=self._swirl_order,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

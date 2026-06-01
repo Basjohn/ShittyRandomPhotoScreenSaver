@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-05-22
+Last updated: 2026-06-01
 
 Living map of the current SRPSS codebase.
 
@@ -116,8 +116,8 @@ Living map of the current SRPSS codebase.
 | Mute button | `widgets/mute_button_widget.py` | Media-adjacent mute toggle anchored to the media card, with canonical local runtime reset ownership for poll state and Spotify secondary-stage reveal state |
 | Startup policy | `rendering/overlay_startup_policy.py` | Primary and secondary startup timing |
 | Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
-| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths, and emits focused transport/volume hotkey intent such as `Space`/`Home` play-pause, `Left`/`Right` track navigation, `Up`/`Down` slider volume steps, plus `PgUp`/`PgDn`/`End` system-audio requests through the same centralized input contract as the other runtime keyboard actions |
-| GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface with transition-resource warmup delegated to the compositor/runtime helpers, compositor-owned skip logic for transitions already warmed through the hidden startup path, and the shared compositor-side transition desync policy |
+| Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks so refresh/menu interactions do not trigger browser-exit helper paths, emits focused transport/volume hotkey intent such as `Space`/`Home` play-pause, `Left`/`Right` track navigation, `Up`/`Down` slider volume steps, plus `PgUp`/`PgDn`/`End` system-audio requests through the same centralized input contract as the other runtime keyboard actions, and preserves focused-only key ownership rather than global key grabs |
+| GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface with transition-resource warmup delegated to the compositor/runtime helpers, compositor-owned skip logic for transitions already warmed through the hidden startup path, shared compositor-side transition desync that is retained only for real multi-display pacing, and actual-start telemetry handoff so transition-duration metrics reflect compositor runtime rather than request-time delay |
 | GL lifecycle helpers | `rendering/gl_compositor_pkg/gl_lifecycle.py` | Compositor context initialization plus registry-driven minimal startup transition-program compilation, hidden/quiescent deferred warmup of the remaining transition shader programs and representative transition resources, and the shared first-use transition-program ensure/bind seam |
 | Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil-mask inset |
 | Transition busy state | `rendering/display_widget.py` / `engine/display_manager.py` | Pending/active transition reporting used by overlay widgets to defer refresh/cache churn during image-load and GL transition windows |

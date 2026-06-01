@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-05-22
+Last updated: 2026-06-01
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -104,6 +104,8 @@ Active ids:
 - External runtime setters and bar-buffer resize must stay no-op safe when the shared beat engine is unavailable, and when authoritative mode config is ready they must prefer that replay path over ad hoc engine-local fallback state.
 - Live audio block-size changes are capture-rebind boundaries: when mode-owned technical config changes the preferred block size at runtime, the active audio worker must restart capture instead of waiting for a full runtime rebuild or settings-dialog restart.
 - Visualizer tick ownership is split by phase: the dedicated recurring timer owns steady runtime cadence, while AnimationManager assistance is transition-scoped only and must hand control cleanly back to the dedicated timer when the transition ends.
+- Steady-state visualizer cadence has one owner: once transition handoff and fresh-frame gating are out of the way, the dedicated recurring timer is authoritative and `_on_tick` must not apply a second silent steady-state FPS throttle on top of that timer.
+- Media-driven playback-state changes must be resilient to short controller wobble: quick paused/playing flaps may update media UI immediately, but the visualizer/capture path must not tear down reactivity or restart capture until a non-playing state survives a short confirmation window.
 - Visualizer latency warnings are activation-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation. Explicit probe-triggered latency requests may still log before readiness so reset/transition investigations remain visible.
 
 ### 5.4 Mode isolation
@@ -140,6 +142,7 @@ Active ids:
 - Mute button follows secondary-stage reveal contract.
 - Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime. Deferred transition warmup should use a hidden/quiescent shared GL context when possible so the live compositor surface is not perturbed after the first image appears; only non-live surfaces may fall back to direct compositor-context warmup. That hidden deferred path should cover both remaining transition-program compilation and representative transition-resource warmup where safe, so first use does not pay avoidable visible-surface prep cost. Transition correctness must not depend on that deferred startup warmup succeeding: first-use transition startup must ensure/bind the needed compositor program in a real current GL context before animation begins. Spotify visualizer GL startup should compile the resolved startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining mode programs incrementally afterward.
 - Multi-display GL transition pacing uses two shared seams: a small display-level image handoff stagger plus compositor-side desync at transition start. Compositor-side desync must remain effectively imperceptible and shared across compositor transition families, not only crossfade.
+- Single-display runtime must bypass compositor-side desync entirely. Request acceptance, deferred/desync wait, and actual transition runtime are separate telemetry concerns; transition duration metrics should begin at the real compositor handoff, not at the earlier request timestamp.
 - Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
 - Cold/recreated display startup must also keep first-image recovery explicit. If the first immediate `_show_next_image()` call fails, the engine should perform a bounded immediate retry sequence rather than relying only on the long rotation timer.
 

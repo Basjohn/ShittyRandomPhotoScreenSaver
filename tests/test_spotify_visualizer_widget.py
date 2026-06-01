@@ -304,6 +304,57 @@ def test_update_timer_interval_does_not_thrash_same_target_when_actual_is_jitter
     assert widget._current_timer_interval_ms == 13
 
 
+def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
+    consume_calls: list[float] = []
+
+    widget = SimpleNamespace(
+        _enabled=True,
+        _bars_timer=None,
+        _waiting_for_fresh_engine_frame=False,
+        _waiting_for_fresh_frame=False,
+        _last_transition_running=False,
+        _last_update_ts=-1.0,
+        _dt_spike_threshold_ms=42.0,
+        _mode_teardown_block_until_ready=False,
+        _mode_transition_ready=True,
+        _has_pushed_first_frame=True,
+        _engine=None,
+        _bar_count=8,
+        parent=lambda: None,
+        _get_transition_context=lambda parent: {"running": False, "name": None, "elapsed": None, "idle_age": None},
+        _pause_timer_during_transition=lambda active: None,
+        _resolve_max_fps=lambda ctx: 90.0,
+        _update_timer_interval=lambda fps: None,
+        _log_tick_spike=lambda dt, ctx: None,
+        _check_mode_teardown_ready=lambda engine, now_ts: None,
+        _request_latency_probe=lambda reason: None,
+    )
+
+    monkeypatch.setattr(tick_pipeline.Shiboken, "isValid", lambda obj: True)
+    monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda widget, now_ts: None)
+    monkeypatch.setattr(
+        tick_pipeline,
+        "consume_engine_bars",
+        lambda widget, now_ts: consume_calls.append(now_ts) or (False, False),
+    )
+    monkeypatch.setattr(tick_pipeline, "process_heartbeat", lambda widget, now_ts: None)
+    monkeypatch.setattr(tick_pipeline, "dispatch_bubble_simulation", lambda widget, now_ts: None)
+    monkeypatch.setattr(tick_pipeline, "dispatch_devcurve_field", lambda widget, now_ts: None)
+    monkeypatch.setattr(
+        tick_pipeline,
+        "push_gpu_frame",
+        lambda widget, parent, now_ts, changed, first_frame: False,
+    )
+
+    times = iter([100.0, 100.0, 100.001, 100.005, 100.005, 100.006])
+    monkeypatch.setattr(tick_pipeline.time, "time", lambda: next(times))
+
+    tick_pipeline.on_tick(widget)
+    tick_pipeline.on_tick(widget)
+
+    assert len(consume_calls) == 2
+
+
 def test_latency_logging_skips_disabled_widget(monkeypatch):
     engine = SimpleNamespace(_last_audio_ts=1.0, _last_smooth_ts=1.0)
     widget = SimpleNamespace(
@@ -4455,6 +4506,9 @@ def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
     
     vis._spotify_playing = True
     vis.handle_media_update({"state": "paused"})
+    assert vis._spotify_playing is True
+    assert vis._pending_playback_pause_timer is not None
+    vis._pending_playback_pause_timer.timeout.emit()
     assert vis._spotify_playing is False
     
     vis.handle_media_update({"state": "playing"})
@@ -4473,6 +4527,9 @@ def test_spotify_visualizer_media_update_provider_neutral_musicbee_payload(qt_ap
     assert vis._spotify_playing is True
 
     vis.handle_media_update({"state": "paused", "app_name": "MusicBee"})
+    assert vis._spotify_playing is True
+    assert vis._pending_playback_pause_timer is not None
+    vis._pending_playback_pause_timer.timeout.emit()
     assert vis._spotify_playing is False
 
     vis.deleteLater()
@@ -4493,6 +4550,7 @@ def test_spotify_visualizer_paused_update_keeps_visible_anchor_path(qt_app, qtbo
     vis._engine = SimpleNamespace(set_playback_state=lambda playing: engine_states.append(bool(playing)))
     vis.set_anchor_media_widget(anchor)
     vis._enabled = True
+    vis._spotify_playing = True
     vis.show()
 
     hide_calls = []
@@ -4502,12 +4560,44 @@ def test_spotify_visualizer_paused_update_keeps_visible_anchor_path(qt_app, qtbo
 
     vis.handle_media_update({"state": "paused"})
 
+    assert vis._spotify_playing is True
+    assert engine_states == []
+    assert vis._pending_playback_pause_timer is not None
+    assert hide_calls == []
+    assert fade_calls == []
+
+    vis._pending_playback_pause_timer.timeout.emit()
+
     assert vis._spotify_playing is False
     assert engine_states == [False]
     assert hide_calls == []
     assert fade_calls == []
 
     vis.deleteLater()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_quick_playback_wobble_does_not_commit_pause(qt_app):
+    """Rapid paused/playing flaps should not collapse visualizer playback state."""
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    engine_states = []
+    try:
+        vis._engine = SimpleNamespace(set_playback_state=lambda playing: engine_states.append(bool(playing)))
+        vis._spotify_playing = True
+
+        vis.handle_media_update({"state": "paused"})
+
+        assert vis._spotify_playing is True
+        assert vis._pending_playback_pause_timer is not None
+        assert engine_states == []
+
+        vis.handle_media_update({"state": "playing"})
+
+        assert vis._spotify_playing is True
+        assert vis._pending_playback_pause_timer is None
+        assert engine_states == []
+    finally:
+        vis.deleteLater()
 
 
 @pytest.mark.qt

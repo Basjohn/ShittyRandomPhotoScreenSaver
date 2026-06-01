@@ -41,6 +41,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
         direction: SlideDirection = SlideDirection.LEFT,
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._direction: SlideDirection = direction
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
@@ -61,9 +62,6 @@ class GLCompositorBlockSpinTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # If there's no old image, just complete immediately.
         if old_pixmap is None or old_pixmap.isNull():
@@ -118,6 +116,7 @@ class GLCompositorBlockSpinTransition(BaseTransition):
             animation_manager=am,
             direction=self._direction,
             on_finished=_on_finished,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

@@ -22,6 +22,45 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _compute_metadata_font_scales(title: str, artist: str) -> tuple[float, float]:
+    """Return title/artist font scales for the current metadata payload.
+
+    The media card is intentionally text-first, but the controls row must keep a
+    protected visual lane. We therefore shrink slightly earlier for titles that
+    are likely to wrap into three lines even if their raw character count is not
+    extremely high.
+    """
+    title_len = len(title)
+    artist_len = len(artist)
+    combined_len = title_len + artist_len
+    word_count = len([part for part in title.split() if part])
+
+    scale_title = 1.0
+    if title_len > 32:
+        scale_title = 0.92
+    if title_len > 40:
+        scale_title = 0.84
+    if title_len > 55:
+        scale_title = 0.74
+    if title_len > 70:
+        scale_title = 0.64
+
+    if combined_len > 55:
+        scale_title = min(scale_title, 0.88)
+    if combined_len > 75:
+        scale_title = min(scale_title, 0.80)
+    if word_count >= 4 and title_len > 28:
+        scale_title = min(scale_title, 0.88)
+
+    scale_artist = 1.0 - (1.0 - scale_title) * 0.45
+    if artist_len > 28:
+        scale_artist = min(scale_artist, 0.92)
+    if combined_len > 75:
+        scale_artist = min(scale_artist, 0.86)
+
+    return scale_title, scale_artist
+
+
 def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> None:
     """Process a media track snapshot and update the widget display.
 
@@ -312,16 +351,7 @@ def _build_and_apply_metadata(
         title_font_base = max(6, base_font + 3)
         artist_font_base = max(6, base_font - 2)
 
-        title_len = len(title)
-        scale_title = 1.0
-        if title_len > 40:
-            scale_title = 0.86
-        if title_len > 55:
-            scale_title = 0.76
-        if title_len > 70:
-            scale_title = 0.66
-
-        scale_artist = 1.0 - (1.0 - scale_title) * 0.4
+        scale_title, scale_artist = _compute_metadata_font_scales(title, artist)
 
         title_font = max(6, int(title_font_base * scale_title))
         artist_font = max(6, int(artist_font_base * scale_artist))

@@ -379,28 +379,48 @@ class TestFlickerAndTelemetry:
         finally:
             QImageReader.setAllocationLimit(old_limit)
 
-    def test_gl_transition_reports_elapsed_time(self, qt_app, thread_manager):
-        widget = DisplayWidget(
-            screen_index=0,
-            display_mode=DisplayMode.FILL,
-            settings_manager=None,
-            thread_manager=thread_manager,
-        )
-        widget.setGeometry(0, 0, 100, 100)
-        dummy = QPixmap(10, 10)
-        dummy.fill(Qt.GlobalColor.black)
+def test_gl_transition_reports_elapsed_time(qt_app, thread_manager):
+    widget = DisplayWidget(
+        screen_index=0,
+        display_mode=DisplayMode.FILL,
+        settings_manager=None,
+        thread_manager=thread_manager,
+    )
+    widget.setGeometry(0, 0, 100, 100)
+    dummy = QPixmap(10, 10)
+    dummy.fill(Qt.GlobalColor.black)
 
-        transition = GLCompositorCrossfadeTransition(duration_ms=100)
-        started = transition.start(dummy, dummy, widget)
-        if not started or transition._start_time is None:
-            pytest.skip("GL compositor crossfade unavailable in this environment")
+    transition = GLCompositorCrossfadeTransition(duration_ms=100)
+    started = transition.start(dummy, dummy, widget)
+    if not started or transition._start_time is None:
+        pytest.skip("GL compositor crossfade unavailable in this environment")
 
-        elapsed = transition.get_elapsed_ms()
-        assert elapsed is not None
-        assert elapsed >= 0.0
-        transition.stop()
-        transition.cleanup()
-        widget.close()
+    elapsed = transition.get_elapsed_ms()
+    assert elapsed is not None
+    assert elapsed >= 0.0
+    transition.stop()
+    transition.cleanup()
+    widget.close()
+
+
+def test_deferred_transition_snapshot_reports_pending(display_widget):
+    class _DeferredTransition:
+        def is_running(self):
+            return True
+
+        def uses_deferred_start_telemetry(self):
+            return True
+
+    display_widget._current_transition = _DeferredTransition()
+    display_widget._current_transition_name = "GLCompositorWipeTransition"
+    display_widget._current_transition_started_at = 0.0
+    display_widget._current_transition_first_run = False
+
+    snapshot = display_widget.get_transition_snapshot()
+
+    assert snapshot["running"] is True
+    assert snapshot["pending"] is True
+    assert snapshot["elapsed"] is None
 
 
 # ---------------------------------------------------------------------------

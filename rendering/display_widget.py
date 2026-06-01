@@ -263,6 +263,7 @@ class DisplayWidget(QWidget):
         self._current_transition: Optional[BaseTransition] = None
         self._current_transition_overlay_key: Optional[str] = None
         self._current_transition_started_at: float = 0.0
+        self._current_transition_expected_duration_ms: int = 0
         self._current_transition_name: Optional[str] = None
         self._current_transition_first_run: bool = False
         self._transition_work_pending: bool = False
@@ -1969,6 +1970,12 @@ class DisplayWidget(QWidget):
                 snapshot["first_run"] = self._current_transition_first_run
                 if self._current_transition_started_at > 0.0:
                     snapshot["elapsed"] = max(0.0, time.monotonic() - self._current_transition_started_at)
+                else:
+                    try:
+                        if transition.uses_deferred_start_telemetry():
+                            snapshot["pending"] = True
+                    except Exception:
+                        pass
         if not snapshot["running"] and self._last_transition_finished_wall_ts > 0.0:
             snapshot["idle_age"] = max(0.0, now_wall - self._last_transition_finished_wall_ts)
         return snapshot

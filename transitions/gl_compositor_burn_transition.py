@@ -71,6 +71,7 @@ class GLCompositorBurnTransition(BaseTransition):
         easing: str = "Auto",
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._widget: Optional[QWidget] = None
         self._compositor: Optional[GLCompositorWidget] = None
         self._animation_id: Optional[str] = None
@@ -101,7 +102,6 @@ class GLCompositorBurnTransition(BaseTransition):
             return False
 
         self._widget = widget
-        self._mark_start()
 
         if old_pixmap is None or old_pixmap.isNull():
             logger.debug("[BURN] No old image, showing new image immediately")
@@ -146,6 +146,7 @@ class GLCompositorBurnTransition(BaseTransition):
             ash_enabled=self._ash_enabled,
             ash_density=self._ash_density,
             seed=self._seed,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

@@ -188,6 +188,7 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
 
     monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
     scheduled: list[int] = []
+    started: list[int] = []
     monkeypatch.setattr(
         "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
         lambda delay, callback: scheduled.append(delay),
@@ -211,14 +212,29 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
         easing=EasingCurve.LINEAR,
         animation_manager=anim_mgr,
         on_finished=None,
+        on_started=lambda duration_ms: started.append(duration_ms),
     )
 
     assert anim_id is None
     assert scheduled == [75]
+    assert started == []
     assert start_calls == []
 
     anim_mgr.cancel_all()
     anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_apply_desync_strategy_bypasses_single_active_display(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)
+
+    monkeypatch.setattr(parent, "get_all_instances", lambda: [parent], raising=False)
+    comp._desync_delay_ms = 150
+
+    delay_ms, compensated_duration = comp._apply_desync_strategy(5000)
+
+    assert delay_ms == 0
+    assert compensated_duration == 5000
 
 
 @pytest.mark.qt_no_exception_capture

@@ -190,6 +190,22 @@ def show_on_screen(widget) -> None:
     if widget.settings_manager:
         widget._setup_widgets()
 
+    if widget._is_mc_build and focusable:
+        try:
+            from rendering.display_input import _restore_mc_input_focus
+            from PySide6.QtCore import QTimer
+
+            QTimer.singleShot(
+                0,
+                lambda w=widget: _restore_mc_input_focus(
+                    w,
+                    "startup_show_on_screen",
+                    focus_reason=Qt.FocusReason.ActiveWindowFocusReason,
+                ),
+            )
+        except Exception:
+            logger.debug("[DISPLAY_WIDGET] Failed to schedule MC startup focus reclaim", exc_info=True)
+
     # Prewarm context menu on the UI thread so first right-click does not
     # pay the QMenu construction/polish cost.
     try:

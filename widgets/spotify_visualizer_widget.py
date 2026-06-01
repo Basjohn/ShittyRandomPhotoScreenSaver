@@ -410,6 +410,8 @@ class SpotifyVisualizerWidget(QWidget):
 
         # Behavioural gating
         self._spotify_playing: bool = False
+        self._pending_playback_pause_timer = None
+        self._pending_playback_pause_state: Optional[str] = None
         self._anchor_media: Optional[QWidget] = None
         self._has_seen_media: bool = False
         # Legacy Spotify gating state (still tracked for telemetry/UI toggles)

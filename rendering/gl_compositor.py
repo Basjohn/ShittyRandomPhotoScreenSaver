@@ -265,7 +265,7 @@ class GLCompositorWidget(QOpenGLWidget):
         )
         
         # DESYNC STRATEGY: Random delay (0-500ms) to spread transition start overhead
-        # Each compositor gets a different delay to avoid simultaneous GPU uploads
+        # on multi-display only. Single-display should not pay this tax.
         import random
         self._desync_delay_ms: int = random.randint(0, 500)  # Atomic int, no lock needed
         # Set program getters after init
@@ -423,6 +423,24 @@ class GLCompositorWidget(QOpenGLWidget):
         if self._frame_state is not None:
             self._frame_state.mark_complete()
         self._frame_state = None
+
+    def _get_active_display_count(self) -> int:
+        """Return the canonical number of active DisplayWidgets when available."""
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "get_all_instances"):
+            try:
+                instances = parent.get_all_instances()
+                count = sum(1 for widget in instances if widget is not None)
+                if count > 0:
+                    return count
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to read active display count", exc_info=True)
+
+        try:
+            from PySide6.QtGui import QGuiApplication
+            return max(1, len(QGuiApplication.screens()))
+        except Exception:
+            return 1
     
     def _apply_desync_strategy(self, base_duration_ms: int) -> tuple[int, int]:
         """Apply desync strategy to spread transition start overhead.
@@ -442,6 +460,10 @@ class GLCompositorWidget(QOpenGLWidget):
             Display 0: delay=0ms, duration=5000ms → completes at T+5000ms
             Display 1: delay=300ms, duration=5300ms → completes at T+5600ms (same visual state)
         """
+        active_display_count = self._get_active_display_count()
+        if active_display_count <= 1:
+            return 0, base_duration_ms
+
         delay_cap_ms = max(0, min(180, int(base_duration_ms * 0.06)))
         delay_ms = min(self._desync_delay_ms, delay_cap_ms)
         # Compensate duration: add delay so transition completes at same visual state
@@ -1136,10 +1158,11 @@ class GLCompositorWidget(QOpenGLWidget):
         easing: EasingCurve,
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_crossfade
-        return start_crossfade(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
+        return start_crossfade(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, on_started=on_started)
 
     def _start_crossfade_impl(
         self,
@@ -1169,10 +1192,11 @@ class GLCompositorWidget(QOpenGLWidget):
         easing: EasingCurve,
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_warp
-        return start_warp(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
+        return start_warp(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, on_started=on_started)
 
     def start_raindrops(
         self,
@@ -1184,10 +1208,11 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
         ripple_count: int = 3,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_raindrops
-        return start_raindrops(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, ripple_count=ripple_count)
+        return start_raindrops(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, ripple_count=ripple_count, on_started=on_started)
 
     def start_wipe(
         self,
@@ -1199,10 +1224,11 @@ class GLCompositorWidget(QOpenGLWidget):
         easing: EasingCurve,
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_wipe
-        return start_wipe(self, old_pixmap, new_pixmap, direction=direction, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
+        return start_wipe(self, old_pixmap, new_pixmap, direction=direction, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, on_started=on_started)
 
     def start_slide(
         self,
@@ -1217,10 +1243,11 @@ class GLCompositorWidget(QOpenGLWidget):
         easing: EasingCurve,
         animation_manager: AnimationManager,
         on_finished: Optional[Callable[[], None]] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_slide
-        return start_slide(self, old_pixmap, new_pixmap, old_start=old_start, old_end=old_end, new_start=new_start, new_end=new_end, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished)
+        return start_slide(self, old_pixmap, new_pixmap, old_start=old_start, old_end=old_end, new_start=new_start, new_end=new_end, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, on_started=on_started)
 
     def start_block_flip(
         self,
@@ -1235,10 +1262,11 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_cols: Optional[int] = None,
         grid_rows: Optional[int] = None,
         direction: Optional[SlideDirection] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_block_flip
-        return start_block_flip(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, direction=direction)
+        return start_block_flip(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, direction=direction, on_started=on_started)
 
     def start_block_spin(
         self,
@@ -1250,10 +1278,11 @@ class GLCompositorWidget(QOpenGLWidget):
         animation_manager: AnimationManager,
         direction: SlideDirection = SlideDirection.LEFT,
         on_finished: Optional[Callable[[], None]] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_block_spin
-        return start_block_spin(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, direction=direction, on_finished=on_finished)
+        return start_block_spin(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, direction=direction, on_finished=on_finished, on_started=on_started)
 
     def start_diffuse(
         self,
@@ -1268,10 +1297,11 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_cols: Optional[int] = None,
         grid_rows: Optional[int] = None,
         shape: Optional[str] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_diffuse
-        return start_diffuse(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, shape=shape)
+        return start_diffuse(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, shape=shape, on_started=on_started)
 
     def start_blinds(
         self,
@@ -1287,10 +1317,11 @@ class GLCompositorWidget(QOpenGLWidget):
         grid_rows: Optional[int] = None,
         feather: float = 0.08,
         direction: int = 0,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_blinds
-        return start_blinds(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, feather=feather, direction=direction)
+        return start_blinds(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, update_callback=update_callback, on_finished=on_finished, grid_cols=grid_cols, grid_rows=grid_rows, feather=feather, direction=direction, on_started=on_started)
 
     def start_crumble(
         self,
@@ -1306,10 +1337,11 @@ class GLCompositorWidget(QOpenGLWidget):
         mosaic_mode: bool = False,
         weight_mode: float = 0.0,
         seed: Optional[float] = None,
+        on_started: Optional[Callable[[int], None]] = None,
     ) -> Optional[str]:
         """Delegates to gl_compositor_pkg.transitions."""
         from rendering.gl_compositor_pkg.transitions import start_crumble
-        return start_crumble(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, piece_count=piece_count, crack_complexity=crack_complexity, mosaic_mode=mosaic_mode, weight_mode=weight_mode, seed=seed)
+        return start_crumble(self, old_pixmap, new_pixmap, duration_ms=duration_ms, easing=easing, animation_manager=animation_manager, on_finished=on_finished, piece_count=piece_count, crack_complexity=crack_complexity, mosaic_mode=mosaic_mode, weight_mode=weight_mode, seed=seed, on_started=on_started)
 
     def start_particle(
         self,

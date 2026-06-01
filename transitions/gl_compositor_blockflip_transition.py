@@ -40,6 +40,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         direction: Optional[SlideDirection] = None,
     ) -> None:
         super().__init__(duration_ms)
+        self._uses_deferred_start_telemetry = True
         self._grid_rows = grid_rows
         self._grid_cols = grid_cols
         self._flip_duration_ms = flip_duration_ms
@@ -57,6 +58,8 @@ class GLCompositorBlockFlipTransition(BaseTransition):
         self._shader_rows: int = 0
 
     def get_expected_duration_ms(self) -> int:
+        if getattr(self, "_effective_duration_ms", None):
+            return int(self._effective_duration_ms)
         total = getattr(self, "_total_duration_ms", None)
         if isinstance(total, (int, float)) and total > 0:
             return int(total)
@@ -76,9 +79,6 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             return False
 
         self._widget = widget
-
-        # Begin telemetry tracking
-        self._mark_start()
 
         # If there's no old image, just complete immediately.
         if old_pixmap is None or old_pixmap.isNull():
@@ -141,6 +141,7 @@ class GLCompositorBlockFlipTransition(BaseTransition):
             grid_cols=self._shader_cols or 0,
             grid_rows=self._shader_rows or 0,
             direction=self._direction,
+            on_started=self._mark_compositor_actual_start,
         )
 
         self._set_state(TransitionState.RUNNING)

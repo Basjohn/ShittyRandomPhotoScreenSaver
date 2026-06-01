@@ -14,13 +14,22 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
+- [ ] Re-validate MC focused-input readiness after startup without disturbing z-order or global-key safety.
+  - [x] Confirm single-display launch-state MC now accepts focused hotkeys such as `Space`, arrows, `Up` / `Down`, `PgUp` / `PgDn`, and `End` without requiring an extra manual click-in.
+  - [ ] Confirm those same focused hotkeys are still not stolen from genuinely focused external applications on another display; SRPSS must remain focused-only for those keys.
+  - [x] Confirm single-display shared startup focus reclaim does not disturb top-level overlay ordering, popup/menu behavior, or previously stabilized focus/z-order paths in MC.
+  - [ ] Keep this open until Thursday multi-display validation; one-display success is not enough to clear focused-key ownership or z-order/focus safety across displays.
+
 - [ ] Re-audit general compositor transition performance after the warmup/desync rescue.
   - [ ] Keep all multi-display-specific checks explicitly open even while single-display testing is the only runtime available; one 1440p display cannot validate the real stagger/desync contract or clear same-instant sibling-display pressure.
-  - [ ] Use the current single-display evidence as the live starting point: the old fake catastrophic timer-gap story is gone, but real drift still remains (`RainDrops` about `+374ms`, `Warp` about `+357ms`, `BlockSpin` about `+368ms`) and smaller real visualizer `Tick dt spike` warnings around `42-49ms` still show up both during and outside transitions.
-  - [ ] Keep the timing-base audit explicit: remove cadence drift caused by compositor timer scheduling/loop overhead before blaming transition-local math, while preserving current visualizer audio freshness and first-frame guardrails.
-  - [ ] Trace the real shared cadence fault instead of transition-local symptoms: focus on the recurring `SpotifyVisualizerWidget._on_tick` spikes, transition-active drift, and any UI-thread or overlay `show()` / `set_state` work clustered in the same windows.
-  - [ ] Confirm the global display-level image handoff stagger plus the broadened compositor-side desync are both active for the transition families that matter in real use, not just crossfade.
-  - [ ] Verify the broadened desync remains imperceptible to users while reducing same-instant multi-display start overhead once multi-display runtime is available again.
+  - [x] Re-validate the newly landed single-display timing-truth fix: request-time stopwatch inflation and single-display compositor desync tax no longer make transitions report the old `~+350ms` class drift when the underlying animation cadence is healthy.
+  - [x] Re-check what real cadence fault remains once timing truth is restored: the current single-display evidence points first at steady visualizer timer cadence rather than compositor transition duration.
+  - [x] Land the shared steady-cadence fix on the visualizer seam: steady runtime now relies on the dedicated recurring timer as the single cadence owner instead of layering `_on_tick`'s old `min_dt` gate on top of it.
+  - [x] Validate in fresh runtime logs that the visualizer now stays near the intended steady cadence after `waiting_engine` clears, without reintroducing first-frame, primer, or transition handoff regressions.
+  - [x] Land the shared playback-state stability fix on the visualizer seam: brief paused/playing wobble from media/controller churn now gets pause-confirmed before it is allowed to collapse visualizer reactivity or tear down capture.
+  - [ ] Validate in fresh runtime logs that the new playback-state stability seam suppresses the old wake/restart loops and large latency spikes during controller/media-key churn, without weakening genuine pause handling or long-idle capture shutdown.
+  - [ ] Confirm the global display-level image handoff stagger plus compositor-side desync are still active only where they help: single-display should bypass the extra delay, while multi-display should keep the shared spread contract once Thursday validation is available.
+  - [ ] Verify the retained multi-display desync remains imperceptible to users while still reducing same-instant sibling-display start overhead once multi-display runtime is available again.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.

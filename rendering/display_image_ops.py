@@ -329,7 +329,13 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 if success:
                     widget._current_transition = transition
                     widget._current_transition_overlay_key = overlay_key
-                    widget._current_transition_started_at = time.monotonic()
+                    deferred_start = False
+                    try:
+                        deferred_start = bool(transition.uses_deferred_start_telemetry())
+                    except Exception:
+                        deferred_start = False
+                    widget._current_transition_started_at = 0.0 if deferred_start else time.monotonic()
+                    widget._current_transition_expected_duration_ms = transition.get_expected_duration_ms()
                     widget._current_transition_name = transition.__class__.__name__
                     widget._current_transition_first_run = (
                         widget._current_transition_name not in widget._warmed_transition_types
@@ -417,6 +423,7 @@ def _on_transition_finished(
     # Clear local state
     widget._current_transition_overlay_key = None
     widget._current_transition_started_at = 0.0
+    widget._current_transition_expected_duration_ms = 0
     widget._current_transition = None
     if widget._current_transition_name:
         widget._warmed_transition_types.add(widget._current_transition_name)
