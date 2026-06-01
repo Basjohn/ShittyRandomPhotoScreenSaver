@@ -342,6 +342,32 @@ def test_media_external_transport_feedback_consumes_pending_keyboard_home_alias(
         widget.deleteLater()
 
 
+def test_media_duplicate_external_transport_feedback_is_suppressed(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget._enabled = True
+        widget._show_controls = True
+        widget._last_info = MediaTrackInfo(
+            title="Song",
+            artist="Artist",
+            state=MediaPlaybackState.PLAYING,
+        )
+        widget._emit_media_update = lambda info: None  # type: ignore[method-assign]
+        widget._invalidate_controls_layout = lambda: None  # type: ignore[method-assign]
+        widget._handle_control_feedback = lambda *args, **kwargs: None  # type: ignore[method-assign]
+        widget.isVisible = lambda: True  # type: ignore[method-assign]
+        widget.update = lambda: None  # type: ignore[method-assign]
+
+        widget.handle_transport_command("play", source="appcommand:play", execute=False)
+        first_state = widget._last_info.state
+        widget.handle_transport_command("play", source="media_key", execute=False)
+
+        assert first_state == MediaPlaybackState.PAUSED
+        assert widget._last_info.state == MediaPlaybackState.PAUSED
+    finally:
+        widget.deleteLater()
+
+
 def test_media_header_fits_spotify_in_runtime_geometry_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

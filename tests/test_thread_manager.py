@@ -675,6 +675,31 @@ def test_large_timer_gap_warning_not_suppressed_for_plain_idle_gap():
 
     assert _should_suppress_large_timer_gap_warning(400.0, 16, context) is False
 
+
+def test_large_timer_gap_warning_suppressed_for_visualizer_reconfiguration_window():
+    context = {
+        "vis_pending_mode": "BUBBLE",
+        "vis_waiting_engine": True,
+        "vis_waiting_frame": False,
+        "display_transition": {
+            "running": False,
+            "pending": False,
+            "last_transition": None,
+            "idle_age": 12.0,
+        },
+        "compositor": {
+            "current_transition": None,
+            "has_frame_state": False,
+            "render_strategy": {
+                "timer": {
+                    "state": "IDLE",
+                }
+            },
+        },
+    }
+
+    assert _should_suppress_large_timer_gap_warning(140.0, 16, context) is True
+
     @pytest.mark.qt_no_exception_capture
     def test_schedule_recurring_respects_description(self, qt_app):
         manager = ThreadManager()

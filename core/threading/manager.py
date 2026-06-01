@@ -43,6 +43,19 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
     except Exception:
         pass
     try:
+        if hasattr(owner, "_mode_transition_pending"):
+            pending = getattr(owner, "_mode_transition_pending")
+            context["vis_pending_mode"] = getattr(pending, "name", None) if pending is not None else None
+    except Exception:
+        pass
+    try:
+        if hasattr(owner, "_waiting_for_fresh_engine_frame"):
+            context["vis_waiting_engine"] = bool(getattr(owner, "_waiting_for_fresh_engine_frame"))
+        if hasattr(owner, "_waiting_for_fresh_frame"):
+            context["vis_waiting_frame"] = bool(getattr(owner, "_waiting_for_fresh_frame"))
+    except Exception:
+        pass
+    try:
         parent = owner.parent() if hasattr(owner, "parent") else None
         if parent is not None and hasattr(parent, "get_transition_snapshot"):
             context["display_transition"] = parent.get_transition_snapshot()
@@ -67,6 +80,11 @@ def _should_suppress_large_timer_gap_warning(
     """
     if not isinstance(context, dict):
         return False
+
+    if bool(context.get("vis_waiting_engine")) or bool(context.get("vis_waiting_frame")):
+        return True
+    if context.get("vis_pending_mode"):
+        return True
 
     display_transition = context.get("display_transition")
     if isinstance(display_transition, dict):

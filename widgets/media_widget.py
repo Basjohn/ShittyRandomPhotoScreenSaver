@@ -145,6 +145,7 @@ class MediaWidget(BaseOverlayWidget):
         self._pending_state_timer: Optional[QTimer] = None
         self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
         self._pending_keyboard_alias_timer: Optional[QTimer] = None
+        self._last_external_transport_feedback: Optional[tuple[str, float]] = None
 
         # Override base class font size default
         self._font_size = 20
@@ -954,6 +955,13 @@ class MediaWidget(BaseOverlayWidget):
 
         if not execute:
             self._consume_matching_keyboard_alias(normalized)
+            if self._should_suppress_duplicate_external_transport_feedback(normalized):
+                logger.debug(
+                    "[MEDIA_WIDGET] Suppressed duplicate external transport feedback: key=%s source=%s",
+                    normalized,
+                    source,
+                )
+                return True
 
         if normalized == "play":
             self.play_pause(source=source, execute=execute)
@@ -1048,6 +1056,25 @@ class MediaWidget(BaseOverlayWidget):
             timer.deleteLater()
         except Exception:
             logger.debug("[MEDIA_WIDGET] Failed to delete deferred keyboard alias timer", exc_info=True)
+
+    def _should_suppress_duplicate_external_transport_feedback(self, key: str) -> bool:
+        """Collapse duplicate execute=False media command bursts from OS/native routes.
+
+        A single physical media-key event can surface through multiple Windows/Qt
+        paths (`WM_APPCOMMAND`, media QKeyEvent, raw-input feedback). Those routes
+        are all external ownership signals, so the media widget must treat the
+        first one as authoritative and ignore immediate duplicates rather than
+        toggling PLAYING -> PAUSED -> PLAYING locally.
+        """
+        now = time.monotonic()
+        last_feedback = self._last_external_transport_feedback
+        self._last_external_transport_feedback = (key, now)
+        if last_feedback is None:
+            return False
+        last_key, last_ts = last_feedback
+        if last_key != key:
+            return False
+        return (now - last_ts) <= 0.18
 
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Refreshes artwork/track info."""
