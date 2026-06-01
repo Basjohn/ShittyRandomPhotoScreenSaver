@@ -109,6 +109,13 @@ No shadow frameworks or parallel ownership paths.
 
 ## 6. Testing and Validation
 - Add automated regression coverage for changed contracts.
+- Prefer runtime-shaped automation over weak proxy guards whenever the failure is user-visible and repeatable in principle. If a bug is fundamentally about startup parity, first-visible authority, curated preset reactivity, mode/preset switching, dynamic-floor behavior, or another real runtime contract, tests should exercise that real contract path instead of only lower-level helper math or generic "no warning logged" coverage.
+- When a historical bug family has already taught the project how it lies, reuse that full vantage. For visualizer work in particular, combine:
+  - historical-bug failure shapes from `Docs/Historical_Bugs.md`,
+  - authored curated preset oracles where applicable,
+  - synthetic-audio parity/runtime tests for hot switch, preset cycle, and first-visible behavior,
+  - and only then lighter unit coverage for helper math.
+- Do not accept a green suite that only proves adjacent seams while the known user-visible failure shape remains unmodeled. If runtime keeps surfacing a complaint that tests miss, strengthen the automation bar until that exact complaint has a meaningful automated oracle.
 - Do not treat tests alone as sufficient for visual/timing-sensitive bug closure.
 - Preserve useful harnesses/probes that materially improve diagnosis quality.
 

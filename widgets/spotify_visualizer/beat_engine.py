@@ -31,6 +31,7 @@ from core.process import ProcessSupervisor
 from utils.lockfree import TripleBuffer
 from widgets.spotify_visualizer.audio_worker import SpotifyVisualizerAudioWorker, _AudioFrame
 from widgets.spotify_visualizer.energy_bands import EnergyBands, extract_energy_bands
+from widgets.spotify_visualizer.signal_contract import soft_ceiling
 from widgets.spotify_visualizer.transient_bus import TransientEnergyBands, TransientEventScheduler
 
 
@@ -80,6 +81,8 @@ class _SpotifyBeatEngine(QObject):
         # Playback state gating for FFT processing
         self._is_spotify_playing: bool = False
         self._last_playback_state_ts: float = 0.0
+        self._capture_keepalive_grace: float = 6.0
+        self._capture_keepalive_deadline: float = 0.0
 
         # Reactivity ramp-up: gentle fade-in after play detection to mask
         # AGC warmup (envelopes converging to actual audio levels).
@@ -264,18 +267,25 @@ class _SpotifyBeatEngine(QObject):
         was_playing = self._is_spotify_playing
         self._is_spotify_playing = bool(is_playing)
         self._last_playback_state_ts = time.time()
+        warm_resume = self._capture_keepalive_deadline > 0.0
+        if self._is_spotify_playing:
+            self._capture_keepalive_deadline = 0.0
 
         # Start reactivity ramp-up on pause→play transition so the first
         # few FFT frames (where AGC envelopes are still converging) get
         # gently faded in instead of producing erratic bar heights.
         if self._is_spotify_playing and not was_playing:
-            self._play_ramp_start_ts = time.time()
-            logger.debug("[SPOTIFY_VIS] Play detected — starting %.1fs reactivity ramp-up", self._play_ramp_duration)
-            # Strict capture policy: worker runs only while actively playing.
             if self._ref_count > 0:
                 self.ensure_started()
+            if warm_resume:
+                self._play_ramp_start_ts = 0.0
+                logger.debug("[SPOTIFY_VIS] Play resumed while capture stayed warm")
+            else:
+                self._play_ramp_start_ts = time.time()
+                logger.debug("[SPOTIFY_VIS] Play detected — starting %.1fs reactivity ramp-up", self._play_ramp_duration)
         elif (not self._is_spotify_playing) and was_playing:
-            self._stop_worker()
+            self._play_ramp_start_ts = 0.0
+            self._schedule_worker_stop_after_grace()
         
         if is_verbose_logging():
             logger.debug(
@@ -354,6 +364,7 @@ class _SpotifyBeatEngine(QObject):
         if self._ref_count > 0:
             self._ref_count -= 1
         if self._ref_count == 0:
+            self._capture_keepalive_deadline = 0.0
             self._stop_worker()
 
     def ensure_started(self) -> None:
@@ -378,6 +389,7 @@ class _SpotifyBeatEngine(QObject):
         self._waveform_count = 0
         self._idle_wave_phase = 0.0
         self._ref_count = 0
+        self._capture_keepalive_deadline = 0.0
         self._stop_worker()
 
     def _stop_worker(self) -> None:
@@ -385,6 +397,28 @@ class _SpotifyBeatEngine(QObject):
             self._audio_worker.stop()
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to stop audio worker in shared engine", exc_info=True)
+
+    def _schedule_worker_stop_after_grace(self) -> None:
+        grace = max(0.0, float(self._capture_keepalive_grace))
+        if self._ref_count <= 0 or grace <= 0.0:
+            self._capture_keepalive_deadline = 0.0
+            self._stop_worker()
+            return
+        self._capture_keepalive_deadline = time.time() + grace
+        logger.debug(
+            "[SPOTIFY_VIS] Keeping audio capture warm for %.1fs after playback pause",
+            grace,
+        )
+
+    def _expire_capture_keepalive_if_needed(self, now_ts: float) -> None:
+        deadline = float(self._capture_keepalive_deadline or 0.0)
+        if deadline <= 0.0 or self._is_spotify_playing:
+            return
+        if now_ts < deadline:
+            return
+        self._capture_keepalive_deadline = 0.0
+        logger.debug("[SPOTIFY_VIS] Warm capture grace expired; stopping audio worker")
+        self._stop_worker()
 
     def _schedule_compute_bars_task(self, samples: object) -> None:
         tm = self._thread_manager
@@ -535,10 +569,12 @@ class _SpotifyBeatEngine(QObject):
         tm = self._thread_manager
 
         now_ts = time.time()
-        # Strict worker-off contract while paused: keep oscilloscope visually alive
-        # with a low-cost synthetic idle waveform that does not require capture.
+        self._expire_capture_keepalive_if_needed(now_ts)
+        # While paused, visuals stay on the idle path even if the capture worker
+        # is still inside its short warm-grace window.
         if not self._is_spotify_playing:
             self._update_idle_waveform(now_ts)
+            self._prime_idle_bars(now_ts)
         frame = self._audio_buffer.consume_latest()
         if frame is not None:
             frame_activation = getattr(frame, "activation_id", None)
@@ -577,9 +613,7 @@ class _SpotifyBeatEngine(QObject):
             
                 if not self._is_spotify_playing:
                     if self._latest_bars is None or len(self._latest_bars) != self._bar_count:
-                        self._latest_bars = [0.0] * self._bar_count
-                    if all(bar == 0.0 for bar in self._latest_bars):
-                        self._latest_bars[0] = 0.08
+                        self._prime_idle_bars(now_ts)
                     return self._latest_bars
                 
                 if tm is not None:
@@ -641,6 +675,27 @@ class _SpotifyBeatEngine(QObject):
         self._waveform = out
         self._waveform_count = count
         self._latest_generation_with_waveform = self._generation_id
+
+    def _prime_idle_bars(self, now_ts: float) -> None:
+        """Generate a low-energy multi-bar idle presentation while paused."""
+        count = max(1, int(self._bar_count))
+        phase = now_ts * 0.43
+        bars: list[float] = [0.0] * count
+        denom = float(max(1, count - 1))
+        for i in range(count):
+            x = float(i) / denom
+            center_env = 1.0 - abs((x * 2.0) - 1.0)
+            center_env = max(0.0, center_env)
+            wave_a = 0.5 + 0.5 * math.sin((x * math.tau * 1.4) + phase)
+            wave_b = 0.5 + 0.5 * math.sin((x * math.tau * 2.2) - (phase * 0.7))
+            bars[i] = 0.010 + center_env * 0.012 + wave_a * 0.008 + wave_b * 0.004
+
+        if count == 1:
+            bars[0] = max(bars[0], 0.028)
+
+        self._latest_bars = list(bars)
+        self._smoothed_bars = list(bars)
+        self._energy_bands = extract_energy_bands(bars)
     
     def get_smoothed_bars(self) -> List[float]:
         """Get pre-smoothed bars for UI display.
@@ -707,6 +762,73 @@ class _SpotifyBeatEngine(QObject):
         mid = max(0.0, min(1.0, float(mid)))
         high = max(0.0, min(1.0, float(high)))
         overall = max(0.0, min(1.0, (bass * 0.5 + mid * 0.3 + high * 0.2)))
+        return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
+
+    def get_bubble_energy_bands(self) -> EnergyBands:
+        """Return Bubble's pressure-aware continuous energy feed.
+
+        Bubble's live motion contract is more sensitive to flattened control
+        lanes than other modes. It still consumes a bounded 0..1 signal, but
+        that signal must be derived primarily from the raw band authority that
+        survives dynamic-floor expansion, with only a light stabilizing blend
+        from the shared control lane.
+        """
+        w = self._audio_worker
+        ramp = self._get_play_ramp_factor()
+        floor_snapshot = self.get_floor_snapshot()
+        dynamic_enabled = bool(floor_snapshot.get("dynamic_enabled", True))
+        pressure = max(0.0, min(1.0, float(floor_snapshot.get("pressure", 0.0) or 0.0)))
+
+        try:
+            raw_bass_avg = max(0.10, float(getattr(w, "_raw_bass_avg", 0.10) or 0.10))
+        except Exception:
+            raw_bass_avg = 0.10
+
+        def _raw(name: str, fallback_name: str) -> float:
+            return max(0.0, float(getattr(w, name, getattr(w, fallback_name, 0.0)) or 0.0))
+
+        def _control(name: str) -> float:
+            return max(0.0, min(1.0, float(getattr(w, name, 0.0) or 0.0)))
+
+        raw_mix = 0.72
+        if dynamic_enabled:
+            raw_mix += pressure * 0.23
+        raw_mix = max(0.72, min(0.95, raw_mix))
+
+        def _shape(raw_value: float, control_value: float, *, denom: float, knee: float, ceiling: float) -> float:
+            normalized = max(0.0, raw_value / max(0.10, denom))
+            shaped = soft_ceiling(
+                normalized,
+                knee=knee,
+                ceiling=ceiling,
+                max_input=2.80,
+                curve=1.10,
+            )
+            blended = control_value * (1.0 - raw_mix) + shaped * raw_mix
+            return max(0.0, min(1.0, blended * ramp))
+
+        bass = _shape(
+            _raw("_last_raw_bass", "_pre_agc_live_bass"),
+            _control("_pre_agc_control_bass"),
+            denom=raw_bass_avg * (1.05 + pressure * 0.22),
+            knee=0.22,
+            ceiling=0.99,
+        )
+        mid = _shape(
+            _raw("_last_raw_mid", "_pre_agc_live_mid"),
+            _control("_pre_agc_control_mid"),
+            denom=raw_bass_avg * (1.55 + pressure * 0.18),
+            knee=0.20,
+            ceiling=0.96,
+        )
+        high = _shape(
+            _raw("_last_raw_treble", "_pre_agc_live_treble"),
+            _control("_pre_agc_control_treble"),
+            denom=raw_bass_avg * (2.10 + pressure * 0.14),
+            knee=0.16,
+            ceiling=0.92,
+        )
+        overall = max(0.0, min(1.0, bass * 0.46 + mid * 0.34 + high * 0.20))
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
     def get_floor_snapshot(self) -> dict:

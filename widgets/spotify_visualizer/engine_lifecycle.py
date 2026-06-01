@@ -193,6 +193,7 @@ def trigger_wake(widget: Any, *, reason: str = "unspecified", allow_defer: bool 
         or (widget._enabled and not widget._startup_hot_start_started)
     ):
         widget._startup_wake_deferred = True
+        widget._startup_wake_deferred_reason = str(reason or "unspecified")
         logger.debug("[SPOTIFY_VIS] Deferred wake until staged hot start (reason=%s)", reason)
         return
 

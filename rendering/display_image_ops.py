@@ -496,9 +496,16 @@ def push_spotify_visualizer_frame(
     if vis is None:
         return False
 
+    allow_hidden_startup_priming = False
     try:
         if not vis.isVisible():
-            return False
+            allow_hidden_startup_priming = bool(
+                getattr(vis, "_startup_reveal_pending", False)
+                or getattr(vis, "_waiting_for_fresh_frame", False)
+                or getattr(vis, "_waiting_for_fresh_engine_frame", False)
+            )
+            if not allow_hidden_startup_priming:
+                return False
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         return False
@@ -539,6 +546,7 @@ def push_spotify_visualizer_frame(
         ghost_alpha=ghost_alpha,
         ghost_decay=ghost_decay,
         vis_mode=vis_mode,
+        visible=True,
         border_width_px=border_width,
         **extra_kwargs,
     )
@@ -671,6 +679,7 @@ def _push_spotify_bars_overlay_state(
     ghost_alpha=0.4,
     ghost_decay=-1.0,
     vis_mode="spectrum",
+    visible=True,
     **extra_kwargs,
 ) -> bool:
     try:
@@ -683,7 +692,7 @@ def _push_spotify_bars_overlay_state(
             "border_color": border_color,
             "fade": fade,
             "playing": playing,
-            "visible": True,
+            "visible": visible,
             "ghosting_enabled": ghosting_enabled,
             "ghost_alpha": ghost_alpha,
             "ghost_decay": ghost_decay,

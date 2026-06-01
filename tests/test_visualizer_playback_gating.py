@@ -49,16 +49,15 @@ class TestVisualizerPlaybackGating:
         # Mock the audio buffer to return our frame
         beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
-        # Call tick - should return 1-bar floor without FFT processing
+        # Call tick - should return a subtle idle seed without FFT processing
         result = beat_engine.tick()
         
-        # Should return a list with minimal 1-bar floor
+        # Should return a list with low-energy idle presentation
         assert isinstance(result, list)
         assert len(result) == 32
-        # Should have exactly 1 bar with minimal height
         non_zero_bars = [bar for bar in result if bar > 0.0]
-        assert len(non_zero_bars) == 1
-        assert non_zero_bars[0] == 0.08  # Minimal visible floor
+        assert len(non_zero_bars) > 8
+        assert max(non_zero_bars) < 0.05
         
         # Verify no compute task was scheduled
         assert beat_engine._compute_task_active is False
@@ -113,11 +112,11 @@ class TestVisualizerPlaybackGating:
         # Process while not playing - should not schedule compute task
         result = beat_engine.tick()
         assert isinstance(result, list)
-        assert len([bar for bar in result if bar > 0.0]) == 1  # 1-bar floor
+        assert len([bar for bar in result if bar > 0.0]) > 8
         assert beat_engine._compute_task_active is False
     
-    def test_one_bar_floor_requirement(self, beat_engine):
-        """Test that exactly 1 bar is visible when not playing."""
+    def test_idle_seed_requirement(self, beat_engine):
+        """Test that paused idle presentation stays visible but low-energy."""
         beat_engine.set_playback_state(False)
         
         # Mock audio data
@@ -132,10 +131,9 @@ class TestVisualizerPlaybackGating:
             assert isinstance(result, list)
             assert len(result) == 32
             
-            # Count non-zero bars
             non_zero_bars = [bar for bar in result if bar > 0.0]
-            assert len(non_zero_bars) == 1, f"Expected exactly 1 non-zero bar, got {len(non_zero_bars)}"
-            assert non_zero_bars[0] == 0.08, f"Expected bar height 0.08, got {non_zero_bars[0]}"
+            assert len(non_zero_bars) > 8, f"Expected broad idle seed, got {len(non_zero_bars)} bars"
+            assert max(non_zero_bars) < 0.05, f"Expected low-energy idle seed, got peak {max(non_zero_bars)}"
     
     def test_performance_impact_simulation(self, beat_engine):
         """Test that CPU usage is reduced when not playing."""
@@ -232,8 +230,8 @@ def test_visualizer_gating_integration():
     # Test state transitions
     test_instance.test_state_transition_handling(engine)
     
-    # Test 1-bar floor requirement
-    test_instance.test_one_bar_floor_requirement(engine)
+    # Test idle seed requirement
+    test_instance.test_idle_seed_requirement(engine)
     
     # Test performance impact
     test_instance.test_performance_impact_simulation(engine)

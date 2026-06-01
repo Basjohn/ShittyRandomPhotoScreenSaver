@@ -8,7 +8,7 @@ tests following TestSuite.md guidelines.
 Test Purpose:
 - Verify FFT mathematical operations are preserved exactly
 - Test playback state gating functionality  
-- Validate 1-bar floor when not playing
+- Validate low-energy idle presentation when not playing
 - Ensure no visual fidelity loss during gating
 - Confirm CPU savings when not playing
 
@@ -158,7 +158,7 @@ class TestSpotifyVisualizerIntegration:
             
             # Verify dynamic floor behavior
             silence_bars = results["silence"]
-            assert np.mean(silence_bars) > 0.01, "Silence should produce 1-bar floor, not zero"
+            assert np.mean(silence_bars) > 0.01, "Silence should produce visible idle presentation, not zero"
             
             # Higher bass should produce higher bars
             assert np.mean(results["high_bass"]) > np.mean(results["low_bass"]), "Higher bass should produce higher bars"
@@ -205,15 +205,15 @@ class TestSpotifyVisualizerIntegration:
         mock_frame.samples = mock_samples
         engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
         
-        # Call tick - should return 1-bar floor without FFT processing
+        # Call tick - should return idle presentation without FFT processing
         result = engine.tick()
         
-        # Should return a list with minimal 1-bar floor
+        # Should return a list with low-energy idle presentation
         assert isinstance(result, list)
         assert len(result) == 32
         non_zero_bars = [bar for bar in result if bar > 0.0]
-        assert len(non_zero_bars) == 1
-        assert non_zero_bars[0] == 0.08  # Minimal visible floor
+        assert len(non_zero_bars) > 8
+        assert max(non_zero_bars) < 0.05
         
         # Verify no compute task was scheduled
         assert engine._compute_task_active is False
@@ -249,9 +249,9 @@ class TestSpotifyVisualizerIntegration:
         
         print("✅ FFT processing when playing works correctly")
     
-    def test_one_bar_floor_requirement(self):
-        """Test that exactly 1 bar is visible when not playing."""
-        print("Testing 1-bar floor requirement...")
+    def test_idle_seed_requirement(self):
+        """Test that paused idle presentation stays visible but low-energy."""
+        print("Testing idle seed requirement...")
         
         engine = _SpotifyBeatEngine(bar_count=32)
         engine._thread_manager = Mock()
@@ -271,10 +271,10 @@ class TestSpotifyVisualizerIntegration:
             
             # Count non-zero bars
             non_zero_bars = [bar for bar in result if bar > 0.0]
-            assert len(non_zero_bars) == 1, "Tick {}: Expected exactly 1 non-zero bar, got {}".format(i, len(non_zero_bars))
-            assert non_zero_bars[0] == 0.08, "Tick {}: Expected bar height 0.08, got {}".format(i, non_zero_bars[0])
-        
-        print("✅ 1-bar floor requirement works correctly")
+            assert len(non_zero_bars) > 8, "Tick {}: Expected broad idle seed, got {}".format(i, len(non_zero_bars))
+            assert max(non_zero_bars) < 0.05, "Tick {}: Expected low-energy idle peak, got {}".format(i, max(non_zero_bars))
+
+        print("✅ Idle seed requirement works correctly")
     
     def test_performance_impact_simulation(self):
         """Test that CPU usage is reduced when not playing."""
@@ -343,7 +343,7 @@ def run_all_integration_tests():
         test_instance.test_playback_state_gating,
         test_instance.test_fft_gating_when_not_playing,
         test_instance.test_fft_processing_when_playing,
-        test_instance.test_one_bar_floor_requirement,
+        test_instance.test_idle_seed_requirement,
         test_instance.test_performance_impact_simulation,
     ]
     
@@ -369,7 +369,7 @@ def run_all_integration_tests():
         print("✅ Dynamic floor logic preserved")
         print("✅ Playback state gating functional")
         print("✅ FFT processing halted when not playing")
-        print("✅ 1-bar floor maintained when paused")
+        print("✅ Low-energy idle seed maintained when paused")
         print("✅ Significant CPU savings achieved")
         return True
     else:

@@ -366,7 +366,11 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     # post-AGC snapshot here can flatten the mode into a near-constant plateau
     # under hot floor pressure, especially after preset/custom transitions.
     if widget._engine:
-        eb_pulse = widget._engine.get_pre_agc_energy_bands()
+        bubble_feed = getattr(widget._engine, "get_bubble_energy_bands", None)
+        if callable(bubble_feed):
+            eb_pulse = bubble_feed()
+        else:
+            eb_pulse = widget._engine.get_pre_agc_energy_bands()
         eb_smooth = eb_pulse
     else:
         eb_pulse = None
@@ -541,6 +545,10 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
         and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
+        and (
+            not bool(getattr(widget, "_startup_idle_reveal_requires_authoritative_media", False))
+            or bool(getattr(widget, "_startup_has_authoritative_media_update", False))
+        )
     ):
         widget._waiting_for_fresh_engine_frame = False
         widget._pending_engine_generation = -1

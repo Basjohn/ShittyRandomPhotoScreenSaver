@@ -9,7 +9,7 @@ from types import SimpleNamespace
 from utils.lockfree import TripleBuffer
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS, get_preset_key
-from core.settings.visualizer_presets import get_custom_preset_index
+from core.settings.visualizer_presets import get_custom_preset_index, get_preset_settings
 from widgets.spotify_visualizer import bar_computation
 from widgets.spotify_visualizer import config_applier
 from widgets.spotify_visualizer import mode_transition
@@ -282,7 +282,7 @@ def test_live_activation_logs_parity_warning_on_worker_config_mismatch(monkeypat
     assert any("[SPOTIFY_VIS][PARITY]" in msg and "manual_floor" in msg for msg in warning_calls)
 
 
-def test_update_timer_interval_does_not_thrash_same_target_when_actual_is_jittered():
+def test_update_timer_interval_corrects_stale_live_interval_even_when_target_matches():
     class _Timer:
         def __init__(self):
             self.calls: list[int] = []
@@ -299,9 +299,31 @@ def test_update_timer_interval_does_not_thrash_same_target_when_actual_is_jitter
 
     tick_helpers.update_timer_interval(widget, 90.0)
 
-    assert timer.calls == []
+    assert timer.calls == [11]
     assert widget._target_timer_interval_ms == 11
-    assert widget._current_timer_interval_ms == 13
+    assert widget._current_timer_interval_ms == 11
+
+
+def test_update_timer_interval_sets_exact_stable_interval_for_target():
+    class _Timer:
+        def __init__(self):
+            self.calls: list[int] = []
+
+        def setInterval(self, interval: int):
+            self.calls.append(interval)
+
+    timer = _Timer()
+    widget = SimpleNamespace(
+        _bars_timer=timer,
+        _target_timer_interval_ms=16,
+        _current_timer_interval_ms=16,
+    )
+
+    tick_helpers.update_timer_interval(widget, 90.0)
+
+    assert timer.calls == [11]
+    assert widget._target_timer_interval_ms == 11
+    assert widget._current_timer_interval_ms == 11
 
 
 def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
@@ -1061,6 +1083,49 @@ def _synthetic_audio(np_module, *, hz: float, amp: float, n: int = 4096):
     return signal.astype("float32")
 
 
+def _synthetic_phrase(np_module, *, n: int = 4096):
+    t = np_module.arange(n, dtype="float32") / 48000.0
+    signal = (
+        np_module.sin(2.0 * np_module.pi * 96.0 * t) * 0.18
+        + np_module.sin(2.0 * np_module.pi * 220.0 * t) * 0.11
+        + np_module.sin(2.0 * np_module.pi * 440.0 * t) * 0.08
+        + np_module.sin(2.0 * np_module.pi * 1188.0 * t) * 0.03
+    )
+    return signal.astype("float32")
+
+
+def _deep_sea_phrase_sequence(np_module, *, n: int = 4096):
+    base = _synthetic_phrase(np_module, n=n)
+    bass_hot = _synthetic_audio(np_module, hz=96.0, amp=0.72, n=n)
+    bass_cool = _synthetic_audio(np_module, hz=96.0, amp=0.28, n=n)
+    vocal_lift = _synthetic_audio(np_module, hz=220.0, amp=0.34, n=n)
+
+    return [
+        (base * 0.92 + bass_hot * 0.34 + vocal_lift * 0.16).astype("float32"),
+        (base * 0.60 + bass_cool * 0.12 + vocal_lift * 0.05).astype("float32"),
+        (base * 1.00 + bass_hot * 0.30 + vocal_lift * 0.10).astype("float32"),
+        (base * 0.56 + bass_cool * 0.08 + vocal_lift * 0.03).astype("float32"),
+    ]
+
+
+def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    assert settings, "expected authored Bubble preset 0 settings"
+
+    config_applier.apply_vis_mode_kwargs(widget, settings)
+    widget._technical_config_cache["bubble"] = {
+        "manual_floor": float(settings.get("bubble_manual_floor", 0.12)),
+        "dynamic_floor": bool(settings.get("bubble_dynamic_floor", True)),
+        "adaptive_sensitivity": bool(settings.get("bubble_adaptive_sensitivity", True)),
+        "sensitivity": float(settings.get("bubble_sensitivity", 1.0)),
+        "audio_block_size": int(settings.get("bubble_audio_block_size", 0)),
+        "input_gain": float(settings.get("bubble_input_gain", 1.0)),
+        "agc_strength": float(settings.get("bubble_agc_strength", 0.35)),
+    }
+    widget._apply_technical_config_for_mode(VisualizerMode.BUBBLE, reason="deep_sea_authored")
+    return settings
+
+
 def _capture_first_visible_frame(
     widget: SpotifyVisualizerWidget,
     parent: _PrimingDisplayParent,
@@ -1138,6 +1203,9 @@ def _poison_audio_worker_state(engine: _SpotifyBeatEngine) -> None:
     aw._pre_agc_control_bass = 0.91
     aw._pre_agc_control_mid = 0.82
     aw._pre_agc_control_treble = 0.73
+    aw._pre_agc_live_bass = 1.91
+    aw._pre_agc_live_mid = 1.62
+    aw._pre_agc_live_treble = 1.43
 
 
 def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
@@ -1180,6 +1248,9 @@ def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
     assert aw._pre_agc_control_bass == pytest.approx(0.0)
     assert aw._pre_agc_control_mid == pytest.approx(0.0)
     assert aw._pre_agc_control_treble == pytest.approx(0.0)
+    assert aw._pre_agc_live_bass == pytest.approx(0.0)
+    assert aw._pre_agc_live_mid == pytest.approx(0.0)
+    assert aw._pre_agc_live_treble == pytest.approx(0.0)
 
 
 def _poison_engine_runtime_state(engine: _SpotifyBeatEngine, np_module) -> tuple[object, object]:
@@ -1385,7 +1456,7 @@ def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot
     assert second_call["args"][3]["big_bass_pulse"] == pytest.approx(0.92)
 
 
-def test_beat_engine_playback_state_strict_worker_lifecycle():
+def test_beat_engine_playback_state_keeps_worker_warm_for_short_pause():
     class _WorkerStub:
         def __init__(self) -> None:
             self.running = False
@@ -1407,12 +1478,22 @@ def test_beat_engine_playback_state_strict_worker_lifecycle():
     worker = _WorkerStub()
     engine._audio_worker = worker  # type: ignore[assignment]
     engine._ref_count = 1
+    engine._capture_keepalive_grace = 6.0
 
     engine.set_playback_state(True)
     assert worker.start_calls == 1
     assert worker.running is True
 
     engine.set_playback_state(False)
+    assert worker.stop_calls == 0
+    assert worker.running is True
+    assert engine._capture_keepalive_deadline > 0.0
+
+    engine._expire_capture_keepalive_if_needed(engine._capture_keepalive_deadline - 0.01)
+    assert worker.stop_calls == 0
+    assert worker.running is True
+
+    engine._expire_capture_keepalive_if_needed(engine._capture_keepalive_deadline + 0.01)
     assert worker.stop_calls == 1
     assert worker.running is False
 
@@ -1420,6 +1501,60 @@ def test_beat_engine_playback_state_strict_worker_lifecycle():
     engine._ref_count = 0
     engine.set_playback_state(True)
     assert worker.start_calls == 1
+
+
+def test_beat_engine_warm_resume_skips_cold_reactivity_ramp():
+    class _WorkerStub:
+        def __init__(self) -> None:
+            self.running = False
+            self.start_calls = 0
+            self.stop_calls = 0
+
+        def is_running(self) -> bool:
+            return self.running
+
+        def start(self) -> None:
+            self.start_calls += 1
+            self.running = True
+
+        def stop(self) -> None:
+            self.stop_calls += 1
+            self.running = False
+
+    engine = _SpotifyBeatEngine(bar_count=8)
+    worker = _WorkerStub()
+    engine._audio_worker = worker  # type: ignore[assignment]
+    engine._ref_count = 1
+    engine._capture_keepalive_grace = 6.0
+
+    engine.set_playback_state(True)
+    cold_ramp_started = engine._play_ramp_start_ts
+    assert cold_ramp_started > 0.0
+
+    engine._play_ramp_start_ts = 0.0
+    engine.set_playback_state(False)
+    deadline = engine._capture_keepalive_deadline
+    assert deadline > 0.0
+    assert worker.running is True
+
+    engine.set_playback_state(True)
+    assert engine._capture_keepalive_deadline == 0.0
+    assert engine._play_ramp_start_ts == 0.0
+
+
+def test_beat_engine_paused_idle_seed_is_visible_without_audio_frame():
+    engine = _SpotifyBeatEngine(bar_count=16)
+    engine.set_playback_state(False)
+    engine._audio_buffer.consume_latest = lambda: None  # type: ignore[assignment]
+
+    result = engine.tick()
+
+    assert isinstance(result, list)
+    assert len(result) == 16
+    assert len([bar for bar in result if bar > 0.0]) > 6
+    assert max(result) < 0.05
+    assert max(engine.get_smoothed_bars()) == pytest.approx(max(result))
+    assert engine.get_energy_bands().overall > 0.0
 
 
 @pytest.mark.qt
@@ -1463,6 +1598,56 @@ def test_bubble_dispatch_keeps_idle_motion_while_paused(qt_app, qtbot, monkeypat
     assert eb_snap["overall"] > 0.0
 
 
+@pytest.mark.qt
+def test_bubble_dispatch_uses_bubble_specific_engine_feed(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_bubble_energy_bands = lambda: SimpleNamespace(
+        bass=0.62,
+        mid=0.41,
+        high=0.18,
+        overall=0.44,
+    )
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(
+        bass=0.09,
+        mid=0.08,
+        high=0.04,
+        overall=0.07,
+    )
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert widget._thread_manager.calls
+    eb_snap = widget._thread_manager.calls[0]["args"][1]
+    assert eb_snap["bass"] == pytest.approx(0.62)
+    assert eb_snap["overall"] == pytest.approx(0.44)
+
+
 @pytest.mark.parametrize(
     "mode",
     [
@@ -1493,6 +1678,40 @@ def test_paused_idle_reveal_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbo
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert widget._pending_engine_generation == -1
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [
+        VisualizerMode.BUBBLE,
+        VisualizerMode.SINE_WAVE,
+        VisualizerMode.DEVCURVE,
+    ],
+)
+@pytest.mark.qt
+def test_provisional_nonplaying_startup_seed_keeps_idle_reveal_modes_waiting(qt_app, qtbot, monkeypatch, mode):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(mode)
+    widget._spotify_playing = False
+    widget._waiting_for_fresh_engine_frame = True
+    widget._pending_engine_generation = 42
+    widget._startup_idle_reveal_requires_authoritative_media = True
+    widget._startup_has_authoritative_media_update = False
+
+    tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert widget._waiting_for_fresh_engine_frame is True
+    assert widget._pending_engine_generation == 42
 
 
 @pytest.mark.parametrize(
@@ -1981,7 +2200,7 @@ def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qt
     assert widget._kick_lane_gain == pytest.approx(0.77)
     assert widget._transient_clamp == pytest.approx(1.3)
     assert widget._sine_wave_transient_width_mix == pytest.approx(0.21)
-    assert parent._spotify_bars_overlay is None
+    assert parent._spotify_bars_overlay is not None
 
     widget.set_visualization_mode(VisualizerMode.BLOB)
 
@@ -1996,7 +2215,7 @@ def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qt
     assert widget._transient_clamp == pytest.approx(2.2)
     assert widget._blob_transient_mix_bass == pytest.approx(0.92)
     assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
-    assert parent._spotify_bars_overlay is None
+    assert parent._spotify_bars_overlay is not None
 
 
 @pytest.mark.qt
@@ -3450,6 +3669,204 @@ def test_widget_manager_preset_cycle_low_floor_first_visible_frame_matches_fresh
 
 
 @pytest.mark.qt
+def test_bubble_deep_sea_first_visible_frame_is_nontrivial_under_authored_phrase(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    parent = _PrimingDisplayParent(
+        overlay_mode="bubble",
+        pending_mode_resets={"bubble"},
+    )
+    qtbot.addWidget(parent)
+
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    frame = _capture_first_visible_frame(
+        widget,
+        parent,
+        engine,
+        _synthetic_phrase(np_module),
+    )
+
+    bars = list(frame["bars"])
+    assert frame["vis_mode"] == "bubble"
+    assert max(bars) >= 0.08
+    assert sum(bars) / len(bars) >= 0.03
+
+
+@pytest.mark.qt
+def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_phrase_sequence(np_module)
+    pressure_series: list[float] = []
+    control_series: list[float] = []
+    bubble_series: list[float] = []
+    strong_control: list[float] = []
+    weak_control: list[float] = []
+    strong_bubble: list[float] = []
+    weak_bubble: list[float] = []
+
+    for idx in range(80):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        pressure = float(engine.get_floor_snapshot()["pressure"])
+        control = float(engine.get_pre_agc_energy_bands().bass)
+        bubble = float(engine.get_bubble_energy_bands().bass)
+        pressure_series.append(pressure)
+        control_series.append(control)
+        bubble_series.append(bubble)
+        if idx >= 24:
+            if idx % len(sequence) in (0, 2):
+                strong_control.append(control)
+                strong_bubble.append(bubble)
+            else:
+                weak_control.append(control)
+                weak_bubble.append(bubble)
+
+    assert max(pressure_series) > 0.35
+    assert strong_control and weak_control and strong_bubble and weak_bubble
+
+    control_delta = (sum(strong_control) / len(strong_control)) - (sum(weak_control) / len(weak_control))
+    bubble_delta = (sum(strong_bubble) / len(strong_bubble)) - (sum(weak_bubble) / len(weak_bubble))
+    control_range = max(control_series[24:]) - min(control_series[24:])
+    bubble_range = max(bubble_series[24:]) - min(bubble_series[24:])
+
+    assert bubble_delta > 0.08, (
+        f"Deep Sea live Bubble delta only reached {bubble_delta:.4f}; "
+        "the continuous feed is still too flat under floor pressure."
+    )
+    assert bubble_range > 0.14, (
+        f"Deep Sea Bubble range {bubble_range:.4f} stayed too narrow under floor pressure; "
+        "the live lane is still collapsing into a plateau."
+    )
+    assert (sum(strong_bubble) / len(strong_bubble)) > (sum(weak_bubble) / len(weak_bubble)) * 1.25, (
+        "Deep Sea Bubble strong phases are not separating enough from weak phases under high floor pressure."
+    )
+
+
+@pytest.mark.qt
+def test_mode_switch_deep_sea_first_visible_frame_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    live_parent = _PrimingDisplayParent(
+        overlay_mode="devcurve",
+        pending_mode_resets={"bubble"},
+    )
+    qtbot.addWidget(live_parent)
+
+    live_engine = _SpotifyBeatEngine(bar_count)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    live_widget = SpotifyVisualizerWidget(parent=live_parent, bar_count=bar_count)
+    qtbot.addWidget(live_widget)
+    live_widget._engine = live_engine
+    live_widget._enabled = True
+    live_widget._spotify_playing = True
+    live_widget._vis_mode = VisualizerMode.DEVCURVE
+    _apply_authored_bubble_deep_sea(live_widget)
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    _poison_audio_worker_state(live_engine)
+
+    assert mode_transition.switch_to_mode(live_widget, "bubble") is True
+    now = live_widget._mode_transition_ts + live_widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(live_widget, now)
+
+    live_frame = _capture_first_visible_frame(
+        live_widget,
+        live_parent,
+        live_engine,
+        _synthetic_phrase(np_module),
+    )
+
+    fresh_parent = _PrimingDisplayParent(
+        overlay_mode="bubble",
+        pending_mode_resets={"bubble"},
+    )
+    qtbot.addWidget(fresh_parent)
+
+    fresh_engine = _SpotifyBeatEngine(bar_count)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=fresh_parent, bar_count=bar_count)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.BUBBLE
+    oracle_widget.reset_runtime_activation_state(reason="oracle")
+    _apply_authored_bubble_deep_sea(oracle_widget)
+
+    fresh_frame = _capture_first_visible_frame(
+        oracle_widget,
+        fresh_parent,
+        fresh_engine,
+        _synthetic_phrase(np_module),
+    )
+
+    live_bars = list(live_frame["bars"])
+    fresh_bars = list(fresh_frame["bars"])
+    assert live_frame["vis_mode"] == "bubble"
+    assert fresh_frame["vis_mode"] == "bubble"
+    assert max(live_bars) >= 0.08
+    assert max(fresh_bars) >= 0.08
+    assert live_bars == pytest.approx(fresh_bars, abs=0.03)
+
+
+@pytest.mark.qt
 def test_runtime_cycle_all_modes_and_settle_devcurve_matches_settings_refresh(qt_app, qtbot, monkeypatch):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -4412,7 +4829,7 @@ def test_spotify_visualizer_startup_flags_delegate_to_shared_startup_contract(qt
 
 
 @pytest.mark.qt
-def test_spotify_visualizer_fallback_reveal_waits_for_playing_state_when_startup_begins_paused(
+def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_paused(
     qt_app,
     qtbot,
     monkeypatch,
@@ -4430,6 +4847,7 @@ def test_spotify_visualizer_fallback_reveal_waits_for_playing_state_when_startup
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
     vis._spotify_secondary_stage_registered = True
+    vis.set_visualization_mode(VisualizerMode.SPECTRUM)
 
     fade_calls: list[int] = []
     def _record_fade(duration_ms=1500):
@@ -4443,7 +4861,7 @@ def test_spotify_visualizer_fallback_reveal_waits_for_playing_state_when_startup
 
     assert vis._startup_require_playing_before_reveal is True
     vis._startup_reveal_not_before_ts = 0.0
-    vis._finish_staged_startup_reveal(reason="fallback_timer", allow_waiting_fallback=True)
+    vis._finish_staged_startup_reveal(reason="startup_watchdog")
 
     assert vis._startup_reveal_pending is True
     assert fade_calls == []
@@ -4476,6 +4894,7 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
     vis.set_anchor_media_widget(anchor)
     vis._spotify_secondary_stage_registered = True
+    vis.set_visualization_mode(VisualizerMode.SPECTRUM)
 
     fade_calls: list[int] = []
     monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
@@ -4498,6 +4917,98 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     assert fade_calls == [1500]
 
     vis.stop()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_watchdog_does_not_override_authoritative_media_wait(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._enabled = True
+    vis._startup_reveal_pending = True
+    vis._startup_reveal_not_before_ts = 0.0
+    vis._startup_require_playing_before_reveal = False
+    vis._startup_idle_reveal_requires_authoritative_media = True
+    vis._startup_has_authoritative_media_update = False
+    vis._waiting_for_fresh_frame = False
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis._finish_staged_startup_reveal(reason="startup_watchdog")
+
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
+
+
+@pytest.mark.qt
+def test_shared_nonplaying_seed_blocks_idle_startup_reveal_until_live_media_confirms(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    class _Anchor(QWidget):
+        _shared_payload = {"state": "paused"}
+
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.refresh_calls = 0
+
+        @classmethod
+        def _get_shared_valid_info(cls):
+            return dict(cls._shared_payload)
+
+        def refresh_playback_state(self):
+            self.refresh_calls += 1
+
+    anchor = _Anchor(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._enabled = True
+    vis._startup_reveal_pending = True
+    vis._startup_reveal_not_before_ts = 0.0
+    vis._startup_require_playing_before_reveal = False
+    vis._waiting_for_fresh_frame = False
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis._seed_playback_state_from_anchor(reason="test_seed", request_refresh_if_missing=True)
+
+    assert vis._startup_idle_reveal_requires_authoritative_media is True
+    assert vis._startup_has_authoritative_media_update is False
+    assert anchor.refresh_calls >= 1
+
+    vis._finish_staged_startup_reveal(reason="authoritative_wait")
+
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
+
+    vis.handle_media_update({"state": "paused"}, source="live")
+    vis._finish_staged_startup_reveal(reason="live_paused_ready")
+
+    assert vis._startup_idle_reveal_requires_authoritative_media is False
+    assert vis._startup_has_authoritative_media_update is True
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
 
 @pytest.mark.qt
 def test_spotify_visualizer_media_update_sets_playing_state(qt_app):
@@ -4631,7 +5142,8 @@ def test_spotify_visualizer_defers_wake_until_staged_hot_start(qt_app, qtbot, mo
 
     assert vis._startup_secondary_stage_pending is False
     assert vis._startup_wake_deferred is False
-    assert fake_engine.wake_calls == 0
+    assert vis._startup_wake_deferred_reason == ""
+    assert fake_engine.wake_calls == 1
     assert fake_engine.playback_states[-1] is True
 
     vis.stop()

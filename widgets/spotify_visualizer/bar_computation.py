@@ -280,8 +280,15 @@ def fft_to_bars(worker: "SpotifyVisualizerAudioWorker", fft) -> List[float]:
         worker._pre_agc_control_treble = min(1.0, max(0.0, treble_energy / control_norm))
 
         # Pre-AGC energy: post-noise-floor but pre-normalization.
-        # Modes that need true dynamic range (bubbles, blob) read these
-        # instead of post-AGC bar-derived energy which is near-constant.
+        # Preserve both a clamped compatibility view and an unclamped live
+        # view. Bubble's continuous path needs the latter so hot floor
+        # pressure cannot silently collapse its variance into a plateau.
+        worker._pre_agc_live_bass = min(2.5, max(0.0, bass_energy))
+        worker._pre_agc_live_mid = min(2.5, max(0.0, mid_energy))
+        worker._pre_agc_live_treble = min(2.5, max(0.0, treble_energy))
+
+        # Compatibility lane for other pre-existing consumers that expect
+        # this family to stay inside a 0..1 contract.
         worker._pre_agc_bass = min(1.0, bass_energy)
         worker._pre_agc_mid = min(1.0, mid_energy)
         worker._pre_agc_treble = min(1.0, treble_energy)

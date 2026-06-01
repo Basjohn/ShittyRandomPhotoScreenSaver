@@ -89,8 +89,9 @@ Living map of the current SRPSS codebase.
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
 | Startup staging | `widgets/spotify_visualizer/startup_staging.py` | Extracted startup staging, lifecycle hooks, hot start, and cleanup |
 | Card paint | `widgets/spotify_visualizer/card_paint.py` | Painted-frame-shadow pixmap generation and card style |
-| Media bridge | `widgets/spotify_visualizer/media_bridge.py` | Media state tracking, anchor seeding, GL overlay teardown |
-| Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking |
+| Media bridge | `widgets/spotify_visualizer/media_bridge.py` | Media state tracking, anchor seeding, pause-confirmed playback authority, startup seed-trust classification for provisional non-playing shared-cache seeds, and GL overlay teardown |
+| Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking, and capture/no-capture lifecycle routing |
+| Beat engine | `widgets/spotify_visualizer/beat_engine.py` | Shared audio worker/capture lifecycle plus paused idle waveform/bar seeding, short warm-capture grace across real-world play/pause wobble, and Bubble's pressure-aware raw-band continuous feed |
 | Technical config | `widgets/spotify_visualizer/technical_config.py` | Per-mode technical cache building, runtime override replacement, mode→engine/overlay technical application |
 | Activation runtime | `widgets/spotify_visualizer/activation_runtime.py` | Settings-model apply, resolved activation payload application, and full-runtime mode replay without touching first-frame authority gates |
 | Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator; live audio-block changes now flow through the worker's capture-restart seam instead of waiting for a full runtime rebuild, early ThreadManager hookup defers authoritative engine replay until startup activation has seeded mode-owned technical config, and external runtime setters plus bar-buffer resize now resolve/rebind engine dependencies and prefer authoritative replay when that contract is ready |

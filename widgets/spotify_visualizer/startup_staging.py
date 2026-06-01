@@ -100,7 +100,6 @@ def finish_staged_startup_reveal(
     widget: Any,
     *,
     reason: str,
-    allow_waiting_fallback: bool = False,
 ) -> None:
     """Complete the staged startup reveal if all preconditions are met."""
     if not widget._enabled or not widget._startup_reveal_pending:
@@ -109,14 +108,19 @@ def finish_staged_startup_reveal(
         return
     if widget._startup_require_playing_before_reveal and not widget._spotify_playing:
         return
-    if widget._waiting_for_fresh_frame and not allow_waiting_fallback:
+    if (
+        widget._startup_idle_reveal_requires_authoritative_media
+        and not widget._startup_has_authoritative_media_update
+    ):
+        return
+    if widget._waiting_for_fresh_frame:
         return
     try:
         not_before_ts = float(getattr(widget, "_startup_reveal_not_before_ts", 0.0) or 0.0)
     except Exception:
         not_before_ts = 0.0
     if not_before_ts > 0.0 and time.monotonic() < not_before_ts:
-        if not allow_waiting_fallback and not widget._waiting_for_fresh_frame:
+        if not widget._waiting_for_fresh_frame:
             try:
                 delay_ms = max(
                     1,
@@ -159,20 +163,28 @@ def schedule_ready_driven_startup_reveal(widget: Any, *, delay_ms: int) -> None:
         _maybe_reveal()
 
 
-def schedule_startup_reveal_fallback(widget: Any) -> None:
-    """Schedule a fallback reveal timer for the staged startup."""
-    delay_ms = max(0, int(widget._startup_reveal_fallback_ms))
+def schedule_startup_reveal_watchdog(widget: Any) -> None:
+    """Schedule a startup watchdog without granting timeout reveal authority."""
+    delay_ms = max(0, int(widget._startup_reveal_watchdog_ms))
     widget._startup_reveal_token += 1
     token = widget._startup_reveal_token
 
     def _maybe_reveal() -> None:
         if token != widget._startup_reveal_token:
             return
-        finish_staged_startup_reveal(
-            widget,
-            reason="fallback_timer",
-            allow_waiting_fallback=True,
-        )
+        finish_staged_startup_reveal(widget, reason="startup_watchdog")
+        if widget._startup_reveal_pending:
+            logger.warning(
+                "[SPOTIFY_VIS][STARTUP] Reveal watchdog expired while still pending "
+                "(mode=%s waiting_frame=%s waiting_engine=%s playing=%s "
+                "require_playing=%s authoritative_media=%s)",
+                str(getattr(widget, "_vis_mode_str", "unknown") or "unknown"),
+                bool(getattr(widget, "_waiting_for_fresh_frame", False)),
+                bool(getattr(widget, "_waiting_for_fresh_engine_frame", False)),
+                bool(getattr(widget, "_spotify_playing", False)),
+                bool(getattr(widget, "_startup_require_playing_before_reveal", False)),
+                bool(getattr(widget, "_startup_has_authoritative_media_update", False)),
+            )
 
     try:
         if delay_ms <= 0:
@@ -180,7 +192,7 @@ def schedule_startup_reveal_fallback(widget: Any) -> None:
         else:
             QTimer.singleShot(delay_ms, _maybe_reveal)
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to schedule startup reveal fallback", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to schedule startup reveal watchdog", exc_info=True)
         _maybe_reveal()
 
 
@@ -202,7 +214,10 @@ def arm_staged_startup(widget: Any, *, reason: str) -> None:
     widget._startup_hot_start_started = False
     widget._startup_reveal_not_before_ts = 0.0
     widget._startup_wake_deferred = False
+    widget._startup_wake_deferred_reason = ""
     widget._startup_require_playing_before_reveal = False
+    widget._startup_idle_reveal_requires_authoritative_media = False
+    widget._startup_has_authoritative_media_update = False
     widget._seed_playback_state_from_anchor(
         reason=reason,
         request_refresh_if_missing=True,
@@ -247,10 +262,14 @@ def begin_hot_start(widget: Any, *, reason: str, reset_reason: str) -> None:
         )
         engine.set_playback_state(widget._spotify_playing)
         if widget._startup_wake_deferred:
+            deferred_reason = widget._startup_wake_deferred_reason or "staged_hot_start"
             widget._startup_wake_deferred = False
+            widget._startup_wake_deferred_reason = ""
             logger.debug(
-                "[SPOTIFY_VIS] Consumed deferred wake during staged hot start without explicit engine.wake()",
+                "[SPOTIFY_VIS] Replaying deferred wake during staged hot start (reason=%s)",
+                deferred_reason,
             )
+            widget._trigger_wake(reason=deferred_reason, allow_defer=False)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to start shared beat engine", exc_info=True)
 
@@ -266,7 +285,7 @@ def begin_hot_start(widget: Any, *, reason: str, reset_reason: str) -> None:
 
     prewarm_parent_overlay(widget)
     widget._startup_reveal_pending = True
-    schedule_startup_reveal_fallback(widget)
+    schedule_startup_reveal_watchdog(widget)
 
 
 def begin_spotify_secondary_stage(widget: Any) -> None:
@@ -375,7 +394,10 @@ def stop_legacy(widget: Any) -> None:
     widget._startup_secondary_stage_pending = False
     widget._startup_hot_start_started = False
     widget._startup_wake_deferred = False
+    widget._startup_wake_deferred_reason = ""
     widget._startup_require_playing_before_reveal = False
+    widget._startup_idle_reveal_requires_authoritative_media = False
+    widget._startup_has_authoritative_media_update = False
     cancel_pending_startup_reveal(widget)
 
     try:

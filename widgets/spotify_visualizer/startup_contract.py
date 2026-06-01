@@ -14,9 +14,12 @@ class VisualizerStartupState:
     reveal_token: int = 0
     reveal_ready_token: int = -1
     wake_deferred: bool = False
+    wake_deferred_reason: str = ""
     require_playing_before_reveal: bool = False
+    idle_reveal_requires_authoritative_media: bool = False
+    has_authoritative_media_update: bool = False
     min_reveal_delay_ms: int = 900
-    reveal_fallback_ms: int = 1900
+    reveal_watchdog_ms: int = 1900
     reveal_not_before_ts: float = 0.0
 
     @classmethod
@@ -25,5 +28,5 @@ class VisualizerStartupState:
         min_reveal_delay_ms = max(900, int(fade_ms * 0.8))
         return cls(
             min_reveal_delay_ms=min_reveal_delay_ms,
-            reveal_fallback_ms=min_reveal_delay_ms + 1000,
+            reveal_watchdog_ms=min_reveal_delay_ms + 1000,
         )

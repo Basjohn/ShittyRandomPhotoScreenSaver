@@ -18,6 +18,7 @@ from core.logging.logger import get_logger, is_verbose_logging
 logger = get_logger(__name__)
 
 _PLAYBACK_PAUSE_CONFIRM_MS = 700
+_SHARED_SEED_SOURCES = {"shared_valid_info", "shared_last_valid_info"}
 
 
 def _payload_state_rank(payload: Optional[dict]) -> int:
@@ -108,13 +109,38 @@ def seed_playback_state_from_anchor(
 
     payload = best_payload
     if payload is not None:
-        widget.handle_media_update(payload)
+        state = str(payload.get("state", "") or "").lower()
+        provisional_nonplaying_seed = (
+            state in {"paused", "stopped"}
+            and best_source in _SHARED_SEED_SOURCES
+        )
+        widget.handle_media_update(
+            payload,
+            source="seed",
+            seed_source=best_source,
+        )
+        widget._startup_idle_reveal_requires_authoritative_media = provisional_nonplaying_seed
+        widget._startup_has_authoritative_media_update = False
         logger.debug(
             "[SPOTIFY_VIS] Seeded playback state from anchor (%s source=%s state=%s)",
             reason,
             best_source,
             payload.get("state"),
         )
+        if provisional_nonplaying_seed and anchor is not None:
+            refresher = getattr(anchor, "refresh_playback_state", None)
+            if callable(refresher):
+                try:
+                    refresher()
+                    logger.debug(
+                        "[SPOTIFY_VIS] Requested anchor playback refresh (%s provisional_nonplaying_seed)",
+                        reason,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to request anchor playback refresh for provisional non-playing seed",
+                        exc_info=True,
+                    )
         return True
 
     if request_refresh_if_missing and anchor is not None:
@@ -197,7 +223,13 @@ def _schedule_nonplaying_commit(widget: Any, *, state: str) -> None:
     timer.start()
 
 
-def handle_media_update(widget: Any, payload: dict) -> None:
+def handle_media_update(
+    widget: Any,
+    payload: dict,
+    *,
+    source: str = "live",
+    seed_source: str | None = None,
+) -> None:
     """Receive media state from MediaWidget.
 
     Expects payload from MediaWidget.media_updated with a ``state``
@@ -215,6 +247,10 @@ def handle_media_update(widget: Any, payload: dict) -> None:
     widget._last_media_state_ts = time.time()
     widget._fallback_logged = False
     prev = bool(getattr(widget, "_spotify_playing", False))
+    if source == "live":
+        widget._startup_has_authoritative_media_update = True
+        widget._startup_idle_reveal_requires_authoritative_media = False
+
     if state == "playing":
         clear_pending_playback_pause(widget)
         if not prev:
@@ -262,6 +298,11 @@ def handle_media_update(widget: Any, payload: dict) -> None:
             "[SPOTIFY_VIS] Deferring %s media state for %dms to absorb playback-state wobble",
             state,
             _PLAYBACK_PAUSE_CONFIRM_MS,
+        )
+    elif source == "seed" and state in {"paused", "stopped"} and seed_source in _SHARED_SEED_SOURCES:
+        logger.debug(
+            "[SPOTIFY_VIS] Provisional non-playing startup seed retained until live media confirms state (source=%s)",
+            seed_source,
         )
 
 

@@ -74,6 +74,93 @@ def test_ensure_spotify_bars_overlay_seeds_ctor_mode_from_visualizer(monkeypatch
     assert calls[0] == ("ctor", "devcurve")
 
 
+def test_push_spotify_visualizer_frame_allows_hidden_startup_priming(monkeypatch):
+    calls: list[dict] = []
+
+    class _FakeVisualizer:
+        _startup_reveal_pending = True
+        _waiting_for_fresh_frame = True
+        _waiting_for_fresh_engine_frame = True
+        _border_width = 2
+
+        def isVisible(self) -> bool:
+            return False
+
+        def geometry(self) -> QRect:
+            return QRect(10, 20, 320, 160)
+
+    class _FakeOverlay:
+        def set_state(self, **kwargs) -> None:
+            calls.append(kwargs)
+
+        def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+            return None
+
+    monkeypatch.setattr(
+        display_image_ops,
+        "_ensure_spotify_bars_overlay",
+        lambda widget: _FakeOverlay(),
+    )
+
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=_FakeVisualizer(),
+    )
+
+    ok = display_image_ops.push_spotify_visualizer_frame(
+        widget,
+        bars=[0.1, 0.2],
+        bar_count=2,
+        segments=4,
+        fill_color=None,
+        border_color=None,
+        fade=0.0,
+        playing=True,
+        vis_mode="bubble",
+    )
+
+    assert ok is True
+    assert len(calls) == 1
+    assert calls[0]["visible"] is True
+    assert calls[0]["rect"] == QRect(10, 20, 320, 160)
+
+
+def test_push_spotify_visualizer_frame_still_skips_hidden_nonstartup_widget(monkeypatch):
+    class _FakeVisualizer:
+        _startup_reveal_pending = False
+        _waiting_for_fresh_frame = False
+        _waiting_for_fresh_engine_frame = False
+
+        def isVisible(self) -> bool:
+            return False
+
+        def geometry(self) -> QRect:
+            return QRect(10, 20, 320, 160)
+
+    monkeypatch.setattr(
+        display_image_ops,
+        "_ensure_spotify_bars_overlay",
+        lambda widget: (_ for _ in ()).throw(AssertionError("overlay should not be created")),
+    )
+
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=_FakeVisualizer(),
+    )
+
+    ok = display_image_ops.push_spotify_visualizer_frame(
+        widget,
+        bars=[0.1, 0.2],
+        bar_count=2,
+        segments=4,
+        fill_color=None,
+        border_color=None,
+        fade=0.0,
+        playing=True,
+        vis_mode="bubble",
+    )
+
+    assert ok is False
+
+
 def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
     scheduled = []
 

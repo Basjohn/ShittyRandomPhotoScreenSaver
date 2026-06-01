@@ -618,12 +618,36 @@ class SpotifyVisualizerWidget(QWidget):
         self._set_startup_phase_attr("wake_deferred", bool(value))
 
     @property
+    def _startup_wake_deferred_reason(self) -> str:
+        return str(self._get_startup_phase_attr("wake_deferred_reason") or "")
+
+    @_startup_wake_deferred_reason.setter
+    def _startup_wake_deferred_reason(self, value: str) -> None:
+        self._set_startup_phase_attr("wake_deferred_reason", str(value or ""))
+
+    @property
     def _startup_require_playing_before_reveal(self) -> bool:
         return bool(self._get_startup_phase_attr("require_playing_before_reveal"))
 
     @_startup_require_playing_before_reveal.setter
     def _startup_require_playing_before_reveal(self, value: bool) -> None:
         self._set_startup_phase_attr("require_playing_before_reveal", bool(value))
+
+    @property
+    def _startup_idle_reveal_requires_authoritative_media(self) -> bool:
+        return bool(self._get_startup_phase_attr("idle_reveal_requires_authoritative_media"))
+
+    @_startup_idle_reveal_requires_authoritative_media.setter
+    def _startup_idle_reveal_requires_authoritative_media(self, value: bool) -> None:
+        self._set_startup_phase_attr("idle_reveal_requires_authoritative_media", bool(value))
+
+    @property
+    def _startup_has_authoritative_media_update(self) -> bool:
+        return bool(self._get_startup_phase_attr("has_authoritative_media_update"))
+
+    @_startup_has_authoritative_media_update.setter
+    def _startup_has_authoritative_media_update(self, value: bool) -> None:
+        self._set_startup_phase_attr("has_authoritative_media_update", bool(value))
 
     @property
     def _startup_min_reveal_delay_ms(self) -> int:
@@ -634,12 +658,12 @@ class SpotifyVisualizerWidget(QWidget):
         self._set_startup_phase_attr("min_reveal_delay_ms", int(value))
 
     @property
-    def _startup_reveal_fallback_ms(self) -> int:
-        return int(self._get_startup_phase_attr("reveal_fallback_ms"))
+    def _startup_reveal_watchdog_ms(self) -> int:
+        return int(self._get_startup_phase_attr("reveal_watchdog_ms"))
 
-    @_startup_reveal_fallback_ms.setter
-    def _startup_reveal_fallback_ms(self, value: int) -> None:
-        self._set_startup_phase_attr("reveal_fallback_ms", int(value))
+    @_startup_reveal_watchdog_ms.setter
+    def _startup_reveal_watchdog_ms(self, value: int) -> None:
+        self._set_startup_phase_attr("reveal_watchdog_ms", int(value))
 
     @property
     def _startup_reveal_not_before_ts(self) -> float:
@@ -1284,9 +1308,9 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.media_bridge import seed_playback_state_from_anchor
         return seed_playback_state_from_anchor(self, reason=reason, request_refresh_if_missing=request_refresh_if_missing)
 
-    def handle_media_update(self, payload: dict) -> None:
+    def handle_media_update(self, payload: dict, **kwargs) -> None:
         from widgets.spotify_visualizer.media_bridge import handle_media_update
-        handle_media_update(self, payload)
+        handle_media_update(self, payload, **kwargs)
 
     def sync_visibility_with_anchor(self) -> None:
         from widgets.spotify_visualizer.media_bridge import sync_visibility_with_anchor
@@ -1376,17 +1400,17 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.startup_staging import prewarm_parent_overlay
         prewarm_parent_overlay(self)
 
-    def _finish_staged_startup_reveal(self, *, reason: str, allow_waiting_fallback: bool = False) -> None:
+    def _finish_staged_startup_reveal(self, *, reason: str) -> None:
         from widgets.spotify_visualizer.startup_staging import finish_staged_startup_reveal
-        finish_staged_startup_reveal(self, reason=reason, allow_waiting_fallback=allow_waiting_fallback)
+        finish_staged_startup_reveal(self, reason=reason)
 
     def _schedule_ready_driven_startup_reveal(self, *, delay_ms: int) -> None:
         from widgets.spotify_visualizer.startup_staging import schedule_ready_driven_startup_reveal
         schedule_ready_driven_startup_reveal(self, delay_ms=delay_ms)
 
-    def _schedule_startup_reveal_fallback(self) -> None:
-        from widgets.spotify_visualizer.startup_staging import schedule_startup_reveal_fallback
-        schedule_startup_reveal_fallback(self)
+    def _schedule_startup_reveal_watchdog(self) -> None:
+        from widgets.spotify_visualizer.startup_staging import schedule_startup_reveal_watchdog
+        schedule_startup_reveal_watchdog(self)
 
     def _mode_allows_idle_reveal(self) -> bool:
         from widgets.spotify_visualizer.startup_staging import mode_allows_idle_reveal

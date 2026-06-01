@@ -10,7 +10,6 @@ from __future__ import annotations
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import time
 import math
-import random
 
 from PySide6.QtCore import QRect
 
@@ -158,19 +157,15 @@ def update_timer_interval(widget: Any, max_fps: float) -> None:
             getattr(widget, "_current_timer_interval_ms", interval_ms),
         )
     )
-    if interval_ms == current_target:
+    current_live = int(getattr(widget, "_current_timer_interval_ms", current_target))
+    if interval_ms == current_target and current_live == interval_ms:
         return
     widget._target_timer_interval_ms = interval_ms
-    # Add a tiny jitter so we don't align perfectly with compositor vsync.
-    # Store the *target* interval separately from the jittered live interval
-    # so we do not keep re-setting the timer every tick for the same cadence.
-    jitter = random.randint(0, 2) if interval_ms >= 8 else 0
-    new_interval = interval_ms + jitter
     timer = widget._bars_timer
     if timer is not None:
         try:
-            timer.setInterval(new_interval)
-            widget._current_timer_interval_ms = new_interval
+            timer.setInterval(interval_ms)
+            widget._current_timer_interval_ms = interval_ms
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 

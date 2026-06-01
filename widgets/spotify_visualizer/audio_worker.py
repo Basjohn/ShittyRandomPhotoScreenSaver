@@ -93,6 +93,9 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_pre_agc_control_bass",
     "_pre_agc_control_mid",
     "_pre_agc_control_treble",
+    "_pre_agc_live_bass",
+    "_pre_agc_live_mid",
+    "_pre_agc_live_treble",
     "_pre_agc_bass",
     "_pre_agc_mid",
     "_pre_agc_treble",
@@ -245,6 +248,9 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._pre_agc_control_bass: float = 0.0
         self._pre_agc_control_mid: float = 0.0
         self._pre_agc_control_treble: float = 0.0
+        self._pre_agc_live_bass: float = 0.0
+        self._pre_agc_live_mid: float = 0.0
+        self._pre_agc_live_treble: float = 0.0
 
         # Sensitivity configuration (driven from Settings UI).
         self._cfg_lock = threading.Lock()
@@ -482,6 +488,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._pre_agc_control_bass = 0.0
             self._pre_agc_control_mid = 0.0
             self._pre_agc_control_treble = 0.0
+            self._pre_agc_live_bass = 0.0
+            self._pre_agc_live_mid = 0.0
+            self._pre_agc_live_treble = 0.0
         try:
             self._transient_bus.reset()
         except Exception:
@@ -723,6 +732,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             "_pre_agc_control_bass",
             "_pre_agc_control_mid",
             "_pre_agc_control_treble",
+            "_pre_agc_live_bass",
+            "_pre_agc_live_mid",
+            "_pre_agc_live_treble",
             "_pre_agc_bass",
             "_pre_agc_mid",
             "_pre_agc_treble",
