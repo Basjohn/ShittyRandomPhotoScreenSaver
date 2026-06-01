@@ -53,6 +53,7 @@ class InputHandler(QObject):
     previous_image_requested = Signal()
     cycle_transition_requested = Signal()
     play_pause_requested = Signal()
+    home_play_pause_requested = Signal()
     previous_track_requested = Signal()
     next_track_requested = Signal()
     slider_volume_up_requested = Signal()
@@ -235,7 +236,7 @@ class InputHandler(QObject):
             return True
         if key == Qt.Key.Key_Home:
             logger.info("Home key pressed - play/pause requested")
-            self.play_pause_requested.emit()
+            self.home_play_pause_requested.emit()
             return True
         if key == Qt.Key.Key_End:
             logger.info("End key pressed - global mute toggle requested")

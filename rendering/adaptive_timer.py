@@ -28,6 +28,20 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _normalize_next_deadline(next_deadline: float, now_ts: float, interval_s: float) -> float:
+    """Return the next frame deadline strictly after ``now_ts``.
+
+    Keeps cadence anchored to the prior deadline instead of pacing each frame
+    from "now", which would accumulate callback overhead into visible drift.
+    """
+    if interval_s <= 0.0:
+        return now_ts
+    if next_deadline > now_ts:
+        return next_deadline
+    missed = int((now_ts - next_deadline) / interval_s) + 1
+    return next_deadline + (missed * interval_s)
+
+
 class TimerState(Enum):
     """Adaptive timer states.
     
@@ -313,6 +327,7 @@ class AdaptiveTimerStrategy:
         fps = self._config.target_fps if self._config.target_fps > 0 else 240.0
         target_interval = max(1.0, 1000.0 / fps) / 1000.0
         sleep_threshold = 0.002
+        next_tick_deadline: Optional[float] = None
         
         logger.debug("[ADAPTIVE_TIMER] Loop started (target=%.2fms)", target_interval * 1000)
         
@@ -320,6 +335,7 @@ class AdaptiveTimerStrategy:
             state = self._state.load()
             
             if state == TimerState.IDLE:
+                next_tick_deadline = None
                 # Deep sleep - but use short timeout to check stop_event frequently
                 # Use 1 second chunks to allow quick shutdown response
                 if self._wake_event.wait(timeout=1.0):
@@ -328,6 +344,7 @@ class AdaptiveTimerStrategy:
                 continue
             
             elif state == TimerState.PAUSED:
+                next_tick_deadline = None
                 # Check if should go idle
                 elapsed = time.monotonic() - self._transition_ended_at
                 if elapsed > self._config.idle_timeout_sec:
@@ -345,6 +362,9 @@ class AdaptiveTimerStrategy:
             elif state == TimerState.RUNNING:
                 # Full-precision timing
                 try:
+                    if next_tick_deadline is None:
+                        next_tick_deadline = time.perf_counter() + target_interval
+
                     # Check for immediate frame requests
                     has_request = False
                     while True:
@@ -357,23 +377,23 @@ class AdaptiveTimerStrategy:
                         self._signal_frame()
                         continue
                     
-                    # Precise timing - use shorter sleeps for better shutdown response
-                    start_ts = time.perf_counter()
-                    
-                    # Sleep for most of interval but in smaller chunks to check stop_event
-                    remaining = target_interval - sleep_threshold
-                    while remaining > 0.01:  # Sleep in 10ms chunks
+                    # Precise timing anchored to the carried deadline so callback
+                    # overhead does not accumulate into long-run drift.
+                    while True:
+                        remaining = next_tick_deadline - time.perf_counter()
+                        if remaining <= sleep_threshold:
+                            break
                         if self._stop_event.is_set():
                             break
-                        sleep_chunk = min(0.01, remaining)
+                        if self._state.load() != TimerState.RUNNING:
+                            break
+                        sleep_chunk = min(0.01, max(0.0, remaining - sleep_threshold))
+                        if sleep_chunk <= 0.0:
+                            break
                         time.sleep(sleep_chunk)
-                        remaining -= sleep_chunk
-                    
-                    if remaining > 0 and not self._stop_event.is_set():
-                        time.sleep(remaining)
-                    
+
                     # Busy-wait for precision
-                    while time.perf_counter() - start_ts < target_interval:
+                    while time.perf_counter() < next_tick_deadline:
                         if self._stop_event.is_set() or self._state.load() != TimerState.RUNNING:
                             break
                         pass
@@ -382,6 +402,11 @@ class AdaptiveTimerStrategy:
                     if (not self._stop_event.is_set() and 
                         self._state.load() == TimerState.RUNNING):
                         self._signal_frame()
+                        next_tick_deadline = _normalize_next_deadline(
+                            next_tick_deadline + target_interval,
+                            time.perf_counter(),
+                            target_interval,
+                        )
                         
                 except Exception as e:
                     logger.error("[ADAPTIVE_TIMER] Loop error: %s", e)

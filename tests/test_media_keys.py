@@ -149,7 +149,7 @@ def test_home_key_routes_play_pause_signal(input_handler):
     event = create_key_event(Qt.Key.Key_Home)
 
     mock_slot = MagicMock()
-    input_handler.play_pause_requested.connect(mock_slot)
+    input_handler.home_play_pause_requested.connect(mock_slot)
 
     result = input_handler.handle_key_press(event)
     assert result is True, "Home should be handled as a focused play/pause hotkey"
@@ -170,14 +170,27 @@ def test_end_key_routes_global_mute_toggle_signal(input_handler):
 def test_display_widget_play_pause_hotkey_dispatches_media_feedback():
     media_widget = MagicMock()
     media_widget.handle_transport_command.return_value = True
-    stub = MagicMock()
-    stub._resolve_media_widget_for_transport.return_value = media_widget
+    stub = SimpleNamespace(_resolve_media_widget_for_transport=lambda: media_widget)
 
-    DisplayWidget._on_play_pause_requested(stub)
+    DisplayWidget._dispatch_play_pause_hotkey(stub, source="keyboard_space")
 
     media_widget.handle_transport_command.assert_called_once_with(
         "play",
         source="keyboard_space",
+        execute=True,
+    )
+
+
+def test_display_widget_home_play_pause_hotkey_dispatches_guarded_media_feedback():
+    media_widget = MagicMock()
+    media_widget.handle_transport_command.return_value = True
+    stub = SimpleNamespace(_resolve_media_widget_for_transport=lambda: media_widget)
+
+    DisplayWidget._dispatch_play_pause_hotkey(stub, source="keyboard_home")
+
+    media_widget.handle_transport_command.assert_called_once_with(
+        "play",
+        source="keyboard_home",
         execute=True,
     )
 

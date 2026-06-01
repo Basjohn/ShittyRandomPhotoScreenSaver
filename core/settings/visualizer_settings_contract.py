@@ -272,6 +272,23 @@ def strip_legacy_global_technical_keys(
     return stripped
 
 
+def strip_legacy_global_visual_keys(
+    data: Mapping[str, Any] | None,
+    *,
+    prefix: str = "widgets.spotify_visualizer",
+) -> Dict[str, Any]:
+    """Drop retired shared visual keys instead of reviving them at runtime."""
+    if not isinstance(data, Mapping):
+        return {}
+
+    stripped = dict(data)
+    scoped_prefix = f"{prefix}."
+    for key in LEGACY_GLOBAL_SHARED_VISUAL_KEYS:
+        stripped.pop(key, None)
+        stripped.pop(f"{scoped_prefix}{key}", None)
+    return stripped
+
+
 def migrate_legacy_global_visual_keys(
     data: Mapping[str, Any] | None,
     *,

@@ -24,6 +24,7 @@ from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     TimerState,
     AtomicTimerState,
+    _normalize_next_deadline,
 )
 
 
@@ -118,6 +119,18 @@ class TestAtomicTimerState(unittest.TestCase):
         # With 5 threads doing 100 attempts each, we expect some successes
         self.assertGreater(success_count[0], 0)
         self.assertLessEqual(success_count[0], 500)
+
+
+class TestAdaptiveTimerDeadlineMath(unittest.TestCase):
+    """Pure timing math guards for drift-free cadence scheduling."""
+
+    def test_normalize_next_deadline_keeps_future_deadline(self):
+        result = _normalize_next_deadline(10.05, 10.00, 0.016)
+        self.assertEqual(result, 10.05)
+
+    def test_normalize_next_deadline_skips_missed_intervals_without_rebasing(self):
+        result = _normalize_next_deadline(10.00, 10.051, 0.016)
+        self.assertAlmostEqual(result, 10.064, places=6)
 
 
 class TestAdaptiveTimerLifecycle(unittest.TestCase):

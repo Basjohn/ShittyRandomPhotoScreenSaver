@@ -920,17 +920,36 @@ class _FakeDisplayParent(QWidget):
 
 
 class _PrimingOverlay:
-    def __init__(self) -> None:
-        self._vis_mode = "spectrum"
-        self._activation_id = 1
-        self._engine_generation = 1
-        self._pending_mode_resets = {"bubble"}
+    def __init__(
+        self,
+        *,
+        mode: str = "spectrum",
+        activation_id: int = 1,
+        engine_generation: int = 1,
+        pending_mode_resets: set[str] | None = None,
+    ) -> None:
+        self._vis_mode = mode
+        self._activation_id = activation_id
+        self._engine_generation = engine_generation
+        self._pending_mode_resets = set(pending_mode_resets or {"bubble"})
 
 
 class _PrimingDisplayParent(QWidget):
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        overlay_mode: str = "spectrum",
+        activation_id: int = 1,
+        engine_generation: int = 1,
+        pending_mode_resets: set[str] | None = None,
+    ) -> None:
         super().__init__()
-        self._spotify_bars_overlay = _PrimingOverlay()
+        self._spotify_bars_overlay = _PrimingOverlay(
+            mode=overlay_mode,
+            activation_id=activation_id,
+            engine_generation=engine_generation,
+            pending_mode_resets=pending_mode_resets,
+        )
         self.frames: list[dict[str, object]] = []
 
     def push_spotify_visualizer_frame(self, *_, **kwargs):
@@ -941,6 +960,9 @@ class _PrimingDisplayParent(QWidget):
         overlay._engine_generation = kwargs.get("engine_generation")
         overlay._pending_mode_resets.discard(overlay._vis_mode)
         return True
+
+    def reset_pushes(self) -> None:
+        self.frames.clear()
 
 
 class _BubbleDispatchThreadManager:
@@ -986,6 +1008,44 @@ def _synthetic_audio(np_module, *, hz: float, amp: float, n: int = 4096):
         + np_module.sin(2.0 * np_module.pi * hz * 2.7 * t) * (amp * 0.28)
     )
     return signal.astype("float32")
+
+
+def _capture_first_visible_frame(
+    widget: SpotifyVisualizerWidget,
+    parent: _PrimingDisplayParent,
+    engine: _SpotifyBeatEngine,
+    samples,
+) -> dict[str, object]:
+    parent.reset_pushes()
+    widget._has_pushed_first_frame = False
+    engine._audio_buffer.publish(
+        _AudioFrame(
+            samples=samples,
+            activation_id=engine.get_activation_id(),
+        )
+    )
+    changed, _any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
+    assert widget._waiting_for_fresh_engine_frame is False
+
+    assert tick_pipeline.push_gpu_frame(
+        widget,
+        parent,
+        time.time(),
+        changed=changed,
+        first_frame=True,
+    ) is True
+    assert widget._has_pushed_first_frame is False
+
+    assert tick_pipeline.push_gpu_frame(
+        widget,
+        parent,
+        time.time(),
+        changed=False,
+        first_frame=True,
+    ) is True
+    assert widget._has_pushed_first_frame is True
+    assert widget._waiting_for_fresh_frame is False
+    return parent.frames[-1]
 
 
 def _poison_audio_worker_state(engine: _SpotifyBeatEngine) -> None:
@@ -2810,6 +2870,83 @@ def test_mode_switch_low_floor_bubble_matches_fresh_activation_oracle(
 
 
 @pytest.mark.qt
+def test_mode_switch_first_visible_spectrum_frame_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    live_parent = _PrimingDisplayParent(
+        overlay_mode="devcurve",
+        pending_mode_resets={"spectrum"},
+    )
+    qtbot.addWidget(live_parent)
+
+    live_engine = _SpotifyBeatEngine(35)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    live_widget = SpotifyVisualizerWidget(parent=live_parent, bar_count=35)
+    qtbot.addWidget(live_widget)
+    live_widget._engine = live_engine
+    live_widget._enabled = True
+    live_widget._spotify_playing = True
+    live_widget._vis_mode = VisualizerMode.DEVCURVE
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    target_samples = _synthetic_audio(np_module, hz=440.0, amp=0.08)
+
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    _poison_audio_worker_state(live_engine)
+
+    assert mode_transition.switch_to_mode(live_widget, "spectrum") is True
+    now = live_widget._mode_transition_ts + live_widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(live_widget, now)
+
+    live_frame = _capture_first_visible_frame(
+        live_widget,
+        live_parent,
+        live_engine,
+        target_samples,
+    )
+
+    fresh_parent = _PrimingDisplayParent(
+        overlay_mode="devcurve",
+        pending_mode_resets={"spectrum"},
+    )
+    qtbot.addWidget(fresh_parent)
+
+    fresh_engine = _SpotifyBeatEngine(35)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=fresh_parent, bar_count=35)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.SPECTRUM
+    oracle_widget.reset_runtime_activation_state(reason="oracle")
+    oracle_widget._apply_full_runtime_config_for_mode(VisualizerMode.SPECTRUM, reason="oracle")
+
+    fresh_frame = _capture_first_visible_frame(
+        oracle_widget,
+        fresh_parent,
+        fresh_engine,
+        target_samples,
+    )
+
+    assert live_frame["vis_mode"] == "spectrum"
+    assert fresh_frame["vis_mode"] == "spectrum"
+    assert live_frame["bars"] == pytest.approx(fresh_frame["bars"], abs=0.025)
+
+
+@pytest.mark.qt
 def test_mode_switch_discards_stale_audio_buffer_before_next_frame(qt_app, qtbot, np_module):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -3136,6 +3273,129 @@ def test_widget_manager_preset_cycle_low_floor_matches_fresh_activation_oracle(
     assert engine._audio_worker._preferred_block_size == 0
     assert fresh_engine._audio_worker._preferred_block_size == 0
     assert live_bars == pytest.approx(fresh_bars, abs=0.025)
+
+
+@pytest.mark.qt
+def test_widget_manager_preset_cycle_low_floor_first_visible_frame_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    settings_manager,
+    np_module,
+    monkeypatch,
+):
+    from core.settings import visualizer_presets as vp
+    from rendering.widget_manager import WidgetManager
+
+    def _fake_get_preset_settings(mode_key, index):
+        if mode_key == "bubble":
+            if index == 0:
+                return {
+                    "bubble_manual_floor": 0.12,
+                    "bubble_audio_block_size": 256,
+                    "bubble_sensitivity": 0.40,
+                }
+            if index == 1:
+                return {
+                    "bubble_manual_floor": 0.07,
+                    "bubble_audio_block_size": 0,
+                    "bubble_sensitivity": 0.42,
+                }
+        return {}
+
+    monkeypatch.setattr(vp, "get_preset_settings", _fake_get_preset_settings)
+    monkeypatch.setattr("rendering.widget_manager.get_preset_count", lambda mode: 2)
+
+    live_parent = _PrimingDisplayParent(
+        overlay_mode="bubble",
+        pending_mode_resets={"bubble"},
+    )
+    qtbot.addWidget(live_parent)
+    live_parent.screen_index = 0
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg.update(
+        {
+            "mode": "bubble",
+            "preset_bubble": 0,
+        }
+    )
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    live_engine = _SpotifyBeatEngine(20)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    live_widget = SpotifyVisualizerWidget(parent=live_parent, bar_count=20)
+    qtbot.addWidget(live_widget)
+    live_widget._engine = live_engine
+    live_widget._enabled = True
+    live_widget._spotify_playing = True
+    live_widget._vis_mode = VisualizerMode.BUBBLE
+
+    wm = WidgetManager(live_parent, resource_manager=None)
+    wm._attach_settings_manager(settings_manager)
+    wm._widgets["spotify_visualizer"] = live_widget
+    live_widget._widget_manager = wm
+    live_widget._apply_full_runtime_config_for_mode(VisualizerMode.BUBBLE, reason="seed")
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    target_samples = _synthetic_audio(np_module, hz=440.0, amp=0.08)
+
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    _poison_audio_worker_state(live_engine)
+
+    assert wm.cycle_visualizer_preset("bubble", 1) is True
+    live_frame = _capture_first_visible_frame(
+        live_widget,
+        live_parent,
+        live_engine,
+        target_samples,
+    )
+
+    fresh_parent = _PrimingDisplayParent(
+        overlay_mode="bubble",
+        pending_mode_resets={"bubble"},
+    )
+    qtbot.addWidget(fresh_parent)
+
+    fresh_engine = _SpotifyBeatEngine(20)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=fresh_parent, bar_count=20)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._widget_manager = SimpleNamespace(_settings_manager=settings_manager)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.BUBBLE
+    oracle_widget.reset_runtime_activation_state(reason="oracle")
+    oracle_widget._apply_full_runtime_config_for_mode(VisualizerMode.BUBBLE, reason="oracle")
+
+    fresh_frame = _capture_first_visible_frame(
+        oracle_widget,
+        fresh_parent,
+        fresh_engine,
+        target_samples,
+    )
+
+    assert int(((settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}).get("preset_bubble", -1)) == 1
+    assert live_engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert fresh_engine._audio_worker._manual_floor == pytest.approx(0.07)
+    assert live_engine._audio_worker._preferred_block_size == 0
+    assert fresh_engine._audio_worker._preferred_block_size == 0
+    assert live_frame["vis_mode"] == "bubble"
+    assert fresh_frame["vis_mode"] == "bubble"
+    assert live_frame["bars"] == pytest.approx(fresh_frame["bars"], abs=0.025)
 
 
 @pytest.mark.qt

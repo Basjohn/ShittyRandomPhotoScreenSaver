@@ -143,6 +143,8 @@ class MediaWidget(BaseOverlayWidget):
         self._refresh_in_flight = False
         self._pending_state_override: Optional[MediaPlaybackState] = None
         self._pending_state_timer: Optional[QTimer] = None
+        self._pending_keyboard_alias_command: Optional[tuple[str, float]] = None
+        self._pending_keyboard_alias_timer: Optional[QTimer] = None
 
         # Override base class font size default
         self._font_size = 20
@@ -199,6 +201,7 @@ class MediaWidget(BaseOverlayWidget):
         
         # Smart polling: diff gating to skip unnecessary updates
         self._last_track_identity: Optional[tuple] = None  # (title, artist, album, state)
+        self._last_metadata_identity: Optional[tuple] = None
         
         # Smart polling: idle detection to stop polling when Spotify is closed
         self._consecutive_none_count: int = 0
@@ -768,6 +771,8 @@ class MediaWidget(BaseOverlayWidget):
         underlying controller. It is safe to call even when no media is
         currently playing.
         """
+        if execute and self._should_defer_keyboard_alias_command(source, "play"):
+            return
 
         control_executed = not execute
         refresh_requested = False
@@ -947,6 +952,9 @@ class MediaWidget(BaseOverlayWidget):
         if normalized is None:
             return False
 
+        if not execute:
+            self._consume_matching_keyboard_alias(normalized)
+
         if normalized == "play":
             self.play_pause(source=source, execute=execute)
         elif normalized == "next":
@@ -977,6 +985,69 @@ class MediaWidget(BaseOverlayWidget):
         self._trigger_controls_feedback(key, source=source)
         if force_refresh:
             self._request_refresh_after_control()
+
+    def _should_defer_keyboard_alias_command(self, source: str, key: str) -> bool:
+        """Delay selected keyboard aliases briefly to avoid duplicate OS/global toggles."""
+        if source != "keyboard_home":
+            return False
+        self._arm_keyboard_alias_command(key)
+        logger.debug("[MEDIA_WIDGET] Deferred keyboard alias command: source=%s key=%s", source, key)
+        return True
+
+    def _arm_keyboard_alias_command(self, key: str) -> None:
+        self._clear_pending_keyboard_alias_timer()
+        self._pending_keyboard_alias_command = (key, time.monotonic())
+        timer = QTimer(self)
+        timer.setSingleShot(True)
+        timer.setInterval(140)
+
+        def _on_timeout() -> None:
+            pending = self._pending_keyboard_alias_command
+            self._pending_keyboard_alias_timer = None
+            self._pending_keyboard_alias_command = None
+            if pending is None:
+                return
+            pending_key, _pending_started = pending
+            logger.debug("[MEDIA_WIDGET] Executing deferred keyboard alias command: key=%s", pending_key)
+            self.handle_transport_command(
+                pending_key,
+                source="keyboard_home_deferred",
+                execute=True,
+            )
+
+        timer.timeout.connect(_on_timeout)
+        self._pending_keyboard_alias_timer = timer
+        timer.start()
+
+    def _consume_matching_keyboard_alias(self, key: str) -> None:
+        pending = self._pending_keyboard_alias_command
+        if pending is None:
+            return
+        pending_key, pending_started = pending
+        if pending_key != key:
+            return
+        age_ms = (time.monotonic() - pending_started) * 1000.0
+        self._clear_pending_keyboard_alias_timer()
+        self._pending_keyboard_alias_command = None
+        logger.info(
+            "[MEDIA_WIDGET] Consumed deferred keyboard alias via external transport ownership: key=%s age_ms=%.1f",
+            key,
+            age_ms,
+        )
+
+    def _clear_pending_keyboard_alias_timer(self) -> None:
+        timer = self._pending_keyboard_alias_timer
+        self._pending_keyboard_alias_timer = None
+        if timer is None:
+            return
+        try:
+            timer.stop()
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to stop deferred keyboard alias timer", exc_info=True)
+        try:
+            timer.deleteLater()
+        except Exception:
+            logger.debug("[MEDIA_WIDGET] Failed to delete deferred keyboard alias timer", exc_info=True)
 
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Refreshes artwork/track info."""
@@ -1244,6 +1315,16 @@ class MediaWidget(BaseOverlayWidget):
             (info.album or "").strip().lower(),
             getattr(info.state, "value", info.state),
             self._compute_artwork_key(info),
+        )
+
+    def _compute_metadata_identity(self, info: MediaTrackInfo) -> tuple:
+        """Compute the text/layout identity for media metadata."""
+        return (
+            (info.title or "").strip().lower(),
+            (info.artist or "").strip().lower(),
+            (info.album or "").strip().lower(),
+            int(self._font_size),
+            str(self.provider_display_name or "").strip().lower(),
         )
 
     def _compute_artwork_key(self, info: MediaTrackInfo) -> tuple:

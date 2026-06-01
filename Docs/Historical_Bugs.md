@@ -407,11 +407,22 @@ This is the long-term anti-regression record for the project, not an active task
     - balanced `before_first_overlay_push` / `after_first_overlay_push`
     - no replay-miss line such as `No technical config available for mode=...`
     - no reset checkpoints showing non-zero stale display bars before fresh-frame acceptance
+- **Later closure hardening (2026-06-01):**
+  - The first-visible path now explicitly permits a hidden primer frame when the overlay still belongs to the previous activation, instead of allowing that stale handoff to count as the authoritative first visible push.
+  - Fresh reactive-mode activation coverage was widened beyond raw bar-array clearing:
+    - hot mode switch and preset cycle now have synthetic-audio oracle tests that compare the first authoritative visible frame against a fresh activation oracle under the same preset-owned technical values
+    - runtime settings cleanup now strips retired global visualizer technical keys from current-schema settings instead of letting `validate_and_repair()` keep re-honoring legacy dirt on every load
+  - Healthy June 2026 runtime logs show the expected shared pattern across startup, settings recreate, and hot mode switch:
+    - `before_first_overlay_push`
+    - optional `[SPOTIFY_VIS][FIRST_FRAME_PRIMER]` when overlay state is stale
+    - `after_first_overlay_push` with current activation/generation
+    - no `[SPOTIFY_VIS][PARITY]` warnings and no `FIRST_FRAME_GUARD` warnings
 - **Takeaways:**
   - Runtime state that can cause visual bleed must be cleared explicitly during mode transitions
   - Source tracking is valuable for diagnosing state bleed issues in logs
   - RENDER_STATE logging must be placed after state changes to capture the correct state
   - Do not rely on implicit clearing or ordering assumptions for critical visual state
+  - First-visible activation parity needs a stronger bar than “no obvious reset leak”: hot activation, preset cycle, clean startup, and settings recreate should all converge on the same authoritative first-visible contract
 
 <a id="U-06"></a>
 ### [U-06] 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)

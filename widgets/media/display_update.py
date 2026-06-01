@@ -77,6 +77,8 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
     # Smart polling: diff gating - compute track identity
     if info is not None:
         current_identity = widget._compute_track_identity(info)
+        current_metadata_identity = widget._compute_metadata_identity(info)
+        metadata_changed = current_metadata_identity != widget._last_metadata_identity
 
         # Reset idle counter when we get valid track info
         if widget._consecutive_none_count > 0 or widget._is_idle:
@@ -118,10 +120,13 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
 
         # Track changed - update identity and proceed
         widget._last_track_identity = current_identity
+        widget._last_metadata_identity = current_metadata_identity
         widget._skipped_identity_updates = 0
         widget._last_display_update_ts = time.monotonic()
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget update applied (track changed)")
+    else:
+        metadata_changed = True
 
     if info is None:
         # MULTI-DISPLAY FIX: Check if other widgets have valid info
@@ -163,7 +168,7 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
         widget._last_info = info
 
     # --- Build metadata HTML ---
-    _build_and_apply_metadata(widget, info, prev_info)
+    _build_and_apply_metadata(widget, info, prev_info, metadata_changed=metadata_changed)
 
 
 def _update_app_process_state(widget: "MediaWidget") -> None:
@@ -286,50 +291,74 @@ def _build_and_apply_metadata(
     widget: "MediaWidget",
     info: MediaTrackInfo,
     prev_info: Optional[MediaTrackInfo],
+    *,
+    metadata_changed: bool,
 ) -> None:
     """Build HTML metadata and update widget text/artwork/layout."""
     title = smart_title_case((info.title or "").strip())
     artist = smart_title_case((info.artist or "").strip())
-
-    base_font = max(6, widget._font_size)
-    header_font = max(6, int(base_font * 1.2))
-
-    title_font_base = max(6, base_font + 3)
-    artist_font_base = max(6, base_font - 2)
-
-    title_len = len(title)
-    scale_title = 1.0
-    if title_len > 40:
-        scale_title = 0.86
-    if title_len > 55:
-        scale_title = 0.76
-    if title_len > 70:
-        scale_title = 0.66
-
-    scale_artist = 1.0 - (1.0 - scale_title) * 0.4
-
-    title_font = max(6, int(title_font_base * scale_title))
-    artist_font = max(6, int(artist_font_base * scale_artist))
-
-    header_weight = 750
-    title_weight = 700
-    artist_weight = 600
-
-    # Store logo metrics so paintEvent can size/position the glyph
-    widget._header_font_pt = header_font
-    widget._header_logo_size = max(12, int(header_font * 1.3))
-    widget._header_logo_margin = widget._header_logo_size
-
     display_title = title
     display_artist = artist
     if not title and not artist:
         display_title = "(no metadata)"
         display_artist = ""
-        title_font = base_font
-        title_weight = 500
-        metadata_complexity = 0
     else:
-        metadata_complexity = len(title.strip()) + len(artist.strip())
+        pass
+
+    if metadata_changed or not getattr(widget, "_metadata_paint", None):
+        base_font = max(6, widget._font_size)
+        header_font = max(6, int(base_font * 1.2))
+
+        title_font_base = max(6, base_font + 3)
+        artist_font_base = max(6, base_font - 2)
+
+        title_len = len(title)
+        scale_title = 1.0
+        if title_len > 40:
+            scale_title = 0.86
+        if title_len > 55:
+            scale_title = 0.76
+        if title_len > 70:
+            scale_title = 0.66
+
+        scale_artist = 1.0 - (1.0 - scale_title) * 0.4
+
+        title_font = max(6, int(title_font_base * scale_title))
+        artist_font = max(6, int(artist_font_base * scale_artist))
+
+        header_weight = 750
+        title_weight = 700
+        artist_weight = 600
+
+        if not title and not artist:
+            title_font = base_font
+            title_weight = 500
+            metadata_complexity = 0
+        else:
+            metadata_complexity = len(title.strip()) + len(artist.strip())
+
+        # Store logo metrics so paintEvent can size/position the glyph
+        widget._header_font_pt = header_font
+        widget._header_logo_size = max(12, int(header_font * 1.3))
+        widget._header_logo_margin = widget._header_logo_size
+
+        # Adjust artwork vertical bias only when the text layout identity changes.
+        if metadata_complexity <= 0:
+            widget._artwork_vertical_bias = 0.58
+        elif metadata_complexity <= 40:
+            widget._artwork_vertical_bias = 0.55
+        elif metadata_complexity <= 80:
+            widget._artwork_vertical_bias = 0.45
+        else:
+            widget._artwork_vertical_bias = 0.32
+    else:
+        base_font = int(widget._metadata_paint.get("base_font", max(6, widget._font_size)))
+        header_font = int(widget._metadata_paint.get("header_font", max(6, int(base_font * 1.2))))
+        title_font = int(widget._metadata_paint.get("title_font", max(6, base_font + 3)))
+        artist_font = int(widget._metadata_paint.get("artist_font", max(6, base_font - 2)))
+        header_weight = int(widget._metadata_paint.get("header_weight", 750))
+        title_weight = int(widget._metadata_paint.get("title_weight", 700))
+        artist_weight = int(widget._metadata_paint.get("artist_weight", 600))
 
     widget._metadata_paint = {
         "provider": widget.provider_display_name,
@@ -348,16 +377,6 @@ def _build_and_apply_metadata(
 
     widget.setTextFormat(Qt.TextFormat.PlainText)
     widget.setText("")
-
-    # Adjust artwork vertical bias
-    if metadata_complexity <= 0:
-        widget._artwork_vertical_bias = 0.58
-    elif metadata_complexity <= 40:
-        widget._artwork_vertical_bias = 0.55
-    elif metadata_complexity <= 80:
-        widget._artwork_vertical_bias = 0.45
-    else:
-        widget._artwork_vertical_bias = 0.32
 
     # Lock the card height after the first track
     if widget._fixed_card_height is None:

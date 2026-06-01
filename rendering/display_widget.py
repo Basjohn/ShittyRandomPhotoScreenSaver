@@ -361,6 +361,7 @@ class DisplayWidget(QWidget):
             self._input_handler.previous_image_requested.connect(self.previous_requested)
             self._input_handler.cycle_transition_requested.connect(self.cycle_transition_requested)
             self._input_handler.play_pause_requested.connect(self._on_play_pause_requested)
+            self._input_handler.home_play_pause_requested.connect(self._on_home_play_pause_requested)
             self._input_handler.previous_track_requested.connect(self._on_previous_track_requested)
             self._input_handler.next_track_requested.connect(self._on_next_track_requested)
             self._input_handler.slider_volume_up_requested.connect(self._on_slider_volume_up_requested)
@@ -1471,25 +1472,33 @@ class DisplayWidget(QWidget):
 
     def _on_play_pause_requested(self) -> None:
         """Route the focused play/pause hotkey through the media widget contract."""
+        self._dispatch_play_pause_hotkey(source="keyboard_space")
+
+    def _on_home_play_pause_requested(self) -> None:
+        """Route the focused Home alias through the guarded transport contract."""
+        self._dispatch_play_pause_hotkey(source="keyboard_home")
+
+    def _dispatch_play_pause_hotkey(self, *, source: str) -> None:
+        """Route a focused play/pause hotkey through the media widget contract."""
         media_widget = self._resolve_media_widget_for_transport()
         if media_widget is None:
-            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey ignored (no media widget)")
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey ignored (%s, no media widget)", source)
             return
         try:
             handled = bool(
                 media_widget.handle_transport_command(
                     "play",
-                    source="keyboard_space",
+                    source=source,
                     execute=True,
                 )
             )
         except Exception:
-            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey dispatch failed", exc_info=True)
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey dispatch failed (%s)", source, exc_info=True)
             handled = False
         if handled:
-            logger.info("[DISPLAY_WIDGET] Play/pause hotkey handled successfully")
+            logger.info("[DISPLAY_WIDGET] Play/pause hotkey handled successfully (%s)", source)
         else:
-            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey was not handled by media widget")
+            logger.debug("[DISPLAY_WIDGET] Play/pause hotkey was not handled by media widget (%s)", source)
 
     def _on_previous_track_requested(self) -> None:
         """Route the focused previous-track hotkey through the media widget contract."""

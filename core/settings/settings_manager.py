@@ -11,6 +11,10 @@ from core.logging.logger import get_logger, is_verbose_logging
 from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+from core.settings.visualizer_settings_contract import (
+    strip_legacy_global_technical_keys,
+    strip_legacy_global_visual_keys,
+)
 
 _WIDGET_DEFAULT_MERGE_SKIP_KEYS: dict[str, frozenset[str]] = {
     # Migration/version markers must only be written when a section has been
@@ -903,7 +907,7 @@ class SettingsManager(QObject):
 
             # Validate display.render_backend_mode - must be valid enum
             backend_mode = self._settings.value('display.render_backend_mode')
-            valid_backends = {'opengl', 'software', 'd3d11'}
+            valid_backends = {'opengl', 'software'}
             if backend_mode is not None:
                 normalized = None
                 if isinstance(backend_mode, str):
@@ -916,10 +920,6 @@ class SettingsManager(QObject):
                     )
                     self._settings.setValue('display.render_backend_mode', 'opengl')
                     repairs['display.render_backend_mode'] = f"Invalid value: {backend_mode!r}"
-                elif normalized == 'd3d11':
-                    logger.info("Normalizing legacy display.render_backend_mode=d3d11 to opengl")
-                    self._settings.setValue('display.render_backend_mode', 'opengl')
-                    repairs['display.render_backend_mode'] = "Legacy value: d3d11"
 
             # Validate display.hw_accel - keep in sync with backend mode
             hw_accel = self._settings.value('display.hw_accel')
@@ -949,31 +949,6 @@ class SettingsManager(QObject):
                 self._settings.setValue('display.hw_accel', expected_hw)
                 repairs['display.hw_accel'] = "Missing key"
 
-            # Migrate legacy widget font families from Segoe UI to Inter
-            widgets = self._settings.value('widgets')
-            if isinstance(widgets, Mapping):
-                widgets_copy: Dict[str, Any] = dict(widgets)
-                changed = False
-                for widget_name, widget_section in widgets_copy.items():
-                    if not isinstance(widget_section, Mapping):
-                        continue
-                    font_key = 'font_family'
-                    if font_key in widget_section:
-                        current_font = widget_section[font_key]
-                        if isinstance(current_font, str) and current_font.strip().lower() == 'segoe ui':
-                            widget_section_copy = dict(widget_section)
-                            widget_section_copy[font_key] = 'Inter'
-                            widgets_copy[widget_name] = widget_section_copy
-                            changed = True
-                            repairs[f'widgets.{widget_name}.font_family'] = "Migrated: Segoe UI -> Inter"
-                            logger.info(
-                                "Migrated widget '%s' font_family from 'Segoe UI' to 'Inter'",
-                                widget_name,
-                            )
-                if changed:
-                    self._store_widgets_root_locked(widgets_copy)
-                    self._settings.sync()
-
             # Validate widgets - must be dict
             widgets = self._settings.value('widgets')
             if widgets is not None and not isinstance(widgets, Mapping):
@@ -992,30 +967,20 @@ class SettingsManager(QObject):
             elif isinstance(widgets, Mapping):
                 vis_section = widgets.get('spotify_visualizer')  # type: ignore[index]
                 if isinstance(vis_section, Mapping):
-                    normalized_vis = normalize_visualizer_section_mapping(
-                        vis_section,
-                        apply_preset_overlay=False,
-                    )
-                    if dict(vis_section) != normalized_vis:
+                    repaired_vis = strip_legacy_global_technical_keys(vis_section)
+                    repaired_vis = strip_legacy_global_visual_keys(repaired_vis)
+                    if dict(vis_section) != repaired_vis:
                         for key, old_value in dict(vis_section).items():
-                            if not str(key).endswith('manual_floor'):
+                            if key in repaired_vis:
                                 continue
-                            new_value = normalized_vis.get(key)
-                            if old_value != new_value:
-                                if new_value is None:
-                                    repairs[f'widgets.spotify_visualizer.{key}'] = (
-                                        "Legacy global manual floor migrated to per-mode technical keys"
-                                    )
-                                else:
-                                    repairs[f'widgets.spotify_visualizer.{key}'] = (
-                                        f"Manual floor normalized to {float(new_value):.2f} "
-                                        f"(range {self._MANUAL_FLOOR_MIN:.2f}-{self._MANUAL_FLOOR_MAX:.2f})"
-                                    )
+                            repairs[f'widgets.spotify_visualizer.{key}'] = (
+                                "Removed retired legacy global visualizer key"
+                            )
                         widgets_copy = dict(widgets)
-                        widgets_copy['spotify_visualizer'] = normalized_vis
+                        widgets_copy['spotify_visualizer'] = repaired_vis
                         self._store_widgets_root_locked(widgets_copy)
                         widgets = widgets_copy
-                        repairs['widgets.spotify_visualizer'] = "Normalized visualizer section"
+                        repairs['widgets.spotify_visualizer'] = "Removed retired legacy global visualizer keys"
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
                 if clamp_repairs:
                     repairs.update(clamp_repairs)

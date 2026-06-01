@@ -305,6 +305,43 @@ def test_media_play_pause_optimistic_feedback_uses_update_not_repaint(qt_app) ->
         widget.deleteLater()
 
 
+def test_media_keyboard_home_alias_defers_local_execution_until_timeout(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        calls = []
+        widget.handle_transport_command = lambda key, *, source="manual", execute=True: calls.append((key, source, execute)) or True  # type: ignore[method-assign]
+
+        deferred = widget._should_defer_keyboard_alias_command("keyboard_home", "play")
+
+        assert deferred is True
+        assert widget._pending_keyboard_alias_command is not None
+        assert calls == []
+
+        widget._pending_keyboard_alias_timer.timeout.emit()
+
+        assert calls == [("play", "keyboard_home_deferred", True)]
+        assert widget._pending_keyboard_alias_command is None
+        assert widget._pending_keyboard_alias_timer is None
+    finally:
+        widget.deleteLater()
+
+
+def test_media_external_transport_feedback_consumes_pending_keyboard_home_alias(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget._should_defer_keyboard_alias_command("keyboard_home", "play")
+
+        assert widget._pending_keyboard_alias_command is not None
+        assert widget._pending_keyboard_alias_timer is not None
+
+        widget._consume_matching_keyboard_alias("play")
+
+        assert widget._pending_keyboard_alias_command is None
+        assert widget._pending_keyboard_alias_timer is None
+    finally:
+        widget.deleteLater()
+
+
 def test_media_header_fits_spotify_in_runtime_geometry_before_eliding(qt_app) -> None:
     from widgets.media.painting import _header_layout
 

@@ -667,7 +667,6 @@ class TestSettingsManagerManualFloorClamp:
 
         widgets = manager.get("widgets")
         assert "manual_floor" not in widgets["spotify_visualizer"]
-        assert widgets["spotify_visualizer"]["bubble_manual_floor"] == pytest.approx(0.12)
         assert widgets["spotify_visualizer"]["spectrum_manual_floor"] == pytest.approx(0.5)
         assert "widgets.spotify_visualizer.manual_floor" in repairs
 
@@ -767,3 +766,20 @@ class TestSettingsManagerManualFloorClamp:
         assert model.resolve_manual_floor("bubble") == pytest.approx(0.07)
         assert model.resolve_audio_block_size("bubble") == 0
         assert model.resolve_input_gain("bubble") == pytest.approx(0.33)
+
+    def test_validate_and_repair_preserves_authored_widget_font_family(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager._settings.setValue(
+            "widgets",
+            {
+                "media": {
+                    "font_family": "Segoe UI",
+                }
+            },
+        )
+
+        repairs = manager.validate_and_repair()
+
+        widgets = manager.get("widgets")
+        assert widgets["media"]["font_family"] == "Segoe UI"
+        assert "widgets.media.font_family" not in repairs

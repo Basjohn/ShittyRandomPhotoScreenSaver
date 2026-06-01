@@ -34,6 +34,7 @@ class _StubMediaWidget:
         self._enabled = True
         self._fade_in_completed = False
         self._last_track_identity = None
+        self._last_metadata_identity = None
         self._polls_at_current_stage = 0
         self._current_poll_stage = 0
         self._poll_intervals = [1000, 2000, 2500]
@@ -87,6 +88,9 @@ class _StubMediaWidget:
 
     def _compute_track_identity(self, info):
         return (info.title, info.artist, info.album, info.state.value)
+
+    def _compute_metadata_identity(self, info):
+        return (info.title, info.artist, info.album, self._font_size, self.provider_display_name)
 
     def _emit_media_update(self, info):
         self._emitted.append(info)
@@ -173,13 +177,16 @@ def test_update_display_uses_provider_failover_snapshot(monkeypatch):
     monkeypatch.setattr(
         display_update,
         "_build_and_apply_metadata",
-        lambda _widget, info, prev_info: captured.update({"info": info, "prev": prev_info}),
+        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
+            {"info": info, "prev": prev_info, "metadata_changed": metadata_changed}
+        ),
     )
     widget.try_provider_failover = lambda: failover_info
 
     display_update.update_display(widget, None)
 
     assert captured["info"] is failover_info
+    assert captured["metadata_changed"] is True
     assert widget._last_info is failover_info
     assert widget._retained_info is failover_info
 
@@ -202,6 +209,47 @@ def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
     assert widget.notify_calls == 1
     assert widget._telemetry_last_visibility is True
     assert widget._emitted and widget._emitted[-1] is live_info
+
+
+def test_build_and_apply_metadata_reuses_existing_layout_for_same_track_identity():
+    widget = _StubMediaWidget()
+    widget._metadata_paint = {
+        "provider": "SPOTIFY",
+        "title": "Track",
+        "artist": "Artist",
+        "base_font": 22,
+        "header_font": 27,
+        "title_font": 31,
+        "artist_font": 17,
+        "header_weight": 750,
+        "title_weight": 700,
+        "artist_weight": 600,
+        "line_spacing": 4,
+        "body_top_gap": 8,
+    }
+    widget._header_font_pt = 27
+    widget._header_logo_size = 35
+    widget._header_logo_margin = 35
+    widget._artwork_vertical_bias = 0.41
+
+    info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PAUSED,
+    )
+
+    display_update._build_and_apply_metadata(
+        widget,
+        info,
+        prev_info=info,
+        metadata_changed=False,
+    )
+
+    assert widget._metadata_paint["title_font"] == 31
+    assert widget._metadata_paint["artist_font"] == 17
+    assert widget._header_font_pt == 27
+    assert widget._artwork_vertical_bias == 0.41
 
 
 def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
