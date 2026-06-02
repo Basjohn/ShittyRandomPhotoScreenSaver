@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-01
+Last updated: 2026-06-02
 
 This file tracks active work only. Ongoing architecture truth belongs in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -22,26 +22,20 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 - [ ] Re-audit general compositor transition performance after the warmup/desync rescue.
   - [ ] Keep all multi-display-specific checks explicitly open even while single-display testing is the only runtime available; one 1440p display cannot validate the real stagger/desync contract or clear same-instant sibling-display pressure.
-  - [x] Re-validate the newly landed single-display timing-truth fix: request-time stopwatch inflation and single-display compositor desync tax no longer make transitions report the old `~+350ms` class drift when the underlying animation cadence is healthy.
-  - [x] Re-check what real cadence fault remains once timing truth is restored: the current single-display evidence points first at steady visualizer timer cadence rather than compositor transition duration.
-  - [x] Land the shared steady-cadence fix on the visualizer seam: steady runtime now relies on the dedicated recurring timer as the single cadence owner instead of layering `_on_tick`'s old `min_dt` gate on top of it.
-  - [x] Validate in fresh runtime logs that the visualizer now stays near the intended steady cadence after `waiting_engine` clears, without reintroducing first-frame, primer, or transition handoff regressions.
-  - [x] Land the shared playback-state stability fix on the visualizer seam: brief paused/playing wobble from media/controller churn now gets pause-confirmed before it is allowed to become authoritative for the visualizer path.
-  - [x] Decouple confirmed non-playing visual state from immediate capture teardown: the beat engine now keeps loopback capture warm for a short grace window so quick real-world resumes do not pay a cold restart plus 1.5s weak-reactivity ramp unless capture actually went cold.
-  - [x] Retire the old dead paused-startup visualizer contract: idle-reveal startup no longer relies on the ancient near-zero/one-bar floor behavior, and provisional shared-cache non-playing seeds no longer become first-visible reveal authority without a later live-media confirmation.
-  - [x] Restore real startup wake authority: staged startup now replays deferred wake requests through the actual beat-engine wake contract instead of merely clearing a deferred flag and leaving Bubble/Sine/Devcurve in a weak pre-wake state.
-  - [x] Add authored Bubble automation for the shared live-path seam: curated `Preset 1 (Deep Sea)` now has first-visible/reactivity oracle coverage so generic parity or pure-simulation tests cannot green-light dead live Bubble behavior on their own.
-  - [x] Replace Bubble's old shared control-normalized continuous feed with a beat-engine-owned pressure-aware raw-band feed, and add a Deep Sea live-variance oracle so dynamic-floor plateau regressions fail in automation instead of only by feel.
-  - [ ] Validate in fresh runtime logs that the combined startup/playback/cadence seam now suppresses the remaining shared failure shapes together:
-    - cold startup, settings recreate, and hot swap must not diverge into different long-lived steady cadence lanes for the same visualizer target,
-    - provisional non-playing startup seeds must not produce the old dead first visible Bubble/Sine/Devcurve startup while actual playback truth arrives later,
-    - short controller/media-key wobble must not reintroduce cold capture restart loops or weak-reactivity resumes,
-    - genuine longer pauses must still settle cleanly into idle presentation and later long-idle capture shutdown,
-    - Bubble's live Deep Sea/curated-path reactivity must no longer collapse into the old barely-grow/barely-shrink plateau under hot dynamic-floor pressure.
   - [ ] Confirm the startup watchdog has been reduced to diagnostics only: hidden pre-reveal priming must allow the first authoritative overlay push to drive reveal readiness, and timeout logging must not become first-visible authority again.
   - [ ] Confirm the global display-level image handoff stagger plus compositor-side desync are still active only where they help: single-display should bypass the extra delay, while multi-display should keep the shared spread contract once Thursday validation is available.
   - [ ] Verify the retained multi-display desync remains imperceptible to users while still reducing same-instant sibling-display start overhead once multi-display runtime is available again.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
+
+- [ ] Validate the newly landed Spectrum authored-organs contract before calling it stable.
+  - [x] Confirm the shared CPU/shader bar-field contract removes the visible left dead gap and right-edge clipping in real runtime, not just in helper math.
+  - [ ] Confirm paused/idle Spectrum keeps at least one visibly exposed segment after pause confirmation and warm-capture expiry, not just on the first paused frame, using the new paused-only visible floor without broadening other reactive modes into a looser idle-reveal contract.
+  - [ ] Keep authored `Preset 1 (Organs)` as the standing Spectrum oracle; if the preset evolves creatively later, re-tune the behavioral bar instead of silently dropping it.
+
+- [ ] Re-close the media card same-track metadata stability seam.
+  - [ ] Confirm same-track updates no longer refit or reformat title/artist text just because album/state/artwork/provider polling churn changes around the card.
+  - [ ] Keep the text/layout identity tied to visible metadata only; non-visible metadata churn must not become a second font/layout authority.
+  - [ ] Preserve legitimate text-fitting changes when the visible title/artist payload really changes.
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.
@@ -116,6 +110,9 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - do not reintroduce entry-point-specific fallback behavior for visualizer settings.
 
 ## Deferred / Not Active
+- Future authored reactivity oracles should follow the stronger Bubble bar pattern instead of weak generic guards:
+  - add a Spline Curve / `devcurve` authored runtime/reactivity oracle around `Preset 1` that exercises the same real seams: startup, hot switch, preset cycle, and live phrase behavior.
+  - when adding those bars, prefer authored preset payloads plus synthetic-audio/runtime-path checks over exact frozen numeric expectations, so curated presets can still evolve while real failure shapes remain testable.
 - Parallelism policy stays profiling-driven if performance work is reopened:
   - profile first and identify a real hotspot before changing thread/process counts,
   - prefer isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths,

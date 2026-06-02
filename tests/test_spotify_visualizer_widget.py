@@ -1108,6 +1108,22 @@ def _deep_sea_phrase_sequence(np_module, *, n: int = 4096):
     ]
 
 
+def _organs_phrase_sequence(np_module, *, n: int = 4096):
+    t = np_module.linspace(0.0, 1.0, n, endpoint=False, dtype="float32")
+    low = np_module.sin(2.0 * np_module.pi * 73.42 * t) * 0.34
+    fifth = np_module.sin(2.0 * np_module.pi * 110.0 * t) * 0.26
+    body = np_module.sin(2.0 * np_module.pi * 220.0 * t) * 0.18
+    air = np_module.sin(2.0 * np_module.pi * 880.0 * t) * 0.05
+    base = (low + fifth + body + air).astype("float32")
+
+    return [
+        (base * 1.00).astype("float32"),
+        (base * 0.48 + low * 0.10).astype("float32"),
+        (base * 0.84 + fifth * 0.08 + body * 0.06).astype("float32"),
+        (base * 0.42 + air * 0.04).astype("float32"),
+    ]
+
+
 def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str, object]:
     settings = dict(get_preset_settings("bubble", 0) or {})
     assert settings, "expected authored Bubble preset 0 settings"
@@ -1123,6 +1139,24 @@ def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str
         "agc_strength": float(settings.get("bubble_agc_strength", 0.35)),
     }
     widget._apply_technical_config_for_mode(VisualizerMode.BUBBLE, reason="deep_sea_authored")
+    return settings
+
+
+def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    settings = dict(get_preset_settings("spectrum", 0) or {})
+    assert settings, "expected authored Spectrum preset 0 settings"
+
+    config_applier.apply_vis_mode_kwargs(widget, settings)
+    widget._technical_config_cache["spectrum"] = {
+        "manual_floor": float(settings.get("spectrum_manual_floor", 0.12)),
+        "dynamic_floor": bool(settings.get("spectrum_dynamic_floor", True)),
+        "adaptive_sensitivity": bool(settings.get("spectrum_adaptive_sensitivity", True)),
+        "sensitivity": float(settings.get("spectrum_sensitivity", 1.0)),
+        "audio_block_size": int(settings.get("spectrum_audio_block_size", 0)),
+        "input_gain": float(settings.get("spectrum_input_gain", 1.0)),
+        "agc_strength": float(settings.get("spectrum_agc_strength", 0.35)),
+    }
+    widget._apply_technical_config_for_mode(VisualizerMode.SPECTRUM, reason="organs_authored")
     return settings
 
 
@@ -1718,7 +1752,6 @@ def test_provisional_nonplaying_startup_seed_keeps_idle_reveal_modes_waiting(qt_
     "mode",
     [
         VisualizerMode.OSCILLOSCOPE,
-        VisualizerMode.SPECTRUM,
     ],
 )
 @pytest.mark.qt
@@ -1743,6 +1776,109 @@ def test_paused_reactive_modes_keep_waiting_for_fresh_engine_frame(qt_app, qtbot
 
     assert widget._waiting_for_fresh_engine_frame is True
     assert widget._pending_engine_generation == 42
+
+
+@pytest.mark.qt
+def test_paused_spectrum_idle_floor_can_clear_wait_and_expose_bars(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(35)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(False)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = False
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+    widget._waiting_for_fresh_engine_frame = True
+    widget._pending_engine_generation = 42
+
+    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._pending_engine_generation == -1
+    assert changed is True
+    assert any_nonzero is True
+    assert max(widget._display_bars) > 0.0
+
+
+@pytest.mark.qt
+def test_paused_spectrum_idle_floor_survives_warm_capture_expiry(qt_app, qtbot, np_module):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(35)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(False)
+    engine._last_audio_ts = time.time() - 1.0
+    engine._capture_keepalive_deadline = time.time() - 0.1
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = False
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+    widget.resize(600, 400)
+    widget._waiting_for_fresh_engine_frame = False
+
+    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert changed is True
+    assert any_nonzero is True
+    assert max(widget._display_bars) >= 0.114
+    assert min(widget._display_bars) >= 0.090
+
+
+def test_spectrum_is_treated_as_idle_reveal_mode_for_first_source_contract():
+    assert tick_pipeline._mode_allows_idle_reveal_key("spectrum") is True
+    assert tick_pipeline._mode_requires_authoritative_first_source("spectrum") is False
+
+
+@pytest.mark.qt
+def test_paused_spectrum_idle_floor_preserves_hotter_paused_bars(qt_app, qtbot):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    class _PausedSpectrumEngine:
+        def __init__(self) -> None:
+            self._generation = 5
+            self._activation = 5
+
+        def tick(self):
+            return None
+
+        def get_smoothed_bars(self):
+            return [0.24] * 35
+
+        def get_generation_id(self):
+            return self._generation
+
+        def get_activation_id(self):
+            return self._activation
+
+        def get_latest_generation_with_frame(self):
+            return self._generation
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = _PausedSpectrumEngine()
+    widget._enabled = True
+    widget._spotify_playing = False
+    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
+    widget.resize(600, 400)
+    widget._waiting_for_fresh_engine_frame = False
+
+    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert changed is True
+    assert any_nonzero is True
+    assert min(widget._display_bars) >= 0.24
 
 
 @pytest.mark.qt
@@ -3203,6 +3339,169 @@ def test_mode_switch_first_visible_spectrum_frame_matches_fresh_activation_oracl
     oracle_widget._vis_mode = VisualizerMode.SPECTRUM
     oracle_widget.reset_runtime_activation_state(reason="oracle")
     oracle_widget._apply_full_runtime_config_for_mode(VisualizerMode.SPECTRUM, reason="oracle")
+
+    fresh_frame = _capture_first_visible_frame(
+        oracle_widget,
+        fresh_parent,
+        fresh_engine,
+        target_samples,
+    )
+
+    assert live_frame["vis_mode"] == "spectrum"
+    assert fresh_frame["vis_mode"] == "spectrum"
+    assert live_frame["bars"] == pytest.approx(fresh_frame["bars"], abs=0.025)
+
+
+@pytest.mark.qt
+def test_spectrum_organs_first_visible_frame_is_nontrivial_under_authored_phrase(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    parent = _PrimingDisplayParent(
+        overlay_mode="spectrum",
+        pending_mode_resets={"spectrum"},
+    )
+    qtbot.addWidget(parent)
+
+    settings = dict(get_preset_settings("spectrum", 0) or {})
+    bar_count = int(settings.get("spectrum_bar_count", 35) or 35)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget.reset_runtime_activation_state(reason="organs_first_visible")
+    _apply_authored_spectrum_organs(widget)
+
+    frame = _capture_first_visible_frame(
+        widget,
+        parent,
+        engine,
+        _organs_phrase_sequence(np_module)[0],
+    )
+
+    assert frame["vis_mode"] == "spectrum"
+    assert max(frame["bars"]) > 0.08
+    assert max(frame["bars"]) - min(frame["bars"]) > 0.05
+
+
+@pytest.mark.qt
+def test_organs_spectrum_feed_preserves_live_variance_under_dynamic_floor_pressure(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    engine = _SpotifyBeatEngine(35)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    _apply_authored_spectrum_organs(widget)
+
+    frames: list[list[float]] = []
+    for samples in _organs_phrase_sequence(np_module):
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        frames.append(list(engine.get_smoothed_bars()))
+
+    loud, quiet, medium, tail = frames
+    loud_max = max(loud)
+    quiet_max = max(quiet)
+    loud_quiet_delta = sum(abs(a - b) for a, b in zip(loud, quiet)) / len(loud)
+    medium_tail_delta = sum(abs(a - b) for a, b in zip(medium, tail)) / len(medium)
+
+    assert loud_max > 0.18
+    assert quiet_max > 0.18
+    assert loud_quiet_delta > 0.02
+    assert medium_tail_delta > 0.015
+    assert max(loud) - min(loud) > 0.08
+
+
+@pytest.mark.qt
+def test_mode_switch_organs_first_visible_frame_matches_fresh_activation_oracle(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    live_parent = _PrimingDisplayParent(
+        overlay_mode="devcurve",
+        pending_mode_resets={"spectrum"},
+    )
+    qtbot.addWidget(live_parent)
+
+    live_engine = _SpotifyBeatEngine(35)
+    live_engine._audio_worker._np = np_module
+    live_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    live_engine.set_playback_state(True)
+    live_engine._play_ramp_start_ts = 0.0
+
+    live_widget = SpotifyVisualizerWidget(parent=live_parent, bar_count=35)
+    qtbot.addWidget(live_widget)
+    live_widget._engine = live_engine
+    live_widget._enabled = True
+    live_widget._spotify_playing = True
+    live_widget._vis_mode = VisualizerMode.DEVCURVE
+    _apply_authored_spectrum_organs(live_widget)
+
+    hot_samples = _synthetic_audio(np_module, hz=96.0, amp=0.95)
+    for _ in range(8):
+        live_engine._audio_buffer.publish(_AudioFrame(samples=hot_samples))
+        live_engine.tick()
+    _poison_audio_worker_state(live_engine)
+
+    assert mode_transition.switch_to_mode(live_widget, "spectrum") is True
+    now = live_widget._mode_transition_ts + live_widget._mode_transition_duration + 0.01
+    mode_transition.mode_transition_fade_factor(live_widget, now)
+
+    target_samples = _organs_phrase_sequence(np_module)[0]
+    live_frame = _capture_first_visible_frame(
+        live_widget,
+        live_parent,
+        live_engine,
+        target_samples,
+    )
+
+    fresh_parent = _PrimingDisplayParent(
+        overlay_mode="devcurve",
+        pending_mode_resets={"spectrum"},
+    )
+    qtbot.addWidget(fresh_parent)
+
+    fresh_engine = _SpotifyBeatEngine(35)
+    fresh_engine._audio_worker._np = np_module
+    fresh_engine.set_thread_manager(_ImmediateComputeThreadManager())
+    fresh_engine.set_playback_state(True)
+    fresh_engine._play_ramp_start_ts = 0.0
+
+    oracle_widget = SpotifyVisualizerWidget(parent=fresh_parent, bar_count=35)
+    qtbot.addWidget(oracle_widget)
+    oracle_widget._engine = fresh_engine
+    oracle_widget._enabled = True
+    oracle_widget._spotify_playing = True
+    oracle_widget._vis_mode = VisualizerMode.SPECTRUM
+    oracle_widget.reset_runtime_activation_state(reason="oracle")
+    _apply_authored_spectrum_organs(oracle_widget)
 
     fresh_frame = _capture_first_visible_frame(
         oracle_widget,
@@ -4859,7 +5158,7 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is True
+    assert vis._startup_require_playing_before_reveal is False
     vis._startup_reveal_not_before_ts = 0.0
     vis._finish_staged_startup_reveal(reason="startup_watchdog")
 
@@ -4867,10 +5166,48 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
     assert fade_calls == []
 
     vis._waiting_for_fresh_frame = False
-    vis.handle_media_update({"state": "playing"})
+    vis._finish_staged_startup_reveal(reason="idle_ready")
 
     assert vis._startup_reveal_pending is False
     assert fade_calls == [1500]
+
+    vis.stop()
+
+
+@pytest.mark.qt
+def test_oscilloscope_watchdog_still_waits_for_play_when_startup_begins_paused(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    anchor = QWidget(parent)
+    anchor.show()
+
+    fake_engine = _FakeEngine(bar_count=10)
+    _patch_shared_engine(monkeypatch, lambda *_: fake_engine)
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=10)
+    vis.set_anchor_media_widget(anchor)
+    vis._spotify_secondary_stage_registered = True
+    vis.set_visualization_mode(VisualizerMode.OSCILLOSCOPE)
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(vis, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    vis.start()
+    vis.begin_spotify_secondary_stage()
+    qt_app.processEvents()
+
+    assert vis._startup_require_playing_before_reveal is True
+    vis._startup_reveal_not_before_ts = 0.0
+    vis._finish_staged_startup_reveal(reason="startup_watchdog")
+
+    assert vis._startup_reveal_pending is True
+    assert fade_calls == []
 
     vis.stop()
 
@@ -4903,7 +5240,7 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is True
+    assert vis._startup_require_playing_before_reveal is False
     vis._startup_reveal_not_before_ts = 0.0
     vis.handle_media_update({"state": "playing"})
 

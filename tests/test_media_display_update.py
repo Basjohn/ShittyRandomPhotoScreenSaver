@@ -90,7 +90,7 @@ class _StubMediaWidget:
         return (info.title, info.artist, info.album, info.state.value)
 
     def _compute_metadata_identity(self, info):
-        return (info.title, info.artist, info.album, self._font_size, self.provider_display_name)
+        return (info.title, info.artist, self._font_size, self.provider_display_name)
 
     def _emit_media_update(self, info):
         self._emitted.append(info)
@@ -209,6 +209,66 @@ def test_update_display_refades_widget_when_metadata_returns(monkeypatch):
     assert widget.notify_calls == 1
     assert widget._telemetry_last_visibility is True
     assert widget._emitted and widget._emitted[-1] is live_info
+
+
+def test_update_display_retained_same_metadata_does_not_force_relayout(monkeypatch):
+    widget = _StubMediaWidget()
+    retained_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album",
+        state=MediaPlaybackState.PAUSED,
+    )
+    widget._retained_info = retained_info
+    widget._last_metadata_identity = widget._compute_metadata_identity(retained_info)
+
+    captured = {}
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
+            {"info": info, "prev": prev_info, "metadata_changed": metadata_changed}
+        ),
+    )
+
+    display_update.update_display(widget, None)
+
+    assert captured["info"] is retained_info
+    assert captured["metadata_changed"] is False
+
+
+def test_update_display_album_only_change_does_not_force_metadata_refit(monkeypatch):
+    widget = _StubMediaWidget()
+    first_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album A",
+        state=MediaPlaybackState.PLAYING,
+    )
+    second_info = MediaTrackInfo(
+        title="Track",
+        artist="Artist",
+        album="Album B",
+        state=MediaPlaybackState.PLAYING,
+    )
+    widget._last_track_identity = None
+    widget._last_metadata_identity = widget._compute_metadata_identity(first_info)
+
+    captured = {}
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
+            {"info": info, "metadata_changed": metadata_changed}
+        ),
+    )
+
+    display_update.update_display(widget, second_info)
+
+    assert captured["info"] is second_info
+    assert captured["metadata_changed"] is False
 
 
 def test_build_and_apply_metadata_reuses_existing_layout_for_same_track_identity():

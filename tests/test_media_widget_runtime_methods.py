@@ -88,6 +88,16 @@ def test_media_display_update_stores_structured_paint_metadata(qt_app) -> None:
         widget.deleteLater()
 
 
+def test_media_widget_header_metrics_exist_before_first_metadata_update(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        assert widget._header_font_pt > 0
+        assert widget._header_logo_size > 0
+        assert widget._header_logo_margin >= widget._header_logo_size
+    finally:
+        widget.deleteLater()
+
+
 def test_media_display_update_does_not_restore_live_widget_during_custom_edit_mode(qt_app) -> None:
     from widgets.media.display_update import _ensure_widget_visible_for_active_metadata
 

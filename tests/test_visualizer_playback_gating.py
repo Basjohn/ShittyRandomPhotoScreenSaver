@@ -134,6 +134,33 @@ class TestVisualizerPlaybackGating:
             non_zero_bars = [bar for bar in result if bar > 0.0]
             assert len(non_zero_bars) > 8, f"Expected broad idle seed, got {len(non_zero_bars)} bars"
             assert max(non_zero_bars) < 0.05, f"Expected low-energy idle seed, got peak {max(non_zero_bars)}"
+
+    def test_paused_idle_seed_survives_post_pause_silence_decay(self, beat_engine):
+        """Paused idle bars must not be zeroed by the playing-only silence decay path."""
+        beat_engine.set_playback_state(False)
+        beat_engine._audio_buffer.consume_latest = Mock(return_value=None)
+        beat_engine._last_audio_ts = time.time() - 1.0
+
+        result = beat_engine.tick()
+
+        assert isinstance(result, list)
+        assert len(result) == 32
+        assert max(result) > 0.0
+        assert max(beat_engine._smoothed_bars) > 0.0
+
+    def test_paused_idle_seed_survives_worker_stop_after_warm_grace(self, beat_engine):
+        """Idle presentation must persist even when warm capture grace expires."""
+        beat_engine.set_playback_state(False)
+        beat_engine._audio_buffer.consume_latest = Mock(return_value=None)
+        beat_engine._last_audio_ts = time.time() - 1.0
+        beat_engine._capture_keepalive_deadline = time.time() - 0.1
+        beat_engine._audio_worker.stop = Mock()
+
+        result = beat_engine.tick()
+
+        beat_engine._audio_worker.stop.assert_called_once()
+        assert isinstance(result, list)
+        assert max(result) > 0.0
     
     def test_performance_impact_simulation(self, beat_engine):
         """Test that CPU usage is reduced when not playing."""

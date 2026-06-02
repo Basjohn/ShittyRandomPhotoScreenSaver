@@ -207,6 +207,10 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
         widget._last_info = info
 
     # --- Build metadata HTML ---
+    final_metadata_identity = widget._compute_metadata_identity(info)
+    metadata_changed = final_metadata_identity != widget._last_metadata_identity
+    widget._last_metadata_identity = final_metadata_identity
+
     _build_and_apply_metadata(widget, info, prev_info, metadata_changed=metadata_changed)
 
 

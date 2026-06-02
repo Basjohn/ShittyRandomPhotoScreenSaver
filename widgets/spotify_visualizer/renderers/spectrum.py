@@ -4,33 +4,96 @@ from __future__ import annotations
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
+from core.settings.shadow_tuning import CARD_SHADOW_TUNING
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
 
 logger = get_logger(__name__)
 
+_SPECTRUM_MARGIN_X = 8.0
+_SPECTRUM_GAP_PX = 2.0
+_SPECTRUM_LEFT_INSET_PX = 1.0
+_SPECTRUM_RIGHT_INSET_PX = 3.0
+_SPECTRUM_BASE_HEIGHT = 80.0
+
+
+def compute_bar_height_scale(total_height: float) -> float:
+    """Mirror the shader's height-scale math for Spectrum bar visibility."""
+    try:
+        cur_h = max(1.0, float(total_height))
+    except Exception:
+        cur_h = _SPECTRUM_BASE_HEIGHT
+    raw_hs = max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)
+    height_scale = 1.0 + (raw_hs ** 0.5 - 1.0) * 1.0
+    return max(1.0, min(1.85, float(height_scale)))
+
+
+def minimum_value_for_visible_segments(
+    total_height: float,
+    segment_count: int,
+    visible_segments: float,
+) -> float:
+    """Return the normalized bar value needed to keep N Spectrum segments visible.
+
+    This mirrors the Spectrum shader's `pow(value, 1.15)` plus height-scale
+    shaping so runtime idle contracts can target what the user actually sees,
+    not just "some small non-zero float" that may still look dead.
+    """
+    try:
+        segments = int(segment_count)
+    except Exception:
+        segments = 0
+    if segments <= 0:
+        return 0.0
+
+    target_segments = max(0.0, float(visible_segments))
+    if target_segments <= 0.0:
+        return 0.0
+
+    # `round()` in the shader flips to N segments once the scaled height clears
+    # the midpoint between segment counts.
+    required_scaled_height = min(
+        0.95,
+        max(0.0, (target_segments - 0.5) / float(segments)),
+    )
+    if required_scaled_height <= 0.0:
+        return 0.0
+
+    height_scale = compute_bar_height_scale(total_height)
+    curved = required_scaled_height / max(1.0, height_scale)
+    if curved <= 0.0:
+        return 0.0
+
+    return max(0.0, min(1.0, float(curved) ** (1.0 / 1.15)))
+
 
 def compute_bar_layout(
-    inner_width: float,
+    total_width: float,
     count: int,
     *,
-    gap: float = 2.0,
-    bars_inset: float = 2.0,
+    margin_x: float = _SPECTRUM_MARGIN_X,
+    gap: float = _SPECTRUM_GAP_PX,
+    left_inset: float = _SPECTRUM_LEFT_INSET_PX,
+    right_inset: float = _SPECTRUM_RIGHT_INSET_PX,
+    card_shrink_right: float = float(CARD_SHADOW_TUNING.get("card_shrink_right", 11)),
 ) -> dict[str, float] | None:
     """Compute the horizontal Spectrum bar field layout.
 
-    This mirrors the intended shader contract for `BARS` / `SEGMENTS`:
-    use the full usable width inside a small fixed inset, rather than flooring
-    the bar width and centering the leftover slack as visible wasted space.
+    This is the authoritative Spectrum bar-field contract shared by CPU tests
+    and the shader. The field intentionally biases one pixel left and keeps a
+    slightly larger right guard so the left edge does not show a dead gutter
+    while the rightmost bar keeps breathing room from the card edge.
     """
     try:
         bar_count = int(count)
     except Exception:
         return None
 
-    if inner_width <= 0.0 or bar_count <= 0:
+    if total_width <= 0.0 or bar_count <= 0:
         return None
 
-    bar_region_width = float(inner_width) - float(bars_inset) * 2.0
+    visible_card_width = max(1.0, float(total_width) - float(card_shrink_right))
+    inner_width = visible_card_width - float(margin_x) * 2.0
+    bar_region_width = inner_width - float(left_inset) - float(right_inset)
     total_gap = float(gap) * float(max(0, bar_count - 1))
     usable_width = bar_region_width - total_gap
     if bar_region_width <= 0.0 or usable_width <= 0.0:
@@ -38,14 +101,17 @@ def compute_bar_layout(
 
     bar_width = usable_width / float(bar_count)
     span = bar_width * float(bar_count) + total_gap
-    right_padding = max(0.0, float(inner_width) - (float(bars_inset) + span))
+    left_px = float(margin_x) + float(left_inset)
+    right_padding = max(0.0, float(total_width) - (left_px + span))
+    visible_right_padding = max(0.0, visible_card_width - (left_px + span))
     return {
-        "bar_width": bar_width,
-        "span": span,
-        "left": float(bars_inset),
-        "right_padding": right_padding,
-        "gap": float(gap),
-        "bar_region_width": bar_region_width,
+        "bar_width_px": bar_width,
+        "span_px": span,
+        "left_px": left_px,
+        "right_padding_px": right_padding,
+        "visible_right_padding_px": visible_right_padding,
+        "gap_px": float(gap),
+        "bar_region_width_px": bar_region_width,
     }
 
 
@@ -58,6 +124,7 @@ def get_uniform_names() -> list[str]:
         "u_spectrum_glow_enabled", "u_spectrum_glow_intensity", "u_spectrum_glow_color",
         "u_rainbow_per_bar",
         "u_rainbow_border",
+        "u_bars_left", "u_bar_width_px", "u_bar_gap_px", "u_bar_span_px",
     ]
 
 
@@ -74,10 +141,29 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     _set1i(gl, u, "u_bar_count", min(count, 64))
     _set1i(gl, u, "u_segments", segments)
 
+    total_width = 0.0
+    try:
+        total_width = float(s._render_rect.width()) if hasattr(s, "_render_rect") else 0.0
+    except Exception:
+        total_width = 0.0
+    if total_width <= 0.0:
+        try:
+            total_width = float(s.width())
+        except Exception:
+            total_width = 0.0
+
+    layout = compute_bar_layout(total_width, count)
+    if layout is None:
+        return False
+
+    _set1f(gl, u, "u_bars_left", float(layout["left_px"]))
+    _set1f(gl, u, "u_bar_width_px", float(layout["bar_width_px"]))
+    _set1f(gl, u, "u_bar_gap_px", float(layout["gap_px"]))
+    _set1f(gl, u, "u_bar_span_px", float(layout["span_px"]))
+
     # Height scale
     loc = u.get("u_bar_height_scale", -1)
     if loc >= 0:
-        _SPECTRUM_BASE_HEIGHT = 80.0
         cur_h = max(1.0, float(s._render_rect.height()) if hasattr(s, '_render_rect') else 80.0)
         gl.glUniform1f(loc, float(max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)))
 

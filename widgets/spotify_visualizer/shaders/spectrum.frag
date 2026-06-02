@@ -23,6 +23,10 @@ uniform vec4 u_spectrum_glow_color;
 uniform float u_rainbow_hue_offset; // 0..1 hue rotation (0 = disabled)
 uniform int u_rainbow_per_bar;      // 1 = unique colour per bar, 0 = single shifting colour
 uniform int u_rainbow_border;       // 1 = borders participate in rainbow, 0 = borders keep base colour
+uniform float u_bars_left;
+uniform float u_bar_width_px;
+uniform float u_bar_gap_px;
+uniform float u_bar_span_px;
 
 // Apply rainbow hue shift to a colour. Returns the shifted colour.
 // Called from both single-piece and segmented code paths.
@@ -113,23 +117,15 @@ void main() {
     vec2 fragCoord = vec2(gl_FragCoord.x / dpr, (fb_height - gl_FragCoord.y) / dpr);
 
     // ========== SPECTRUM MODE ==========
-    float margin_x = 8.0;
     float margin_y = 6.0;
-    float gap = 2.0;
+    float gap = u_bar_gap_px;
     float seg_gap = 1.0;
-    float bars_inset = 2.0;
 
-    // Match QWidget geometry: inner rect is rect.adjusted(margin_x, margin_y,
-    // -margin_x, -margin_y). For a logical rect starting at (0, 0) this
-    // gives width = W - 2*margin_x and height = H - 2*margin_y.
-    float inner_left = margin_x;
     float inner_top = margin_y;
-    float inner_width = width - margin_x * 2.0;
     float inner_height = height - margin_y * 2.0;
-    float inner_right = inner_left + inner_width;
     float inner_bottom = inner_top + inner_height;
 
-    if (inner_width <= 0.0 || inner_height <= 0.0) {
+    if (inner_height <= 0.0) {
         discard;
     }
 
@@ -139,26 +135,17 @@ void main() {
         discard;
     }
 
-    float bar_region_width = inner_width - (bars_inset * 2.0);
-    if (bar_region_width <= 0.0) {
-        discard;
-    }
-
     int bar_count_int = max(u_bar_count, 1);
     float bar_count = float(bar_count_int);
-    float total_gap = gap * float(bar_count_int - 1);
-    float usable_width = bar_region_width - total_gap;
-    if (usable_width <= 0.0) {
-        discard;
-    }
-
-    float bar_width = usable_width / bar_count;
+    float bar_width = u_bar_width_px;
     if (bar_width < 1.0) {
         discard;
     }
-
-    float span = bar_width * bar_count + total_gap;
-    float bars_left = inner_left + bars_inset;
+    float span = u_bar_span_px;
+    float bars_left = u_bars_left;
+    if (bars_left < 0.0 || span <= 0.0 || gap < 0.0) {
+        discard;
+    }
 
     float x_rel = fragCoord.x - bars_left;
     if (x_rel < 0.0) {

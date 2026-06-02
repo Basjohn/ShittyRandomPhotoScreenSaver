@@ -198,7 +198,7 @@ def schedule_startup_reveal_watchdog(widget: Any) -> None:
 
 def mode_allows_idle_reveal(widget: Any) -> bool:
     """Return True when the current mode should reveal while paused."""
-    return str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "devcurve"}
+    return str(getattr(widget, "_vis_mode_str", "")).lower() in {"bubble", "sine_wave", "devcurve", "spectrum"}
 
 
 def arm_staged_startup(widget: Any, *, reason: str) -> None:

@@ -1014,24 +1014,28 @@ class TestSpectrumGlowUniforms:
             "u_bar_count": 1,
             "u_segments": 2,
             "u_bar_height_scale": 3,
-            "u_single_piece": 4,
-            "u_slanted": 5,
-            "u_border_radius": 6,
-            "u_bars": 7,
-            "u_peaks": 8,
-            "u_playing": 9,
-            "u_ghost_alpha": 10,
-            "u_fill_color": 11,
-            "u_border_color": 12,
-            "u_spectrum_glow_enabled": 13,
-            "u_spectrum_glow_intensity": 14,
-            "u_spectrum_glow_color": 15,
-            "u_rainbow_per_bar": 16,
+            "u_bars_left": 4,
+            "u_bar_width_px": 5,
+            "u_bar_gap_px": 6,
+            "u_bar_span_px": 7,
+            "u_single_piece": 8,
+            "u_slanted": 9,
+            "u_border_radius": 10,
+            "u_bars": 11,
+            "u_peaks": 12,
+            "u_playing": 13,
+            "u_ghost_alpha": 14,
+            "u_fill_color": 15,
+            "u_border_color": 16,
+            "u_spectrum_glow_enabled": 17,
+            "u_spectrum_glow_intensity": 18,
+            "u_spectrum_glow_color": 19,
+            "u_rainbow_per_bar": 20,
         }
         state = SimpleNamespace(
             _bar_count=5,
             _segments=12,
-            _render_rect=SimpleNamespace(height=lambda: 120),
+            _render_rect=SimpleNamespace(width=lambda: 320, height=lambda: 120),
             _single_piece=True,
             _slanted=False,
             _border_radius=3.0,
@@ -1051,8 +1055,8 @@ class TestSpectrumGlowUniforms:
         )
 
         assert spectrum.upload_uniforms(gl, uniforms, state) is True
-        assert gl.uniforms[13] == 1
-        assert gl.uniforms[14] == pytest.approx(0.94)
+        assert gl.uniforms[17] == 1
+        assert gl.uniforms[18] == pytest.approx(0.94)
 
     def test_oscilloscope_secondary_ghosts_use_glow_colors(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "oscilloscope.frag").read_text(encoding="utf-8")

@@ -86,17 +86,28 @@ class TestSpectrumShapeConfig:
     def test_bar_layout_reclaims_width_without_centering_waste(self):
         from widgets.spotify_visualizer.renderers.spectrum import compute_bar_layout
 
-        layout = compute_bar_layout(884.0, 33, gap=2.0, bars_inset=2.0)
+        layout = compute_bar_layout(900.0, 33, gap=2.0)
         assert layout is not None
-        assert layout["left"] == pytest.approx(2.0)
-        assert layout["right_padding"] == pytest.approx(2.0, abs=1e-6)
-        assert layout["span"] == pytest.approx(880.0, abs=1e-6)
-        assert layout["bar_width"] > 24.0
+        assert layout["left_px"] == pytest.approx(9.0)
+        assert layout["visible_right_padding_px"] == pytest.approx(11.0, abs=1e-6)
+        assert layout["span_px"] == pytest.approx(869.0, abs=1e-6)
+        assert layout["bar_width_px"] > 24.0
 
     def test_shader_uses_full_span_bar_width_contract(self):
         src = (ROOT / "widgets" / "spotify_visualizer" / "shaders" / "spectrum.frag").read_text(encoding="utf-8")
-        assert "float bars_inset = 2.0;" in src
-        assert "float bar_width = usable_width / bar_count;" in src
+        assert "uniform float u_bars_left;" in src
+        assert "float bar_width = u_bar_width_px;" in src
+        assert "float bars_left = u_bars_left;" in src
+
+    def test_minimum_value_for_visible_segments_grows_with_visibility_demand(self):
+        from widgets.spotify_visualizer.renderers.spectrum import minimum_value_for_visible_segments
+
+        one_seg = minimum_value_for_visible_segments(400.0, 64, 1.15)
+        two_seg = minimum_value_for_visible_segments(400.0, 64, 1.85)
+
+        assert one_seg > 0.0
+        assert two_seg > one_seg
+        assert two_seg < 0.05
 
 
 class TestSpectrumShapeEditorNotches:

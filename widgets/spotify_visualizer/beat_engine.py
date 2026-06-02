@@ -637,7 +637,7 @@ class _SpotifyBeatEngine(QObject):
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             last_ts = 0.0
-        if last_ts > 0.0:
+        if self._is_spotify_playing and last_ts > 0.0:
             try:
                 silence_elapsed = now_ts - last_ts
                 if silence_elapsed >= 0.3:

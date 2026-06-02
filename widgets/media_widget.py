@@ -49,6 +49,7 @@ from widgets.media.runtime_state import (
 )
 from widgets.shadow_utils import ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from utils.text_utils import smart_title_case
 
 if TYPE_CHECKING:
     from rendering.widget_manager import WidgetManager
@@ -192,6 +193,9 @@ class MediaWidget(BaseOverlayWidget):
 
         # Cached header logo metrics so paintEvent can align the Spotify glyph
         # with the painter-owned SPOTIFY header.
+        self._header_font_pt: int = max(6, int(self._font_size * 1.2))
+        self._header_logo_size: int = max(12, int(self._header_font_pt * 1.3))
+        self._header_logo_margin: int = self._header_logo_size
         self._context_menu_active: bool = False
         self._context_menu_prewarmed: bool = False
         self._pending_effect_invalidation: bool = False
@@ -1345,11 +1349,14 @@ class MediaWidget(BaseOverlayWidget):
         )
 
     def _compute_metadata_identity(self, info: MediaTrackInfo) -> tuple:
-        """Compute the text/layout identity for media metadata."""
+        """Compute the visible text/layout identity for media metadata.
+
+        Album, playback state, and artwork churn must not cause a relayout when
+        the user-visible title/artist/provider presentation is unchanged.
+        """
         return (
-            (info.title or "").strip().lower(),
-            (info.artist or "").strip().lower(),
-            (info.album or "").strip().lower(),
+            smart_title_case((info.title or "").strip()).lower(),
+            smart_title_case((info.artist or "").strip()).lower(),
             int(self._font_size),
             str(self.provider_display_name or "").strip().lower(),
         )
