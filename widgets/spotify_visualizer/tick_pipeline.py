@@ -420,12 +420,12 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
         _pulse_mid = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
         _bass_bed = max(0.0, _pulse_bass - 0.34)
-        _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal + _bass_bed * 0.30)
+        _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal + _bass_bed * 0.42)
         eb_snap["bass"] = _mixed_bass
         eb_snap["mid"] = _mixed_mid
         eb_snap["high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
         _overall = getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0
-        eb_snap["overall"] = min(1.0, max(_overall, _overall + _bass_bed * 0.25))
+        eb_snap["overall"] = min(1.0, max(_overall, _overall + _bass_bed * 0.30))
         eb_snap["smooth_mid"] = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
         eb_snap["smooth_high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
 

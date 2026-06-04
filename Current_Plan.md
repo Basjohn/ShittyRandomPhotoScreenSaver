@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 This file tracks active work only. Ongoing architecture truth belongs in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -13,6 +13,11 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 - Avoid broad focus, window-flag, compositor, widget-shadow, visualizer, or Qt effect rewrites unless the current task directly requires them.
 
 ## Active Tasks
+
+- [ ] Re-close widget position recovery/default-route safety so stale `Custom` state cannot strand overlays off-screen.
+  - [x] Stop invalid `spotify_visualizer` `Custom + ALL` recovery from guessing a screen when no valid saved CUSTOM owner remains; restore the visualizer family back to its authored route instead.
+  - [x] Add a Defaults-tab reset action that restores widget positions/monitor routes to the current profile's canonical shipped defaults (Normal vs MC) and clears persisted CUSTOM rects.
+  - [x] Validate in live runtime that the visualizer can be recovered back onto screen after the prior cross-display/custom-route bug and that the new reset action restores all widgets to visible non-CUSTOM defaults.
 
 - [ ] Re-validate MC focused-input readiness after startup without disturbing z-order or global-key safety.
   - [x] Confirm single-display launch-state MC now accepts focused hotkeys such as `Space`, arrows, `Up` / `Down`, `PgUp` / `PgDn`, and `End` without requiring an extra manual click-in.
@@ -38,16 +43,15 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [x] Stop media smart-poll timer churn from recreating recurring timers during the same live session; adaptive poll-stage retunes should reuse the active ThreadManager timer in place so startup/playback windows do not accumulate poll jitter.
 
 - [ ] Re-close Bubble against the harsh runtime-loud oracle instead of weak helper bars.
-  - [ ] Keep the current soft/transient Bubble feel intact; treat that as a protected baseline, not collateral damage.
-  - [ ] Make the authored `Preset 1 (Deep Sea)` widget-path loud oracle pass on the same late-loud shape that currently fails in runtime: dead small lane, undersized hero lane, pinned clamp pressure, and flat/single-value late hero sizing.
-  - [ ] Make the sustained-loud hold bar pass without reintroducing dynamic-floor dependence or a sticky "loud mode" that lingers after the drop.
-  - [ ] Keep the size/clamp-edit guard honest: if freeing the hero lane only works by collapsing the small lane, that still counts as failure.
-  - [ ] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; do not treat it as final runtime sign-off while the widget-path oracle is red.
-  - [ ] Finish the Bubble settings audit against the current Preset 1 runtime target before more math surgery.
-  - [ ] Explicitly classify every user/preset-facing Bubble setting as one of: technical feed control, movement/behavior control, render-only control, or misleading/non-reactivity control.
-  - [ ] Confirm no Bubble-facing setting is dead or half-wired from model -> preset snapshot -> config application -> runtime consumer.
-  - [ ] Call out misleading controls plainly in docs/notes where needed; `bubble_growth` in particular must stay understood as outer card growth, not bubble-size/reactivity growth.
-  - [ ] Re-audit `bubble_big_bass_pulse`, `bubble_big_size_max`, and `bubble_big_size_clamp` against the harsh runtime-loud oracle because current evidence says they still produce inverted or self-defeating late-loud behavior.
+  - [x] Keep the current soft/transient Bubble feel intact as a protected baseline while fixing sustained-loud behavior.
+  - [x] Make the authored `Preset 1 (Deep Sea)` widget-path loud oracle pass on the same late-loud shape that was failing in runtime: dead small lane, undersized hero lane, pinned clamp pressure, and flat/single-value late hero sizing.
+  - [x] Make the sustained-loud hold bar pass without reintroducing dynamic-floor dependence or a sticky "loud mode" that lingers after the drop.
+  - [x] Keep the size/clamp-edit guard honest: freeing the hero lane must not work by collapsing the small lane.
+  - [x] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; use the widget-path oracle as the real gate.
+  - [x] Finish the Bubble settings audit against the current Preset 1 runtime target and confirm the main controls are wired; keep `bubble_growth` documented as outer card growth, not Bubble reactivity/size growth.
+  - [x] Keep the harsh loud oracle honest by grading the actual Bubble worker snapshot and a cycle-aligned log-replay dispatch profile; do not reintroduce helper-side re-snapshotting with neutral pulse params.
+  - [ ] Re-validate in live runtime that harsh loud sections now match the green oracle: small lane stays alive, hot big spawns do not enter dead, and late hero sizing stays strong without dynamic-floor dependence.
+  - [ ] If live runtime still shows only visual flicker after the structural loud-path fix, scope the deferred optional big-bubble render-only interpolation pass as a separate follow-up, not part of the signal path.
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.

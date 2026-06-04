@@ -13,6 +13,7 @@ import os
 from typing import Any, Callable, Dict, Mapping
 
 from PySide6.QtWidgets import QButtonGroup, QPushButton
+from core.settings.defaults import get_default_settings
 from rendering.custom_layout_contract import (
     get_custom_layout_restore_entry,
     load_custom_layout_map,
@@ -1654,6 +1655,107 @@ def restore_all_custom_layouts_to_authored_layout(
     restored_any = False
     for widget_id in candidate_widget_ids:
         restored_any = restore_widget_family_to_authored_layout(widgets_config, widget_id) or restored_any
+    return restored_any
+
+
+def restore_widget_family_to_application_default_layout(
+    widgets_config: Dict[str, Any],
+    widget_id: str,
+    default_widgets_config: Mapping[str, Any] | None = None,
+) -> bool:
+    """Restore one widget family to the current profile's canonical default route."""
+
+    family_widget_ids = get_custom_layout_family_widget_ids(widget_id)
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    restored_any = False
+
+    defaults_candidate = default_widgets_config
+    if not isinstance(defaults_candidate, Mapping):
+        defaults_candidate = get_default_settings().get("widgets", {})
+    if not isinstance(defaults_candidate, Mapping):
+        defaults_candidate = {}
+
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, dict):
+        displays = {}
+        custom_layout_map["displays"] = displays
+
+    for family_widget_id in family_widget_ids:
+        descriptor = get_widget_runtime_descriptor(family_widget_id)
+        if descriptor is not None and descriptor.supports_custom_position_slot:
+            position_settings_key = get_custom_persistence_position_settings_key_for_widget(
+                family_widget_id
+            )
+            monitor_settings_key = get_custom_persistence_monitor_settings_key_for_widget(
+                family_widget_id
+            )
+
+            position_defaults = defaults_candidate.get(position_settings_key, {})
+            if not isinstance(position_defaults, Mapping):
+                position_defaults = {}
+            monitor_defaults = defaults_candidate.get(monitor_settings_key, {})
+            if not isinstance(monitor_defaults, Mapping):
+                monitor_defaults = {}
+
+            position_section = widgets_config.get(position_settings_key, {})
+            if not isinstance(position_section, dict) or position_settings_key not in widgets_config:
+                position_section = {}
+                widgets_config[position_settings_key] = position_section
+            default_position = str(position_defaults.get("position", "") or "").strip()
+            if default_position and position_section.get("position") != default_position:
+                restored_any = True
+                position_section["position"] = default_position
+
+            monitor_section = widgets_config.get(monitor_settings_key, {})
+            if not isinstance(monitor_section, dict) or monitor_settings_key not in widgets_config:
+                monitor_section = {}
+                widgets_config[monitor_settings_key] = monitor_section
+            default_monitor = str(monitor_defaults.get("monitor", "ALL") or "ALL").strip() or "ALL"
+            if monitor_section.get("monitor") != default_monitor:
+                restored_any = True
+                monitor_section["monitor"] = default_monitor
+
+        for screen_signature, layouts in list(displays.items()):
+            if not isinstance(layouts, dict):
+                continue
+            if family_widget_id in layouts:
+                remove_screen_layout_entry(custom_layout_map, str(screen_signature), family_widget_id)
+                restored_any = True
+
+    if restored_any:
+        write_custom_layout_map(widgets_config, custom_layout_map)
+    return restored_any
+
+
+def restore_all_widget_positions_to_application_defaults(
+    widgets_config: Dict[str, Any],
+    default_widgets_config: Mapping[str, Any] | None = None,
+) -> bool:
+    """Reset all widget families with movable routes to canonical app defaults."""
+
+    defaults_candidate = default_widgets_config
+    if not isinstance(defaults_candidate, Mapping):
+        defaults_candidate = get_default_settings().get("widgets", {})
+    if not isinstance(defaults_candidate, Mapping):
+        defaults_candidate = {}
+
+    candidate_widget_ids: list[str] = []
+    for descriptor in get_widget_runtime_descriptors():
+        if not descriptor.supports_custom_position_slot:
+            continue
+        if descriptor.widget_id not in candidate_widget_ids:
+            candidate_widget_ids.append(descriptor.widget_id)
+
+    restored_any = False
+    for widget_id in candidate_widget_ids:
+        restored_any = (
+            restore_widget_family_to_application_default_layout(
+                widgets_config,
+                widget_id,
+                default_widgets_config=defaults_candidate,
+            )
+            or restored_any
+        )
     return restored_any
 
 

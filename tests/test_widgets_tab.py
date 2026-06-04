@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QToolButton
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
 from core.settings import SettingsManager
+from core.settings.defaults import get_default_settings
 from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     iter_visualizer_mode_descriptors,
@@ -693,6 +694,53 @@ class TestWidgetsTab:
             }
             assert widgets_cfg["global"]["card_border_width_px"] == 4
             assert widgets_cfg["global"]["stacking_enabled"] is True
+        finally:
+            tab.deleteLater()
+
+    def test_widgets_tab_defaults_reset_positions_button_restores_application_defaults(self, qt_app, settings_manager, monkeypatch):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Custom", "monitor": "2"},
+            "spotify_visualizer": {"position": "Custom", "monitor": "2"},
+            "gmail": {"enabled": True, "position": "Custom", "monitor": "1"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:test": {
+                        "media": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                            "size_payload": {"font_size": 22, "artwork_size": 220},
+                            "resize_mode": "media_scale",
+                        },
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.55, "y": 0.2, "width": 0.18, "height": 0.22},
+                            "size_payload": {"width_scale": 1.2, "height_scale": 1.1},
+                            "resize_mode": "visualizer_rect",
+                        },
+                        "gmail": {
+                            "rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2},
+                            "size_payload": {"font_size": 15},
+                            "resize_mode": "gmail_font",
+                        },
+                    }
+                },
+            },
+        })
+
+        monkeypatch.setattr("ui.tabs.widgets_tab.StyledPopup.question", lambda *args, **kwargs: True)
+
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._on_reset_widget_positions_to_defaults_clicked()
+            widgets_cfg = settings_manager.get("widgets", {})
+            defaults = get_default_settings()["widgets"]
+
+            assert widgets_cfg["media"]["position"] == defaults["media"]["position"]
+            assert str(widgets_cfg["media"]["monitor"]) == str(defaults["media"]["monitor"])
+            assert widgets_cfg["spotify_visualizer"]["position"] == defaults["spotify_visualizer"]["position"]
+            assert str(widgets_cfg["spotify_visualizer"]["monitor"]) == str(defaults["spotify_visualizer"]["monitor"])
+            assert widgets_cfg["gmail"]["position"] == defaults["gmail"]["position"]
+            assert str(widgets_cfg["gmail"]["monitor"]) == str(defaults["gmail"]["monitor"])
+            assert widgets_cfg["custom_layout"]["displays"].get("screen:test", {}) == {}
         finally:
             tab.deleteLater()
 

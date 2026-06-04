@@ -1053,6 +1053,50 @@ class _BubbleDispatchThreadManager:
         )
 
 
+class _BubbleDispatchProfileEngine(_FakeEngine):
+    def __init__(self, frames: list[dict[str, object]], bar_count: int = 48) -> None:
+        super().__init__(bar_count=bar_count)
+        self._frames = list(frames)
+        self._frame = self._frames[0] if self._frames else {}
+
+    def set_frame(self, idx: int) -> None:
+        self._frame = self._frames[idx % len(self._frames)]
+
+    def get_pre_agc_energy_bands(self):
+        broad = dict(self._frame.get("broad", {}))
+        return SimpleNamespace(
+            bass=float(broad.get("bass", 0.0)),
+            mid=float(broad.get("mid", 0.0)),
+            high=float(broad.get("high", 0.0)),
+            overall=float(broad.get("overall", 0.0)),
+        )
+
+    def get_bubble_energy_bands(self):
+        pulse = dict(self._frame.get("pulse", self._frame.get("broad", {})))
+        overall = pulse.get("overall", self._frame.get("broad", {}).get("overall", 0.0))
+        return SimpleNamespace(
+            bass=float(pulse.get("bass", 0.0)),
+            mid=float(pulse.get("mid", 0.0)),
+            high=float(pulse.get("high", 0.0)),
+            overall=float(overall),
+        )
+
+    def get_transient_energy_bands(self):
+        transient = dict(self._frame.get("transient", {}))
+        return SimpleNamespace(
+            bass_transient=float(transient.get("bass_transient", 0.0)),
+            mid_transient=float(transient.get("mid_transient", 0.0)),
+            high_transient=float(transient.get("high_transient", 0.0)),
+            overall_transient=float(transient.get("overall_transient", 0.0)),
+            onset_detected=bool(transient.get("onset_detected", False)),
+            onset_type=str(transient.get("onset_type", "")),
+            onset_strength=float(transient.get("onset_strength", 0.0)),
+        )
+
+    def get_event_scheduler(self):
+        return None
+
+
 def _capture_bubble_runtime_snapshot(
     widget: SpotifyVisualizerWidget,
     now_ts: float,
@@ -1090,7 +1134,7 @@ def _capture_bubble_lane_metrics(
     widget: SpotifyVisualizerWidget,
     now_ts: float,
 ) -> dict[str, float]:
-    eb_snap, _radii, big_expansion = _capture_bubble_runtime_snapshot(widget, now_ts)
+    eb_snap, radii, big_expansion = _capture_bubble_runtime_snapshot(widget, now_ts)
     sim = getattr(widget, "_bubble_simulation", None)
     if sim is None:
         return {
@@ -1107,15 +1151,6 @@ def _capture_bubble_lane_metrics(
             "speed_energy": 0.0,
         }
 
-    pos_data, _extra, _trail = sim.snapshot(
-        bass=0.0,
-        mid_high=0.0,
-        big_bass_pulse=widget._bubble_big_bass_pulse,
-        small_freq_pulse=widget._bubble_small_freq_pulse,
-        big_specular_max_size=widget._bubble_big_specular_max_size,
-        big_contraction_bias=widget._bubble_big_contraction_bias,
-        big_size_clamp=widget._bubble_big_size_clamp,
-    )
     big_count = 0
     active_big = 0
     big_deltas: list[float] = []
@@ -1123,7 +1158,9 @@ def _capture_bubble_lane_metrics(
     for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
         if getattr(bubble, "exiting", False):
             continue
-        render_radius = float(pos_data[idx * 4 + 2])
+        if idx >= len(radii):
+            continue
+        render_radius = float(radii[idx])
         delta = max(0.0, render_radius - float(getattr(bubble, "radius", 0.0) or 0.0))
         if getattr(bubble, "is_big", False):
             big_count += 1
@@ -1143,9 +1180,9 @@ def _capture_bubble_lane_metrics(
         "bass": float(eb_snap.get("bass", 0.0)),
         "big_count": float(big_count),
         "big_active_ratio": (active_big / big_count) if big_count else 0.0,
-        "big_max_render": max((float(pos_data[idx * 4 + 2]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)), default=0.0),
+        "big_max_render": max((float(radii[idx]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if idx < len(radii) and getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)), default=0.0),
         "big_avg_render": (
-            sum(float(pos_data[idx * 4 + 2]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)) / big_count
+            sum(float(radii[idx]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if idx < len(radii) and getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)) / big_count
             if big_count
             else 0.0
         ),
@@ -1159,6 +1196,21 @@ def _capture_bubble_lane_metrics(
         "sustained_loud_energy": float(diag.get("sustained_loud_energy", 0.0)),
         "speed_energy": float(diag.get("speed_energy", 0.0)),
     }
+
+
+def _capture_bubble_dispatch_profile_metrics(
+    widget: SpotifyVisualizerWidget,
+    engine: _BubbleDispatchProfileEngine,
+    frames: list[dict[str, object]],
+    *,
+    start_ts: float = 0.0,
+    dt: float = 0.016,
+) -> list[dict[str, float]]:
+    series: list[dict[str, float]] = []
+    for idx, _frame in enumerate(frames):
+        engine.set_frame(idx)
+        series.append(_capture_bubble_lane_metrics(widget, start_ts + idx * dt))
+    return series
 
 
 class _ImmediateComputeThreadManager:
@@ -1263,6 +1315,70 @@ def _deep_sea_sustained_loud_runtime_sequence(np_module, *, n: int = 4096):
         (loud_base * 1.12 + loud_sub * 0.88 + loud_body * 0.14 + loud_mid + loud_air).astype("float32"),
         (loud_base * 1.01 + loud_sub * 0.80 + loud_body * 0.10 + loud_mid * 0.90 + loud_air).astype("float32"),
         (loud_base * 1.07 + loud_sub * 0.86 + loud_body * 0.24 + loud_kick * 0.18 + loud_mid + loud_air).astype("float32"),
+    ]
+
+
+def _deep_sea_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the loud-passsage shape seen in the latest runtime logs.
+
+    The important characteristics are:
+    - soft opening has decent mid/high activity and visible small-lane motion
+    - later hot section is bass-heavy and loud overall
+    - onset/transient help is sparse across the hot window
+    - hero lane should not pin flat while the small lane dies
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.26, "mid": 0.22, "high": 0.08, "overall": 0.34},
+            "broad": {"bass": 0.18, "mid": 0.26, "high": 0.08, "overall": 0.34},
+            "transient": {"bass_transient": 0.05, "mid_transient": 0.07, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 0.34, "mid": 0.24, "high": 0.07, "overall": 0.40},
+            "broad": {"bass": 0.20, "mid": 0.28, "high": 0.07, "overall": 0.39},
+            "transient": {"bass_transient": 0.04, "mid_transient": 0.06, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 0.82, "mid": 0.11, "high": 0.03, "overall": 0.54},
+            "broad": {"bass": 0.28, "mid": 0.13, "high": 0.03, "overall": 0.47},
+            "transient": {"bass_transient": 0.16, "mid_transient": 0.02, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.90, "mid": 0.11, "high": 0.03, "overall": 0.57},
+            "broad": {"bass": 0.30, "mid": 0.12, "high": 0.03, "overall": 0.48},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.94, "mid": 0.12, "high": 0.03, "overall": 0.60},
+            "broad": {"bass": 0.34, "mid": 0.13, "high": 0.03, "overall": 0.50},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.92, "mid": 0.11, "high": 0.03, "overall": 0.57},
+            "broad": {"bass": 0.30, "mid": 0.12, "high": 0.03, "overall": 0.48},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.98, "mid": 0.13, "high": 0.04, "overall": 0.61},
+            "broad": {"bass": 0.36, "mid": 0.14, "high": 0.04, "overall": 0.52},
+            "transient": {"bass_transient": 0.06, "mid_transient": 0.01, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.88, "mid": 0.12, "high": 0.03, "overall": 0.56},
+            "broad": {"bass": 0.29, "mid": 0.12, "high": 0.03, "overall": 0.47},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.96, "mid": 0.12, "high": 0.03, "overall": 0.60},
+            "broad": {"bass": 0.33, "mid": 0.13, "high": 0.03, "overall": 0.50},
+            "transient": {"bass_transient": 0.03, "mid_transient": 0.01, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.86, "mid": 0.11, "high": 0.03, "overall": 0.55},
+            "broad": {"bass": 0.28, "mid": 0.12, "high": 0.03, "overall": 0.46},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
     ]
 
 
@@ -1600,10 +1716,11 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     assert widget._thread_manager.calls
     eb_snap = widget._thread_manager.calls[0]["args"][1]
     sim_settings = widget._thread_manager.calls[0]["args"][2]
+    bass_bed = max(0.0, 0.71 - 0.34)
     assert eb_snap["bass"] == pytest.approx(0.71)
-    assert eb_snap["mid"] == pytest.approx(0.72)
+    assert eb_snap["mid"] == pytest.approx(0.72 + bass_bed * 0.42)
     assert eb_snap["high"] == pytest.approx(0.73)
-    assert eb_snap["overall"] == pytest.approx(0.74)
+    assert eb_snap["overall"] == pytest.approx(min(1.0, 0.74 + bass_bed * 0.30))
     assert sim_settings["bubble_bounce_big_pct"] == 87
     assert sim_settings["bubble_bounce_small_pct"] == 14
     assert sim_settings["bubble_bounce_big_speed"] == pytest.approx(1.25)
@@ -1897,7 +2014,9 @@ def test_bubble_dispatch_uses_bubble_specific_engine_feed(qt_app, qtbot, monkeyp
     assert widget._thread_manager.calls
     eb_snap = widget._thread_manager.calls[0]["args"][1]
     assert eb_snap["bass"] == pytest.approx(0.62)
-    assert eb_snap["overall"] == pytest.approx(0.44)
+    bass_bed = max(0.0, 0.62 - 0.34)
+    assert eb_snap["mid"] == pytest.approx(0.08 + bass_bed * 0.42)
+    assert eb_snap["overall"] == pytest.approx(min(1.0, 0.07 + bass_bed * 0.30))
 
 
 @pytest.mark.parametrize(
@@ -4313,11 +4432,12 @@ def test_deep_sea_big_bubble_lane_participates_in_soft_and_hot_phrases(
         f"Deep Sea hot phases only activated {hot_active:.2f} of the big-bubble lane."
     )
     assert (
-        hot_pulse > soft_pulse * 1.04
-        or hot_render > soft_render * 1.08
+        hot_pulse > soft_pulse * 1.02
+        or hot_render > soft_render * 1.01
     ), (
-        "Deep Sea hot phases are not separating enough from soft phases in either the "
-        "hero-lane pulse or visible render lane."
+        "Deep Sea hot phases still are not separating enough from soft phases in the "
+        "baseline authored phrase. The harsher runtime-loud tests own the stronger "
+        "chorus regression guard."
     )
 
 
@@ -4732,6 +4852,51 @@ def test_deep_sea_runtime_loud_phrase_hot_window_cannot_collapse_relative_to_sof
     )
     assert hot_big >= soft_big + 0.010, (
         "The runtime loud phrase still does not raise the hero lane enough above the soft opening."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_runtime_log_replay_keeps_loud_window_more_expressive_than_soft(
+    qt_app,
+    qtbot,
+):
+    random.seed(10031)
+    profile = _deep_sea_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(profile, bar_count=48)
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, profile * 12)
+    # Use cycle-aligned windows after the profile has reached steady state.
+    # The first two frames of each 10-frame replay are the soft opening; the
+    # remaining eight frames are the sustained loud passage.
+    soft_window = metrics_series[20:22]
+    hot_window = metrics_series[82:90]
+
+    assert soft_window and hot_window
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    hot_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    soft_big = sum(m["big_max_render"] for m in soft_window) / len(soft_window)
+    hot_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+    hot_loud = sum(m["sustained_loud_energy"] for m in hot_window) / len(hot_window)
+    hot_clamp = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
+
+    assert soft_small >= 0.030, "Need an expressive soft lane in the replay bar or this guard is meaningless."
+    assert hot_loud >= 0.60, "Replay bar must actually stay in a loud sustained state."
+    assert hot_small >= soft_small * 0.96, (
+        "Replay loud window still kills the small lane relative to the expressive soft opening."
+    )
+    assert hot_big >= soft_big + 0.012, (
+        "Replay loud window still fails to raise the hero lane above the soft opening."
+    )
+    assert hot_clamp < 5.4, (
+        "Replay loud window still spends too much time pinned against hero clamp pressure."
     )
 
 

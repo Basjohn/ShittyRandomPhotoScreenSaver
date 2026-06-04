@@ -72,6 +72,7 @@ from rendering.widget_descriptors import (
     load_widget_section,
     load_widget_sections,
     restore_all_custom_layouts_to_authored_layout,
+    restore_all_widget_positions_to_application_defaults,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
 )
@@ -694,6 +695,36 @@ class WidgetsTab(QWidget):
         restored_any = restore_all_custom_layouts_to_authored_layout(widgets_cfg)
         if not restored_any:
             return
+        self._save_coalesce_token += 1
+        self._save_coalesce_pending = False
+        self._settings.set_widgets_map(widgets_cfg, emit_change=False)
+        self._settings.save()
+        self.load_from_settings()
+
+    def _on_reset_widget_positions_to_defaults_clicked(self) -> None:
+        """Reset widget positions/monitors to the current profile's shipped defaults."""
+
+        confirmed = StyledPopup.question(
+            self,
+            "Reset Widget Positions",
+            "This will restore all widget positions and monitor routes to the application defaults for this profile.",
+            yes_text="Reset",
+            no_text="Cancel",
+            default_to_yes=False,
+        )
+        if not confirmed:
+            return
+
+        widgets_cfg = self._settings.get_widgets_map()
+        default_widgets_cfg = get_default_settings().get("widgets", {})
+        restored_any = restore_all_widget_positions_to_application_defaults(
+            widgets_cfg,
+            default_widgets_config=default_widgets_cfg if isinstance(default_widgets_cfg, Mapping) else {},
+        )
+        if not restored_any:
+            return
+
+        sync_custom_layout_restore_routes(widgets_cfg)
         self._save_coalesce_token += 1
         self._save_coalesce_pending = False
         self._settings.set_widgets_map(widgets_cfg, emit_change=False)

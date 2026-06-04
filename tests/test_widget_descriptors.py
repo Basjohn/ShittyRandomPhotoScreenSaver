@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from core.settings.defaults import get_default_settings
 from rendering.widget_descriptors import (
     CUSTOM_POSITION_OPTION_LABEL,
     apply_widget_section_save_results,
@@ -35,6 +36,8 @@ from rendering.widget_descriptors import (
     load_widget_section,
     load_widget_sections,
     restore_all_custom_layouts_to_authored_layout,
+    restore_all_widget_positions_to_application_defaults,
+    restore_widget_family_to_application_default_layout,
     restore_widget_family_to_authored_layout,
     resolve_widget_section_index_from_view_state,
     sync_custom_layout_restore_routes,
@@ -783,6 +786,72 @@ def test_restore_all_custom_layouts_to_authored_layout_restores_every_active_cus
     assert widgets_cfg["media"]["position"] == "Bottom Left"
     assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Right"
     assert widgets_cfg["gmail"]["position"] == "Top Left"
+    displays = widgets_cfg["custom_layout"]["displays"]
+    assert "screen:a" not in displays or not displays["screen:a"]
+
+
+def test_restore_widget_family_to_application_default_layout_restores_visualizer_default_route():
+    default_widgets = get_default_settings()["widgets"]
+    widgets_cfg = {
+        "spotify_visualizer": {"position": "Custom", "monitor": "ALL"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:a": {
+                    "spotify_visualizer": {"rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}},
+                }
+            },
+        },
+        "custom_layout_restore": {
+            "version": 1,
+            "widgets": {
+                "spotify_visualizer": {"position": "Bottom Center", "monitor": "2"},
+            },
+        },
+    }
+
+    assert restore_widget_family_to_application_default_layout(
+        widgets_cfg,
+        "spotify_visualizer",
+        default_widgets_config=default_widgets,
+    ) is True
+
+    assert widgets_cfg["spotify_visualizer"]["position"] == default_widgets["spotify_visualizer"]["position"]
+    assert widgets_cfg["spotify_visualizer"]["monitor"] == default_widgets["spotify_visualizer"]["monitor"]
+    displays = widgets_cfg["custom_layout"]["displays"]
+    assert "screen:a" not in displays or not displays["screen:a"]
+
+
+def test_restore_all_widget_positions_to_application_defaults_resets_all_custom_routes():
+    default_widgets = get_default_settings()["widgets"]
+    widgets_cfg = {
+        "media": {"position": "Custom", "monitor": "2"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "2"},
+        "gmail": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:a": {
+                    "media": {"rect": {"x": 0.2, "y": 0.2, "width": 0.2, "height": 0.2}},
+                    "spotify_volume": {"rect": {"x": 0.4, "y": 0.2, "width": 0.05, "height": 0.3}},
+                    "spotify_visualizer": {"rect": {"x": 0.0, "y": 0.0, "width": 0.3, "height": 0.3}},
+                    "gmail": {"rect": {"x": 0.5, "y": 0.1, "width": 0.2, "height": 0.2}},
+                }
+            },
+        },
+    }
+
+    assert restore_all_widget_positions_to_application_defaults(
+        widgets_cfg,
+        default_widgets_config=default_widgets,
+    ) is True
+
+    assert widgets_cfg["media"]["position"] == default_widgets["media"]["position"]
+    assert str(widgets_cfg["media"]["monitor"]) == str(default_widgets["media"]["monitor"])
+    assert widgets_cfg["spotify_visualizer"]["position"] == default_widgets["spotify_visualizer"]["position"]
+    assert str(widgets_cfg["spotify_visualizer"]["monitor"]) == str(default_widgets["spotify_visualizer"]["monitor"])
+    assert widgets_cfg["gmail"]["position"] == default_widgets["gmail"]["position"]
+    assert str(widgets_cfg["gmail"]["monitor"]) == str(default_widgets["gmail"]["monitor"])
     displays = widgets_cfg["custom_layout"]["displays"]
     assert "screen:a" not in displays or not displays["screen:a"]
 

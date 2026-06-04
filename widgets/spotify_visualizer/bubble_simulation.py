@@ -709,17 +709,18 @@ class BubbleSimulation:
                 if b.is_big:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
+                    size_t_eff = size_t * 0.55
                     # Big bubbles are the hero lane. Keep them more
                     # excursion-driven than sustained so they visibly grow on
                     # strong hits and contract back toward their authored base.
                     # They also need a lower continuous threshold than before;
                     # otherwise soft phrases keep the small lane alive while
                     # the big lane goes completely dormant.
-                    delta_sens = 4.40 - size_t * 0.70
-                    sustained_knee = 0.20 + size_t * 0.09
-                    sustained_scale = 0.22 - size_t * 0.02
-                    attack_rate = 11.8 - size_t * 1.5
-                    decay_rate = 5.80 + size_t * 0.90
+                    delta_sens = 4.40 - size_t_eff * 0.70
+                    sustained_knee = 0.20 + size_t_eff * 0.09
+                    sustained_scale = 0.22 - size_t_eff * 0.02
+                    attack_rate = 11.8 - size_t_eff * 1.5
+                    decay_rate = 5.80 + size_t_eff * 0.90
                 else:
                     # Promoted smalls should add a brief extra accent when the
                     # main big bubbles are already busy, not become a durable
@@ -747,14 +748,36 @@ class BubbleSimulation:
                     max_input=1.40,
                     curve=1.00,
                 )
+                hot_bass_support = soft_ceiling(
+                    max(0.0, bass - (0.28 + size_t * 0.08)),
+                    knee=0.0,
+                    ceiling=0.26 - size_t * 0.03,
+                    max_input=1.55,
+                    curve=0.96,
+                )
                 loud_bed_support = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.04)),
                     knee=0.0,
-                    ceiling=0.20 - size_t * 0.03,
+                    ceiling=0.24 - size_t * 0.03,
                     max_input=0.76,
                     curve=0.98,
                 )
-                raw_src = mid * 0.50 + high * 0.28 + chorus_support + bass_support + loud_bed_support
+                hot_bass_mix = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - (0.34 + size_t * 0.03)),
+                    knee=0.0,
+                    ceiling=0.22 - size_t * 0.02,
+                    max_input=0.68,
+                    curve=0.98,
+                )
+                raw_src = (
+                    mid * 0.50
+                    + high * 0.28
+                    + chorus_support
+                    + bass_support
+                    + hot_bass_support
+                    + loud_bed_support
+                    + hot_bass_mix
+                )
                 running_avg = self._midhi_running_avg
                 delta_sens = 4.4 - size_t * 1.1
                 sustained_knee = 0.20 + size_t * 0.13
@@ -802,23 +825,44 @@ class BubbleSimulation:
             )
             hold_component = 0.0
             loud_support_component = 0.0
+            lane_floor_component = 0.0
             if b.is_big:
-                hold_gate = 0.28 + size_t * 0.06
+                hold_gate = 0.28 + size_t_eff * 0.06
                 hold_component = soft_ceiling(
                     max(0.0, raw_src - hold_gate),
                     knee=0.0,
-                    ceiling=0.72 - size_t * 0.05,
+                    ceiling=0.78 - size_t_eff * 0.05,
                     max_input=max(0.18, 0.96 - hold_gate),
                     curve=1.02,
                 )
-                loud_hold_gate = 0.18 + size_t * 0.04
+                loud_hold_gate = 0.18 + size_t_eff * 0.04
                 loud_support_component = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - loud_hold_gate),
                     knee=0.0,
-                    ceiling=0.18 - size_t * 0.01,
+                    ceiling=0.18 - size_t_eff * 0.01,
                     max_input=max(0.18, 0.92 - loud_hold_gate),
                     curve=0.98,
                 )
+                hero_hot_gate = 0.50 + size_t_eff * 0.03
+                hero_hot_t = max(
+                    0.0,
+                    min(
+                        1.0,
+                        (self._sustained_loud_energy - hero_hot_gate)
+                        / max(0.12, 1.0 - hero_hot_gate),
+                    ),
+                )
+                hero_floor = 0.0
+                if hero_hot_t > 0.0:
+                    hero_floor = 0.30 + hero_hot_t * (0.16 - size_t_eff * 0.01)
+                hero_body = soft_ceiling(
+                    max(0.0, raw_src - (0.28 + size_t_eff * 0.04)),
+                    knee=0.0,
+                    ceiling=0.26 - size_t_eff * 0.03,
+                    max_input=1.0,
+                    curve=1.0,
+                )
+                lane_floor_component = min(0.82, hero_floor + hero_body)
             elif not use_bass:
                 loud_hold_gate = 0.22 + size_t * 0.04
                 loud_support_component = soft_ceiling(
@@ -828,10 +872,36 @@ class BubbleSimulation:
                     max_input=max(0.18, 0.84 - loud_hold_gate),
                     curve=0.98,
                 )
+                small_hot_gate = 0.46 + size_t * 0.02
+                small_hot_t = max(
+                    0.0,
+                    min(
+                        1.0,
+                        (self._sustained_loud_energy - small_hot_gate)
+                        / max(0.14, 1.0 - small_hot_gate),
+                    ),
+                )
+                small_loud_floor = 0.0
+                if small_hot_t > 0.0:
+                    small_loud_floor = 0.58 + small_hot_t * (0.20 - size_t * 0.04)
+                small_body_floor = soft_ceiling(
+                    max(0.0, overall - (0.40 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.10 - size_t * 0.02,
+                    max_input=1.0,
+                    curve=1.0,
+                )
+                lane_floor_component = min(0.46, small_loud_floor + small_body_floor)
 
             gated_energy = min(
                 1.0,
-                max(delta_component, sustained_component, accent_component, hold_component)
+                max(
+                    delta_component,
+                    sustained_component,
+                    accent_component,
+                    hold_component,
+                    lane_floor_component,
+                )
                 + loud_support_component * (0.80 if b.is_big else 0.84),
             )
             pulse_before = b.pulse_energy
@@ -1287,6 +1357,7 @@ class BubbleSimulation:
                 1.0,
                 max(0.0, (bubble.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
             )
+            size_weight_eff = size_weight * 0.55
             pulse_setting = soft_ceiling(
                 big_bass_pulse,
                 knee=0.58,
@@ -1294,12 +1365,25 @@ class BubbleSimulation:
                 max_input=1.10,
                 curve=1.00,
             )
-            pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight * 0.34
+            hero_hot_t = max(
+                0.0,
+                min(1.0, (self._sustained_loud_energy - 0.50) / 0.50),
+            )
+            hero_recovery_gap = max(0.0, 0.95 - bubble.pulse_energy)
+            pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight_eff * 0.34
+            pulse_scale += hero_hot_t * hero_recovery_gap * 4.0
             pulse_factor = 1.0 + bubble.pulse_energy * pulse_scale
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
         else:
-            pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 3.0
+            small_hot_t = max(
+                0.0,
+                min(1.0, (self._sustained_loud_energy - 0.48) / 0.52),
+            )
+            recovery_gap = max(0.0, 0.92 - bubble.pulse_energy)
+            hero_size_pressure = max(0.0, self._big_size_max - 0.035)
+            pulse_scale = 3.0 + small_hot_t * recovery_gap * 5.2 + hero_size_pressure * 14.0
+            pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * pulse_scale
 
         pulse_radius = bubble.radius * pulse_factor
         loud_plateau_radius = 0.0
@@ -1308,10 +1392,11 @@ class BubbleSimulation:
                 1.0,
                 max(0.0, (bubble.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
             )
+            size_weight_eff = size_weight * 0.55
             loud_floor = soft_ceiling(
-                max(0.0, self._sustained_loud_energy - (0.18 + size_weight * 0.02)),
+                max(0.0, self._sustained_loud_energy - (0.18 + size_weight_eff * 0.02)),
                 knee=0.0,
-                ceiling=0.52 - size_weight * 0.04,
+                ceiling=0.52 - size_weight_eff * 0.04,
                 max_input=0.72,
                 curve=0.98,
             )
@@ -1513,6 +1598,15 @@ class BubbleSimulation:
             spec_size_mut=spec_size_mut, spec_ox=spec_ox, spec_oy=spec_oy,
             trail_tail_x=x, trail_tail_y=y,
         )
+        hot_seed_t = max(
+            0.0,
+            min(1.0, (self._sustained_loud_energy - 0.48) / 0.52),
+        )
+        if hot_seed_t > 0.0:
+            if is_big:
+                b.pulse_energy = max(b.pulse_energy, 0.40 + hot_seed_t * 0.28)
+            else:
+                b.pulse_energy = max(b.pulse_energy, 0.18 + hot_seed_t * 0.18)
         self._bubbles.append(b)
 
     def _swirl_motion(
@@ -1698,6 +1792,7 @@ class BubbleSimulation:
                     1.0,
                     max(0.0, (b.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
                 )
+                size_weight_eff = size_weight * 0.55
                 pulse_setting = soft_ceiling(
                     big_bass_pulse,
                     knee=0.58,
@@ -1705,28 +1800,57 @@ class BubbleSimulation:
                     max_input=1.10,
                     curve=1.00,
                 )
-                pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight * 0.34
+                hero_hot_t = max(
+                    0.0,
+                    min(1.0, (self._sustained_loud_energy - 0.50) / 0.50),
+                )
+                hero_recovery_gap = max(0.0, 0.95 - b.pulse_energy)
+                hero_live_bass = soft_ceiling(
+                    max(0.0, bass - (0.30 + size_weight_eff * 0.03)),
+                    knee=0.0,
+                    ceiling=0.23 - size_weight_eff * 0.02,
+                    max_input=1.10,
+                    curve=0.96,
+                )
+                pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight_eff * 0.34
+                pulse_scale += hero_hot_t * hero_recovery_gap * 4.4
+                pulse_scale += hero_live_bass * (1.32 + hero_recovery_gap * 1.95)
                 pulse_factor = 1.0 + b.pulse_energy * pulse_scale
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.8
             else:
-                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.4
+                small_hot_t = max(
+                    0.0,
+                    min(1.0, (self._sustained_loud_energy - 0.48) / 0.52),
+                )
+                recovery_gap = max(0.0, 0.92 - b.pulse_energy)
+                hero_size_pressure = max(0.0, self._big_size_max - 0.035)
+                size_range = max(0.001, self._small_size_max - 0.004)
+                size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
+                small_live_bass = soft_ceiling(
+                    max(0.0, bass - (0.34 + size_t * 0.06)),
+                    knee=0.0,
+                    ceiling=0.34 - size_t * 0.04,
+                    max_input=1.08,
+                    curve=0.96,
+                )
+                pulse_scale = 3.4 + small_hot_t * recovery_gap * 5.6 + hero_size_pressure * 18.0
+                pulse_scale += small_live_bass * (1.50 + recovery_gap * 3.6)
+                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * pulse_scale
 
             pulse_radius = b.radius * pulse_factor
             loud_plateau_radius = 0.0
             if b.is_big:
                 loud_floor = soft_ceiling(
-                    max(0.0, self._sustained_loud_energy - (0.18 + size_weight * 0.02)),
+                    max(0.0, self._sustained_loud_energy - (0.18 + size_weight_eff * 0.02)),
                     knee=0.0,
-                    ceiling=0.52 - size_weight * 0.04,
+                    ceiling=0.52 - size_weight_eff * 0.04,
                     max_input=0.72,
                     curve=0.98,
                 )
                 loud_plateau_radius = b.radius * (1.0 + loud_floor)
             elif not is_tiny:
-                size_range = max(0.001, self._small_size_max - 0.004)
-                size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
                 phase_bias = 1.12 + 0.26 * (0.5 + 0.5 * math.sin(self._time * 2.2 + b.phase))
                 small_loud_floor = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.03)),

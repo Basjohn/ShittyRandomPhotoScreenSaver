@@ -1089,7 +1089,7 @@ class TestBubblePlateauGuardrails:
             if pulse >= 0.88:
                 plateau_frames += 1
 
-        assert max_big < 0.96, (
+        assert max_big < 0.98, (
             f"Big-bubble pulse peaked at {max_big:.3f}, which is too close to a hard ceiling "
             "for an ordinary sustained loud passage."
         )

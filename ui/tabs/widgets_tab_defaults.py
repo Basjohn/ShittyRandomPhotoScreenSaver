@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Mapping
 
-from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QGroupBox, QCheckBox, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QSpinBox, QGroupBox, QCheckBox, QWidget, QPushButton
 
 from ui.tabs.shared_styles import FORM_ROW_LABEL_STYLE, add_aligned_row, style_group_box
 
@@ -97,6 +97,40 @@ def build_defaults_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     px_label.setMinimumWidth(24)
     border_row.addWidget(px_label)
     border_row.addStretch()
+
+    button_row = QHBoxLayout()
+    button_row.setContentsMargins(0, 6, 0, 0)
+    button_row.setSpacing(12)
+    button_row.addStretch()
+
+    tab.reset_widget_positions_btn = QPushButton("Reset Widget Positions")
+    tab.reset_widget_positions_btn.setFixedHeight(32)
+    tab.reset_widget_positions_btn.setToolTip(
+        "Restore all widget positions and monitor routes to the application defaults for this profile."
+    )
+    tab.reset_widget_positions_btn.setStyleSheet(
+        """
+        QPushButton {
+            background-color: rgba(255, 255, 255, 18);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 92);
+            border-radius: 16px;
+            padding: 0 16px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        QPushButton:hover {
+            background-color: rgba(255, 255, 255, 30);
+            border-color: rgba(255, 255, 255, 132);
+        }
+        QPushButton:pressed {
+            background-color: rgba(255, 255, 255, 42);
+        }
+        """
+    )
+    tab.reset_widget_positions_btn.clicked.connect(tab._on_reset_widget_positions_to_defaults_clicked)
+    button_row.addWidget(tab.reset_widget_positions_btn)
+    content_layout.addLayout(button_row)
 
     return group
 

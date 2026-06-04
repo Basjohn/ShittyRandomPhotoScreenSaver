@@ -13,12 +13,12 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-from rendering.custom_layout_contract import get_screen_signature_aliases, load_custom_layout_map
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     is_custom_position_selected_for_widget,
+    restore_widget_family_to_authored_layout,
 )
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
@@ -31,55 +31,6 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
-
-
-def _resolve_display_screen(display) -> object | None:
-    screen = getattr(display, "_screen", None)
-    if screen is not None:
-        return screen
-    getter = getattr(display, "screen", None)
-    if callable(getter):
-        try:
-            return getter()
-        except Exception:
-            logger.debug("[WIDGET_MANAGER] Failed to resolve display.screen() during visualizer routing guard", exc_info=True)
-    return None
-
-
-def _resolve_invalid_custom_all_visualizer_target_screen_index(
-    widgets_config: Mapping[str, object] | None,
-) -> int | None:
-    custom_layout_map = load_custom_layout_map(widgets_config)
-    displays = custom_layout_map.get("displays", {})
-    if not isinstance(displays, Mapping):
-        return None
-
-    owner_signatures = [
-        str(signature)
-        for signature, layouts in displays.items()
-        if isinstance(layouts, Mapping) and isinstance(layouts.get("spotify_visualizer"), Mapping)
-    ]
-    if len(owner_signatures) != 1:
-        return None
-
-    target_signature = owner_signatures[0]
-    try:
-        instances = get_coordinator().get_all_instances()
-    except Exception:
-        logger.debug("[WIDGET_MANAGER] Failed to enumerate displays for invalid visualizer Custom+ALL guard", exc_info=True)
-        return None
-
-    for instance in instances:
-        screen = _resolve_display_screen(instance)
-        if screen is None:
-            continue
-        if target_signature in get_screen_signature_aliases(screen):
-            try:
-                return int(getattr(instance, "screen_index", -1))
-            except Exception:
-                logger.debug("[WIDGET_MANAGER] Failed to read target screen index for invalid visualizer Custom+ALL guard", exc_info=True)
-                return None
-    return None
 
 
 def _resolve_visualizer_anchor_media_widget(
@@ -543,20 +494,39 @@ def create_spotify_visualizer_widget(
         "spotify_visualizer",
         widgets_config if isinstance(widgets_config, Mapping) else None,
     )
-    invalid_custom_all_target_screen_index = None
     if custom_routing_active and str(effective_monitor_sel or "ALL").strip().upper() == "ALL":
-        invalid_custom_all_target_screen_index = _resolve_invalid_custom_all_visualizer_target_screen_index(
-            widgets_config if isinstance(widgets_config, Mapping) else None,
-        )
-        if invalid_custom_all_target_screen_index is not None:
-            effective_monitor_sel = str(invalid_custom_all_target_screen_index + 1)
-            logger.warning(
-                "[SPOTIFY_VIS] Recovered invalid Custom+ALL monitor route by inferring screen=%s from saved CUSTOM layout",
-                invalid_custom_all_target_screen_index,
+        restored_to_authored = False
+        if isinstance(widgets_config, dict):
+            restored_to_authored = restore_widget_family_to_authored_layout(
+                widgets_config,
+                "spotify_visualizer",
             )
+        if restored_to_authored:
+            custom_routing_active = is_custom_position_selected_for_widget(
+                "spotify_visualizer",
+                widgets_config if isinstance(widgets_config, Mapping) else None,
+            )
+            effective_monitor_sel = get_effective_monitor_value_for_widget(
+                "spotify_visualizer",
+                widgets_config if isinstance(widgets_config, Mapping) else None,
+                default=str(media_model.monitor or "ALL"),
+            )
+            logger.warning(
+                "[SPOTIFY_VIS] Restored invalid Custom+ALL visualizer route back to authored layout"
+            )
+            settings_manager = getattr(mgr, "_settings_manager", None)
+            if settings_manager is not None and isinstance(widgets_config, dict):
+                try:
+                    settings_manager.set_widgets_map(widgets_config, emit_change=False)
+                    settings_manager.save()
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to persist authored-route recovery for invalid Custom+ALL visualizer state",
+                        exc_info=True,
+                    )
         else:
             logger.warning(
-                "[SPOTIFY_VIS] Suppressing invalid Custom+ALL visualizer creation; unable to infer a single owning display"
+                "[SPOTIFY_VIS] Suppressing invalid Custom+ALL visualizer creation; unable to restore an authored route"
             )
             return None
     try:
