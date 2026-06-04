@@ -197,6 +197,7 @@ class BubbleSimulation:
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
+        self._sustained_loud_energy: float = 0.0  # fast absolute loudness lane for sustained hot sections
         self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
         self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
         self._overdrive_active: bool = False
@@ -218,6 +219,7 @@ class BubbleSimulation:
         self._time = 0.0
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
+        self._sustained_loud_energy = 0.0
         self._bass_running_avg = 0.0
         self._midhi_running_avg = 0.0
         self._overdrive_active = False
@@ -331,6 +333,8 @@ class BubbleSimulation:
             "max_big_gated_energy": 0.0,
             "max_big_pulse_before": 0.0,
             "max_big_pulse_after": 0.0,
+            "sustained_loud_energy": 0.0,
+            "speed_energy": 0.0,
         }
 
         # --- Beat detection (§2.4 scheduler-first, delta fallback) ---
@@ -367,6 +371,26 @@ class BubbleSimulation:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_attack
         else:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_release
+
+        loud_raw = max(
+            bass * 0.84 + overall * 0.48,
+            bass * 0.68 + overall * 0.62,
+        )
+        loud_target = soft_ceiling(
+            max(0.0, loud_raw - 0.26),
+            knee=0.0,
+            ceiling=0.92,
+            max_input=0.76,
+            curve=0.94,
+        )
+        if loud_target > self._sustained_loud_energy:
+            self._sustained_loud_energy += (
+                loud_target - self._sustained_loud_energy
+            ) * min(1.0, dt * 16.0)
+        else:
+            self._sustained_loud_energy += (
+                loud_target - self._sustained_loud_energy
+            ) * min(1.0, dt * 11.0)
 
         # --- Small→big promotion on every beat ---
         if beat_detected:
@@ -464,13 +488,24 @@ class BubbleSimulation:
             delta_weight=1.05,
             event_weight=0.16,
         )
+        loud_motion_speed = soft_ceiling(
+            self._sustained_loud_energy,
+            knee=0.10,
+            ceiling=0.88,
+            max_input=0.90,
+            curve=0.94,
+        )
+        reactivity_preview = min(1.0, max(0.0, stream_reactivity))
         speed_energy = min(
             1.0,
             max(
                 0.0,
                 sustained_speed * 0.94 + burst_speed * 0.28,
+                loud_motion_speed * (0.68 + 0.18 * reactivity_preview),
             ),
         )
+        big_lane_diag["sustained_loud_energy"] = self._sustained_loud_energy
+        big_lane_diag["speed_energy"] = speed_energy
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
         reactivity_cap = 2.0
@@ -622,7 +657,8 @@ class BubbleSimulation:
             drift_phase = b.phase + self._time * drift_speed * 2.0
             drift_noise = math.sin(drift_phase * (1.0 + drift_freq * 3.0))
             drift_bias_val = b.drift_bias * drift_amount * 0.05
-            drift_offset = (drift_noise * drift_amount * 0.03 + drift_bias_val) * drift_follow
+            loud_drift_boost = 1.0 + self._sustained_loud_energy * 0.35
+            drift_offset = (drift_noise * drift_amount * 0.03 + drift_bias_val) * drift_follow * loud_drift_boost
 
             # Apply drift; Swish modes force an axis, swirl modes orbit around centre,
             # otherwise stay perpendicular to stream
@@ -711,7 +747,14 @@ class BubbleSimulation:
                     max_input=1.40,
                     curve=1.00,
                 )
-                raw_src = mid * 0.50 + high * 0.28 + chorus_support + bass_support
+                loud_bed_support = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.06 - size_t * 0.01,
+                    max_input=0.76,
+                    curve=0.98,
+                )
+                raw_src = mid * 0.50 + high * 0.28 + chorus_support + bass_support + loud_bed_support
                 running_avg = self._midhi_running_avg
                 delta_sens = 4.4 - size_t * 1.1
                 sustained_knee = 0.20 + size_t * 0.13
@@ -750,12 +793,8 @@ class BubbleSimulation:
                 curve=1.0,
             )
             hold_component = 0.0
+            loud_support_component = 0.0
             if b.is_big:
-                # Big bubbles need a dedicated sustained-loud hold lane or the
-                # running-average delta logic gradually starves them during hot
-                # choruses. Keep this hero lane independent of dynamic floor:
-                # loud passages should stay visibly alive, but soft passages
-                # must still sit lower and contraction on drops must survive.
                 hold_gate = 0.28 + size_t * 0.06
                 hold_component = soft_ceiling(
                     max(0.0, raw_src - hold_gate),
@@ -764,10 +803,28 @@ class BubbleSimulation:
                     max_input=max(0.18, 0.96 - hold_gate),
                     curve=1.02,
                 )
+                loud_hold_gate = 0.18 + size_t * 0.04
+                loud_support_component = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - loud_hold_gate),
+                    knee=0.0,
+                    ceiling=0.14 - size_t * 0.01,
+                    max_input=max(0.18, 0.92 - loud_hold_gate),
+                    curve=0.98,
+                )
+            elif not use_bass:
+                loud_hold_gate = 0.22 + size_t * 0.04
+                loud_support_component = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - loud_hold_gate),
+                    knee=0.0,
+                    ceiling=0.08 - size_t * 0.01,
+                    max_input=max(0.18, 0.84 - loud_hold_gate),
+                    curve=0.98,
+                )
 
             gated_energy = min(
                 1.0,
-                max(delta_component, sustained_component, accent_component, hold_component),
+                max(delta_component, sustained_component, accent_component, hold_component)
+                + loud_support_component * (0.74 if b.is_big else 0.56),
             )
             pulse_before = b.pulse_energy
 
@@ -1597,6 +1654,14 @@ class BubbleSimulation:
                     curve=1.00,
                 )
                 pulse_scale = 4.10 + pulse_setting * 1.10 + size_weight * 0.65
+                loud_pulse_boost = 1.0 + soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - 0.22),
+                    knee=0.0,
+                    ceiling=0.08,
+                    max_input=0.70,
+                    curve=0.98,
+                )
+                pulse_scale *= loud_pulse_boost
                 pulse_factor = 1.0 + b.pulse_energy * pulse_scale
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
@@ -1605,6 +1670,14 @@ class BubbleSimulation:
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.4
 
             unclamped_r = b.radius * pulse_factor
+            if b.is_big:
+                unclamped_r += b.radius * soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - 0.18),
+                    knee=0.0,
+                    ceiling=0.14,
+                    max_input=0.70,
+                    curve=0.98,
+                )
             r = unclamped_r
 
             # Contraction bias: during quiet passages (low pulse_energy),

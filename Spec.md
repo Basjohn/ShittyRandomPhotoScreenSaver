@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-01
+Last updated: 2026-06-04
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -117,6 +117,8 @@ Active ids:
 - Bubble's runtime pulse handoff must also stay live all the way through compute/render. If dispatch mixes current/transient pulse authority into the Bubble compute payload, that authority must measurably affect the rendered simulation output; dead `pulse_params` plumbing that stays green on feed-only tests is a regression.
 - Bubble is a two-lane closure seam, not one generic motion bucket. The big-bubble hero lane must stay visibly active under both soft and loud authored phrases, must keep sustained-loud authority instead of starving after the initial hit, must not depend on dynamic-floor enablement to stay alive, and must not be visually flattened by hidden render-size multiplier/clamp saturation while the small/medium lane continues reacting underneath.
 - Bubble's small/medium lane has its own sustained-loud obligation. It must not only react in quiet phrases; the same shared Bubble feed must keep the smaller field visibly alive through hot sustained passages without needing Preset-9-style authored rescue settings just to look awake.
+- Bubble sustained-loud recovery must stay structurally separate from its soft transient feel. A fast fixed-threshold absolute loudness lane may drive movement semantics strongly and feed restrained big/small hold support, but it must not become a slow adaptive "loud mode", must not rely on dynamic floor, and must release quickly enough that drops still contract and breathe naturally.
+- Bubble sustained-loud closure must be proven against a harsher runtime-loud oracle, not only against friendly bass-heavy helper phrases. The acceptance bar is: soft/transient feel stays good, real long hot sections with sparse onset help keep the small lane visibly alive, the big lane reaches a strong authored upper range without crude hard-clamp mode-switching, and ordinary hot passages still stay below a fake ceiling.
 - Spectrum startup/reactivity automation must also use an authored curated preset path, not only generic parity helpers. `Preset 1 (Organs)` is the standing Spectrum oracle for first-visible authority and startup/mode-switch parity.
 - Spectrum horizontal bar geometry has one shared contract. CPU helper math and shader layout must agree on the same slightly left-biased bar field so the mode does not reintroduce a visible left gutter or right-edge clipping through duplicate geometry calculations.
 - Idle-reveal modes must have a meaningful paused startup presentation without depending on a prior live audio frame. When playback is genuinely non-playing, the shared beat engine should still provide a low-energy idle waveform/bar seed so first visible startup does not collapse into a dead zero frame.

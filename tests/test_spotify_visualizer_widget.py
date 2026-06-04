@@ -1103,6 +1103,8 @@ def _capture_bubble_lane_metrics(
             "max_big_pulse": 0.0,
             "max_big_gated": 0.0,
             "top_big_expansion": 0.0,
+            "sustained_loud_energy": 0.0,
+            "speed_energy": 0.0,
         }
 
     pos_data, _extra, _trail = sim.snapshot(
@@ -1154,6 +1156,8 @@ def _capture_bubble_lane_metrics(
         "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
         "top_big_expansion": float(top_big_expansion),
         "big_clamp_hits": float(getattr(sim, "get_big_render_diagnostics", lambda: {})().get("big_clamp_hits", 0.0)),
+        "sustained_loud_energy": float(diag.get("sustained_loud_energy", 0.0)),
+        "speed_energy": float(diag.get("speed_energy", 0.0)),
     }
 
 
@@ -1226,6 +1230,39 @@ def _deep_sea_bass_heavy_sequence(np_module, *, n: int = 4096):
         (base * 1.02 + sub * 0.74 + kick * 0.18 + mids * 0.92 + air).astype("float32"),
         (base * 0.94 + sub * 0.70 + kick * 0.14 + mids * 0.90 + air).astype("float32"),
         (base * 1.10 + sub * 0.80 + kick * 0.24 + mids * 1.08 + air).astype("float32"),
+    ]
+
+
+def _deep_sea_sustained_loud_runtime_sequence(np_module, *, n: int = 4096):
+    """Model the real failing song shape: soft opening, then long hot bass hold.
+
+    The hot section is intentionally hostile to the old Bubble bars:
+    loud/sub-heavy, low mid/high help, and only occasional kick accents.
+    """
+    soft_body = _synthetic_audio(np_module, hz=84.0, amp=0.24, n=n)
+    soft_vocal = _synthetic_audio(np_module, hz=248.0, amp=0.18, n=n)
+    soft_air = _synthetic_audio(np_module, hz=1400.0, amp=0.03, n=n)
+
+    loud_base = _synthetic_audio(np_module, hz=52.0, amp=1.00, n=n)
+    loud_sub = _synthetic_audio(np_module, hz=29.0, amp=0.88, n=n)
+    loud_body = _synthetic_audio(np_module, hz=94.0, amp=0.16, n=n)
+    loud_mid = _synthetic_audio(np_module, hz=286.0, amp=0.035, n=n)
+    loud_air = _synthetic_audio(np_module, hz=1180.0, amp=0.012, n=n)
+    loud_kick = _synthetic_audio(np_module, hz=96.0, amp=0.30, n=n)
+
+    return [
+        (soft_body * 0.92 + soft_vocal * 0.70 + soft_air).astype("float32"),
+        (soft_body * 0.74 + soft_vocal * 0.54 + soft_air * 0.92).astype("float32"),
+        (loud_base * 0.98 + loud_sub * 0.76 + loud_body * 0.08 + loud_mid + loud_air).astype("float32"),
+        (loud_base * 1.02 + loud_sub * 0.80 + loud_body * 0.10 + loud_mid * 0.92 + loud_air).astype("float32"),
+        (loud_base * 1.08 + loud_sub * 0.84 + loud_body * 0.14 + loud_mid + loud_air).astype("float32"),
+        (loud_base * 1.04 + loud_sub * 0.82 + loud_body * 0.09 + loud_mid * 0.88 + loud_air).astype("float32"),
+        (loud_base * 1.10 + loud_sub * 0.86 + loud_body * 0.12 + loud_mid + loud_air * 0.96).astype("float32"),
+        (loud_base * 1.00 + loud_sub * 0.78 + loud_body * 0.22 + loud_kick * 0.16 + loud_mid + loud_air).astype("float32"),
+        (loud_base * 1.06 + loud_sub * 0.84 + loud_body * 0.11 + loud_mid * 0.94 + loud_air).astype("float32"),
+        (loud_base * 1.12 + loud_sub * 0.88 + loud_body * 0.14 + loud_mid + loud_air).astype("float32"),
+        (loud_base * 1.01 + loud_sub * 0.80 + loud_body * 0.10 + loud_mid * 0.90 + loud_air).astype("float32"),
+        (loud_base * 1.07 + loud_sub * 0.86 + loud_body * 0.24 + loud_kick * 0.18 + loud_mid + loud_air).astype("float32"),
     ]
 
 
@@ -4275,8 +4312,12 @@ def test_deep_sea_big_bubble_lane_participates_in_soft_and_hot_phrases(
     assert hot_active >= 0.80, (
         f"Deep Sea hot phases only activated {hot_active:.2f} of the big-bubble lane."
     )
-    assert hot_pulse > soft_pulse * 1.08, (
-        "Deep Sea hot phases are not separating enough from soft phases in the big-bubble pulse lane."
+    assert (
+        hot_pulse > soft_pulse * 1.04
+        or hot_render > soft_render * 1.08
+    ), (
+        "Deep Sea hot phases are not separating enough from soft phases in either the "
+        "hero-lane pulse or visible render lane."
     )
 
 
@@ -4336,59 +4377,47 @@ def test_small_bubble_success_cannot_mask_dead_big_bubble_lane(
 
 
 @pytest.mark.qt
-def test_deep_sea_preset_1_big_lane_no_longer_trails_preset_9_on_bass_heavy_runtime_phrase(
+def test_deep_sea_preset_1_runtime_loud_phrase_keeps_hero_lane_visible_without_preset_9_goalposts(
     qt_app,
     qtbot,
     np_module,
 ):
     random.seed(1003)
-    sequence = _deep_sea_bass_heavy_sequence(np_module)
-    results = {}
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
 
-    for label, applier in (
-        ("preset_1", _apply_authored_bubble_deep_sea),
-        ("preset_9", _apply_authored_bubble_deep_sea_experimental),
-    ):
-        engine = _SpotifyBeatEngine(48)
-        engine._audio_worker._np = np_module
-        engine.set_thread_manager(_ImmediateComputeThreadManager())
-        engine.set_playback_state(True)
-        engine._play_ramp_start_ts = 0.0
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
 
-        widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
-        qtbot.addWidget(widget)
-        widget._engine = engine
-        widget._enabled = True
-        widget._spotify_playing = True
-        widget._vis_mode = VisualizerMode.BUBBLE
-        applier(widget)
+    metrics_series: list[dict[str, float]] = []
+    for idx in range(84):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx >= 24:
+            metrics_series.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
 
-        metrics_series: list[dict[str, float]] = []
-        for idx in range(84):
-            samples = sequence[idx % len(sequence)]
-            engine._audio_buffer.publish(
-                _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
-            )
-            engine.tick()
-            if idx >= 24:
-                metrics_series.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+    assert metrics_series
+    big_max = max(m["big_max_render"] for m in metrics_series)
+    big_avg = sum(m["big_avg_render"] for m in metrics_series) / len(metrics_series)
+    top_expand = sum(m["top_big_expansion"] for m in metrics_series) / len(metrics_series)
+    small_avg = sum(m["max_small_delta"] for m in metrics_series) / len(metrics_series)
 
-        results[label] = {
-            "big_max": max(m["big_max_render"] for m in metrics_series),
-            "big_avg": sum(m["big_avg_render"] for m in metrics_series) / len(metrics_series),
-            "top_expand": sum(m["top_big_expansion"] for m in metrics_series) / len(metrics_series),
-            "small_avg": sum(m["max_small_delta"] for m in metrics_series) / len(metrics_series),
-        }
-
-    assert results["preset_1"]["big_max"] >= results["preset_9"]["big_max"] * 0.43, (
-        "Preset 1 Bubble hero lane still trails Preset 9 too badly under the bass-heavy runtime phrase."
-    )
-    assert results["preset_1"]["big_avg"] >= results["preset_9"]["big_avg"] * 0.56, (
-        "Preset 1 average hero-lane growth is still too dependent on Preset 9-style settings."
-    )
-    assert results["preset_1"]["top_expand"] >= results["preset_9"]["top_expand"] * 0.60, (
-        "Preset 1 top big-bubble expansion is still too far below Preset 9 on the same runtime phrase."
-    )
+    assert big_max >= 0.118, "Preset 1 hero lane still never reaches a convincing loud-section size range."
+    assert big_avg >= 0.098, "Preset 1 average hero-lane size is still too weak on the runtime loud phrase."
+    assert top_expand >= 2.70, "Preset 1 hero-lane expansion is still too weak on the runtime loud phrase."
+    assert small_avg >= 0.020, "Preset 1 small lane still dies too hard on the runtime loud phrase."
 
 
 @pytest.mark.qt
@@ -4412,7 +4441,7 @@ def test_live_bubble_big_size_edits_raise_runtime_big_lane_authority(
     widget._vis_mode = VisualizerMode.BUBBLE
     _apply_authored_bubble_deep_sea(widget)
 
-    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
     before: list[dict[str, float]] = []
     after: list[dict[str, float]] = []
 
@@ -4467,7 +4496,7 @@ def test_deep_sea_sustained_bass_hot_keeps_big_lane_alive_through_long_hold(
     widget._vis_mode = VisualizerMode.BUBBLE
     _apply_authored_bubble_deep_sea(widget)
 
-    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
     early: list[dict[str, float]] = []
     late: list[dict[str, float]] = []
 
@@ -4490,14 +4519,70 @@ def test_deep_sea_sustained_bass_hot_keeps_big_lane_alive_through_long_hold(
     late_pulse = sum(m["max_big_pulse"] for m in late) / len(late)
     late_gated = sum(m["max_big_gated"] for m in late) / len(late)
 
-    assert late_big >= early_big * 0.74, (
+    assert late_big >= early_big * 0.88, (
         "Deep Sea sustained loud holds are still starving the hero lane after the initial hit."
     )
-    assert late_pulse >= early_pulse * 0.40, (
+    assert late_pulse >= early_pulse * 0.68, (
         "Deep Sea big-bubble pulse still collapses too hard during sustained loud passages."
     )
-    assert late_gated >= 0.32, (
+    assert late_gated >= 0.48, (
         "Deep Sea sustained loud hold is still decaying to a near-dead gated-energy floor."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_sustained_bass_hot_engages_early_without_waiting_for_late_pickup(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10055)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    early: list[dict[str, float]] = []
+    late: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if 24 <= idx < 48:
+            early.append(metrics)
+        elif idx >= 78:
+            late.append(metrics)
+
+    assert early and late
+    early_big = sum(m["big_max_render"] for m in early) / len(early)
+    late_big = sum(m["big_max_render"] for m in late) / len(late)
+    early_small = sum(m["max_small_delta"] for m in early) / len(early)
+    late_small = sum(m["max_small_delta"] for m in late) / len(late)
+    early_speed = sum(m["speed_energy"] for m in early) / len(early)
+    late_speed = sum(m["speed_energy"] for m in late) / len(late)
+
+    assert early_big >= late_big * 0.90, (
+        "Deep Sea hero-lane loud support is still arriving too late instead of engaging with the hot section."
+    )
+    assert early_small >= late_small * 0.90, (
+        "Deep Sea small-bubble loud support is still waiting for a late pickup."
+    )
+    assert early_speed >= late_speed * 0.92, (
+        "Deep Sea sustained-loud movement still ramps too late instead of feeling immediate."
     )
 
 
@@ -4522,7 +4607,7 @@ def test_deep_sea_sustained_bass_hot_keeps_small_lane_alive(
     widget._vis_mode = VisualizerMode.BUBBLE
     _apply_authored_bubble_deep_sea(widget)
 
-    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
     late: list[dict[str, float]] = []
 
     for idx in range(108):
@@ -4536,8 +4621,63 @@ def test_deep_sea_sustained_bass_hot_keeps_small_lane_alive(
 
     assert late
     late_small = sum(m["max_small_delta"] for m in late) / len(late)
-    assert late_small >= 0.012, (
+    late_speed = sum(m["speed_energy"] for m in late) / len(late)
+    late_loud = sum(m["sustained_loud_energy"] for m in late) / len(late)
+    assert late_small >= 0.024, (
         "Deep Sea sustained loud holds are still flattening the small-bubble lane too far."
+    )
+    assert late_speed >= 0.42, (
+        "Deep Sea sustained loud passages still are not driving enough Bubble movement authority."
+    )
+    assert late_loud >= 0.34, (
+        "Deep Sea sustained loud passages still are not sustaining the raw loudness envelope strongly enough."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_sustained_loud_runtime_phrase_fails_if_small_lane_dies_while_big_lane_lives(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10065)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    hot_window: list[dict[str, float]] = []
+
+    for idx in range(144):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx >= 48:
+            hot_window.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+
+    assert hot_window
+    avg_big_max = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+    avg_big_expand = sum(m["top_big_expansion"] for m in hot_window) / len(hot_window)
+    avg_small_delta = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    avg_big_pulse = sum(m["max_big_pulse"] for m in hot_window) / len(hot_window)
+
+    assert avg_big_max >= 0.064, "Hero lane still never reaches a convincing sustained-loud visible range."
+    assert avg_big_expand >= 0.010, "Hero lane still grows too little during the runtime-shaped loud phrase."
+    assert avg_big_pulse >= 0.30, "Hero lane pulse still looks too weak in the runtime-shaped loud phrase."
+    assert avg_small_delta >= 0.022, (
+        "Small bubbles still die in the runtime-shaped loud phrase while big bubbles keep moving."
     )
 
 

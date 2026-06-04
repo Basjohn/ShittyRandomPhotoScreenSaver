@@ -863,6 +863,111 @@ class TestStreamSpeedReactivity:
             f"low-reactivity displacement {low_displacement:.4f}"
         )
 
+    def test_sustained_bass_heavy_sections_drive_motion_even_with_calm_vocal_lane(self):
+        seed = 1441
+        dt = 1 / 60
+        quiet = {
+            "bass": 0.12,
+            "mid": 0.12,
+            "high": 0.05,
+            "overall": 0.11,
+            "smooth_mid": 0.12,
+            "smooth_high": 0.05,
+        }
+        sustained_hot = {
+            "bass": 0.92,
+            "mid": 0.14,
+            "high": 0.05,
+            "overall": 0.42,
+            "smooth_mid": 0.14,
+            "smooth_high": 0.05,
+        }
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.18,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=0.95,
+        )
+
+        random.seed(seed)
+        sim_quiet = BubbleSimulation()
+        _warm_up(sim_quiet, settings, frames=60)
+
+        random.seed(seed)
+        sim_hot = BubbleSimulation()
+        _warm_up(sim_hot, settings, frames=60)
+        sim_hot._bubbles = copy.deepcopy(sim_quiet._bubbles)
+
+        quiet_before = [(b.x, b.y) for b in sim_quiet._bubbles if not b.exiting]
+        hot_before = [(b.x, b.y) for b in sim_hot._bubbles if not b.exiting]
+
+        for _ in range(18):
+            sim_quiet.tick(dt, quiet, settings)
+            sim_hot.tick(dt, sustained_hot, settings)
+
+        quiet_after = [(b.x, b.y) for b in sim_quiet._bubbles if not b.exiting]
+        hot_after = [(b.x, b.y) for b in sim_hot._bubbles if not b.exiting]
+
+        quiet_displacement = sum(
+            math.hypot(ax - bx, ay - by)
+            for (bx, by), (ax, ay) in zip(quiet_before, quiet_after)
+        )
+        hot_displacement = sum(
+            math.hypot(ax - bx, ay - by)
+            for (bx, by), (ax, ay) in zip(hot_before, hot_after)
+        )
+
+        assert sim_hot._sustained_loud_energy >= 0.22, (
+            f"Sustained loud envelope only reached {sim_hot._sustained_loud_energy:.3f} on a bass-heavy hot section."
+        )
+        assert hot_displacement > quiet_displacement * 1.22, (
+            f"Bass-heavy sustained loud motion {hot_displacement:.4f} should exceed quiet motion "
+            f"{quiet_displacement:.4f} even when the vocal lane stays calm."
+        )
+
+    def test_sustained_loud_motion_releases_quickly_after_the_drop(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_stream_constant_speed=0.18,
+            bubble_stream_speed_cap=1.9,
+            bubble_stream_reactivity=0.95,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        sustained_hot = {
+            "bass": 0.90,
+            "mid": 0.16,
+            "high": 0.06,
+            "overall": 0.43,
+            "smooth_mid": 0.16,
+            "smooth_high": 0.06,
+        }
+        quiet = {
+            "bass": 0.12,
+            "mid": 0.10,
+            "high": 0.05,
+            "overall": 0.10,
+            "smooth_mid": 0.10,
+            "smooth_high": 0.05,
+        }
+
+        for _ in range(30):
+            sim.tick(dt, sustained_hot, settings)
+        hot_energy = sim._sustained_loud_energy
+
+        for _ in range(18):
+            sim.tick(dt, quiet, settings)
+
+        assert hot_energy >= 0.24, (
+            f"Expected the hot section to build a meaningful loud-motion envelope, got {hot_energy:.3f}."
+        )
+        assert sim._sustained_loud_energy < hot_energy * 0.76, (
+            "Sustained loud motion is still lingering too long after the section drops."
+        )
+        assert sim._sustained_loud_energy < 0.26, (
+            f"Sustained loud motion only decayed to {sim._sustained_loud_energy:.3f}; Bubble still feels too sticky."
+        )
+
 
 class TestBubblePlateauGuardrails:
     def test_medium_vocal_run_does_not_latch_overdrive_for_entire_phrase(self):
@@ -1255,6 +1360,7 @@ class TestBubblePlateauGuardrails:
         )
 
     def test_hot_preset_1_big_render_stays_near_510520e_shape(self):
+        random.seed(1014)
         payload = {
             "bubble_big_count": 6,
             "bubble_small_count": 45,
@@ -1299,6 +1405,7 @@ class TestBubblePlateauGuardrails:
         )
 
         hist_mod = _load_historical_bubble_module("510520e")
+        random.seed(1014)
         historical = hist_mod.BubbleSimulation()
         for _ in range(80):
             historical.tick(1 / 60, quiet, settings)

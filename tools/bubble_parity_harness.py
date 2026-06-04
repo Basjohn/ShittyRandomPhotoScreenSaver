@@ -114,6 +114,15 @@ def _run_phrase(sim_cls, payload: dict, phrase: dict, frames: int = 24) -> dict:
     return _snapshot_metrics(sim, payload)
 
 
+def _run_phrase_sequence(sim_cls, payload: dict, phrase_sequence: list[dict], frames: int = 72) -> dict:
+    sim = sim_cls()
+    settings = _build_settings(payload)
+    _warm_up(sim, settings, frames=80)
+    for idx in range(frames):
+        sim.tick(1 / 60, phrase_sequence[idx % len(phrase_sequence)], settings)
+    return _snapshot_metrics(sim, payload)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compare current Bubble against historical revisions.")
     parser.add_argument(
@@ -131,6 +140,20 @@ def main() -> int:
         "hot_phrase": _energy(bass=1.55, mid=0.65, high=0.16),
         "sustained_bass_hot": _energy(bass=1.60, mid=0.15, high=0.03),
     }
+    runtime_loud_sequence = [
+        _energy(bass=0.28, mid=0.18, high=0.05),
+        _energy(bass=0.24, mid=0.15, high=0.04),
+        _energy(bass=1.58, mid=0.14, high=0.03),
+        _energy(bass=1.66, mid=0.15, high=0.03),
+        _energy(bass=1.78, mid=0.17, high=0.04),
+        _energy(bass=1.70, mid=0.13, high=0.03),
+        _energy(bass=1.84, mid=0.18, high=0.04),
+        _energy(bass=1.72, mid=0.16, high=0.03),
+        _energy(bass=1.88, mid=0.18, high=0.04),
+        _energy(bass=1.68, mid=0.14, high=0.03),
+        _energy(bass=1.82, mid=0.19, high=0.04),
+        _energy(bass=1.74, mid=0.16, high=0.03),
+    ]
 
     historical = {
         "current": BubbleSimulation,
@@ -141,6 +164,11 @@ def main() -> int:
     report = {}
     for name, sim_cls in historical.items():
         report[name] = {label: _run_phrase(sim_cls, widget_payload, phrase) for label, phrase in phrases.items()}
+        report[name]["runtime_loud_phrase"] = _run_phrase_sequence(
+            sim_cls,
+            widget_payload,
+            runtime_loud_sequence,
+        )
 
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0

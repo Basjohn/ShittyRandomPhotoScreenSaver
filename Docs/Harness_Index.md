@@ -77,6 +77,7 @@ python tools/bubble_parity_harness.py --preset preset_9_deap_sea_experimental.js
 ```
 - Notes:
   - compares current BubbleSimulation against `9d4925e` and `510520e`
+  - includes the harsher `runtime_loud_phrase` comparison lane for sustained-loud audits
   - use alongside authored widget-path tests, not instead of them
 
 ### Preset repair tool
