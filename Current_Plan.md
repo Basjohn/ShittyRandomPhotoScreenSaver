@@ -36,6 +36,13 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Keep the text/layout identity tied to visible metadata only; non-visible metadata churn must not become a second font/layout authority.
   - [ ] Preserve legitimate text-fitting changes when the visible title/artist payload really changes.
 
+- [ ] Re-close Bubble against the harsh runtime-loud oracle instead of weak helper bars.
+  - [ ] Keep the current soft/transient Bubble feel intact; treat that as a protected baseline, not collateral damage.
+  - [ ] Make the authored `Preset 1 (Deep Sea)` widget-path loud oracle pass on the same late-loud shape that currently fails in runtime: dead small lane, undersized hero lane, pinned clamp pressure, and flat/single-value late hero sizing.
+  - [ ] Make the sustained-loud hold bar pass without reintroducing dynamic-floor dependence or a sticky "loud mode" that lingers after the drop.
+  - [ ] Keep the size/clamp-edit guard honest: if freeing the hero lane only works by collapsing the small lane, that still counts as failure.
+  - [ ] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; do not treat it as final runtime sign-off while the widget-path oracle is red.
+
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.
   - [ ] Validate the newly landed prefetch authority contract in runtime: mixed-source lookahead now mirrors `ImageQueue.next()` via preview state, so confirm the upcoming images being warmed are the images that actually appear under local/RSS ratio, history, and domain-diversity rules.

@@ -4682,6 +4682,211 @@ def test_deep_sea_sustained_loud_runtime_phrase_fails_if_small_lane_dies_while_b
 
 
 @pytest.mark.qt
+def test_deep_sea_runtime_loud_phrase_hot_window_cannot_collapse_relative_to_soft_window(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1003)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    soft_window: list[dict[str, float]] = []
+    hot_window: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if 24 <= idx < 36:
+            soft_window.append(metrics)
+        elif idx >= 76:
+            hot_window.append(metrics)
+
+    assert soft_window and hot_window
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    hot_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    soft_big = sum(m["big_max_render"] for m in soft_window) / len(soft_window)
+    hot_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+    hot_loud = sum(m["sustained_loud_energy"] for m in hot_window) / len(hot_window)
+
+    assert soft_small >= 0.028, "Need a genuinely alive soft window for this runtime-loud regression guard."
+    assert hot_loud >= 0.60, "Need a genuinely hot late window for this runtime-loud regression guard."
+    assert hot_small >= soft_small * 0.78, (
+        "The runtime loud phrase still kills the small lane relative to the good soft opening."
+    )
+    assert hot_big >= soft_big + 0.010, (
+        "The runtime loud phrase still does not raise the hero lane enough above the soft opening."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_runtime_loud_phrase_does_not_flatline_hero_size_while_pulse_decays(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1003)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    late: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx >= 76:
+            late.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+
+    assert late
+    late_big_values = [m["big_max_render"] for m in late]
+    late_pulse_values = [m["max_big_pulse"] for m in late]
+    plateau_spread = max(late_big_values) - min(late_big_values)
+    unique_big_values = {round(v, 6) for v in late_big_values}
+    pulse_floor = sum(late_pulse_values) / len(late_pulse_values)
+
+    assert pulse_floor >= 0.45, "Need a still-alive hot window for this flatline regression guard."
+    assert len(unique_big_values) >= 3 or plateau_spread > 0.0015, (
+        "Hero size still flatlines to one visible value through the late loud window."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_runtime_loud_phrase_does_not_live_on_pinned_clamp_hits(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1003)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    hot_window: list[dict[str, float]] = []
+
+    for idx in range(96):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx >= 36:
+            hot_window.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+
+    assert hot_window
+    avg_clamp_hits = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
+    max_clamp_hits = max(m["big_clamp_hits"] for m in hot_window)
+
+    assert avg_clamp_hits < 6.2, (
+        "Hero lane still spends too much of the runtime loud phrase pinned into clamp saturation."
+    )
+    assert max_clamp_hits < 8.0, (
+        "Hero lane still reaches the same hard clamp-hit ceiling across the runtime loud phrase."
+    )
+
+
+@pytest.mark.qt
+def test_runtime_loud_phrase_big_size_and_clamp_edits_free_the_hero_lane(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10068)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    before: list[dict[str, float]] = []
+    after: list[dict[str, float]] = []
+
+    for idx in range(120):
+        if idx == 60:
+            widget._bubble_big_size_max = 0.045
+            widget._bubble_big_size_clamp = 4.8
+            widget._bubble_big_bass_pulse = 0.95
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if 36 <= idx < 60:
+            before.append(metrics)
+        elif idx >= 84:
+            after.append(metrics)
+
+    assert before and after
+    before_big_max = sum(m["big_max_render"] for m in before) / len(before)
+    after_big_max = sum(m["big_max_render"] for m in after) / len(after)
+    before_clamp = sum(m["big_clamp_hits"] for m in before) / len(before)
+    after_clamp = sum(m["big_clamp_hits"] for m in after) / len(after)
+    before_small = sum(m["max_small_delta"] for m in before) / len(before)
+    after_small = sum(m["max_small_delta"] for m in after) / len(after)
+
+    assert after_big_max > before_big_max + 0.006, (
+        "Runtime loud big-size/clamp edits still do not materially free the hero lane."
+    )
+    assert after_clamp < before_clamp - 0.4, (
+        "Runtime loud big-size/clamp edits still leave the hero lane stuck on the same clamp pressure."
+    )
+    assert after_small >= before_small * 0.85, (
+        "Big-size/clamp edits still buy hero-lane room by collapsing the small lane."
+    )
+
+
+@pytest.mark.qt
 def test_mode_switch_deep_sea_first_visible_frame_matches_fresh_activation_oracle(
     qt_app,
     qtbot,

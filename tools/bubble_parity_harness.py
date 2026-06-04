@@ -123,6 +123,61 @@ def _run_phrase_sequence(sim_cls, payload: dict, phrase_sequence: list[dict], fr
     return _snapshot_metrics(sim, payload)
 
 
+def _run_phrase_sequence_windows(
+    sim_cls,
+    payload: dict,
+    phrase_sequence: list[dict],
+    *,
+    frames: int = 108,
+    soft_start: int = 24,
+    soft_end: int = 36,
+    hot_start: int = 76,
+) -> dict:
+    sim = sim_cls()
+    settings = _build_settings(payload)
+    _warm_up(sim, settings, frames=80)
+    soft_window: list[dict] = []
+    hot_window: list[dict] = []
+    for idx in range(frames):
+        sim.tick(1 / 60, phrase_sequence[idx % len(phrase_sequence)], settings)
+        snap = _snapshot_metrics(sim, payload)
+        if soft_start <= idx < soft_end:
+            soft_window.append(snap)
+        elif idx >= hot_start:
+            hot_window.append(snap)
+
+    def _avg(rows: list[dict], key: str) -> float:
+        return (sum(float(r.get(key, 0.0)) for r in rows) / len(rows)) if rows else 0.0
+
+    hot_big_values = [float(r.get("big_max_render", 0.0)) for r in hot_window]
+    hot_unique_big_values = len({round(v, 6) for v in hot_big_values})
+    return {
+        "soft_window": {
+            "big_max_render": _avg(soft_window, "big_max_render"),
+            "small_max_delta": _avg(soft_window, "small_max_delta"),
+            "big_avg_pulse": _avg(soft_window, "big_avg_pulse"),
+        },
+        "hot_window": {
+            "big_max_render": _avg(hot_window, "big_max_render"),
+            "small_max_delta": _avg(hot_window, "small_max_delta"),
+            "big_avg_pulse": _avg(hot_window, "big_avg_pulse"),
+            "avg_clamp_hits": (
+                sum(float(r.get("render_diag", {}).get("big_clamp_hits", 0.0)) for r in hot_window) / len(hot_window)
+                if hot_window
+                else 0.0
+            ),
+            "unique_big_max_render_values": hot_unique_big_values,
+            "big_max_render_spread": (max(hot_big_values) - min(hot_big_values)) if hot_big_values else 0.0,
+        },
+        "comparison": {
+            "hot_small_vs_soft_ratio": (
+                _avg(hot_window, "small_max_delta") / max(1e-6, _avg(soft_window, "small_max_delta"))
+            ),
+            "hot_big_minus_soft": _avg(hot_window, "big_max_render") - _avg(soft_window, "big_max_render"),
+        },
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Compare current Bubble against historical revisions.")
     parser.add_argument(
@@ -165,6 +220,11 @@ def main() -> int:
     for name, sim_cls in historical.items():
         report[name] = {label: _run_phrase(sim_cls, widget_payload, phrase) for label, phrase in phrases.items()}
         report[name]["runtime_loud_phrase"] = _run_phrase_sequence(
+            sim_cls,
+            widget_payload,
+            runtime_loud_sequence,
+        )
+        report[name]["runtime_loud_windows"] = _run_phrase_sequence_windows(
             sim_cls,
             widget_payload,
             runtime_loud_sequence,
