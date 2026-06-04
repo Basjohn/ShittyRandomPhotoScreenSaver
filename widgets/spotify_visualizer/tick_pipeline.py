@@ -366,12 +366,13 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     # post-AGC snapshot here can flatten the mode into a near-constant plateau
     # under hot floor pressure, especially after preset/custom transitions.
     if widget._engine:
+        broad_feed = widget._engine.get_pre_agc_energy_bands()
         bubble_feed = getattr(widget._engine, "get_bubble_energy_bands", None)
         if callable(bubble_feed):
             eb_pulse = bubble_feed()
         else:
-            eb_pulse = widget._engine.get_pre_agc_energy_bands()
-        eb_smooth = eb_pulse
+            eb_pulse = broad_feed
+        eb_smooth = broad_feed
     else:
         eb_pulse = None
         eb_smooth = None
@@ -417,12 +418,14 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
         _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
-        _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
-        _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
+        _pulse_mid = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
+        _bass_bed = max(0.0, _pulse_bass - 0.34)
+        _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal + _bass_bed * 0.30)
         eb_snap["bass"] = _mixed_bass
         eb_snap["mid"] = _mixed_mid
-        eb_snap["high"] = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
-        eb_snap["overall"] = getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0
+        eb_snap["high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
+        _overall = getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0
+        eb_snap["overall"] = min(1.0, max(_overall, _overall + _bass_bed * 0.25))
         eb_snap["smooth_mid"] = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
         eb_snap["smooth_high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
 

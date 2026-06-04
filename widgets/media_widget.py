@@ -141,6 +141,7 @@ class MediaWidget(BaseOverlayWidget):
         self._widget_manager: Optional["WidgetManager"] = None
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
+        self._update_timer_interval_ms: Optional[int] = None
         self._refresh_in_flight = False
         self._pending_state_override: Optional[MediaPlaybackState] = None
         self._pending_state_timer: Optional[QTimer] = None
@@ -535,6 +536,7 @@ class MediaWidget(BaseOverlayWidget):
             except RuntimeError:
                 pass
             self._update_timer = None
+        self._update_timer_interval_ms = None
 
     def _stop_update_timers(self, *, delete_qtimer: bool) -> None:
         self._reset_update_timer_state(delete_qtimer=delete_qtimer)
@@ -1402,13 +1404,32 @@ class MediaWidget(BaseOverlayWidget):
 
     def _ensure_timer(self, *, force: bool = False) -> None:
         """Ensure update timer is running at correct interval."""
-        if self._update_timer_handle is not None and not force:
-            timer = getattr(self._update_timer_handle, "_timer", None)
+        if self._is_idle:
+            interval = self._deep_idle_poll_interval if not self._app_process_running else self._idle_poll_interval
+        else:
+            interval = self._poll_intervals[self._current_poll_stage]
+
+        timer = self._update_timer
+        if self._update_timer_handle is not None and timer is not None:
             try:
-                if timer is not None and timer.isActive():
+                if timer.isActive():
+                    if not force and self._update_timer_interval_ms == interval:
+                        return
+                    timer.setInterval(max(1, int(interval)))
+                    timer.start()
+                    self._update_timer_interval_ms = interval
+                    if is_perf_metrics_enabled():
+                        logger.debug(
+                            "[PERF] Media widget timer retuned in place to %dms (stage %d)",
+                            interval,
+                            self._current_poll_stage,
+                        )
                     return
-            except Exception:
-                force = True
+            except RuntimeError:
+                timer = None
+            except Exception as exc:
+                logger.debug("[MEDIA_WIDGET][TIMER] In-place retune failed; recreating timer: %s", exc)
+
         if force:
             self._stop_timer()
 
@@ -1419,10 +1440,6 @@ class MediaWidget(BaseOverlayWidget):
             return
 
         self._telemetry_logged_missing_tm = False
-        if self._is_idle:
-            interval = self._deep_idle_poll_interval if not self._app_process_running else self._idle_poll_interval
-        else:
-            interval = self._poll_intervals[self._current_poll_stage]
         try:
             handle = create_overlay_timer(self, interval, self._refresh, description="MediaWidget smart poll")
         except RuntimeError as exc:
@@ -1434,6 +1451,7 @@ class MediaWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._update_timer = None
+        self._update_timer_interval_ms = interval
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget timer started/restarted at %dms (stage %d)", interval, self._current_poll_stage)
     

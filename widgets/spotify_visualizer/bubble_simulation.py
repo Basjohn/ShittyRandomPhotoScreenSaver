@@ -743,14 +743,14 @@ class BubbleSimulation:
                 bass_support = soft_ceiling(
                     max(0.0, bass - (0.42 + size_t * 0.10)),
                     knee=0.0,
-                    ceiling=0.08,
+                    ceiling=0.14 - size_t * 0.02,
                     max_input=1.40,
                     curve=1.00,
                 )
                 loud_bed_support = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.04)),
                     knee=0.0,
-                    ceiling=0.06 - size_t * 0.01,
+                    ceiling=0.20 - size_t * 0.03,
                     max_input=0.76,
                     curve=0.98,
                 )
@@ -758,9 +758,17 @@ class BubbleSimulation:
                 running_avg = self._midhi_running_avg
                 delta_sens = 4.4 - size_t * 1.1
                 sustained_knee = 0.20 + size_t * 0.13
-                sustained_scale = 0.60 - size_t * 0.10
+                sustained_scale = 0.66 - size_t * 0.10
                 attack_rate = 15.5 - size_t * 2.5
                 decay_rate = 1.5 if b.radius < 0.008 else (3.0 + size_t * 1.3)
+                loud_decay_hold = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - (0.28 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.72 - size_t * 0.08,
+                    max_input=0.74,
+                    curve=0.98,
+                )
+                decay_rate *= max(0.38, 1.0 - loud_decay_hold * 0.48)
 
             # Delta component: transient punch (noise gate: ignore sub-perceptual deltas)
             if b.is_big:
@@ -807,7 +815,7 @@ class BubbleSimulation:
                 loud_support_component = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - loud_hold_gate),
                     knee=0.0,
-                    ceiling=0.14 - size_t * 0.01,
+                    ceiling=0.18 - size_t * 0.01,
                     max_input=max(0.18, 0.92 - loud_hold_gate),
                     curve=0.98,
                 )
@@ -816,7 +824,7 @@ class BubbleSimulation:
                 loud_support_component = soft_ceiling(
                     max(0.0, self._sustained_loud_energy - loud_hold_gate),
                     knee=0.0,
-                    ceiling=0.08 - size_t * 0.01,
+                    ceiling=0.18 - size_t * 0.02,
                     max_input=max(0.18, 0.84 - loud_hold_gate),
                     curve=0.98,
                 )
@@ -824,7 +832,7 @@ class BubbleSimulation:
             gated_energy = min(
                 1.0,
                 max(delta_component, sustained_component, accent_component, hold_component)
-                + loud_support_component * (0.74 if b.is_big else 0.56),
+                + loud_support_component * (0.80 if b.is_big else 0.84),
             )
             pulse_before = b.pulse_energy
 
@@ -1286,14 +1294,41 @@ class BubbleSimulation:
                 max_input=1.10,
                 curve=1.00,
             )
-            pulse_scale = 4.10 + pulse_setting * 1.10 + size_weight * 0.65
+            pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight * 0.34
             pulse_factor = 1.0 + bubble.pulse_energy * pulse_scale
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
         else:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 3.0
 
-        r = bubble.radius * pulse_factor
+        pulse_radius = bubble.radius * pulse_factor
+        loud_plateau_radius = 0.0
+        if bubble.is_big:
+            size_weight = min(
+                1.0,
+                max(0.0, (bubble.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
+            )
+            loud_floor = soft_ceiling(
+                max(0.0, self._sustained_loud_energy - (0.18 + size_weight * 0.02)),
+                knee=0.0,
+                ceiling=0.52 - size_weight * 0.04,
+                max_input=0.72,
+                curve=0.98,
+            )
+            loud_plateau_radius = bubble.radius * (1.0 + loud_floor)
+        elif not is_tiny:
+            size_range = max(0.001, self._small_size_max - 0.004)
+            size_t = min(1.0, max(0.0, (bubble.radius - 0.004) / size_range))
+            phase_bias = 1.12 + 0.26 * (0.5 + 0.5 * math.sin(self._time * 2.2 + bubble.phase))
+            small_loud_floor = soft_ceiling(
+                max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.03)),
+                knee=0.0,
+                ceiling=1.66 - size_t * 0.20,
+                max_input=0.74,
+                curve=0.98,
+            )
+            loud_plateau_radius = bubble.radius * (1.0 + small_loud_floor * phase_bias)
+        r = max(pulse_radius, loud_plateau_radius)
         if bubble.is_big and big_contraction_bias < 1.0:
             quiet = 1.0 - min(1.0, bubble.pulse_energy)
             quiet_curve = quiet ** 0.85
@@ -1301,7 +1336,24 @@ class BubbleSimulation:
             r *= max(0.60, shrink)
 
         if bubble.is_big and big_size_clamp > 0.0:
-            r = min(r, bubble.radius * max(1.5, big_size_clamp))
+            clamp_headroom = soft_ceiling(
+                max(0.0, bubble.pulse_energy - 0.56),
+                knee=0.0,
+                ceiling=0.40,
+                max_input=0.40,
+                curve=0.96,
+            )
+            clamp_limit = bubble.radius * max(1.5, big_size_clamp + clamp_headroom)
+            clamp_start = clamp_limit * 0.92
+            if r > clamp_start:
+                r = clamp_start + soft_ceiling(
+                    r - clamp_start,
+                    knee=0.0,
+                    ceiling=max(1e-6, clamp_limit - clamp_start),
+                    max_input=max(1e-6, clamp_limit * 0.55),
+                    curve=0.94,
+                )
+            r = min(r, clamp_limit)
 
         return max(0.001, r)
 
@@ -1653,15 +1705,7 @@ class BubbleSimulation:
                     max_input=1.10,
                     curve=1.00,
                 )
-                pulse_scale = 4.10 + pulse_setting * 1.10 + size_weight * 0.65
-                loud_pulse_boost = 1.0 + soft_ceiling(
-                    max(0.0, self._sustained_loud_energy - 0.22),
-                    knee=0.0,
-                    ceiling=0.08,
-                    max_input=0.70,
-                    curve=0.98,
-                )
-                pulse_scale *= loud_pulse_boost
+                pulse_scale = 3.20 + pulse_setting * 0.82 + size_weight * 0.34
                 pulse_factor = 1.0 + b.pulse_energy * pulse_scale
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
@@ -1669,15 +1713,30 @@ class BubbleSimulation:
             else:
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.4
 
-            unclamped_r = b.radius * pulse_factor
+            pulse_radius = b.radius * pulse_factor
+            loud_plateau_radius = 0.0
             if b.is_big:
-                unclamped_r += b.radius * soft_ceiling(
-                    max(0.0, self._sustained_loud_energy - 0.18),
+                loud_floor = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - (0.18 + size_weight * 0.02)),
                     knee=0.0,
-                    ceiling=0.14,
-                    max_input=0.70,
+                    ceiling=0.52 - size_weight * 0.04,
+                    max_input=0.72,
                     curve=0.98,
                 )
+                loud_plateau_radius = b.radius * (1.0 + loud_floor)
+            elif not is_tiny:
+                size_range = max(0.001, self._small_size_max - 0.004)
+                size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
+                phase_bias = 1.12 + 0.26 * (0.5 + 0.5 * math.sin(self._time * 2.2 + b.phase))
+                small_loud_floor = soft_ceiling(
+                    max(0.0, self._sustained_loud_energy - (0.22 + size_t * 0.03)),
+                    knee=0.0,
+                    ceiling=1.66 - size_t * 0.20,
+                    max_input=0.74,
+                    curve=0.98,
+                )
+                loud_plateau_radius = b.radius * (1.0 + small_loud_floor * phase_bias)
+            unclamped_r = max(pulse_radius, loud_plateau_radius)
             r = unclamped_r
 
             # Contraction bias: during quiet passages (low pulse_energy),
@@ -1691,8 +1750,24 @@ class BubbleSimulation:
 
             # Max size clamp: cap the pulsed radius to base_radius * clamp
             if b.is_big and big_size_clamp > 0.0:
-                clamp_limit = b.radius * max(1.5, big_size_clamp)
-                if unclamped_r > clamp_limit:
+                clamp_headroom = soft_ceiling(
+                    max(0.0, b.pulse_energy - 0.56),
+                    knee=0.0,
+                    ceiling=0.40,
+                    max_input=0.40,
+                    curve=0.96,
+                )
+                clamp_limit = b.radius * max(1.5, big_size_clamp + clamp_headroom)
+                clamp_start = clamp_limit * 0.92
+                if r > clamp_start:
+                    r = clamp_start + soft_ceiling(
+                        r - clamp_start,
+                        knee=0.0,
+                        ceiling=max(1e-6, clamp_limit - clamp_start),
+                        max_input=max(1e-6, clamp_limit * 0.55),
+                        curve=0.94,
+                    )
+                if r >= clamp_limit - 1e-5:
                     big_render_diag["big_clamp_hits"] += 1.0
                 r = min(r, clamp_limit)
 

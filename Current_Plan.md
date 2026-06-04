@@ -35,6 +35,7 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Confirm same-track updates no longer refit or reformat title/artist text just because album/state/artwork/provider polling churn changes around the card.
   - [ ] Keep the text/layout identity tied to visible metadata only; non-visible metadata churn must not become a second font/layout authority.
   - [ ] Preserve legitimate text-fitting changes when the visible title/artist payload really changes.
+  - [x] Stop media smart-poll timer churn from recreating recurring timers during the same live session; adaptive poll-stage retunes should reuse the active ThreadManager timer in place so startup/playback windows do not accumulate poll jitter.
 
 - [ ] Re-close Bubble against the harsh runtime-loud oracle instead of weak helper bars.
   - [ ] Keep the current soft/transient Bubble feel intact; treat that as a protected baseline, not collateral damage.
@@ -42,6 +43,11 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Make the sustained-loud hold bar pass without reintroducing dynamic-floor dependence or a sticky "loud mode" that lingers after the drop.
   - [ ] Keep the size/clamp-edit guard honest: if freeing the hero lane only works by collapsing the small lane, that still counts as failure.
   - [ ] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; do not treat it as final runtime sign-off while the widget-path oracle is red.
+  - [ ] Finish the Bubble settings audit against the current Preset 1 runtime target before more math surgery.
+  - [ ] Explicitly classify every user/preset-facing Bubble setting as one of: technical feed control, movement/behavior control, render-only control, or misleading/non-reactivity control.
+  - [ ] Confirm no Bubble-facing setting is dead or half-wired from model -> preset snapshot -> config application -> runtime consumer.
+  - [ ] Call out misleading controls plainly in docs/notes where needed; `bubble_growth` in particular must stay understood as outer card growth, not bubble-size/reactivity growth.
+  - [ ] Re-audit `bubble_big_bass_pulse`, `bubble_big_size_max`, and `bubble_big_size_clamp` against the harsh runtime-loud oracle because current evidence says they still produce inverted or self-defeating late-loud behavior.
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.

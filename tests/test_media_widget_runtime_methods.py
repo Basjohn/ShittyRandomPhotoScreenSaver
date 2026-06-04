@@ -271,6 +271,86 @@ def test_media_stop_timer_uses_canonical_update_timer_reset(monkeypatch) -> None
     assert calls == [False]
 
 
+def test_media_ensure_timer_reuses_active_timer_for_same_interval(monkeypatch) -> None:
+    class _FakeTimer:
+        def __init__(self) -> None:
+            self.set_intervals = []
+            self.start_calls = 0
+
+        def isActive(self) -> bool:
+            return True
+
+        def setInterval(self, interval: int) -> None:
+            self.set_intervals.append(interval)
+
+        def start(self) -> None:
+            self.start_calls += 1
+
+    create_calls = []
+    monkeypatch.setattr("widgets.media_widget.create_overlay_timer", lambda *args, **kwargs: create_calls.append((args, kwargs)))
+
+    timer = _FakeTimer()
+    handle = SimpleNamespace(_timer=timer)
+    stub = SimpleNamespace(
+        _is_idle=False,
+        _app_process_running=False,
+        _deep_idle_poll_interval=30000,
+        _idle_poll_interval=5000,
+        _poll_intervals=[1000, 2000, 2500],
+        _current_poll_stage=1,
+        _update_timer_handle=handle,
+        _update_timer=timer,
+        _update_timer_interval_ms=2000,
+    )
+
+    MediaWidget._ensure_timer(stub, force=False)
+
+    assert create_calls == []
+    assert timer.set_intervals == []
+    assert timer.start_calls == 0
+    assert stub._update_timer_interval_ms == 2000
+
+
+def test_media_ensure_timer_retunes_active_timer_in_place(monkeypatch) -> None:
+    class _FakeTimer:
+        def __init__(self) -> None:
+            self.set_intervals = []
+            self.start_calls = 0
+
+        def isActive(self) -> bool:
+            return True
+
+        def setInterval(self, interval: int) -> None:
+            self.set_intervals.append(interval)
+
+        def start(self) -> None:
+            self.start_calls += 1
+
+    create_calls = []
+    monkeypatch.setattr("widgets.media_widget.create_overlay_timer", lambda *args, **kwargs: create_calls.append((args, kwargs)))
+
+    timer = _FakeTimer()
+    handle = SimpleNamespace(_timer=timer)
+    stub = SimpleNamespace(
+        _is_idle=False,
+        _app_process_running=False,
+        _deep_idle_poll_interval=30000,
+        _idle_poll_interval=5000,
+        _poll_intervals=[1000, 2000, 2500],
+        _current_poll_stage=2,
+        _update_timer_handle=handle,
+        _update_timer=timer,
+        _update_timer_interval_ms=2000,
+    )
+
+    MediaWidget._ensure_timer(stub, force=True)
+
+    assert create_calls == []
+    assert timer.set_intervals == [2500]
+    assert timer.start_calls == 1
+    assert stub._update_timer_interval_ms == 2500
+
+
 def test_media_clear_pending_state_timer_uses_canonical_reset() -> None:
     stub = SimpleNamespace()
     calls = []
