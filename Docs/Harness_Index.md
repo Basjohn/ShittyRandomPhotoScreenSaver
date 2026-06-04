@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-05-08
+Last updated: 2026-06-04
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -66,6 +66,18 @@ python tools/media_key_reality_harness.py --profile-mode mirrored --scenario foc
 ### Visualizer distribution harness
 - Purpose: inspect transition-random distribution or mode-selection skew over longer sessions.
 - Tool: `tools/visualizer_distribution_harness.py`
+
+### Bubble historical parity harness
+- Purpose: compare current Bubble curated preset behavior against historical-good revisions when present-day runtime bars are no longer trustworthy.
+- Tool: `tools/bubble_parity_harness.py`
+- Typical commands:
+```powershell
+python tools/bubble_parity_harness.py --preset preset_1_deep_sea.json
+python tools/bubble_parity_harness.py --preset preset_9_deap_sea_experimental.json
+```
+- Notes:
+  - compares current BubbleSimulation against `9d4925e` and `510520e`
+  - use alongside authored widget-path tests, not instead of them
 
 ### Preset repair tool
 - Purpose: audit, repair, and reindex visualizer preset payloads without hand-edit drift.

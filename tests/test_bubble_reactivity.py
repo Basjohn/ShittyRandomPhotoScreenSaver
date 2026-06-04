@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import copy
 import math
+import pathlib
 import random
+import subprocess
+import sys
 from types import SimpleNamespace
+import types
 
 import pytest
 
@@ -110,6 +114,142 @@ def _snapshot_big_radii(
         if bubble.is_big and not bubble.exiting:
             radii.append(pos_data[idx * 4 + 2])
     return radii
+
+
+def _snapshot_max_radius(
+    sim,
+    *,
+    bass: float,
+    mid_high: float,
+    big_bass_pulse=0.9,
+    small_freq_pulse=0.5,
+):
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=bass,
+        mid_high=mid_high,
+        big_bass_pulse=big_bass_pulse,
+        small_freq_pulse=small_freq_pulse,
+    )
+    return max((pos_data[i] for i in range(2, len(pos_data), 4)), default=0.0)
+
+
+def _snapshot_small_max_radius(
+    sim,
+    *,
+    big_bass_pulse=0.9,
+    small_freq_pulse=0.5,
+):
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=0.0,
+        mid_high=0.0,
+        big_bass_pulse=big_bass_pulse,
+        small_freq_pulse=small_freq_pulse,
+    )
+    radii = []
+    for idx, bubble in enumerate(sim._bubbles):
+        if (not bubble.is_big) and not bubble.exiting:
+            radii.append(pos_data[idx * 4 + 2])
+    return max(radii, default=0.0)
+
+
+def _big_lane_metrics(
+    sim,
+    *,
+    big_bass_pulse=0.9,
+    small_freq_pulse=0.5,
+    big_specular_max_size=1.5,
+    big_contraction_bias=0.55,
+    big_size_clamp=3.14,
+):
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=0.0,
+        mid_high=0.0,
+        big_bass_pulse=big_bass_pulse,
+        small_freq_pulse=small_freq_pulse,
+        big_specular_max_size=big_specular_max_size,
+        big_contraction_bias=big_contraction_bias,
+        big_size_clamp=big_size_clamp,
+    )
+    big_active = 0
+    big_count = 0
+    big_radius_deltas = []
+    small_radius_deltas = []
+    for idx, bubble in enumerate(sim._bubbles):
+        if bubble.exiting:
+            continue
+        render_radius = pos_data[idx * 4 + 2]
+        delta = max(0.0, render_radius - bubble.radius)
+        if bubble.is_big:
+            big_count += 1
+            if bubble.pulse_energy > 0.04:
+                big_active += 1
+            big_radius_deltas.append(delta)
+        else:
+            small_radius_deltas.append(delta)
+    diag = sim.get_big_lane_diagnostics()
+    return {
+        "big_count": big_count,
+        "big_active": big_active,
+        "big_active_ratio": (big_active / big_count) if big_count else 0.0,
+        "max_big_delta": max(big_radius_deltas, default=0.0),
+        "avg_big_delta": (sum(big_radius_deltas) / len(big_radius_deltas)) if big_radius_deltas else 0.0,
+        "max_small_delta": max(small_radius_deltas, default=0.0),
+        "max_big_pulse": float(diag.get("max_big_pulse_after", 0.0)),
+        "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
+    }
+
+
+def _render_lane_metrics(
+    sim,
+    *,
+    big_bass_pulse=0.9,
+    small_freq_pulse=0.5,
+    big_contraction_bias=0.55,
+    big_size_clamp=3.14,
+):
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=0.0,
+        mid_high=0.0,
+        big_bass_pulse=big_bass_pulse,
+        small_freq_pulse=small_freq_pulse,
+        big_contraction_bias=big_contraction_bias,
+        big_size_clamp=big_size_clamp,
+    )
+    big_render = []
+    small_render = []
+    for idx, bubble in enumerate(sim._bubbles):
+        if bubble.exiting:
+            continue
+        render_radius = pos_data[idx * 4 + 2]
+        row = (bubble.radius, render_radius, max(0.0, render_radius - bubble.radius))
+        if bubble.is_big:
+            big_render.append(row)
+        else:
+            small_render.append(row)
+    render_diag = sim.get_big_render_diagnostics() if hasattr(sim, "get_big_render_diagnostics") else {}
+    return {
+        "big_max_render": max((r for _b, r, _d in big_render), default=0.0),
+        "big_avg_render": (sum(r for _b, r, _d in big_render) / len(big_render)) if big_render else 0.0,
+        "big_max_delta": max((d for _b, _r, d in big_render), default=0.0),
+        "small_max_render": max((r for _b, r, _d in small_render), default=0.0),
+        "small_avg_render": (sum(r for _b, r, _d in small_render) / len(small_render)) if small_render else 0.0,
+        "small_max_delta": max((d for _b, _r, d in small_render), default=0.0),
+        "clamp_hits": float(render_diag.get("big_clamp_hits", 0.0)),
+    }
+
+
+def _load_historical_bubble_module(rev: str):
+    root = pathlib.Path(__file__).resolve().parents[1]
+    src = subprocess.check_output(
+        ["git", "show", f"{rev}:widgets/spotify_visualizer/bubble_simulation.py"],
+        cwd=root,
+        text=True,
+    )
+    name = f"bubble_{rev}"
+    mod = types.ModuleType(name)
+    sys.modules[name] = mod
+    exec(src, mod.__dict__)
+    return mod
 
 
 class _SingleShotScheduler:
@@ -283,6 +423,60 @@ class TestSustainedLoudSection:
         spread = max(pulse_series) - min(pulse_series)
         assert spread > 0.035, (
             f"Hot-chorus pulse variance collapsed (spread={spread:.4f})"
+        )
+
+    def test_live_energy_raises_rendered_big_bubble_size(self):
+        """Louder live energy should grow rendered big bubbles, not invert them."""
+        sim = BubbleSimulation()
+        settings = _default_settings(bubble_big_count=4, bubble_small_count=10)
+        _warm_up(sim, settings, frames=24)
+
+        dt = 1 / 60
+        quiet = _energy(bass=0.18, mid=0.10, high=0.05)
+        loud = _energy(bass=0.74, mid=0.28, high=0.12)
+
+        for _ in range(18):
+            sim.tick(dt, quiet, settings)
+        low = _snapshot_max_radius(sim, bass=0.0, mid_high=0.0)
+
+        for _ in range(12):
+            sim.tick(dt, loud, settings)
+        high = _snapshot_max_radius(sim, bass=0.0, mid_high=0.0)
+
+        assert high > low + 0.008, (
+            f"Loud live energy only changed Bubble max radius by {high - low:.4f}; "
+            "the visible big-bubble lane is still too flat or inverted."
+        )
+
+    def test_live_energy_raises_rendered_small_bubble_size(self):
+        """Small bubbles should not stay visually dormant during live energy."""
+        sim = BubbleSimulation()
+        settings = _default_settings(bubble_big_count=4, bubble_small_count=12)
+        _warm_up(sim, settings, frames=24)
+
+        dt = 1 / 60
+        quiet = _energy(bass=0.14, mid=0.08, high=0.04)
+        loud = _energy(bass=0.22, mid=0.58, high=0.36)
+
+        for _ in range(18):
+            sim.tick(dt, quiet, settings)
+        low = _snapshot_small_max_radius(
+            sim,
+            big_bass_pulse=0.9,
+            small_freq_pulse=0.6,
+        )
+
+        for _ in range(12):
+            sim.tick(dt, loud, settings)
+        high = _snapshot_small_max_radius(
+            sim,
+            big_bass_pulse=0.9,
+            small_freq_pulse=0.6,
+        )
+
+        assert high > low + 0.0015, (
+            f"Loud live energy only changed small-bubble max radius by {high - low:.4f}; "
+            "the small-bubble lane is still too dormant."
         )
 
 
@@ -961,6 +1155,254 @@ class TestBubblePlateauGuardrails:
         assert peaks[-1] > 0.06, (
             f"Later big-bubble pulse collapsed to {peaks[-1]:.3f}; "
             "tiny authored changes can still kick Bubble into a dead-feeling state."
+        )
+
+    def test_big_bubble_lane_participates_in_soft_and_hot_phrases(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=45,
+            bubble_big_size_max=0.035,
+            bubble_small_size_max=0.012,
+            bubble_big_bass_pulse=0.8,
+            bubble_small_freq_pulse=0.6,
+            bubble_big_contraction_bias=0.5,
+            bubble_big_size_clamp=3.0,
+            bubble_stream_constant_speed=0.15,
+            bubble_stream_speed_cap=1.8,
+            bubble_stream_reactivity=0.9,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        soft = _energy(bass=0.28, mid=0.14, high=0.05)
+        hot = _energy(bass=0.72, mid=0.28, high=0.09)
+
+        soft_metrics = []
+        hot_metrics = []
+        for _ in range(90):
+            sim.tick(dt, soft, settings)
+            soft_metrics.append(_big_lane_metrics(sim))
+        for _ in range(90):
+            sim.tick(dt, hot, settings)
+            hot_metrics.append(_big_lane_metrics(sim))
+
+        assert soft_metrics and hot_metrics
+        soft_active_peak = max(m["big_active_ratio"] for m in soft_metrics)
+        hot_active_peak = max(m["big_active_ratio"] for m in hot_metrics)
+        soft_delta_peak = max(m["max_big_delta"] for m in soft_metrics)
+        hot_delta_peak = max(m["max_big_delta"] for m in hot_metrics)
+        soft_pulse_peak = max(m["max_big_pulse"] for m in soft_metrics)
+        hot_pulse_peak = max(m["max_big_pulse"] for m in hot_metrics)
+
+        assert soft_metrics[0]["big_count"] >= 6, "Expected the authored Deep Sea-style big population to be present."
+        assert soft_active_peak >= 0.50, (
+            f"Soft phrase only activated {soft_active_peak:.2f} of the big-bubble lane at its best; "
+            "the hero lane is still effectively dead while small bubbles can move."
+        )
+        assert soft_delta_peak > 0.004, (
+            f"Soft phrase only produced {soft_delta_peak:.4f} of visible big-bubble growth."
+        )
+        assert hot_active_peak >= 0.83, (
+            f"Hot phrase only activated {hot_active_peak:.2f} of the big-bubble lane."
+        )
+        assert hot_delta_peak > soft_delta_peak * 1.35, (
+            "Hot phrase still is not growing the hero lane clearly beyond the soft phrase."
+        )
+        assert hot_pulse_peak > soft_pulse_peak * 1.30, (
+            "Hot phrase pulse authority is not clearly separating from the soft phrase in the big lane."
+        )
+
+    def test_small_lane_reactivity_cannot_mask_dead_big_bubbles(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=45,
+            bubble_big_size_max=0.04,
+            bubble_small_size_max=0.012,
+            bubble_big_bass_pulse=1.01,
+            bubble_small_freq_pulse=0.6,
+            bubble_big_contraction_bias=0.5,
+            bubble_big_size_clamp=5.61,
+            bubble_stream_constant_speed=0.15,
+            bubble_stream_speed_cap=1.8,
+            bubble_stream_reactivity=0.9,
+        )
+        _warm_up(sim, settings, frames=60)
+
+        dt = 1 / 60
+        phrase = _energy(bass=0.34, mid=0.18, high=0.06)
+        metrics_series = []
+        for _ in range(120):
+            sim.tick(dt, phrase, settings)
+            metrics_series.append(_big_lane_metrics(sim))
+
+        assert metrics_series
+        max_small_delta = max(m["max_small_delta"] for m in metrics_series)
+        max_big_active = max(m["big_active_ratio"] for m in metrics_series)
+        max_big_avg_delta = max(m["avg_big_delta"] for m in metrics_series)
+        max_big_pulse = max(m["max_big_pulse"] for m in metrics_series)
+
+        assert max_small_delta > 0.002, "Need a live small lane for this regression guard."
+        assert max_big_active >= 0.50, (
+            f"Small bubbles stayed live, but only {max_big_active:.2f} of big bubbles participated."
+        )
+        assert max_big_avg_delta > max_small_delta * 0.55, (
+            "Small-bubble reactivity is still masking an almost dormant big-bubble lane."
+        )
+        assert max_big_pulse > 0.08, (
+            f"Conservative phrase only pushed big-bubble pulse to {max_big_pulse:.4f}."
+        )
+
+    def test_hot_preset_1_big_render_stays_near_510520e_shape(self):
+        payload = {
+            "bubble_big_count": 6,
+            "bubble_small_count": 45,
+            "bubble_surface_reach": 0.75,
+            "bubble_stream_direction": "up",
+            "bubble_stream_constant_speed": 0.15,
+            "bubble_stream_speed_cap": 1.8,
+            "bubble_stream_reactivity": 0.9,
+            "bubble_rotation_amount": 0.15,
+            "bubble_drift_amount": 0.5,
+            "bubble_drift_speed": 0.3,
+            "bubble_drift_frequency": 0.5,
+            "bubble_drift_direction": "swish_horizontal",
+            "bubble_big_size_max": 0.035,
+            "bubble_small_size_max": 0.012,
+            "bubble_trail_strength": 0.8,
+            "bubble_bounce_big_pct": 0.0,
+            "bubble_bounce_small_pct": 5.0,
+            "bubble_bounce_big_speed": 0.2,
+            "bubble_bounce_small_speed": 0.4,
+            "bubble_bounce_same_only": True,
+            "bubble_collision_pop_mode": "off",
+            "bubble_big_bass_pulse": 0.8,
+            "bubble_small_freq_pulse": 0.6,
+            "bubble_big_contraction_bias": 0.5,
+            "bubble_big_size_clamp": 3.0,
+        }
+        settings = _default_settings(**payload)
+        quiet = _energy(bass=0.15, mid=0.10, high=0.05)
+        hot = _energy(bass=1.55, mid=0.65, high=0.16)
+
+        current = BubbleSimulation()
+        _warm_up(current, settings, frames=80)
+        for _ in range(24):
+            current.tick(1 / 60, hot, settings)
+        current_metrics = _render_lane_metrics(
+            current,
+            big_bass_pulse=payload["bubble_big_bass_pulse"],
+            small_freq_pulse=payload["bubble_small_freq_pulse"],
+            big_contraction_bias=payload["bubble_big_contraction_bias"],
+            big_size_clamp=payload["bubble_big_size_clamp"],
+        )
+
+        hist_mod = _load_historical_bubble_module("510520e")
+        historical = hist_mod.BubbleSimulation()
+        for _ in range(80):
+            historical.tick(1 / 60, quiet, settings)
+        for _ in range(24):
+            historical.tick(1 / 60, hot, settings)
+        historical_metrics = _render_lane_metrics(
+            historical,
+            big_bass_pulse=payload["bubble_big_bass_pulse"],
+            small_freq_pulse=payload["bubble_small_freq_pulse"],
+            big_contraction_bias=payload["bubble_big_contraction_bias"],
+            big_size_clamp=payload["bubble_big_size_clamp"],
+        )
+
+        assert current_metrics["big_max_render"] >= historical_metrics["big_max_render"] * 0.97, (
+            "Current Bubble still renders the Deep Sea hero lane smaller than the 510520e anchor "
+            f"({current_metrics['big_max_render']:.4f} vs {historical_metrics['big_max_render']:.4f})."
+        )
+        assert current_metrics["big_avg_render"] >= historical_metrics["big_avg_render"] * 0.97, (
+            "Current Bubble still renders the average Deep Sea big-bubble lane below the 510520e anchor "
+            f"({current_metrics['big_avg_render']:.4f} vs {historical_metrics['big_avg_render']:.4f})."
+        )
+
+    def test_live_big_size_edits_increase_big_render_authority(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=45,
+            bubble_big_size_max=0.035,
+            bubble_small_size_max=0.012,
+            bubble_big_bass_pulse=0.8,
+            bubble_small_freq_pulse=0.6,
+            bubble_big_contraction_bias=0.5,
+            bubble_big_size_clamp=3.0,
+            bubble_stream_constant_speed=0.15,
+            bubble_stream_speed_cap=1.8,
+            bubble_stream_reactivity=0.9,
+        )
+        _warm_up(sim, settings, frames=80)
+        hot = _energy(bass=1.55, mid=0.65, high=0.16)
+
+        for _ in range(24):
+            sim.tick(1 / 60, hot, settings)
+        before = _render_lane_metrics(
+            sim,
+            big_bass_pulse=settings["bubble_big_bass_pulse"],
+            small_freq_pulse=settings["bubble_small_freq_pulse"],
+            big_contraction_bias=settings["bubble_big_contraction_bias"],
+            big_size_clamp=settings["bubble_big_size_clamp"],
+        )
+
+        boosted = copy.deepcopy(settings)
+        boosted["bubble_big_size_max"] = 0.045
+        boosted["bubble_big_size_clamp"] = 4.8
+        boosted["bubble_big_bass_pulse"] = 0.95
+        for _ in range(36):
+            sim.tick(1 / 60, hot, boosted)
+        after = _render_lane_metrics(
+            sim,
+            big_bass_pulse=boosted["bubble_big_bass_pulse"],
+            small_freq_pulse=boosted["bubble_small_freq_pulse"],
+            big_contraction_bias=boosted["bubble_big_contraction_bias"],
+            big_size_clamp=boosted["bubble_big_size_clamp"],
+        )
+
+        assert after["big_max_render"] > before["big_max_render"] + 0.010, (
+            "Live big-bubble size edits still barely move the visible hero lane."
+        )
+        assert after["big_avg_render"] > before["big_avg_render"] + 0.008, (
+            "Live big-bubble size edits still are not changing the average visible hero lane enough."
+        )
+
+    def test_sustained_bass_hot_keeps_small_lane_alive(self):
+        sim = BubbleSimulation()
+        settings = _default_settings(
+            bubble_big_count=6,
+            bubble_small_count=45,
+            bubble_big_size_max=0.035,
+            bubble_small_size_max=0.012,
+            bubble_big_bass_pulse=0.8,
+            bubble_small_freq_pulse=0.6,
+            bubble_big_contraction_bias=0.5,
+            bubble_big_size_clamp=3.0,
+            bubble_stream_constant_speed=0.15,
+            bubble_stream_speed_cap=1.8,
+            bubble_stream_reactivity=0.9,
+        )
+        _warm_up(sim, settings, frames=80)
+
+        sustained_bass_hot = _energy(bass=1.60, mid=0.15, high=0.03)
+        for _ in range(60):
+            sim.tick(1 / 60, sustained_bass_hot, settings)
+        metrics = _render_lane_metrics(
+            sim,
+            big_bass_pulse=settings["bubble_big_bass_pulse"],
+            small_freq_pulse=settings["bubble_small_freq_pulse"],
+            big_contraction_bias=settings["bubble_big_contraction_bias"],
+            big_size_clamp=settings["bubble_big_size_clamp"],
+        )
+
+        assert metrics["small_max_render"] > 0.020, (
+            "Small bubbles still collapse too far during sustained bass-heavy loud passages."
+        )
+        assert metrics["small_avg_render"] > 0.013, (
+            "Small bubbles still look too dormant on sustained loud passages."
         )
 
     def test_post_initial_refill_does_not_spawn_a_backlog_wave_in_one_tick(self):

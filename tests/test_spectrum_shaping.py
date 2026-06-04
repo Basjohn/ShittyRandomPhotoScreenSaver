@@ -99,16 +99,6 @@ class TestSpectrumShapeConfig:
         assert "float bar_width = u_bar_width_px;" in src
         assert "float bars_left = u_bars_left;" in src
 
-    def test_minimum_value_for_visible_segments_grows_with_visibility_demand(self):
-        from widgets.spotify_visualizer.renderers.spectrum import minimum_value_for_visible_segments
-
-        one_seg = minimum_value_for_visible_segments(400.0, 64, 1.15)
-        two_seg = minimum_value_for_visible_segments(400.0, 64, 1.85)
-
-        assert one_seg > 0.0
-        assert two_seg > one_seg
-        assert two_seg < 0.05
-
 
 class TestSpectrumShapeEditorNotches:
     @staticmethod

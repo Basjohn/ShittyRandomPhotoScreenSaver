@@ -7,7 +7,7 @@
     "widgets": {
       "spotify_visualizer": {
         "bubble_adaptive_sensitivity": true,
-        "bubble_agc_strength": 0.2,
+        "bubble_agc_strength": 0.3,
         "bubble_audio_block_size": 128,
         "bubble_bar_count": 48,
         "bubble_big_bass_pulse": 1.0,
@@ -26,7 +26,7 @@
         "bubble_drift_direction": "swish_horizontal",
         "bubble_drift_frequency": 0.4,
         "bubble_drift_speed": 0.15,
-        "bubble_dynamic_floor": true,
+        "bubble_dynamic_floor": false,
         "bubble_dynamic_range_enabled": false,
         "bubble_ghost_alpha": 0.2,
         "bubble_ghost_decay": 0.7,

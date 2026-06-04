@@ -52,60 +52,12 @@ def _mode_requires_fresh_waveform(mode_str: str) -> bool:
 
 def _mode_allows_idle_reveal_key(mode_str: str) -> bool:
     """Return True when a mode may reveal or animate while paused."""
-    return str(mode_str or "").lower() in {"bubble", "sine_wave", "devcurve", "spectrum"}
-
-
-def _mode_allows_idle_floor_key(mode_str: str) -> bool:
-    """Return True when a mode may surface a paused idle floor without audio authority."""
-    return str(mode_str or "").lower() in {"bubble", "sine_wave", "devcurve", "spectrum"}
+    return str(mode_str or "").lower() in {"bubble", "sine_wave", "devcurve"}
 
 
 def _mode_requires_authoritative_first_source(mode_str: str) -> bool:
     """Return True when first visible output must come from a fresh source-tracked frame."""
     return not _mode_allows_idle_reveal_key(mode_str)
-
-
-def _apply_spectrum_idle_visibility_floor(
-    widget: Any,
-    bars: list[float],
-    now_ts: float,
-) -> list[float]:
-    """Keep paused Spectrum visibly alive at the rendered-segment level.
-
-    The shared beat engine already provides a low-energy idle seed, but very
-    small values can still collapse to a dead-looking bar field once Spectrum's
-    segmented shader, card height, and bottom-border geometry are involved.
-    This helper keeps a tiny, segment-aware idle floor only while Spectrum is
-    genuinely non-playing, without touching live audio-driven reactivity.
-    """
-    if str(getattr(widget, "_vis_mode_str", "") or "").lower() != "spectrum":
-        return list(bars)
-    if bool(getattr(widget, "_spotify_playing", False)):
-        return list(bars)
-
-    # Keep this contract deliberately simple and isolated from live audio:
-    # a small paused-only floor that is safely above Spectrum's visually dead
-    # range once card borders, segmented bars, and renderer rounding are
-    # accounted for.
-    edge_floor = 0.090
-    center_floor = 0.114
-
-    count = max(1, int(getattr(widget, "_bar_count", len(bars) or 1)))
-    phase = now_ts * 0.085
-    out = list(bars[:count])
-    if len(out) < count:
-        out.extend([0.0] * (count - len(out)))
-
-    denom = float(max(1, count - 1))
-    for i in range(count):
-        x = float(i) / denom
-        center_env = max(0.0, 1.0 - abs((x * 2.0) - 1.0))
-        wave = 0.5 + 0.5 * math.sin((x * math.tau * 0.85) + phase)
-        desired = edge_floor + center_env * (center_floor - edge_floor)
-        desired += edge_floor * 0.10 * wave
-        out[i] = max(float(out[i]), desired)
-
-    return out
 
 
 # ------------------------------------------------------------------
@@ -592,7 +544,7 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     if (
         widget._waiting_for_fresh_engine_frame
         and not widget._spotify_playing
-        and _mode_allows_idle_floor_key(getattr(widget, "_vis_mode_str", ""))
+        and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
         and (
             not bool(getattr(widget, "_startup_idle_reveal_requires_authoritative_media", False))
             or bool(getattr(widget, "_startup_has_authoritative_media_update", False))
@@ -645,8 +597,6 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
 
     # Get pre-smoothed bars from engine (smoothing done on COMPUTE pool)
     smoothed = engine.get_smoothed_bars()
-    if not widget._spotify_playing:
-        smoothed = _apply_spectrum_idle_visibility_floor(widget, smoothed, now_ts)
 
     # Capture engine generation/activation for source tracking
     try:

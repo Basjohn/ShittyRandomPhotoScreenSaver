@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-01
+Last updated: 2026-06-04
 
 Living map of the current SRPSS codebase.
 
@@ -74,6 +74,7 @@ Living map of the current SRPSS codebase.
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, canonical default-mode fallback, and key-prefix ownership |
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
+| Bubble parity harness | `tools/bubble_parity_harness.py` | Historical comparison harness for Bubble curated presets against `9d4925e` / `510520e`, used when Deep Sea regressions are too severe for present-day proxy bars to be trusted |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, and ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, and deferred warmup of remaining visualizer mode programs |
 | Overlay diagnostics | `widgets/spotify_visualizer/overlay_diagnostics.py` | Passive overlay diagnostics for Glow, Blob, and Sine idle-state logging, extracted so diagnostic payload assembly stays outside render authority code |
@@ -93,6 +94,7 @@ Living map of the current SRPSS codebase.
 | Media bridge | `widgets/spotify_visualizer/media_bridge.py` | Media state tracking, anchor seeding, pause-confirmed playback authority, startup seed-trust classification for provisional non-playing shared-cache seeds, and GL overlay teardown |
 | Engine lifecycle | `widgets/spotify_visualizer/engine_lifecycle.py` | Engine reset, audio fallback, wake, generation tracking, and capture/no-capture lifecycle routing |
 | Beat engine | `widgets/spotify_visualizer/beat_engine.py` | Shared audio worker/capture lifecycle plus paused idle waveform/bar seeding, short warm-capture grace across real-world play/pause wobble, and Bubble's pressure-aware raw-band continuous feed |
+| Bubble simulation | `widgets/spotify_visualizer/bubble_simulation.py` | CPU-side Bubble particle simulation, two-lane Bubble sizing/gating (hero big lane plus small/medium lane), live size-envelope adaptation for existing bubbles, and per-frame big-lane diagnostics used by the authored Deep Sea regression bars |
 | Technical config | `widgets/spotify_visualizer/technical_config.py` | Per-mode technical cache building, runtime override replacement, mode→engine/overlay technical application |
 | Activation runtime | `widgets/spotify_visualizer/activation_runtime.py` | Settings-model apply, resolved activation payload application, and full-runtime mode replay without touching first-frame authority gates |
 | Runtime config | `widgets/spotify_visualizer/runtime_config.py` | Shared engine/thread/process/audio-block/runtime-bar-state coordination extracted from the widget coordinator; live audio-block changes now flow through the worker's capture-restart seam instead of waiting for a full runtime rebuild, early ThreadManager hookup defers authoritative engine replay until startup activation has seeded mode-owned technical config, and external runtime setters plus bar-buffer resize now resolve/rebind engine dependencies and prefer authoritative replay when that contract is ready |

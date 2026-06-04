@@ -63,6 +63,7 @@ class BubbleState:
     popping: bool = False
     pop_timer: float = 0.0
     pulse_energy: float = 0.0  # smoothed energy for size pulse (attack fast, decay slow)
+    size_bias: float = 1.0      # spawn-time size percentile within the authored lane
     spec_size_mut: float = 1.0   # per-bubble specular size mutation (0.7–1.4)
     spec_ox: float = 0.0         # per-bubble specular offset X mutation (-0.08..0.08)
     spec_oy: float = 0.0         # per-bubble specular offset Y mutation (-0.08..0.08)
@@ -208,6 +209,8 @@ class BubbleSimulation:
         self._prev_bass: float = 0.0  # previous frame bass for slope detection
         self._stream_burst_envelope: float = 0.0
         self._pair_bounce_cooldowns: Dict[Tuple[int, int], float] = {}
+        self._last_big_lane_diag: Dict[str, float] = {}
+        self._last_big_render_diag: Dict[str, float] = {}
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -227,10 +230,20 @@ class BubbleSimulation:
         self._prev_bass = 0.0
         self._stream_burst_envelope = 0.0
         self._pair_bounce_cooldowns.clear()
+        self._last_big_lane_diag = {}
+        self._last_big_render_diag = {}
 
     @property
     def count(self) -> int:
         return len(self._bubbles)
+
+    def get_big_lane_diagnostics(self) -> Dict[str, float]:
+        """Return the latest big-bubble lane diagnostic snapshot."""
+        return dict(self._last_big_lane_diag)
+
+    def get_big_render_diagnostics(self) -> Dict[str, float]:
+        """Return the latest rendered big-bubble snapshot diagnostics."""
+        return dict(self._last_big_render_diag)
 
     def tick(self, dt: float, energy_bands: Optional[object], settings: Dict) -> None:
         """Advance simulation by *dt* seconds."""
@@ -306,6 +319,20 @@ class BubbleSimulation:
                     stream_const, stream_cap, stream_reactivity,
                 )
 
+        big_lane_diag = {
+            "big_count": 0.0,
+            "active_big_count": 0.0,
+            "dormant_big_count": 0.0,
+            "max_big_raw_src": 0.0,
+            "max_big_delta_component": 0.0,
+            "max_big_sustained_component": 0.0,
+            "max_big_accent_component": 0.0,
+            "max_big_hold_component": 0.0,
+            "max_big_gated_energy": 0.0,
+            "max_big_pulse_before": 0.0,
+            "max_big_pulse_after": 0.0,
+        }
+
         # --- Beat detection (§2.4 scheduler-first, delta fallback) ---
         # Event micro-scheduler provides consume-once kick events so each
         # detected beat drives exactly one promotion batch.  Falls back to
@@ -363,7 +390,7 @@ class BubbleSimulation:
                 promote_count = min(2, max(1, int(len(small_pool) * promote_frac)))
                 promote_duration = 0.45 + 0.12 * beat_strength
             else:
-                if big_hotness < 0.45:
+                if big_hotness < 0.35:
                     promote_count = 0
                 else:
                     promote_count = 1
@@ -529,6 +556,23 @@ class BubbleSimulation:
             if b.bounce_glide > 0.0:
                 b.bounce_glide = max(0.0, b.bounce_glide - dt)
 
+            # Live builder edits should affect the existing field too. Without
+            # a shared envelope adaptation seam, Custom big-bubble size/clamp
+            # changes can look broken because only newly spawned bubbles ever
+            # learn the new authored size range.
+            if b.is_big:
+                target_center = max(0.016, self._big_size_max)
+                target_lo = target_center * 0.72
+                target_hi = target_center * 1.34
+            else:
+                target_center = max(0.005, self._small_size_max)
+                target_lo = target_center * 0.58
+                target_hi = target_center * 1.48
+            target_radius = min(target_hi, max(target_lo, target_center * max(0.50, float(getattr(b, "size_bias", 1.0) or 1.0))))
+            if abs(target_radius - b.radius) > 1e-4:
+                adapt_rate = 5.8 if b.is_big else 2.8
+                b.radius += (target_radius - b.radius) * min(1.0, dt * adapt_rate)
+
             # Fade-in ramp for initial-fill bubbles (alpha starts at 0)
             if b.alpha < 1.0 and not b.popping:
                 b.alpha = min(1.0, b.alpha + dt / 1.5)
@@ -629,16 +673,17 @@ class BubbleSimulation:
                 if b.is_big:
                     size_range = max(0.001, self._big_size_max - 0.015)
                     size_t = min(1.0, max(0.0, (b.radius - 0.015) / size_range))
-                    # The stricter sustain path fixed easy ceilinging, but it
-                    # also made big-bubble life too brittle: tiny authored
-                    # changes could collapse the whole big lane into a dead
-                    # state. Keep the improved overdrive/release behavior, but
-                    # restore more of the older big-lane sustain authority.
-                    delta_sens = 3.05 - size_t * 0.9
-                    sustained_knee = 0.46 + size_t * 0.16
-                    sustained_scale = 0.30 - size_t * 0.10
-                    attack_rate = 11.0 - size_t * 3.0
-                    decay_rate = 2.85 + size_t * 1.0
+                    # Big bubbles are the hero lane. Keep them more
+                    # excursion-driven than sustained so they visibly grow on
+                    # strong hits and contract back toward their authored base.
+                    # They also need a lower continuous threshold than before;
+                    # otherwise soft phrases keep the small lane alive while
+                    # the big lane goes completely dormant.
+                    delta_sens = 4.40 - size_t * 0.70
+                    sustained_knee = 0.20 + size_t * 0.09
+                    sustained_scale = 0.22 - size_t * 0.02
+                    attack_rate = 11.8 - size_t * 1.5
+                    decay_rate = 5.80 + size_t * 0.90
                 else:
                     # Promoted smalls should add a brief extra accent when the
                     # main big bubbles are already busy, not become a durable
@@ -650,19 +695,39 @@ class BubbleSimulation:
                     attack_rate = 15.0
                     decay_rate = 7.2
             else:
-                raw_src = mid * 0.6 + high * 0.4
-                running_avg = self._midhi_running_avg
                 size_range = max(0.001, self._small_size_max - 0.004)
                 size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
-                delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
-                sustained_knee = 0.25 + size_t * 0.15
-                sustained_scale = 0.50 - size_t * 0.10
-                attack_rate = 14.0 - size_t * 3.0
-                decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
+                chorus_support = soft_ceiling(
+                    max(0.0, overall - (0.16 + size_t * 0.05)),
+                    knee=0.0,
+                    ceiling=0.18 - size_t * 0.03,
+                    max_input=0.82,
+                    curve=1.00,
+                )
+                bass_support = soft_ceiling(
+                    max(0.0, bass - (0.42 + size_t * 0.10)),
+                    knee=0.0,
+                    ceiling=0.08,
+                    max_input=1.40,
+                    curve=1.00,
+                )
+                raw_src = mid * 0.50 + high * 0.28 + chorus_support + bass_support
+                running_avg = self._midhi_running_avg
+                delta_sens = 4.4 - size_t * 1.1
+                sustained_knee = 0.20 + size_t * 0.13
+                sustained_scale = 0.60 - size_t * 0.10
+                attack_rate = 15.5 - size_t * 2.5
+                decay_rate = 1.5 if b.radius < 0.008 else (3.0 + size_t * 1.3)
 
             # Delta component: transient punch (noise gate: ignore sub-perceptual deltas)
-            delta = max(0.0, raw_src - running_avg)
-            delta = max(0.0, delta - 0.015)  # suppress jitter below threshold
+            if b.is_big:
+                delta_reference = max(running_avg * 1.03, 0.18 + size_t * 0.08)
+                delta = max(0.0, raw_src - delta_reference)
+                delta_gate = 0.0015
+            else:
+                delta = max(0.0, raw_src - running_avg)
+                delta_gate = 0.004 if use_bass else 0.006
+            delta = max(0.0, delta - delta_gate)  # suppress tiny jitter without killing motion
             delta_component = min(1.0, delta * delta_sens)
 
             # Sustained component: absolute energy through perceptual curve
@@ -674,12 +739,67 @@ class BubbleSimulation:
                 t = (perceptual_src - sustained_knee) / max(0.01, 1.0 - sustained_knee)
                 sustained_component = min(sustained_scale, t * sustained_scale)
 
-            gated_energy = min(1.0, max(delta_component, sustained_component))
+            accent_gate = sustained_knee * (0.72 if use_bass else 0.64)
+            accent_src = max(0.0, raw_src - accent_gate)
+            accent_ceiling = 0.32 if use_bass else 0.24
+            accent_component = soft_ceiling(
+                accent_src,
+                knee=0.0,
+                ceiling=accent_ceiling,
+                max_input=max(0.12, 1.0 - accent_gate),
+                curve=1.0,
+            )
+            hold_component = 0.0
+            if b.is_big:
+                # Big bubbles need a dedicated sustained-loud hold lane or the
+                # running-average delta logic gradually starves them during hot
+                # choruses. Keep this hero lane independent of dynamic floor:
+                # loud passages should stay visibly alive, but soft passages
+                # must still sit lower and contraction on drops must survive.
+                hold_gate = 0.28 + size_t * 0.06
+                hold_component = soft_ceiling(
+                    max(0.0, raw_src - hold_gate),
+                    knee=0.0,
+                    ceiling=0.72 - size_t * 0.05,
+                    max_input=max(0.18, 0.96 - hold_gate),
+                    curve=1.02,
+                )
+
+            gated_energy = min(
+                1.0,
+                max(delta_component, sustained_component, accent_component, hold_component),
+            )
+            pulse_before = b.pulse_energy
 
             if gated_energy > b.pulse_energy:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
             else:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
+
+            if b.is_big:
+                big_lane_diag["big_count"] += 1.0
+                big_lane_diag["max_big_raw_src"] = max(big_lane_diag["max_big_raw_src"], raw_src)
+                big_lane_diag["max_big_delta_component"] = max(
+                    big_lane_diag["max_big_delta_component"],
+                    delta_component,
+                )
+                big_lane_diag["max_big_sustained_component"] = max(
+                    big_lane_diag["max_big_sustained_component"],
+                    sustained_component,
+                )
+                big_lane_diag["max_big_accent_component"] = max(
+                    big_lane_diag["max_big_accent_component"],
+                    accent_component,
+                )
+                big_lane_diag["max_big_hold_component"] = max(
+                    big_lane_diag["max_big_hold_component"],
+                    hold_component,
+                )
+                big_lane_diag["max_big_gated_energy"] = max(big_lane_diag["max_big_gated_energy"], gated_energy)
+                big_lane_diag["max_big_pulse_before"] = max(big_lane_diag["max_big_pulse_before"], pulse_before)
+                big_lane_diag["max_big_pulse_after"] = max(big_lane_diag["max_big_pulse_after"], b.pulse_energy)
+                if b.pulse_energy > 0.04:
+                    big_lane_diag["active_big_count"] += 1.0
 
             # Rotation (wobble)
             vocal_energy = mid * 0.7 + bass * 0.2 + high * 0.1
@@ -789,6 +909,12 @@ class BubbleSimulation:
                                       initial_fill=is_initial)
                 small_count += 1
                 small_spawn_budget -= 1
+
+        big_lane_diag["dormant_big_count"] = max(
+            0.0,
+            big_lane_diag["big_count"] - big_lane_diag["active_big_count"],
+        )
+        self._last_big_lane_diag = big_lane_diag
 
     def _spawn_bubble(self, is_big: bool, stream_dir: str,
                       surface_reach: float, drift_dir: str) -> None:
@@ -1092,7 +1218,19 @@ class BubbleSimulation:
         """Approximate rendered radius so collision and visuals stay aligned."""
         is_tiny = (not bubble.is_big) and bubble.radius < 0.008
         if bubble.is_big:
-            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2
+            size_weight = min(
+                1.0,
+                max(0.0, (bubble.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
+            )
+            pulse_setting = soft_ceiling(
+                big_bass_pulse,
+                knee=0.58,
+                ceiling=0.94,
+                max_input=1.10,
+                curve=1.00,
+            )
+            pulse_scale = 4.10 + pulse_setting * 1.10 + size_weight * 0.65
+            pulse_factor = 1.0 + bubble.pulse_energy * pulse_scale
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
         else:
@@ -1179,6 +1317,7 @@ class BubbleSimulation:
             lo = center * 0.55
             hi = center * 1.45
             radius = random.uniform(lo, hi)
+        size_bias = radius / max(1e-6, center)
 
         # Per-bubble velocity for random stream direction.
         vx, vy = 0.0, 0.0
@@ -1261,6 +1400,7 @@ class BubbleSimulation:
             age=age, max_age=max_age, alpha=alpha,
             drift_bias=drift_bias, rotation=0.0,
             vx=vx, vy=vy, speed_mult=speed_mult,
+            size_bias=size_bias,
             spec_size_mut=spec_size_mut, spec_ox=spec_ox, spec_oy=spec_oy,
             trail_tail_x=x, trail_tail_y=y,
         )
@@ -1428,22 +1568,44 @@ class BubbleSimulation:
         extra_data: List[float] = []
         trail_data: List[float] = []
         _snap_diag = (self._diag_tick_count <= 5 or self._diag_tick_count % 60 == 0)
-
+        big_render_diag = {
+            "big_render_count": 0.0,
+            "big_clamp_hits": 0.0,
+            "max_big_render_radius": 0.0,
+            "max_big_render_delta": 0.0,
+            "avg_big_render_radius": 0.0,
+        }
         for b in self._bubbles:
             # Pulse: smoothed energy drives visible size thump.
-            # Multipliers: big 4.0x, small 3.0x at max slider (slider 0-1).
+            # Big bubbles must preserve visible headroom between soft and hot
+            # passages. An overly large hidden multiplier here just slams the
+            # hero lane into the authored size clamp and makes every phrase
+            # look the same.
             # Small bubbles below tiny threshold: suppress pulse to avoid
             # flicker between dot and outline rendering.
             is_tiny = (not b.is_big) and b.radius < 0.008
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2
+                size_weight = min(
+                    1.0,
+                    max(0.0, (b.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
+                )
+                pulse_setting = soft_ceiling(
+                    big_bass_pulse,
+                    knee=0.58,
+                    ceiling=0.94,
+                    max_input=1.10,
+                    curve=1.00,
+                )
+                pulse_scale = 4.10 + pulse_setting * 1.10 + size_weight * 0.65
+                pulse_factor = 1.0 + b.pulse_energy * pulse_scale
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
-                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5
+                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.8
             else:
-                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.0
+                pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 3.4
 
-            r = b.radius * pulse_factor
+            unclamped_r = b.radius * pulse_factor
+            r = unclamped_r
 
             # Contraction bias: during quiet passages (low pulse_energy),
             # big bubbles shrink slightly below base radius.  bias=1.0 means
@@ -1456,7 +1618,16 @@ class BubbleSimulation:
 
             # Max size clamp: cap the pulsed radius to base_radius * clamp
             if b.is_big and big_size_clamp > 0.0:
-                r = min(r, b.radius * max(1.5, big_size_clamp))
+                clamp_limit = b.radius * max(1.5, big_size_clamp)
+                if unclamped_r > clamp_limit:
+                    big_render_diag["big_clamp_hits"] += 1.0
+                r = min(r, clamp_limit)
+
+            if b.is_big:
+                big_render_diag["big_render_count"] += 1.0
+                big_render_diag["max_big_render_radius"] = max(big_render_diag["max_big_render_radius"], r)
+                big_render_diag["max_big_render_delta"] = max(big_render_diag["max_big_render_delta"], max(0.0, r - b.radius))
+                big_render_diag["avg_big_render_radius"] += r
 
             # Specular pulses at slightly less than half the bubble outline rate.
             # Base specular size (spec_size_mut) is unchanged; only the
@@ -1487,14 +1658,42 @@ class BubbleSimulation:
                     trail_data.extend([b.x, b.y, 0.0])
 
         # Diagnostic: log first big bubble's pulse details
+        if big_render_diag["big_render_count"] > 0.0:
+            big_render_diag["avg_big_render_radius"] /= big_render_diag["big_render_count"]
+        self._last_big_render_diag = big_render_diag
+
         if _snap_diag and self._bubbles and is_verbose_logging():
             fb = next((b for b in self._bubbles if b.is_big), self._bubbles[0])
-            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * (4.2 if fb.is_big else 3.0)
+            if fb.is_big:
+                fb_size_weight = min(
+                    1.0,
+                    max(0.0, (fb.radius - 0.018) / max(0.001, self._big_size_max - 0.018)),
+                )
+                fb_pulse_setting = soft_ceiling(
+                    big_bass_pulse,
+                    knee=0.58,
+                    ceiling=0.94,
+                    max_input=1.10,
+                    curve=1.00,
+                )
+                fb_pulse_scale = 4.10 + fb_pulse_setting * 1.10 + fb_size_weight * 0.65
+            else:
+                fb_pulse_scale = 3.0
+            pf = 1.0 + fb.pulse_energy * (big_bass_pulse if fb.is_big else small_freq_pulse) * fb_pulse_scale
+            diag = self._last_big_lane_diag or {}
             logger.debug(
                 "[BUBBLE_SIM] snapshot: big_bass_pulse=%.2f small_freq_pulse=%.2f "
-                "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f",
+                "first_big: pe=%.3f pf=%.3f base_r=%.4f final_r=%.4f "
+                "big_lane(count=%d active=%d max_raw=%.3f max_gated=%.3f max_after=%.3f clamp_hits=%d max_render=%.4f)",
                 big_bass_pulse, small_freq_pulse,
                 fb.pulse_energy, pf, fb.radius, fb.radius * pf,
+                int(diag.get("big_count", 0.0)),
+                int(diag.get("active_big_count", 0.0)),
+                float(diag.get("max_big_raw_src", 0.0)),
+                float(diag.get("max_big_gated_energy", 0.0)),
+                float(diag.get("max_big_pulse_after", 0.0)),
+                int(big_render_diag.get("big_clamp_hits", 0.0)),
+                float(big_render_diag.get("max_big_render_radius", 0.0)),
             )
 
         return pos_data, extra_data, trail_data

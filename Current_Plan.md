@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-02
+Last updated: 2026-06-04
 
 This file tracks active work only. Ongoing architecture truth belongs in the relevant reference docs, while dated severe/complex bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -27,10 +27,9 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Verify the retained multi-display desync remains imperceptible to users while still reducing same-instant sibling-display start overhead once multi-display runtime is available again.
   - [ ] Keep all work on shared compositor/image/cache seams first; do not degrade fidelity or remove transition features to fake a perf win.
 
-- [ ] Validate the newly landed Spectrum authored-organs contract before calling it stable.
+- [ ] Keep the landed Spectrum alignment/oracle work honest without reopening idle-contract churn.
   - [x] Confirm the shared CPU/shader bar-field contract removes the visible left dead gap and right-edge clipping in real runtime, not just in helper math.
-  - [ ] Confirm paused/idle Spectrum keeps at least one visibly exposed segment after pause confirmation and warm-capture expiry, not just on the first paused frame, using the new paused-only visible floor without broadening other reactive modes into a looser idle-reveal contract.
-  - [ ] Keep authored `Preset 1 (Organs)` as the standing Spectrum oracle; if the preset evolves creatively later, re-tune the behavioral bar instead of silently dropping it.
+  - [ ] Keep authored `Preset 1 (Organs)` as the standing Spectrum oracle for startup/mode-switch parity checks; if the preset evolves creatively later, re-tune the behavioral bar instead of silently dropping it.
 
 - [ ] Re-close the media card same-track metadata stability seam.
   - [ ] Confirm same-track updates no longer refit or reformat title/artist text just because album/state/artwork/provider polling churn changes around the card.
@@ -111,8 +110,12 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Deferred / Not Active
 - Future authored reactivity oracles should follow the stronger Bubble bar pattern instead of weak generic guards:
+  - keep the authored Spectrum `Preset 1 (Organs)` oracle on the same stronger standard if its bar is widened later: exercise startup, hot switch, preset cycle, and real runtime-path phrase behavior rather than helper-only feed checks.
   - add a Spline Curve / `devcurve` authored runtime/reactivity oracle around `Preset 1` that exercises the same real seams: startup, hot switch, preset cycle, and live phrase behavior.
   - when adding those bars, prefer authored preset payloads plus synthetic-audio/runtime-path checks over exact frozen numeric expectations, so curated presets can still evolve while real failure shapes remain testable.
+- Optional Bubble large-bubble visual smoothing remains deferred until the restored two-lane Bubble bars and runtime stay healthy for a while.
+  - If that work starts later, keep it isolated from audio/signal shaping.
+  - Expose it as an explicit user-facing Bubble setting with preset/UI/tool support instead of a hidden fallback-style smoothing path.
 - Parallelism policy stays profiling-driven if performance work is reopened:
   - profile first and identify a real hotspot before changing thread/process counts,
   - prefer isolated pure-compute kernels or process-safe workloads, not Qt/UI/OpenGL ownership paths,

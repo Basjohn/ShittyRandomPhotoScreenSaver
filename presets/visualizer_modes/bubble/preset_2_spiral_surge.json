@@ -8,7 +8,7 @@
       "spotify_visualizer": {
         "bubble_adaptive_sensitivity": false,
         "bubble_agc_strength": 0.25,
-        "bubble_audio_block_size": 128,
+        "bubble_audio_block_size": 256,
         "bubble_bar_count": 48,
         "bubble_big_bass_pulse": 1.2,
         "bubble_big_contraction_bias": 0.4,

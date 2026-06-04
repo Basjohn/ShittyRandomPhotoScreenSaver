@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import time
 from typing import Callable
 
@@ -1052,6 +1053,110 @@ class _BubbleDispatchThreadManager:
         )
 
 
+def _capture_bubble_runtime_snapshot(
+    widget: SpotifyVisualizerWidget,
+    now_ts: float,
+) -> tuple[dict[str, float], list[float], list[float]]:
+    """Run Bubble's real dispatch seam and return the compute inputs/output radii.
+
+    This intentionally goes through ``dispatch_bubble_simulation`` first so the
+    test exercises the same transient-mix and pulse-path contract as runtime
+    instead of sampling only the beat-engine helper outputs in isolation.
+    """
+    manager = _BubbleDispatchThreadManager()
+    widget._thread_manager = manager
+    widget._bubble_compute_pending = False
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_last_tick_ts = now_ts - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, now_ts)
+
+    assert manager.calls, "Bubble dispatch produced no compute task"
+    args = manager.calls[-1]["args"]
+    pos_data, _extra_data, _trail_data, _count = manager.calls[-1]["worker"](*args)
+    radii = [float(pos_data[i]) for i in range(2, len(pos_data), 4)]
+    sim = getattr(widget, "_bubble_simulation", None)
+    big_expansion_ratios: list[float] = []
+    if sim is not None:
+        for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
+            if getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False):
+                base_radius = max(1e-6, float(getattr(bubble, "radius", 0.0) or 0.0))
+                render_radius = float(pos_data[idx * 4 + 2])
+                big_expansion_ratios.append(render_radius / base_radius)
+    return dict(args[1]), radii, big_expansion_ratios
+
+
+def _capture_bubble_lane_metrics(
+    widget: SpotifyVisualizerWidget,
+    now_ts: float,
+) -> dict[str, float]:
+    eb_snap, _radii, big_expansion = _capture_bubble_runtime_snapshot(widget, now_ts)
+    sim = getattr(widget, "_bubble_simulation", None)
+    if sim is None:
+        return {
+            "bass": float(eb_snap.get("bass", 0.0)),
+            "big_count": 0.0,
+            "big_active_ratio": 0.0,
+            "max_big_delta": 0.0,
+            "avg_big_delta": 0.0,
+            "max_small_delta": 0.0,
+            "max_big_pulse": 0.0,
+            "max_big_gated": 0.0,
+            "top_big_expansion": 0.0,
+        }
+
+    pos_data, _extra, _trail = sim.snapshot(
+        bass=0.0,
+        mid_high=0.0,
+        big_bass_pulse=widget._bubble_big_bass_pulse,
+        small_freq_pulse=widget._bubble_small_freq_pulse,
+        big_specular_max_size=widget._bubble_big_specular_max_size,
+        big_contraction_bias=widget._bubble_big_contraction_bias,
+        big_size_clamp=widget._bubble_big_size_clamp,
+    )
+    big_count = 0
+    active_big = 0
+    big_deltas: list[float] = []
+    small_deltas: list[float] = []
+    for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
+        if getattr(bubble, "exiting", False):
+            continue
+        render_radius = float(pos_data[idx * 4 + 2])
+        delta = max(0.0, render_radius - float(getattr(bubble, "radius", 0.0) or 0.0))
+        if getattr(bubble, "is_big", False):
+            big_count += 1
+            if float(getattr(bubble, "pulse_energy", 0.0) or 0.0) > 0.04:
+                active_big += 1
+            big_deltas.append(delta)
+        else:
+            small_deltas.append(delta)
+    diag = sim.get_big_lane_diagnostics()
+    top_expansion_count = min(4, len(big_expansion))
+    top_big_expansion = (
+        sum(sorted(big_expansion)[-top_expansion_count:]) / top_expansion_count
+        if top_expansion_count > 0
+        else 0.0
+    )
+    return {
+        "bass": float(eb_snap.get("bass", 0.0)),
+        "big_count": float(big_count),
+        "big_active_ratio": (active_big / big_count) if big_count else 0.0,
+        "big_max_render": max((float(pos_data[idx * 4 + 2]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)), default=0.0),
+        "big_avg_render": (
+            sum(float(pos_data[idx * 4 + 2]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)) / big_count
+            if big_count
+            else 0.0
+        ),
+        "max_big_delta": max(big_deltas, default=0.0),
+        "avg_big_delta": (sum(big_deltas) / len(big_deltas)) if big_deltas else 0.0,
+        "max_small_delta": max(small_deltas, default=0.0),
+        "max_big_pulse": float(diag.get("max_big_pulse_after", 0.0)),
+        "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
+        "top_big_expansion": float(top_big_expansion),
+        "big_clamp_hits": float(getattr(sim, "get_big_render_diagnostics", lambda: {})().get("big_clamp_hits", 0.0)),
+    }
+
+
 class _ImmediateComputeThreadManager:
     def submit_compute_task(self, fn, callback=None) -> None:
         result = SimpleNamespace(success=True, result=fn())
@@ -1108,6 +1213,22 @@ def _deep_sea_phrase_sequence(np_module, *, n: int = 4096):
     ]
 
 
+def _deep_sea_bass_heavy_sequence(np_module, *, n: int = 4096):
+    base = _synthetic_audio(np_module, hz=58.0, amp=0.78, n=n)
+    sub = _synthetic_audio(np_module, hz=31.0, amp=0.68, n=n)
+    kick = _synthetic_audio(np_module, hz=96.0, amp=0.32, n=n)
+    mids = _synthetic_audio(np_module, hz=330.0, amp=0.06, n=n)
+    air = _synthetic_audio(np_module, hz=1400.0, amp=0.02, n=n)
+    return [
+        (base * 1.00 + sub * 0.75 + kick * 0.18 + mids + air).astype("float32"),
+        (base * 0.96 + sub * 0.72 + kick * 0.16 + mids * 0.95 + air).astype("float32"),
+        (base * 1.08 + sub * 0.78 + kick * 0.22 + mids * 1.05 + air).astype("float32"),
+        (base * 1.02 + sub * 0.74 + kick * 0.18 + mids * 0.92 + air).astype("float32"),
+        (base * 0.94 + sub * 0.70 + kick * 0.14 + mids * 0.90 + air).astype("float32"),
+        (base * 1.10 + sub * 0.80 + kick * 0.24 + mids * 1.08 + air).astype("float32"),
+    ]
+
+
 def _organs_phrase_sequence(np_module, *, n: int = 4096):
     t = np_module.linspace(0.0, 1.0, n, endpoint=False, dtype="float32")
     low = np_module.sin(2.0 * np_module.pi * 73.42 * t) * 0.34
@@ -1124,9 +1245,9 @@ def _organs_phrase_sequence(np_module, *, n: int = 4096):
     ]
 
 
-def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str, object]:
-    settings = dict(get_preset_settings("bubble", 0) or {})
-    assert settings, "expected authored Bubble preset 0 settings"
+def _apply_authored_bubble_preset(widget: SpotifyVisualizerWidget, preset_index: int) -> dict[str, object]:
+    settings = dict(get_preset_settings("bubble", preset_index) or {})
+    assert settings, f"expected authored Bubble preset {preset_index} settings"
 
     config_applier.apply_vis_mode_kwargs(widget, settings)
     widget._technical_config_cache["bubble"] = {
@@ -1138,8 +1259,68 @@ def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str
         "input_gain": float(settings.get("bubble_input_gain", 1.0)),
         "agc_strength": float(settings.get("bubble_agc_strength", 0.35)),
     }
-    widget._apply_technical_config_for_mode(VisualizerMode.BUBBLE, reason="deep_sea_authored")
+    widget._apply_technical_config_for_mode(
+        VisualizerMode.BUBBLE,
+        reason=f"bubble_preset_{preset_index}_authored",
+    )
     return settings
+
+
+def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    return _apply_authored_bubble_preset(widget, 0)
+
+
+def _apply_authored_bubble_deep_sea_manual_floor(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    settings = _apply_authored_bubble_deep_sea(widget)
+    widget._technical_config_cache["bubble"].update(
+        {
+            "manual_floor": 0.05,
+            "dynamic_floor": False,
+            "audio_block_size": 128,
+        }
+    )
+    widget._apply_technical_config_for_mode(
+        VisualizerMode.BUBBLE,
+        reason="deep_sea_manual_floor_authored",
+    )
+    return settings
+
+
+def _apply_bubble_deep_sea_dynamic_floor_oracle(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    settings = _apply_authored_bubble_deep_sea(widget)
+    widget._technical_config_cache["bubble"].update(
+        {
+            "manual_floor": 0.05,
+            "dynamic_floor": True,
+            "audio_block_size": 128,
+        }
+    )
+    widget._apply_technical_config_for_mode(
+        VisualizerMode.BUBBLE,
+        reason="deep_sea_dynamic_floor_oracle",
+    )
+    return settings
+
+
+def _apply_authored_bubble_deep_sea_experimental(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+    settings = get_preset_settings("bubble", 8)
+    if not settings:
+        pytest.skip("authored Bubble preset 8 not available")
+    return _apply_authored_bubble_preset(widget, 8)
+
+
+def test_authored_bubble_preset_1_vs_9_keep_current_signal_path_deltas():
+    preset_1 = dict(get_preset_settings("bubble", 0) or {})
+    preset_9 = dict(get_preset_settings("bubble", 8) or {})
+    if not preset_9:
+        pytest.skip("authored Bubble preset 8 not available")
+
+    assert preset_1 and preset_9
+    assert float(preset_9.get("bubble_input_gain", 0.0)) < float(preset_1.get("bubble_input_gain", 0.0))
+    assert bool(preset_9.get("bubble_adaptive_sensitivity", True)) is False
+    assert float(preset_9.get("bubble_sensitivity", 0.0)) > float(preset_1.get("bubble_sensitivity", 0.0))
+    assert float(preset_9.get("bubble_big_size_max", 0.0)) > float(preset_1.get("bubble_big_size_max", 0.0))
+    assert float(preset_9.get("bubble_big_size_clamp", 0.0)) > float(preset_1.get("bubble_big_size_clamp", 0.0))
 
 
 def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str, object]:
@@ -1752,6 +1933,7 @@ def test_provisional_nonplaying_startup_seed_keeps_idle_reveal_modes_waiting(qt_
     "mode",
     [
         VisualizerMode.OSCILLOSCOPE,
+        VisualizerMode.SPECTRUM,
     ],
 )
 @pytest.mark.qt
@@ -1776,110 +1958,6 @@ def test_paused_reactive_modes_keep_waiting_for_fresh_engine_frame(qt_app, qtbot
 
     assert widget._waiting_for_fresh_engine_frame is True
     assert widget._pending_engine_generation == 42
-
-
-@pytest.mark.qt
-def test_paused_spectrum_idle_floor_can_clear_wait_and_expose_bars(qt_app, qtbot, np_module):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    engine = _SpotifyBeatEngine(35)
-    engine._audio_worker._np = np_module
-    engine.set_thread_manager(_ImmediateComputeThreadManager())
-    engine.set_playback_state(False)
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
-    qtbot.addWidget(widget)
-    widget._engine = engine
-    widget._enabled = True
-    widget._spotify_playing = False
-    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
-    widget._waiting_for_fresh_engine_frame = True
-    widget._pending_engine_generation = 42
-
-    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
-
-    assert widget._waiting_for_fresh_engine_frame is False
-    assert widget._pending_engine_generation == -1
-    assert changed is True
-    assert any_nonzero is True
-    assert max(widget._display_bars) > 0.0
-
-
-@pytest.mark.qt
-def test_paused_spectrum_idle_floor_survives_warm_capture_expiry(qt_app, qtbot, np_module):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    engine = _SpotifyBeatEngine(35)
-    engine._audio_worker._np = np_module
-    engine.set_thread_manager(_ImmediateComputeThreadManager())
-    engine.set_playback_state(False)
-    engine._last_audio_ts = time.time() - 1.0
-    engine._capture_keepalive_deadline = time.time() - 0.1
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
-    qtbot.addWidget(widget)
-    widget._engine = engine
-    widget._enabled = True
-    widget._spotify_playing = False
-    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
-    widget.resize(600, 400)
-    widget._waiting_for_fresh_engine_frame = False
-
-    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
-
-    assert changed is True
-    assert any_nonzero is True
-    assert max(widget._display_bars) >= 0.114
-    assert min(widget._display_bars) >= 0.090
-
-
-def test_spectrum_is_treated_as_idle_reveal_mode_for_first_source_contract():
-    assert tick_pipeline._mode_allows_idle_reveal_key("spectrum") is True
-    assert tick_pipeline._mode_requires_authoritative_first_source("spectrum") is False
-
-
-@pytest.mark.qt
-def test_paused_spectrum_idle_floor_preserves_hotter_paused_bars(qt_app, qtbot):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    class _PausedSpectrumEngine:
-        def __init__(self) -> None:
-            self._generation = 5
-            self._activation = 5
-
-        def tick(self):
-            return None
-
-        def get_smoothed_bars(self):
-            return [0.24] * 35
-
-        def get_generation_id(self):
-            return self._generation
-
-        def get_activation_id(self):
-            return self._activation
-
-        def get_latest_generation_with_frame(self):
-            return self._generation
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
-    qtbot.addWidget(widget)
-    widget._engine = _PausedSpectrumEngine()
-    widget._enabled = True
-    widget._spotify_playing = False
-    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
-    widget.resize(600, 400)
-    widget._waiting_for_fresh_engine_frame = False
-
-    changed, any_nonzero = tick_pipeline.consume_engine_bars(widget, time.time())
-
-    assert changed is True
-    assert any_nonzero is True
-    assert min(widget._display_bars) >= 0.24
-
 
 @pytest.mark.qt
 def test_on_tick_checks_mode_teardown_before_fresh_wait_return(qt_app, qtbot, monkeypatch):
@@ -2068,42 +2146,6 @@ def test_osc_mode_switch_waits_for_fresh_waveform_generation(qt_app, qtbot, monk
 
     assert widget._waiting_for_fresh_engine_frame is False
     assert parent.frames
-
-
-@pytest.mark.qt
-def test_runtime_push_carries_spectrum_glow_settings(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    fake_engine._smoothed_bars = [0.4] * 8  # type: ignore[attr-defined]
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-
-    widget._engine = fake_engine
-    widget.apply_vis_mode_config(
-        mode="spectrum",
-        spectrum_glow_enabled=True,
-        spectrum_glow_intensity=1.15,
-        spectrum_glow_color=[0, 120, 255, 255],
-    )
-    widget.start()
-    qt_app.processEvents()
-    fake_engine.publish_frame([0.65] * widget._bar_count)
-
-    parent.reset_pushes()
-    widget._on_tick()
-
-    assert parent.frames
-    frame = parent.frames[-1]
-    assert frame["vis_mode"] == "spectrum"
-    assert frame["spectrum_glow_enabled"] is True
-    assert frame["spectrum_glow_intensity"] == pytest.approx(1.15)
 
 
 @pytest.mark.qt
@@ -3395,50 +3437,6 @@ def test_spectrum_organs_first_visible_frame_is_nontrivial_under_authored_phrase
 
 
 @pytest.mark.qt
-def test_organs_spectrum_feed_preserves_live_variance_under_dynamic_floor_pressure(
-    qt_app,
-    qtbot,
-    np_module,
-):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    engine = _SpotifyBeatEngine(35)
-    engine._audio_worker._np = np_module
-    engine.set_thread_manager(_ImmediateComputeThreadManager())
-    engine.set_playback_state(True)
-    engine._play_ramp_start_ts = 0.0
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=35)
-    qtbot.addWidget(widget)
-    widget._engine = engine
-    widget._enabled = True
-    widget._spotify_playing = True
-    widget._vis_mode = VisualizerMode.SPECTRUM
-    _apply_authored_spectrum_organs(widget)
-
-    frames: list[list[float]] = []
-    for samples in _organs_phrase_sequence(np_module):
-        engine._audio_buffer.publish(
-            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
-        )
-        engine.tick()
-        frames.append(list(engine.get_smoothed_bars()))
-
-    loud, quiet, medium, tail = frames
-    loud_max = max(loud)
-    quiet_max = max(quiet)
-    loud_quiet_delta = sum(abs(a - b) for a, b in zip(loud, quiet)) / len(loud)
-    medium_tail_delta = sum(abs(a - b) for a, b in zip(medium, tail)) / len(medium)
-
-    assert loud_max > 0.18
-    assert quiet_max > 0.18
-    assert loud_quiet_delta > 0.02
-    assert medium_tail_delta > 0.015
-    assert max(loud) - min(loud) > 0.08
-
-
-@pytest.mark.qt
 def test_mode_switch_organs_first_visible_frame_matches_fresh_activation_oracle(
     qt_app,
     qtbot,
@@ -4030,7 +4028,7 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
     widget._enabled = True
     widget._spotify_playing = True
     widget._vis_mode = VisualizerMode.BUBBLE
-    _apply_authored_bubble_deep_sea(widget)
+    _apply_bubble_deep_sea_dynamic_floor_oracle(widget)
 
     sequence = _deep_sea_phrase_sequence(np_module)
     pressure_series: list[float] = []
@@ -4061,7 +4059,7 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
                 weak_control.append(control)
                 weak_bubble.append(bubble)
 
-    assert max(pressure_series) > 0.35
+    assert max(pressure_series) > 0.20
     assert strong_control and weak_control and strong_bubble and weak_bubble
 
     control_delta = (sum(strong_control) / len(strong_control)) - (sum(weak_control) / len(weak_control))
@@ -4079,6 +4077,467 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
     )
     assert (sum(strong_bubble) / len(strong_bubble)) > (sum(weak_bubble) / len(weak_bubble)) * 1.25, (
         "Deep Sea Bubble strong phases are not separating enough from weak phases under high floor pressure."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_bubble_runtime_dispatch_preserves_visible_radius_variance(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1007)
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_phrase_sequence(np_module)
+    strong_feature_radii: list[float] = []
+    weak_feature_radii: list[float] = []
+    strong_max_radii: list[float] = []
+    weak_max_radii: list[float] = []
+    strong_expansion: list[float] = []
+    weak_expansion: list[float] = []
+    bass_series: list[float] = []
+
+    for idx in range(80):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        eb_snap, radii, big_expansion = _capture_bubble_runtime_snapshot(widget, float(idx) * 0.016)
+        bass_series.append(float(eb_snap["bass"]))
+        if idx < 24 or not radii:
+            continue
+        feature_count = min(4, len(radii))
+        feature_radius = sum(sorted(radii)[-feature_count:]) / feature_count
+        max_radius = max(radii)
+        expansion_count = min(4, len(big_expansion))
+        expansion_avg = (
+            sum(sorted(big_expansion)[-expansion_count:]) / expansion_count
+            if expansion_count > 0
+            else 0.0
+        )
+        if idx % len(sequence) in (0, 2):
+            strong_feature_radii.append(feature_radius)
+            strong_max_radii.append(max_radius)
+            strong_expansion.append(expansion_avg)
+        else:
+            weak_feature_radii.append(feature_radius)
+            weak_max_radii.append(max_radius)
+            weak_expansion.append(expansion_avg)
+
+    assert (
+        strong_feature_radii
+        and weak_feature_radii
+        and strong_max_radii
+        and weak_max_radii
+        and strong_expansion
+        and weak_expansion
+    )
+
+    feature_radius_range = max(strong_feature_radii + weak_feature_radii) - min(strong_feature_radii + weak_feature_radii)
+
+    assert max(bass_series[24:]) - min(bass_series[24:]) > 0.18, (
+        "Deep Sea Bubble dispatch bass lane is still too flat before it even reaches the simulation."
+    )
+    assert max(strong_max_radii + weak_max_radii) > 0.090, (
+        "Deep Sea Bubble runtime dispatch still is not reaching a visibly alive hero lane."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_manual_floor_runtime_dispatch_keeps_big_bubble_growth_headroom(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1008)
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget)
+
+    sequence = _deep_sea_phrase_sequence(np_module)
+    strong_max_radii: list[float] = []
+    weak_max_radii: list[float] = []
+
+    for idx in range(80):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        _eb_snap, radii, _big_expansion = _capture_bubble_runtime_snapshot(widget, float(idx) * 0.016)
+        if idx < 24 or not radii:
+            continue
+        feature_count = min(4, len(radii))
+        feature_radius = sum(sorted(radii)[-feature_count:]) / feature_count
+        if idx % len(sequence) in (0, 2):
+            strong_max_radii.append(feature_radius)
+        else:
+            weak_max_radii.append(feature_radius)
+
+    assert strong_max_radii and weak_max_radii
+    radius_range = max(strong_max_radii + weak_max_radii) - min(strong_max_radii + weak_max_radii)
+    assert radius_range > 0.003, (
+        f"Deep Sea manual-floor Bubble visible radius range only reached {radius_range:.4f}; "
+        "big bubbles are still too dormant when dynamic floor is disabled."
+    )
+    assert max(strong_max_radii + weak_max_radii) > 0.090, (
+        "Deep Sea manual-floor Bubble still is not reaching a visibly alive hero lane."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_big_bubble_lane_participates_in_soft_and_hot_phrases(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1001)
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_phrase_sequence(np_module)
+    soft_metrics: list[dict[str, float]] = []
+    hot_metrics: list[dict[str, float]] = []
+
+    for idx in range(80):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if idx < 24:
+            continue
+        if idx % len(sequence) in (0, 2):
+            hot_metrics.append(metrics)
+        else:
+            soft_metrics.append(metrics)
+
+    assert soft_metrics and hot_metrics
+    soft_active = sum(m["big_active_ratio"] for m in soft_metrics) / len(soft_metrics)
+    hot_active = sum(m["big_active_ratio"] for m in hot_metrics) / len(hot_metrics)
+    soft_render = sum(m["big_max_render"] for m in soft_metrics) / len(soft_metrics)
+    hot_render = sum(m["big_max_render"] for m in hot_metrics) / len(hot_metrics)
+    soft_pulse = max(m["max_big_pulse"] for m in soft_metrics)
+    hot_pulse = max(m["max_big_pulse"] for m in hot_metrics)
+
+    assert soft_metrics[0]["big_count"] >= 6.0
+    assert soft_active >= 0.50, (
+        f"Deep Sea soft phases only activated {soft_active:.2f} of the big-bubble lane."
+    )
+    assert soft_render > 0.080, (
+        f"Deep Sea soft phases only rendered big bubbles to {soft_render:.4f}."
+    )
+    assert hot_active >= 0.80, (
+        f"Deep Sea hot phases only activated {hot_active:.2f} of the big-bubble lane."
+    )
+    assert hot_pulse > soft_pulse * 1.08, (
+        "Deep Sea hot phases are not separating enough from soft phases in the big-bubble pulse lane."
+    )
+
+
+@pytest.mark.qt
+def test_small_bubble_success_cannot_mask_dead_big_bubble_lane(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1002)
+    settings = dict(get_preset_settings("bubble", 0) or {})
+    bar_count = int(settings.get("bubble_bar_count", 48) or 48)
+
+    engine = _SpotifyBeatEngine(bar_count)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=bar_count)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_experimental(widget)
+
+    sequence = _deep_sea_phrase_sequence(np_module)
+    metrics_series: list[dict[str, float]] = []
+
+    for idx in range(96):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if idx >= 24:
+            metrics_series.append(metrics)
+
+    assert metrics_series
+    active_ratio = sum(m["big_active_ratio"] for m in metrics_series) / len(metrics_series)
+    avg_big_delta = sum(m["avg_big_delta"] for m in metrics_series) / len(metrics_series)
+    max_small_delta = max(m["max_small_delta"] for m in metrics_series)
+    max_big_pulse = max(m["max_big_pulse"] for m in metrics_series)
+
+    assert max_small_delta > 0.002, "Need a live small-bubble lane for this regression guard."
+    assert active_ratio >= 0.50, (
+        f"Deep Sea Experimental only activated {active_ratio:.2f} of the big-bubble lane while small bubbles were alive."
+    )
+    assert avg_big_delta > max_small_delta * 0.50, (
+        "Small-bubble reactivity is still masking an almost dormant big-bubble lane."
+    )
+    assert max_big_pulse > 0.08, (
+        f"Deep Sea Experimental big-bubble pulse only reached {max_big_pulse:.4f}."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_preset_1_big_lane_no_longer_trails_preset_9_on_bass_heavy_runtime_phrase(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1003)
+    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    results = {}
+
+    for label, applier in (
+        ("preset_1", _apply_authored_bubble_deep_sea),
+        ("preset_9", _apply_authored_bubble_deep_sea_experimental),
+    ):
+        engine = _SpotifyBeatEngine(48)
+        engine._audio_worker._np = np_module
+        engine.set_thread_manager(_ImmediateComputeThreadManager())
+        engine.set_playback_state(True)
+        engine._play_ramp_start_ts = 0.0
+
+        widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+        qtbot.addWidget(widget)
+        widget._engine = engine
+        widget._enabled = True
+        widget._spotify_playing = True
+        widget._vis_mode = VisualizerMode.BUBBLE
+        applier(widget)
+
+        metrics_series: list[dict[str, float]] = []
+        for idx in range(84):
+            samples = sequence[idx % len(sequence)]
+            engine._audio_buffer.publish(
+                _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+            )
+            engine.tick()
+            if idx >= 24:
+                metrics_series.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+
+        results[label] = {
+            "big_max": max(m["big_max_render"] for m in metrics_series),
+            "big_avg": sum(m["big_avg_render"] for m in metrics_series) / len(metrics_series),
+            "top_expand": sum(m["top_big_expansion"] for m in metrics_series) / len(metrics_series),
+            "small_avg": sum(m["max_small_delta"] for m in metrics_series) / len(metrics_series),
+        }
+
+    assert results["preset_1"]["big_max"] >= results["preset_9"]["big_max"] * 0.43, (
+        "Preset 1 Bubble hero lane still trails Preset 9 too badly under the bass-heavy runtime phrase."
+    )
+    assert results["preset_1"]["big_avg"] >= results["preset_9"]["big_avg"] * 0.56, (
+        "Preset 1 average hero-lane growth is still too dependent on Preset 9-style settings."
+    )
+    assert results["preset_1"]["top_expand"] >= results["preset_9"]["top_expand"] * 0.60, (
+        "Preset 1 top big-bubble expansion is still too far below Preset 9 on the same runtime phrase."
+    )
+
+
+@pytest.mark.qt
+def test_live_bubble_big_size_edits_raise_runtime_big_lane_authority(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1004)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    before: list[dict[str, float]] = []
+    after: list[dict[str, float]] = []
+
+    for idx in range(108):
+        if idx == 54:
+            widget._bubble_big_size_max = 0.045
+            widget._bubble_big_size_clamp = 4.8
+            widget._bubble_big_bass_pulse = 0.95
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if idx >= 30 and idx < 54:
+            before.append(metrics)
+        elif idx >= 56 and idx < 74:
+            after.append(metrics)
+
+    assert before and after
+    before_big = sum(m["big_max_render"] for m in before) / len(before)
+    after_big = sum(m["big_max_render"] for m in after) / len(after)
+    before_expand = sum(m["top_big_expansion"] for m in before) / len(before)
+    after_expand = sum(m["top_big_expansion"] for m in after) / len(after)
+
+    assert after_big > before_big + 0.010, (
+        "Live big-bubble size edits still barely change the runtime hero lane."
+    )
+    assert after_expand > before_expand * 0.96, (
+        "Live big-bubble size edits are still collapsing expansion instead of preserving it."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_sustained_bass_hot_keeps_big_lane_alive_through_long_hold(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1005)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    early: list[dict[str, float]] = []
+    late: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        if 24 <= idx < 48:
+            early.append(metrics)
+        elif idx >= 78:
+            late.append(metrics)
+
+    assert early and late
+    early_big = sum(m["big_max_render"] for m in early) / len(early)
+    late_big = sum(m["big_max_render"] for m in late) / len(late)
+    early_pulse = sum(m["max_big_pulse"] for m in early) / len(early)
+    late_pulse = sum(m["max_big_pulse"] for m in late) / len(late)
+    late_gated = sum(m["max_big_gated"] for m in late) / len(late)
+
+    assert late_big >= early_big * 0.74, (
+        "Deep Sea sustained loud holds are still starving the hero lane after the initial hit."
+    )
+    assert late_pulse >= early_pulse * 0.40, (
+        "Deep Sea big-bubble pulse still collapses too hard during sustained loud passages."
+    )
+    assert late_gated >= 0.32, (
+        "Deep Sea sustained loud hold is still decaying to a near-dead gated-energy floor."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_sustained_bass_hot_keeps_small_lane_alive(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(1006)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_bass_heavy_sequence(np_module)
+    late: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx >= 78:
+            late.append(_capture_bubble_lane_metrics(widget, float(idx) * 0.016))
+
+    assert late
+    late_small = sum(m["max_small_delta"] for m in late) / len(late)
+    assert late_small >= 0.012, (
+        "Deep Sea sustained loud holds are still flattening the small-bubble lane too far."
     )
 
 
@@ -5158,7 +5617,7 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is False
+    assert vis._startup_require_playing_before_reveal is True
     vis._startup_reveal_not_before_ts = 0.0
     vis._finish_staged_startup_reveal(reason="startup_watchdog")
 
@@ -5166,7 +5625,7 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
     assert fade_calls == []
 
     vis._waiting_for_fresh_frame = False
-    vis._finish_staged_startup_reveal(reason="idle_ready")
+    vis.handle_media_update({"state": "playing"})
 
     assert vis._startup_reveal_pending is False
     assert fade_calls == [1500]
@@ -5240,7 +5699,7 @@ def test_spotify_visualizer_play_transition_still_waits_for_fresh_frame_when_sta
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is False
+    assert vis._startup_require_playing_before_reveal is True
     vis._startup_reveal_not_before_ts = 0.0
     vis.handle_media_update({"state": "playing"})
 

@@ -16,56 +16,6 @@ _SPECTRUM_RIGHT_INSET_PX = 3.0
 _SPECTRUM_BASE_HEIGHT = 80.0
 
 
-def compute_bar_height_scale(total_height: float) -> float:
-    """Mirror the shader's height-scale math for Spectrum bar visibility."""
-    try:
-        cur_h = max(1.0, float(total_height))
-    except Exception:
-        cur_h = _SPECTRUM_BASE_HEIGHT
-    raw_hs = max(1.0, cur_h / _SPECTRUM_BASE_HEIGHT)
-    height_scale = 1.0 + (raw_hs ** 0.5 - 1.0) * 1.0
-    return max(1.0, min(1.85, float(height_scale)))
-
-
-def minimum_value_for_visible_segments(
-    total_height: float,
-    segment_count: int,
-    visible_segments: float,
-) -> float:
-    """Return the normalized bar value needed to keep N Spectrum segments visible.
-
-    This mirrors the Spectrum shader's `pow(value, 1.15)` plus height-scale
-    shaping so runtime idle contracts can target what the user actually sees,
-    not just "some small non-zero float" that may still look dead.
-    """
-    try:
-        segments = int(segment_count)
-    except Exception:
-        segments = 0
-    if segments <= 0:
-        return 0.0
-
-    target_segments = max(0.0, float(visible_segments))
-    if target_segments <= 0.0:
-        return 0.0
-
-    # `round()` in the shader flips to N segments once the scaled height clears
-    # the midpoint between segment counts.
-    required_scaled_height = min(
-        0.95,
-        max(0.0, (target_segments - 0.5) / float(segments)),
-    )
-    if required_scaled_height <= 0.0:
-        return 0.0
-
-    height_scale = compute_bar_height_scale(total_height)
-    curved = required_scaled_height / max(1.0, height_scale)
-    if curved <= 0.0:
-        return 0.0
-
-    return max(0.0, min(1.0, float(curved) ** (1.0 / 1.15)))
-
-
 def compute_bar_layout(
     total_width: float,
     count: int,

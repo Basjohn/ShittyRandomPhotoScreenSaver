@@ -790,12 +790,11 @@ class _SpotifyBeatEngine(QObject):
         def _control(name: str) -> float:
             return max(0.0, min(1.0, float(getattr(w, name, 0.0) or 0.0)))
 
-        raw_mix = 0.72
-        if dynamic_enabled:
-            raw_mix += pressure * 0.23
-        raw_mix = max(0.72, min(0.95, raw_mix))
-
         def _shape(raw_value: float, control_value: float, *, denom: float, knee: float, ceiling: float) -> float:
+            raw_mix = 0.72
+            if dynamic_enabled:
+                raw_mix += pressure * 0.23
+            raw_mix = max(0.72, min(0.95, raw_mix))
             normalized = max(0.0, raw_value / max(0.10, denom))
             shaped = soft_ceiling(
                 normalized,
@@ -807,13 +806,51 @@ class _SpotifyBeatEngine(QObject):
             blended = control_value * (1.0 - raw_mix) + shaped * raw_mix
             return max(0.0, min(1.0, blended * ramp))
 
-        bass = _shape(
-            _raw("_last_raw_bass", "_pre_agc_live_bass"),
-            _control("_pre_agc_control_bass"),
-            denom=raw_bass_avg * (1.05 + pressure * 0.22),
-            knee=0.22,
-            ceiling=0.99,
-        )
+        raw_bass = _raw("_last_raw_bass", "_pre_agc_live_bass")
+        control_bass = _control("_pre_agc_control_bass")
+        if dynamic_enabled:
+            bass = _shape(
+                raw_bass,
+                control_bass,
+                denom=raw_bass_avg * (1.05 + pressure * 0.22),
+                knee=0.22,
+                ceiling=0.99,
+            )
+        else:
+            # Manual-floor Bubble should preserve loud-passages as a distinct
+            # hero lane instead of collapsing them into the same continuous
+            # body that already drives soft passages. Keep a low stable body,
+            # add a light normalized support lane, and reserve a stronger
+            # absolute-peak branch for true hot sections.
+            absolute_body = soft_ceiling(
+                raw_bass / 2.60,
+                knee=0.16,
+                ceiling=0.24,
+                max_input=1.00,
+                curve=1.00,
+            )
+            normalized_support = soft_ceiling(
+                raw_bass / max(0.22, raw_bass_avg * 2.10),
+                knee=0.12,
+                ceiling=0.18,
+                max_input=2.40,
+                curve=1.00,
+            )
+            absolute_peak = soft_ceiling(
+                max(0.0, raw_bass - 1.55),
+                knee=0.0,
+                ceiling=0.46,
+                max_input=2.35,
+                curve=1.00,
+            )
+            control_support = min(0.04, control_bass * 0.05)
+            bass = (
+                absolute_body * 0.62
+                + normalized_support * 0.28
+                + absolute_peak
+                + control_support
+            )
+            bass = max(0.0, min(1.0, bass * ramp))
         mid = _shape(
             _raw("_last_raw_mid", "_pre_agc_live_mid"),
             _control("_pre_agc_control_mid"),

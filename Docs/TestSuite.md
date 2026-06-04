@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-05-22
+Last updated: 2026-06-04
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -62,7 +62,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_widget_visual_padding.py`
   BaseOverlayWidget visual-padding math plus `_custom_layout_local_rect` override behavior used by first-phase CUSTOM layout reapply.
 - `tests/test_spotify_visualizer_widget.py`
-  Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), Spectrum GPU extras reuse, authored Spectrum `Preset 1 (Organs)` first-visible/live-variance oracle coverage, paused Spectrum idle-floor contract coverage, first-visible-frame synthetic oracle parity for hot mode switch/preset cycle versus fresh activation, and architecture-split engine-resolution regression coverage.
+  Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), authored Bubble `Preset 1 (Deep Sea)` feed-plus-visible-motion oracle coverage including sustained-loud hold, live big-size edit authority, seeded Preset 1 vs Preset 9 runtime comparison, Spectrum GPU extras reuse, authored Spectrum `Preset 1 (Organs)` first-visible/startup-parity oracle coverage, first-visible-frame synthetic oracle parity for hot mode switch/preset cycle versus fresh activation, and architecture-split engine-resolution regression coverage.
 - `tests/test_visualizer_settings_plumbing.py`
   Visualizer settings-model round-trip coverage, active-mode parity between `from_mapping()` and `from_settings()` for Bubble/Spectrum/Spline, curated-vs-custom preset authority, grouped build/serialize field-family contracts, legacy migration normalization, and create-time cross-display media-anchor resolution for Custom-routed visualizers.
 - `tests/test_spotify_visualizer_mode_transition.py`
@@ -133,6 +133,8 @@ When changing visualizer settings/contracts, include tests for:
 - **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that mode/preset-owned growth still drives preferred outer height, blob-width reduction stays media-relative, and top/bottom anchor placement remains correct independently of stencil-shell behavior.
 - **CUSTOM adaptive visualizer sizing** (`tests/test_custom_layout_manager.py`, `tests/test_widget_manager.py`, `tests/test_visualizer_card_geometry.py`): validates that visualizer CUSTOM edit shells use a maximum-envelope footprint for safe alignment, saved CUSTOM payload stores width/height scales, and runtime re-resolves the live mode/preset card size instead of freezing the first captured CUSTOM rect dimensions.
 - **First visible activation parity** (`tests/test_spotify_visualizer_widget.py`): validates that the first authoritative visible GPU frame after hot mode switch or preset cycle matches a fresh-activation oracle under the same synthetic audio and preset-owned technical values, so poisoned runtime state or entry-point drift cannot hide behind worker-only tests.
+- **Authored runtime motion oracles** (`tests/test_spotify_visualizer_widget.py`, `tests/test_bubble_reactivity.py`): when a mode has a known curated “truth” preset such as Bubble `Preset 1 (Deep Sea)`, the bar should include runtime-path checks that measure visible simulation motion, not only helper/feed variance. Bubble closure now requires direct runtime-path oracles for both lanes: big bubbles must be present, visibly active under soft phrases, sustain visible authority through loud holds, and stay competitive with authored comparison presets without silently flattening under render-size clamp saturation; the small/medium lane must also remain alive through sustained loud passages instead of only looking good in quieter sections. Runtime pulse payload plumbing must be proven live, not merely present.
+- **Historical comparison when Bubble regressions get deep** (`tools/bubble_parity_harness.py`, `tests/test_bubble_reactivity.py`): when present-day Bubble bars stop matching runtime feel, compare current Deep Sea / Preset 9 behavior against `9d4925e` and `510520e` rather than trusting modern proxy bars alone. Treat the harness as a structural reference, not final runtime sign-off.
 
 ## 4.1 Gmail Test Expectations
 When changing Gmail widget OAuth/backend, include tests for:
