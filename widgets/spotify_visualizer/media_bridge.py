@@ -119,7 +119,14 @@ def seed_playback_state_from_anchor(
             source="seed",
             seed_source=best_source,
         )
-        widget._startup_idle_reveal_requires_authoritative_media = provisional_nonplaying_seed
+        idle_capable_mode = str(getattr(widget, "_vis_mode_str", "") or "").lower() in {
+            "bubble",
+            "sine_wave",
+            "devcurve",
+        }
+        widget._startup_idle_reveal_requires_authoritative_media = (
+            provisional_nonplaying_seed and not idle_capable_mode
+        )
         widget._startup_has_authoritative_media_update = False
         logger.debug(
             "[SPOTIFY_VIS] Seeded playback state from anchor (%s source=%s state=%s)",

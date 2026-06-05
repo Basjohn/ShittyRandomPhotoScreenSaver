@@ -691,7 +691,11 @@ class BubbleSimulation:
                     max_input=0.78,
                     curve=1.0,
                 )
-                raw_src = mid * 0.58 + high * 0.34 + chorus_support
+                vocal_body = max(
+                    mid * 0.58 + high * 0.34,
+                    smooth_mid * 0.62 + smooth_high * 0.28,
+                )
+                raw_src = vocal_body + chorus_support
                 delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
                 sustained_knee = 0.25 + size_t * 0.15
                 sustained_scale = 0.54 - size_t * 0.08

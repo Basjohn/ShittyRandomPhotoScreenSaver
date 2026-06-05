@@ -2085,7 +2085,12 @@ def test_paused_idle_reveal_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbo
     ],
 )
 @pytest.mark.qt
-def test_provisional_nonplaying_startup_seed_keeps_idle_reveal_modes_waiting(qt_app, qtbot, monkeypatch, mode):
+def test_provisional_nonplaying_startup_seed_allows_idle_reveal_modes_to_clear_engine_wait(
+    qt_app,
+    qtbot,
+    monkeypatch,
+    mode,
+):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
 
@@ -2101,13 +2106,53 @@ def test_provisional_nonplaying_startup_seed_keeps_idle_reveal_modes_waiting(qt_
     widget._spotify_playing = False
     widget._waiting_for_fresh_engine_frame = True
     widget._pending_engine_generation = 42
-    widget._startup_idle_reveal_requires_authoritative_media = True
+    widget._startup_idle_reveal_requires_authoritative_media = False
     widget._startup_has_authoritative_media_update = False
 
     tick_pipeline.consume_engine_bars(widget, time.time())
 
-    assert widget._waiting_for_fresh_engine_frame is True
-    assert widget._pending_engine_generation == 42
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._pending_engine_generation == -1
+
+
+@pytest.mark.qt
+def test_paused_bubble_idle_seed_can_complete_startup_reveal_without_playback(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine._smoothed = [0.012] * 8
+    fake_engine.get_generation_id = lambda: 9
+    fake_engine.get_activation_id = lambda: 4
+    fake_engine.get_latest_generation_with_frame = lambda: 9
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._enabled = True
+    widget._spotify_playing = False
+    widget._startup_reveal_pending = True
+    widget._startup_reveal_not_before_ts = 0.0
+    widget._waiting_for_fresh_engine_frame = True
+    widget._waiting_for_fresh_frame = True
+    widget._pending_engine_generation = 42
+    widget._startup_idle_reveal_requires_authoritative_media = False
+    widget._startup_has_authoritative_media_update = False
+
+    fade_calls: list[int] = []
+    monkeypatch.setattr(widget, "_start_widget_fade_in", lambda duration_ms=1500: fade_calls.append(duration_ms))
+
+    tick_pipeline.consume_engine_bars(widget, time.time())
+
+    assert widget._waiting_for_fresh_engine_frame is False
+    assert widget._waiting_for_fresh_frame is False
+    assert widget._startup_reveal_pending is False
+    assert fade_calls == [1500]
 
 
 @pytest.mark.parametrize(
@@ -6329,7 +6374,7 @@ def test_spotify_visualizer_watchdog_does_not_override_authoritative_media_wait(
 
 
 @pytest.mark.qt
-def test_shared_nonplaying_seed_blocks_idle_startup_reveal_until_live_media_confirms(qt_app, qtbot, monkeypatch):
+def test_shared_nonplaying_seed_allows_idle_startup_reveal_for_bubble(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
@@ -6367,20 +6412,12 @@ def test_shared_nonplaying_seed_blocks_idle_startup_reveal_until_live_media_conf
 
     vis._seed_playback_state_from_anchor(reason="test_seed", request_refresh_if_missing=True)
 
-    assert vis._startup_idle_reveal_requires_authoritative_media is True
+    assert vis._startup_idle_reveal_requires_authoritative_media is False
     assert vis._startup_has_authoritative_media_update is False
     assert anchor.refresh_calls >= 1
 
     vis._finish_staged_startup_reveal(reason="authoritative_wait")
 
-    assert vis._startup_reveal_pending is True
-    assert fade_calls == []
-
-    vis.handle_media_update({"state": "paused"}, source="live")
-    vis._finish_staged_startup_reveal(reason="live_paused_ready")
-
-    assert vis._startup_idle_reveal_requires_authoritative_media is False
-    assert vis._startup_has_authoritative_media_update is True
     assert vis._startup_reveal_pending is False
     assert fade_calls == [1500]
 

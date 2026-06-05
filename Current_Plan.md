@@ -20,11 +20,6 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [ ] Evaluate a shared cache-age startup-refresh contract for general users: if Gmail/Reddit/Weather cache is newer than 15 minutes, skip automatic startup refresh and reuse cache first.
   - [ ] Keep the cache-age contract clean and low-overhead; it must not add noticeable startup cost or another widget-local ad hoc decision path.
 
-- [ ] Re-close the Reddit family enable/disable contract so the master Reddit toggle owns both Reddit widgets consistently.
-  - [ ] Make the top-level Reddit enable state persist as a family gate, so disabling Reddit cannot leave `reddit2` alive across save/restart.
-  - [ ] Make startup/runtime overlay expectation logic treat `reddit.enabled=false` as disabling the whole Reddit family even if stale `reddit2.enabled=true` survives in older settings.
-  - [ ] Validate in runtime that disabling Reddit removes both `reddit` and `reddit2` after exiting settings and relaunching, with no stray startup refresh/rate-limit work from the secondary widget.
-
 - [ ] Re-close widget position recovery/default-route safety so stale `Custom` state cannot strand overlays off-screen.
   - [x] Stop invalid `spotify_visualizer` `Custom + ALL` recovery from guessing a screen when no valid saved CUSTOM owner remains; restore the visualizer family back to its authored route instead.
   - [x] Add a Defaults-tab reset action that restores widget positions/monitor routes to the current profile's canonical shipped defaults (Normal vs MC) and clears persisted CUSTOM rects.

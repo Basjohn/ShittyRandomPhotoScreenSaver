@@ -639,6 +639,17 @@ def consume_engine_bars(widget: Any, now_ts: float) -> tuple[bool, bool]:
     widget._display_bars_source_generation = engine_generation
     widget._display_bars_source_activation = engine_activation
 
+    if (
+        not widget._spotify_playing
+        and _mode_allows_idle_reveal_key(getattr(widget, "_vis_mode_str", ""))
+        and not bool(getattr(widget, "_waiting_for_fresh_engine_frame", False))
+        and bool(getattr(widget, "_waiting_for_fresh_frame", False))
+    ):
+        try:
+            widget._on_first_frame_after_cold_start()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed idle-ready startup reveal handoff", exc_info=True)
+
     # Force update during decay (when bars are non-zero but Spotify stopped)
     if any_nonzero and not widget._spotify_playing:
         changed = True
