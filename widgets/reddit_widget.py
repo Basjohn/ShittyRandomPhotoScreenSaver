@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from typing import Optional, List, Dict, Any
-from datetime import timedelta
+from datetime import datetime, timedelta
 import math
 import threading
 import time
@@ -77,7 +77,9 @@ from widgets.service_widget_runtime import (
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
+    should_run_automatic_startup_refresh,
 )
+from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
 
@@ -277,9 +279,16 @@ class RedditWidget(BaseOverlayWidget):
                 self._start_growth_timer()
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
-        
-        self._schedule_timer()
-        self._fetch_feed()
+
+        if automatic_service_updates_enabled():
+            self._schedule_timer()
+            cache_timestamp = self._get_cache_timestamp()
+            if should_run_automatic_startup_refresh(cache_timestamp=cache_timestamp):
+                self._fetch_feed()
+            else:
+                logger.debug("[REDDIT] Skipping startup refresh; cached subreddit data is still fresh")
+        else:
+            logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
         logger.debug("[LIFECYCLE] RedditWidget activated")
     
     def _deactivate_impl(self) -> None:
@@ -367,9 +376,16 @@ class RedditWidget(BaseOverlayWidget):
                 self._start_growth_timer()
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
-        
-        self._schedule_timer()
-        self._fetch_feed()
+
+        if automatic_service_updates_enabled():
+            self._schedule_timer()
+            cache_timestamp = self._get_cache_timestamp()
+            if should_run_automatic_startup_refresh(cache_timestamp=cache_timestamp):
+                self._fetch_feed()
+            else:
+                logger.debug("[REDDIT] Skipping startup refresh; cached subreddit data is still fresh")
+        else:
+            logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
 
     def stop(self) -> None:
         """Stop refreshes and hide widget."""
@@ -2014,6 +2030,17 @@ class RedditWidget(BaseOverlayWidget):
         cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / f"{self._cache_key}_posts.json"
+
+    def _get_cache_timestamp(self):
+        """Return the cache file modification time when available."""
+        try:
+            cache_path = self._get_cache_file_path()
+            if not cache_path.exists():
+                return None
+            return datetime.fromtimestamp(cache_path.stat().st_mtime)
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect cache timestamp", exc_info=True)
+            return None
     
     def _save_cached_posts(self, posts: List[RedditPost]) -> None:
         """Save posts to cache for next startup."""

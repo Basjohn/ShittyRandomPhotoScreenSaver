@@ -5,6 +5,7 @@ click handling for posts and the header.
 """
 
 import time
+from datetime import datetime
 
 import pytest
 from PySide6.QtCore import QPoint, QRect
@@ -270,6 +271,44 @@ def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: 
         started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
 
         assert started is True
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        calls = []
+        widget.set_thread_manager(object())
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now())
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+
+        widget._activate_impl()
+
+        assert calls == ["timer"]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_activate_disables_automatic_updates_under_noupdates(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        calls = []
+        widget.set_thread_manager(object())
+        monkeypatch.setattr("widgets.reddit_widget.automatic_service_updates_enabled", lambda: False)
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+
+        widget._activate_impl()
+
         assert calls == []
     finally:
         widget.cleanup()

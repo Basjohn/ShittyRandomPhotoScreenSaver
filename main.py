@@ -121,6 +121,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --set - Enable settings mutation/import/schema diagnostics
     - --life - Enable widget/worker/engine lifecycle diagnostics
     - --cache - Enable image-cache/prefetch/cache-authority diagnostics
+    - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
@@ -131,6 +132,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     # Filter out debug/viz/dev-gate flags
     _filtered = {
         "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache",
+        "--noupdates",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "-devblob", "--devcurve",
     }

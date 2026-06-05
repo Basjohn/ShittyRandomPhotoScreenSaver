@@ -7,9 +7,15 @@ provider logic, and authored UI behavior stay local.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
 from typing import Any, Callable, Iterable
 
 from PySide6.QtCore import QTimer
+
+from core.runtime_flags import automatic_service_updates_enabled
+
+
+SERVICE_STARTUP_CACHE_FRESH_WINDOW = timedelta(minutes=15)
 
 
 def parent_transition_running(widget: Any) -> bool:
@@ -312,3 +318,27 @@ def reset_deferred_runtime_state(
         stop_qtimer_attr(widget, attr_name, delete_qtimers=delete_qtimers)
     for attr_name, value in state_attrs:
         setattr(widget, attr_name, value)
+
+
+def should_run_automatic_startup_refresh(
+    *,
+    cache_timestamp: datetime | None = None,
+    fresh_window: timedelta = SERVICE_STARTUP_CACHE_FRESH_WINDOW,
+) -> bool:
+    """Return True when automatic startup retrieval should run.
+
+    Shared contract:
+    - ``--noupdates`` disables all automatic service retrieval work.
+    - otherwise, a fresh cache suppresses only the startup fetch; later
+      periodic timers/manual refresh remain independent.
+    """
+
+    if not automatic_service_updates_enabled():
+        return False
+    if cache_timestamp is None:
+        return True
+    try:
+        age = datetime.now() - cache_timestamp
+    except Exception:
+        return True
+    return age >= fresh_window

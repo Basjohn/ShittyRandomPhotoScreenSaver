@@ -21,7 +21,13 @@ from weather.open_meteo_provider import OpenMeteoProvider
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from widgets.service_widget_runtime import ensure_single_shot_timer, stop_overlay_timer_pair, stop_qtimer_attr
+from widgets.service_widget_runtime import (
+    ensure_single_shot_timer,
+    should_run_automatic_startup_refresh,
+    stop_overlay_timer_pair,
+    stop_qtimer_attr,
+)
+from core.runtime_flags import automatic_service_updates_enabled
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
     WeatherDetailRow,
@@ -643,7 +649,12 @@ class WeatherWidget(BaseOverlayWidget):
         self.hide()
         self._pending_first_show = True
 
-        self._fetch_weather()
+        if automatic_service_updates_enabled() and should_run_automatic_startup_refresh(cache_timestamp=self._cache_time):
+            self._fetch_weather()
+        elif automatic_service_updates_enabled():
+            logger.debug("[WEATHER] Skipping startup refresh; cached weather is still fresh")
+        else:
+            logger.info("[WEATHER] Automatic updates disabled via --noupdates; manual refresh only")
         self._schedule_refresh_cycle()
 
         self._enabled = True
@@ -682,11 +693,17 @@ class WeatherWidget(BaseOverlayWidget):
 
     def _schedule_refresh_cycle(self) -> None:
         """Schedule startup and steady-state refresh timers using one canonical policy."""
+        if not automatic_service_updates_enabled():
+            logger.info("[WEATHER] Automatic updates disabled via --noupdates; manual refresh only")
+            return
         self._schedule_startup_refresh()
         self._start_periodic_refresh_timer()
 
     def _schedule_startup_refresh(self) -> None:
         """Schedule the one-shot startup refresh used after activation/startup."""
+        if not should_run_automatic_startup_refresh(cache_timestamp=self._cache_time):
+            logger.debug("[WEATHER] Skipping startup refresh; cached weather is still fresh")
+            return
         # Open-Meteo free tier: 10k calls/day, our cadence stays well within that.
         ThreadManager.single_shot(30 * 1000, self._fetch_weather)
         logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")

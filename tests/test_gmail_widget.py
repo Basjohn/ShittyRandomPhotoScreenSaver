@@ -249,6 +249,56 @@ def test_gmail_cached_startup_stays_hidden_until_fade_starter_runs(qt_app, monke
         parent.deleteLater()
 
 
+def test_gmail_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, monkeypatch):
+    """Fresh cache should still allow timer setup while skipping startup retrieval."""
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        cached = EmailMetadata(
+            id="cached_msg",
+            thread_id="cached_thread",
+            sender="Sender",
+            subject="Cached Subject",
+            date=datetime.now(),
+            labels=("INBOX",),
+            is_unread=True,
+        )
+        monkeypatch.setattr(widget, "_load_email_cache", lambda: [cached])
+        monkeypatch.setattr(widget, "_get_email_cache_timestamp", lambda: datetime.now())
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
+
+        widget._activate_impl()
+
+        assert calls == ["timer"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_activate_disables_automatic_updates_under_noupdates(qt_app, monkeypatch):
+    """Automatic Gmail retrieval should fully stop under --noupdates."""
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    calls = []
+    try:
+        monkeypatch.setattr("widgets.gmail_widget.automatic_service_updates_enabled", lambda: False)
+        monkeypatch.setattr(widget, "_load_email_cache", lambda: None)
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_emails", lambda: calls.append("fetch") or False)
+
+        widget._activate_impl()
+
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_fetch_error_keeps_displayed_cache_visible(qt_app):
     """Fetch errors should not replace valid displayed mail with retry UI."""
     from datetime import datetime

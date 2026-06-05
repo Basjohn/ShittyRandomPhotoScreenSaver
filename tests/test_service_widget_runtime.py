@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget
 
@@ -14,6 +16,7 @@ from widgets.service_widget_runtime import (
     reset_deferred_runtime_state,
     stop_overlay_timer_pair,
     stop_qtimer_attr,
+    should_run_automatic_startup_refresh,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
 )
@@ -260,6 +263,23 @@ def test_preserve_visible_fallback_returns_true_only_for_trustworthy_visible_con
         assert preserve_visible_fallback(widget, content_attr="_items") is False
     finally:
         widget.deleteLater()
+
+
+def test_startup_refresh_runs_without_cache_timestamp(monkeypatch):
+    monkeypatch.setattr("widgets.service_widget_runtime.automatic_service_updates_enabled", lambda: True)
+    assert should_run_automatic_startup_refresh(cache_timestamp=None) is True
+
+
+def test_startup_refresh_skips_when_cache_is_fresh(monkeypatch):
+    monkeypatch.setattr("widgets.service_widget_runtime.automatic_service_updates_enabled", lambda: True)
+    fresh_time = datetime.now() - timedelta(minutes=5)
+    assert should_run_automatic_startup_refresh(cache_timestamp=fresh_time) is False
+
+
+def test_startup_refresh_stops_when_noupdates_is_active(monkeypatch):
+    monkeypatch.setattr("widgets.service_widget_runtime.automatic_service_updates_enabled", lambda: False)
+    stale_time = datetime.now() - timedelta(hours=1)
+    assert should_run_automatic_startup_refresh(cache_timestamp=stale_time) is False
 
 
 def test_reset_deferred_runtime_state_stops_timers_and_clears_attrs(qt_app):

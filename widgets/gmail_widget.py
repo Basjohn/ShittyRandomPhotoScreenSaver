@@ -62,6 +62,7 @@ from widgets.service_widget_runtime import (
     stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
+    should_run_automatic_startup_refresh,
     trigger_manual_refresh,
 )
 from widgets.shadow_utils import (
@@ -72,6 +73,7 @@ from widgets.shadow_utils import (
     header_shadows_enabled,
     text_shadows_enabled,
 )
+from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
 
@@ -409,8 +411,14 @@ class GmailWidget(BaseOverlayWidget):
             self._request_fade_in()
         else:
             self._update_card_height_from_content(1)
-        self._schedule_timer()
-        self._fetch_emails()
+        if automatic_service_updates_enabled():
+            self._schedule_timer()
+            if should_run_automatic_startup_refresh(cache_timestamp=self._get_email_cache_timestamp()):
+                self._fetch_emails()
+            else:
+                logger.debug("[GMAIL] Skipping startup refresh; cached mail is still fresh")
+        else:
+            logger.info("[GMAIL] Automatic updates disabled via --noupdates; manual refresh only")
         logger.debug("[LIFECYCLE] GmailWidget activated")
 
     def _deactivate_impl(self) -> None:
@@ -902,6 +910,15 @@ class GmailWidget(BaseOverlayWidget):
             return emails
         except Exception as e:
             logger.warning("[GMAIL] Failed to load cache: %s", e)
+            return None
+
+    def _get_email_cache_timestamp(self) -> Optional[datetime]:
+        try:
+            if not CACHE_PATH.exists():
+                return None
+            return datetime.fromtimestamp(CACHE_PATH.stat().st_mtime)
+        except Exception as e:
+            logger.debug("[GMAIL] Failed to inspect cache timestamp: %s", e)
             return None
 
     def _write_email_cache(self, emails: List[EmailMetadata]) -> None:

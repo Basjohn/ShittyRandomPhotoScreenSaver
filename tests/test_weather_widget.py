@@ -1,4 +1,5 @@
 """Tests for weather widget."""
+from datetime import datetime
 import pytest
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
@@ -330,6 +331,49 @@ def test_weather_schedule_refresh_cycle_uses_shared_startup_and_jitter_policy(qa
     ]
     assert weather._update_timer_handle is not None
     assert weather._update_timer is not None
+
+
+def test_weather_schedule_refresh_cycle_skips_startup_fetch_when_cache_is_fresh(qapp, parent_widget, monkeypatch):
+    weather = WeatherWidget(parent=parent_widget)
+    single_shots = []
+    timer_calls = []
+
+    class _Handle:
+        def __init__(self):
+            self._timer = object()
+
+    weather._cache_time = datetime.now()
+    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
+    monkeypatch.setattr("widgets.weather_widget.random.randint", lambda a, b: 0)
+    monkeypatch.setattr(
+        "widgets.weather_widget.create_overlay_timer",
+        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)) or _Handle(),
+    )
+
+    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+
+    assert single_shots == []
+    assert timer_calls == [
+        (weather, 30 * 60 * 1000, weather._fetch_weather, "WeatherWidget refresh")
+    ]
+
+
+def test_weather_schedule_refresh_cycle_disables_automatic_updates_under_noupdates(qapp, parent_widget, monkeypatch):
+    weather = WeatherWidget(parent=parent_widget)
+    single_shots = []
+    timer_calls = []
+
+    monkeypatch.setattr("widgets.weather_widget.automatic_service_updates_enabled", lambda: False)
+    monkeypatch.setattr("widgets.weather_widget.ThreadManager.single_shot", lambda delay, cb: single_shots.append((delay, cb)))
+    monkeypatch.setattr(
+        "widgets.weather_widget.create_overlay_timer",
+        lambda owner, interval, callback, description="": timer_calls.append((owner, interval, callback, description)),
+    )
+
+    weather._schedule_refresh_cycle()  # type: ignore[attr-defined]
+
+    assert single_shots == []
+    assert timer_calls == []
 
 
 def test_weather_start_uses_same_refresh_schedule_for_cached_startup(qapp, parent_widget, monkeypatch):
