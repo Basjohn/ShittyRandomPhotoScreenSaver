@@ -538,8 +538,9 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
 
 def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     """Return (reddit_config, reddit2_config) from current UI state."""
+    family_enabled = tab.reddit_enabled.isChecked()
     reddit_config = {
-        'enabled': tab.reddit_enabled.isChecked(),
+        'enabled': family_enabled,
         'exit_on_click': tab.reddit_exit_on_click.isChecked(),
         'subreddit': tab.reddit_subreddit.text().strip() or 'wallpapers',
         'limit': clamp_list_capacity(tab.reddit_items.value(), default=10),
@@ -564,7 +565,9 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     reddit_config['monitor'] = rmon_text if rmon_text == 'ALL' else int(rmon_text)
 
     reddit2_config = {
-        'enabled': tab.reddit2_enabled.isChecked(),
+        # The top-level Reddit toggle owns the whole family. Reddit 2 only
+        # participates when the family is enabled and its own child toggle is on.
+        'enabled': family_enabled and tab.reddit2_enabled.isChecked(),
         'subreddit': tab.reddit2_subreddit.text().strip(),
         'limit': clamp_list_capacity(tab.reddit2_items.value(), default=20),
         'position': tab.reddit2_position.currentText(),

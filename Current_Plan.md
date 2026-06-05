@@ -14,6 +14,17 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
 
 ## Active Tasks
 
+- [ ] Re-close shared service-widget startup retrieval gating so frequent testing does not trigger avoidable Gmail/Reddit/Weather bans or churn.
+  - [ ] Add a clean CLI `--noupdates` contract that disables automatic retrieval work for Gmail, Reddit, and Weather while preserving manual refresh affordances such as double-click or spiral-triggered refresh.
+  - [ ] Keep `--noupdates` startup-safe: the contract should suppress automatic retrieval on startup too, rather than only suppressing later timers.
+  - [ ] Evaluate a shared cache-age startup-refresh contract for general users: if Gmail/Reddit/Weather cache is newer than 15 minutes, skip automatic startup refresh and reuse cache first.
+  - [ ] Keep the cache-age contract clean and low-overhead; it must not add noticeable startup cost or another widget-local ad hoc decision path.
+
+- [ ] Re-close the Reddit family enable/disable contract so the master Reddit toggle owns both Reddit widgets consistently.
+  - [ ] Make the top-level Reddit enable state persist as a family gate, so disabling Reddit cannot leave `reddit2` alive across save/restart.
+  - [ ] Make startup/runtime overlay expectation logic treat `reddit.enabled=false` as disabling the whole Reddit family even if stale `reddit2.enabled=true` survives in older settings.
+  - [ ] Validate in runtime that disabling Reddit removes both `reddit` and `reddit2` after exiting settings and relaunching, with no stray startup refresh/rate-limit work from the secondary widget.
+
 - [ ] Re-close widget position recovery/default-route safety so stale `Custom` state cannot strand overlays off-screen.
   - [x] Stop invalid `spotify_visualizer` `Custom + ALL` recovery from guessing a screen when no valid saved CUSTOM owner remains; restore the visualizer family back to its authored route instead.
   - [x] Add a Defaults-tab reset action that restores widget positions/monitor routes to the current profile's canonical shipped defaults (Normal vs MC) and clears persisted CUSTOM rects.
@@ -43,10 +54,11 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [x] Stop media smart-poll timer churn from recreating recurring timers during the same live session; adaptive poll-stage retunes should reuse the active ThreadManager timer in place so startup/playback windows do not accumulate poll jitter.
 
 - [ ] Re-close Bubble against the harsh runtime-loud oracle instead of weak helper bars.
-  - [x] Restore the Bubble runtime seam itself (`bubble_simulation.py`, `tick_pipeline.py`) to the `61ad4ba` V13 baseline after the later loud-path overfit stack made both runtime and the oracle less trustworthy.
-  - [ ] Rebuild the loud-path oracle from the restored baseline so it fails on the exact live complaint now: soft passages more expressive than loud ones, dead small lane in loud windows, and hero lane late/undersized relative to the same phrase.
-  - [ ] Keep the oracle as the active target instead of relaxing it to fit current code; if runtime still looks bad while the bar is green, strengthen the bar before touching Bubble again.
-  - [ ] Make one Bubble loud-path change at a time from this baseline and require logs/runtime to either confirm the aspect improved or prove the oracle is still incomplete before stacking another change.
+  - [x] Restore the Bubble runtime seam itself (`bubble_simulation.py`, `tick_pipeline.py`) to the `510520e` old-logic baseline after the later loud-path overfit stack made both runtime and the oracle less trustworthy.
+  - [x] Rebuild the current loud-path oracle into a restored-baseline floor guard so the now-alive `510520e` behavior is protected before further Bubble work resumes.
+  - [ ] Validate the single small-lane body-support change against live runtime/logs and keep it only if it materially improves small-bubble activity without harming the restored hero-lane life; current complaint is still that small bubbles barely pulse in soft passages and not at all in loud ones.
+  - [ ] Keep the oracle as a floor guard first and tighten it upward only after a visible runtime improvement is confirmed; do not let it drift back into fake-green proxy coverage.
+  - [ ] Make one Bubble visible seam change at a time from this restored baseline and require logs/runtime to either confirm the aspect improved or prove the oracle is still incomplete before stacking another change.
   - [x] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; use the widget-path oracle as the real gate.
   - [x] Finish the Bubble settings audit against the current Preset 1 runtime target and confirm the main controls are wired; keep `bubble_growth` documented as outer card growth, not Bubble reactivity/size growth.
   - [ ] Only revisit the deferred optional big-bubble render-only interpolation pass if the restored baseline plus rebuilt oracle show the remaining problem is purely visual flicker rather than wrong loud-path semantics.

@@ -529,6 +529,23 @@ class TestWidgetsTab:
         assert shadows_cfg.get("text_enabled") is False
         assert shadows_cfg.get("header_enabled") is True
 
+    def test_widgets_tab_master_reddit_toggle_disables_reddit2_persistence(self, qt_app, widgets_tab):
+        tab = widgets_tab
+
+        tab.reddit_enabled.setChecked(True)
+        tab.reddit2_enabled.setChecked(True)
+        tab._save_settings_now()
+
+        widgets_cfg = tab._settings.get("widgets", {})
+        assert widgets_cfg.get("reddit2", {}).get("enabled") is True
+
+        tab.reddit_enabled.setChecked(False)
+        tab._save_settings_now()
+
+        widgets_cfg = tab._settings.get("widgets", {})
+        assert widgets_cfg.get("reddit", {}).get("enabled") is False
+        assert widgets_cfg.get("reddit2", {}).get("enabled") is False
+
     def test_widgets_tab_load_settings_uses_descriptor_loader_routing(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
         try:

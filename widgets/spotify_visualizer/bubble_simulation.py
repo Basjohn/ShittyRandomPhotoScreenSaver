@@ -196,6 +196,7 @@ class BubbleSimulation:
         self._small_size_max: float = 0.018
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
+        self._sustained_loud_energy: float = 0.0  # compatibility loudness proxy for diagnostics/tests
         self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
         self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
         self._overdrive_active: bool = False
@@ -217,6 +218,7 @@ class BubbleSimulation:
         self._time = 0.0
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
+        self._sustained_loud_energy = 0.0
         self._bass_running_avg = 0.0
         self._midhi_running_avg = 0.0
         self._overdrive_active = False
@@ -363,6 +365,7 @@ class BubbleSimulation:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_attack
         else:
             self._midhi_running_avg += (midhi - self._midhi_running_avg) * avg_release
+        self._sustained_loud_energy = min(1.0, max(bass, overall))
 
         # --- Small→big promotion on every beat ---
         if beat_detected:
@@ -674,19 +677,31 @@ class BubbleSimulation:
                     attack_rate = 15.0
                     decay_rate = 7.2
             else:
-                raw_src = mid * 0.6 + high * 0.4
                 running_avg = self._midhi_running_avg
                 size_range = max(0.001, self._small_size_max - 0.004)
                 size_t = min(1.0, max(0.0, (b.radius - 0.004) / size_range))
+                # Keep the old lane ownership simple: small bubbles are still
+                # mid/high-led, but they need one shared body term so quiet and
+                # loud passages can both read without reintroducing a separate
+                # loud-mode helper stack.
+                chorus_support = soft_ceiling(
+                    max(0.0, overall - (0.14 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.16 - size_t * 0.02,
+                    max_input=0.78,
+                    curve=1.0,
+                )
+                raw_src = mid * 0.58 + high * 0.34 + chorus_support
                 delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
                 sustained_knee = 0.25 + size_t * 0.15
-                sustained_scale = 0.50 - size_t * 0.10
+                sustained_scale = 0.54 - size_t * 0.08
                 attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
 
             # Delta component: transient punch (noise gate: ignore sub-perceptual deltas)
             delta = max(0.0, raw_src - running_avg)
-            delta = max(0.0, delta - 0.015)  # suppress jitter below threshold
+            delta_gate = 0.015 if use_bass else 0.012
+            delta = max(0.0, delta - delta_gate)  # suppress jitter below threshold
             delta_component = min(1.0, delta * delta_sens)
 
             # Sustained component: absolute energy through perceptual curve

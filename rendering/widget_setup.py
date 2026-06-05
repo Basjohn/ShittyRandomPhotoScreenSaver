@@ -129,7 +129,7 @@ def compute_expected_overlays(
     reddit2_settings = widgets_map.get('reddit2', {})
     reddit2_enabled = SettingsManager.to_bool(reddit2_settings.get('enabled', False), False)
     reddit2_monitor = reddit2_settings.get('monitor', 'ALL')
-    if reddit2_enabled and resolve_monitor_visibility(reddit2_monitor, screen_index):
+    if reddit_enabled and reddit2_enabled and resolve_monitor_visibility(reddit2_monitor, screen_index):
         expected.add("reddit2")
 
     # Gmail

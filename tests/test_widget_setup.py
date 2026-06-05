@@ -30,6 +30,25 @@ def test_compute_expected_overlays_excludes_visualizer_from_primary_wave():
     assert "spotify_visualizer" not in expected
 
 
+def test_compute_expected_overlays_treats_reddit_master_toggle_as_family_gate():
+    display = SimpleNamespace(screen_index=0)
+    widgets_config = {
+        "reddit": {
+            "enabled": False,
+            "monitor": "ALL",
+        },
+        "reddit2": {
+            "enabled": True,
+            "monitor": "ALL",
+        },
+    }
+
+    expected = compute_expected_overlays(display, widgets_config)
+
+    assert "reddit" not in expected
+    assert "reddit2" not in expected
+
+
 def test_start_overlay_fades_uses_deliberate_primary_and_secondary_startup_delays():
     primary_calls: list[str] = []
     secondary_delays: list[int] = []
