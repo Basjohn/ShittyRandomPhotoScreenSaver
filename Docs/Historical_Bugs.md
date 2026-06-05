@@ -10,6 +10,7 @@ This is the long-term anti-regression record for the project, not an active task
 ### Open Issues
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
 1. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
@@ -47,6 +48,41 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="U-07"></a>
+### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)
+
+- [x] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current unresolved state:** Bubble was reverted back to the `61ad4ba` runtime baseline (`4.1 Alphas - V13 More Vizwork - Bubble Soft Good Hard Soft Decent`) after a long sequence of loud-path fixes made both runtime behavior and the oracle less trustworthy. Soft passages had been good at several points, but loud passages still underreacted badly, and later attempts also dirtied the good soft-path feel.
+- **Observed failure pattern:**
+  - live runtime repeatedly showed soft passages looking more expressive than louder passages
+  - small bubbles often died in loud passages while big bubbles pulsed late, flickered, or plateaued at the wrong visible size
+  - some automated bars stayed green even when runtime still looked awful
+  - later passes made the bar easier to satisfy while live behavior stayed wrong or got worse
+- **What went wrong in the investigation:**
+  - too many loud-path adjustments were stacked at once across `bubble_simulation.py`, `tick_pipeline.py`, and the widget-path oracle
+  - the loud oracle was repeatedly tuned to current code instead of staying anchored to the user-visible rule that louder music must not look less active than softer music
+  - helper/proxy-style checks and permissive thresholds were allowed to coexist with an unresolved runtime complaint
+  - sim-only or feed-only conclusions were trusted too early without matching the exact live failure shape
+- **Concrete failed methods worth preserving:**
+  - weakening the replay oracle from a stronger "loud must beat soft" expectation into "materially alive" ratios such as `hot_small >= soft_small * 0.80` and `hot_big >= soft_big * 0.88`
+  - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime
+  - treating a green synthetic or widget-path bar as sufficient even after live logs still showed loud sections plateauing around modest visible output while raw/transient loudness was much higher
+  - trying to fix several of these at once: signal source choice, small-lane support, big-lane hold, render sizing, and oracle expectations
+- **Key lessons / guardrails from this failure family:**
+  - when runtime says soft looks better than loud, the loud oracle must fail in that same shape before more code tuning continues
+  - do one aspect change at a time once the oracle is suspect; otherwise good fixes can be buried under later overfit changes
+  - do not relax Bubble loud-path assertions to fit current code; strengthen them against live logs instead
+  - historical-good commits such as `61ad4ba` are recovery baselines for the runtime seam only, not a reason to restore older weak tests wholesale
+- **Next correct direction:**
+  - keep the restored Bubble runtime baseline
+  - rebuild the loud-path oracle from current logs so it strongly fails on the exact runtime complaint
+  - only after the oracle is honestly red should the next single-aspect Bubble loud-path fix land
+
 
 <a id="R-24"></a>
 ### [R-24] 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)

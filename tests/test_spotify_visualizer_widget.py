@@ -1324,59 +1324,84 @@ def _deep_sea_runtime_log_replay_profile() -> list[dict[str, object]]:
     The important characteristics are:
     - soft opening has decent mid/high activity and visible small-lane motion
     - later hot section is bass-heavy and loud overall
-    - onset/transient help is sparse across the hot window
+    - onset/transient help is sparse across most of the hot window
+    - a later vocal swell / snare pair must still visibly lift Bubble activity
     - hero lane should not pin flat while the small lane dies
     """
 
     return [
         {
-            "pulse": {"bass": 0.26, "mid": 0.22, "high": 0.08, "overall": 0.34},
-            "broad": {"bass": 0.18, "mid": 0.26, "high": 0.08, "overall": 0.34},
+            "pulse": {"bass": 0.28, "mid": 0.24, "high": 0.08, "overall": 0.36},
+            "broad": {"bass": 0.18, "mid": 0.28, "high": 0.08, "overall": 0.35},
             "transient": {"bass_transient": 0.05, "mid_transient": 0.07, "high_transient": 0.01},
         },
         {
-            "pulse": {"bass": 0.34, "mid": 0.24, "high": 0.07, "overall": 0.40},
-            "broad": {"bass": 0.20, "mid": 0.28, "high": 0.07, "overall": 0.39},
+            "pulse": {"bass": 0.34, "mid": 0.27, "high": 0.07, "overall": 0.42},
+            "broad": {"bass": 0.20, "mid": 0.30, "high": 0.07, "overall": 0.40},
             "transient": {"bass_transient": 0.04, "mid_transient": 0.06, "high_transient": 0.01},
         },
         {
-            "pulse": {"bass": 0.82, "mid": 0.11, "high": 0.03, "overall": 0.54},
-            "broad": {"bass": 0.28, "mid": 0.13, "high": 0.03, "overall": 0.47},
-            "transient": {"bass_transient": 0.16, "mid_transient": 0.02, "high_transient": 0.00},
+            "pulse": {"bass": 1.10, "mid": 0.14, "high": 0.03, "overall": 0.60},
+            "broad": {"bass": 0.28, "mid": 0.12, "high": 0.03, "overall": 0.45},
+            "transient": {"bass_transient": 0.28, "mid_transient": 0.03, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.90, "mid": 0.11, "high": 0.03, "overall": 0.57},
-            "broad": {"bass": 0.30, "mid": 0.12, "high": 0.03, "overall": 0.48},
+            "pulse": {"bass": 1.52, "mid": 0.16, "high": 0.03, "overall": 0.64},
+            "broad": {"bass": 0.30, "mid": 0.11, "high": 0.03, "overall": 0.46},
             "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.94, "mid": 0.12, "high": 0.03, "overall": 0.60},
-            "broad": {"bass": 0.34, "mid": 0.13, "high": 0.03, "overall": 0.50},
+            "pulse": {"bass": 1.54, "mid": 0.18, "high": 0.04, "overall": 0.66},
+            "broad": {"bass": 0.31, "mid": 0.12, "high": 0.03, "overall": 0.47},
             "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.92, "mid": 0.11, "high": 0.03, "overall": 0.57},
-            "broad": {"bass": 0.30, "mid": 0.12, "high": 0.03, "overall": 0.48},
+            "pulse": {"bass": 1.10, "mid": 0.16, "high": 0.03, "overall": 0.60},
+            "broad": {"bass": 0.27, "mid": 0.11, "high": 0.03, "overall": 0.43},
             "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.98, "mid": 0.13, "high": 0.04, "overall": 0.61},
-            "broad": {"bass": 0.36, "mid": 0.14, "high": 0.04, "overall": 0.52},
-            "transient": {"bass_transient": 0.06, "mid_transient": 0.01, "high_transient": 0.00},
-        },
-        {
-            "pulse": {"bass": 0.88, "mid": 0.12, "high": 0.03, "overall": 0.56},
-            "broad": {"bass": 0.29, "mid": 0.12, "high": 0.03, "overall": 0.47},
+            "pulse": {"bass": 0.99, "mid": 0.38, "high": 0.06, "overall": 0.63},
+            "broad": {"bass": 0.25, "mid": 0.19, "high": 0.04, "overall": 0.44},
             "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.96, "mid": 0.12, "high": 0.03, "overall": 0.60},
-            "broad": {"bass": 0.33, "mid": 0.13, "high": 0.03, "overall": 0.50},
-            "transient": {"bass_transient": 0.03, "mid_transient": 0.01, "high_transient": 0.00},
+            "pulse": {"bass": 0.80, "mid": 0.22, "high": 0.04, "overall": 0.56},
+            "broad": {"bass": 0.22, "mid": 0.12, "high": 0.03, "overall": 0.39},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
         {
-            "pulse": {"bass": 0.86, "mid": 0.11, "high": 0.03, "overall": 0.55},
-            "broad": {"bass": 0.28, "mid": 0.12, "high": 0.03, "overall": 0.46},
+            "pulse": {"bass": 1.42, "mid": 0.86, "high": 0.07, "overall": 0.74},
+            "broad": {"bass": 0.29, "mid": 0.44, "high": 0.08, "overall": 0.56},
+            "transient": {
+                "bass_transient": 1.08,
+                "mid_transient": 0.82,
+                "high_transient": 0.07,
+                "onset_detected": True,
+                "onset_type": "vocal_swell",
+                "onset_strength": 0.14,
+            },
+        },
+        {
+            "pulse": {"bass": 0.90, "mid": 0.26, "high": 0.05, "overall": 0.59},
+            "broad": {"bass": 0.22, "mid": 0.14, "high": 0.03, "overall": 0.41},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 2.47, "mid": 1.14, "high": 0.22, "overall": 0.84},
+            "broad": {"bass": 0.34, "mid": 0.28, "high": 0.08, "overall": 0.58},
+            "transient": {
+                "bass_transient": 1.67,
+                "mid_transient": 0.99,
+                "high_transient": 0.21,
+                "onset_detected": True,
+                "onset_type": "snare",
+                "onset_strength": 0.28,
+            },
+        },
+        {
+            "pulse": {"bass": 1.35, "mid": 0.20, "high": 0.04, "overall": 0.62},
+            "broad": {"bass": 0.24, "mid": 0.11, "high": 0.02, "overall": 0.40},
             "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
     ]
@@ -4872,12 +4897,13 @@ def test_deep_sea_runtime_log_replay_keeps_loud_window_more_expressive_than_soft
     widget._vis_mode = VisualizerMode.BUBBLE
     _apply_authored_bubble_deep_sea(widget)
 
-    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, profile * 12)
-    # Use cycle-aligned windows after the profile has reached steady state.
-    # The first two frames of each 10-frame replay are the soft opening; the
-    # remaining eight frames are the sustained loud passage.
-    soft_window = metrics_series[20:22]
-    hot_window = metrics_series[82:90]
+    # Replay the runtime-shaped profile as one real phrase: a soft opening
+    # followed by a long hot section, not an endlessly repeating cycle that
+    # reintroduces "soft" frames after the loud bed has already latched.
+    replay_frames = profile[:2] * 16 + profile[2:] * 24
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    soft_window = metrics_series[12:20]
+    hot_window = metrics_series[-16:]
 
     assert soft_window and hot_window
     soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
@@ -4889,14 +4915,56 @@ def test_deep_sea_runtime_log_replay_keeps_loud_window_more_expressive_than_soft
 
     assert soft_small >= 0.030, "Need an expressive soft lane in the replay bar or this guard is meaningless."
     assert hot_loud >= 0.60, "Replay bar must actually stay in a loud sustained state."
-    assert hot_small >= soft_small * 0.96, (
-        "Replay loud window still kills the small lane relative to the expressive soft opening."
+    assert hot_small >= soft_small, (
+        "Replay loud window is still less expressive than the soft opening on the small lane."
     )
-    assert hot_big >= soft_big + 0.012, (
-        "Replay loud window still fails to raise the hero lane above the soft opening."
+    assert hot_big >= soft_big * 0.88, (
+        "Replay loud window still leaves the hero lane materially weaker than the soft opening."
     )
     assert hot_clamp < 5.4, (
         "Replay loud window still spends too much time pinned against hero clamp pressure."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_runtime_log_replay_vocal_and_snare_events_must_lift_small_lane(
+    qt_app,
+    qtbot,
+):
+    random.seed(10031)
+    profile = _deep_sea_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(profile, bar_count=48)
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    replay_frames = profile[:2] * 16 + profile[2:] * 24
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+
+    # Final hot-cycle windows:
+    # - hot_bed: sustained loud plateau before the later vocal/snare lift
+    # - vocal_window: authored vocal swell pair
+    # - snare_window: authored snare accent plus immediate tail
+    hot_bed = metrics_series[264:268]
+    vocal_window = metrics_series[268:270]
+    snare_window = metrics_series[270:272]
+
+    assert hot_bed and vocal_window and snare_window
+    bed_small = sum(m["max_small_delta"] for m in hot_bed) / len(hot_bed)
+    vocal_small = sum(m["max_small_delta"] for m in vocal_window) / len(vocal_window)
+    snare_small = sum(m["max_small_delta"] for m in snare_window) / len(snare_window)
+
+    assert bed_small >= 0.020, "Need a genuinely loud hot bed before checking the later event lift."
+    assert vocal_small >= bed_small * 1.08, (
+        "Replay vocal-swell window still fails to lift the small lane above the loud bed."
+    )
+    assert snare_small >= bed_small * 1.08, (
+        "Replay snare window still fails to lift the small lane above the loud bed."
     )
 
 

@@ -43,15 +43,13 @@ This file tracks active work only. Ongoing architecture truth belongs in the rel
   - [x] Stop media smart-poll timer churn from recreating recurring timers during the same live session; adaptive poll-stage retunes should reuse the active ThreadManager timer in place so startup/playback windows do not accumulate poll jitter.
 
 - [ ] Re-close Bubble against the harsh runtime-loud oracle instead of weak helper bars.
-  - [x] Keep the current soft/transient Bubble feel intact as a protected baseline while fixing sustained-loud behavior.
-  - [x] Make the authored `Preset 1 (Deep Sea)` widget-path loud oracle pass on the same late-loud shape that was failing in runtime: dead small lane, undersized hero lane, pinned clamp pressure, and flat/single-value late hero sizing.
-  - [x] Make the sustained-loud hold bar pass without reintroducing dynamic-floor dependence or a sticky "loud mode" that lingers after the drop.
-  - [x] Keep the size/clamp-edit guard honest: freeing the hero lane must not work by collapsing the small lane.
+  - [x] Restore the Bubble runtime seam itself (`bubble_simulation.py`, `tick_pipeline.py`) to the `61ad4ba` V13 baseline after the later loud-path overfit stack made both runtime and the oracle less trustworthy.
+  - [ ] Rebuild the loud-path oracle from the restored baseline so it fails on the exact live complaint now: soft passages more expressive than loud ones, dead small lane in loud windows, and hero lane late/undersized relative to the same phrase.
+  - [ ] Keep the oracle as the active target instead of relaxing it to fit current code; if runtime still looks bad while the bar is green, strengthen the bar before touching Bubble again.
+  - [ ] Make one Bubble loud-path change at a time from this baseline and require logs/runtime to either confirm the aspect improved or prove the oracle is still incomplete before stacking another change.
   - [x] Keep `tools/bubble_parity_harness.py` as a historical comparison anchor only; use the widget-path oracle as the real gate.
   - [x] Finish the Bubble settings audit against the current Preset 1 runtime target and confirm the main controls are wired; keep `bubble_growth` documented as outer card growth, not Bubble reactivity/size growth.
-  - [x] Keep the harsh loud oracle honest by grading the actual Bubble worker snapshot and a cycle-aligned log-replay dispatch profile; do not reintroduce helper-side re-snapshotting with neutral pulse params.
-  - [ ] Re-validate in live runtime that harsh loud sections now match the green oracle: small lane stays alive, hot big spawns do not enter dead, and late hero sizing stays strong without dynamic-floor dependence.
-  - [ ] If live runtime still shows only visual flicker after the structural loud-path fix, scope the deferred optional big-bubble render-only interpolation pass as a separate follow-up, not part of the signal path.
+  - [ ] Only revisit the deferred optional big-bubble render-only interpolation pass if the restored baseline plus rebuilt oracle show the remaining problem is purely visual flicker rather than wrong loud-path semantics.
 
 - [ ] Restore image-cache / prescale performance to a healthy runtime contract.
   - [ ] Treat the current single-display 1440p limitation as a validation boundary, not a closure signal: this setup can validate single-display cache authority, cold-start fallthrough, and transition-complete resume logging, but it cannot clear multi-display stagger/desync/bunching risk.
