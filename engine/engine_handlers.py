@@ -259,6 +259,12 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             reason="custom_layout_runtime_reload",
         )
 
+        try:
+            if engine.settings_manager is not None:
+                engine.settings_manager.load()
+        except Exception:
+            logger.debug("Settings reload after custom layout commit failed", exc_info=True)
+
         if not engine._initialize_display():
             logger.error("Failed to reinitialize displays after custom layout reload; quitting")
             QApplication.quit()

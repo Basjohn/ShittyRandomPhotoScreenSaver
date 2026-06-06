@@ -795,7 +795,7 @@ class DisplayWidget(QWidget):
     def recalculate_stacking(self) -> None:
         """Recalculate widget stacking offsets."""
         try:
-            widgets = self.settings_manager.get('widgets', {}) if self.settings_manager else {}
+            widgets = self.settings_manager.get_widgets_map() if self.settings_manager else {}
             self._apply_widget_stacking(widgets)
         except Exception:
             logger.debug("Failed to recalculate stacking", exc_info=True)

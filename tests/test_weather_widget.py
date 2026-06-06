@@ -3,6 +3,7 @@ from datetime import datetime
 import pytest
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 
@@ -455,6 +456,44 @@ def test_weather_error_with_cache(qapp, parent_widget, mock_weather_data):
     # Should fall back to cache (case-insensitive check)
     text = weather._city_label.text()
     assert "London" in text or "LONDON" in text.upper()
+
+
+def test_weather_runtime_content_refresh_respects_active_custom_rect(qapp, parent_widget, mock_weather_data):
+    weather = WeatherWidget(parent=parent_widget)
+    weather._custom_layout_local_rect = QRect(40, 50, 610, 280)
+    adjust_calls = []
+    update_position_calls = []
+    reapply_calls = []
+
+    weather.adjustSize = lambda: adjust_calls.append("adjust")  # type: ignore[method-assign]
+    weather._update_position = lambda: update_position_calls.append("position")  # type: ignore[method-assign]
+    weather._schedule_custom_layout_geometry_reapply = lambda: reapply_calls.append("reapply")  # type: ignore[method-assign]
+
+    weather._update_display(mock_weather_data)
+
+    assert adjust_calls == []
+    assert update_position_calls == []
+    assert reapply_calls == ["reapply"]
+
+
+def test_weather_start_error_path_respects_active_custom_rect(qapp, parent_widget):
+    weather = WeatherWidget(parent=parent_widget)
+    weather.set_thread_manager(Mock())
+    weather._location = ""
+    weather._custom_layout_local_rect = QRect(10, 20, 600, 300)
+    adjust_calls = []
+    update_position_calls = []
+    reapply_calls = []
+
+    weather.adjustSize = lambda: adjust_calls.append("adjust")  # type: ignore[method-assign]
+    weather._update_position = lambda: update_position_calls.append("position")  # type: ignore[method-assign]
+    weather._schedule_custom_layout_geometry_reapply = lambda: reapply_calls.append("reapply")  # type: ignore[method-assign]
+
+    weather.start()
+
+    assert adjust_calls == []
+    assert update_position_calls == []
+    assert reapply_calls == ["reapply"]
 
 
 def test_weather_fetcher_creation(qapp):

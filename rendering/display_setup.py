@@ -488,7 +488,7 @@ def setup_widgets(widget) -> None:
     
     # Delegate widget creation to WidgetManager
     if widget._widget_manager is not None:
-        widgets_config = widget.settings_manager.get('widgets', {}) if widget.settings_manager else {}
+        widgets_config = widget.settings_manager.get_widgets_map() if widget.settings_manager else {}
         widget._widget_manager.configure_expected_overlays(widgets_config)
         created = widget._widget_manager.setup_all_widgets(
             widget.settings_manager,
@@ -510,7 +510,7 @@ def setup_widgets(widget) -> None:
     widget._setup_pixel_shift()
     
     # Apply widget stacking for overlapping positions
-    widgets = widget.settings_manager.get('widgets', {})
+    widgets = widget.settings_manager.get_widgets_map() if widget.settings_manager else {}
     widget._apply_widget_stacking(widgets if isinstance(widgets, dict) else {})
 
 def apply_widget_stacking(widget, widgets_config: Dict[str, Any]) -> None:

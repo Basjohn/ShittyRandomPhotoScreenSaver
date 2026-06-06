@@ -270,6 +270,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
     from engine import engine_handlers
 
     guard_calls: list[tuple[int, str]] = []
+    load_calls: list[str] = []
     monkeypatch.setattr(
         "rendering.display_widget.DisplayWidget.suppress_pointer_input_globally",
         classmethod(lambda cls, duration_ms=700, reason="": guard_calls.append((int(duration_ms), str(reason)))),
@@ -286,6 +287,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
 
     engine = SimpleNamespace(
         display_manager=SimpleNamespace(cleanup=lambda: None),
+        settings_manager=SimpleNamespace(load=lambda: load_calls.append("load")),
         _display_initialized=True,
         stop=lambda exit_app=False: None,
         _initialize_display=lambda: True,
@@ -296,6 +298,7 @@ def test_custom_layout_reload_arms_pointer_guard(monkeypatch, qt_app):
     engine_handlers.on_custom_layout_reload_requested(engine)
 
     assert guard_calls == [(700, "custom_layout_runtime_reload")]
+    assert load_calls == ["load"]
 
 
 def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):

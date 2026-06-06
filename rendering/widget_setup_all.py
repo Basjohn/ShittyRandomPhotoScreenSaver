@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, TYPE_CHECKING
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -45,7 +46,7 @@ class _WidgetSetupContext:
 
 
 def _resolve_widgets_config(settings_manager: SettingsManager) -> dict:
-    widgets_config = settings_manager.get('widgets', {})
+    widgets_config = settings_manager.get_widgets_map()
     if not isinstance(widgets_config, dict):
         return {}
     return widgets_config
@@ -319,6 +320,33 @@ def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) 
     )
 
     _start_widgets(created)
+
+    if parent is not None:
+        try:
+            parent._apply_saved_custom_layouts()
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to apply saved custom layouts after startup", exc_info=True)
+
+        try:
+            pending = getattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+            if not isinstance(pending, bool):
+                pending = False
+            if not pending:
+                setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
+
+                def _stabilize_saved_custom_layouts() -> None:
+                    try:
+                        setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+                        parent._apply_saved_custom_layouts()
+                    except Exception:
+                        logger.debug(
+                            "[WIDGET_SETUP] Failed to stabilize saved custom layouts after startup",
+                            exc_info=True,
+                        )
+
+                QTimer.singleShot(0, _stabilize_saved_custom_layouts)
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to schedule saved custom layout stabilization", exc_info=True)
 
     for attr_name, widget in created.items():
         if widget is not None:

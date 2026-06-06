@@ -11,6 +11,7 @@ This is the long-term anti-regression record for the project, not an active task
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
+4. [U-08 — 2026-06-06 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Unresolved)](#U-08)
 
 ### Recent Resolutions
 1. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
@@ -48,6 +49,38 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="U-08"></a>
+### [U-08] 2026-06-06 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Unresolved)
+
+- [x] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current unresolved state:** edit-mode shells preview the intended geometry correctly, but after save/rebuild several widgets still reappear too large, overlap, or distort. The failure is much worse when the saved CUSTOM rect is smaller than the widget's authored/default size.
+- **Observed failure pattern:**
+  - shrinking `reddit`, `reddit2`, `gmail`, `weather`, `media`, and sometimes `spotify_visualizer` from their default sizes makes post-save runtime replay far more likely to widen, overlap, or otherwise ignore the previewed shell
+  - enlarging tends to survive more often, which made several geometry theories look plausible even while the real runtime contract was still broken
+  - disabling authored stacking did not remove the failures, proving the overlap family was larger than stack planning alone
+- **Root cause family currently identified:**
+  1. Several overlays are constructed with large authored/default minimum sizes before `_custom_layout_local_rect` is attached at runtime replay.
+  2. Later CUSTOM replay tried to `setGeometry(...)` to a smaller saved rect, but Qt still honored those earlier minimum constraints, so the widget could not actually shrink to the saved outer size.
+  3. Earlier tests missed this because they mostly used plain QWidget doubles without real BaseOverlayWidget minimum-size behavior, so replay looked correct in tests while the real widgets stayed too large.
+  4. Stacking noise obscured this by creating extra overlaps, but it was not the only or main cause once the user disabled stacking and the failures remained.
+- **Failed investigation patterns worth preserving:**
+  - treating post-save overlap as primarily a stacking planner issue
+  - fixing only widget-local geometry mutators while leaving pre-existing minimum constraints alive
+  - relying on polite test doubles that never start with large authored minimum widths/heights
+  - assuming "reassert the saved rect after payload apply" was sufficient even when Qt was still enforcing bigger minimum sizes created earlier in startup
+- **What changed once the real seam was identified:**
+  - CUSTOM replay now explicitly locks BaseOverlayWidget min/max width/height to the committed saved rect once `_custom_layout_local_rect` becomes active
+  - clearing CUSTOM replay restores the prior authored min/max constraints
+  - focused regression tests now include hostile shrink cases where a widget starts with larger authored minimums and must still land on the smaller committed CUSTOM rect
+  - full CUSTOM runtime reload now refreshes the in-memory settings snapshot before display recreation, and geometry-critical runtime seams were moved onto `get_widgets_map()` instead of ad hoc `get('widgets', ...)` calls so stale widget-route snapshots cannot keep reintroducing authored geometry after the saved file is already correct
+- **Remaining lesson / guardrail:**
+  - whenever a CUSTOM geometry bug is "much worse when shrinking than enlarging", audit pre-existing minimum/maximum size constraints before blaming stacking, normalized rect math, or edit-shell preview
+  - if logs prove the saved settings file is correct while runtime still behaves as if widgets are authored/default-sized, treat stale in-memory widget snapshots as a first-class suspect and re-audit any geometry ownership checks that still gate on route/config state instead of an active committed custom rect
 
 <a id="U-07"></a>
 ### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)

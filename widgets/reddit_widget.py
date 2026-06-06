@@ -70,6 +70,7 @@ from widgets.service_widget_runtime import (
     defer_value_if_transition,
     end_fetch_guard,
     ensure_single_shot_timer,
+    get_automatic_startup_refresh_decision,
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
@@ -77,7 +78,6 @@ from widgets.service_widget_runtime import (
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
     trigger_manual_refresh,
-    should_run_automatic_startup_refresh,
 )
 from core.runtime_flags import automatic_service_updates_enabled
 
@@ -283,10 +283,20 @@ class RedditWidget(BaseOverlayWidget):
         if automatic_service_updates_enabled():
             self._schedule_timer()
             cache_timestamp = self._get_cache_timestamp()
-            if should_run_automatic_startup_refresh(cache_timestamp=cache_timestamp):
+            decision = get_automatic_startup_refresh_decision(cache_timestamp=cache_timestamp)
+            if decision.run:
+                logger.info(
+                    "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
                 self._fetch_feed()
             else:
-                logger.debug("[REDDIT] Skipping startup refresh; cached subreddit data is still fresh")
+                logger.info(
+                    "[CACHE][REDDIT] Startup refresh skipped (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
         else:
             logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
         logger.debug("[LIFECYCLE] RedditWidget activated")
@@ -380,10 +390,20 @@ class RedditWidget(BaseOverlayWidget):
         if automatic_service_updates_enabled():
             self._schedule_timer()
             cache_timestamp = self._get_cache_timestamp()
-            if should_run_automatic_startup_refresh(cache_timestamp=cache_timestamp):
+            decision = get_automatic_startup_refresh_decision(cache_timestamp=cache_timestamp)
+            if decision.run:
+                logger.info(
+                    "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
                 self._fetch_feed()
             else:
-                logger.debug("[REDDIT] Skipping startup refresh; cached subreddit data is still fresh")
+                logger.info(
+                    "[CACHE][REDDIT] Startup refresh skipped (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
         else:
             logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
 

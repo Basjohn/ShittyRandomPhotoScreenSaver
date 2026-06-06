@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QRect, QTimer
 from PySide6.QtWidgets import QWidget
 
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
@@ -102,6 +102,22 @@ def test_spotify_volume_uses_track_shadow_without_outer_frame_box(qt_app):
     try:
         assert widget.uses_outer_frame_shadow() is False
         assert widget.uses_painted_frame_shadow() is True
+    finally:
+        widget.deleteLater()
+
+
+def test_spotify_volume_scale_contract_respects_active_custom_rect(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    try:
+        widget._custom_layout_local_rect = QRect(12, 34, 66, 288)  # type: ignore[attr-defined]
+        reapply_calls = []
+        monkeypatch.setattr(widget, "_schedule_custom_layout_geometry_reapply", lambda: reapply_calls.append("reapply"))  # type: ignore[method-assign]
+
+        widget.apply_scale_contract(width=40, height=180, track_width=14, track_margin=5)
+
+        assert widget.minimumWidth() == 66
+        assert widget.minimumHeight() == 288
+        assert reapply_calls == ["reapply"]
     finally:
         widget.deleteLater()
 

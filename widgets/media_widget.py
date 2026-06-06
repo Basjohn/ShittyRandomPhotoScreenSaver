@@ -724,10 +724,17 @@ class MediaWidget(BaseOverlayWidget):
         if size <= 0:
             return
         self._artwork_size = int(size)
+        target_min_height = max(220, self._artwork_size + 60)
         # Keep the card's minimum height in sync with the configured artwork
         # footprint so resizing via settings does not cause unexpected jumps
         # at runtime.
-        self.setMinimumHeight(max(220, self._artwork_size + 60))
+        self.setMinimumHeight(self._resolve_custom_locked_height(target_min_height))
+        if self._active_custom_layout_rect() is not None:
+            try:
+                self.updateGeometry()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+            self._schedule_custom_layout_geometry_reapply()
         if self._last_info is not None:
             try:
                 self._update_display(self._last_info)

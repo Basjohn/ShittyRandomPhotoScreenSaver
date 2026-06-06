@@ -691,6 +691,67 @@ class TestStartupCoordination:
         assert clock.stack_offsets[-1] == QPoint(0, 0)
         assert weather.stack_offsets[-1] == QPoint(0, 0)
 
+    def test_apply_widget_stacking_skips_widgets_with_active_custom_layout_rect_even_without_custom_route(self):
+        from PySide6.QtCore import QPoint, QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int, height: int, *, custom_rect: QRect | None = None):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._height = height
+                self._base_y = base_y
+                self._stack_offset = QPoint(0, 0)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+                if custom_rect is not None:
+                    self._custom_layout_local_rect = QRect(custom_rect)
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: self._height)
+
+            def height(self):
+                return self._height
+
+            def get_bounding_size(self):
+                return SimpleNamespace(height=lambda: self._height)
+
+        parent = MagicMock()
+        parent.height.return_value = 1439
+        parent.screen_index = 1
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20, 267)
+        reddit = _StackWidget("MIDDLE_LEFT", 357, 724, custom_rect=QRect(200, 357, 600, 724))
+        gmail = _StackWidget("BOTTOM_LEFT", 1066, 353)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (reddit, "reddit_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "reddit": {"position": "Middle Left"},
+                "gmail": {"position": "Bottom Left"},
+            },
+        )
+
+        assert weather.stack_offsets[-1] == QPoint(0, 0)
+        assert reddit.stack_offsets[-1] == QPoint(0, 0)
+        assert gmail.stack_offsets[-1] == QPoint(0, 0)
+        assert weather.y() == 20
+        assert reddit.y() == 357
+        assert gmail.y() == 1066
+
     def test_apply_widget_stacking_is_disabled_by_default_and_clears_offsets(self):
         from PySide6.QtCore import QPoint
         from rendering.widget_manager import WidgetManager
@@ -735,6 +796,104 @@ class TestStartupCoordination:
         )
 
         assert weather.stack_offsets[-1] == QPoint(0, 0)
+        assert gmail.stack_offsets[-1] == QPoint(0, 0)
+
+    def test_apply_widget_stacking_is_disabled_for_entire_display_during_custom_edit_mode(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._stack_offset = QPoint(0, 99)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return 100 + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 120)
+
+            def height(self):
+                return 120
+
+        parent = MagicMock()
+        parent.height.return_value = 1000
+        parent._custom_layout_edit_active = True
+        manager = WidgetManager(parent)
+        reddit = _StackWidget("MIDDLE_LEFT")
+        gmail = _StackWidget("BOTTOM_LEFT")
+
+        manager.apply_widget_stacking(
+            [
+                (reddit, "reddit_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "reddit": {"position": "Middle Left"},
+                "gmail": {"position": "Bottom Left"},
+            },
+        )
+
+        assert reddit.stack_offsets[-1] == QPoint(0, 0)
+        assert gmail.stack_offsets[-1] == QPoint(0, 0)
+
+    def test_apply_widget_stacking_is_disabled_globally_when_any_widget_family_uses_custom_mode(self):
+        from PySide6.QtCore import QPoint
+        from rendering.widget_manager import WidgetManager
+
+        class _StackWidget:
+            def __init__(self, position_name: str, base_y: int):
+                self._position = SimpleNamespace(name=position_name)
+                self._margin = 20
+                self._stack_offset = QPoint(0, 33)
+                self._pixel_shift_offset = QPoint(0, 0)
+                self._base_y = base_y
+                self.stack_offsets: list[QPoint] = []
+
+            def set_stack_offset(self, offset: QPoint) -> None:
+                self._stack_offset = QPoint(offset)
+                self.stack_offsets.append(QPoint(offset))
+
+            def y(self):
+                return self._base_y + self._stack_offset.y()
+
+            def sizeHint(self):
+                return SimpleNamespace(isValid=lambda: True, height=lambda: 160)
+
+            def height(self):
+                return 160
+
+        parent = MagicMock()
+        parent.height.return_value = 1200
+        manager = WidgetManager(parent)
+        weather = _StackWidget("TOP_LEFT", 20)
+        reddit = _StackWidget("MIDDLE_LEFT", 320)
+        gmail = _StackWidget("BOTTOM_LEFT", 900)
+
+        manager.apply_widget_stacking(
+            [
+                (weather, "weather_widget"),
+                (reddit, "reddit_widget"),
+                (gmail, "gmail_widget"),
+            ],
+            {
+                "global": {"stacking_enabled": True},
+                "weather": {"position": "Top Left"},
+                "reddit": {"position": "Custom"},
+                "gmail": {"position": "Middle Left"},
+            },
+        )
+
+        assert weather.stack_offsets[-1] == QPoint(0, 0)
+        assert reddit.stack_offsets[-1] == QPoint(0, 0)
         assert gmail.stack_offsets[-1] == QPoint(0, 0)
 
     def test_apply_widget_stacking_reflows_same_column_across_top_middle_bottom(self):
@@ -1456,6 +1615,24 @@ class TestSettingsRouting:
         manager._refresh_media_config.assert_not_called()
         manager._refresh_spotify_visualizer_config.assert_not_called()
 
+    def test_handle_settings_changed_suppresses_live_widget_refresh_during_custom_reload(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        parent._custom_layout_runtime_reload_pending = True
+        manager = WidgetManager(parent)
+        manager._refresh_media_config = MagicMock()
+        manager._refresh_reddit_configs = MagicMock()
+        manager._refresh_spotify_visualizer_config = MagicMock()
+
+        manager._handle_settings_changed("widgets", {"media": {"enabled": True}})
+        manager._handle_settings_changed("widgets.reddit.limit", 7)
+
+        manager._refresh_media_config.assert_not_called()
+        manager._refresh_reddit_configs.assert_not_called()
+        manager._refresh_spotify_visualizer_config.assert_not_called()
+        parent._apply_saved_custom_layouts.assert_not_called()
+
     def test_refresh_media_config_reapplies_artwork_font_and_rounding(self):
         from rendering.widget_manager import WidgetManager
 
@@ -1667,7 +1844,7 @@ class TestSettingsRouting:
         assert vis._blob_width == pytest.approx(0.5)
         assert vis._geometry == (175, 400, 150, 280)
 
-    def test_position_spotify_visualizer_honors_custom_rect_when_visualizer_position_is_custom(self):
+    def test_position_spotify_visualizer_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
@@ -1704,9 +1881,8 @@ class TestSettingsRouting:
                 self.raised = True
 
         settings = MagicMock()
-        settings.get.return_value = {
+        settings.get_widgets_map.return_value = {
             "media": {"position": "Bottom Left"},
-            "spotify_visualizer": {"position": "Custom"},
         }
         manager = WidgetManager(MagicMock())
         manager._settings_manager = settings
@@ -1715,10 +1891,10 @@ class TestSettingsRouting:
 
         manager.position_spotify_visualizer(vis, None, 1920, 1080)
 
-        assert vis._geometry == (333, 444, 300, 160)
+        assert vis._geometry == (333, 444, 555, 160)
         assert vis.raised is True
 
-    def test_position_spotify_visualizer_custom_rect_uses_scale_payload(self):
+    def test_position_spotify_visualizer_custom_rect_uses_scale_payload_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
@@ -1755,7 +1931,7 @@ class TestSettingsRouting:
                 self.raised = True
 
         settings = MagicMock()
-        settings.get.return_value = {"spotify_visualizer": {"position": "Custom"}}
+        settings.get_widgets_map.return_value = {}
         manager = WidgetManager(MagicMock())
         manager._settings_manager = settings
 
@@ -1763,10 +1939,10 @@ class TestSettingsRouting:
 
         manager.position_spotify_visualizer(vis, None, 1920, 1080)
 
-        assert vis._geometry == (210, 310, 210, 350)
+        assert vis._geometry == (210, 310, 420, 350)
         assert vis.raised is True
 
-    def test_position_spotify_volume_honors_custom_rect_when_media_position_is_custom(self):
+    def test_position_spotify_volume_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
@@ -1800,7 +1976,7 @@ class TestSettingsRouting:
                 return 180
 
         settings = MagicMock()
-        settings.get.return_value = {"media": {"position": "Custom"}}
+        settings.get_widgets_map.return_value = {}
         manager = WidgetManager(MagicMock())
         manager._settings_manager = settings
 

@@ -1,6 +1,7 @@
 """Tests for Gmail widget with Qt app (requires QCoreApplication)."""
 from __future__ import annotations
 
+from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QApplication, QWidget
 import pytest
 
@@ -622,6 +623,35 @@ def test_gmail_widget_phase_a_settings(qt_app):
         assert widget._account_slot == "2"
     finally:
         widget.cleanup()
+
+
+def test_gmail_apply_width_respects_active_custom_rect(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    parent = QWidget()
+    parent.resize(1600, 900)
+    widget = GmailWidget(parent=parent)
+    try:
+        widget._custom_layout_local_rect = QRect(100, 120, 777, 333)
+        resize_calls = []
+        update_position_calls = []
+        reapply_calls = []
+
+        widget.resize = lambda *args: resize_calls.append(args)  # type: ignore[method-assign]
+        widget._update_position = lambda: update_position_calls.append("position")  # type: ignore[method-assign]
+        widget._schedule_custom_layout_geometry_reapply = lambda: reapply_calls.append("reapply")  # type: ignore[method-assign]
+        widget._width = 640
+
+        widget._apply_width()
+
+        assert widget.minimumWidth() == 777
+        assert widget.maximumWidth() == 777
+        assert resize_calls == []
+        assert update_position_calls == []
+        assert reapply_calls == ["reapply"]
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
 
 
 def test_gmail_widget_text_cleanup_settings(qt_app):

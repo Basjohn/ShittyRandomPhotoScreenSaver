@@ -362,17 +362,21 @@ class CustomLayoutManager:
                 )
 
         write_custom_layout_map(widgets_map, custom_layout_map)
-        settings_manager.set_widgets_map(widgets_map)
-        settings_manager.save()
+        self._set_runtime_reload_pending_for_managers(active_managers, True)
+        try:
+            settings_manager.set_widgets_map(widgets_map)
+            settings_manager.save()
 
-        for manager in active_managers:
-            manager._finish_session(
-                restore_live_visibility=False,
-                restore_special_widgets=False,
-            )
-        if not self._request_runtime_reload():
-            self._reload_widgets_across_instances()
-        return True
+            for manager in active_managers:
+                manager._finish_session(
+                    restore_live_visibility=False,
+                    restore_special_widgets=False,
+                )
+            if not self._request_runtime_reload():
+                self._reload_widgets_across_instances()
+            return True
+        finally:
+            self._set_runtime_reload_pending_for_managers(active_managers, False)
 
     def reset_to_authored_layout(self) -> bool:
         """Restore the last known non-CUSTOM authored routes and exit edit mode.
@@ -405,17 +409,21 @@ class CustomLayoutManager:
         if not restored_any:
             return False
 
-        settings_manager.set_widgets_map(widgets_map)
-        settings_manager.save()
+        self._set_runtime_reload_pending_for_managers(active_managers, True)
+        try:
+            settings_manager.set_widgets_map(widgets_map)
+            settings_manager.save()
 
-        for manager in active_managers:
-            manager._finish_session(
-                restore_live_visibility=False,
-                restore_special_widgets=False,
-            )
-        if not self._request_runtime_reload():
-            self._reload_widgets_across_instances()
-        return True
+            for manager in active_managers:
+                manager._finish_session(
+                    restore_live_visibility=False,
+                    restore_special_widgets=False,
+                )
+            if not self._request_runtime_reload():
+                self._reload_widgets_across_instances()
+            return True
+        finally:
+            self._set_runtime_reload_pending_for_managers(active_managers, False)
 
     def _start_session_local(self) -> bool:
         if self._active:
@@ -468,6 +476,17 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to request runtime reload; falling back to local rebuild", exc_info=True)
             return False
+
+    @staticmethod
+    def _set_runtime_reload_pending_for_managers(
+        managers: list["CustomLayoutManager"],
+        active: bool,
+    ) -> None:
+        for manager in managers:
+            try:
+                setattr(manager._display, "_custom_layout_runtime_reload_pending", bool(active))
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to set runtime reload pending flag", exc_info=True)
 
     def _write_widget_custom_layout(
         self,
@@ -1950,6 +1969,12 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to clear custom rect", exc_info=True)
         try:
+            restore_constraints = getattr(widget, "_restore_custom_layout_size_constraints", None)
+            if callable(restore_constraints):
+                restore_constraints()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to restore authored size constraints after clearing custom layout", exc_info=True)
+        try:
             if hasattr(widget, "_custom_layout_visualizer_scale_payload"):
                 delattr(widget, "_custom_layout_visualizer_scale_payload")
         except Exception:
@@ -2010,14 +2035,14 @@ class CustomLayoutManager:
             return
         local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
         if descriptor.custom_layout_resize_mode == "visualizer_rect":
-            local_rect.setSize(
-                self._resolve_visualizer_custom_size(
-                    widget,
-                    entry.size_payload,
-                    maximum_envelope=False,
-                    fallback_size=local_rect.size(),
-                )
+            resolved_size = self._resolve_visualizer_custom_size(
+                widget,
+                entry.size_payload,
+                maximum_envelope=False,
+                fallback_size=local_rect.size(),
             )
+            if resolved_size.height() > 0:
+                local_rect.setHeight(int(resolved_size.height()))
         if not descriptor.supports_layout_resize_edit:
             try:
                 local_rect.setSize(widget.geometry().size())
@@ -2029,6 +2054,12 @@ class CustomLayoutManager:
             min_size=self._min_size_for_descriptor(descriptor, widget),
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
+        try:
+            apply_constraints = getattr(widget, "_apply_custom_layout_size_constraints_if_active", None)
+            if callable(apply_constraints):
+                apply_constraints()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to lock custom size constraints for %s", descriptor.widget_id, exc_info=True)
         self._apply_size_payload(descriptor, widget, entry.size_payload)
         try:
             set_stack_offset = getattr(widget, "set_stack_offset", None)
@@ -2044,6 +2075,14 @@ class CustomLayoutManager:
                 widget.setGeometry(local_rect)
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply custom rect to %s", descriptor.widget_id, exc_info=True)
+        try:
+            widget.setGeometry(local_rect)
+        except Exception:
+            logger.debug(
+                "[CUSTOM_LAYOUT] Failed to reassert committed custom rect for %s after size payload apply",
+                descriptor.widget_id,
+                exc_info=True,
+            )
         try:
             if bool(getattr(widget, "isVisible", lambda: False)()):
                 widget.raise_()

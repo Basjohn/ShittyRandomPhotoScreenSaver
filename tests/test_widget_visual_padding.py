@@ -77,6 +77,34 @@ class TestVisualPaddingSetterGetter:
         qtbot.wait(10)
 
         assert widget.geometry() == custom_rect
+
+    def test_custom_layout_rect_suppresses_parent_stacking_recalc_requests(self, qtbot):
+        class _Parent(QWidget):
+            def __init__(self):
+                super().__init__()
+                self.recalc_calls = 0
+
+            def recalculate_stacking(self):
+                self.recalc_calls += 1
+
+        parent = _Parent()
+        parent.resize(800, 600)
+        qtbot.addWidget(parent)
+        parent.show()
+
+        widget = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        qtbot.addWidget(widget)
+        widget.resize(100, 50)
+        widget.show()
+
+        widget._custom_layout_local_rect = QRect(123, 234, 160, 90)
+        widget._update_position()
+        qtbot.wait(10)
+        parent.recalc_calls = 0
+        widget.resize(160, 140)
+        qtbot.wait(10)
+
+        assert parent.recalc_calls == 0
     
     def test_set_visual_padding(self, qtbot):
         """Test setting visual padding."""

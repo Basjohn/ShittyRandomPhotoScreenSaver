@@ -232,6 +232,7 @@ class BaseOverlayWidget(QLabel):
         self._stack_recalc_pending = False
         self._custom_layout_geometry_reentry = False
         self._custom_layout_geometry_reapply_pending = False
+        self._custom_layout_constraint_restore: tuple[int, int, int, int] | None = None
         
         # Visual padding - accounts for widget chrome vs visible content
         # Used to align the visible card edge (not QLabel frame) to margins
@@ -491,6 +492,45 @@ class BaseOverlayWidget(QLabel):
         if custom_rect is None:
             return int(height)
         return int(custom_rect.height())
+
+    def _apply_custom_layout_size_constraints_if_active(self) -> bool:
+        """Lock QWidget min/max size to the committed CUSTOM outer rect."""
+
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return False
+        try:
+            if self._custom_layout_constraint_restore is None:
+                self._custom_layout_constraint_restore = (
+                    int(self.minimumWidth()),
+                    int(self.maximumWidth()),
+                    int(self.minimumHeight()),
+                    int(self.maximumHeight()),
+                )
+            QWidget.setMinimumWidth(self, int(custom_rect.width()))
+            QWidget.setMaximumWidth(self, int(custom_rect.width()))
+            QWidget.setMinimumHeight(self, int(custom_rect.height()))
+            QWidget.setMaximumHeight(self, int(custom_rect.height()))
+            return True
+        except Exception:
+            logger.debug("[OVERLAY] Failed to lock custom layout size constraints", exc_info=True)
+            return False
+
+    def _restore_custom_layout_size_constraints(self) -> None:
+        """Restore authored min/max size constraints after CUSTOM authority ends."""
+
+        restore = self._custom_layout_constraint_restore
+        self._custom_layout_constraint_restore = None
+        if restore is None:
+            return
+        try:
+            min_w, max_w, min_h, max_h = restore
+            QWidget.setMinimumWidth(self, int(min_w))
+            QWidget.setMaximumWidth(self, int(max_w))
+            QWidget.setMinimumHeight(self, int(min_h))
+            QWidget.setMaximumHeight(self, int(max_h))
+        except Exception:
+            logger.debug("[OVERLAY] Failed to restore authored size constraints after custom layout", exc_info=True)
     
     def _update_position(self) -> None:
         """Update widget position based on current settings."""
@@ -500,6 +540,7 @@ class BaseOverlayWidget(QLabel):
 
         custom_rect = getattr(self, "_custom_layout_local_rect", None)
         if isinstance(custom_rect, QRect) and custom_rect.width() > 0 and custom_rect.height() > 0:
+            self._apply_custom_layout_size_constraints_if_active()
             self.setGeometry(custom_rect)
             return
 
@@ -613,6 +654,7 @@ class BaseOverlayWidget(QLabel):
             return False
         if custom_rect.width() <= 0 or custom_rect.height() <= 0:
             return False
+        self._apply_custom_layout_size_constraints_if_active()
         try:
             current = self.geometry()
         except Exception:
@@ -838,6 +880,8 @@ class BaseOverlayWidget(QLabel):
         if self._stack_recalc_pending:
             return
         if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return
+        if self._active_custom_layout_rect() is not None:
             return
         parent = self.parentWidget()
         if parent is None or not hasattr(parent, "recalculate_stacking"):

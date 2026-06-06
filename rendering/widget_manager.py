@@ -8,7 +8,7 @@ from __future__ import annotations
 import time
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING, Mapping
 
-from PySide6.QtCore import QPoint, QRect, QTimer
+from PySide6.QtCore import QPoint, QRect, QSize, QTimer
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import (
@@ -24,6 +24,7 @@ from rendering.widget_descriptors import (
     get_live_refresh_handlers,
     get_live_refresh_handlers_for_settings_key,
     get_widget_runtime_descriptor_by_attr_name,
+    get_layout_edit_runtime_descriptors,
     is_custom_position_selected_for_widget,
 )
 from rendering.multi_monitor_coordinator import get_coordinator
@@ -755,13 +756,31 @@ class WidgetManager:
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
+        parent = self._parent
+        runtime_reload_pending = False
+        if parent is not None:
+            try:
+                pending_value = getattr(parent, "_custom_layout_runtime_reload_pending", False)
+                runtime_reload_pending = pending_value if isinstance(pending_value, bool) else False
+            except Exception:
+                runtime_reload_pending = False
+        if (
+            parent is not None
+            and setting_key.startswith("widgets")
+            and runtime_reload_pending
+        ):
+            logger.debug(
+                "[WIDGET_MANAGER][SETTINGS] suppressing live refresh during custom layout runtime reload key=%s",
+                setting_key,
+            )
+            return
+
         if setting_key == 'widgets':
             widgets_payload: Optional[Mapping[str, Any]] = value if isinstance(value, Mapping) else None
             for handler_name in get_live_refresh_handlers():
                 handler = getattr(self, handler_name, None)
                 if callable(handler):
                     handler(widgets_payload)
-            parent = self._parent
             if parent is not None:
                 try:
                     parent._apply_saved_custom_layouts()
@@ -773,7 +792,6 @@ class WidgetManager:
             handler = getattr(self, handler_name, None)
             if callable(handler):
                 handler()
-        parent = self._parent
         if parent is not None and setting_key.startswith("widgets."):
             try:
                 parent._apply_saved_custom_layouts()
@@ -1262,7 +1280,7 @@ class WidgetManager:
         try:
             widgets_config: Mapping[str, Any] | None = None
             if self._settings_manager is not None:
-                candidate = self._settings_manager.get('widgets', {}) or {}
+                candidate = self._settings_manager.get_widgets_map() or {}
                 if isinstance(candidate, Mapping):
                     widgets_config = candidate
 
@@ -1271,7 +1289,6 @@ class WidgetManager:
                 isinstance(custom_rect, QRect)
                 and custom_rect.width() > 0
                 and custom_rect.height() > 0
-                and is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
             ):
                 from widgets.spotify_visualizer.card_geometry import (
                     build_growth_map_from_widget,
@@ -1307,11 +1324,16 @@ class WidgetManager:
                     logger.debug("[WIDGET_MANAGER] Failed to resolve adaptive custom visualizer size", exc_info=True)
                     resolved_size = None
 
+                resolved_height = (
+                    int(resolved_size.height())
+                    if isinstance(resolved_size, QSize) and resolved_size.height() > 0
+                    else int(custom_rect.height())
+                )
                 resolved_custom_rect = resolve_custom_card_rect(
                     custom_rect,
                     parent_width=parent_width,
                     parent_height=parent_height,
-                    size=resolved_size,
+                    size=QSize(int(custom_rect.width()), resolved_height),
                 )
                 if resolved_custom_rect.isEmpty():
                     return
@@ -1373,7 +1395,7 @@ class WidgetManager:
 
             widgets_config: Mapping[str, Any] | None = None
             if self._settings_manager is not None:
-                candidate = self._settings_manager.get('widgets', {}) or {}
+                candidate = self._settings_manager.get_widgets_map() or {}
                 if isinstance(candidate, Mapping):
                     widgets_config = candidate
 
@@ -1382,7 +1404,6 @@ class WidgetManager:
                 isinstance(custom_rect, QRect)
                 and custom_rect.width() > 0
                 and custom_rect.height() > 0
-                and is_custom_position_selected_for_widget("spotify_volume", widgets_config)
             ):
                 width = max(24, int(custom_rect.width()))
                 height = max(120, int(custom_rect.height()))
@@ -1432,6 +1453,25 @@ class WidgetManager:
         except Exception as e:
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
+    def _widget_has_active_custom_layout_rect(self, widget: Any) -> bool:
+        """Return whether a widget currently has a saved CUSTOM rect in force.
+
+        Shared authored stacking must never reflow widgets whose outer geometry
+        is already being explicitly controlled by the saved CUSTOM layout.
+        """
+        try:
+            if bool(getattr(widget, "_custom_layout_shell_active", False)):
+                return True
+            custom_rect = getattr(widget, "_custom_layout_local_rect", None)
+            return (
+                isinstance(custom_rect, QRect)
+                and custom_rect.width() > 0
+                and custom_rect.height() > 0
+            )
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            return False
+
     def apply_widget_stacking(self, widget_list: list, widgets_config: Optional[Mapping[str, Any]] = None) -> None:
         """Apply authored stacking offsets across shared left/center/right columns."""
         from PySide6.QtCore import QPoint
@@ -1445,14 +1485,24 @@ class WidgetManager:
             global_cfg.get("stacking_enabled", False),
             False,
         )
-        if not stacking_enabled:
+        custom_layout_edit_active = getattr(self._parent, "_custom_layout_edit_active", False)
+        if not isinstance(custom_layout_edit_active, bool):
+            custom_layout_edit_active = False
+        custom_layout_mode_active = self._custom_layout_mode_disables_stacking(
+            widget_list,
+            widgets_config,
+        )
+        if not stacking_enabled or custom_layout_edit_active or custom_layout_mode_active:
             for widget, _attr_name in widget_list:
                 if widget is not None and hasattr(widget, "set_stack_offset"):
                     widget.set_stack_offset(QPoint(0, 0))
             if is_geometry_logging_enabled():
                 logger.info(
-                    "[STACK] screen=%s stacking disabled; clearing offsets for %d widgets",
+                    "[STACK] screen=%s stacking disabled (enabled=%s custom_edit=%s custom_mode=%s); clearing offsets for %d widgets",
                     getattr(self._parent, "screen_index", "?"),
+                    stacking_enabled,
+                    custom_layout_edit_active,
+                    custom_layout_mode_active,
                     len(widget_list),
                 )
             return
@@ -1476,8 +1526,13 @@ class WidgetManager:
             descriptor = get_widget_runtime_descriptor_by_attr_name(attr_name)
             if (
                 descriptor is not None
-                and descriptor.supports_custom_position_slot
-                and is_custom_position_selected_for_widget(descriptor.widget_id, widgets_config)
+                and (
+                    self._widget_has_active_custom_layout_rect(widget)
+                    or (
+                        descriptor.supports_custom_position_slot
+                        and is_custom_position_selected_for_widget(descriptor.widget_id, widgets_config)
+                    )
+                )
             ):
                 if hasattr(widget, 'set_stack_offset'):
                     widget.set_stack_offset(QPoint(0, 0))
@@ -1546,6 +1601,25 @@ class WidgetManager:
                     plan.lane_spacing.get(lane, spacing),
                     ", ".join(report),
                 )
+
+    def _custom_layout_mode_disables_stacking(
+        self,
+        widget_list: list,
+        widgets_config: Optional[Mapping[str, Any]],
+    ) -> bool:
+        """Return True when any live or configured widget family is in CUSTOM mode."""
+
+        for widget, _attr_name in widget_list:
+            if widget is not None and self._widget_has_active_custom_layout_rect(widget):
+                return True
+
+        if not isinstance(widgets_config, Mapping):
+            return False
+
+        for descriptor in get_layout_edit_runtime_descriptors():
+            if is_custom_position_selected_for_widget(descriptor.widget_id, widgets_config):
+                return True
+        return False
 
     def _get_widget_position_key(self, widget) -> str:
         """Get normalized position key from widget."""

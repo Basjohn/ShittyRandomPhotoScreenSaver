@@ -56,13 +56,13 @@ from widgets.service_widget_runtime import (
     defer_value_if_transition,
     end_fetch_guard,
     ensure_single_shot_timer,
+    get_automatic_startup_refresh_decision,
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
     stop_overlay_timer_pair,
     stop_qtimer_attr,
     sync_refresh_spinner_for_transition,
-    should_run_automatic_startup_refresh,
     trigger_manual_refresh,
 )
 from widgets.shadow_utils import (
@@ -244,10 +244,18 @@ class GmailWidget(BaseOverlayWidget):
     def _apply_width(self) -> None:
         width = max(200, min(1200, int(self._width)))
         self._width = width
-        self.setMinimumWidth(width)
-        self.setMaximumWidth(width)
-        if self.width() != width:
-            self.resize(width, self.height())
+        applied_width = self._resolve_custom_locked_width(width)
+        self.setMinimumWidth(applied_width)
+        self.setMaximumWidth(applied_width)
+
+        if self._active_custom_layout_rect() is not None:
+            self.updateGeometry()
+            self._schedule_custom_layout_geometry_reapply()
+            self.update()
+            return
+
+        if self.width() != applied_width:
+            self.resize(applied_width, self.height())
         self._update_position()
 
     def _update_stylesheet(self) -> None:
@@ -413,10 +421,22 @@ class GmailWidget(BaseOverlayWidget):
             self._update_card_height_from_content(1)
         if automatic_service_updates_enabled():
             self._schedule_timer()
-            if should_run_automatic_startup_refresh(cache_timestamp=self._get_email_cache_timestamp()):
+            decision = get_automatic_startup_refresh_decision(
+                cache_timestamp=self._get_email_cache_timestamp()
+            )
+            if decision.run:
+                logger.info(
+                    "[CACHE][GMAIL] Startup refresh allowed (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
                 self._fetch_emails()
             else:
-                logger.debug("[GMAIL] Skipping startup refresh; cached mail is still fresh")
+                logger.info(
+                    "[CACHE][GMAIL] Startup refresh skipped (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
         else:
             logger.info("[GMAIL] Automatic updates disabled via --noupdates; manual refresh only")
         logger.debug("[LIFECYCLE] GmailWidget activated")

@@ -1074,7 +1074,9 @@ class SpotifyVisualizerWidget(QWidget):
 
             wm = getattr(self, "_widget_manager", None)
             settings_manager = getattr(wm, "_settings_manager", None) if wm is not None else None
-            widgets_config = settings_manager.get("widgets", {}) if settings_manager is not None else {}
+            widgets_config = settings_manager.get_widgets_map() if settings_manager is not None else {}
+            if not isinstance(widgets_config, dict):
+                return True
             return is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM layout ownership", exc_info=True)

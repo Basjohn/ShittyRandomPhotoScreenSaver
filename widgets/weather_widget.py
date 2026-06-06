@@ -23,7 +23,7 @@ from widgets.shadow_utils import PaintedShadowLabel, ShadowFadeProfile
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
 from widgets.service_widget_runtime import (
     ensure_single_shot_timer,
-    should_run_automatic_startup_refresh,
+    get_automatic_startup_refresh_decision,
     stop_overlay_timer_pair,
     stop_qtimer_attr,
 )
@@ -358,6 +358,24 @@ class WeatherWidget(BaseOverlayWidget):
             return self._root_layout.minimumSize()
         return super().minimumSizeHint()
 
+    def _refresh_outer_geometry_for_runtime_content(self) -> None:
+        """Refresh layout-driven internals without letting runtime content own CUSTOM geometry."""
+        if self._active_custom_layout_rect() is not None:
+            try:
+                self.updateGeometry()
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
+            self._schedule_custom_layout_geometry_reapply()
+            try:
+                self.update()
+            except Exception as e:
+                logger.debug("[WEATHER] Exception suppressed: %s", e)
+            return
+
+        self.adjustSize()
+        if self.parent():
+            self._update_position()
+
     def _create_separator(self) -> QWidget:
         """Create a horizontal separator line widget."""
         from PySide6.QtWidgets import QFrame
@@ -612,9 +630,7 @@ class WeatherWidget(BaseOverlayWidget):
             logger.error(error_msg)
             self.setText("Weather: No Location")
             try:
-                self.adjustSize()
-                if self.parent():
-                    self._update_position()
+                self._refresh_outer_geometry_for_runtime_content()
             except Exception as e:
                 logger.debug("[WEATHER] Exception suppressed: %s", e)
             self.show()
@@ -649,10 +665,21 @@ class WeatherWidget(BaseOverlayWidget):
         self.hide()
         self._pending_first_show = True
 
-        if automatic_service_updates_enabled() and should_run_automatic_startup_refresh(cache_timestamp=self._cache_time):
-            self._fetch_weather()
-        elif automatic_service_updates_enabled():
-            logger.debug("[WEATHER] Skipping startup refresh; cached weather is still fresh")
+        if automatic_service_updates_enabled():
+            decision = get_automatic_startup_refresh_decision(cache_timestamp=self._cache_time)
+            if decision.run:
+                logger.info(
+                    "[CACHE][WEATHER] Startup refresh allowed (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
+                self._fetch_weather()
+            else:
+                logger.info(
+                    "[CACHE][WEATHER] Startup refresh skipped (%s%s)",
+                    decision.reason,
+                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+                )
         else:
             logger.info("[WEATHER] Automatic updates disabled via --noupdates; manual refresh only")
         self._schedule_refresh_cycle()
@@ -701,12 +728,21 @@ class WeatherWidget(BaseOverlayWidget):
 
     def _schedule_startup_refresh(self) -> None:
         """Schedule the one-shot startup refresh used after activation/startup."""
-        if not should_run_automatic_startup_refresh(cache_timestamp=self._cache_time):
-            logger.debug("[WEATHER] Skipping startup refresh; cached weather is still fresh")
+        decision = get_automatic_startup_refresh_decision(cache_timestamp=self._cache_time)
+        if not decision.run:
+            logger.info(
+                "[CACHE][WEATHER] Startup timer skipped (%s%s)",
+                decision.reason,
+                f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+            )
             return
         # Open-Meteo free tier: 10k calls/day, our cadence stays well within that.
         ThreadManager.single_shot(30 * 1000, self._fetch_weather)
-        logger.debug("[WEATHER] Scheduled early refresh in 30 seconds")
+        logger.info(
+            "[CACHE][WEATHER] Startup timer scheduled in 30s (%s%s)",
+            decision.reason,
+            f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+        )
 
     def _start_periodic_refresh_timer(self) -> None:
         """Start the steady-state refresh timer with small desync jitter."""
@@ -1191,10 +1227,8 @@ class WeatherWidget(BaseOverlayWidget):
                 self._forecast_label.setVisible(False)
                 self._forecast_separator.setVisible(False)
 
-            # Adjust layout
-            self.adjustSize()
-            if self.parent():
-                self._update_position()
+            # Refresh internals while keeping a saved CUSTOM rect authoritative.
+            self._refresh_outer_geometry_for_runtime_content()
 
         except Exception as e:
             logger.exception(f"Error updating weather display: {e}")

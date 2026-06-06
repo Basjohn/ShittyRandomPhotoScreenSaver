@@ -36,6 +36,9 @@ class _StubSettingsManager:
             return self._widgets
         return default
 
+    def get_widgets_map(self):
+        return dict(self._widgets)
+
 
 def _fake_qcolor(value, opacity_override=None):
     if value is None:
@@ -665,6 +668,45 @@ def test_setup_all_widgets_runs_spotify_setup_phases_in_explicit_order(monkeypat
     ]
 
 
+def test_finalize_widget_startup_reapplies_saved_custom_layouts_after_startup(monkeypatch):
+    from rendering import widget_setup_all
+
+    class _Parent:
+        def __init__(self):
+            self.apply_calls: list[str] = []
+            self._custom_layout_runtime_stabilize_pending = False
+
+        def _apply_saved_custom_layouts(self):
+            self.apply_calls.append("apply")
+
+    class _Widget:
+        def __init__(self):
+            self.raised = 0
+
+        def raise_(self):
+            self.raised += 1
+
+    parent = _Parent()
+    manager = SimpleNamespace(_parent=parent, _fade_coordinator=SimpleNamespace(describe=lambda: {"participants": []}))
+    created = {"reddit_widget": _Widget()}
+    startup_calls: list[str] = []
+    deferred_calls: list[int] = []
+
+    monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda widgets: startup_calls.append("start"))
+    monkeypatch.setattr(
+        widget_setup_all.QTimer,
+        "singleShot",
+        lambda delay, callback: (deferred_calls.append(delay), callback()),
+    )
+
+    widget_setup_all._finalize_widget_startup(manager, created)
+
+    assert startup_calls == ["start"]
+    assert parent.apply_calls == ["apply", "apply", "apply"]
+    assert deferred_calls == [0]
+    assert created["reddit_widget"].raised == 1
+
+
 def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
     lifecycle_initialize_calls: list[str] = []
     spotify_calls: list[str] = []
@@ -686,6 +728,9 @@ def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
             if key == "widgets":
                 return {"clock": {"enabled": True}}
             return default
+
+        def get_widgets_map(self):
+            return {"clock": {"enabled": True}}
 
     widget = SimpleNamespace(
         settings_manager=_SettingsStub(),

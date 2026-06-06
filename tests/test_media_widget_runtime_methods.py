@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QFontMetrics, QPixmap
 
 from core.media.media_controller import MediaPlaybackState, MediaTrackInfo
@@ -501,5 +501,20 @@ def test_media_header_elides_only_when_artwork_collision_is_unavoidable(qt_app) 
         metrics = QFontMetrics(layout["font"])
 
         assert layout["text_width"] < metrics.horizontalAdvance("MUSICBEE")
+    finally:
+        widget.deleteLater()
+
+
+def test_media_set_artwork_size_respects_active_custom_rect(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget._custom_layout_local_rect = QRect(20, 30, 640, 410)
+        reapply_calls = []
+        widget._schedule_custom_layout_geometry_reapply = lambda: reapply_calls.append("reapply")  # type: ignore[method-assign]
+
+        widget.set_artwork_size(360)
+
+        assert widget.minimumHeight() == 410
+        assert reapply_calls == ["reapply"]
     finally:
         widget.deleteLater()

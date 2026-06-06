@@ -8,7 +8,7 @@ provider logic, and authored UI behavior stay local.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, NamedTuple
 
 from PySide6.QtCore import QTimer
 
@@ -16,6 +16,12 @@ from core.runtime_flags import automatic_service_updates_enabled
 
 
 SERVICE_STARTUP_CACHE_FRESH_WINDOW = timedelta(minutes=15)
+
+
+class StartupRefreshDecision(NamedTuple):
+    run: bool
+    reason: str
+    age: timedelta | None
 
 
 def parent_transition_running(widget: Any) -> bool:
@@ -342,3 +348,23 @@ def should_run_automatic_startup_refresh(
     except Exception:
         return True
     return age >= fresh_window
+
+
+def get_automatic_startup_refresh_decision(
+    *,
+    cache_timestamp: datetime | None = None,
+    fresh_window: timedelta = SERVICE_STARTUP_CACHE_FRESH_WINDOW,
+) -> StartupRefreshDecision:
+    """Return the startup-refresh policy decision plus an auditable reason."""
+
+    if not automatic_service_updates_enabled():
+        return StartupRefreshDecision(False, "automatic_updates_disabled", None)
+    if cache_timestamp is None:
+        return StartupRefreshDecision(True, "missing_cache_timestamp", None)
+    try:
+        age = datetime.now() - cache_timestamp
+    except Exception:
+        return StartupRefreshDecision(True, "cache_timestamp_error", None)
+    if age >= fresh_window:
+        return StartupRefreshDecision(True, "cache_stale", age)
+    return StartupRefreshDecision(False, "cache_fresh", age)

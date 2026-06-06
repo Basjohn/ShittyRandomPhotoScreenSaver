@@ -151,6 +151,10 @@ class SpotifyVolumeWidget(QWidget):
         next_height = max(120, int(height))
         next_track_width = max(10, min(next_width - 8, int(track_width)))
         next_track_margin = max(2, min(24, int(track_margin)))
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is not None:
+            next_width = int(custom_rect.width())
+            next_height = int(custom_rect.height())
 
         self._track_width = next_track_width
         self._track_margin = next_track_margin
@@ -161,8 +165,41 @@ class SpotifyVolumeWidget(QWidget):
             self.updateGeometry()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        if custom_rect is not None:
+            self._schedule_custom_layout_geometry_reapply()
         try:
             self.update()
+        except Exception as e:
+            logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+
+    def _active_custom_layout_rect(self) -> Optional[QRect]:
+        if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return None
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return None
+        if custom_rect.width() <= 0 or custom_rect.height() <= 0:
+            return None
+        return QRect(custom_rect)
+
+    def _schedule_custom_layout_geometry_reapply(self) -> None:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return
+
+        def _reapply() -> None:
+            try:
+                if Shiboken is not None and not Shiboken.isValid(self):
+                    return
+            except Exception:
+                return
+            try:
+                self.setGeometry(custom_rect)
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+
+        try:
+            QTimer.singleShot(0, _reapply)
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
     

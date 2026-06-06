@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QWidget
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.custom_layout_contract import get_screen_signature
+from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.edit_shell_widget import EditShellWidget
 
 
@@ -142,6 +143,24 @@ class _GmailLikeTestWidget(_EditableTestWidget):
 
     def set_font_size(self, size: int) -> None:
         self._font_size = int(size)
+
+
+class _ConstrainedOverlayWidget(BaseOverlayWidget):
+    def __init__(self, parent: QWidget, *, overlay_name: str = "constraint", font_size: int = 18) -> None:
+        super().__init__(parent, position=OverlayPosition.TOP_LEFT, overlay_name=overlay_name)
+        self._font_size = font_size
+        self._show_background = True
+        self._apply_base_styling()
+        self.setGeometry(40, 60, 600, 320)
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(320)
+        self.show()
+
+    def set_font_size(self, size: int) -> None:
+        self._font_size = int(size)
+        self._update_font()
+        self.setMinimumWidth(600)
+        self.setMinimumHeight(320)
 
 
 class _ImgurLikeTestWidget(_EditableTestWidget):
@@ -1147,6 +1166,54 @@ def test_custom_layout_manager_applies_move_only_volume_rect_using_authored_size
     assert volume._track_margin == 9
 
 
+def test_custom_layout_manager_reasserts_volume_outer_rect_after_scale_contract(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 800, 600))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                get_screen_signature(screen): {
+                    "spotify_volume": {
+                        "rect": {"x": 0.4, "y": 0.2, "width": 0.18, "height": 0.48},
+                        "size_payload": {
+                            "width": 144,
+                            "height": 288,
+                            "track_width": 26,
+                            "track_margin": 9,
+                        },
+                        "resize_mode": "volume_scale",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _StretchyVolume(_VolumeLikeTestWidget):
+        def apply_scale_contract(self, **kwargs) -> None:
+            super().apply_scale_contract(**kwargs)
+            self.setGeometry(self.x(), self.y(), self.width() + 40, self.height() + 80)
+
+    volume = _StretchyVolume(display)
+    display.spotify_volume_widget = volume
+    qtbot.addWidget(volume)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(volume, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 144
+    assert custom_rect.height() == 288
+    assert volume.geometry() == custom_rect
+
+
 def test_custom_layout_manager_volume_resize_rect_uses_payload_dimensions(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
@@ -1716,6 +1783,41 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     assert payload["resize_mode"] == "gmail_font"
 
 
+def test_custom_layout_manager_marks_runtime_reload_pending_during_save(qtbot):
+    _reset_custom_layout_manager_state()
+
+    class _CheckingSettingsStub(_SettingsStub):
+        def __init__(self, display: _DisplayStub) -> None:
+            super().__init__()
+            self._display = display
+            self.flags_seen: list[bool] = []
+
+        def save(self) -> None:
+            self.flags_seen.append(bool(getattr(self._display, "_custom_layout_runtime_reload_pending", False)))
+            super().save()
+
+    display = _DisplayStub(_SettingsStub())
+    settings_stub = _CheckingSettingsStub(display)
+    display.settings_manager = settings_stub
+    qtbot.addWidget(display)
+    display.show()
+
+    reddit = _RedditLikeTestWidget(display, font_size=18)
+    display.reddit_widget = reddit
+    qtbot.addWidget(reddit)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["reddit"]
+    state.current_size_payload = {"font_size": 20}
+
+    assert manager.save_session() is True
+    assert settings_stub.flags_seen == [True]
+    assert getattr(display, "_custom_layout_runtime_reload_pending", False) is False
+
+
 def test_custom_layout_manager_saves_and_reapplies_imgur_scale_resize(qtbot, monkeypatch):
     monkeypatch.setenv("SRPSS_ENABLE_DEV", "true")
     _reset_custom_layout_manager_state()
@@ -1870,6 +1972,229 @@ def test_custom_layout_manager_reapplies_visualizer_custom_rect_size(qtbot):
     assert isinstance(custom_rect, QRect)
     assert custom_rect.width() == 420
     assert custom_rect.height() == 160
+
+
+def test_custom_layout_manager_reasserts_media_outer_rect_after_artwork_scale_apply(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "media": {
+                        "rect": {"x": 0.10, "y": 0.12, "width": 0.40, "height": 0.30},
+                        "size_payload": {"font_size": 18, "artwork_size": 220},
+                        "resize_mode": "media_scale",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _StretchyMedia(_EditableTestWidget):
+        def set_artwork_size(self, size: int) -> None:
+            super().set_artwork_size(size)
+            self.setGeometry(self.x(), self.y(), self.width() + 120, self.height() + 40)
+
+    media = _StretchyMedia(display, font_size=14)
+    media.setGeometry(30, 40, 320, 180)
+    display.media_widget = media
+    qtbot.addWidget(media)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(media, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 400
+    assert custom_rect.height() == 210
+    assert media.geometry() == custom_rect
+
+
+def test_custom_layout_manager_reasserts_weather_outer_rect_after_scale_apply(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "weather": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "weather": {
+                        "rect": {"x": 0.08, "y": 0.10, "width": 0.36, "height": 0.24},
+                        "size_payload": {"font_size": 22, "icon_size": 50, "detail_icon_size": 24},
+                        "resize_mode": "weather_scale",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _StretchyWeather(_EditableTestWidget):
+        def set_font_size(self, size: int) -> None:
+            super().set_font_size(size)
+            self.setGeometry(self.x(), self.y(), self.width() + 110, self.height() + 25)
+
+    weather = _StretchyWeather(display, font_size=18)
+    weather.setGeometry(30, 40, 220, 120)
+    display.weather_widget = weather
+    qtbot.addWidget(weather)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(weather, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 360
+    assert custom_rect.height() == 168
+    assert weather.geometry() == custom_rect
+
+
+def test_custom_layout_manager_reasserts_reddit_outer_rect_after_font_payload_apply(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "reddit": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "reddit": {
+                        "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.32},
+                        "size_payload": {"font_size": 24},
+                        "resize_mode": "reddit_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _StretchyReddit(_RedditLikeTestWidget):
+        def set_font_size(self, size: int) -> None:
+            super().set_font_size(size)
+            self.setGeometry(self.x(), self.y(), self.width() + 140, self.height() + 60)
+
+    reddit = _StretchyReddit(display, font_size=18)
+    reddit.setGeometry(40, 60, 320, 180)
+    display.reddit_widget = reddit
+    qtbot.addWidget(reddit)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(reddit, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 420
+    assert custom_rect.height() == 224
+    assert reddit.geometry() == custom_rect
+
+
+def test_custom_layout_manager_reasserts_gmail_outer_rect_after_font_payload_apply(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "gmail": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "gmail": {
+                        "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.28},
+                        "size_payload": {"font_size": 18},
+                        "resize_mode": "gmail_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _StretchyGmail(_GmailLikeTestWidget):
+        def set_font_size(self, size: int) -> None:
+            super().set_font_size(size)
+            self.setGeometry(self.x(), self.y(), self.width() + 160, self.height() + 45)
+
+    gmail = _StretchyGmail(display, font_size=13)
+    gmail.setGeometry(50, 70, 600, 220)
+    display.gmail_widget = gmail
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(gmail, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 440
+    assert custom_rect.height() == 196
+    assert gmail.geometry() == custom_rect
+
+
+def test_custom_layout_manager_can_shrink_overlay_below_authored_minimums_when_custom_rect_is_active(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "gmail": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "gmail": {
+                        "rect": {"x": 0.08, "y": 0.10, "width": 0.28, "height": 0.20},
+                        "size_payload": {"font_size": 18},
+                        "resize_mode": "gmail_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    gmail = _ConstrainedOverlayWidget(display, overlay_name="gmail", font_size=13)
+    display.gmail_widget = gmail
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(gmail, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 280
+    assert custom_rect.height() == 140
+    assert gmail.minimumWidth() == 280
+    assert gmail.minimumHeight() == 140
+    assert gmail.maximumWidth() == 280
+    assert gmail.maximumHeight() == 140
+    assert gmail.geometry() == custom_rect
 
 
 def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
