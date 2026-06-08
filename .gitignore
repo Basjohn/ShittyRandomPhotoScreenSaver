@@ -70,6 +70,7 @@ agent.md
 release/
 *.exe
 *.scr
+*.msi
 
 # Secrets / credentials (keep templates tracked)
 .env
@@ -158,6 +159,38 @@ dmypy.json
 *.onefile-build
 *.manifest
 *.spec.bak
+
+# SRPSS build scratch output
+/build_nuitka/
+/build_nuitka_venv/
+/build_nuitka_mc_onedir/
+/build_nuitka_mc_onedir_venv/
+/build_reddit_helper/
+/build_reddit_helper_venv/
+/build_deps/
+/dist/
+/build/
+
+# SRPSS venv build-runner local junk
+/scripts/venv/.venv/
+/scripts/venv/**/__pycache__/
+/scripts/venv/**/*.py[cod]
+/scripts/venv/**/*.log
+
+# Accidental/invalid output locations from running copied scripts from scripts/venv
+/scripts/release/
+/scripts/logs/
+/scripts/build_deps/
+/scripts/build_reddit_helper/
+/scripts/build_nuitka/
+/scripts/build_nuitka_venv/
+/scripts/build_nuitka_mc_onedir/
+/scripts/build_nuitka_mc_onedir_venv/
+
+# Installer output / Inno leftovers
+Output/
+output/
+*.iss.bak
 
 # Misc temporary/editor conflict leftovers
 *.tmp

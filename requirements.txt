@@ -1,31 +1,63 @@
+# SRPSS known-good dependency set
+# Captured/pinned from the working Python 3.11.9 global build environment.
+# Used by experimental scripts\venv\.venv builds.
+
 # Core UI framework
-PySide6>=6.5.0
+PySide6==6.9.1
+PySide6_Addons==6.9.1
+PySide6_Essentials==6.9.1
+shiboken6==6.9.1
 
-# Image processing
-Pillow>=10.0.0
-numpy>=1.23.0
+# Image processing / numeric
+Pillow==12.0.0
+numpy==1.26.4
 
-# Network/feeds
-requests>=2.31.0
-feedparser>=6.0.10
-beautifulsoup4>=4.12.0
+# OpenGL visualizer / Spotify bars overlay
+PyOpenGL==3.1.10
+
+# Network / feeds / scraping
+requests==2.32.5
+certifi==2025.10.5
+charset-normalizer==3.4.4
+idna==3.11
+urllib3==2.5.0
+feedparser==6.0.12
+sgmllib3k==1.0.0
+beautifulsoup4==4.14.3
+soupsieve==2.8.3
 
 # Timezone support
-pytz>=2023.3
+pytz==2025.2
 
-# Windows Media Session API (for Spotify/media widget)
-winrt-runtime>=2.0.0
-winrt-Windows.Foundation>=2.0.0
-winrt-Windows.Foundation.Collections>=2.0.0
-winrt-Windows.Media.Control>=2.0.0
-winrt-Windows.Storage.Streams>=2.0.0
+# Windows Media Session API
+winrt-runtime==3.2.1
+winrt-Windows.Foundation==3.2.1
+winrt-Windows.Foundation.Collections==3.2.1
+winrt-Windows.Media.Control==3.2.1
+winrt-Windows.Storage.Streams==3.2.1
 
-# Audio (Spotify visualizer and volume control)
-sounddevice>=0.4.6
-pycaw>=20230407
+# Audio capture / volume control
+PyAudioWPatch==0.2.12.7
+sounddevice==0.5.3
+cffi==2.0.0
+pycparser==2.23
+pycaw==20240210
+comtypes==1.4.11
 
-# Gmail integration (uses requests directly; no google-auth-oauthlib needed)
+# Build
+Nuitka==2.7.12
+ordered-set==4.1.0
+zstandard==0.24.0
 
-# Testing (dev only)
-pytest>=7.4.0
-pytest-qt>=4.2.0
+# Testing / dev
+pytest==8.4.1
+pytest-qt==4.5.0
+iniconfig==2.1.0
+packaging==25.0
+pluggy==1.6.0
+Pygments==2.19.2
+colorama==0.4.6
+
+# Windows helpers
+pywin32==311
+psutil==7.0.0
