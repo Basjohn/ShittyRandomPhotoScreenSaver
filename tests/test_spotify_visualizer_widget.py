@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import random
 import time
+import wave
+from pathlib import Path
 from typing import Callable
 
 import pytest
@@ -1081,10 +1083,26 @@ class _BubbleDispatchThreadManager:
 
 
 class _BubbleDispatchProfileEngine(_FakeEngine):
-    def __init__(self, frames: list[dict[str, object]], bar_count: int = 48) -> None:
+    def __init__(
+        self,
+        frames: list[dict[str, object]],
+        bar_count: int = 48,
+        *,
+        floor_snapshot: dict[str, float | bool] | None = None,
+    ) -> None:
         super().__init__(bar_count=bar_count)
         self._frames = list(frames)
         self._frame = self._frames[0] if self._frames else {}
+        self._floor_snapshot = dict(
+            floor_snapshot
+            or {
+                "dynamic_enabled": False,
+                "manual_floor": 0.20,
+                "gate_floor": 0.20,
+                "support_pressure": 0.0,
+                "expansion": 0.0,
+            }
+        )
 
     def set_frame(self, idx: int) -> None:
         self._frame = self._frames[idx % len(self._frames)]
@@ -1122,6 +1140,9 @@ class _BubbleDispatchProfileEngine(_FakeEngine):
 
     def get_event_scheduler(self):
         return None
+
+    def get_floor_snapshot(self) -> dict[str, float | bool]:
+        return dict(self._floor_snapshot)
 
 
 def _capture_bubble_runtime_snapshot(
@@ -1237,6 +1258,60 @@ def _capture_bubble_dispatch_profile_metrics(
     for idx, _frame in enumerate(frames):
         engine.set_frame(idx)
         series.append(_capture_bubble_lane_metrics(widget, start_ts + idx * dt))
+    return series
+
+
+_AUDIO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "audio"
+
+
+def _load_audio_fixture_blocks(
+    np_module,
+    fixture_name: str,
+    *,
+    block_size: int = 2048,
+):
+    fixture_path = _AUDIO_FIXTURE_DIR / f"{fixture_name}.wav"
+    assert fixture_path.exists(), f"missing Bubble audio fixture: {fixture_path}"
+
+    with wave.open(str(fixture_path), "rb") as handle:
+        assert handle.getnchannels() == 1, f"{fixture_name} must stay mono"
+        assert handle.getsampwidth() == 2, f"{fixture_name} must stay 16-bit PCM"
+        raw_bytes = handle.readframes(handle.getnframes())
+
+    samples = np_module.frombuffer(raw_bytes, dtype="<i2").astype("float32") / 32768.0
+    blocks: list[object] = []
+    for start in range(0, int(samples.shape[0]), block_size):
+        block = samples[start:start + block_size]
+        if int(block.shape[0]) < block_size:
+            block = np_module.pad(block, (0, block_size - int(block.shape[0])))
+        blocks.append(block.astype("float32"))
+    assert blocks, f"{fixture_name} produced no audio blocks"
+    return blocks
+
+
+def _capture_bubble_audio_fixture_metrics(
+    widget: SpotifyVisualizerWidget,
+    engine: _SpotifyBeatEngine,
+    blocks: list[object],
+    *,
+    sample_rate: int = 44100,
+) -> list[dict[str, float]]:
+    dt = len(blocks[0]) / float(sample_rate) if blocks else 0.016
+    series: list[dict[str, float]] = []
+    for idx, samples in enumerate(blocks):
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * dt)
+        floor_snapshot = engine.get_floor_snapshot()
+        metrics["raw_bass"] = float(getattr(engine._audio_worker, "_last_raw_bass", 0.0) or 0.0)
+        metrics["bubble_feed_bass"] = float(engine.get_bubble_energy_bands().bass)
+        metrics["bubble_feed_mid"] = float(engine.get_bubble_energy_bands().mid)
+        metrics["bubble_feed_high"] = float(engine.get_bubble_energy_bands().high)
+        metrics["support_pressure"] = float(floor_snapshot.get("support_pressure", 0.0) or 0.0)
+        metrics["gate_floor"] = float(floor_snapshot.get("gate_floor", 0.0) or 0.0)
+        series.append(metrics)
     return series
 
 
@@ -1450,6 +1525,83 @@ def _organs_phrase_sequence(np_module, *, n: int = 4096):
     ]
 
 
+def _manual_floor_late_loud_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the manual-floor late-loud failure family from `22:30:11 .. 22:30:56`.
+
+    This window matters because the remaining weak Bubble shape happened while
+    the floor context stayed manual (`gate=manual=0.200`, `support=0.000`).
+    Loud bass repeatedly crossed 1.0, but the visible Bubble lanes still
+    behaved more like a cautious soft passage than a hot sustained hold.
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.24, "mid": 0.20, "high": 0.06, "overall": 0.32},
+            "broad": {"bass": 0.15, "mid": 0.23, "high": 0.06, "overall": 0.29},
+            "transient": {"bass_transient": 0.05, "mid_transient": 0.06, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 0.29, "mid": 0.24, "high": 0.06, "overall": 0.37},
+            "broad": {"bass": 0.17, "mid": 0.26, "high": 0.06, "overall": 0.33},
+            "transient": {"bass_transient": 0.04, "mid_transient": 0.06, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 1.89, "mid": 0.11, "high": 0.03, "overall": 0.63},
+            "broad": {"bass": 0.30, "mid": 0.10, "high": 0.03, "overall": 0.45},
+            "transient": {"bass_transient": 0.16, "mid_transient": 0.02, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.18, "mid": 0.14, "high": 0.03, "overall": 0.57},
+            "broad": {"bass": 0.27, "mid": 0.11, "high": 0.03, "overall": 0.42},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.42, "mid": 0.13, "high": 0.03, "overall": 0.60},
+            "broad": {"bass": 0.29, "mid": 0.10, "high": 0.03, "overall": 0.44},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.24, "mid": 0.17, "high": 0.04, "overall": 0.60},
+            "broad": {"bass": 0.28, "mid": 0.12, "high": 0.03, "overall": 0.43},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.05, "mid": 0.38, "high": 0.06, "overall": 0.64},
+            "broad": {"bass": 0.24, "mid": 0.22, "high": 0.05, "overall": 0.47},
+            "transient": {
+                "bass_transient": 0.18,
+                "mid_transient": 0.16,
+                "high_transient": 0.03,
+                "onset_detected": True,
+                "onset_type": "vocal_swell",
+                "onset_strength": 0.10,
+            },
+        },
+        {
+            "pulse": {"bass": 1.01, "mid": 0.16, "high": 0.03, "overall": 0.56},
+            "broad": {"bass": 0.22, "mid": 0.11, "high": 0.03, "overall": 0.39},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.06, "mid": 0.17, "high": 0.04, "overall": 0.58},
+            "broad": {"bass": 0.23, "mid": 0.12, "high": 0.03, "overall": 0.40},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.34, "mid": 0.70, "high": 0.07, "overall": 0.72},
+            "broad": {"bass": 0.28, "mid": 0.32, "high": 0.06, "overall": 0.53},
+            "transient": {
+                "bass_transient": 0.56,
+                "mid_transient": 0.44,
+                "high_transient": 0.05,
+                "onset_detected": True,
+                "onset_type": "snare",
+                "onset_strength": 0.16,
+            },
+        },
+    ]
+
+
 def _organs_runtime_floor_sequence(np_module, *, n: int = 4096):
     base = _organs_phrase_sequence(np_module, n=n)
     sub = _synthetic_audio(np_module, hz=48.0, amp=0.30, n=n)
@@ -1492,11 +1644,15 @@ def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str
     return _apply_authored_bubble_preset(widget, 0)
 
 
-def _apply_authored_bubble_deep_sea_manual_floor(widget: SpotifyVisualizerWidget) -> dict[str, object]:
+def _apply_authored_bubble_deep_sea_manual_floor(
+    widget: SpotifyVisualizerWidget,
+    *,
+    manual_floor: float = 0.05,
+) -> dict[str, object]:
     settings = _apply_authored_bubble_deep_sea(widget)
     widget._technical_config_cache["bubble"].update(
         {
-            "manual_floor": 0.05,
+            "manual_floor": float(manual_floor),
             "dynamic_floor": False,
             "audio_block_size": 128,
         }
@@ -5295,6 +5451,170 @@ def test_deep_sea_runtime_log_replay_vocal_and_snare_events_must_lift_small_lane
     )
     assert snare_small >= bed_small * 0.95, (
         "Replay snare window still sinks below the restored hot-bed small-lane baseline."
+    )
+
+
+@pytest.mark.qt
+def test_manual_floor_runtime_log_replay_keeps_loud_window_alive_without_support_pressure(
+    qt_app,
+    qtbot,
+):
+    random.seed(10043)
+    profile = _manual_floor_late_loud_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile[:2] * 16 + profile[2:] * 24
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    soft_window = metrics_series[12:20]
+    hot_window = metrics_series[-16:]
+
+    assert soft_window and hot_window
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    hot_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    soft_big = sum(m["big_max_render"] for m in soft_window) / len(soft_window)
+    hot_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+    hot_feed = sum(m["bass"] for m in hot_window) / len(hot_window)
+    hot_loud = sum(m["sustained_loud_energy"] for m in hot_window) / len(hot_window)
+    hot_clamp = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
+    hot_unique_big = {round(m["big_max_render"], 6) for m in hot_window}
+    hot_big_spread = max(m["big_max_render"] for m in hot_window) - min(m["big_max_render"] for m in hot_window)
+
+    assert soft_small >= 0.020, "Need an alive soft opener or the late-loud replay bar loses meaning."
+    assert hot_loud >= 0.56, "Manual-floor replay bar must stay genuinely loud."
+    assert hot_feed >= 0.95, "Manual-floor replay must still carry real Bubble bass authority."
+    assert hot_small >= max(0.010, soft_small * 0.92), (
+        "Manual-floor late loud replay still lets the small lane sag below the soft window."
+    )
+    assert hot_big >= max(0.068, soft_big * 0.58), (
+        "Manual-floor late loud replay still leaves the hero lane too modest for repeated 1.0+ raw bass."
+    )
+    assert hot_clamp < 7.0, (
+        "Manual-floor late loud replay still appears alive mainly because the hero lane is pinned into clamp pressure."
+    )
+    assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
+        "Manual-floor late loud replay still collapses the hero lane into one narrow visible shape."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_soft_to_loud_audio_fixture_keeps_loud_section_more_expressive_than_soft(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10091)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    blocks = _load_audio_fixture_blocks(np_module, "soft_to_loud_transition")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    soft_window = metrics_series[4:10]
+    hot_window = metrics_series[-10:]
+
+    assert soft_window and hot_window
+    soft_raw = sum(m["raw_bass"] for m in soft_window) / len(soft_window)
+    hot_raw = sum(m["raw_bass"] for m in hot_window) / len(hot_window)
+    soft_feed = sum(m["bubble_feed_bass"] for m in soft_window) / len(soft_window)
+    hot_feed = sum(m["bubble_feed_bass"] for m in hot_window) / len(hot_window)
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    hot_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    soft_big = sum(m["big_max_render"] for m in soft_window) / len(soft_window)
+    hot_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+
+    assert hot_raw >= max(1.0, soft_raw * 2.2), "Fixture must really transition from soft into a loud bass-led section."
+    assert hot_feed >= soft_feed * 1.35, (
+        "Bubble feed still fails to open up materially when the fixture crosses into the loud section."
+    )
+    assert hot_small >= max(0.010, soft_small * 0.96), (
+        "Loud fixture section still leaves the small lane looking less alive than the soft opener."
+    )
+    assert hot_big >= max(0.070, soft_big * 1.08), (
+        "Loud fixture section still does not give the hero lane clearly stronger authority than the soft opener."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10092)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    blocks = _load_audio_fixture_blocks(np_module, "loud_bass_hold")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    hot_window = metrics_series[8:]
+    early_window = hot_window[:6]
+    late_window = hot_window[-6:]
+
+    assert hot_window and early_window and late_window
+    avg_raw = sum(m["raw_bass"] for m in hot_window) / len(hot_window)
+    avg_feed = sum(m["bubble_feed_bass"] for m in hot_window) / len(hot_window)
+    avg_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    avg_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
+    avg_clamp = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
+    early_big = sum(m["big_max_render"] for m in early_window) / len(early_window)
+    late_big = sum(m["big_max_render"] for m in late_window) / len(late_window)
+    late_small = sum(m["max_small_delta"] for m in late_window) / len(late_window)
+    hot_unique_big = {round(m["big_max_render"], 6) for m in hot_window}
+    hot_big_spread = max(m["big_max_render"] for m in hot_window) - min(m["big_max_render"] for m in hot_window)
+
+    assert max(m["support_pressure"] for m in hot_window) == pytest.approx(0.0, abs=1e-6)
+    assert avg_raw >= 1.00, "Manual-floor hold fixture must stay genuinely hot."
+    assert avg_feed >= 0.24, "Manual-floor Bubble feed still stays too weak through the hold."
+    assert avg_small >= 0.010, "Manual-floor loud hold still lets the small lane die."
+    assert late_small >= 0.010, "Manual-floor loud hold still loses the small lane by the tail of the hold."
+    assert avg_big >= 0.068, "Manual-floor loud hold still leaves the hero lane too modest."
+    assert early_big >= 0.062, "Manual-floor loud hold still waits too long before lifting the hero lane."
+    assert late_big >= early_big * 0.90, "Manual-floor loud hold still fades the hero lane away instead of sustaining it."
+    assert avg_clamp < 7.0, "Manual-floor loud hold still looks alive mostly because clamp pressure is doing the work."
+    assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
+        "Manual-floor loud hold still flattens into one narrow hero-lane shape."
     )
 
 

@@ -790,6 +790,21 @@ class _SpotifyBeatEngine(QObject):
         def _control(name: str) -> float:
             return max(0.0, min(1.0, float(getattr(w, name, 0.0) or 0.0)))
 
+        def _clamp01(value: float) -> float:
+            return max(0.0, min(1.0, float(value)))
+
+        def _hot_phase(raw_value: float) -> float:
+            return _clamp01((raw_value - 0.85) / 0.40)
+
+        def _hot_lift(raw_value: float) -> float:
+            return soft_ceiling(
+                max(0.0, raw_value - 0.85),
+                knee=0.0,
+                ceiling=0.56,
+                max_input=1.80,
+                curve=0.96,
+            )
+
         def _shape(raw_value: float, control_value: float, *, denom: float, knee: float, ceiling: float) -> float:
             raw_mix = 0.72
             if dynamic_enabled:
@@ -810,64 +825,101 @@ class _SpotifyBeatEngine(QObject):
 
         raw_bass = _raw("_last_raw_bass", "_pre_agc_live_bass")
         control_bass = _control("_pre_agc_control_bass")
+        raw_mid = _raw("_last_raw_mid", "_pre_agc_live_mid")
+        control_mid = _control("_pre_agc_control_mid")
+        raw_high = _raw("_last_raw_treble", "_pre_agc_live_treble")
+        control_high = _control("_pre_agc_control_treble")
+        hot_phase = _hot_phase(raw_bass)
+        hot_lift = _hot_lift(raw_bass)
+        support_carry = min(0.04, support_pressure * max(0.008, 0.04 - hot_phase * 0.032))
+        raw_presence = soft_ceiling(
+            raw_mid / max(0.24, raw_bass_avg * 1.65),
+            knee=0.08,
+            ceiling=0.10,
+            max_input=1.50,
+            curve=1.00,
+        )
+        presence_carry = min(
+            0.16,
+            raw_presence
+            + control_mid * 0.06
+            + control_high * 0.025,
+        )
         if dynamic_enabled:
-            bass = _shape(
-                raw_bass,
-                control_bass,
-                denom=raw_bass_avg * 1.02,
-                knee=0.22,
-                ceiling=0.99,
-            )
-        else:
-            # Manual-floor Bubble should preserve loud-passages as a distinct
-            # hero lane instead of collapsing them into the same continuous
-            # body that already drives soft passages. Keep a low stable body,
-            # add a light normalized support lane, and reserve a stronger
-            # absolute-peak branch for true hot sections.
-            absolute_body = soft_ceiling(
-                raw_bass / 2.60,
-                knee=0.16,
-                ceiling=0.24,
-                max_input=1.00,
+            body = soft_ceiling(
+                raw_bass / max(0.26, raw_bass_avg * 2.10),
+                knee=0.12,
+                ceiling=0.20,
+                max_input=1.40,
                 curve=1.00,
+            )
+            warm_support = soft_ceiling(
+                raw_bass / max(0.24, raw_bass_avg * 1.30),
+                knee=0.10,
+                ceiling=0.16,
+                max_input=2.20,
+                curve=1.02,
+            ) * (1.0 - hot_phase * 0.78)
+            bass = (
+                body * 0.42
+                + warm_support * 0.18
+                + hot_lift
+                + presence_carry * 0.16
+                + min(0.045, control_bass * 0.06)
+                + support_carry
+            )
+            bass = _clamp01(bass * ramp)
+        else:
+            # Manual-floor Bubble should read loud sections from absolute bass
+            # authority, not from a moving average that can flatten the hero
+            # branch back into the same bucket as soft passages.
+            absolute_body = soft_ceiling(
+                raw_bass / 2.70,
+                knee=0.14,
+                ceiling=0.22,
+                max_input=1.10,
+                curve=0.98,
             )
             normalized_support = soft_ceiling(
-                raw_bass / max(0.22, raw_bass_avg * 2.10),
-                knee=0.12,
-                ceiling=0.18,
-                max_input=2.40,
+                raw_bass / max(0.22, raw_bass_avg * 2.40),
+                knee=0.10,
+                ceiling=0.12,
+                max_input=1.80,
                 curve=1.00,
-            )
-            absolute_peak = soft_ceiling(
-                max(0.0, raw_bass - 1.55),
-                knee=0.0,
-                ceiling=0.46,
-                max_input=2.35,
-                curve=1.00,
-            )
-            control_support = min(0.04, control_bass * 0.05)
+            ) * (1.0 - hot_phase * 0.72)
+            control_support = min(0.035, control_bass * 0.06)
             bass = (
-                absolute_body * 0.62
-                + normalized_support * 0.28
-                + absolute_peak
+                absolute_body * 0.56
+                + normalized_support * 0.18
+                + hot_lift * 1.02
+                + presence_carry * 0.22
                 + control_support
             )
-            bass = max(0.0, min(1.0, bass * ramp))
+            bass = _clamp01(bass * ramp)
         mid = _shape(
-            _raw("_last_raw_mid", "_pre_agc_live_mid"),
-            _control("_pre_agc_control_mid"),
+            raw_mid,
+            control_mid,
             denom=raw_bass_avg * 1.48,
             knee=0.20,
             ceiling=0.96,
         )
         high = _shape(
-            _raw("_last_raw_treble", "_pre_agc_live_treble"),
-            _control("_pre_agc_control_treble"),
+            raw_high,
+            control_high,
             denom=raw_bass_avg * 1.98,
             knee=0.16,
             ceiling=0.92,
         )
-        overall = max(0.0, min(1.0, bass * 0.46 + mid * 0.34 + high * 0.20))
+        mid_presence = min(0.12, presence_carry * (0.26 + hot_phase * 0.44) + support_carry * 0.40)
+        high_presence = min(0.07, presence_carry * (0.10 + hot_phase * 0.22) + support_carry * 0.18)
+        mid = max(mid, mid_presence * ramp)
+        high = max(high, high_presence * ramp)
+        overall = _clamp01(
+            bass * 0.44
+            + mid * 0.34
+            + high * 0.22
+            + hot_phase * presence_carry * 0.10
+        )
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
     def get_floor_snapshot(self) -> dict:

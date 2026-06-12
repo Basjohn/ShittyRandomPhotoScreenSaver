@@ -22,6 +22,7 @@ from core.logging.logger import (
     is_viz_diagnostics_enabled,
     is_viz_logging_enabled,
 )
+from widgets.spotify_visualizer.signal_contract import soft_ceiling
 
 logger = get_logger(__name__)
 
@@ -416,15 +417,43 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         _t_clamp = getattr(widget, '_transient_clamp', 1.5)
         _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
         _bmix_vocal = getattr(widget, '_bubble_transient_mix_vocal', 0.25)
+        _hot_bass_lift = soft_ceiling(
+            max(0.0, _pulse_bass - 0.85),
+            knee=0.0,
+            ceiling=0.12,
+            max_input=0.40,
+            curve=1.0,
+        )
+        _hot_presence = soft_ceiling(
+            max(0.0, _pulse_bass - 0.92),
+            knee=0.0,
+            ceiling=0.09,
+            max_input=0.42,
+            curve=1.0,
+        )
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
         _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
         _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
-        eb_snap["bass"] = _mixed_bass
+        eb_snap["bass"] = min(_t_clamp, _mixed_bass + _hot_bass_lift)
         eb_snap["mid"] = _mixed_mid
         eb_snap["high"] = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
-        eb_snap["overall"] = getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0
-        eb_snap["smooth_mid"] = getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0
-        eb_snap["smooth_high"] = getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0
+        eb_snap["smooth_mid"] = max(
+            getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
+            _hot_presence * 0.82,
+        )
+        eb_snap["smooth_high"] = max(
+            getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
+            _hot_presence * 0.34,
+        )
+        eb_snap["overall"] = max(
+            getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,
+            min(
+                1.0,
+                eb_snap["bass"] * 0.46
+                + eb_snap["smooth_mid"] * 0.34
+                + eb_snap["smooth_high"] * 0.20,
+            ),
+        )
 
     sim_settings = getattr(widget, "_bubble_dispatch_settings", None)
     if not isinstance(sim_settings, dict):

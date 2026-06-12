@@ -676,6 +676,15 @@ class BubbleSimulation:
                     sustained_scale = 0.10
                     attack_rate = 15.0
                     decay_rate = 7.2
+                hot_hold_support = soft_ceiling(
+                    max(0.0, bass - (0.44 + size_t * 0.08)),
+                    knee=0.0,
+                    ceiling=0.40 - size_t * 0.08,
+                    max_input=0.50,
+                    curve=1.0,
+                )
+                if hot_hold_support > 0.0:
+                    decay_rate = min(decay_rate, 1.90 + size_t * 0.70)
             else:
                 running_avg = self._midhi_running_avg
                 size_range = max(0.001, self._small_size_max - 0.004)
@@ -691,16 +700,25 @@ class BubbleSimulation:
                     max_input=0.78,
                     curve=1.0,
                 )
+                hot_bed_support = soft_ceiling(
+                    max(0.0, max(bass, overall) - (0.46 + size_t * 0.05)),
+                    knee=0.0,
+                    ceiling=0.18 - size_t * 0.03,
+                    max_input=0.48,
+                    curve=1.0,
+                )
                 vocal_body = max(
                     mid * 0.58 + high * 0.34,
                     smooth_mid * 0.62 + smooth_high * 0.28,
                 )
-                raw_src = vocal_body + chorus_support
+                raw_src = vocal_body + chorus_support + hot_bed_support
                 delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
                 sustained_knee = 0.25 + size_t * 0.15
                 sustained_scale = 0.54 - size_t * 0.08
                 attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
+                if hot_bed_support > 0.0:
+                    decay_rate = min(decay_rate, 2.0 + size_t * 1.0)
 
             # Delta component: transient punch (noise gate: ignore sub-perceptual deltas)
             delta = max(0.0, raw_src - running_avg)
@@ -716,6 +734,11 @@ class BubbleSimulation:
             else:
                 t = (perceptual_src - sustained_knee) / max(0.01, 1.0 - sustained_knee)
                 sustained_component = min(sustained_scale, t * sustained_scale)
+
+            if use_bass:
+                sustained_component = max(sustained_component, hot_hold_support)
+            else:
+                sustained_component = max(sustained_component, hot_bed_support * 0.85)
 
             gated_energy = min(1.0, max(delta_component, sustained_component))
 
@@ -1148,8 +1171,15 @@ class BubbleSimulation:
     ) -> float:
         """Approximate rendered radius so collision and visuals stay aligned."""
         is_tiny = (not bubble.is_big) and bubble.radius < 0.008
+        big_hold_boost = soft_ceiling(
+            max(0.0, self._sustained_loud_energy - 0.68),
+            knee=0.0,
+            ceiling=0.30,
+            max_input=0.24,
+            curve=1.0,
+        )
         if bubble.is_big:
-            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2
+            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
         else:
@@ -1499,8 +1529,15 @@ class BubbleSimulation:
             # Small bubbles below tiny threshold: suppress pulse to avoid
             # flicker between dot and outline rendering.
             is_tiny = (not b.is_big) and b.radius < 0.008
+            big_hold_boost = soft_ceiling(
+                max(0.0, self._sustained_loud_energy - 0.68),
+                knee=0.0,
+                ceiling=0.30,
+                max_input=0.24,
+                curve=1.0,
+            )
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2
+                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5
