@@ -603,9 +603,9 @@ def test_blob_dynamic_floor_pressure_rebases_body_more_than_vocal_motion(qt_app)
         {
             "dynamic_enabled": True,
             "manual_floor": 0.15,
-            "applied_floor": 0.92,
+            "gate_floor": 0.31,
             "last_noise_floor": 0.90,
-            "pressure": 0.90,
+            "support_pressure": 0.90,
         }
     )
     overlay._blob_kick_event_strength = 0.0
@@ -712,9 +712,9 @@ def test_blob_floor_pressure_preserves_stage_branch_better_than_live_body(qt_app
         {
             "dynamic_enabled": True,
             "manual_floor": 0.15,
-            "applied_floor": 0.92,
+            "gate_floor": 0.31,
             "last_noise_floor": 0.90,
-            "pressure": 0.90,
+            "support_pressure": 0.90,
         }
     )
     overlay._blob_kick_event_strength = 0.72

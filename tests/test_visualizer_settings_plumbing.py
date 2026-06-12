@@ -884,9 +884,9 @@ class TestConfigApplier:
                 return {
                     "dynamic_enabled": True,
                     "manual_floor": 0.15,
-                    "applied_floor": 0.88,
+                    "gate_floor": 0.30,
                     "last_noise_floor": 0.86,
-                    "pressure": 0.86,
+                    "support_pressure": 0.86,
                 }
 
             def get_event_scheduler(self):
@@ -896,7 +896,7 @@ class TestConfigApplier:
 
         assert extra["floor_snapshot"]["dynamic_enabled"] is True
         assert extra["floor_snapshot"]["manual_floor"] == pytest.approx(0.15)
-        assert extra["floor_snapshot"]["applied_floor"] == pytest.approx(0.88)
+        assert extra["floor_snapshot"]["gate_floor"] == pytest.approx(0.30)
 
     def test_spectrum_glow_applied_and_pushed(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs

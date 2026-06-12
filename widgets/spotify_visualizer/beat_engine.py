@@ -765,19 +765,19 @@ class _SpotifyBeatEngine(QObject):
         return EnergyBands(bass=bass, mid=mid, high=high, overall=overall)
 
     def get_bubble_energy_bands(self) -> EnergyBands:
-        """Return Bubble's pressure-aware continuous energy feed.
+        """Return Bubble's support-aware continuous energy feed.
 
         Bubble's live motion contract is more sensitive to flattened control
         lanes than other modes. It still consumes a bounded 0..1 signal, but
         that signal must be derived primarily from the raw band authority that
-        survives dynamic-floor expansion, with only a light stabilizing blend
+        survives gate-floor subtraction, with only a light stabilizing blend
         from the shared control lane.
         """
         w = self._audio_worker
         ramp = self._get_play_ramp_factor()
         floor_snapshot = self.get_floor_snapshot()
         dynamic_enabled = bool(floor_snapshot.get("dynamic_enabled", True))
-        pressure = max(0.0, min(1.0, float(floor_snapshot.get("pressure", 0.0) or 0.0)))
+        support_pressure = max(0.0, min(1.0, float(floor_snapshot.get("support_pressure", 0.0) or 0.0)))
 
         try:
             raw_bass_avg = max(0.10, float(getattr(w, "_raw_bass_avg", 0.10) or 0.10))
@@ -793,8 +793,8 @@ class _SpotifyBeatEngine(QObject):
         def _shape(raw_value: float, control_value: float, *, denom: float, knee: float, ceiling: float) -> float:
             raw_mix = 0.72
             if dynamic_enabled:
-                raw_mix += pressure * 0.23
-            raw_mix = max(0.72, min(0.95, raw_mix))
+                raw_mix += support_pressure * 0.14
+            raw_mix = max(0.72, min(0.88, raw_mix))
             normalized = max(0.0, raw_value / max(0.10, denom))
             shaped = soft_ceiling(
                 normalized,
@@ -804,6 +804,8 @@ class _SpotifyBeatEngine(QObject):
                 curve=1.10,
             )
             blended = control_value * (1.0 - raw_mix) + shaped * raw_mix
+            if dynamic_enabled and support_pressure > 0.0:
+                blended += support_pressure * 0.06
             return max(0.0, min(1.0, blended * ramp))
 
         raw_bass = _raw("_last_raw_bass", "_pre_agc_live_bass")
@@ -812,7 +814,7 @@ class _SpotifyBeatEngine(QObject):
             bass = _shape(
                 raw_bass,
                 control_bass,
-                denom=raw_bass_avg * (1.05 + pressure * 0.22),
+                denom=raw_bass_avg * 1.02,
                 knee=0.22,
                 ceiling=0.99,
             )
@@ -854,14 +856,14 @@ class _SpotifyBeatEngine(QObject):
         mid = _shape(
             _raw("_last_raw_mid", "_pre_agc_live_mid"),
             _control("_pre_agc_control_mid"),
-            denom=raw_bass_avg * (1.55 + pressure * 0.18),
+            denom=raw_bass_avg * 1.48,
             knee=0.20,
             ceiling=0.96,
         )
         high = _shape(
             _raw("_last_raw_treble", "_pre_agc_live_treble"),
             _control("_pre_agc_control_treble"),
-            denom=raw_bass_avg * (2.10 + pressure * 0.14),
+            denom=raw_bass_avg * 1.98,
             knee=0.16,
             ceiling=0.92,
         )
@@ -886,27 +888,27 @@ class _SpotifyBeatEngine(QObject):
         except Exception:
             manual_floor = 0.12
         try:
-            applied_floor = float(getattr(w, '_applied_noise_floor', manual_floor) or manual_floor)
+            gate_floor = float(getattr(w, '_gate_floor', getattr(w, '_applied_noise_floor', manual_floor)) or manual_floor)
         except Exception:
-            applied_floor = manual_floor
+            gate_floor = manual_floor
         try:
-            last_noise_floor = float(getattr(w, '_last_noise_floor', applied_floor) or applied_floor)
+            last_noise_floor = float(getattr(w, '_last_noise_floor', gate_floor) or gate_floor)
         except Exception:
-            last_noise_floor = applied_floor
+            last_noise_floor = gate_floor
+        try:
+            support_pressure = float(getattr(w, '_support_pressure', 0.0) or 0.0)
+        except Exception:
+            support_pressure = 0.0
 
         manual_floor = max(0.0, min(1.0, manual_floor))
-        applied_floor = max(0.0, min(1.0, applied_floor))
+        gate_floor = max(0.0, min(1.0, gate_floor))
         last_noise_floor = max(0.0, min(1.0, last_noise_floor))
-        pressure = 0.0
-        if dynamic_enabled:
-            denom = max(0.12, 1.0 - manual_floor)
-            pressure = max(0.0, min(1.0, (applied_floor - manual_floor) / denom))
         return {
             'dynamic_enabled': dynamic_enabled,
             'manual_floor': manual_floor,
-            'applied_floor': applied_floor,
+            'gate_floor': gate_floor,
             'last_noise_floor': last_noise_floor,
-            'pressure': pressure,
+            'support_pressure': max(0.0, min(1.0, support_pressure if dynamic_enabled else 0.0)),
         }
 
     def get_transient_energy_bands(self) -> TransientEnergyBands:

@@ -201,12 +201,9 @@ def persist_vis_mode(widget: Any) -> None:
         return
     try:
         mode_str = widget._vis_mode_str
-        cfg = sm.get('widgets', {}) or {}
-        vis_cfg = cfg.get('spotify_visualizer', {}) or {}
-        if vis_cfg.get('mode') != mode_str:
-            vis_cfg['mode'] = mode_str
-            cfg['spotify_visualizer'] = vis_cfg
-            sm.set('widgets', cfg)
+        current_mode = sm.get('widgets.spotify_visualizer.mode', None)
+        if current_mode != mode_str:
+            sm.set('widgets.spotify_visualizer.mode', mode_str)
             logger.debug("[SPOTIFY_VIS] Persisted vis mode: %s", mode_str)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to persist vis mode", exc_info=True)

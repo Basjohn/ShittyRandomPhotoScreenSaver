@@ -1906,18 +1906,21 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         except Exception:
             manual_floor = 0.12
         try:
-            applied_floor = float(floor_snapshot.get('applied_floor', manual_floor) or manual_floor)
+            gate_floor = float(floor_snapshot.get('gate_floor', manual_floor) or manual_floor)
         except Exception:
-            applied_floor = manual_floor
+            gate_floor = manual_floor
         try:
-            pressure = float(floor_snapshot.get('pressure', 0.0) or 0.0)
+            support_pressure = float(floor_snapshot.get('support_pressure', 0.0) or 0.0)
         except Exception:
-            pressure = 0.0
+            support_pressure = 0.0
 
         self._continuous_floor_dynamic_enabled = dynamic_enabled
         self._continuous_floor_manual = max(0.0, min(1.0, manual_floor))
-        self._continuous_floor_applied = max(0.0, min(1.0, applied_floor))
-        self._continuous_floor_pressure = max(0.0, min(1.0, pressure if dynamic_enabled else 0.0))
+        self._continuous_floor_applied = max(0.0, min(1.0, gate_floor))
+        self._continuous_floor_pressure = max(
+            0.0,
+            min(1.0, support_pressure if dynamic_enabled else 0.0),
+        )
 
     def _get_blob_floor_pressure(self) -> float:
         return max(0.0, min(1.0, float(getattr(self, '_continuous_floor_pressure', 0.0) or 0.0)))

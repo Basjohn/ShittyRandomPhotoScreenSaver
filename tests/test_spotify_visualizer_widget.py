@@ -90,6 +90,33 @@ def test_spotify_visualizer_compute_bars_reasonable_runtime(np_module):
     assert elapsed < 0.5, f"compute_bars_from_samples too slow: {elapsed:.3f}s"
 
 
+def test_persist_vis_mode_updates_only_visualizer_mode_key():
+    class _FakeSettingsManager:
+        def __init__(self, current_mode: str | None):
+            self.current_mode = current_mode
+            self.set_calls: list[tuple[str, str]] = []
+
+        def get(self, key, default=None):
+            if key == "widgets.spotify_visualizer.mode":
+                return self.current_mode
+            return default
+
+        def set(self, key, value):
+            self.set_calls.append((key, value))
+            if key == "widgets.spotify_visualizer.mode":
+                self.current_mode = value
+
+    settings = _FakeSettingsManager(current_mode="spectrum")
+    widget = SimpleNamespace(
+        _vis_mode_str="bubble",
+        _widget_manager=SimpleNamespace(_settings_manager=settings),
+    )
+
+    mode_transition.persist_vis_mode(widget)
+
+    assert settings.set_calls == [("widgets.spotify_visualizer.mode", "bubble")]
+
+
 @pytest.mark.qt
 def test_visualizer_mode_transition_fade_forwards_duration_override(qt_app, monkeypatch):
     widget = SpotifyVisualizerWidget(parent=None, bar_count=10)
@@ -1423,6 +1450,23 @@ def _organs_phrase_sequence(np_module, *, n: int = 4096):
     ]
 
 
+def _organs_runtime_floor_sequence(np_module, *, n: int = 4096):
+    base = _organs_phrase_sequence(np_module, n=n)
+    sub = _synthetic_audio(np_module, hz=48.0, amp=0.30, n=n)
+    kick = _synthetic_audio(np_module, hz=96.0, amp=0.18, n=n)
+    body = _synthetic_audio(np_module, hz=220.0, amp=0.14, n=n)
+    air = _synthetic_audio(np_module, hz=880.0, amp=0.05, n=n)
+
+    return [
+        (base[0] * 0.96 + sub * 0.32 + kick * 0.08 + body * 0.06).astype("float32"),
+        (base[2] * 0.86 + sub * 0.26 + kick * 0.05 + body * 0.05).astype("float32"),
+        (base[0] * 1.08 + sub * 0.40 + kick * 0.11 + body * 0.07 + air * 0.02).astype("float32"),
+        (base[2] * 1.02 + sub * 0.37 + kick * 0.09 + body * 0.08).astype("float32"),
+        (base[0] * 1.12 + sub * 0.43 + kick * 0.12 + body * 0.08 + air * 0.03).astype("float32"),
+        (base[2] * 1.06 + sub * 0.39 + kick * 0.08 + body * 0.08).astype("float32"),
+    ]
+
+
 def _apply_authored_bubble_preset(widget: SpotifyVisualizerWidget, preset_index: int) -> dict[str, object]:
     settings = dict(get_preset_settings("bubble", preset_index) or {})
     assert settings, f"expected authored Bubble preset {preset_index} settings"
@@ -1575,6 +1619,9 @@ def _poison_audio_worker_state(engine: _SpotifyBeatEngine) -> None:
     aw._raw_bass_avg = 2.5
     aw._applied_noise_floor = 2.0
     aw._last_noise_floor = 1.8
+    aw._gate_floor = 1.9
+    aw._support_pressure = 0.82
+    aw._support_signal_avg = 2.1
     aw._last_bass_drop_ratio = 0.7
     aw._bass_drop_accum = 0.6
     aw._bar_gate_prev1 = [0.9]
@@ -1620,6 +1667,9 @@ def _assert_audio_worker_state_reset(engine: _SpotifyBeatEngine) -> None:
     assert aw._raw_bass_avg == pytest.approx(floor)
     assert aw._applied_noise_floor == pytest.approx(floor)
     assert aw._last_noise_floor == pytest.approx(floor)
+    assert aw._gate_floor == pytest.approx(floor)
+    assert aw._support_pressure == pytest.approx(0.0)
+    assert aw._support_signal_avg == pytest.approx(floor)
     assert aw._last_bass_drop_ratio == pytest.approx(0.0)
     assert aw._bass_drop_accum == pytest.approx(0.0)
     assert aw._bar_gate_prev1 is None
@@ -3780,6 +3830,117 @@ def test_spectrum_organs_first_visible_frame_is_nontrivial_under_authored_phrase
 
 
 @pytest.mark.qt
+def test_spectrum_organs_dynamic_floor_caps_gate_floor_while_support_pressure_stays_alive(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    engine = _SpotifyBeatEngine(35)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    _apply_authored_spectrum_organs(widget)
+
+    manual_floor = float(engine._audio_worker._manual_floor)
+    gate_cap = min(0.18, (1.0 - manual_floor) * 0.22)
+    gate_ceiling = manual_floor + gate_cap
+
+    gate_series: list[float] = []
+    support_series: list[float] = []
+    raw_series: list[float] = []
+
+    for idx in range(48):
+        samples = _organs_runtime_floor_sequence(np_module)[idx % 6]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        snap = engine.get_floor_snapshot()
+        gate_series.append(float(snap["gate_floor"]))
+        support_series.append(float(snap["support_pressure"]))
+        raw_series.append(float(getattr(engine._audio_worker, "_last_raw_bass", 0.0)))
+
+    hot_gate = gate_series[24:]
+    hot_support = support_series[24:]
+    hot_raw = raw_series[24:]
+
+    assert max(hot_raw) > 1.20, "Authored Organs hot window did not reach a meaningful bass load."
+    assert max(gate_series) <= gate_ceiling + 0.025
+    assert max(hot_support) > 0.35, "Support pressure never meaningfully rose on the hot Organs window."
+    assert max(hot_gate) - min(hot_gate) < 0.12, "Gate floor is still drifting too widely inside one hot window."
+    assert max(hot_gate) < 0.70, "Gate floor is still saturating far above authored intent."
+
+
+@pytest.mark.qt
+def test_spectrum_organs_hot_window_keeps_visible_headroom_under_dynamic_floor(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    engine = _SpotifyBeatEngine(35)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=35)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    _apply_authored_spectrum_organs(widget)
+
+    cool_peaks: list[float] = []
+    cool_ranges: list[float] = []
+    hot_peaks: list[float] = []
+    hot_ranges: list[float] = []
+    hot_raw: list[float] = []
+
+    sequence = _organs_runtime_floor_sequence(np_module)
+    for idx in range(60):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        bars = list(engine.get_smoothed_bars())
+        peak = max(bars)
+        spread = peak - min(bars)
+        raw_bass = float(getattr(engine._audio_worker, "_last_raw_bass", 0.0))
+        if idx >= 24:
+            hot_peaks.append(peak)
+            hot_ranges.append(spread)
+            hot_raw.append(raw_bass)
+        else:
+            cool_peaks.append(peak)
+            cool_ranges.append(spread)
+
+    assert hot_peaks and cool_peaks
+    assert max(hot_raw) > 1.20
+    assert min(hot_peaks) > 0.30, (
+        f"Hot Organs peak collapsed to {min(hot_peaks):.3f}; dynamic floor is still eating too much headroom."
+    )
+    assert (sum(hot_peaks) / len(hot_peaks)) > (sum(cool_peaks) / len(cool_peaks)) + 0.02, (
+        "Hot Organs window is still not materially stronger than the cooler window."
+    )
+    assert (sum(hot_ranges) / len(hot_ranges)) > (sum(cool_ranges) / len(cool_ranges)) + 0.02, (
+        "Hot Organs spread is still not materially stronger than the cooler window."
+    )
+    assert min(hot_ranges) > 0.14, (
+        f"Hot Organs spread collapsed to {min(hot_ranges):.3f}; Spectrum is still flattening into a narrow band."
+    )
+
+
+@pytest.mark.qt
 def test_mode_switch_organs_first_visible_frame_matches_fresh_activation_oracle(
     qt_app,
     qtbot,
@@ -4375,6 +4536,7 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
 
     sequence = _deep_sea_phrase_sequence(np_module)
     pressure_series: list[float] = []
+    gate_series: list[float] = []
     control_series: list[float] = []
     bubble_series: list[float] = []
     strong_control: list[float] = []
@@ -4388,7 +4550,9 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
             _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
         )
         engine.tick()
-        pressure = float(engine.get_floor_snapshot()["pressure"])
+        floor_snapshot = engine.get_floor_snapshot()
+        pressure = float(floor_snapshot["support_pressure"])
+        gate_series.append(float(floor_snapshot["gate_floor"]))
         control = float(engine.get_pre_agc_energy_bands().bass)
         bubble = float(engine.get_bubble_energy_bands().bass)
         pressure_series.append(pressure)
@@ -4403,6 +4567,7 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
                 weak_bubble.append(bubble)
 
     assert max(pressure_series) > 0.20
+    assert max(gate_series) <= 0.30
     assert strong_control and weak_control and strong_bubble and weak_bubble
 
     control_delta = (sum(strong_control) / len(strong_control)) - (sum(weak_control) / len(weak_control))
@@ -4417,6 +4582,9 @@ def test_deep_sea_bubble_feed_preserves_live_variance_under_floor_pressure(
     assert bubble_range > 0.14, (
         f"Deep Sea Bubble range {bubble_range:.4f} stayed too narrow under floor pressure; "
         "the live lane is still collapsing into a plateau."
+    )
+    assert min(strong_bubble) > max(0.10, (sum(weak_bubble) / len(weak_bubble)) * 0.95), (
+        "Deep Sea Bubble still lets the strong window sag toward the weak window while support pressure is elevated."
     )
     assert (sum(strong_bubble) / len(strong_bubble)) > (sum(weak_bubble) / len(weak_bubble)) * 1.25, (
         "Deep Sea Bubble strong phases are not separating enough from weak phases under high floor pressure."

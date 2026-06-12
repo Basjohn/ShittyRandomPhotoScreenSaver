@@ -67,6 +67,11 @@ _COMPUTE_SNAPSHOT_ATTRS = (
     "_dynamic_floor_decay_alpha",
     "_applied_noise_floor",
     "_last_noise_floor",
+    "_gate_floor",
+    "_support_pressure",
+    "_support_signal_avg",
+    "_support_pressure_alpha",
+    "_support_pressure_decay_alpha",
     "_floor_response",
     "_floor_mid_weight",
     "_floor_headroom",
@@ -212,6 +217,11 @@ class SpotifyVisualizerAudioWorker(QObject):
         self._dynamic_floor_decay_alpha: float = 0.12
         self._applied_noise_floor: float = 0.12
         self._last_noise_floor: float = 0.12
+        self._gate_floor: float = 0.12
+        self._support_pressure: float = 0.0
+        self._support_signal_avg: float = 0.12
+        self._support_pressure_alpha: float = 0.14
+        self._support_pressure_decay_alpha: float = 0.18
         self._floor_response: float = 0.08
         self._floor_mid_weight: float = 0.18
         self._floor_headroom: float = 0.18
@@ -321,6 +331,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._raw_bass_avg = floor
             self._applied_noise_floor = floor
             self._last_noise_floor = floor
+            self._gate_floor = floor
+            self._support_pressure = 0.0
+            self._support_signal_avg = floor
             self._running_peak = 0.5
         self._last_floor_config = (dyn, floor)
 
@@ -454,6 +467,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             self._raw_bass_avg = floor
             self._applied_noise_floor = floor
             self._last_noise_floor = floor
+            self._gate_floor = floor
+            self._support_pressure = 0.0
+            self._support_signal_avg = floor
             self._running_peak = 0.5
             self._env_short = 0.5
             self._env_long = 0.5
@@ -719,6 +735,9 @@ class SpotifyVisualizerAudioWorker(QObject):
             "_raw_bass_avg",
             "_applied_noise_floor",
             "_last_noise_floor",
+            "_gate_floor",
+            "_support_pressure",
+            "_support_signal_avg",
             "_last_bass_drop_ratio",
             "_bass_drop_accum",
             "_transient_bus",

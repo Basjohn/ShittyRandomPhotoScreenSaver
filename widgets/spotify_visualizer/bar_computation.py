@@ -454,7 +454,7 @@ def _compute_noise_floor(
     low_resolution: bool,
     drop_signal: float,
 ) -> tuple:
-    """Compute noise floor and expansion factor. Returns (noise_floor, expansion)."""
+    """Compute the shared floor context. Returns (gate_floor, expansion)."""
     noise_floor_base = max(0.8, 1.5 / (resolution_boost ** 0.35))
     expansion_base = 3.6 * (resolution_boost ** 0.4)
 
@@ -499,10 +499,12 @@ def _compute_noise_floor(
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             expansion = expansion_base
 
-    target_floor = base_noise_floor
+    gate_floor_target = base_noise_floor
     mode = "dynamic" if use_dynamic_floor else "manual"
+    support_pressure_target = 0.0
     if use_dynamic_floor:
         avg = getattr(worker, "_raw_bass_avg", base_noise_floor)
+        support_avg = getattr(worker, "_support_signal_avg", max(manual_floor, avg))
         try:
             floor_mid_weight = float(worker._floor_mid_weight)
         except Exception as e:
@@ -532,6 +534,14 @@ def _compute_noise_floor(
             alpha_decay = alpha_rise
         alpha_rise = max(0.0, min(1.0, alpha_rise))
         alpha_decay = max(0.0, min(1.0, alpha_decay))
+        support_alpha_rise = max(
+            alpha_rise,
+            min(1.0, float(getattr(worker, "_support_pressure_alpha", alpha_rise))),
+        )
+        support_alpha_decay = max(
+            alpha_decay,
+            min(1.0, float(getattr(worker, "_support_pressure_decay_alpha", alpha_decay))),
+        )
 
         # Keep decay behavior tied to the current configured rates rather than
         # hardcoding one multiplier.  We still enforce a minimum asymmetry that
@@ -548,6 +558,15 @@ def _compute_noise_floor(
         # analysis (base_noise_floor) considers reasonable.
         avg = min(avg, base_noise_floor * 2.5)
         worker._raw_bass_avg = avg
+        support_alpha = support_alpha_rise if floor_signal >= support_avg else support_alpha_decay
+        support_avg = (1.0 - support_alpha) * support_avg + support_alpha * floor_signal
+        support_signal_ceiling = max(
+            base_noise_floor * 4.5,
+            manual_floor + 0.65,
+            silence_threshold + 0.30,
+        )
+        support_avg = min(support_avg, support_signal_ceiling)
+        worker._support_signal_avg = support_avg
         dyn_ratio = getattr(worker, "_dynamic_floor_ratio", 0.42)
         if low_resolution:
             dyn_ratio = min(0.75, dyn_ratio * (1.0 + 0.35 * (resolution_boost - 1.0)))
@@ -555,8 +574,10 @@ def _compute_noise_floor(
             worker._min_floor,
             min(worker._max_floor, avg * dyn_ratio),
         )
-        base_target = max(worker._min_floor, min(base_noise_floor, dyn_candidate))
-        target_floor = base_target
+        gate_uplift_cap = min(0.18, max(0.0, (1.0 - manual_floor) * 0.22))
+        gate_floor_ceiling = min(worker._max_floor, manual_floor + gate_uplift_cap)
+        base_target = max(manual_floor, min(gate_floor_ceiling, dyn_candidate))
+        gate_floor_target = base_target
         try:
             headroom = float(worker._floor_headroom)
         except Exception as e:
@@ -565,47 +586,72 @@ def _compute_noise_floor(
         if headroom > 0.0:
             headroom = min(1.0, headroom)
             blended = (floor_signal * (1.0 - headroom)) + (base_target * headroom)
-            target_floor = max(worker._min_floor, min(base_noise_floor, blended))
+            gate_floor_target = max(manual_floor, min(gate_floor_ceiling, blended))
         drop_relief = getattr(worker, "_last_bass_drop_ratio", 0.0)
         if drop_relief > 0.18:
-            target_floor = max(worker._min_floor, target_floor * (1.0 - drop_relief * 0.18))
+            gate_floor_target = max(manual_floor, gate_floor_target * (1.0 - drop_relief * 0.18))
         elif low_resolution and drop_relief > 0.05:
-            target_floor = max(worker._min_floor, target_floor * (1.0 - drop_relief * 0.45))
+            gate_floor_target = max(manual_floor, gate_floor_target * (1.0 - drop_relief * 0.45))
+
+        support_floor = max(manual_floor + 0.02, silence_threshold)
+        support_ceiling = max(
+            support_floor + 0.22,
+            min(support_signal_ceiling, manual_floor + 0.85),
+        )
+        support_span = max(0.22, support_ceiling - support_floor)
+        support_pressure_target = max(
+            0.0,
+            min(1.0, (support_avg - support_floor) / support_span),
+        )
     else:
-        target_floor = max(worker._min_floor, min(worker._max_floor, manual_floor))
+        gate_floor_target = max(worker._min_floor, min(worker._max_floor, manual_floor))
         # Compensate expansion when floor is lowered: more signal passes through,
         # so scale down expansion to prevent bar pinning at max height.
-        if noise_floor_base > 0.01 and target_floor < noise_floor_base * 0.9:
-            floor_ratio = max(0.15, target_floor / noise_floor_base)
+        if noise_floor_base > 0.01 and gate_floor_target < noise_floor_base * 0.9:
+            floor_ratio = max(0.15, gate_floor_target / noise_floor_base)
             expansion *= max(0.50, floor_ratio ** 0.35)
 
     try:
-        applied_floor = getattr(worker, "_applied_noise_floor", target_floor)
+        previous_gate_floor = getattr(
+            worker,
+            "_gate_floor",
+            getattr(worker, "_applied_noise_floor", gate_floor_target),
+        )
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        applied_floor = target_floor
+        previous_gate_floor = gate_floor_target
     response = worker._floor_response
     if response < 0.05:
         response = 0.05
     elif response > 1.0:
         response = 1.0
 
-    applied_floor = applied_floor + (target_floor - applied_floor) * response
-    worker._applied_noise_floor = applied_floor
-    noise_floor = applied_floor
-    worker._last_noise_floor = noise_floor
+    gate_floor = previous_gate_floor + (gate_floor_target - previous_gate_floor) * response
+    worker._gate_floor = gate_floor
+    worker._applied_noise_floor = gate_floor
+    worker._last_noise_floor = gate_floor
+    try:
+        support_pressure = float(getattr(worker, "_support_pressure", 0.0) or 0.0)
+    except Exception:
+        support_pressure = 0.0
+    support_response = support_alpha_rise if use_dynamic_floor else 1.0
+    if use_dynamic_floor:
+        support_response = support_alpha_rise if support_pressure_target >= support_pressure else support_alpha_decay
+    support_pressure = support_pressure + (support_pressure_target - support_pressure) * support_response
+    worker._support_pressure = max(0.0, min(1.0, support_pressure))
     maybe_log_floor_state(
         worker,
         mode=mode,
-        applied_floor=noise_floor,
+        gate_floor=gate_floor,
         manual_floor=manual_floor,
         raw_bass=raw_bass,
         raw_mid=raw_mid,
         raw_treble=raw_treble,
+        support_pressure=worker._support_pressure,
         expansion=expansion,
     )
 
-    return noise_floor, expansion
+    return gate_floor, expansion
 
 
 def _apply_bar_gate(worker: "SpotifyVisualizerAudioWorker", arr, np) -> None:
@@ -845,23 +891,29 @@ def _apply_adaptive_normalization(
 
     # --- Per-stack gain computation ---
     limiter_thresh = 1.2 - agc_str * 0.4  # 1.0 at default, 0.8 at max
+    support_pressure = max(0.0, min(1.0, float(getattr(worker, "_support_pressure", 0.0) or 0.0)))
 
-    def _compute_stack_gain(env_s: float, env_l: float) -> float:
+    def _compute_stack_gain(env_s: float, env_l: float, support_drive: float) -> float:
         """Compute gain factor for one envelope stack."""
         # 1) Limiter: short-term exceeds threshold → compress
         if env_s > limiter_thresh:
             raw_gain = limiter_thresh / env_s
-            return 1.0 + (raw_gain - 1.0) * agc_str * 2.0
+            gain = 1.0 + (raw_gain - 1.0) * agc_str * 2.0
+            if support_drive > 0.0 and env_l > limiter_thresh * 0.72:
+                gain += (1.0 - gain) * min(0.22, support_drive)
+            return min(1.0, gain)
         # 2) Recovery: short << long (quiet after loud) → gentle boost
         if env_l > 0.15 and env_s < env_l * 0.45:
             boost = min(1.35, env_l / max(env_s, 0.08))
             blend = min(0.3, (env_l - env_s) / max(env_l, 0.1))
             return 1.0 + (boost - 1.0) * blend * agc_str * 2.0
         # 3) Sustained: short ≈ long → unity gain (preserve dynamics)
+        if support_drive > 0.0 and env_s >= env_l * 0.72:
+            return min(1.08, 1.0 + support_drive * 0.06)
         return 1.0
 
-    bass_gain = _compute_stack_gain(eb_s, eb_l)
-    mix_gain = _compute_stack_gain(em_s, em_l)
+    bass_gain = _compute_stack_gain(eb_s, eb_l, support_pressure * 0.18)
+    mix_gain = _compute_stack_gain(em_s, em_l, support_pressure * 0.10)
 
     # --- Apply zone-aware gain to bars ---
     bass_split = max(1, getattr(worker, "_agc_bass_split", 4))
@@ -892,11 +944,12 @@ def maybe_log_floor_state(
     worker: "SpotifyVisualizerAudioWorker",
     *,
     mode: str,
-    applied_floor: float,
+    gate_floor: float,
     manual_floor: float,
     raw_bass: float,
     raw_mid: float,
     raw_treble: float,
+    support_pressure: float,
     expansion: float,
 ) -> None:
     """Throttled logging for noise-floor diagnostics."""
@@ -932,11 +985,11 @@ def maybe_log_floor_state(
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             return 0.0
 
-    applied_bucket = _bucket(applied_floor, 0.10)
+    applied_bucket = _bucket(gate_floor, 0.10)
 
     state_changed = (
         last_mode != mode
-        or _changed(applied_floor, last_applied)
+        or _changed(gate_floor, last_applied)
         or _changed(manual_floor, last_manual)
         or applied_bucket != last_applied_bucket
     )
@@ -949,10 +1002,11 @@ def maybe_log_floor_state(
 
     try:
         logger.info(
-            "[SPOTIFY_VIS][FLOOR] mode=%s applied=%.3f manual=%.3f bass=%.3f mid=%.3f treble=%.3f expansion=%.3f",
+            "[SPOTIFY_VIS][FLOOR] mode=%s gate=%.3f manual=%.3f support=%.3f bass=%.3f mid=%.3f treble=%.3f expansion=%.3f",
             mode,
-            float(applied_floor),
+            float(gate_floor),
             float(manual_floor),
+            float(support_pressure),
             float(raw_bass),
             float(raw_mid),
             float(raw_treble),
@@ -965,7 +1019,7 @@ def maybe_log_floor_state(
         try:
             worker._floor_log_last_ts = now
             worker._floor_log_last_mode = mode
-            worker._floor_log_last_applied = applied_floor
+            worker._floor_log_last_applied = gate_floor
             worker._floor_log_last_manual = manual_floor
             worker._floor_log_last_applied_bucket = applied_bucket
         except Exception as e:
