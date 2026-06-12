@@ -161,6 +161,100 @@ def test_push_spotify_visualizer_frame_still_skips_hidden_nonstartup_widget(monk
     assert ok is False
 
 
+def test_prewarm_spotify_visualizer_overlay_prefers_committed_custom_rect_over_stale_live_geometry(monkeypatch):
+    calls: list[object] = []
+
+    class _FakeVisualizer:
+        _vis_mode_str = "bubble"
+        _custom_layout_local_rect = QRect(12, 220, 510, 340)
+
+        def geometry(self) -> QRect:
+            return QRect(12, 220, 340, 340)
+
+        def _active_custom_layout_rect(self) -> QRect:
+            return QRect(self._custom_layout_local_rect)
+
+    class _FakeOverlay:
+        def __init__(self) -> None:
+            self._vis_mode = "spectrum"
+
+        def prewarm_context(self, geom: QRect) -> None:
+            calls.append(
+                ("overlay", self._vis_mode, geom.x(), geom.y(), geom.width(), geom.height())
+            )
+
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.shaders.preload_fragment_shaders",
+        lambda: calls.append("shaders") or {"spectrum": "frag"},
+    )
+    monkeypatch.setattr(
+        display_image_ops,
+        "_ensure_spotify_bars_overlay",
+        lambda widget: _FakeOverlay(),
+    )
+
+    widget = SimpleNamespace(spotify_visualizer_widget=_FakeVisualizer())
+
+    assert display_image_ops.prewarm_spotify_visualizer_overlay(widget) is True
+    assert calls == [
+        "shaders",
+        ("overlay", "bubble", 12, 220, 510, 340),
+    ]
+
+
+def test_push_spotify_visualizer_frame_prefers_committed_custom_rect_over_stale_live_geometry(monkeypatch):
+    calls: list[dict] = []
+
+    class _FakeVisualizer:
+        _startup_reveal_pending = False
+        _waiting_for_fresh_frame = False
+        _waiting_for_fresh_engine_frame = False
+        _border_width = 2
+        _custom_layout_local_rect = QRect(24, 180, 402, 357)
+
+        def isVisible(self) -> bool:
+            return True
+
+        def geometry(self) -> QRect:
+            return QRect(24, 180, 357, 357)
+
+        def _active_custom_layout_rect(self) -> QRect:
+            return QRect(self._custom_layout_local_rect)
+
+    class _FakeOverlay:
+        def set_state(self, **kwargs) -> None:
+            calls.append(kwargs)
+
+        def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+            return None
+
+    monkeypatch.setattr(
+        display_image_ops,
+        "_ensure_spotify_bars_overlay",
+        lambda widget: _FakeOverlay(),
+    )
+
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=_FakeVisualizer(),
+    )
+
+    ok = display_image_ops.push_spotify_visualizer_frame(
+        widget,
+        bars=[0.1, 0.2],
+        bar_count=2,
+        segments=4,
+        fill_color=None,
+        border_color=None,
+        fade=1.0,
+        playing=True,
+        vis_mode="bubble",
+    )
+
+    assert ok is True
+    assert len(calls) == 1
+    assert calls[0]["rect"] == QRect(24, 180, 402, 357)
+
+
 def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
     scheduled = []
 

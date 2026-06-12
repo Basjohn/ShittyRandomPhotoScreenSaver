@@ -1019,21 +1019,28 @@ class CustomLayoutManager:
         widget: Any,
     ) -> _ShellState | None:
         screen, screen_signature = self._sync_display_screen_binding()
+        prior_custom_rect = getattr(widget, "_custom_layout_local_rect", None)
         try:
             local_rect = widget.geometry()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to read geometry for %s", descriptor.widget_id, exc_info=True)
             return None
+        if (
+            descriptor.widget_id == "spotify_visualizer"
+            and isinstance(prior_custom_rect, QRect)
+            and prior_custom_rect.width() > 0
+            and prior_custom_rect.height() > 0
+        ):
+            local_rect = QRect(prior_custom_rect)
 
         baseline_payload = self._capture_size_payload(descriptor, widget)
         shell_local_rect = QRect(local_rect)
         if descriptor.custom_layout_resize_mode == "visualizer_rect":
             shell_local_rect.setSize(
-                self._resolve_visualizer_custom_size(
+                self._resolve_visualizer_shell_preview_size(
                     widget,
                     baseline_payload,
-                    maximum_envelope=True,
-                    fallback_size=local_rect.size(),
+                    authoritative_size=local_rect.size(),
                 )
             )
         try:
@@ -1052,7 +1059,6 @@ class CustomLayoutManager:
         global_top_left = self._display.mapToGlobal(local_rect.topLeft())
         global_rect = QRect(global_top_left, shell_local_rect.size())
         current_monitor_value = self._read_monitor_value_for_widget(descriptor)
-        prior_custom_rect = getattr(widget, "_custom_layout_local_rect", None)
         has_qol_envelope = shell_local_rect.size() != local_rect.size()
         shell = EditShellWidget(
             widget_id=descriptor.widget_id,
@@ -2155,6 +2161,31 @@ class CustomLayoutManager:
                 update_position()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to restore default position after clearing custom layout", exc_info=True)
+
+    def _resolve_visualizer_shell_preview_size(
+        self,
+        widget: Any,
+        payload: dict[str, Any],
+        *,
+        authoritative_size: QSize,
+    ) -> QSize:
+        fallback_size = QSize(
+            max(1, authoritative_size.width()),
+            max(1, authoritative_size.height()),
+        )
+        envelope_size = self._resolve_visualizer_custom_size(
+            widget,
+            payload,
+            maximum_envelope=True,
+            fallback_size=fallback_size,
+        )
+        # Visualizer QoL shell previews may grow vertically to show the
+        # maximum authored envelope, but committed CUSTOM width remains
+        # authoritative and must never narrow or widen here.
+        return QSize(
+            fallback_size.width(),
+            max(fallback_size.height(), envelope_size.height()),
+        )
 
     def _resolve_visualizer_custom_size(
         self,

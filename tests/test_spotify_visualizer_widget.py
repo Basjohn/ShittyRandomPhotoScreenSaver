@@ -2835,6 +2835,72 @@ def test_visualizer_custom_rect_geometry_reapply_restores_committed_rect_after_r
 
 
 @pytest.mark.qt
+def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_runtime_drift(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QWidget
+    from rendering.widget_manager import WidgetManager
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.resize(1280, 720)
+
+    class _Settings:
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Custom"}}
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    widget._custom_layout_local_rect = QRect(36, 200, 402, 357)
+    widget._widget_manager = WidgetManager(parent)
+    widget._widget_manager._settings_manager = _Settings()
+    widget._vis_mode = VisualizerMode.BLOB
+
+    for _ in range(3):
+        QWidget.setGeometry(widget, QRect(36, 200, 357, 357))
+        widget._mode_transition_apply_height_on_resume = True
+        widget._apply_pending_mode_transition_layout()
+
+        assert widget.minimumWidth() == 402
+        assert widget.maximumWidth() == 402
+        assert widget.minimumHeight() == 357
+        assert widget.maximumHeight() == 357
+        assert widget.geometry() == QRect(36, 200, 402, 357)
+
+
+@pytest.mark.qt
+def test_push_gpu_frame_uses_authoritative_custom_rect_for_geometry_change_detection(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.resize(1280, 720)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.SPECTRUM
+    widget._display_bars = [0.2] * 8
+    widget._bar_count = 8
+    widget._custom_layout_local_rect = QRect(24, 180, 402, 357)
+    widget._last_gpu_geom = QRect(24, 180, 357, 357)
+    widget._last_gpu_fade_sent = 1.0
+    widget._get_gpu_fade_factor = lambda now_ts: 1.0
+    widget._mode_transition_fade_factor = lambda now_ts: 1.0
+    widget.setGeometry(24, 180, 357, 357)
+
+    assert tick_pipeline.push_gpu_frame(
+        widget,
+        parent,
+        time.time(),
+        changed=False,
+        first_frame=False,
+    ) is True
+    assert len(parent.frames) == 1
+    assert widget._last_gpu_geom == QRect(24, 180, 402, 357)
+
+
+@pytest.mark.qt
 def test_visualizer_request_reposition_uses_anchor_media_in_custom_without_local_media(qt_app, qtbot):
     from PySide6.QtCore import QRect
 

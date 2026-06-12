@@ -676,7 +676,11 @@ def push_gpu_frame(
         return False
 
     try:
-        current_geom = widget.geometry()
+        resolve_gpu_target_rect = getattr(widget, "_resolve_gpu_target_rect", None)
+        if callable(resolve_gpu_target_rect):
+            current_geom = resolve_gpu_target_rect()
+        else:
+            current_geom = widget.geometry()
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
         current_geom = None
@@ -794,7 +798,11 @@ def push_gpu_frame(
     if used_gpu:
         try:
             if current_geom is None:
-                current_geom = widget.geometry()
+                resolve_gpu_target_rect = getattr(widget, "_resolve_gpu_target_rect", None)
+                if callable(resolve_gpu_target_rect):
+                    current_geom = resolve_gpu_target_rect()
+                else:
+                    current_geom = widget.geometry()
             widget._last_gpu_geom = QRect(current_geom)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)

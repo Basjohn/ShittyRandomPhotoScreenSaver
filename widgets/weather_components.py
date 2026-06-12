@@ -175,6 +175,17 @@ class WeatherConditionIcon(QWidget):
         self._shadow_cache_key = key
         return self._shadow_pixmap
 
+    def _scaled_shadow_offsets(self, target: QRect) -> tuple[int, int]:
+        tuning = ICON_SHADOW_TUNING
+        base_x = int(tuning.get("offset_x", 3))
+        base_y = int(tuning.get("offset_y", 4))
+        shortest_edge = max(1, min(int(target.width()), int(target.height())))
+        scale = max(0.4, min(1.0, shortest_edge / 96.0))
+        return (
+            max(1, int(round(base_x * scale))),
+            max(1, int(round(base_y * scale))),
+        )
+
     def _convert_to_grayscale(self, pixmap: QPixmap) -> QPixmap:
         """Convert pixmap to grayscale while preserving alpha channel.
         
@@ -225,12 +236,12 @@ class WeatherConditionIcon(QWidget):
         # Draw pixmap scaled to target with smooth transformation
         # Monochrome conversion already applied in _load_pixmap (zero overhead here)
         target = self.rect().adjusted(self._padding, self._padding, -self._padding, -self._padding)
-        tuning = ICON_SHADOW_TUNING
+        shadow_offset_x, shadow_offset_y = self._scaled_shadow_offsets(target)
         shadow = self._ensure_shadow_pixmap(target)
         if shadow is not None and not shadow.isNull():
             painter.drawPixmap(
-                target.x() + int(tuning.get("offset_x", 3)),
-                target.y() + int(tuning.get("offset_y", 4)),
+                target.x() + shadow_offset_x,
+                target.y() + shadow_offset_y,
                 shadow,
             )
         painter.drawPixmap(target, self._pixmap)

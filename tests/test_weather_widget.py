@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QWidget, QApplication
 from PySide6.QtCore import QRect
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
+from widgets.weather_components import WeatherConditionIcon
 
 
 @pytest.fixture(autouse=True)
@@ -474,6 +475,48 @@ def test_weather_runtime_content_refresh_respects_active_custom_rect(qapp, paren
     assert adjust_calls == []
     assert update_position_calls == []
     assert reapply_calls == ["reapply"]
+
+
+def test_weather_condition_icon_stays_centered_with_primary_text_when_shrunk(qapp, parent_widget):
+    weather = WeatherWidget(parent=parent_widget)
+    parent_widget.show()
+    weather.show()
+    weather.resize(405, 168)
+    weather.set_icon_alignment("RIGHT")
+    weather.set_icon_size(65)
+    weather.set_font_size(19)
+
+    data = {
+        "temperature": 20.5,
+        "condition": "Scattered Clouds",
+        "location": "Cape Town",
+        "weather_code": 2,
+        "is_day": 1,
+        "humidity": 65,
+        "precipitation_probability": 10,
+        "wind_speed": 22,
+    }
+
+    weather._update_display(data)
+    qapp.processEvents()
+
+    icon_geom = weather._condition_icon_widget.geometry()
+    text_geom = weather._text_column.geometry()
+    icon_center_y = icon_geom.y() + (icon_geom.height() / 2.0)
+    text_center_y = text_geom.y() + (text_geom.height() / 2.0)
+
+    assert weather._condition_icon_widget.isVisible() is True
+    assert abs(icon_center_y - text_center_y) <= 3.0
+
+
+def test_weather_condition_icon_shadow_drop_scales_down_with_small_icons(qapp):
+    icon = WeatherConditionIcon(size_px=96)
+
+    large_dx, large_dy = icon._scaled_shadow_offsets(QRect(0, 0, 96, 96))
+    small_dx, small_dy = icon._scaled_shadow_offsets(QRect(0, 0, 40, 40))
+
+    assert large_dx >= small_dx >= 1
+    assert large_dy > small_dy >= 1
 
 
 def test_weather_start_error_path_respects_active_custom_rect(qapp, parent_widget):

@@ -2563,6 +2563,73 @@ def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
     assert state.shell._snapshot.size() == QSize(320, 280)
 
 
+def test_custom_layout_manager_visualizer_shell_qol_preview_only_grows_height(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    media = _EditableTestWidget(display, font_size=14)
+    media.setGeometry(20, 40, 450, 180)
+    display.media_widget = media
+    qtbot.addWidget(media)
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._anchor_media = media
+    visualizer._custom_layout_local_rect = QRect(70, 360, 300, 160)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert display.mapFromGlobal(state.baseline_global_rect.topLeft()) == QPoint(70, 360)
+    assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(70, 360)
+    assert state.baseline_global_rect.size() == QSize(300, 280)
+    assert state.current_global_rect.size() == QSize(300, 280)
+    assert state.shell._snapshot.size() == QSize(300, 280)
+
+
+def test_custom_layout_manager_visualizer_shell_prefers_committed_custom_rect_over_stale_live_geometry(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    media = _EditableTestWidget(display, font_size=14)
+    media.setGeometry(20, 40, 450, 180)
+    display.media_widget = media
+    qtbot.addWidget(media)
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._anchor_media = media
+    visualizer._custom_layout_visualizer_scale_payload = {
+        "width_scale": 0.868,
+        "height_scale": 0.868,
+    }
+    visualizer._custom_layout_local_rect = QRect(12, 252, 521, 347)
+    visualizer.setGeometry(12, 252, 391, 347)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert display.mapFromGlobal(state.baseline_global_rect.topLeft()) == QPoint(12, 252)
+    assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(12, 252)
+    assert state.baseline_global_rect.size() == QSize(521, 347)
+    assert state.current_global_rect.size() == QSize(521, 347)
+    assert state.shell._snapshot.size() == QSize(521, 347)
+
+
 def test_custom_layout_manager_saves_visualizer_scale_payload(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

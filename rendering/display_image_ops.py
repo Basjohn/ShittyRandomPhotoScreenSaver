@@ -14,7 +14,7 @@ from typing import Optional, TYPE_CHECKING
 
 import weakref
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, QRect
 from PySide6.QtGui import QPixmap
 
 try:
@@ -34,9 +34,6 @@ from transitions.overlay_manager import GL_OVERLAY_KEYS
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 
 from rendering.display_widget import _describe_pixmap
-
-if TYPE_CHECKING:
-    from PySide6.QtCore import QRect
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
@@ -510,10 +507,8 @@ def push_spotify_visualizer_frame(
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         return False
 
-    try:
-        geom = vis.geometry()
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    geom = _resolve_spotify_visualizer_overlay_rect(vis)
+    if geom is None:
         return False
 
     if geom.width() <= 0 or geom.height() <= 0:
@@ -559,10 +554,8 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
     if vis is None:
         return False
 
-    try:
-        geom = vis.geometry()
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    geom = _resolve_spotify_visualizer_overlay_rect(vis)
+    if geom is None:
         return False
 
     if geom.width() <= 0 or geom.height() <= 0:
@@ -603,6 +596,47 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
         return False
 
     return True
+
+
+def _resolve_spotify_visualizer_overlay_rect(vis) -> QRect | None:
+    """Prefer the committed CUSTOM rect when it is available and valid.
+
+    The visualizer can briefly carry a stale live geometry during startup,
+    rebuild, or runtime card-pressure churn even though a committed CUSTOM rect
+    is already authoritative. The GL overlay must follow the committed rect in
+    those windows so runtime content cannot regress back to a square/stale card
+    while geometry replay logs stay green.
+    """
+
+    try:
+        resolve_gpu_target_rect = getattr(vis, "_resolve_gpu_target_rect", None)
+        if callable(resolve_gpu_target_rect):
+            rect = resolve_gpu_target_rect()
+            if isinstance(rect, QRect) and rect.width() > 0 and rect.height() > 0:
+                return QRect(rect)
+    except Exception:
+        logger.debug("[DISPLAY_WIDGET] Failed to read visualizer authoritative GPU rect", exc_info=True)
+
+    try:
+        active_custom_rect = getattr(vis, "_active_custom_layout_rect", None)
+        if callable(active_custom_rect):
+            rect = active_custom_rect()
+            if isinstance(rect, QRect) and rect.width() > 0 and rect.height() > 0:
+                return QRect(rect)
+    except Exception:
+        logger.debug("[DISPLAY_WIDGET] Failed to read visualizer active custom rect", exc_info=True)
+
+    try:
+        geom = vis.geometry()
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return None
+
+    try:
+        return QRect(geom)
+    except Exception:
+        logger.debug("[DISPLAY_WIDGET] Failed to normalize visualizer geometry", exc_info=True)
+        return None
 
 
 def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:

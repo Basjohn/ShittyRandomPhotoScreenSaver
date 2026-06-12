@@ -1072,6 +1072,18 @@ class SpotifyVisualizerWidget(QWidget):
             return None
         return QRect(custom_rect)
 
+    def _resolve_gpu_target_rect(self) -> Optional[QRect]:
+        """Return the authoritative outer rect for GPU/overlay geometry work."""
+
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is not None:
+            return custom_rect
+        try:
+            return QRect(self.geometry())
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to resolve GPU target rect", exc_info=True)
+            return None
+
     def _apply_custom_layout_size_constraints_if_active(self) -> bool:
         """Lock the visualizer's QWidget min/max size to the committed CUSTOM rect."""
 

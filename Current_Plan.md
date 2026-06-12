@@ -57,7 +57,7 @@ The current top-priority blocker is CUSTOM geometry / edit-mode parity. `audits/
 - [ ] Use the new `--geo` scene/replay probes to find the first Reddit/Gmail divergence before changing widget-local growth rules again.
   - `save_scene` must stay whole-scene and authoritative.
   - `replay_start` / `replay_after_payload` / `replay_after_update_position` / `replay_final` are now the required divergence checkpoints.
-  - The current tree still contains a preview-capture seam that mutates live widget geometry during shell refresh; treat that seam as a first suspect before reopening runtime replay theory.
+  - If `spotify_visualizer` reopens in edit mode again, treat committed-rect-vs-shell-envelope authority as the first suspect before reopening generic runtime replay theory.
 
 - [ ] Replace any compounding resize model with a stable authored/reference baseline.
   - Re-entering edit after shrink must not lower future control range.
@@ -74,12 +74,19 @@ The current top-priority blocker is CUSTOM geometry / edit-mode parity. `audits/
 - [ ] Keep the current diagnosis table grounded in the actual post-revert tree before new geometry edits land.
   - `gmail`: failure layer currently inner content fit; latest logs keep `save_scene == replay_final`
   - `reddit` / `reddit2`: failure layer currently inner content fit plus blocked-fetch survivability; latest logs keep `save_scene == replay_final`
-  - `spotify_visualizer`: if fresh `--geo` logs stay green, route the next pass to runtime card/overlay content contradiction instead of reopening outer replay authority
+  - `spotify_visualizer`: outer replay, live-overlay rect, GPU rect authority, and edit-shell re-entry bars are green; only reopen shell/replay authority if fresh `--geo` logs contradict the committed-width + vertical-only-envelope contract
 
 - [ ] Close the known runtime drift still visible in current `--geo` evidence.
   - Visualizer:
     - keep the now-green runtime outer replay locked: fresh `--geo` runs must keep `replay_after_payload` / `replay_after_update_position` / `replay_final` equal to the committed CUSTOM rect
-    - if a future live screenshot still contradicts the rect logs, route the next pass to card/overlay content fit rather than reopening replay authority blindly
+    - keep edit-shell re-entry locked after save/swap/re-enter churn:
+      - committed CUSTOM width remains authoritative
+      - QoL envelope may grow height only
+      - stale live geometry or anchor-media width drift must not narrow the shell
+    - keep overlay/GPU rect authority locked during recreate/monitor churn:
+      - prewarm and live overlay pushes must prefer the committed CUSTOM rect over stale square live geometry
+      - GPU geometry-change detection must compare against the same authoritative rect, not raw `widget.geometry()` alone
+    - if a future live screenshot still contradicts the rect logs and the re-entry bar stays green, route the next pass to card/overlay content fit or monitor-transfer state rather than reopening replay authority blindly
   - Spotify Volume:
     - keep outer CUSTOM replay green
     - keep pre-replay authored placement from leaking into first reveal
@@ -98,13 +105,14 @@ The current top-priority blocker is CUSTOM geometry / edit-mode parity. `audits/
 
 - [ ] Re-close content-fit for the known shrink failures.
   - Weather must not lose location letters.
+  - Weather condition icon must stay visually centered with the primary text block under shrink.
   - Gmail must not lose subject letters.
   - Reddit must not lose title/body letters.
   - SpotifyVolume live edit distortion must be isolated cleanly.
   - Spotify visualizer rect must remain locked by the committed CUSTOM replay even when preset height logic varies.
+  - Spotify visualizer live GL overlay/prewarm must prefer the committed CUSTOM rect over stale square live geometry.
 
 - [ ] Add/strengthen automation bars before calling the geometry family closed.
-  - preview-capture bar: shell preview refresh must not mutate the live widget geometry/state path
   - corner-drag cleanup bar: resize state must clear cleanly on pointer ungrab/release
   - no-width-growth Gmail/Reddit bar
   - allowed-height-only Gmail/Reddit growth bar
@@ -112,7 +120,9 @@ The current top-priority blocker is CUSTOM geometry / edit-mode parity. `audits/
   - Reddit shrink-budget bar: smaller resize/font payloads must compact the age lane and increase title budget, not reduce it
   - no-compounding edit baseline bar
   - committed-card no-clipping bars for the remaining shrink-risk widgets
-  - visualizer custom-drift bar: production reposition/custom replay must restore the committed CUSTOM rect after a bad live geometry mutation
+  - visualizer monitor-churn bar: save/swap/re-enter must preserve committed width while allowing height-only QoL shell growth
+  - visualizer GPU rect authority bar: stale square live geometry must not suppress the next committed-rect overlay push
+  - Weather icon alignment bar: shrink must keep the condition icon centered against the primary text block
   - extend the now-green media metadata/controls/mute pattern to Weather and any other widget that still clips under shrink
 
 - [ ] Keep the diagnosis table current while fixes land:
@@ -123,7 +133,7 @@ The current top-priority blocker is CUSTOM geometry / edit-mode parity. `audits/
   | gmail | inner content fit | post-replay live layout | no in latest `--geo` | yes, row/dead-space cleanup only | yes, subject loss in live | still under audit | sender/time/action lane budgeting |
   | reddit | inner content fit + fetch survivability | post-replay live layout | no in latest `--geo` | yes, staged cache/count growth only | yes, title loss in live | still under audit | title/age lane budgeting + growth path |
   | reddit2 | inner content fit + fetch survivability | post-replay live layout | no in latest `--geo` | yes, staged cache/count growth only | yes, title loss in live | still under audit | title/age lane budgeting + growth path |
-  | spotify_visualizer | runtime card/overlay contradiction unless logs re-open replay | unknown while `replay_final` stays green | no in latest `--geo` | no | yes in screenshots when runtime contradicts shell | still under audit | card-height/overlay content fit, not save authority unless logs go red |
+  | spotify_visualizer | runtime card/overlay contradiction unless logs re-open shell or replay authority | live runtime/content after replay, unless fresh logs beat the committed-width re-entry and GPU-rect-authority bars | no in latest `--geo` | no | yes in screenshots when runtime contradicts shell | still under audit | card/overlay content fit or monitor-transfer state if committed-width shell + GPU rect bars stay green |
   ```
 
 ### 2. Remove the accidental 60 fps cap on Display 0 transitions
