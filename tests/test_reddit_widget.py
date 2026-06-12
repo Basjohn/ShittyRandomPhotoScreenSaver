@@ -6,11 +6,12 @@ click handling for posts and the header.
 
 import time
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
-from widgets.reddit_widget import RedditWidget
+from widgets.reddit_widget import RedditWidget, REDDIT_STARTUP_CACHE_FRESH_WINDOW
 
 
 @pytest.mark.qt
@@ -91,6 +92,134 @@ def test_reddit_item_limit_clamps_to_shared_capacity_policy(qt_app, qtbot):  # n
 
 
 @pytest.mark.qt
+def test_reddit_custom_layout_rect_survives_content_height_recalc(qt_app, qtbot):  # noqa: ARG001
+    from PySide6.QtWidgets import QApplication, QWidget
+
+    parent = QWidget()
+    parent.resize(1200, 900)
+    widget = RedditWidget(parent)
+    qtbot.addWidget(parent)
+    qtbot.addWidget(widget)
+    try:
+        custom_rect = QRect(40, 50, 620, 344)
+        widget._custom_layout_local_rect = QRect(custom_rect)  # type: ignore[attr-defined]
+        widget._configured_capacity = 10  # type: ignore[attr-defined]
+        widget._effective_visible_capacity = 10  # type: ignore[attr-defined]
+        widget._update_position()  # type: ignore[attr-defined]
+
+        widget.set_font_size(26)
+        widget._update_card_height_from_content(10)  # type: ignore[attr-defined]
+        QApplication.processEvents()
+
+        assert widget.geometry() == custom_rect
+    finally:
+        widget.cleanup()
+        parent.deleteLater()
+
+
+@pytest.mark.qt
+def test_reddit_content_height_updates_do_not_change_width_constraints(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    widget.resize(640, 200)
+    widget.setMinimumWidth(640)
+    widget.setMaximumWidth(640)
+    widget._effective_visible_capacity = 10  # type: ignore[attr-defined]
+
+    widget._update_card_height_from_content(10)  # type: ignore[attr-defined]
+
+    assert widget.minimumWidth() == 640
+    assert widget.maximumWidth() == 640
+    assert widget.minimumHeight() == widget.maximumHeight()
+
+
+@pytest.mark.qt
+def test_reddit_small_font_compacts_age_column_width(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from PySide6.QtGui import QPainter, QPixmap
+
+    from widgets import reddit_widget as reddit_module
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    widget.resize(420, 220)
+    widget._posts = [  # type: ignore[attr-defined]
+        RedditPost(
+            title="A longer post title that benefits from more horizontal room",
+            url="https://example.com/post",
+            score=10,
+            created_utc=time.time() - 7200,
+        )
+    ]
+
+    captured_age_widths: list[int] = []
+    original_draw_text_rect_with_shadow = reddit_module.draw_text_rect_with_shadow
+
+    def _capture_draw_text_rect_with_shadow(painter, rect, flags, text, **kwargs):
+        if text in {"02", "HR", "AGO", "02 HR"}:
+            captured_age_widths.append(rect.width())
+        return original_draw_text_rect_with_shadow(painter, rect, flags, text, **kwargs)
+
+    monkeypatch.setattr(
+        reddit_module,
+        "draw_text_rect_with_shadow",
+        _capture_draw_text_rect_with_shadow,
+    )
+
+    def _paint_and_age_width() -> int:
+        captured_age_widths.clear()
+        pixmap = QPixmap(widget.size())
+        pixmap.fill()
+        painter = QPainter(pixmap)
+        try:
+            widget._paint_content_to_painter(painter)  # type: ignore[attr-defined]
+        finally:
+            painter.end()
+        assert captured_age_widths
+        return max(captured_age_widths)
+
+    widget.set_font_size(18)
+    baseline_width = _paint_and_age_width()
+
+    widget.set_font_size(8)
+    compact_width = _paint_and_age_width()
+
+    assert compact_width < baseline_width
+
+
+@pytest.mark.qt
+def test_reddit_small_font_rebalances_budget_toward_title_text(qt_app, qtbot):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    widget.resize(420, 220)
+    widget._posts = [  # type: ignore[attr-defined]
+        RedditPost(
+            title="A longer post title that benefits from more horizontal room",
+            url="https://example.com/post",
+            score=10,
+            created_utc=time.time() - (22 * 3600),
+        )
+    ]
+
+    rect = widget.rect().adjusted(12, 12, -12, -12)
+    age_labels = [widget._format_age(widget._posts[0].created_utc, time.time())]  # type: ignore[attr-defined]
+
+    widget.set_font_size(18)
+    baseline_metrics = widget._compute_post_layout_metrics(rect, age_labels)  # type: ignore[attr-defined]
+
+    widget.set_font_size(8)
+    compact_metrics = widget._compute_post_layout_metrics(rect, age_labels)  # type: ignore[attr-defined]
+
+    assert compact_metrics["age_col_width"] < baseline_metrics["age_col_width"]
+    assert compact_metrics["title_available_width"] > baseline_metrics["title_available_width"]
+
+
+@pytest.mark.qt
 def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
     """On fetch error before any valid data, the widget should hide itself."""
 
@@ -132,6 +261,114 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert hide_calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_403_error_touches_cache_timestamp_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_cache.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    try:
+        RedditRateLimiter.reset()
+        widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
+        widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+
+        widget._on_fetch_error("403 Client Error: Blocked for url: https://www.reddit.com/r/Games/hot.json?limit=25")  # type: ignore[attr-defined]
+
+        assert cache_path.exists()
+        assert gate_path.exists()
+        assert RedditRateLimiter.get_blocked_cooldown_remaining() > 0
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_skips_network_while_blocked_cooldown_is_active(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls: list[str] = []
+    try:
+        RedditRateLimiter.reset()
+        RedditRateLimiter.record_blocked_response(reason="test")
+        monkeypatch.setattr("widgets.reddit_widget.requests.get", lambda *args, **kwargs: calls.append("get"))
+
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+        assert calls == []
+    finally:
+        widget.cleanup()
+        RedditRateLimiter.reset()
+
+
+@pytest.mark.qt
+def test_reddit_blocked_slot_skip_does_not_fall_through_to_empty_listing_logs(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    empty_listing_logs: list[str] = []
+    try:
+        RedditRateLimiter.reset()
+        monkeypatch.setattr(
+            "widgets.reddit_widget.begin_fetch_guard",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            "widgets.reddit_widget.end_fetch_guard",
+            lambda *args, **kwargs: None,
+        )
+        monkeypatch.setattr(
+            "widgets.reddit_widget.preserve_visible_fallback",
+            lambda *args, **kwargs: True,
+        )
+        monkeypatch.setattr(
+            RedditRateLimiter,
+            "get_blocked_cooldown_remaining",
+            staticmethod(lambda: 10.0),
+        )
+        monkeypatch.setattr(
+            "widgets.reddit_widget.logger.warning",
+            lambda msg, *args, **kwargs: empty_listing_logs.append(msg % args if args else msg),
+        )
+
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+
+        assert not any("Empty listing" in message for message in empty_listing_logs)
+    finally:
+        widget.cleanup()
+        RedditRateLimiter.reset()
+
+
+@pytest.mark.qt
+def test_reddit_startup_refresh_uses_shared_service_gate_before_rate_limiter(qt_app, qtbot, tmp_path):  # noqa: ARG001
+    from datetime import timedelta
+    import os
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_cache.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    try:
+        cache_path.write_text("[]", encoding="utf-8")
+        widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
+        widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+
+        old_ts = time.time() - (REDDIT_STARTUP_CACHE_FRESH_WINDOW.total_seconds() * 2)
+        os.utime(cache_path, (old_ts, old_ts))
+        widget._touch_service_gate_timestamp_now()  # type: ignore[attr-defined]
+
+        decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
+
+        assert decision.run is False
+        assert decision.reason == "blocked_cooldown_cache_fresh"
+        assert decision.age is not None
+        assert decision.age < timedelta(minutes=1)
     finally:
         widget.cleanup()
 

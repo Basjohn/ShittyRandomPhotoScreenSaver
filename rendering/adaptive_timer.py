@@ -22,10 +22,39 @@ from core.threading.manager import ThreadManager, ThreadPoolType
 from core.resources.manager import ResourceManager
 from utils.lockfree.spsc_queue import SPSCQueue
 
+try:
+    from shiboken6 import Shiboken
+except Exception:  # pragma: no cover - shiboken may be unavailable in some test contexts
+    Shiboken = None
+
 if TYPE_CHECKING:
     from rendering.gl_compositor import GLCompositorWidget
 
 logger = get_logger(__name__)
+
+
+def _queue_safe_widget_update(widget) -> None:
+    """Queue a QWidget.update() call that tolerates teardown races."""
+    if widget is None:
+        return
+
+    def _apply_update() -> None:
+        if widget is None:
+            return
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(widget):
+                    return
+            except Exception:
+                return
+        try:
+            widget.update()
+        except RuntimeError as exc:
+            logger.debug("[ADAPTIVE_TIMER] Suppressed stale widget update: %s", exc)
+        except Exception as exc:
+            logger.debug("[ADAPTIVE_TIMER] Widget update failed: %s", exc)
+
+    ThreadManager.run_on_ui_thread(_apply_update)
 
 
 def _normalize_next_deadline(next_deadline: float, now_ts: float, interval_s: float) -> float:
@@ -421,7 +450,7 @@ class AdaptiveTimerStrategy:
                 # Log occasional frame signals for debugging
                 if self._metrics.frame_count % 100 == 0:
                     logger.debug("[ADAPTIVE_TIMER] Signaling frame %d", self._metrics.frame_count)
-                ThreadManager.run_on_ui_thread(self._compositor.update)
+                _queue_safe_widget_update(self._compositor)
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)

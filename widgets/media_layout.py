@@ -22,6 +22,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _controls_compact_scale(widget) -> float:
+    """Return a card-size scale factor for controls-row compaction."""
+    width = max(1, int(widget.width()))
+    height = max(1, int(widget.height()))
+    width_scale = min(1.0, width / 600.0)
+    height_scale = min(1.0, height / 290.0)
+    compact = min(width_scale, height_scale)
+    return max(0.72, compact)
+
+
 def _defer_update_position(widget) -> None:
     """Retry position update on the next tick if the widget still exists."""
 
@@ -60,7 +70,8 @@ def compute_controls_layout(widget):
         widget._controls_layout_cache = None
         return None
 
-    controls_font_pt = max(8, int((widget._font_size - 2) * 0.9))
+    compact_scale = _controls_compact_scale(widget)
+    controls_font_pt = max(8, int((widget._font_size - 2) * 0.9 * compact_scale))
     font = QFont("Segoe UI", controls_font_pt, QFont.Weight.Medium)
     fm = QFontMetrics(font)
     row_height = max(widget._controls_row_min_height(), int((fm.height() + 10) * 0.85))
@@ -80,6 +91,7 @@ def compute_controls_layout(widget):
         margins.bottom(),
         controls_font_pt,
         header_font_pt,
+        round(compact_scale, 3),
     )
     cached = widget._controls_layout_cache
     if cached is not None and cached.get("_cache_key") == cache_key:
@@ -104,8 +116,8 @@ def compute_controls_layout(widget):
     )
 
     slot_width = content_width / 3.0
-    inner_pad_x = max(5.0, slot_width * 0.07)
-    inner_pad_y = max(2.0, row_height * 0.16)
+    inner_pad_x = max(4.0, slot_width * (0.06 if compact_scale < 0.9 else 0.07))
+    inner_pad_y = max(2.0, row_height * (0.14 if compact_scale < 0.9 else 0.16))
     hit_slop = max(8, int(row_height * 0.28))
 
     button_rects = {}

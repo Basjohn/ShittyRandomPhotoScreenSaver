@@ -20,7 +20,7 @@ class EditShellWidget(QWidget):
     drag_finished = Signal(str, QRect, QPoint)
     geometry_live_changed = Signal(str, QRect)
     resize_wheel_requested = Signal(str, int)
-    resize_drag_started = Signal(str, str, QRect)
+    resize_drag_started = Signal(str, str, QRect, QPoint)
     resize_drag_live_changed = Signal(str, str, QRect, QPoint)
     resize_drag_finished = Signal(str, str, QRect, QPoint)
     reset_size_requested = Signal(str)
@@ -327,6 +327,17 @@ class EditShellWidget(QWidget):
         except Exception:
             pass
 
+    def _cancel_pointer_interaction(self) -> None:
+        self._dragging = False
+        self._resizing = False
+        self._resize_corner = None
+        self._pressed_button = None
+        try:
+            self.releaseMouse()
+        except Exception:
+            pass
+        self._update_hover_cursor()
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         local_pos = event.position().toPoint()
         if (
@@ -346,7 +357,12 @@ class EditShellWidget(QWidget):
                 self._resizing = True
                 self._resize_corner = resize_corner
                 self._refresh_active_pointer_grab()
-                self.resize_drag_started.emit(self.widget_id, resize_corner, self.current_global_rect())
+                self.resize_drag_started.emit(
+                    self.widget_id,
+                    resize_corner,
+                    self.current_global_rect(),
+                    event.globalPosition().toPoint(),
+                )
                 self._update_hover_cursor(local_pos)
                 event.accept()
                 return
@@ -455,6 +471,12 @@ class EditShellWidget(QWidget):
     def leaveEvent(self, event) -> None:  # type: ignore[override]
         super().leaveEvent(event)
         self.unsetCursor()
+
+    def event(self, event):  # type: ignore[override]
+        event_type = event.type()
+        if event_type == QEvent.Type.UngrabMouse:
+            self._cancel_pointer_interaction()
+        return super().event(event)
 
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)

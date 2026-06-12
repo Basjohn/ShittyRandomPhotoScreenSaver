@@ -1290,50 +1290,20 @@ class WidgetManager:
                 and custom_rect.width() > 0
                 and custom_rect.height() > 0
             ):
-                from widgets.spotify_visualizer.card_geometry import (
-                    build_growth_map_from_widget,
-                    resolve_custom_card_rect,
-                    resolve_custom_card_size,
-                )
-
-                payload = getattr(vis_widget, "_custom_layout_visualizer_scale_payload", None)
-                if not isinstance(payload, Mapping):
-                    payload = {}
-                resolved_size = None
                 try:
-                    anchor_media = getattr(vis_widget, "_anchor_media", None)
-                    media_width = max(
-                        10,
-                        int(
-                            anchor_media.geometry().width()
-                            if anchor_media is not None
-                            else custom_rect.width()
-                        ),
-                    )
-                    resolved_size = resolve_custom_card_size(
-                        mode_id=str(getattr(vis_widget, "_vis_mode_str", "spectrum") or "spectrum"),
-                        media_width=media_width,
-                        base_height=int(getattr(vis_widget, "_base_height", 80)),
-                        growth_by_mode=build_growth_map_from_widget(vis_widget),
-                        blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
-                        width_scale=float(payload.get("width_scale", 1.0)),
-                        height_scale=float(payload.get("height_scale", 1.0)),
-                        maximum_envelope=False,
-                    )
+                    apply_constraints = getattr(vis_widget, "_apply_custom_layout_size_constraints_if_active", None)
+                    if callable(apply_constraints):
+                        apply_constraints()
                 except Exception:
-                    logger.debug("[WIDGET_MANAGER] Failed to resolve adaptive custom visualizer size", exc_info=True)
-                    resolved_size = None
-
-                resolved_height = (
-                    int(resolved_size.height())
-                    if isinstance(resolved_size, QSize) and resolved_size.height() > 0
-                    else int(custom_rect.height())
+                    logger.debug("[WIDGET_MANAGER] Failed to lock visualizer custom constraints", exc_info=True)
+                from widgets.spotify_visualizer.card_geometry import (
+                    resolve_custom_card_rect,
                 )
                 resolved_custom_rect = resolve_custom_card_rect(
                     custom_rect,
                     parent_width=parent_width,
                     parent_height=parent_height,
-                    size=QSize(int(custom_rect.width()), resolved_height),
+                    size=custom_rect.size(),
                 )
                 if resolved_custom_rect.isEmpty():
                     return

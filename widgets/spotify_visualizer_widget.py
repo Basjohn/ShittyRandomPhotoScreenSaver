@@ -88,6 +88,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._shadow_config = None
         self._show_background: bool = True
         self._painted_frame_shadow_enabled: bool = True
+        self._custom_layout_constraint_restore: Optional[tuple[int, int, int, int]] = None
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
         self._animation_manager = None
@@ -1061,26 +1062,95 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Reposition after mode switch failed", exc_info=True)
 
+    def _active_custom_layout_rect(self) -> Optional[QRect]:
+        if bool(getattr(self, "_custom_layout_shell_active", False)):
+            return None
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return None
+        if custom_rect.width() <= 0 or custom_rect.height() <= 0:
+            return None
+        return QRect(custom_rect)
+
+    def _apply_custom_layout_size_constraints_if_active(self) -> bool:
+        """Lock the visualizer's QWidget min/max size to the committed CUSTOM rect."""
+
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return False
+        try:
+            if self._custom_layout_constraint_restore is None:
+                self._custom_layout_constraint_restore = (
+                    int(self.minimumWidth()),
+                    int(self.maximumWidth()),
+                    int(self.minimumHeight()),
+                    int(self.maximumHeight()),
+                )
+            QWidget.setMinimumWidth(self, int(custom_rect.width()))
+            QWidget.setMaximumWidth(self, int(custom_rect.width()))
+            QWidget.setMinimumHeight(self, int(custom_rect.height()))
+            QWidget.setMaximumHeight(self, int(custom_rect.height()))
+            return True
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to lock CUSTOM size constraints", exc_info=True)
+            return False
+
+    def _restore_custom_layout_size_constraints(self) -> None:
+        """Restore authored min/max size constraints after CUSTOM authority ends."""
+
+        restore = self._custom_layout_constraint_restore
+        self._custom_layout_constraint_restore = None
+        if restore is None:
+            return
+        try:
+            min_w, max_w, min_h, max_h = restore
+            QWidget.setMinimumWidth(self, int(min_w))
+            QWidget.setMaximumWidth(self, int(max_w))
+            QWidget.setMinimumHeight(self, int(min_h))
+            QWidget.setMaximumHeight(self, int(max_h))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to restore authored size constraints", exc_info=True)
+
     def _is_custom_layout_active(self) -> bool:
         """Return whether a committed CUSTOM layout currently owns geometry."""
 
         try:
-            from PySide6.QtCore import QRect
-            from rendering.widget_descriptors import is_custom_position_selected_for_widget
-
-            custom_rect = getattr(self, "_custom_layout_local_rect", None)
-            if not isinstance(custom_rect, QRect) or custom_rect.width() <= 0 or custom_rect.height() <= 0:
-                return False
-
-            wm = getattr(self, "_widget_manager", None)
-            settings_manager = getattr(wm, "_settings_manager", None) if wm is not None else None
-            widgets_config = settings_manager.get_widgets_map() if settings_manager is not None else {}
-            if not isinstance(widgets_config, dict):
-                return True
-            return is_custom_position_selected_for_widget("spotify_visualizer", widgets_config)
+            return self._active_custom_layout_rect() is not None
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM layout ownership", exc_info=True)
             return False
+
+    def _resolve_custom_locked_width(self, width: int) -> int:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return int(width)
+        return int(custom_rect.width())
+
+    def _resolve_custom_locked_height(self, height: int) -> int:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return int(height)
+        return int(custom_rect.height())
+
+    def setMinimumWidth(self, minw: int) -> None:  # type: ignore[override]
+        if self._apply_custom_layout_size_constraints_if_active():
+            return
+        super().setMinimumWidth(self._resolve_custom_locked_width(minw))
+
+    def setMaximumWidth(self, maxw: int) -> None:  # type: ignore[override]
+        if self._apply_custom_layout_size_constraints_if_active():
+            return
+        super().setMaximumWidth(self._resolve_custom_locked_width(maxw))
+
+    def setMinimumHeight(self, minh: int) -> None:  # type: ignore[override]
+        if self._apply_custom_layout_size_constraints_if_active():
+            return
+        super().setMinimumHeight(self._resolve_custom_locked_height(minh))
+
+    def setMaximumHeight(self, maxh: int) -> None:  # type: ignore[override]
+        if self._apply_custom_layout_size_constraints_if_active():
+            return
+        super().setMaximumHeight(self._resolve_custom_locked_height(maxh))
 
     def _apply_preferred_height(self) -> None:
         """Resize the widget to match the preferred height for the current mode.

@@ -2765,10 +2765,8 @@ def test_visualizer_preferred_height_defers_direct_resize_when_custom_rect_activ
     qtbot.addWidget(parent)
 
     class _Settings:
-        def get(self, key, default=None):
-            if key == "widgets":
-                return {"spotify_visualizer": {"position": "Custom"}}
-            return default
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Custom"}}
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
@@ -2782,6 +2780,61 @@ def test_visualizer_preferred_height_defers_direct_resize_when_custom_rect_activ
 
 
 @pytest.mark.qt
+def test_visualizer_custom_rect_stays_authoritative_even_if_settings_snapshot_is_stale(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    class _Settings:
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Bottom Left"}}
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._custom_layout_local_rect = QRect(10, 20, 300, 160)
+    widget._vis_mode = VisualizerMode.BUBBLE
+    widget.setGeometry(10, 20, 300, 160)
+
+    widget.setMinimumHeight(400)
+    widget._apply_preferred_height()
+
+    assert widget.minimumHeight() == 160
+    assert widget.maximumHeight() == 160
+    assert widget.geometry() == QRect(10, 20, 300, 160)
+
+
+@pytest.mark.qt
+def test_visualizer_custom_rect_geometry_reapply_restores_committed_rect_after_runtime_drift(qt_app, qtbot):
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QWidget
+    from rendering.widget_manager import WidgetManager
+
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+    parent.resize(1280, 720)
+
+    class _Settings:
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Custom"}}
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    widget._custom_layout_local_rect = QRect(10, 20, 300, 160)
+    widget._widget_manager = WidgetManager(parent)
+    widget._widget_manager._settings_manager = _Settings()
+
+    QWidget.setGeometry(widget, QRect(10, 20, 300, 360))
+    assert widget.geometry() == QRect(10, 20, 300, 360)
+
+    widget._request_reposition()
+
+    assert widget.minimumHeight() == 160
+    assert widget.maximumHeight() == 160
+    assert widget.geometry() == QRect(10, 20, 300, 160)
+
+
+@pytest.mark.qt
 def test_visualizer_request_reposition_uses_anchor_media_in_custom_without_local_media(qt_app, qtbot):
     from PySide6.QtCore import QRect
 
@@ -2792,10 +2845,8 @@ def test_visualizer_request_reposition_uses_anchor_media_in_custom_without_local
     calls: list[tuple[object | None, int, int]] = []
 
     class _Settings:
-        def get(self, key, default=None):
-            if key == "widgets":
-                return {"spotify_visualizer": {"position": "Custom"}}
-            return default
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Custom"}}
 
     class _WidgetManager:
         def __init__(self):

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QRect, QTimer
 from PySide6.QtWidgets import QWidget
 
@@ -97,6 +99,40 @@ def test_spotify_volume_sync_visibility_requests_volume_sync_when_becoming_visib
         widget.deleteLater()
 
 
+def test_spotify_volume_waits_for_secondary_stage_before_reveal(qt_app, monkeypatch):
+    parent = QWidget()
+    parent.resize(640, 480)
+    parent.show()
+    parent._overlay_fade_expected = {"clock", "weather"}
+    parent._overlay_fade_started = False
+
+    widget = SpotifyVolumeWidget(parent)
+    anchor = QWidget(parent)
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._spotify_secondary_stage_registered = True  # type: ignore[attr-defined]
+        anchor.show()
+        widget.set_anchor_media_widget(anchor)
+
+        calls = []
+
+        def _fake_sync(*_args, **_kwargs):
+            calls.append("sync")
+            widget.show()
+            return True
+
+        monkeypatch.setattr("widgets.spotify_volume_widget.sync_anchor_dependent_visibility", _fake_sync)
+
+        widget.sync_visibility_with_anchor()
+
+        assert widget.isVisible() is False
+        assert calls == []
+    finally:
+        anchor.deleteLater()
+        widget.deleteLater()
+        parent.deleteLater()
+
+
 def test_spotify_volume_uses_track_shadow_without_outer_frame_box(qt_app):
     widget = SpotifyVolumeWidget()
     try:
@@ -120,6 +156,34 @@ def test_spotify_volume_scale_contract_respects_active_custom_rect(qt_app, monke
         assert reapply_calls == ["reapply"]
     finally:
         widget.deleteLater()
+
+
+def test_spotify_volume_secondary_stage_forces_sync_against_visible_anchor(qt_app, monkeypatch):
+    parent = QWidget()
+    parent.resize(640, 480)
+    parent.show()
+    parent._spotify_secondary_not_before_ts = time.monotonic() - 1.0
+
+    widget = SpotifyVolumeWidget(parent)
+    anchor = QWidget(parent)
+    calls = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._spotify_secondary_stage_registered = True  # type: ignore[attr-defined]
+        anchor.show()
+        widget.set_anchor_media_widget(anchor)
+        parent._position_spotify_volume = lambda: calls.append(("position", {}))  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_request_volume_sync", lambda **kwargs: calls.append(("volume", kwargs)))  # type: ignore[method-assign]
+        monkeypatch.setattr(widget, "sync_visibility_with_anchor", lambda: calls.append(("visibility", {})))  # type: ignore[method-assign]
+
+        widget.begin_spotify_secondary_stage()
+
+        assert widget._spotify_secondary_stage_started is True  # type: ignore[attr-defined]
+        assert calls == [("position", {}), ("volume", {"force": True}), ("visibility", {})]
+    finally:
+        anchor.deleteLater()
+        widget.deleteLater()
+        parent.deleteLater()
 
 
 def test_spotify_volume_keyboard_step_works_while_hidden(qt_app, monkeypatch):

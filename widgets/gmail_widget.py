@@ -976,6 +976,7 @@ class GmailWidget(BaseOverlayWidget):
             rows = len(self._display_rows) or self._configured_capacity or 1
         rows = max(1, min(rows, max(1, self._configured_capacity)))
         base_font_pt = max(8, int(self._font_size))
+        layout_scale = max(0.5, min(2.0, float(base_font_pt) / 13.0))
         header_font_pt = int(self._header_font_pt or base_font_pt)
         header_font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
         header_layout = self._calculate_header_layout(
@@ -986,7 +987,7 @@ class GmailWidget(BaseOverlayWidget):
         header_height = int(header_layout["height"]) + self._content_padding_top + 8
         row_font = QFont(self._font_family, base_font_pt, QFont.Weight.Normal)
         row_metrics = QFontMetrics(row_font)
-        line_height = row_metrics.height() + 6
+        line_height = row_metrics.height() + max(2, int(round(6 * layout_scale)))
         card_padding = 22
         try:
             margins = self.contentsMargins()
@@ -1328,22 +1329,19 @@ class GmailWidget(BaseOverlayWidget):
             msg,
         )
 
-    def _paint_emails(self, painter: QPainter) -> None:
+    def _compute_email_layout_metrics(self, visible_rows: List[DisplayRow]) -> Dict[str, Any]:
         margins = self.contentsMargins()
         left = margins.left() + self._content_padding_left
         base_font_pt = max(8, int(self._font_size))
-        row_y = self._header_bottom_y()
-        self._row_hit_rects.clear()
-        self._action_hit_rects.clear()
+        layout_scale = max(0.5, min(2.0, float(base_font_pt) / 13.0))
         available_width = max(
             1,
             self.width() - left - margins.right() - self._content_padding_right,
         )
         content_bottom = self.height() - max(12, margins.bottom())
-        visible_rows = self._display_rows[: self._configured_capacity]
-        action_width = 24 if self._show_three_dot_menu else 0
+        action_width = max(18, int(round(24 * layout_scale))) if self._show_three_dot_menu else 0
         env_slot_width = (
-            self._envelope_pixmap.width() + 6
+            self._envelope_pixmap.width() + max(3, int(round(6 * layout_scale)))
             if self._show_envelope_icon and self._envelope_pixmap is not None
             else 0
         )
@@ -1352,23 +1350,81 @@ class GmailWidget(BaseOverlayWidget):
             time_font = QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal)
             time_fm = QFontMetrics(time_font)
             time_slot_width = max(
-                (time_fm.horizontalAdvance(self._format_email_date(row.email.date)) + 8 for row in visible_rows),
+                (
+                    time_fm.horizontalAdvance(self._format_email_date(row.email.date))
+                    + max(4, int(round(8 * layout_scale)))
+                    for row in visible_rows
+                ),
                 default=0,
             )
-        text_area_width = max(1, available_width - env_slot_width - time_slot_width - action_width - 18)
+        row_outer_gap = max(10, int(round(18 * layout_scale)))
+        sender_text_gap = max(6, int(round(12 * layout_scale)))
+        text_area_width = max(1, available_width - env_slot_width - time_slot_width - action_width - row_outer_gap)
         sender_slot_width = 0
         if self._show_sender:
             max_sender_width = max(40, text_area_width - 20)
             configured_sender_width = max(40, int(self._sender_column_width))
             sender_slot_width = min(configured_sender_width, max_sender_width)
+        return {
+            "left": left,
+            "base_font_pt": base_font_pt,
+            "layout_scale": layout_scale,
+            "available_width": available_width,
+            "content_bottom": content_bottom,
+            "action_width": action_width,
+            "env_slot_width": env_slot_width,
+            "time_slot_width": time_slot_width,
+            "row_outer_gap": row_outer_gap,
+            "sender_text_gap": sender_text_gap,
+            "text_area_width": text_area_width,
+            "sender_slot_width": sender_slot_width,
+        }
+
+    def _compute_email_row_budget(self, row: DisplayRow, layout_metrics: Dict[str, Any]) -> Dict[str, int]:
+        sender_width = 0
+        if self._show_sender:
+            sender_width = int(layout_metrics["sender_slot_width"]) + int(layout_metrics["sender_text_gap"])
+        subject_max_width = max(
+            20,
+            int(layout_metrics["available_width"])
+            - int(layout_metrics["time_slot_width"])
+            - sender_width
+            - int(layout_metrics["env_slot_width"])
+            - int(layout_metrics["action_width"])
+            - int(layout_metrics["row_outer_gap"]),
+        )
+        return {
+            "sender_width": sender_width,
+            "subject_max_width": subject_max_width,
+        }
+
+    def _paint_emails(self, painter: QPainter) -> None:
+        margins = self.contentsMargins()
+        layout_metrics = self._compute_email_layout_metrics(
+            self._display_rows[: self._configured_capacity]
+        )
+        left = int(layout_metrics["left"])
+        base_font_pt = int(layout_metrics["base_font_pt"])
+        layout_scale = float(layout_metrics["layout_scale"])
+        row_y = self._header_bottom_y()
+        self._row_hit_rects.clear()
+        self._action_hit_rects.clear()
+        available_width = int(layout_metrics["available_width"])
+        content_bottom = int(layout_metrics["content_bottom"])
+        visible_rows = self._display_rows[: self._configured_capacity]
+        action_width = int(layout_metrics["action_width"])
+        env_slot_width = int(layout_metrics["env_slot_width"])
+        time_slot_width = int(layout_metrics["time_slot_width"])
+        sender_slot_width = int(layout_metrics["sender_slot_width"])
         prev_unread = None
         painter.save()
         painter.setClipRect(QRect(left, row_y, max(1, available_width), max(0, content_bottom - row_y)))
         for i, row in enumerate(visible_rows):
             email = row.email
+            row_budget = self._compute_email_row_budget(row, layout_metrics)
             subject_font = QFont(self._font_family, base_font_pt, QFont.Weight(600) if email.is_unread else QFont.Weight(400))
             subject_fm = QFontMetrics(subject_font)
-            line_height = subject_fm.height() + 6
+            line_height = subject_fm.height() + max(2, int(round(6 * layout_scale)))
             if row_y + line_height > content_bottom:
                 break
             if prev_unread is not None and prev_unread != email.is_unread and self._show_separators:
@@ -1405,16 +1461,16 @@ class GmailWidget(BaseOverlayWidget):
                 sender_text = sender_fm.elidedText(
                     sender_text, Qt.TextElideMode.ElideRight, sender_slot_width
                 )
-                sender_width = sender_slot_width + 12
+                sender_width = int(row_budget["sender_width"])
             subject_font = QFont(self._font_family, base_font_pt, subject_weight)
             painter.setFont(subject_font)
             subject_fm = QFontMetrics(subject_font)
             subject_text = self._build_subject_display_text(row)
-            subject_max_width = max(20, available_width - time_width - sender_width - env_width - action_width - 18)
+            subject_max_width = int(row_budget["subject_max_width"])
             subject_text = subject_fm.elidedText(
                 subject_text, Qt.TextElideMode.ElideRight, subject_max_width
             )
-            text_y = row_y + subject_fm.ascent() + 2
+            text_y = row_y + subject_fm.ascent() + max(1, int(round(2 * layout_scale)))
             if self._show_timestamp:
                 painter.setFont(QFont(self._font_family, base_font_pt - 5, QFont.Weight.Normal))
                 painter.setPen(QColor(180, 180, 180, 200))
@@ -1467,8 +1523,8 @@ class GmailWidget(BaseOverlayWidget):
             row_rect = QRect(left, row_y, available_width, line_height)
             self._row_hit_rects.append((row_rect, email.id, email.subject))
             if self._show_three_dot_menu:
-                action_x = self.width() - margins.right() - self._content_padding_right - 24
-                action_rect = QRect(action_x, row_y, 24, line_height)
+                action_x = self.width() - margins.right() - self._content_padding_right - action_width
+                action_rect = QRect(action_x, row_y, action_width, line_height)
                 self._action_hit_rects.append((action_rect, email.id))
                 painter.setPen(QColor(150, 150, 150, 180))
                 dot_x = action_x + action_rect.width() // 2

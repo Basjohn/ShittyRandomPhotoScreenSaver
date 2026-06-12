@@ -65,6 +65,7 @@ from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/exte
     try_bring_reddit_window_to_front as _try_bring_reddit_window_to_front,
 )
 from widgets.service_widget_runtime import (
+    StartupRefreshDecision,
     begin_fetch_guard,
     defer_refresh_if_transition,
     defer_value_if_transition,
@@ -82,6 +83,9 @@ from widgets.service_widget_runtime import (
 from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
+
+
+REDDIT_STARTUP_CACHE_FRESH_WINDOW = timedelta(hours=1)
 
 
 class RedditWidget(BaseOverlayWidget):
@@ -282,8 +286,7 @@ class RedditWidget(BaseOverlayWidget):
 
         if automatic_service_updates_enabled():
             self._schedule_timer()
-            cache_timestamp = self._get_cache_timestamp()
-            decision = get_automatic_startup_refresh_decision(cache_timestamp=cache_timestamp)
+            decision = self._get_startup_refresh_decision()
             if decision.run:
                 logger.info(
                     "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
@@ -389,8 +392,7 @@ class RedditWidget(BaseOverlayWidget):
 
         if automatic_service_updates_enabled():
             self._schedule_timer()
-            cache_timestamp = self._get_cache_timestamp()
-            decision = get_automatic_startup_refresh_decision(cache_timestamp=cache_timestamp)
+            decision = self._get_startup_refresh_decision()
             if decision.run:
                 logger.info(
                     "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
@@ -784,6 +786,18 @@ class RedditWidget(BaseOverlayWidget):
             return False
         if defer_for_transition and self._defer_refresh_if_transition():
             return True
+        try:
+            from core.reddit_rate_limiter import RedditRateLimiter
+
+            blocked_wait = RedditRateLimiter.get_blocked_cooldown_remaining()
+            if blocked_wait > 0:
+                logger.warning(
+                    "[RATE_LIMIT] Reddit widget skipping fetch during blocked cooldown (remaining=%.1fs)",
+                    blocked_wait,
+                )
+                return True
+        except ImportError:
+            logger.debug("[REDDIT] RedditRateLimiter not available")
         if not begin_fetch_guard(
             self,
             logger=logger,
@@ -793,7 +807,7 @@ class RedditWidget(BaseOverlayWidget):
 
         tm = self._thread_manager
 
-        def _do_fetch(subreddit: str, sort: str, limit: int) -> List[Dict[str, Any]]:
+        def _do_fetch(subreddit: str, sort: str, limit: int) -> List[Dict[str, Any]] | dict[str, str]:
             import time
             start_time = time.perf_counter()
             
@@ -801,27 +815,32 @@ class RedditWidget(BaseOverlayWidget):
             try:
                 from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority
                 # Reserve 1 request for this fetch
-                if not RedditRateLimiter.reserve_quota(count=1, namespace="widget"):
+                reserved_quota = RedditRateLimiter.reserve_quota(count=1, namespace="widget")
+                if not reserved_quota:
                     logger.warning("[RATE_LIMIT] Could not reserve quota for widget, waiting...")
-                
-                wait_time = RedditRateLimiter.wait_if_needed(priority=RateLimitPriority.HIGH)
-                if wait_time > 0:
-                    logger.info(f"[RATE_LIMIT] Reddit widget waiting {wait_time:.1f}s for rate limit")
-                    if self._shutdown_event.wait(wait_time):
-                        return []  # Shutdown requested
-                RedditRateLimiter.record_request(namespace="widget")
-                # Release the reservation after successful request recording
-                RedditRateLimiter.release_quota(count=1, namespace="widget")
+                try:
+                    slot_state = RedditRateLimiter.acquire_request_slot(
+                        priority=RateLimitPriority.HIGH,
+                        namespace="widget",
+                        shutdown_event=self._shutdown_event,
+                        skip_if_blocked=True,
+                    )
+                finally:
+                    if reserved_quota:
+                        RedditRateLimiter.release_quota(count=1, namespace="widget")
+                if slot_state == "shutdown":
+                    return {"skip_reason": "shutdown"}
+                if slot_state == "blocked":
+                    logger.warning("[RATE_LIMIT] Reddit widget skipping fetch after blocked cooldown re-check")
+                    return {"skip_reason": "blocked_cooldown"}
             except ImportError:
                 logger.debug("[REDDIT] RedditRateLimiter not available")
             
             url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
             
-            # Import and use rotated User-Agent to avoid Reddit fingerprinting
-            from core.reddit_rate_limiter import get_reddit_user_agent
-            headers = {
-                "User-Agent": get_reddit_user_agent(),
-            }
+            from core.reddit_rate_limiter import get_reddit_request_persona
+            persona = get_reddit_request_persona(f"{self._cache_key}:{subreddit}:{sort}")
+            headers = {"User-Agent": persona.user_agent, **persona.headers}
 
             # Visible item limit (what the UI will actually show) is still
             # derived from the configured limit, but we always fetch the same
@@ -839,13 +858,20 @@ class RedditWidget(BaseOverlayWidget):
                 )
             else:
                 logger.debug(
-                    "[REDDIT] Fetching feed: subreddit=%s sort=%s limit=%s (visible_limit=%s)",
+                    "[REDDIT] Fetching feed: subreddit=%s sort=%s limit=%s (visible_limit=%s persona=%s)",
                     subreddit,
                     sort,
                     params["limit"],
                     effective_limit,
+                    persona.label,
                 )
             resp = requests.get(url, headers=headers, params=params, timeout=10)
+            if resp.status_code == 403:
+                try:
+                    from core.reddit_rate_limiter import RedditRateLimiter
+                    RedditRateLimiter.record_blocked_response(reason=f"widget:{subreddit}")
+                except Exception:
+                    logger.debug("[REDDIT] Failed to record blocked Reddit response", exc_info=True)
             resp.raise_for_status()
             payload = resp.json()
             
@@ -892,12 +918,20 @@ class RedditWidget(BaseOverlayWidget):
 
         def _on_result(result) -> None:
             try:
-                if getattr(result, "success", False) and isinstance(getattr(result, "result", None), list):
-                    posts_data = result.result
-                    ThreadManager.run_on_ui_thread(self._on_feed_fetched, posts_data)
+                if getattr(result, "success", False):
+                    payload = getattr(result, "result", None)
+                    if isinstance(payload, dict) and payload.get("skip_reason"):
+                        ThreadManager.run_on_ui_thread(self._on_fetch_skipped, str(payload["skip_reason"]))
+                        return
+                    if isinstance(payload, list):
+                        posts_data = payload
+                        ThreadManager.run_on_ui_thread(self._on_feed_fetched, posts_data)
+                        return
                 else:
                     err = getattr(result, "error", None) or "No Reddit data returned"
                     ThreadManager.run_on_ui_thread(self._on_fetch_error, str(err))
+                    return
+                ThreadManager.run_on_ui_thread(self._on_fetch_error, "No Reddit data returned")
             except Exception as exc:  # pragma: no cover - defensive
                 ThreadManager.run_on_ui_thread(
                     self._on_fetch_error,
@@ -919,12 +953,23 @@ class RedditWidget(BaseOverlayWidget):
 
         # Fallback: synchronous fetch on UI thread (rare, but bounded by timeout)
         try:
-            posts_data = _do_fetch(self._subreddit, self._sort, self._configured_capacity)
+            payload = _do_fetch(self._subreddit, self._sort, self._configured_capacity)
+            if isinstance(payload, dict) and payload.get("skip_reason"):
+                self._on_fetch_skipped(str(payload["skip_reason"]))
+                return True
+            posts_data = payload
             self._on_feed_fetched(posts_data)
             return True
         except Exception as exc:
             self._on_fetch_error(str(exc))
             return False
+
+    def _on_fetch_skipped(self, reason: str) -> None:
+        if not shiboken_isValid(self):
+            return
+        end_fetch_guard(self)
+        self._stop_refresh_spinner()
+        logger.info("[REDDIT] Fetch skipped without changing visible content (reason=%s)", reason)
 
     def _trigger_manual_refresh(self) -> bool:
         return trigger_manual_refresh(
@@ -1236,6 +1281,15 @@ class RedditWidget(BaseOverlayWidget):
         if is_verbose_logging():
             logger.warning("[REDDIT] Fetch error: %s", error)
 
+        error_lower = str(error or "").lower()
+        if "403" in error_lower or "blocked for url" in error_lower:
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter
+                RedditRateLimiter.record_blocked_response(reason=error)
+            except Exception:
+                logger.debug("[REDDIT] Failed to record blocked-response cooldown", exc_info=True)
+            self._touch_cache_timestamp_now()
+
         # If we have never displayed valid data, remain hidden; otherwise
         # keep showing the last successful sample.
         if preserve_visible_fallback(
@@ -1496,28 +1550,19 @@ class RedditWidget(BaseOverlayWidget):
             )
 
         # Posts list
-        title_font = QFont(self._font_family, self._font_size, QFont.Weight(680))
-        title_metrics = QFontMetrics(title_font)
-        age_font_size = max(8, self._font_size - 5)
-        age_font = QFont(self._font_family, age_font_size, QFont.Weight.DemiBold)
-        painter.setFont(age_font)
-        age_metrics = QFontMetrics(age_font)
-
         now_ts = time.time()
         age_labels: List[str] = []
         for post in self._posts:
             age_labels.append(self._format_age(post.created_utc, now_ts))
-
-        max_age_width = 0
-        for label in age_labels:
-            if not label:
-                continue
-            w = age_metrics.horizontalAdvance(label)
-            if w > max_age_width:
-                max_age_width = w
-        age_col_width = max(max_age_width, 48)
-
-        line_height = max(age_metrics.height(), title_metrics.height()) + 4
+        layout_metrics = self._compute_post_layout_metrics(rect, age_labels)
+        title_font = layout_metrics["title_font"]
+        title_metrics = layout_metrics["title_metrics"]
+        age_font_size = int(layout_metrics["age_font_size"])
+        age_font = layout_metrics["age_font"]
+        painter.setFont(age_font)
+        age_col_width = int(layout_metrics["age_col_width"])
+        line_height = int(layout_metrics["line_height"])
+        title_gap = int(layout_metrics["title_gap"])
 
         y = header_bottom + 4
         self._row_hit_rects = []
@@ -1570,7 +1615,7 @@ class RedditWidget(BaseOverlayWidget):
 
             painter.setFont(title_font)
             painter.setPen(self._text_color)
-            title_x = rect.left() + age_col_width + 8
+            title_x = rect.left() + age_col_width + title_gap
             available_width = max(0, rect.right() - title_x)
             if available_width <= 0:
                 break
@@ -1715,6 +1760,7 @@ class RedditWidget(BaseOverlayWidget):
         rows = max(1, min(rows, max(1, self._effective_visible_capacity)))
 
         base_font_pt = max(8, int(self._font_size))
+        layout_scale = max(0.5, min(2.0, float(base_font_pt) / 18.0))
         header_font_pt = int(self._header_font_pt or base_font_pt)
 
         header_font = QFont(self._font_family, header_font_pt, QFont.Weight.Bold)
@@ -1728,7 +1774,7 @@ class RedditWidget(BaseOverlayWidget):
         title_font = QFont(self._font_family, base_font_pt, QFont.Weight(680))
         title_metrics = QFontMetrics(title_font)
 
-        line_height = max(age_metrics.height(), title_metrics.height()) + 4
+        line_height = max(age_metrics.height(), title_metrics.height()) + max(2, int(round(4 * layout_scale)))
 
         # Base vertical padding inside the card
         card_padding = 22  # 6 + 6 + 10
@@ -1771,6 +1817,40 @@ class RedditWidget(BaseOverlayWidget):
         # Fallback used when the limit changes before we have data.
         self._update_card_height_from_content(self._configured_capacity)
 
+    def _compute_post_layout_metrics(self, rect: QRect, age_labels: List[str]) -> Dict[str, Any]:
+        title_font = QFont(self._font_family, self._font_size, QFont.Weight(680))
+        title_metrics = QFontMetrics(title_font)
+        age_font_size = max(8, self._font_size - 5)
+        age_font = QFont(self._font_family, age_font_size, QFont.Weight.DemiBold)
+        age_metrics = QFontMetrics(age_font)
+        layout_scale = max(0.5, min(2.0, float(self._font_size) / 18.0))
+
+        max_age_width = 0
+        for label in age_labels:
+            if not label:
+                continue
+            w = age_metrics.horizontalAdvance(label)
+            if w > max_age_width:
+                max_age_width = w
+        age_col_width = max(max_age_width, max(28, int(round(48 * layout_scale))))
+        line_height = max(age_metrics.height(), title_metrics.height()) + max(2, int(round(4 * layout_scale)))
+        title_gap = max(4, int(round(8 * layout_scale)))
+        title_x = rect.left() + age_col_width + title_gap
+        title_available_width = max(0, rect.right() - title_x)
+
+        return {
+            "title_font": title_font,
+            "title_metrics": title_metrics,
+            "age_font_size": age_font_size,
+            "age_font": age_font,
+            "age_metrics": age_metrics,
+            "layout_scale": layout_scale,
+            "age_col_width": age_col_width,
+            "line_height": line_height,
+            "title_gap": title_gap,
+            "title_available_width": title_available_width,
+        }
+
     def _format_age(self, created_utc: float, now_ts: Optional[float] = None) -> str:
         if created_utc <= 0 and now_ts is None:
             return ""
@@ -1783,16 +1863,16 @@ class RedditWidget(BaseOverlayWidget):
         if minutes < 1:
             minutes = 1
         if hours < 1:
-            return f"{minutes:02d} M AGO"
+            return f"{minutes}M AGO"
         if days < 1:
-            return f"{hours:02d} HR AGO"
+            return f"{hours}HR AGO"
         if days < 7:
-            return f"{days:02d} D AGO"
+            return f"{days}D AGO"
         weeks = days // 7
         if weeks < 52:
-            return f"{weeks:02d} W AGO"
+            return f"{weeks}W AGO"
         years = days // 365
-        return f"{years:02d} Y AGO"
+        return f"{years}Y AGO"
 
     def _start_widget_fade_in(self, duration_ms: Optional[int] = None) -> None:
         logger.debug("[REDDIT] _start_widget_fade_in: duration_ms=%s", duration_ms)
@@ -2051,6 +2131,11 @@ class RedditWidget(BaseOverlayWidget):
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / f"{self._cache_key}_posts.json"
 
+    def _get_service_gate_file_path(self) -> Path:
+        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / "_startup_gate.touch"
+
     def _get_cache_timestamp(self):
         """Return the cache file modification time when available."""
         try:
@@ -2061,6 +2146,78 @@ class RedditWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[REDDIT] Failed to inspect cache timestamp", exc_info=True)
             return None
+
+    def _get_service_gate_timestamp(self):
+        """Return the shared Reddit startup-gate timestamp when available."""
+        try:
+            gate_path = self._get_service_gate_file_path()
+            if not gate_path.exists():
+                return None
+            return datetime.fromtimestamp(gate_path.stat().st_mtime)
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect shared startup-gate timestamp", exc_info=True)
+            return None
+
+    def _get_startup_refresh_decision(self) -> StartupRefreshDecision:
+        """Return startup-refresh policy with a shared Reddit service cooldown gate."""
+
+        try:
+            from core.reddit_rate_limiter import RedditRateLimiter
+
+            gate_timestamp = self._get_service_gate_timestamp()
+            if gate_timestamp is not None:
+                gate_age = datetime.now() - gate_timestamp
+                blocked_window = timedelta(seconds=RedditRateLimiter.BLOCK_COOLDOWN_SECONDS)
+                if gate_age < blocked_window:
+                    return StartupRefreshDecision(False, "blocked_cooldown_cache_fresh", gate_age)
+        except Exception:
+            logger.debug("[REDDIT] Failed to evaluate shared startup gate", exc_info=True)
+
+        return get_automatic_startup_refresh_decision(
+            cache_timestamp=self._get_cache_timestamp(),
+            fresh_window=REDDIT_STARTUP_CACHE_FRESH_WINDOW,
+        )
+
+    def _touch_service_gate_timestamp_now(self) -> None:
+        """Refresh the shared Reddit startup gate after a blocked response."""
+
+        gate_path = self._get_service_gate_file_path()
+        try:
+            if not gate_path.exists():
+                gate_path.parent.mkdir(parents=True, exist_ok=True)
+                gate_path.write_text("reddit_startup_gate\n", encoding="utf-8")
+            now = time.time()
+            gate_path.touch()
+            try:
+                import os
+                os.utime(gate_path, (now, now))
+            except Exception:
+                logger.debug("[REDDIT] Failed to force startup-gate timestamp via utime", exc_info=True)
+        except Exception:
+            logger.debug("[REDDIT] Failed to touch shared startup-gate timestamp", exc_info=True)
+
+    def _touch_cache_timestamp_now(self) -> None:
+        """Refresh the cache timestamp so startup policy backs off after a block."""
+
+        cache_path = self._get_cache_file_path()
+        try:
+            if not cache_path.exists():
+                cached_posts = list(self._all_fetched_posts or self._posts)
+                if cached_posts:
+                    self._save_cached_posts(cached_posts)
+                else:
+                    cache_path.parent.mkdir(parents=True, exist_ok=True)
+                    cache_path.write_text("[]", encoding="utf-8")
+            now = time.time()
+            cache_path.touch()
+            try:
+                import os
+                os.utime(cache_path, (now, now))
+            except Exception:
+                logger.debug("[REDDIT] Failed to force cache timestamp via utime", exc_info=True)
+        except Exception:
+            logger.debug("[REDDIT] Failed to touch cache timestamp", exc_info=True)
+        self._touch_service_gate_timestamp_now()
     
     def _save_cached_posts(self, posts: List[RedditPost]) -> None:
         """Save posts to cache for next startup."""

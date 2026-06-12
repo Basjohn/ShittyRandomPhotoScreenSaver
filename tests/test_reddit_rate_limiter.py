@@ -118,6 +118,69 @@ class TestRedditRateLimiter:
         # Should be empty
         assert RedditRateLimiter.get_request_count() == 0
         assert RedditRateLimiter._last_request_time == 0.0
+        assert RedditRateLimiter.get_blocked_cooldown_remaining() == 0.0
+
+    def test_blocked_response_starts_cooldown(self):
+        """Verify blocked public-endpoint responses trigger a harsher cooldown."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.reset()
+        RedditRateLimiter.record_blocked_response(reason="403")
+
+        wait_time = RedditRateLimiter.wait_if_needed()
+
+        assert wait_time > 0
+        assert RedditRateLimiter.get_blocked_cooldown_remaining() > 0
+
+    def test_acquire_request_slot_records_request_when_available(self):
+        """Verify atomic slot acquisition records a request immediately."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.reset()
+
+        result = RedditRateLimiter.acquire_request_slot(namespace="widget")
+
+        assert result == "acquired"
+        assert RedditRateLimiter.get_request_count() == 1
+
+    def test_acquire_request_slot_can_skip_when_blocked_cooldown_is_active(self):
+        """Verify blocked cooldown can abort queued requests before they hit Reddit."""
+        from core.reddit_rate_limiter import RedditRateLimiter
+
+        RedditRateLimiter.reset()
+        RedditRateLimiter.record_blocked_response(reason="403")
+
+        result = RedditRateLimiter.acquire_request_slot(
+            namespace="widget",
+            skip_if_blocked=True,
+        )
+
+        assert result == "blocked"
+        assert RedditRateLimiter.get_request_count() == 0
+
+    def test_request_persona_is_stable_for_same_widget_key_within_rotation_window(self):
+        """Verify Reddit request personas stay stable for the same key within a window."""
+        from core.reddit_rate_limiter import RedditRateLimiter, get_reddit_request_persona
+
+        RedditRateLimiter.reset()
+
+        first = get_reddit_request_persona("reddit:Games:hot")
+        second = get_reddit_request_persona("reddit:Games:hot")
+
+        assert first.key == second.key
+        assert first.user_agent == second.user_agent
+        assert first.headers == second.headers
+
+    def test_request_personas_expose_distinct_client_labels_and_headers(self):
+        """Verify persona pool exposes different client/application appearances."""
+        from core.reddit_rate_limiter import REDDIT_REQUEST_PERSONAS
+
+        labels = {persona.label for persona in REDDIT_REQUEST_PERSONAS}
+        header_clients = {persona.headers.get("X-SRPSS-Reddit-Client") for persona in REDDIT_REQUEST_PERSONAS}
+
+        assert len(labels) == len(REDDIT_REQUEST_PERSONAS)
+        assert None not in header_clients
+        assert len(header_clients) == len(REDDIT_REQUEST_PERSONAS)
 
 
 class TestRedditRateLimiterThreadSafety:

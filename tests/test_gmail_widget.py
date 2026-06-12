@@ -474,6 +474,142 @@ def test_gmail_custom_layout_rect_survives_content_height_recalc(qt_app):
         parent.deleteLater()
 
 
+def test_gmail_content_height_updates_do_not_change_width_constraints(qt_app):
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(640, 180)
+        widget.setMinimumWidth(640)
+        widget.setMaximumWidth(640)
+        widget._configured_capacity = 10
+
+        widget._update_card_height_from_content(10)
+
+        assert widget.minimumWidth() == 640
+        assert widget.maximumWidth() == 640
+        assert widget.minimumHeight() == widget.maximumHeight()
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_custom_layout_payload_scales_sender_column_width():
+    from types import SimpleNamespace
+
+    from rendering.custom_layout_manager import CustomLayoutManager
+
+    class _DummyGmail:
+        def __init__(self) -> None:
+            self._font_size = 13
+            self._sender_column_width = 180
+
+        def set_font_size(self, value: int) -> None:
+            self._font_size = int(value)
+
+        def set_sender_column_width(self, value: int) -> None:
+            self._sender_column_width = int(value)
+
+    manager = CustomLayoutManager.__new__(CustomLayoutManager)
+    descriptor = SimpleNamespace(custom_layout_resize_mode="gmail_font", widget_id="gmail")
+    widget = _DummyGmail()
+
+    payload = manager._capture_size_payload(descriptor, widget)
+    scaled = manager._scale_size_payload(descriptor, payload, 0.65)
+    manager._apply_size_payload(descriptor, widget, scaled)
+
+    assert payload == {"font_size": 13, "sender_column_width": 180}
+    assert scaled["font_size"] < payload["font_size"]
+    assert scaled["sender_column_width"] < payload["sender_column_width"]
+    assert widget._font_size == scaled["font_size"]
+    assert widget._sender_column_width == scaled["sender_column_width"]
+
+
+def test_gmail_small_font_compacts_action_lane(qt_app):
+    from datetime import datetime
+
+    from PySide6.QtGui import QPainter, QPixmap
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(420, 180)
+        widget._show_three_dot_menu = True
+        widget._emails = [
+            EmailMetadata(
+                id="msg_1",
+                thread_id="thread_1",
+                sender="Some Longer Sender Name",
+                subject="A subject that needs room",
+                date=datetime.now(),
+                labels=("INBOX",),
+                is_unread=True,
+            )
+        ]
+        widget._rebuild_display_rows()
+
+        def _paint_and_action_width() -> int:
+            pixmap = QPixmap(widget.size())
+            pixmap.fill()
+            painter = QPainter(pixmap)
+            try:
+                widget._paint_emails(painter)
+            finally:
+                painter.end()
+            assert widget._action_hit_rects
+            return widget._action_hit_rects[0][0].width()
+
+        widget.set_font_size(13)
+        baseline_width = _paint_and_action_width()
+
+        widget.set_font_size(8)
+        compact_width = _paint_and_action_width()
+
+        assert compact_width < baseline_width
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_small_font_rebalances_budget_toward_subject_text(qt_app):
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(760, 220)
+        widget._show_three_dot_menu = True
+        widget._emails = [
+            EmailMetadata(
+                id="msg_1",
+                thread_id="thread_1",
+                sender="Some Longer Sender Name",
+                subject="A subject that benefits from more horizontal budget when shrunk",
+                date=datetime.now(),
+                labels=("INBOX",),
+                is_unread=True,
+            )
+        ]
+        widget._rebuild_display_rows()
+        row = widget._display_rows[0]
+
+        widget.set_font_size(13)
+        baseline_layout = widget._compute_email_layout_metrics(widget._display_rows)
+        baseline_budget = widget._compute_email_row_budget(row, baseline_layout)
+
+        widget.set_font_size(8)
+        compact_layout = widget._compute_email_layout_metrics(widget._display_rows)
+        compact_budget = widget._compute_email_row_budget(row, compact_layout)
+
+        assert compact_layout["action_width"] < baseline_layout["action_width"]
+        assert compact_layout["time_slot_width"] < baseline_layout["time_slot_width"]
+        assert compact_budget["subject_max_width"] > baseline_budget["subject_max_width"]
+    finally:
+        widget.cleanup()
+
+
 def test_gmail_small_custom_height_does_not_paint_rows_past_bottom(qt_app):
     from datetime import datetime
 

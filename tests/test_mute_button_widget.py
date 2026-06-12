@@ -4,6 +4,7 @@ import time
 
 import pytest
 from PySide6.QtWidgets import QWidget
+from PySide6.QtCore import QRect
 
 from widgets.mute_button_widget import MuteButtonWidget
 
@@ -216,3 +217,41 @@ def test_mute_button_cleanup_uses_canonical_runtime_reset(qt_app):
         assert calls == [(True, True)]
     finally:
         mute.deleteLater()
+
+
+@pytest.mark.qt
+def test_mute_button_scales_down_with_small_media_controls_lane(qt_app):
+    parent = QWidget()
+    parent.resize(900, 600)
+    parent.show()
+
+    class _Anchor(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setGeometry(120, 160, 480, 232)
+            self._last_artwork_rect = QRect(300, 26, 150, 150)
+
+        def _compute_controls_layout(self):
+            return {"row_rect": QRect(22, 176, 220, 24)}
+
+    anchor = _Anchor(parent)
+    anchor.show()
+
+    mute = MuteButtonWidget(parent)
+    mute._available = True
+    mute.set_anchor(anchor)
+    mute.set_enabled(True)
+    mute.show()
+
+    try:
+        mute.update_position()
+
+        assert mute._btn_width < 40
+        assert mute._btn_height < 36
+        assert mute.width() <= 32 + mute._shadow_margin * 2
+        assert mute.y() >= anchor.geometry().top()
+        assert mute.y() + mute.height() <= parent.height()
+    finally:
+        mute.deleteLater()
+        anchor.deleteLater()
+        parent.deleteLater()

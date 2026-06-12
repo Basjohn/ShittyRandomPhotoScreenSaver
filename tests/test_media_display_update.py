@@ -53,6 +53,8 @@ class _StubMediaWidget:
         self.fade_in_calls = 0
         self.notify_calls = 0
         self._visible = True
+        self._width = 600
+        self._height = 290
 
     @classmethod
     def _get_shared_valid_info(cls):
@@ -110,6 +112,12 @@ class _StubMediaWidget:
 
     def setContentsMargins(self, *_args):
         return None
+
+    def width(self):
+        return self._width
+
+    def height(self):
+        return self._height
 
     def _controls_row_margin(self):
         return 12
@@ -330,6 +338,30 @@ def test_build_and_apply_metadata_shrinks_wrap_prone_metadata_more_aggressively(
 
     assert widget._metadata_paint["title_font"] < widget._font_size + 3
     assert widget._metadata_paint["artist_font"] < widget._font_size - 2
+
+
+def test_build_and_apply_metadata_compacts_for_small_committed_card_geometry():
+    widget = _StubMediaWidget()
+    widget._width = 480
+    widget._height = 232
+    info = MediaTrackInfo(
+        title="The Longest Distance Between Two Places",
+        artist="The World Is A Beautiful Place And I Am No Longer Afraid To Die",
+        album="Whenever, If Ever",
+        state=MediaPlaybackState.PLAYING,
+    )
+
+    display_update._build_and_apply_metadata(
+        widget,
+        info,
+        prev_info=None,
+        metadata_changed=True,
+    )
+
+    assert widget._metadata_paint["title_font"] <= widget._font_size
+    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
+    assert widget._metadata_paint["line_spacing"] <= 3
+    assert widget._metadata_paint["body_top_gap"] <= 7
 
 
 def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):

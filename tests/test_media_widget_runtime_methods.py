@@ -187,6 +187,27 @@ def test_media_layout_deferred_update_position_runs_when_widget_still_valid(monk
     assert calls == ["updated"]
 
 
+def test_media_controls_layout_compacts_for_small_committed_card(qt_app) -> None:
+    from widgets.media_layout import compute_controls_layout
+
+    widget = MediaWidget()
+    try:
+        widget._show_controls = True
+        widget.resize(600, 290)
+        large_layout = compute_controls_layout(widget)
+        large_font = large_layout["font"].pointSize()
+        large_row_height = large_layout["row_rect"].height()
+
+        widget.resize(480, 232)
+        widget._controls_layout_cache = None
+        small_layout = compute_controls_layout(widget)
+
+        assert small_layout["font"].pointSize() < large_font
+        assert small_layout["row_rect"].height() < large_row_height
+    finally:
+        widget.deleteLater()
+
+
 def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
     widget = MediaWidget()
     registrations = []

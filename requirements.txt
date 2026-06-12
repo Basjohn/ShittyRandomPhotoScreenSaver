@@ -1,6 +1,6 @@
 # SRPSS known-good dependency set
 # Captured/pinned from the working Python 3.11.9 global build environment.
-# Used by experimental scripts\venv\.venv builds.
+# Used by experimental scripts\venv builds against the repo-root .venv.
 
 # Core UI framework
 PySide6==6.9.1

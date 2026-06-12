@@ -1891,10 +1891,10 @@ class TestSettingsRouting:
 
         manager.position_spotify_visualizer(vis, None, 1920, 1080)
 
-        assert vis._geometry == (333, 444, 555, 160)
+        assert vis._geometry == (333, 444, 555, 280)
         assert vis.raised is True
 
-    def test_position_spotify_visualizer_custom_rect_uses_scale_payload_even_if_settings_snapshot_is_stale(self):
+    def test_position_spotify_visualizer_custom_rect_keeps_committed_rect_even_if_scale_payload_differs(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
 
@@ -1939,8 +1939,36 @@ class TestSettingsRouting:
 
         manager.position_spotify_visualizer(vis, None, 1920, 1080)
 
-        assert vis._geometry == (210, 310, 420, 350)
+        assert vis._geometry == (210, 310, 420, 280)
         assert vis.raised is True
+
+    @pytest.mark.qt
+    def test_position_spotify_visualizer_real_widget_applies_custom_constraints_before_replay(self, qt_app, qtbot):
+        from PySide6.QtCore import QRect
+        from PySide6.QtWidgets import QWidget
+        from rendering.widget_manager import WidgetManager
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        parent.show()
+
+        settings = MagicMock()
+        settings.get_widgets_map.return_value = {}
+        manager = WidgetManager(parent)
+        manager._settings_manager = settings
+
+        vis = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        vis._custom_layout_local_rect = QRect(210, 310, 420, 280)
+        vis.setMinimumHeight(400)
+        vis.setGeometry(0, 0, 100, 400)
+
+        manager.position_spotify_visualizer(vis, None, 1920, 1080)
+
+        assert vis.geometry() == QRect(210, 310, 420, 280)
+        assert vis.minimumHeight() == 280
+        assert vis.maximumHeight() == 280
 
     def test_position_spotify_volume_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect

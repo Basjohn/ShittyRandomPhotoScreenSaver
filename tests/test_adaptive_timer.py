@@ -24,6 +24,7 @@ from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     TimerState,
     AtomicTimerState,
+    _queue_safe_widget_update,
     _normalize_next_deadline,
 )
 
@@ -193,6 +194,35 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         self.timer.stop()
         self.assertFalse(self.timer.is_active())
         self.assertIsNone(self.timer._task_future)
+
+    def test_safe_widget_update_skips_deleted_qt_owner(self):
+        """Queued frame updates should no-op if the Qt widget has already died."""
+        class _DeadWidget:
+            def update(self):
+                raise AssertionError("deleted widget should not be updated")
+
+        widget = _DeadWidget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+
+            class _FakeShiboken:
+                @staticmethod
+                def isValid(_obj):
+                    return False
+
+            adaptive_timer.Shiboken = _FakeShiboken
+            _queue_safe_widget_update(widget)
+            self.assertEqual(len(queued), 1)
+            queued[0]()
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
 
 
 class TestAdaptiveTimerAutoIdle(unittest.TestCase):

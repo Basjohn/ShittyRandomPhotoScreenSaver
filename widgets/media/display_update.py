@@ -22,7 +22,14 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _compute_metadata_font_scales(title: str, artist: str) -> tuple[float, float]:
+def _compute_metadata_font_scales(
+    title: str,
+    artist: str,
+    *,
+    available_width: int = 0,
+    available_height: int = 0,
+    base_font: int = 20,
+) -> tuple[float, float]:
     """Return title/artist font scales for the current metadata payload.
 
     The media card is intentionally text-first, but the controls row must keep a
@@ -52,11 +59,46 @@ def _compute_metadata_font_scales(title: str, artist: str) -> tuple[float, float
     if word_count >= 4 and title_len > 28:
         scale_title = min(scale_title, 0.88)
 
+    # Long-metadata heuristics alone are too weak for small committed CUSTOM
+    # cards. When width/height are tight, shrink against the actual card
+    # envelope before paint rather than protecting the old authored footprint.
+    width_pressure = 1.0
+    if available_width > 0:
+        if available_width <= 520:
+            width_pressure = min(width_pressure, 0.94)
+        if available_width <= 460:
+            width_pressure = min(width_pressure, 0.88)
+        if available_width <= 400:
+            width_pressure = min(width_pressure, 0.82)
+        if available_width <= 340:
+            width_pressure = min(width_pressure, 0.74)
+
+    height_pressure = 1.0
+    if available_height > 0:
+        if available_height <= 260:
+            height_pressure = min(height_pressure, 0.94)
+        if available_height <= 232:
+            height_pressure = min(height_pressure, 0.86)
+        if available_height <= 210:
+            height_pressure = min(height_pressure, 0.78)
+        if available_height <= 190:
+            height_pressure = min(height_pressure, 0.70)
+
+    if base_font <= 16:
+        width_pressure = min(width_pressure, 0.96)
+    if base_font <= 14:
+        height_pressure = min(height_pressure, 0.94)
+
+    scale_title = min(scale_title, width_pressure, height_pressure)
     scale_artist = 1.0 - (1.0 - scale_title) * 0.45
     if artist_len > 28:
         scale_artist = min(scale_artist, 0.92)
     if combined_len > 75:
         scale_artist = min(scale_artist, 0.86)
+    if available_width > 0 and available_width <= 400:
+        scale_artist = min(scale_artist, 0.84)
+    if available_height > 0 and available_height <= 232:
+        scale_artist = min(scale_artist, 0.80)
 
     return scale_title, scale_artist
 
@@ -355,7 +397,13 @@ def _build_and_apply_metadata(
         title_font_base = max(6, base_font + 3)
         artist_font_base = max(6, base_font - 2)
 
-        scale_title, scale_artist = _compute_metadata_font_scales(title, artist)
+        scale_title, scale_artist = _compute_metadata_font_scales(
+            title,
+            artist,
+            available_width=int(getattr(widget, "width", lambda: 0)() or 0),
+            available_height=int(getattr(widget, "height", lambda: 0)() or 0),
+            base_font=base_font,
+        )
 
         title_font = max(6, int(title_font_base * scale_title))
         artist_font = max(6, int(artist_font_base * scale_artist))
@@ -394,6 +442,16 @@ def _build_and_apply_metadata(
         title_weight = int(widget._metadata_paint.get("title_weight", 700))
         artist_weight = int(widget._metadata_paint.get("artist_weight", 600))
 
+    compact_height = int(getattr(widget, "height", lambda: 0)() or 0)
+    compact_line_spacing = 4
+    compact_body_gap = 8
+    if compact_height and compact_height <= 260:
+        compact_line_spacing = 3
+        compact_body_gap = 6
+    if compact_height and compact_height <= 232:
+        compact_line_spacing = 2
+        compact_body_gap = 4
+
     widget._metadata_paint = {
         "provider": widget.provider_display_name,
         "title": display_title,
@@ -405,8 +463,8 @@ def _build_and_apply_metadata(
         "header_weight": header_weight,
         "title_weight": title_weight,
         "artist_weight": artist_weight,
-        "line_spacing": 4,
-        "body_top_gap": 8,
+        "line_spacing": compact_line_spacing,
+        "body_top_gap": compact_body_gap,
     }
 
     widget.setTextFormat(Qt.TextFormat.PlainText)

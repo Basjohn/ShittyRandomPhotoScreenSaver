@@ -1309,11 +1309,14 @@ class MediaWidget(BaseOverlayWidget):
     
     def _controls_row_min_height(self) -> int:
         """Return the minimum vertical footprint required for the controls row."""
-        controls_font_pt = max(8, int((self._font_size - 2) * 0.9))
+        from widgets.media_layout import _controls_compact_scale
+
+        compact_scale = _controls_compact_scale(self)
+        controls_font_pt = max(8, int((self._font_size - 2) * 0.9 * compact_scale))
         font = QFont(self._font_family, controls_font_pt, QFont.Weight.Medium)
         fm = QFontMetrics(font)
         # Inner padding mirrors _compute_controls_layout to keep visuals consistent.
-        min_height = max(24, fm.height() + 12)
+        min_height = max(22, fm.height() + 10)
         return max(20, int(min_height * 0.82))
     
     def _controls_row_margin(self) -> int:

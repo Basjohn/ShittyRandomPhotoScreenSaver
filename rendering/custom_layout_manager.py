@@ -1,6 +1,7 @@
 """CUSTOM widget layout edit-mode session manager."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -95,6 +96,7 @@ class _ShellState:
     last_drag_axis: str = "both"
     removed: bool = False
     resize_origin_rect: QRect | None = None
+    resize_origin_cursor: QPoint | None = None
     resize_origin_scale: float = 1.0
     resize_origin_payload: dict[str, Any] | None = None
     resize_corner: str | None = None
@@ -105,6 +107,7 @@ class CustomLayoutManager:
 
     _active_managers: list["CustomLayoutManager"] = []
     _key_filter: _CustomLayoutSessionKeyFilter | None = None
+    _geo_session_counter: int = 0
     _EDIT_MODE_MIN_DIM_OPACITY = 0.5
     _restack_scheduled: bool = False
     _menu_interaction_depth: int = 0
@@ -123,6 +126,62 @@ class CustomLayoutManager:
         self._suppress_live_feedback_widget_ids: set[str] = set()
         self._edit_mode_dimming_restore: tuple[bool, float] | None = None
         self._display_cursor_restore_shape: Qt.CursorShape | None = None
+        self._geo_session_id: str | None = None
+
+    @classmethod
+    def _next_geo_session_id(cls) -> str:
+        cls._geo_session_counter += 1
+        return f"geo-{cls._geo_session_counter:04d}"
+
+    @staticmethod
+    def _format_rect(rect: QRect | None) -> str:
+        if not isinstance(rect, QRect):
+            return "-"
+        return f"({rect.x()},{rect.y()},{rect.width()},{rect.height()})"
+
+    @staticmethod
+    def _format_payload(payload: dict[str, Any] | None) -> str:
+        if not payload:
+            return "{}"
+        parts = [f"{key}={payload[key]!r}" for key in sorted(payload.keys(), key=str)]
+        return "{" + ",".join(parts) + "}"
+
+    def _log_geo_audit(
+        self,
+        widget_id: str,
+        phase: str,
+        *,
+        local_rect: QRect | None = None,
+        global_rect: QRect | None = None,
+        payload: dict[str, Any] | None = None,
+        source: str,
+        extra: str | None = None,
+    ) -> None:
+        session_id = self._geo_session_id or "geo-inactive"
+        message = (
+            "[GEO_AUDIT] session=%s widget=%s phase=%s local=%s global=%s payload=%s source=%s"
+            % (
+                session_id,
+                widget_id,
+                phase,
+                self._format_rect(local_rect),
+                self._format_rect(global_rect),
+                self._format_payload(payload),
+                source,
+            )
+        )
+        if extra:
+            message = f"{message} {extra}"
+        logger.info(message)
+
+    @staticmethod
+    def _top_center_anchor_for_rect(rect: QRect) -> tuple[float, int]:
+        return (float(rect.x()) + (float(rect.width()) / 2.0), int(rect.y()))
+
+    @staticmethod
+    def _rect_from_top_center(anchor_x: float, top_y: int, width: int, height: int) -> QRect:
+        left = int(round(anchor_x - (float(width) / 2.0)))
+        return QRect(left, int(top_y), int(width), int(height))
 
     def _get_available_screens(self) -> list[Any]:
         instances = self._get_global_display_instances()
@@ -300,11 +359,16 @@ class CustomLayoutManager:
                 continue
             seen_ids.add(id(manager))
             managers.append(manager)
+        session_id = CustomLayoutManager._next_geo_session_id()
+        for manager in managers:
+            manager._geo_session_id = session_id
         started: list[CustomLayoutManager] = []
         for manager in managers:
             if manager._start_session_local():
                 started.append(manager)
         if not started:
+            for manager in managers:
+                manager._geo_session_id = None
             return False
         CustomLayoutManager._active_managers = started
         started[0]._refresh_duplicate_shell_remove_affordances_global()
@@ -537,6 +601,18 @@ class CustomLayoutManager:
             resize_mode=state.descriptor.custom_layout_resize_mode,
         )
         set_screen_layout_entry(custom_layout_map, target_signature, widget_id, entry)
+        self._log_geo_audit(
+            widget_id,
+            "save_scene",
+            local_rect=local_rect,
+            global_rect=global_rect,
+            payload=entry.size_payload,
+            source="_write_widget_custom_layout",
+            extra=(
+                f"resize_mode={entry.resize_mode} monitor={monitor_value} "
+                f"force_custom_position={str(widget_writes_custom_position_key(widget_id)).lower()}"
+            ),
+        )
 
         if widget_writes_custom_position_key(widget_id):
             position_settings_key = get_custom_persistence_position_settings_key_for_widget(widget_id)
@@ -772,6 +848,7 @@ class CustomLayoutManager:
         if not CustomLayoutManager._active_managers:
             CustomLayoutManager._uninstall_global_key_filter()
         setattr(self._display, "_custom_layout_edit_active", False)
+        self._geo_session_id = None
         self.flush_deferred_processed_image()
 
     def _suspend_interaction_cursor_state(self) -> None:
@@ -975,6 +1052,8 @@ class CustomLayoutManager:
         global_top_left = self._display.mapToGlobal(local_rect.topLeft())
         global_rect = QRect(global_top_left, shell_local_rect.size())
         current_monitor_value = self._read_monitor_value_for_widget(descriptor)
+        prior_custom_rect = getattr(widget, "_custom_layout_local_rect", None)
+        has_qol_envelope = shell_local_rect.size() != local_rect.size()
         shell = EditShellWidget(
             widget_id=descriptor.widget_id,
             snapshot=snapshot,
@@ -1005,6 +1084,19 @@ class CustomLayoutManager:
         shell.set_reset_size_enabled(False)
         shell.set_reset_position_enabled(False)
         shell.set_remove_enabled(False)
+        self._log_geo_audit(
+            descriptor.widget_id,
+            "edit_shell_create",
+            local_rect=shell_local_rect,
+            global_rect=global_rect,
+            payload=baseline_payload,
+            source="_create_shell_state",
+            extra=(
+                f"preview={'live' if descriptor.custom_layout_resize_mode in {'volume_scale', 'visualizer_rect'} else 'snapshot'} "
+                f"qol_envelope={str(has_qol_envelope).lower()} "
+                f"had_prior_custom={str(isinstance(prior_custom_rect, QRect)).lower()}"
+            ),
+        )
         return _ShellState(
             descriptor=descriptor,
             widget=widget,
@@ -1264,11 +1356,18 @@ class CustomLayoutManager:
         self._update_shell_reset_affordances(state)
         self._set_shell_geometry_silently(state, committed)
 
-    def _on_shell_resize_drag_started(self, widget_id: str, corner: str, global_rect: QRect) -> None:
+    def _on_shell_resize_drag_started(
+        self,
+        widget_id: str,
+        corner: str,
+        global_rect: QRect,
+        cursor_global: QPoint,
+    ) -> None:
         state = self._shell_states.get(widget_id)
         if state is None or not state.descriptor.supports_layout_resize_edit:
             return
         state.resize_origin_rect = QRect(global_rect)
+        state.resize_origin_cursor = QPoint(cursor_global)
         state.resize_origin_scale = float(state.resize_scale)
         state.resize_origin_payload = dict(state.current_size_payload)
         state.resize_corner = str(corner or "")
@@ -1298,7 +1397,13 @@ class CustomLayoutManager:
         step_count = int(angle_delta_y / 120) if angle_delta_y else 0
         if step_count == 0:
             step_count = 1 if angle_delta_y > 0 else -1
-        next_scale = max(0.7, min(2.4, state.resize_scale + (0.05 * step_count)))
+        target_screen = state.current_screen or self._screen
+        min_scale, max_scale = self._resize_scale_bounds_for_state(
+            state,
+            state.current_global_rect,
+            screen=target_screen,
+        )
+        next_scale = max(min_scale, min(max_scale, state.resize_scale + (0.05 * step_count)))
         if abs(next_scale - state.resize_scale) < 1e-6:
             return
         state.resize_scale = next_scale
@@ -1309,10 +1414,25 @@ class CustomLayoutManager:
         )
         self._update_shell_reset_affordances(state)
         next_rect = self._scaled_rect_from_baseline(state)
-        target_screen = state.current_screen or self._screen
         if target_screen is not None:
-            next_rect = clamp_global_rect_to_screen(next_rect, target_screen)
+            next_rect = clamp_global_rect_to_screen(
+                next_rect,
+                target_screen,
+                min_size=self._min_size_for_state(state),
+            )
         state.current_global_rect = QRect(next_rect)
+        anchor_x, anchor_y = self._top_center_anchor_for_rect(state.current_global_rect)
+        self._log_geo_audit(
+            widget_id,
+            "resize_wheel",
+            global_rect=next_rect,
+            payload=state.current_size_payload,
+            source="_on_shell_resize_wheel_requested",
+            extra=(
+                f"scale={state.resize_scale:.4f} min_scale={min_scale:.4f} max_scale={max_scale:.4f} "
+                f"anchor=({anchor_x:.2f},{anchor_y})"
+            ),
+        )
         self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
         self._set_shell_geometry_silently(state, next_rect)
 
@@ -1332,13 +1452,20 @@ class CustomLayoutManager:
         resolved_corner = str(corner or state.resize_corner or "")
         if not resolved_corner:
             return
-        next_scale = self._resolve_resize_drag_scale_for_corner(
+        raw_scale = self._resolve_resize_drag_scale_for_corner(
             state,
             origin_rect,
             resolved_corner,
             cursor_global,
+            state.resize_origin_cursor,
         )
-        state.resize_scale = max(0.7, min(2.4, next_scale))
+        target_screen = state.current_screen or self._screen
+        min_scale, max_scale = self._resize_scale_bounds_for_state(
+            state,
+            origin_rect,
+            screen=target_screen,
+        )
+        state.resize_scale = max(min_scale, min(max_scale, raw_scale))
         state.current_size_payload = self._scale_size_payload(
             state.descriptor,
             state.baseline_size_payload,
@@ -1357,10 +1484,23 @@ class CustomLayoutManager:
         )
         state.current_global_rect = QRect(next_rect)
         self._update_shell_reset_affordances(state)
+        anchor_x, anchor_y = self._top_center_anchor_for_rect(origin_rect)
+        self._log_geo_audit(
+            widget_id,
+            "resize_drag_final" if finalize else "resize_drag_live",
+            global_rect=next_rect,
+            payload=state.current_size_payload,
+            source="_apply_resize_drag",
+            extra=(
+                f"corner={resolved_corner} raw_scale={raw_scale:.4f} scale={state.resize_scale:.4f} "
+                f"min_scale={min_scale:.4f} max_scale={max_scale:.4f} anchor=({anchor_x:.2f},{anchor_y})"
+            ),
+        )
         self._refresh_shell_snapshot_for_resize_preview(state, next_rect.size())
         self._set_shell_geometry_silently(state, next_rect)
         if finalize:
             state.resize_origin_rect = None
+            state.resize_origin_cursor = None
             state.resize_origin_payload = None
             state.resize_origin_scale = state.resize_scale
             state.resize_corner = None
@@ -1374,11 +1514,15 @@ class CustomLayoutManager:
         self._update_shell_reset_affordances(state)
         current = QRect(state.current_global_rect)
         baseline = QRect(state.baseline_global_rect)
-        center = current.center()
-        baseline.moveCenter(center)
+        anchor_x, top_y = self._top_center_anchor_for_rect(current)
+        baseline = self._rect_from_top_center(anchor_x, top_y, baseline.width(), baseline.height())
         target_screen = state.current_screen or self._screen
         if target_screen is not None:
-            baseline = clamp_global_rect_to_screen(baseline, target_screen)
+            baseline = clamp_global_rect_to_screen(
+                baseline,
+                target_screen,
+                min_size=self._min_size_for_state(state),
+            )
         state.current_global_rect = QRect(baseline)
         self._set_shell_geometry_silently(state, baseline)
 
@@ -1394,7 +1538,11 @@ class CustomLayoutManager:
         current_rect = QRect(state.current_global_rect)
         reset_rect = QRect(baseline_top_left, current_rect.size())
         if source_screen is not None:
-            reset_rect = clamp_global_rect_to_screen(reset_rect, source_screen)
+            reset_rect = clamp_global_rect_to_screen(
+                reset_rect,
+                source_screen,
+                min_size=self._min_size_for_state(state),
+            )
         state.current_global_rect = QRect(reset_rect)
         state.shell.set_transfer_blocked(False, "")
         self._set_shell_geometry_silently(state, reset_rect)
@@ -1420,9 +1568,18 @@ class CustomLayoutManager:
         if descriptor.custom_layout_resize_mode == "volume_scale":
             return QSize(24, 120)
         if descriptor.supports_layout_resize_edit:
+            if widget is not None:
+                try:
+                    geom = widget.geometry()
+                    return QSize(
+                        max(1, int(round(geom.width() * 0.5))),
+                        max(1, int(round(geom.height() * 0.5))),
+                    )
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to read baseline size for custom minimum", exc_info=True)
             return QSize(
-                int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width()),
-                int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height()),
+                max(1, int(round(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width() * 0.5))),
+                max(1, int(round(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height() * 0.5))),
             )
         if widget is not None:
             try:
@@ -1463,53 +1620,11 @@ class CustomLayoutManager:
                 state.shell.set_remove_enabled(removable)
 
     def _refresh_shell_snapshot_for_resize_preview(self, state: _ShellState, shell_size: QSize) -> None:
-        if state.descriptor.custom_layout_resize_mode not in {"volume_scale", "visualizer_rect"}:
-            return
-        widget = state.widget
-        try:
-            original_geom = QRect(widget.geometry())
-            original_payload = self._capture_size_payload(state.descriptor, widget)
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to capture original widget state for resize preview", exc_info=True)
-            return
-
-        try:
-            preview_local_rect = QRect(original_geom)
-            self._apply_size_payload(state.descriptor, widget, state.current_size_payload)
-            if state.descriptor.custom_layout_resize_mode == "visualizer_rect":
-                preview_local_rect.setSize(
-                    self._resolve_visualizer_custom_size(
-                        widget,
-                        state.current_size_payload,
-                        maximum_envelope=False,
-                        fallback_size=original_geom.size(),
-                    )
-                )
-                widget.setGeometry(preview_local_rect)
-                snapshot = self._capture_visualizer_shell_snapshot(
-                    widget,
-                    preview_local_rect,
-                    canvas_size=shell_size,
-                )
-            else:
-                preview_local_rect.setSize(
-                    QSize(
-                        max(24, int(state.current_size_payload.get("width", shell_size.width()))),
-                        max(120, int(state.current_size_payload.get("height", shell_size.height()))),
-                    )
-                )
-                widget.setGeometry(preview_local_rect)
-                snapshot = widget.grab()
-            if not snapshot.isNull():
-                state.shell.set_snapshot(snapshot)
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to refresh shell snapshot for resize preview", exc_info=True)
-        finally:
-            try:
-                self._apply_size_payload(state.descriptor, widget, original_payload)
-                widget.setGeometry(original_geom)
-            except Exception:
-                logger.debug("[CUSTOM_LAYOUT] Failed to restore widget after resize preview refresh", exc_info=True)
+        del shell_size
+        # Do not mutate the live widget during preview capture. The shell's
+        # existing snapshot scales with shell geometry and is intentionally only
+        # a shell-shape hint, not a second live runtime layout pass.
+        return
 
     def _collect_peer_local_rects(self, exclude_widget_id: str, screen: Any) -> list[QRect]:
         if screen is None:
@@ -1663,25 +1778,90 @@ class CustomLayoutManager:
         return current_screen
 
     def _scaled_rect_from_baseline(self, state: _ShellState) -> QRect:
-        if state.descriptor.custom_layout_resize_mode == "volume_scale":
-            current = state.current_global_rect
-            center = current.center()
-            rect = QRect(
-                0,
-                0,
-                max(24, int(state.current_size_payload.get("width", state.baseline_global_rect.width()))),
-                max(120, int(state.current_size_payload.get("height", state.baseline_global_rect.height()))),
-            )
-            rect.moveCenter(center)
-            return rect
-        base = state.baseline_global_rect
         current = state.current_global_rect
-        center = current.center()
-        next_width = max(48, int(round(base.width() * state.resize_scale)))
-        next_height = max(32, int(round(base.height() * state.resize_scale)))
-        rect = QRect(0, 0, next_width, next_height)
-        rect.moveCenter(center)
-        return rect
+        anchor_x, top_y = self._top_center_anchor_for_rect(current)
+        return self._scaled_rect_from_top_center(
+            state,
+            anchor_x=anchor_x,
+            top_y=top_y,
+            next_scale=state.resize_scale,
+            fallback_rect=current,
+        )
+
+    def _scaled_rect_from_top_center(
+        self,
+        state: _ShellState,
+        *,
+        anchor_x: float,
+        top_y: int,
+        next_scale: float,
+        fallback_rect: QRect,
+    ) -> QRect:
+        next_payload = self._scale_size_payload(
+            state.descriptor,
+            state.baseline_size_payload,
+            next_scale,
+        )
+        if state.descriptor.custom_layout_resize_mode == "volume_scale":
+            width = max(24, int(next_payload.get("width", fallback_rect.width())))
+            height = max(120, int(next_payload.get("height", fallback_rect.height())))
+        elif state.descriptor.custom_layout_resize_mode == "visualizer_rect":
+            width_height = self._resolve_visualizer_custom_size(
+                state.widget,
+                next_payload,
+                maximum_envelope=True,
+                fallback_size=fallback_rect.size(),
+            )
+            width = max(48, int(width_height.width()))
+            height = max(32, int(width_height.height()))
+        else:
+            width = max(48, int(round(state.baseline_global_rect.width() * next_scale)))
+            height = max(32, int(round(state.baseline_global_rect.height() * next_scale)))
+        return self._rect_from_top_center(anchor_x, top_y, width, height)
+
+    def _resize_scale_bounds_for_state(
+        self,
+        state: _ShellState,
+        anchor_rect: QRect,
+        *,
+        screen: Any | None,
+    ) -> tuple[float, float]:
+        min_scale = 0.5
+        if screen is None:
+            return min_scale, max(min_scale, 0.5)
+        anchor_x, top_y = self._top_center_anchor_for_rect(anchor_rect)
+
+        def _fits(scale: float) -> bool:
+            rect = self._scaled_rect_from_top_center(
+                state,
+                anchor_x=anchor_x,
+                top_y=top_y,
+                next_scale=scale,
+                fallback_rect=anchor_rect,
+            )
+            clamped = clamp_global_rect_to_screen(
+                rect,
+                screen,
+                min_size=self._min_size_for_state(state),
+            )
+            return clamped.size() == rect.size()
+
+        if not _fits(min_scale):
+            return min_scale, min_scale
+
+        low = min_scale
+        high = max(1.0, low)
+        while high < 64.0 and _fits(high):
+            low = high
+            high *= 2.0
+        high = min(high, 64.0)
+        for _ in range(28):
+            mid = (low + high) / 2.0
+            if _fits(mid):
+                low = mid
+            else:
+                high = mid
+        return min_scale, max(min_scale, low)
 
     def _resolve_resize_drag_scale_for_corner(
         self,
@@ -1689,44 +1869,42 @@ class CustomLayoutManager:
         origin_rect: QRect,
         corner: str,
         cursor_global: QPoint,
+        origin_cursor: QPoint | None,
     ) -> float:
         screen = state.current_screen or self._screen
         if screen is None:
             return state.resize_scale
-        geom = screen.geometry()
         min_size = self._min_size_for_state(state)
-        left = origin_rect.x()
-        top = origin_rect.y()
-        right = origin_rect.x() + origin_rect.width()
-        bottom = origin_rect.y() + origin_rect.height()
+        base_half_width = max(1.0, float(origin_rect.width()) / 2.0)
+        base_height = max(1.0, float(origin_rect.height()))
+        base_diag = max(1.0, math.hypot(base_half_width, base_height))
 
-        base_width = max(1, origin_rect.width())
-        base_height = max(1, origin_rect.height())
-        base_diag = max(1.0, (float(base_width * base_width + base_height * base_height)) ** 0.5)
+        _corner = str(corner or "")
+        if origin_cursor is None:
+            if _corner == "top_left":
+                origin_cursor = origin_rect.topLeft()
+            elif _corner == "top_right":
+                origin_cursor = origin_rect.topRight()
+            elif _corner == "bottom_left":
+                origin_cursor = origin_rect.bottomLeft()
+            else:
+                origin_cursor = origin_rect.bottomRight()
 
-        if corner == "top_left":
-            left = max(geom.x(), min(int(cursor_global.x()), right - min_size.width()))
-            top = max(geom.y(), min(int(cursor_global.y()), bottom - min_size.height()))
-            target_width = max(min_size.width(), right - left)
-            target_height = max(min_size.height(), bottom - top)
-        elif corner == "top_right":
-            right = min(geom.x() + geom.width(), max(int(cursor_global.x()), left + min_size.width()))
-            top = max(geom.y(), min(int(cursor_global.y()), bottom - min_size.height()))
-            target_width = max(min_size.width(), right - left)
-            target_height = max(min_size.height(), bottom - top)
-        elif corner == "bottom_left":
-            left = max(geom.x(), min(int(cursor_global.x()), right - min_size.width()))
-            bottom = min(geom.y() + geom.height(), max(int(cursor_global.y()), top + min_size.height()))
-            target_width = max(min_size.width(), right - left)
-            target_height = max(min_size.height(), bottom - top)
-        else:
-            right = min(geom.x() + geom.width(), max(int(cursor_global.x()), left + min_size.width()))
-            bottom = min(geom.y() + geom.height(), max(int(cursor_global.y()), top + min_size.height()))
-            target_width = max(min_size.width(), right - left)
-            target_height = max(min_size.height(), bottom - top)
+        delta_x = float(cursor_global.x() - origin_cursor.x())
+        delta_y = float(cursor_global.y() - origin_cursor.y())
+        horizontal_sign = -1.0 if _corner.endswith("left") else 1.0
+        vertical_sign = -1.0 if _corner.startswith("top_") else 1.0
 
-        target_diag = max(1.0, (float(target_width * target_width + target_height * target_height)) ** 0.5)
-        return max(0.7, min(2.4, state.resize_origin_scale * (target_diag / base_diag)))
+        target_half_width = max(
+            float(min_size.width()) / 2.0,
+            base_half_width + (delta_x * horizontal_sign),
+        )
+        target_height = max(
+            float(min_size.height()),
+            base_height + (delta_y * vertical_sign),
+        )
+        target_diag = max(1.0, math.hypot(target_half_width, target_height))
+        return max(0.5, state.resize_origin_scale * (target_diag / base_diag))
 
     def _resolve_resize_drag_rect_on_fixed_screen(
         self,
@@ -1758,7 +1936,8 @@ class CustomLayoutManager:
             threshold_px=6 if not snap_to_grid else 10,
             min_size=self._min_size_for_state(state),
         )
-        local_rect = snap_resolution.rect
+        if snap_to_grid:
+            local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
         self._update_grid_guides(state, target_screen, snap_resolution)
@@ -1777,39 +1956,15 @@ class CustomLayoutManager:
         *,
         next_scale: float,
     ) -> QRect:
-        next_payload = state.current_size_payload
-        if state.descriptor.custom_layout_resize_mode == "volume_scale":
-            width = max(24, int(next_payload.get("width", origin_rect.width())))
-            height = max(120, int(next_payload.get("height", origin_rect.height())))
-        elif state.descriptor.custom_layout_resize_mode == "visualizer_rect":
-            fallback_size = origin_rect.size()
-            width_height = self._resolve_visualizer_custom_size(
-                state.widget,
-                next_payload,
-                maximum_envelope=True,
-                fallback_size=fallback_size,
-            )
-            width = max(48, int(width_height.width()))
-            height = max(32, int(width_height.height()))
-        else:
-            width = max(48, int(round(state.baseline_global_rect.width() * next_scale)))
-            height = max(32, int(round(state.baseline_global_rect.height() * next_scale)))
-
-        if corner == "top_left":
-            right = origin_rect.x() + origin_rect.width()
-            bottom = origin_rect.y() + origin_rect.height()
-            return QRect(right - width, bottom - height, width, height)
-        if corner == "top_right":
-            left = origin_rect.x()
-            bottom = origin_rect.y() + origin_rect.height()
-            return QRect(left, bottom - height, width, height)
-        if corner == "bottom_left":
-            right = origin_rect.x() + origin_rect.width()
-            top = origin_rect.y()
-            return QRect(right - width, top, width, height)
-        left = origin_rect.x()
-        top = origin_rect.y()
-        return QRect(left, top, width, height)
+        del corner
+        anchor_x, top_y = self._top_center_anchor_for_rect(origin_rect)
+        return self._scaled_rect_from_top_center(
+            state,
+            anchor_x=anchor_x,
+            top_y=top_y,
+            next_scale=next_scale,
+            fallback_rect=origin_rect,
+        )
 
     def _capture_size_payload(
         self,
@@ -1833,7 +1988,10 @@ class CustomLayoutManager:
         if mode == "reddit_font":
             return {"font_size": int(getattr(widget, "_font_size", 18))}
         if mode == "gmail_font":
-            return {"font_size": int(getattr(widget, "_font_size", 13))}
+            return {
+                "font_size": int(getattr(widget, "_font_size", 13)),
+                "sender_column_width": int(getattr(widget, "_sender_column_width", 180)),
+            }
         if mode == "imgur_scale":
             return {
                 "header_font_size": int(getattr(widget, "_header_font_size", 14)),
@@ -1889,10 +2047,14 @@ class CustomLayoutManager:
             }
         if mode == "reddit_font":
             base = int(baseline_payload.get("font_size", 18))
-            return {"font_size": max(10, int(round(base * scale)))}
+            return {"font_size": max(8, int(round(base * scale)))}
         if mode == "gmail_font":
             base = int(baseline_payload.get("font_size", 13))
-            return {"font_size": max(10, int(round(base * scale)))}
+            sender_column_width = int(baseline_payload.get("sender_column_width", 180))
+            return {
+                "font_size": max(8, int(round(base * scale))),
+                "sender_column_width": max(40, int(round(sender_column_width * scale))),
+            }
         if mode == "imgur_scale":
             return {
                 "header_font_size": max(10, int(round(int(baseline_payload.get("header_font_size", 14)) * scale))),
@@ -1901,11 +2063,16 @@ class CustomLayoutManager:
                 "image_border_width": max(0, min(5, int(round(int(baseline_payload.get("image_border_width", 2)) * scale)))),
             }
         if mode == "volume_scale":
+            effective_scale = float(scale)
+            if effective_scale < 1.0:
+                # Shrunk volume sliders need a little extra contraction so the
+                # live lane stays balanced beside smaller media cards.
+                effective_scale *= 0.9
             return {
-                "width": max(24, int(round(int(baseline_payload.get("width", 32)) * scale))),
-                "height": max(120, int(round(int(baseline_payload.get("height", 180)) * scale))),
-                "track_width": max(10, int(round(int(baseline_payload.get("track_width", 18)) * scale))),
-                "track_margin": max(2, int(round(int(baseline_payload.get("track_margin", 6)) * scale))),
+                "width": max(24, int(round(int(baseline_payload.get("width", 32)) * effective_scale))),
+                "height": max(120, int(round(int(baseline_payload.get("height", 180)) * effective_scale))),
+                "track_width": max(10, int(round(int(baseline_payload.get("track_width", 18)) * effective_scale))),
+                "track_margin": max(2, int(round(int(baseline_payload.get("track_margin", 6)) * effective_scale))),
             }
         if mode == "visualizer_rect":
             return {
@@ -1934,6 +2101,9 @@ class CustomLayoutManager:
                 return
             if mode == "gmail_font":
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 13))))
+                widget.set_sender_column_width(
+                    int(payload.get("sender_column_width", getattr(widget, "_sender_column_width", 180)))
+                )
                 return
             if mode == "imgur_scale":
                 widget.set_header_font_size(int(payload.get("header_font_size", getattr(widget, "_header_font_size", 14))))
@@ -2034,24 +2204,29 @@ class CustomLayoutManager:
         if self._screen is None:
             return
         local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
-        if descriptor.custom_layout_resize_mode == "visualizer_rect":
-            resolved_size = self._resolve_visualizer_custom_size(
-                widget,
-                entry.size_payload,
-                maximum_envelope=False,
-                fallback_size=local_rect.size(),
-            )
-            if resolved_size.height() > 0:
-                local_rect.setHeight(int(resolved_size.height()))
         if not descriptor.supports_layout_resize_edit:
             try:
                 local_rect.setSize(widget.geometry().size())
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to reuse authored size for move-only widget", exc_info=True)
+        min_size = QSize(1, 1) if descriptor.supports_layout_resize_edit else self._min_size_for_descriptor(descriptor, widget)
         local_rect = clamp_local_rect_to_bounds(
             local_rect,
             self._screen.geometry().size(),
-            min_size=self._min_size_for_descriptor(descriptor, widget),
+            min_size=min_size,
+        )
+        try:
+            pre_widget_rect = QRect(widget.geometry())
+        except Exception:
+            pre_widget_rect = None
+        self._log_geo_audit(
+            descriptor.widget_id,
+            "replay_start",
+            local_rect=local_rect,
+            global_rect=pre_widget_rect,
+            payload=entry.size_payload,
+            source="_apply_entry_to_widget",
+            extra=f"resize_mode={entry.resize_mode}",
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
         try:
@@ -2061,6 +2236,17 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to lock custom size constraints for %s", descriptor.widget_id, exc_info=True)
         self._apply_size_payload(descriptor, widget, entry.size_payload)
+        try:
+            self._log_geo_audit(
+                descriptor.widget_id,
+                "replay_after_payload",
+                local_rect=QRect(widget.geometry()),
+                global_rect=QRect(widget.geometry()),
+                payload=entry.size_payload,
+                source="_apply_entry_to_widget",
+            )
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to log replay_after_payload geometry", exc_info=True)
         try:
             set_stack_offset = getattr(widget, "set_stack_offset", None)
             if callable(set_stack_offset):
@@ -2076,6 +2262,17 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply custom rect to %s", descriptor.widget_id, exc_info=True)
         try:
+            self._log_geo_audit(
+                descriptor.widget_id,
+                "replay_after_update_position",
+                local_rect=QRect(widget.geometry()),
+                global_rect=QRect(widget.geometry()),
+                payload=entry.size_payload,
+                source="_apply_entry_to_widget",
+            )
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to log replay_after_update_position geometry", exc_info=True)
+        try:
             widget.setGeometry(local_rect)
         except Exception:
             logger.debug(
@@ -2083,6 +2280,17 @@ class CustomLayoutManager:
                 descriptor.widget_id,
                 exc_info=True,
             )
+        try:
+            self._log_geo_audit(
+                descriptor.widget_id,
+                "replay_final",
+                local_rect=QRect(widget.geometry()),
+                global_rect=QRect(widget.geometry()),
+                payload=entry.size_payload,
+                source="_apply_entry_to_widget",
+            )
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to log replay_final geometry", exc_info=True)
         try:
             if bool(getattr(widget, "isVisible", lambda: False)()):
                 widget.raise_()
@@ -2102,7 +2310,10 @@ class CustomLayoutManager:
         if state.descriptor.custom_layout_resize_mode == "volume_scale":
             return QSize(24, 120)
         if state.descriptor.supports_layout_resize_edit:
-            return CUSTOM_LAYOUT_MIN_WIDGET_SIZE
+            return QSize(
+                max(1, int(round(state.baseline_global_rect.width() * 0.5))),
+                max(1, int(round(state.baseline_global_rect.height() * 0.5))),
+            )
         return QSize(
             max(1, state.baseline_global_rect.width()),
             max(1, state.baseline_global_rect.height()),

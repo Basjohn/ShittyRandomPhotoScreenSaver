@@ -61,6 +61,7 @@ class SpotifyVolumeWidget(QWidget):
         self._has_faded_in: bool = False
         self._anchor_media: Optional[QWidget] = None
         self._last_volume_sync_request_ts: float = 0.0
+        self._spotify_secondary_stage_started: bool = False
         self._painted_frame_shadow_enabled: bool = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
@@ -218,6 +219,17 @@ class SpotifyVolumeWidget(QWidget):
         Called when the media widget visibility changes to keep the
         volume widget in sync.
         """
+        if (
+            getattr(self, "_spotify_secondary_stage_registered", False)
+            and not self._spotify_secondary_stage_started
+        ):
+            if (
+                self._enabled
+                and self._is_anchor_visible()
+                and self._is_parent_secondary_stage_ready()
+            ):
+                self.begin_spotify_secondary_stage()
+            return
         if is_verbose_logging():
             logger.debug("[SPOTIFY_VOL] Syncing visibility with anchor")
         was_visible = False
@@ -240,6 +252,68 @@ class SpotifyVolumeWidget(QWidget):
                 self._request_volume_sync()
         except Exception as e:
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+
+    def _is_anchor_visible(self) -> bool:
+        anchor = self._anchor_media
+        if anchor is None:
+            return False
+        try:
+            return bool(anchor.isVisible())
+        except Exception:
+            return False
+
+    def _is_parent_secondary_stage_ready(self) -> bool:
+        parent = self.parent()
+        if parent is None:
+            return True
+        try:
+            overlay_expected = getattr(parent, "_overlay_fade_expected", set()) or set()
+        except Exception:
+            overlay_expected = set()
+        try:
+            overlay_started = bool(getattr(parent, "_overlay_fade_started", False))
+        except Exception:
+            overlay_started = False
+        if overlay_expected and not overlay_started:
+            return False
+        try:
+            not_before_ts = float(
+                getattr(parent, "_spotify_secondary_not_before_ts", 0.0) or 0.0
+            )
+        except Exception:
+            not_before_ts = 0.0
+        if not_before_ts <= 0.0:
+            return not overlay_expected
+        return time.monotonic() >= not_before_ts
+
+    def begin_spotify_secondary_stage(self) -> None:
+        """Join the shared Spotify secondary reveal stage explicitly."""
+        if not self._enabled:
+            return
+        parent = self.parent()
+        if parent is not None:
+            try:
+                if bool(getattr(parent, "_custom_layout_runtime_stabilize_pending", False)):
+                    QTimer.singleShot(0, self.begin_spotify_secondary_stage)
+                    return
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        anchor = self._anchor_media
+        if anchor is not None:
+            try:
+                if not anchor.isVisible():
+                    return
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                return
+        self._spotify_secondary_stage_started = True
+        if parent is not None and hasattr(parent, "_position_spotify_volume"):
+            try:
+                parent._position_spotify_volume()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+        self._request_volume_sync(force=True)
+        self.sync_visibility_with_anchor()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -353,6 +427,8 @@ class SpotifyVolumeWidget(QWidget):
         if not self._enabled:
             return
         self._enabled = False
+        self._spotify_secondary_stage_started = False
+        self._has_faded_in = False
         self._reset_flush_state(delete_timer=False)
         try:
             self.hide()

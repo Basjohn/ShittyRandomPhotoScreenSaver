@@ -1,6 +1,6 @@
 # Visualizer Reference
 
-Last updated: 2026-05-22
+Last updated: 2026-06-11
 
 Architecture and contract reference for the visualizer subsystem.
 
@@ -68,8 +68,11 @@ Reindex contract:
 ## 6. CUSTOM Geometry Contract
 - The visualizer participates in the same global CUSTOM edit session as the other supported widget families.
 - The edit shell uses the composited card-plus-overlay view rather than only the bare QWidget shell or the whole display.
-- Saved CUSTOM payload stores adaptive width/height scale intent rather than freezing one captured card size forever.
-- Runtime CUSTOM sizing should stay single-authority: live mode/preset card metrics come from the visualizer geometry policy, while committed CUSTOM placement/scale comes from the shared runtime reapply path.
+- Saved CUSTOM state has two distinct pieces:
+  - the committed outer rect, which is the authoritative runtime replay result;
+  - the visualizer scale payload, which may still inform edit-time QoL envelopes or authored baseline math.
+- Runtime CUSTOM replay must not re-derive the committed rect from live mode/preset height policy.
+- Live mode/preset card metrics still own authored placement and edit-preview envelope sizing, but committed CUSTOM replay stays owned by the shared runtime reapply path.
 
 ## 7. Diagnostics
 - Use `--viz` for ordinary visualizer diagnostics.

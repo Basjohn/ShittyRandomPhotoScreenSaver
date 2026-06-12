@@ -71,6 +71,7 @@ release/
 *.exe
 *.scr
 *.msi
+nuitka-crash-report*.xml
 
 # Secrets / credentials (keep templates tracked)
 .env

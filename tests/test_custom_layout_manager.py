@@ -4,13 +4,14 @@ import pytest
 
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QEvent
 from PySide6.QtGui import QColor, QGuiApplication, QPixmap, QKeyEvent
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.custom_layout_contract import get_screen_signature
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.edit_shell_widget import EditShellWidget
+from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
 
 class _SettingsStub:
@@ -316,6 +317,56 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert clock.isVisible() is False
 
 
+def test_custom_layout_manager_save_session_persists_untouched_widgets_as_authoritative_custom_scene(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {"position": "Top Right"},
+        "gmail": {"position": "Top Left"},
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    gmail = _GmailLikeTestWidget(display, font_size=13)
+    display.clock_widget = clock
+    display.gmail_widget = gmail
+    qtbot.addWidget(clock)
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    updated_rect = QRect(clock_state.current_global_rect.x() + 36, clock_state.current_global_rect.y() + 24, 260, 140)
+    clock_state.current_global_rect = QRect(updated_rect)
+    clock_state.current_size_payload = {"font_size": 60}
+    clock_state.resize_scale = 1.25
+    clock_state.shell.set_shell_geometry(updated_rect)
+
+    gmail_state = manager._shell_states["gmail"]
+    untouched_rect = QRect(gmail_state.current_global_rect)
+
+    assert manager.save_session() is True
+
+    widgets_map = settings_stub.get_widgets_map()
+    displays = widgets_map["custom_layout"]["displays"]
+    payloads = next(iter(displays.values()))
+    assert set(payloads.keys()) >= {"clock", "gmail"}
+    assert widgets_map["clock"]["position"] == "Custom"
+    assert widgets_map["gmail"]["position"] == "Custom"
+    assert payloads["clock"]["size_payload"]["font_size"] == 60
+    assert payloads["gmail"]["size_payload"]["font_size"] == 13
+    assert payloads["gmail"]["resize_mode"] == "gmail_font"
+    assert payloads["gmail"]["rect"]["x"] == pytest.approx(untouched_rect.x() / screen.geometry().width())
+    assert payloads["gmail"]["rect"]["y"] == pytest.approx(untouched_rect.y() / screen.geometry().height())
+    assert payloads["gmail"]["rect"]["width"] == pytest.approx(untouched_rect.width() / screen.geometry().width())
+    assert payloads["gmail"]["rect"]["height"] == pytest.approx(untouched_rect.height() / screen.geometry().height())
+
+
 def test_custom_widget_position_normalizes_without_fallback():
     assert coerce_widget_position("Custom", WidgetPosition.TOP_RIGHT) == WidgetPosition.CUSTOM
     assert coerce_widget_position("custom", WidgetPosition.TOP_RIGHT) == WidgetPosition.CUSTOM
@@ -461,11 +512,12 @@ def test_custom_layout_session_suspends_halo_and_restores_blank_cursor(qtbot, mo
     assert display.cursor().shape() == Qt.CursorShape.BlankCursor
 
 
-def test_custom_layout_corner_drag_resize_scales_from_opposite_corner(qtbot):
+def test_custom_layout_corner_drag_resize_scales_from_top_center_anchor(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
-    display = _DisplayStub(settings_stub)
+    screen = _FakeScreen("Display-A", QRect(0, 0, 520, 420))
+    display = _DisplayStub(settings_stub, screen=screen)
     qtbot.addWidget(display)
     display.show()
 
@@ -479,35 +531,205 @@ def test_custom_layout_corner_drag_resize_scales_from_opposite_corner(qtbot):
 
     state = manager._shell_states["clock"]
     origin_rect = QRect(state.current_global_rect)
-    fixed_bottom_right = origin_rect.topLeft() + QPoint(origin_rect.width(), origin_rect.height())
-
-    manager._on_shell_resize_drag_started("clock", "top_left", origin_rect)
+    origin_top = origin_rect.y()
+    manager._on_shell_resize_drag_started(
+        "clock",
+        "bottom_right",
+        origin_rect,
+        origin_rect.bottomRight(),
+    )
     manager._on_shell_resize_drag_live_changed(
         "clock",
-        "top_left",
+        "bottom_right",
         QRect(origin_rect),
-        origin_rect.topLeft() - QPoint(20, 10),
+        QPoint(origin_rect.right() + 60, origin_rect.bottom() + 40),
     )
 
     assert state.resize_scale > 1.0
     assert state.current_size_payload["font_size"] > state.baseline_size_payload["font_size"]
-    assert state.current_global_rect.topLeft().x() < origin_rect.topLeft().x()
-    assert state.current_global_rect.topLeft().y() < origin_rect.topLeft().y()
-    snapped_bottom_right = state.current_global_rect.topLeft() + QPoint(
-        state.current_global_rect.width(),
-        state.current_global_rect.height(),
-    )
-    assert abs(snapped_bottom_right.x() - fixed_bottom_right.x()) <= 12
-    assert abs(snapped_bottom_right.y() - fixed_bottom_right.y()) <= 12
+    assert state.current_global_rect.y() == origin_top
+    assert state.current_global_rect.width() > origin_rect.width()
+    assert state.current_global_rect.height() > origin_rect.height()
+    assert state.current_global_rect.x() >= screen.geometry().x()
+    assert state.current_global_rect.right() <= screen.geometry().right()
 
     manager._on_shell_resize_drag_finished(
         "clock",
-        "top_left",
+        "bottom_right",
         QRect(state.current_global_rect),
-        state.current_global_rect.topLeft(),
+        QPoint(state.current_global_rect.right(), state.current_global_rect.bottom()),
     )
     assert state.resize_corner is None
     assert state.resize_origin_rect is None
+
+
+def test_custom_layout_resize_wheel_uses_absolute_half_scale_minimum_and_display_bounded_maximum(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 240, 220))
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    origin_rect = QRect(state.current_global_rect)
+    origin_top = origin_rect.y()
+    origin_center_x = origin_rect.center().x()
+
+    manager._on_shell_resize_wheel_requested("clock", -12000)
+
+    assert state.resize_scale == pytest.approx(0.5)
+    assert state.current_global_rect.y() == origin_top
+    assert abs(state.current_global_rect.center().x() - origin_center_x) <= 1
+    assert state.current_global_rect.width() == int(round(origin_rect.width() * 0.5))
+    assert state.current_global_rect.height() == int(round(origin_rect.height() * 0.5))
+
+    manager._on_shell_resize_wheel_requested("clock", 120000)
+
+    assert state.resize_scale > 1.0
+    assert state.current_global_rect.y() == origin_top
+    assert state.current_global_rect.x() >= screen.geometry().x()
+    assert state.current_global_rect.x() + state.current_global_rect.width() <= screen.geometry().x() + screen.geometry().width()
+    assert (
+        state.current_global_rect.x() == screen.geometry().x()
+        or state.current_global_rect.x() + state.current_global_rect.width() == screen.geometry().x() + screen.geometry().width()
+    )
+    assert state.current_global_rect.height() > origin_rect.height()
+
+
+def test_custom_layout_resize_wheel_can_grow_by_pushing_back_inside_screen(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 400, 320))
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    constrained_rect = QRect(0, 20, 180, 200)
+    state.baseline_global_rect = QRect(constrained_rect)
+    state.current_global_rect = QRect(constrained_rect)
+    manager._set_shell_geometry_silently(state, constrained_rect)
+
+    manager._on_shell_resize_wheel_requested("clock", 12000)
+
+    assert state.resize_scale > 1.0
+    assert state.current_global_rect.width() > constrained_rect.width()
+    assert state.current_global_rect.height() > constrained_rect.height()
+    assert state.current_global_rect.x() >= screen.geometry().x()
+    assert state.current_global_rect.right() <= screen.geometry().right()
+
+
+def test_custom_layout_corner_drag_does_not_jump_when_press_starts_inside_resize_gutter(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    origin_rect = QRect(state.current_global_rect)
+    press_cursor = QPoint(origin_rect.right() - 18, origin_rect.bottom() - 18)
+
+    manager._on_shell_resize_drag_started(
+        "clock",
+        "bottom_right",
+        origin_rect,
+        press_cursor,
+    )
+    manager._on_shell_resize_drag_live_changed(
+        "clock",
+        "bottom_right",
+        QRect(origin_rect),
+        QPoint(press_cursor),
+    )
+
+    assert state.resize_scale == pytest.approx(1.0)
+    assert state.current_global_rect == origin_rect
+
+
+def test_custom_layout_resize_preview_refresh_does_not_mutate_live_widget_geometry_or_state(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    class _PreviewMutationProbe(_EditableTestWidget):
+        def __init__(self, parent: QWidget) -> None:
+            self.geometry_mutations = 0
+            self.font_size_mutations = 0
+            super().__init__(parent, font_size=48)
+
+        def setGeometry(self, *args):  # type: ignore[override]
+            self.geometry_mutations += 1
+            return super().setGeometry(*args)
+
+        def set_font_size(self, size: int) -> None:
+            self.font_size_mutations += 1
+            super().set_font_size(size)
+
+    clock = _PreviewMutationProbe(display)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    clock.geometry_mutations = 0
+    clock.font_size_mutations = 0
+
+    manager._refresh_shell_snapshot_for_resize_preview(state, QSize(260, 140))
+
+    assert clock.geometry_mutations == 0
+    assert clock.font_size_mutations == 0
+
+
+def test_edit_shell_clears_resize_state_on_mouse_ungrab(qtbot):
+    shell = EditShellWidget(
+        widget_id="clock",
+        snapshot=QPixmap(80, 40),
+        initial_global_rect=QRect(20, 20, 160, 90),
+        resizable=True,
+    )
+    qtbot.addWidget(shell)
+    shell.show()
+
+    shell._resizing = True
+    shell._resize_corner = "bottom_right"
+
+    QApplication.sendEvent(shell, QEvent(QEvent.Type.UngrabMouse))
+
+    assert shell._resizing is False
+    assert shell._resize_corner is None
 
 
 def test_custom_layout_corner_resize_stays_on_current_screen(qtbot, monkeypatch):
@@ -541,7 +763,12 @@ def test_custom_layout_corner_resize_stays_on_current_screen(qtbot, monkeypatch)
     assert manager_a.start_session() is True
     state = manager_a._shell_states["clock"]
     origin_signature = state.current_screen_signature
-    manager_a._on_shell_resize_drag_started("clock", "top_right", QRect(state.current_global_rect))
+    manager_a._on_shell_resize_drag_started(
+        "clock",
+        "top_right",
+        QRect(state.current_global_rect),
+        state.current_global_rect.topRight(),
+    )
     manager_a._on_shell_resize_drag_live_changed(
         "clock",
         "top_right",
@@ -1243,6 +1470,36 @@ def test_custom_layout_manager_volume_resize_rect_uses_payload_dimensions(qtbot)
     assert rect.width() == 48
     assert rect.height() == 270
     assert manager._min_size_for_state(state) == QSize(24, 120)
+
+
+def test_custom_layout_manager_volume_scale_payload_biases_shrink_more_aggressively(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+
+    manager = CustomLayoutManager(display)
+
+    class _Descriptor:
+        custom_layout_resize_mode = "volume_scale"
+
+    payload = manager._scale_size_payload(
+        _Descriptor(),
+        {
+            "width": 32,
+            "height": 234,
+            "track_width": 18,
+            "track_margin": 6,
+        },
+        0.8,
+    )
+
+    assert payload == {
+        "width": 24,
+        "height": 168,
+        "track_width": 13,
+        "track_margin": 4,
+    }
 
 
 def test_custom_layout_manager_reset_position_restores_source_rect_without_resetting_size(qtbot):
@@ -1971,7 +2228,94 @@ def test_custom_layout_manager_reapplies_visualizer_custom_rect_size(qtbot):
     custom_rect = getattr(visualizer, "_custom_layout_local_rect", None)
     assert isinstance(custom_rect, QRect)
     assert custom_rect.width() == 420
-    assert custom_rect.height() == 160
+    assert custom_rect.height() == 217
+    assert visualizer.geometry() == custom_rect
+
+
+def test_custom_layout_manager_keeps_committed_visualizer_rect_even_if_mode_height_differs(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Custom", "monitor": "1"},
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.045, "y": 0.20, "width": 0.36, "height": 0.40},
+                        "size_payload": {"width_scale": 1.0, "height_scale": 1.0},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._vis_mode_str = "bubble"
+    visualizer._bubble_growth = 5.0
+    visualizer._base_height = 80
+    visualizer.setGeometry(0, 0, 100, 400)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(visualizer, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect == QRect(36, 120, 288, 240)
+    assert visualizer.geometry() == custom_rect
+
+
+def test_custom_layout_manager_replays_real_visualizer_rect_over_authored_min_height(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
+                        "size_payload": {"width_scale": 0.7, "height_scale": 0.7},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.resize(800, 600)
+    display.show()
+
+    visualizer = SpotifyVisualizerWidget(display, bar_count=8)
+    visualizer.setMinimumHeight(400)
+    visualizer.setGeometry(0, 0, 100, 400)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(visualizer, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect == QRect(204, 180, 420, 280)
+    assert visualizer.geometry() == custom_rect
+    assert visualizer.minimumHeight() == 280
+    assert visualizer.maximumHeight() == 280
 
 
 def test_custom_layout_manager_reasserts_media_outer_rect_after_artwork_scale_apply(qtbot):

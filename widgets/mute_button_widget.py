@@ -66,6 +66,36 @@ class MuteButtonWidget(QWidget):
         self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
         self.hide()
 
+    def _resize_to_button_footprint(self, btn_width: int, btn_height: int) -> None:
+        """Apply a new button footprint and invalidate cached shadow geometry."""
+        btn_width = max(24, int(btn_width))
+        btn_height = max(22, int(btn_height))
+        if btn_width == self._btn_width and btn_height == self._btn_height:
+            return
+        self._btn_width = btn_width
+        self._btn_height = btn_height
+        self._border_radius = max(8.0, min(12.0, btn_height * 0.32))
+        self._shadow_cache = None
+        self._shadow_cache_key = None
+        self.setFixedSize(self._btn_width + self._shadow_margin * 2, self._btn_height + self._shadow_margin * 2)
+
+    def _sync_button_size_from_anchor_layout(self, controls_layout, artwork_rect) -> None:
+        """Scale the mute button to the current media-card controls footprint."""
+        row_rect = controls_layout.get("row_rect") if controls_layout is not None else None
+        if row_rect is None:
+            return
+
+        row_height = max(1, int(row_rect.height()))
+        row_width = max(1, int(row_rect.width()))
+        target_height = max(22, min(36, int(row_height * 0.92)))
+        target_width = max(24, min(40, int(target_height * 1.08)))
+        if artwork_rect is not None and getattr(artwork_rect, "width", lambda: 0)() > 0:
+            target_width = min(target_width, max(24, int(artwork_rect.width() * 0.26)))
+        if row_width < 210:
+            target_width = min(target_width, 32)
+            target_height = min(target_height, 30)
+        self._resize_to_button_footprint(target_width, target_height)
+
     # ------------------------------------------------------------------
     # Public configuration
     # ------------------------------------------------------------------
@@ -236,6 +266,7 @@ class MuteButtonWidget(QWidget):
         if controls_layout is not None and artwork_rect is not None:
             row_rect = controls_layout.get("row_rect")
             if row_rect is not None:
+                self._sync_button_size_from_anchor_layout(controls_layout, artwork_rect)
                 # Y: same as control bar top, in parent coordinates
                 y = anchor_geo.top() + row_rect.top() + (row_rect.height() - self._btn_height) // 2 - self._shadow_margin
                 # X: centered under artwork panel, in parent coordinates
