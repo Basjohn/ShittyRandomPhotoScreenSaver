@@ -2175,11 +2175,7 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
     )
     state.current_global_rect = QRect(updated_rect)
     state.resize_scale = 1.25
-    state.current_size_payload = manager._scale_size_payload(
-        state.descriptor,
-        state.baseline_size_payload,
-        state.resize_scale,
-    )
+    state.current_size_payload = {"width": 420, "height": 210}
     state.shell.set_shell_geometry(updated_rect)
 
     assert manager.save_session() is True
@@ -2188,8 +2184,7 @@ def test_custom_layout_manager_saves_visualizer_rect_under_visualizer_custom_slo
     assert widgets_map["spotify_visualizer"]["position"] == "Custom"
     payload = next(iter(widgets_map["custom_layout"]["displays"].values()))["spotify_visualizer"]
     assert payload["resize_mode"] == "visualizer_rect"
-    assert payload["size_payload"]["width_scale"] == pytest.approx(1.25)
-    assert payload["size_payload"]["height_scale"] == pytest.approx(1.25)
+    assert payload["size_payload"] == {"width": 420, "height": 210}
 
 
 def test_custom_layout_manager_reapplies_visualizer_custom_rect_size(qtbot):
@@ -2627,10 +2622,11 @@ def test_custom_layout_manager_visualizer_shell_prefers_committed_custom_rect_ov
     assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(12, 252)
     assert state.baseline_global_rect.size() == QSize(521, 347)
     assert state.current_global_rect.size() == QSize(521, 347)
+    assert state.baseline_size_payload == {"width": 521, "height": 347}
     assert state.shell._snapshot.size() == QSize(521, 347)
 
 
-def test_custom_layout_manager_saves_visualizer_scale_payload(qtbot):
+def test_custom_layout_manager_saves_visualizer_absolute_rect_payload(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
@@ -2647,12 +2643,96 @@ def test_custom_layout_manager_saves_visualizer_scale_payload(qtbot):
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    state.current_size_payload = {"width_scale": 1.4, "height_scale": 1.1}
+    state.current_size_payload = {"width": 448, "height": 224}
     state.resize_scale = 1.2
 
     assert manager.save_session() is True
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["spotify_visualizer"]
-    assert payload["size_payload"] == {"width_scale": 1.4, "height_scale": 1.1}
+    assert payload["size_payload"] == {"width": 448, "height": 224}
+
+
+def test_custom_layout_manager_visualizer_uniform_resize_uses_committed_rect_baseline(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"spotify_visualizer": {"position": "Custom", "monitor": "1"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    media = _EditableTestWidget(display, font_size=14)
+    media.setGeometry(20, 40, 486, 232)
+    display.media_widget = media
+    qtbot.addWidget(media)
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._anchor_media = media
+    visualizer._vis_mode_str = "spectrum"
+    visualizer._custom_layout_local_rect = QRect(56, 900, 372, 276)
+    visualizer.setGeometry(56, 900, 372, 276)
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert state.baseline_size_payload == {"width": 372, "height": 276}
+
+    scaled = manager._scaled_rect_from_top_center(
+        state,
+        anchor_x=state.current_global_rect.center().x(),
+        top_y=state.current_global_rect.top(),
+        next_scale=1.1024,
+        fallback_rect=state.current_global_rect,
+    )
+
+    assert scaled.size() == QSize(410, 304)
+
+
+def test_custom_layout_manager_visualizer_legacy_scale_payload_rebaselines_to_committed_rect(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("A", QRect(0, 0, 1600, 1200))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                get_screen_signature(screen): {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.035, "y": 0.75, "width": 0.335, "height": 0.23},
+                        "size_payload": {"width_scale": 1.1024, "height_scale": 1.1024},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    media = _EditableTestWidget(display, font_size=14)
+    media.setGeometry(20, 40, 486, 232)
+    display.media_widget = media
+    qtbot.addWidget(media)
+
+    visualizer = _VisualizerLikeTestWidget(display)
+    visualizer._anchor_media = media
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    assert getattr(visualizer, "_custom_layout_local_rect", None) == QRect(56, 900, 536, 276)
+    assert visualizer.geometry() == QRect(56, 900, 536, 276)
+
+    assert manager.start_session() is True
+    state = manager._shell_states["spotify_visualizer"]
+    assert state.baseline_size_payload == {"width": 536, "height": 276}
 
 
 def test_custom_layout_manager_promotes_visualizer_from_follow_media_to_visualizer_custom_slot(qtbot):

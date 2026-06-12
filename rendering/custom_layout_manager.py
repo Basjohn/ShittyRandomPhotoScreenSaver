@@ -52,6 +52,8 @@ from widgets.edit_grid_overlay_widget import EditGridOverlayWidget
 from widgets.edit_shell_widget import EditShellWidget
 
 logger = get_logger(__name__)
+_MIN_CUSTOM_WIDGET_WIDTH = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width())
+_MIN_CUSTOM_WIDGET_HEIGHT = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height())
 
 
 class _CustomLayoutSessionKeyFilter(QObject):
@@ -1812,14 +1814,8 @@ class CustomLayoutManager:
             width = max(24, int(next_payload.get("width", fallback_rect.width())))
             height = max(120, int(next_payload.get("height", fallback_rect.height())))
         elif state.descriptor.custom_layout_resize_mode == "visualizer_rect":
-            width_height = self._resolve_visualizer_custom_size(
-                state.widget,
-                next_payload,
-                maximum_envelope=True,
-                fallback_size=fallback_rect.size(),
-            )
-            width = max(48, int(width_height.width()))
-            height = max(32, int(width_height.height()))
+            width = max(48, int(next_payload.get("width", fallback_rect.width())))
+            height = max(32, int(next_payload.get("height", fallback_rect.height())))
         else:
             width = max(48, int(round(state.baseline_global_rect.width() * next_scale)))
             height = max(32, int(round(state.baseline_global_rect.height() * next_scale)))
@@ -2013,15 +2009,19 @@ class CustomLayoutManager:
                 "track_margin": int(getattr(widget, "_track_margin", 6)),
             }
         if mode == "visualizer_rect":
-            payload = getattr(widget, "_custom_layout_visualizer_scale_payload", None)
-            if isinstance(payload, dict):
+            committed_rect = getattr(widget, "_custom_layout_local_rect", None)
+            if isinstance(committed_rect, QRect) and committed_rect.width() > 0 and committed_rect.height() > 0:
                 return {
-                    "width_scale": max(0.4, min(3.0, float(payload.get("width_scale", 1.0)))),
-                    "height_scale": max(0.4, min(3.0, float(payload.get("height_scale", 1.0)))),
+                    "width": int(committed_rect.width()),
+                    "height": int(committed_rect.height()),
                 }
+            try:
+                live_rect = QRect(widget.geometry())
+            except Exception:
+                live_rect = QRect()
             return {
-                "width_scale": 1.0,
-                "height_scale": 1.0,
+                "width": max(10, int(live_rect.width() or 100)),
+                "height": max(_MIN_CUSTOM_WIDGET_HEIGHT, int(live_rect.height() or 80)),
             }
         return {}
 
@@ -2081,9 +2081,11 @@ class CustomLayoutManager:
                 "track_margin": max(2, int(round(int(baseline_payload.get("track_margin", 6)) * effective_scale))),
             }
         if mode == "visualizer_rect":
+            base_width = max(10, int(baseline_payload.get("width", 100)))
+            base_height = max(_MIN_CUSTOM_WIDGET_HEIGHT, int(baseline_payload.get("height", 80)))
             return {
-                "width_scale": max(0.4, min(3.0, float(baseline_payload.get("width_scale", 1.0)) * scale)),
-                "height_scale": max(0.4, min(3.0, float(baseline_payload.get("height_scale", 1.0)) * scale)),
+                "width": max(10, int(round(base_width * scale))),
+                "height": max(_MIN_CUSTOM_WIDGET_HEIGHT, int(round(base_height * scale))),
             }
         return dict(baseline_payload)
 
@@ -2126,14 +2128,6 @@ class CustomLayoutManager:
                 )
                 return
             if mode == "visualizer_rect":
-                setattr(
-                    widget,
-                    "_custom_layout_visualizer_scale_payload",
-                    {
-                        "width_scale": max(0.4, min(3.0, float(payload.get("width_scale", 1.0)))),
-                        "height_scale": max(0.4, min(3.0, float(payload.get("height_scale", 1.0)))),
-                    },
-                )
                 return
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to apply size payload for %s", descriptor.widget_id, exc_info=True)
@@ -2150,11 +2144,6 @@ class CustomLayoutManager:
                 restore_constraints()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to restore authored size constraints after clearing custom layout", exc_info=True)
-        try:
-            if hasattr(widget, "_custom_layout_visualizer_scale_payload"):
-                delattr(widget, "_custom_layout_visualizer_scale_payload")
-        except Exception:
-            logger.debug("[CUSTOM_LAYOUT] Failed to clear visualizer custom scale payload", exc_info=True)
         try:
             update_position = getattr(widget, "_update_position", None)
             if callable(update_position):
@@ -2210,15 +2199,54 @@ class CustomLayoutManager:
             media_width = max(10, int(fallback_size.width()))
 
         try:
-            return resolve_custom_card_size(
-                mode_id=str(getattr(widget, "_vis_mode_str", "spectrum") or "spectrum"),
+            mode_id = str(getattr(widget, "_vis_mode_str", "spectrum") or "spectrum")
+            growth_map = build_growth_map_from_widget(widget)
+            base_height = int(getattr(widget, "_base_height", max(40, fallback_size.height())))
+            blob_width = float(getattr(widget, "_blob_width", 1.0))
+            authored_current_size = resolve_custom_card_size(
+                mode_id=mode_id,
                 media_width=media_width,
-                base_height=int(getattr(widget, "_base_height", max(40, fallback_size.height()))),
-                growth_by_mode=build_growth_map_from_widget(widget),
-                blob_width=float(getattr(widget, "_blob_width", 1.0)),
+                base_height=base_height,
+                growth_by_mode=growth_map,
+                blob_width=blob_width,
+                width_scale=1.0,
+                height_scale=1.0,
+                maximum_envelope=False,
+            )
+            if maximum_envelope:
+                envelope_size = resolve_custom_card_size(
+                    mode_id=mode_id,
+                    media_width=media_width,
+                    base_height=base_height,
+                    growth_by_mode=growth_map,
+                    blob_width=blob_width,
+                    width_scale=1.0,
+                    height_scale=1.0,
+                    maximum_envelope=True,
+                )
+                authored_height = max(_MIN_CUSTOM_WIDGET_HEIGHT, int(authored_current_size.height()))
+                current_height = max(_MIN_CUSTOM_WIDGET_HEIGHT, int(fallback_size.height()))
+                height_scale = max(0.4, min(1.0, float(current_height) / float(authored_height)))
+                return QSize(
+                    max(10, int(fallback_size.width())),
+                    max(_MIN_CUSTOM_WIDGET_HEIGHT, int(round(envelope_size.height() * height_scale))),
+                )
+
+            if "width" in payload or "height" in payload:
+                return QSize(
+                    max(10, int(payload.get("width", fallback_size.width()))),
+                    max(_MIN_CUSTOM_WIDGET_HEIGHT, int(payload.get("height", fallback_size.height()))),
+                )
+
+            return resolve_custom_card_size(
+                mode_id=mode_id,
+                media_width=media_width,
+                base_height=base_height,
+                growth_by_mode=growth_map,
+                blob_width=blob_width,
                 width_scale=float(payload.get("width_scale", 1.0)),
                 height_scale=float(payload.get("height_scale", 1.0)),
-                maximum_envelope=maximum_envelope,
+                maximum_envelope=False,
             )
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to resolve adaptive visualizer custom size", exc_info=True)
@@ -2340,6 +2368,16 @@ class CustomLayoutManager:
     def _min_size_for_state(self, state: _ShellState) -> QSize:
         if state.descriptor.custom_layout_resize_mode == "volume_scale":
             return QSize(24, 120)
+        if state.descriptor.custom_layout_resize_mode == "visualizer_rect":
+            baseline_width = max(1, int(state.baseline_size_payload.get("width", state.baseline_global_rect.width())))
+            baseline_height = max(
+                1,
+                int(state.baseline_size_payload.get("height", state.baseline_global_rect.height())),
+            )
+            return QSize(
+                max(1, int(round(baseline_width * 0.5))),
+                max(1, int(round(baseline_height * 0.5))),
+            )
         if state.descriptor.supports_layout_resize_edit:
             return QSize(
                 max(1, int(round(state.baseline_global_rect.width() * 0.5))),

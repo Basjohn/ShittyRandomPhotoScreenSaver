@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-05-25
+Last updated: 2026-06-12
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -11,22 +11,22 @@ This is the long-term anti-regression record for the project, not an active task
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
-4. [U-08 — 2026-06-06 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Unresolved)](#U-08)
 
 ### Recent Resolutions
-1. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-2. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-3. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-4. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-5. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-6. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-7. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-8. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-9. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-10. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-11. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-12. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-13. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+2. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+3. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+4. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+5. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+6. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+7. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+8. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+9. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+10. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+11. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+12. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+13. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+14. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -51,14 +51,14 @@ This is the long-term anti-regression record for the project, not an active task
 ## Recent Entries
 
 <a id="U-08"></a>
-### [U-08] 2026-06-06 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Unresolved)
+### [U-08] 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)
 
-- [x] COMPLETELY FUCKED
+- [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
 - [ ] AWAITING VALIDATION
-- [ ] SOLVED
+- [x] SOLVED
 
-- **Current unresolved state:** edit-mode shells preview the intended geometry correctly, but after save/rebuild several widgets still reappear too large, overlap, or distort. The failure is much worse when the saved CUSTOM rect is smaller than the widget's authored/default size.
+- **Final resolved state:** CUSTOM geometry now closes cleanly across the edited widget family. Edit-mode shells and runtime replay agree on the committed rect, repeated visualizer save/re-enter churn keeps the intended aspect ratio instead of slowly squaring off, and the changed widgets in the latest `--geo` run replay back onto their saved rects.
 - **Observed failure pattern:**
   - shrinking `reddit`, `reddit2`, `gmail`, `weather`, `media`, and sometimes `spotify_visualizer` from their default sizes makes post-save runtime replay far more likely to widen, overlap, or otherwise ignore the previewed shell
   - enlarging tends to survive more often, which made several geometry theories look plausible even while the real runtime contract was still broken
@@ -78,9 +78,15 @@ This is the long-term anti-regression record for the project, not an active task
   - clearing CUSTOM replay restores the prior authored min/max constraints
   - focused regression tests now include hostile shrink cases where a widget starts with larger authored minimums and must still land on the smaller committed CUSTOM rect
   - full CUSTOM runtime reload now refreshes the in-memory settings snapshot before display recreation, and geometry-critical runtime seams were moved onto `get_widgets_map()` instead of ad hoc `get('widgets', ...)` calls so stale widget-route snapshots cannot keep reintroducing authored geometry after the saved file is already correct
+  - visualizer CUSTOM resize/save stopped persisting a moving mode/media-relative scale payload and now persists absolute committed `width` / `height`, so repeated save/re-enter churn cannot silently rebase onto the current authored envelope and drift toward a square card
+- **Closure evidence worth preserving:**
+  - the latest visualizer resize chain held near-constant aspect ratio through heavy churn: `390x260`, `195x130`, `565x377`, `763x509`, `496x331`, `422x281`, `274x183`, `397x265`
+  - those sizes stayed clustered around a `1.5` ratio instead of drifting toward the old square failure shape
+  - the same run also replayed the changed widgets back to their saved rects in `replay_final`, including `spotify_visualizer (397x265)`, `media (390x187)`, `gmail (480x198)`, `weather (600x249)`, `reddit (600x679)`, `reddit2 (600x619)`, and `spotify_volume (32x279)`
 - **Remaining lesson / guardrail:**
   - whenever a CUSTOM geometry bug is "much worse when shrinking than enlarging", audit pre-existing minimum/maximum size constraints before blaming stacking, normalized rect math, or edit-shell preview
   - if logs prove the saved settings file is correct while runtime still behaves as if widgets are authored/default-sized, treat stale in-memory widget snapshots as a first-class suspect and re-audit any geometry ownership checks that still gate on route/config state instead of an active committed custom rect
+  - if visualizer replay stays green but saved `HxW` slowly drifts over many edit/save cycles, the next suspect is resize-baseline rebasing rather than ordinary replay parity
 
 <a id="U-07"></a>
 ### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)
