@@ -208,6 +208,49 @@ def test_media_controls_layout_compacts_for_small_committed_card(qt_app) -> None
         widget.deleteLater()
 
 
+def test_media_artwork_size_rebuilds_stale_retained_metadata_layout(qt_app) -> None:
+    widget = MediaWidget()
+    try:
+        widget.resize(390, 187)
+        info = MediaTrackInfo(
+            title="Modest Mountains",
+            artist="Field Division",
+            album="Reverie State",
+            state=MediaPlaybackState.PLAYING,
+            artwork=b"art",
+        )
+        widget._last_info = None
+        widget._has_seen_first_track = True
+        widget.cache_retained_display_info(info)
+        artwork = QPixmap(200, 200)
+        artwork.fill(QColor(200, 80, 40))
+        widget._artwork_pixmap = artwork
+        widget._metadata_paint = {
+            "provider": "SPOTIFY",
+            "title": "Modest Mountains",
+            "artist": "Field Division",
+            "base_font": 20,
+            "header_font": 40,
+            "title_font": 36,
+            "artist_font": 28,
+            "header_weight": 750,
+            "title_weight": 700,
+            "artist_weight": 600,
+            "line_spacing": 8,
+            "body_top_gap": 12,
+        }
+        widget._last_metadata_identity = widget._compute_metadata_identity(info)
+
+        widget.set_artwork_size(130)
+
+        assert int(widget._metadata_paint["header_font"]) < 40
+        assert int(widget._metadata_paint["title_font"]) < 36
+        assert int(widget._metadata_paint["artist_font"]) < 28
+        assert int(widget._metadata_paint["line_spacing"]) <= 3
+    finally:
+        widget.deleteLater()
+
+
 def test_media_pending_state_timer_registers_and_is_cleared_on_stop(qt_app, monkeypatch) -> None:
     widget = MediaWidget()
     registrations = []

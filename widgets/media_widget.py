@@ -718,12 +718,50 @@ class MediaWidget(BaseOverlayWidget):
         overlay_pos = OverlayPosition(position.value)
         super().set_position(overlay_pos)
 
+    def _invalidate_metadata_layout(self) -> None:
+        """Force the next media display refresh to rebuild painter-owned text layout."""
+
+        self._metadata_paint = {}
+        self._last_metadata_identity = None
+
+    def _refresh_current_display_layout(self) -> None:
+        """Rebuild the live or retained media card layout after geometry-affecting setting changes."""
+
+        info = self._last_info
+        if info is None:
+            try:
+                info = self.get_retained_display_info()
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+                info = None
+        if info is not None:
+            try:
+                self._update_display(info)
+                return
+            except Exception as e:
+                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+        self._safe_update()
+
+    def set_font_size(self, size: int) -> None:  # type: ignore[override]
+        """Set the font size and invalidate any cached media text layout."""
+
+        super().set_font_size(size)
+        self._invalidate_metadata_layout()
+        invalidate = getattr(self, "_invalidate_controls_layout", None)
+        if callable(invalidate):
+            invalidate()
+        self._refresh_current_display_layout()
+
     def set_artwork_size(self, size: int) -> None:
         """Set preferred artwork size in pixels and refresh layout."""
 
         if size <= 0:
             return
         self._artwork_size = int(size)
+        self._invalidate_metadata_layout()
+        invalidate = getattr(self, "_invalidate_controls_layout", None)
+        if callable(invalidate):
+            invalidate()
         target_min_height = max(220, self._artwork_size + 60)
         # Keep the card's minimum height in sync with the configured artwork
         # footprint so resizing via settings does not cause unexpected jumps
@@ -735,12 +773,7 @@ class MediaWidget(BaseOverlayWidget):
             except Exception as e:
                 logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
             self._schedule_custom_layout_geometry_reapply()
-        if self._last_info is not None:
-            try:
-                self._update_display(self._last_info)
-            except Exception as e:
-                logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
-                self._safe_update()
+        self._refresh_current_display_layout()
 
     def set_rounded_artwork_border(self, rounded: bool) -> None:
         """Enable or disable rounded borders around the album artwork."""

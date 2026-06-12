@@ -22,6 +22,46 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
+    width = max(1, int(getattr(widget, "width", lambda: 0)() or 0))
+    height = max(1, int(getattr(widget, "height", lambda: 0)() or 0))
+    try:
+        shrink_r, shrink_b = widget.painted_frame_shadow_card_shrink()
+    except Exception:
+        shrink_r, shrink_b = 0, 0
+
+    left_margin = 29
+    top_margin = 12
+    if hasattr(widget, "contentsMargins"):
+        try:
+            margins = widget.contentsMargins()
+            left_margin = int(margins.left())
+            top_margin = int(margins.top())
+        except Exception:
+            pass
+
+    artwork_size = max(0, int(getattr(widget, "_artwork_size", 0) or 0))
+    base_right_margin = 12
+    if hasattr(widget, "contentsMargins"):
+        try:
+            base_right_margin = int(widget.contentsMargins().right())
+        except Exception:
+            pass
+    if has_artwork:
+        right_reserved = max(artwork_size + 40, 60) + int(shrink_r)
+    else:
+        right_reserved = max(base_right_margin, 12)
+    text_width = max(1, width - left_margin - right_reserved - 8)
+    content_height = max(1, height - top_margin - int(shrink_b))
+    return {
+        "text_width": text_width,
+        "content_height": content_height,
+        "left_margin": left_margin,
+        "top_margin": top_margin,
+        "right_reserved": right_reserved,
+    }
+
+
 def _compute_metadata_font_scales(
     title: str,
     artist: str,
@@ -103,6 +143,36 @@ def _compute_metadata_font_scales(
     return scale_title, scale_artist
 
 
+def _compute_media_header_scale(
+    *,
+    available_width: int = 0,
+    available_height: int = 0,
+    base_font: int = 20,
+) -> float:
+    scale = 1.0
+    if available_width > 0:
+        if available_width <= 260:
+            scale = min(scale, 0.92)
+        if available_width <= 220:
+            scale = min(scale, 0.84)
+        if available_width <= 190:
+            scale = min(scale, 0.76)
+        if available_width <= 170:
+            scale = min(scale, 0.68)
+    if available_height > 0:
+        if available_height <= 232:
+            scale = min(scale, 0.92)
+        if available_height <= 210:
+            scale = min(scale, 0.84)
+        if available_height <= 190:
+            scale = min(scale, 0.76)
+    if base_font <= 16:
+        scale = min(scale, 0.96)
+    if base_font <= 14:
+        scale = min(scale, 0.92)
+    return scale
+
+
 def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> None:
     """Process a media track snapshot and update the widget display.
 
@@ -156,6 +226,8 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
             logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
 
     # Smart polling: diff gating - compute track identity
+    metadata_changed = False
+
     if info is not None:
         current_identity = widget._compute_track_identity(info)
         current_metadata_identity = widget._compute_metadata_identity(info)
@@ -207,7 +279,7 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
         if is_perf_metrics_enabled():
             logger.debug("[PERF] Media widget update applied (track changed)")
     else:
-        metadata_changed = True
+        metadata_changed = False
 
     if info is None:
         # MULTI-DISPLAY FIX: Check if other widgets have valid info
@@ -250,7 +322,7 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
 
     # --- Build metadata HTML ---
     final_metadata_identity = widget._compute_metadata_identity(info)
-    metadata_changed = final_metadata_identity != widget._last_metadata_identity
+    metadata_changed = bool(metadata_changed or (final_metadata_identity != widget._last_metadata_identity))
     widget._last_metadata_identity = final_metadata_identity
 
     _build_and_apply_metadata(widget, info, prev_info, metadata_changed=metadata_changed)
@@ -391,8 +463,17 @@ def _build_and_apply_metadata(
         pass
 
     if metadata_changed or not getattr(widget, "_metadata_paint", None):
+        layout_budget = _compute_metadata_layout_budget(
+            widget,
+            has_artwork=bool(getattr(info, "artwork", None) or getattr(widget, "_artwork_pixmap", None)),
+        )
         base_font = max(6, widget._font_size)
-        header_font = max(6, int(base_font * 1.2))
+        header_scale = _compute_media_header_scale(
+            available_width=int(layout_budget["text_width"]),
+            available_height=int(layout_budget["content_height"]),
+            base_font=base_font,
+        )
+        header_font = max(6, int(base_font * 1.2 * header_scale))
 
         title_font_base = max(6, base_font + 3)
         artist_font_base = max(6, base_font - 2)
@@ -400,8 +481,8 @@ def _build_and_apply_metadata(
         scale_title, scale_artist = _compute_metadata_font_scales(
             title,
             artist,
-            available_width=int(getattr(widget, "width", lambda: 0)() or 0),
-            available_height=int(getattr(widget, "height", lambda: 0)() or 0),
+            available_width=int(layout_budget["text_width"]),
+            available_height=int(layout_budget["content_height"]),
             base_font=base_font,
         )
 

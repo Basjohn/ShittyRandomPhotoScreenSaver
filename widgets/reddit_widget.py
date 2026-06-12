@@ -1559,8 +1559,10 @@ class RedditWidget(BaseOverlayWidget):
         title_metrics = layout_metrics["title_metrics"]
         age_font_size = int(layout_metrics["age_font_size"])
         age_font = layout_metrics["age_font"]
+        age_metrics = layout_metrics["age_metrics"]
         painter.setFont(age_font)
         age_col_width = int(layout_metrics["age_col_width"])
+        age_split_gap = int(layout_metrics["age_split_gap"])
         line_height = int(layout_metrics["line_height"])
         title_gap = int(layout_metrics["title_gap"])
 
@@ -1585,9 +1587,16 @@ class RedditWidget(BaseOverlayWidget):
             painter.setPen(QColor(200, 200, 200, 220))
             age_rect = QRect(rect.left(), y, age_col_width, line_height)
             # Draw value left-aligned, AGO suffix right-aligned
+            value_width = age_metrics.horizontalAdvance(age_value) if age_value else 0
+            suffix_width = age_metrics.horizontalAdvance(age_suffix) if age_suffix else 0
             if age_value:
-                value_w = int(age_rect.width() * 0.55)
-                value_rect = QRect(age_rect.left(), age_rect.top(), value_w, age_rect.height())
+                remaining_width = max(0, age_rect.width() - suffix_width - (age_split_gap if age_suffix else 0))
+                value_rect = QRect(
+                    age_rect.left(),
+                    age_rect.top(),
+                    max(value_width, remaining_width),
+                    age_rect.height(),
+                )
                 draw_text_rect_with_shadow(
                     painter,
                     value_rect,
@@ -1597,11 +1606,10 @@ class RedditWidget(BaseOverlayWidget):
                     enabled=text_shadows_enabled(self._shadow_config),
                 )
             if age_suffix:
-                suffix_w = age_rect.width() - int(age_rect.width() * 0.55)
                 suffix_rect = QRect(
-                    age_rect.left() + int(age_rect.width() * 0.55),
+                    age_rect.right() - suffix_width + 1,
                     age_rect.top(),
-                    suffix_w,
+                    suffix_width,
                     age_rect.height(),
                 )
                 draw_text_rect_with_shadow(
@@ -1832,7 +1840,27 @@ class RedditWidget(BaseOverlayWidget):
             w = age_metrics.horizontalAdvance(label)
             if w > max_age_width:
                 max_age_width = w
-        age_col_width = max(max_age_width, max(28, int(round(48 * layout_scale))))
+        age_split_gap = max(2, int(round(4 * layout_scale)))
+        max_split_width = 0
+        for label in age_labels:
+            if not label:
+                continue
+            parts = label.rsplit(" ", 1)
+            age_value = parts[0] if len(parts) > 0 else ""
+            age_suffix = parts[1] if len(parts) > 1 else ""
+            split_width = 0
+            if age_value:
+                split_width += age_metrics.horizontalAdvance(age_value)
+            if age_suffix:
+                if split_width > 0:
+                    split_width += age_split_gap
+                split_width += age_metrics.horizontalAdvance(age_suffix)
+            max_split_width = max(max_split_width, split_width)
+        age_col_width = max(
+            max_age_width,
+            max_split_width + max(2, int(round(3 * layout_scale))),
+            max(28, int(round(48 * layout_scale))),
+        )
         line_height = max(age_metrics.height(), title_metrics.height()) + max(2, int(round(4 * layout_scale)))
         title_gap = max(4, int(round(8 * layout_scale)))
         title_x = rect.left() + age_col_width + title_gap
@@ -1846,6 +1874,7 @@ class RedditWidget(BaseOverlayWidget):
             "age_metrics": age_metrics,
             "layout_scale": layout_scale,
             "age_col_width": age_col_width,
+            "age_split_gap": age_split_gap,
             "line_height": line_height,
             "title_gap": title_gap,
             "title_available_width": title_available_width,

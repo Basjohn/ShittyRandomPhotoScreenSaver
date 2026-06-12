@@ -364,6 +364,33 @@ def test_build_and_apply_metadata_compacts_for_small_committed_card_geometry():
     assert widget._metadata_paint["body_top_gap"] <= 7
 
 
+def test_build_and_apply_metadata_uses_text_column_budget_not_full_card_width():
+    widget = _StubMediaWidget()
+    widget._width = 390
+    widget._height = 187
+    widget._artwork_size = 130
+    info = MediaTrackInfo(
+        title="Modest Mountains",
+        artist="Field Division",
+        album="Reverie State",
+        state=MediaPlaybackState.PLAYING,
+    )
+
+    display_update._build_and_apply_metadata(
+        widget,
+        info,
+        prev_info=None,
+        metadata_changed=True,
+    )
+
+    layout_budget = display_update._compute_metadata_layout_budget(widget)
+
+    assert layout_budget["text_width"] < widget.width()
+    assert widget._metadata_paint["header_font"] < int(widget._font_size * 1.2)
+    assert widget._metadata_paint["title_font"] < widget._font_size + 3
+    assert widget._metadata_paint["artist_font"] < widget._font_size - 2
+
+
 def test_update_display_first_track_waits_for_parent_fade_starter(monkeypatch):
     widget = _StubMediaWidget()
     widget._has_seen_first_track = False

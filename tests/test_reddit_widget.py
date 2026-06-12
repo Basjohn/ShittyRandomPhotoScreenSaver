@@ -220,6 +220,25 @@ def test_reddit_small_font_rebalances_budget_toward_title_text(qt_app, qtbot):  
 
 
 @pytest.mark.qt
+def test_reddit_age_lane_budget_reserves_full_suffix_width(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    widget.resize(220, 140)
+    widget.set_font_size(11)
+    rect = widget.rect().adjusted(12, 12, -12, -12)
+    age_labels = ["2W AGO"]
+
+    metrics = widget._compute_post_layout_metrics(rect, age_labels)  # type: ignore[attr-defined]
+    age_metrics = metrics["age_metrics"]
+    suffix_width = age_metrics.horizontalAdvance("AGO")
+    value_width = age_metrics.horizontalAdvance("2W")
+    split_gap = metrics["age_split_gap"]
+
+    assert metrics["age_col_width"] >= value_width + split_gap + suffix_width
+
+
+@pytest.mark.qt
 def test_reddit_error_hides_before_first_success(qt_app, qtbot):  # noqa: ARG001
     """On fetch error before any valid data, the widget should hide itself."""
 
