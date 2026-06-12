@@ -1629,6 +1629,19 @@ class TestSettingsRouting:
         manager._refresh_spotify_visualizer_config.assert_called_once_with()
         manager._refresh_media_config.assert_not_called()
         manager._refresh_reddit_configs.assert_not_called()
+        parent._apply_saved_custom_layouts.assert_not_called()
+
+    def test_handle_settings_changed_reapplies_custom_layouts_for_widget_route_change(self):
+        from rendering.widget_manager import WidgetManager
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        manager._refresh_media_config = MagicMock()
+        manager._refresh_reddit_configs = MagicMock()
+        manager._refresh_spotify_visualizer_config = MagicMock()
+
+        manager._handle_settings_changed("widgets.media.position", "custom")
+
         parent._apply_saved_custom_layouts.assert_called_once_with()
 
     def test_handle_settings_changed_suppresses_live_widget_refresh_during_custom_reload(self):

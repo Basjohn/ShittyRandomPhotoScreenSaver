@@ -66,6 +66,14 @@ logger = get_logger(__name__)
 
 
 _STACK_RESERVED_MEDIA_VISUALIZER_KEY = "__reserved_spotify_media_visualizer"
+_CUSTOM_LAYOUT_REAPPLY_SUFFIXES: tuple[str, ...] = (
+    ".position",
+    ".position2",
+    ".monitor",
+    ".monitor_index",
+    ".monitor_combo",
+    ".custom_position",
+)
 
 
 class WidgetManager:
@@ -792,11 +800,29 @@ class WidgetManager:
             handler = getattr(self, handler_name, None)
             if callable(handler):
                 handler()
-        if parent is not None and setting_key.startswith("widgets."):
+        if (
+            parent is not None
+            and setting_key.startswith("widgets.")
+            and self._settings_key_requires_custom_layout_reapply(setting_key)
+        ):
             try:
                 parent._apply_saved_custom_layouts()
             except Exception:
                 logger.debug("[WIDGET_MANAGER] Failed to reapply saved custom layouts", exc_info=True)
+
+    def _settings_key_requires_custom_layout_reapply(self, setting_key: str) -> bool:
+        """Return whether a settings change should replay committed CUSTOM layout.
+
+        CUSTOM replay is geometry authority, not a generic follow-up step for
+        every widget config mutation. Only route/monitor/custom-layout changes
+        should trigger a full reapply here; mode/content changes must stay local
+        to their owning widget paths.
+        """
+        if not setting_key.startswith("widgets."):
+            return False
+        if setting_key.startswith("widgets.custom_layout"):
+            return True
+        return setting_key.endswith(_CUSTOM_LAYOUT_REAPPLY_SUFFIXES)
 
     def _log_spotify_vis_config(
         self,

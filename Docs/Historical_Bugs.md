@@ -102,6 +102,14 @@ This is the long-term anti-regression record for the project, not an active task
   - small bubbles often died in loud passages while big bubbles pulsed late, flickered, or plateaued at the wrong visible size
   - some automated bars stayed green even when runtime still looked awful
   - later passes made the bar easier to satisfy while live behavior stayed wrong or got worse
+- **Latest evidence that tightened the diagnosis (2026-06-12 late run):**
+  - a newer loud window near `22:30:11 .. 22:30:56` reproduced the same weak-Bubble shape even though the run was no longer leaning on dynamic-floor support
+  - representative points from that window:
+    - `22:30:11`: `raw_bass=1.894` while visible bars stayed modest instead of opening up loudly
+    - `22:30:21`: `raw_bass=1.183` while the lane still hovered around small values
+    - `22:30:51`: `raw_bass=1.005` and `22:30:56`: `raw_bass=1.063`, still with weak visible response
+  - accompanying floor logs in that same window stayed at `mode=manual gate=0.200 manual=0.200 support=0.000`
+  - this matters because it weakens the theory that the remaining loud-path failure is only a shared dynamic-floor / support-pressure problem; Bubble-owned feed/compression/simulation seams remain first suspects
 - **What went wrong in the investigation:**
   - too many loud-path adjustments were stacked at once across `bubble_simulation.py`, `tick_pipeline.py`, and the widget-path oracle
   - the loud oracle was repeatedly tuned to current code instead of staying anchored to the user-visible rule that louder music must not look less active than softer music
