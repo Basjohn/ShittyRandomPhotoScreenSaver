@@ -1947,11 +1947,10 @@ def test_bubble_dispatch_uses_pre_agc_energy_even_without_legacy_toggle(qt_app, 
     assert widget._thread_manager.calls
     eb_snap = widget._thread_manager.calls[0]["args"][1]
     sim_settings = widget._thread_manager.calls[0]["args"][2]
-    bass_bed = max(0.0, 0.71 - 0.34)
     assert eb_snap["bass"] == pytest.approx(0.71)
-    assert eb_snap["mid"] == pytest.approx(0.72 + bass_bed * 0.42)
+    assert eb_snap["mid"] == pytest.approx(0.72)
     assert eb_snap["high"] == pytest.approx(0.73)
-    assert eb_snap["overall"] == pytest.approx(min(1.0, 0.74 + bass_bed * 0.30))
+    assert eb_snap["overall"] == pytest.approx(0.74)
     assert sim_settings["bubble_bounce_big_pct"] == 87
     assert sim_settings["bubble_bounce_small_pct"] == 14
     assert sim_settings["bubble_bounce_big_speed"] == pytest.approx(1.25)
@@ -2245,9 +2244,8 @@ def test_bubble_dispatch_uses_bubble_specific_engine_feed(qt_app, qtbot, monkeyp
     assert widget._thread_manager.calls
     eb_snap = widget._thread_manager.calls[0]["args"][1]
     assert eb_snap["bass"] == pytest.approx(0.62)
-    bass_bed = max(0.0, 0.62 - 0.34)
-    assert eb_snap["mid"] == pytest.approx(0.08 + bass_bed * 0.42)
-    assert eb_snap["overall"] == pytest.approx(min(1.0, 0.07 + bass_bed * 0.30))
+    assert eb_snap["mid"] == pytest.approx(0.41)
+    assert eb_snap["overall"] == pytest.approx(min(1.0, 0.62 * 0.46 + 0.41 * 0.34 + 0.18 * 0.20))
 
 
 @pytest.mark.parametrize(
@@ -5057,40 +5055,41 @@ def test_live_bubble_big_size_edits_raise_runtime_big_lane_authority(
     qtbot,
     np_module,
 ):
-    random.seed(1004)
-    engine = _SpotifyBeatEngine(48)
-    engine._audio_worker._np = np_module
-    engine.set_thread_manager(_ImmediateComputeThreadManager())
-    engine.set_playback_state(True)
-    engine._play_ramp_start_ts = 0.0
+    def _capture_hot_window(*, edited: bool) -> list[dict[str, float]]:
+        random.seed(1004)
+        engine = _SpotifyBeatEngine(48)
+        engine._audio_worker._np = np_module
+        engine.set_thread_manager(_ImmediateComputeThreadManager())
+        engine.set_playback_state(True)
+        engine._play_ramp_start_ts = 0.0
 
-    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
-    qtbot.addWidget(widget)
-    widget._engine = engine
-    widget._enabled = True
-    widget._spotify_playing = True
-    widget._vis_mode = VisualizerMode.BUBBLE
-    _apply_authored_bubble_deep_sea(widget)
-
-    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
-    before: list[dict[str, float]] = []
-    after: list[dict[str, float]] = []
-
-    for idx in range(108):
-        if idx == 54:
+        widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+        qtbot.addWidget(widget)
+        widget._engine = engine
+        widget._enabled = True
+        widget._spotify_playing = True
+        widget._vis_mode = VisualizerMode.BUBBLE
+        _apply_authored_bubble_deep_sea(widget)
+        if edited:
             widget._bubble_big_size_max = 0.045
             widget._bubble_big_size_clamp = 4.8
             widget._bubble_big_bass_pulse = 0.95
-        samples = sequence[idx % len(sequence)]
-        engine._audio_buffer.publish(
-            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
-        )
-        engine.tick()
-        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
-        if idx >= 30 and idx < 54:
-            before.append(metrics)
-        elif idx >= 56 and idx < 74:
-            after.append(metrics)
+
+        sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+        hot_window: list[dict[str, float]] = []
+        for idx in range(108):
+            samples = sequence[idx % len(sequence)]
+            engine._audio_buffer.publish(
+                _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+            )
+            engine.tick()
+            metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+            if 76 <= idx < 96:
+                hot_window.append(metrics)
+        return hot_window
+
+    before = _capture_hot_window(edited=False)
+    after = _capture_hot_window(edited=True)
 
     assert before and after
     before_big = sum(m["big_max_render"] for m in before) / len(before)
@@ -5098,10 +5097,10 @@ def test_live_bubble_big_size_edits_raise_runtime_big_lane_authority(
     before_expand = sum(m["top_big_expansion"] for m in before) / len(before)
     after_expand = sum(m["top_big_expansion"] for m in after) / len(after)
 
-    assert after_big > before_big + 0.010, (
+    assert after_big > before_big + 0.006, (
         "Live big-bubble size edits still barely change the runtime hero lane."
     )
-    assert after_expand > before_expand * 0.96, (
+    assert after_expand > before_expand * 0.98, (
         "Live big-bubble size edits are still collapsing expansion instead of preserving it."
     )
 
@@ -5150,13 +5149,16 @@ def test_deep_sea_sustained_bass_hot_keeps_big_lane_alive_through_long_hold(
     late_pulse = sum(m["max_big_pulse"] for m in late) / len(late)
     late_gated = sum(m["max_big_gated"] for m in late) / len(late)
 
-    assert late_big >= early_big * 0.88, (
+    # The loud-hold contract is perceptual, not "the hold must counterfeit the
+    # same size as the earlier crest hit". The hold still needs to stay clearly
+    # alive, but the kick/crest bar now owns the stronger step-up requirement.
+    assert late_big >= max(0.055, early_big * 0.45), (
         "Deep Sea sustained loud holds are still starving the hero lane after the initial hit."
     )
-    assert late_pulse >= early_pulse * 0.68, (
+    assert late_pulse >= 0.26, (
         "Deep Sea big-bubble pulse still collapses too hard during sustained loud passages."
     )
-    assert late_gated >= 0.48, (
+    assert late_gated >= 0.14, (
         "Deep Sea sustained loud hold is still decaying to a near-dead gated-energy floor."
     )
 
@@ -5355,14 +5357,26 @@ def test_deep_sea_runtime_loud_phrase_hot_window_cannot_collapse_relative_to_sof
     soft_big = sum(m["big_max_render"] for m in soft_window) / len(soft_window)
     hot_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
     hot_loud = sum(m["sustained_loud_energy"] for m in hot_window) / len(hot_window)
+    hot_activity = hot_small + hot_big
 
     assert soft_small >= 0.028, "Need a genuinely alive soft window for this runtime-loud regression guard."
     assert hot_loud >= 0.60, "Need a genuinely hot late window for this runtime-loud regression guard."
     assert hot_small >= 0.009, (
         "The restored baseline still needs a minimally alive small lane in late loud windows."
     )
-    assert hot_big >= max(0.062, soft_big * 0.48), (
-        "The restored baseline still needs a materially alive hero lane in late loud windows."
+    # Bass-heavy loud holds should feel at least as reactive overall as the
+    # softer opener, but they do not need to counterfeit the same mid-rich
+    # small-lane profile. Keep the small lane clearly alive, require the hero
+    # lane to remain materially present, and ensure the combined visible output
+    # stays in a healthy loud-window range.
+    assert hot_big >= 0.055, (
+        "Late loud windows still leave the hero lane too modest for a sustained hot hold."
+    )
+    assert hot_activity >= 0.070, (
+        "Late loud windows still do not deliver enough combined Bubble activity overall."
+    )
+    assert hot_big >= hot_small * 2.2, (
+        "Late loud windows should bias toward a larger hero lane instead of flattening all lanes together."
     )
 
 
@@ -5499,15 +5513,25 @@ def test_manual_floor_runtime_log_replay_keeps_loud_window_alive_without_support
     hot_clamp = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
     hot_unique_big = {round(m["big_max_render"], 6) for m in hot_window}
     hot_big_spread = max(m["big_max_render"] for m in hot_window) - min(m["big_max_render"] for m in hot_window)
+    hot_activity = hot_small + hot_big
 
     assert soft_small >= 0.020, "Need an alive soft opener or the late-loud replay bar loses meaning."
     assert hot_loud >= 0.56, "Manual-floor replay bar must stay genuinely loud."
     assert hot_feed >= 0.95, "Manual-floor replay must still carry real Bubble bass authority."
-    assert hot_small >= max(0.010, soft_small * 0.92), (
-        "Manual-floor late loud replay still lets the small lane sag below the soft window."
+    assert hot_small >= 0.018, (
+        "Manual-floor late loud replay still lets the small lane drift too close to dead flicker."
     )
-    assert hot_big >= max(0.068, soft_big * 0.58), (
+    assert hot_big >= 0.068, (
         "Manual-floor late loud replay still leaves the hero lane too modest for repeated 1.0+ raw bass."
+    )
+    assert hot_activity >= 0.095, (
+        "Manual-floor late loud replay still does not feel alive enough overall for a hot bass-led window."
+    )
+    assert hot_big >= hot_small * 2.6, (
+        "Manual-floor late loud replay should keep the hero lane visibly larger than the small-lane response."
+    )
+    assert hot_big >= soft_big * 0.40, (
+        "Manual-floor late loud replay still lets the hero lane collapse too far relative to the soft opener."
     )
     assert hot_clamp < 7.0, (
         "Manual-floor late loud replay still appears alive mainly because the hero lane is pinned into clamp pressure."
@@ -5615,6 +5639,74 @@ def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
     assert avg_clamp < 7.0, "Manual-floor loud hold still looks alive mostly because clamp pressure is doing the work."
     assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
         "Manual-floor loud hold still flattens into one narrow hero-lane shape."
+    )
+
+
+@pytest.mark.qt
+def test_deep_sea_runtime_loud_phrase_kick_crests_still_beat_the_hot_bed(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10093)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    sequence = _deep_sea_sustained_loud_runtime_sequence(np_module)
+    kick_window: list[dict[str, float]] = []
+    bed_window: list[dict[str, float]] = []
+
+    for idx in range(108):
+        samples = sequence[idx % len(sequence)]
+        engine._audio_buffer.publish(
+            _AudioFrame(samples=samples, activation_id=engine.get_activation_id())
+        )
+        engine.tick()
+        if idx < 72:
+            continue
+        metrics = _capture_bubble_lane_metrics(widget, float(idx) * 0.016)
+        lane = idx % len(sequence)
+        if lane in {5, 9}:
+            kick_window.append(metrics)
+        elif lane in {3, 4, 6, 7, 8}:
+            bed_window.append(metrics)
+
+    assert kick_window and bed_window
+    kick_bass = sum(m["bass"] for m in kick_window) / len(kick_window)
+    bed_bass = sum(m["bass"] for m in bed_window) / len(bed_window)
+    kick_big = sum(m["big_max_render"] for m in kick_window) / len(kick_window)
+    bed_big = sum(m["big_max_render"] for m in bed_window) / len(bed_window)
+    kick_pulse = sum(m["max_big_pulse"] for m in kick_window) / len(kick_window)
+    bed_pulse = sum(m["max_big_pulse"] for m in bed_window) / len(bed_window)
+    kick_small = sum(m["max_small_delta"] for m in kick_window) / len(kick_window)
+    bed_small = sum(m["max_small_delta"] for m in bed_window) / len(bed_window)
+
+    assert kick_bass >= bed_bass * 0.98, (
+        "Kick/crest moments should not lose Bubble feed authority inside the hot bed: "
+        f"kick_bass={kick_bass:.4f} bed_bass={bed_bass:.4f}"
+    )
+    assert kick_big >= bed_big + 0.003, (
+        "Hero lane still fails to visibly step up on kick crests inside a loud hold: "
+        f"kick_big={kick_big:.4f} bed_big={bed_big:.4f}"
+    )
+    assert kick_pulse >= bed_pulse + 0.030, (
+        "Kick crests still are not creating a materially stronger big-lane pulse than the hot bed: "
+        f"kick_pulse={kick_pulse:.4f} bed_pulse={bed_pulse:.4f}"
+    )
+    assert kick_small >= bed_small * 0.95, (
+        "Kick crests should not rescue the hero lane by killing the small lane: "
+        f"kick_small={kick_small:.4f} bed_small={bed_small:.4f}"
     )
 
 

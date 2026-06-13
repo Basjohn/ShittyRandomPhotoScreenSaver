@@ -1,10 +1,10 @@
 # Current Plan
 
-Last updated: 2026-06-12
+Last updated: 2026-06-13
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
-The current top-priority work is Bubble mode consistency: tighten the runtime-shaped oracle around the real loud-passage failure and investigate Bubble-owned seams without destabilizing the now-good Spectrum path.
+The current top-priority work is Bubble mode consistency: keep the now-stronger loud-path oracle honest against real songs and only continue tuning Bubble-owned seams when fresh evidence shows a failure the current bars do not yet model.
 
 ## Guardrails
 
@@ -20,47 +20,31 @@ The current top-priority work is Bubble mode consistency: tighten the runtime-sh
 
 ## Active Tasks
 
-### 1. Rebuild Bubble investigation around mode-specific seams, not another shared-floor rewrite
+### 1. Keep Bubble loud-path work evidence-first and Bubble-owned
 
-- [ ] Treat Spectrum as the protected good path for this pass.
-  - Keep the current Spectrum reactivity baseline as a regression guard:
+- [ ] Keep Spectrum protected while Bubble continues moving.
+  - Preserve the current Spectrum regression guards:
     - strong reactivity
     - no visible jitter
     - fluid larger reactions in louder passages
-  - Do not broaden Bubble fixes back into the shared floor contract unless Bubble-owned seams are ruled out by evidence.
-- [ ] Turn the recent live runs into a harsher Bubble oracle before more runtime asks.
-  - Preserve the known failure shape from the older hot windows:
-    - soft passages can look more expressive than louder passages
-    - small bubbles can die while the hero lane survives, flatlines, or clamps
-    - support/floor can stay elevated while visible Bubble output still underreacts
-  - Capture the newest soft-track caveat explicitly:
-    - the latest log is not a closure signal because the whole song stayed generally soft
-    - Bubble looking healthy on this run must not weaken the loud-passage oracle
-  - Record the newest late-run hot evidence in the same structure as the older windows:
-    - `22:30:11 .. 22:30:56` shows the same low-reaction family even with `raw_bass` repeatedly near or above `1.0`
-    - this window is especially important because it is a manual-floor run (`gate=manual=0.200`, `support=0.000`)
-    - treat that as evidence against blaming the remaining failure only on shared dynamic-floor/support-pressure behavior
-  - Use the existing hot evidence sets as primary anchors:
-    - `14:31:54 .. 14:32:04`
-    - `15:52:06 .. 15:52:31`
-    - `22:30:11 .. 22:30:56`
-    - the runtime-loud replay/profile bars already in the suite
-- [ ] Investigate Bubble-owned runtime seams in this order.
-  - Bubble continuous feed / dispatch:
-    - check whether `get_bubble_energy_bands()` still compresses loud variance too early even when support pressure is healthy
-    - confirm Bubble-specific feed behavior is evaluated separately from Spectrum/shared control lanes
-  - Bubble simulation and visible sizing:
-    - inspect hero-lane size/clamp behavior, small-lane survival, and any state that makes loud passages converge toward one visible shape
-    - verify whether pulse/size/clamp paths help one lane while starving the other
-  - Bubble oracle realism:
-    - tighten bars against the exact user-visible failure shape rather than helper/proxy success
-    - prefer runtime-shaped replay/profile checks over friendly synthetic-only phrases
-- [ ] Keep the output actionable.
-  - identify whether the inconsistency is primarily:
-    - Bubble feed compression
-    - Bubble simulation/render sizing/clamp behavior
-    - oracle weakness
-  - only after that should a Bubble code change be proposed
+  - Do not reopen shared floor semantics unless a new failure clearly escapes Bubble-owned seams.
+- [ ] Keep the Bubble oracle harsher than runtime complaints, not friendlier.
+  - Preserve the existing loud-path families:
+    - soft passages must not look more expressive overall than louder passages
+    - the small lane must stay alive in loud holds
+    - the hero lane must not flatline, clamp-pin, or collapse into one narrow shape
+  - Preserve the newer crest-vs-bed rule:
+    - kick/crest moments inside an already-hot section must still step up above the surrounding loud bed
+    - the hero lane may step up more than the small lane, but not by killing the small lane
+  - Keep the loud-hold contract perceptual:
+    - a loud bed must stay clearly alive
+    - it does not need to counterfeit the exact same size/pulse shape as a sharper crest hit
+- [ ] Use fresh runtime logs to decide whether another Bubble tuning pass is warranted.
+  - If a new song still shows missed loud beats or another inconsistent hot-window family, add that exact failure to the replay/fixture bar set before more tuning.
+  - Prefer Bubble-owned seams in this order:
+    - continuous feed / dispatch ranking inside hot sections
+    - BubbleSimulation pulse/size conversion
+    - only then additional oracle expansion if runtime still escapes the suite
 
 ## Watchlist
 
@@ -68,6 +52,9 @@ The current top-priority work is Bubble mode consistency: tighten the runtime-sh
 - Bubble work must preserve mode isolation:
   - shared floor/support behavior may remain the neutral baseline
   - Bubble-specific rescue logic belongs to Bubble-owned seams if Spectrum is already healthy
+- Bubble transition spikes are currently treated as non-sticky perf watch items, not active Bubble blockers:
+  - the `23:39:57` spike / latency burst completed cleanly and did not leave `waiting_engine`, `waiting_frame`, or transition-running drift behind in the following Bubble windows
+  - keep a regression eye on long-lived staleness, not one-off transition spikes by themselves
 
 - If transition watchdog/compositor-complete failures reappear under `--perf`, inspect `rendering/gl_profiler.py` and `rendering/gl_compositor.py` before treating it as a generic transition regression.
 

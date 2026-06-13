@@ -783,6 +783,10 @@ class _SpotifyBeatEngine(QObject):
             raw_bass_avg = max(0.10, float(getattr(w, "_raw_bass_avg", 0.10) or 0.10))
         except Exception:
             raw_bass_avg = 0.10
+        try:
+            prev_raw_bass = max(0.0, float(getattr(w, "_prev_raw_bass", 0.0) or 0.0))
+        except Exception:
+            prev_raw_bass = 0.0
 
         def _raw(name: str, fallback_name: str) -> float:
             return max(0.0, float(getattr(w, name, getattr(w, fallback_name, 0.0)) or 0.0))
@@ -831,6 +835,14 @@ class _SpotifyBeatEngine(QObject):
         control_high = _control("_pre_agc_control_treble")
         hot_phase = _hot_phase(raw_bass)
         hot_lift = _hot_lift(raw_bass)
+        raw_rise = max(0.0, raw_bass - prev_raw_bass)
+        hot_crest_lift = soft_ceiling(
+            max(0.0, raw_rise - (0.05 if dynamic_enabled else 0.035)),
+            knee=0.0,
+            ceiling=0.11 if dynamic_enabled else 0.14,
+            max_input=0.30,
+            curve=1.0,
+        ) * (0.30 + hot_phase * 0.70)
         support_carry = min(0.04, support_pressure * max(0.008, 0.04 - hot_phase * 0.032))
         raw_presence = soft_ceiling(
             raw_mid / max(0.24, raw_bass_avg * 1.65),
@@ -864,6 +876,7 @@ class _SpotifyBeatEngine(QObject):
                 body * 0.42
                 + warm_support * 0.18
                 + hot_lift
+                + hot_crest_lift
                 + presence_carry * 0.16
                 + min(0.045, control_bass * 0.06)
                 + support_carry
@@ -892,6 +905,7 @@ class _SpotifyBeatEngine(QObject):
                 absolute_body * 0.56
                 + normalized_support * 0.18
                 + hot_lift * 1.02
+                + hot_crest_lift * 1.18
                 + presence_carry * 0.22
                 + control_support
             )

@@ -395,6 +395,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             "smooth_high": 0.0,
         }
         widget._bubble_dispatch_energy_snapshot = eb_snap
+    prev_dispatch_bass = float(eb_snap.get("bass", 0.0) or 0.0)
 
     if not widget._spotify_playing:
         dt_bubble *= _IDLE_BUBBLE_DT_SCALE
@@ -431,19 +432,26 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             max_input=0.42,
             curve=1.0,
         )
+        _hot_crest_step = soft_ceiling(
+            max(0.0, _pulse_bass - prev_dispatch_bass - 0.020),
+            knee=0.0,
+            ceiling=0.18,
+            max_input=0.20,
+            curve=1.0,
+        ) * max(0.0, min(1.0, (_pulse_bass - 0.82) / 0.26))
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
         _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
         _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
-        eb_snap["bass"] = min(_t_clamp, _mixed_bass + _hot_bass_lift)
+        eb_snap["bass"] = min(_t_clamp, _mixed_bass + _hot_bass_lift + _hot_crest_step)
         eb_snap["mid"] = _mixed_mid
         eb_snap["high"] = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
         eb_snap["smooth_mid"] = max(
             getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
-            _hot_presence * 0.82,
+            _hot_presence * 0.82 + _hot_crest_step * 0.12,
         )
         eb_snap["smooth_high"] = max(
             getattr(eb_smooth, 'high', 0.0) if eb_smooth else 0.0,
-            _hot_presence * 0.34,
+            _hot_presence * 0.34 + _hot_crest_step * 0.05,
         )
         eb_snap["overall"] = max(
             getattr(eb_smooth, 'overall', 0.0) if eb_smooth else 0.0,

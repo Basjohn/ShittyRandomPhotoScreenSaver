@@ -650,6 +650,7 @@ class BubbleSimulation:
             # Promoted small bubbles temporarily react to bass (like big bubbles)
             # with scaled-down sensitivity, adding visual density during bursts.
             use_bass = b.is_big or b.promoted
+            hot_crest_support = 0.0
             if use_bass:
                 raw_src = bass
                 running_avg = self._bass_running_avg
@@ -681,6 +682,13 @@ class BubbleSimulation:
                     knee=0.0,
                     ceiling=0.40 - size_t * 0.08,
                     max_input=0.50,
+                    curve=1.0,
+                )
+                hot_crest_support = soft_ceiling(
+                    max(0.0, raw_src - running_avg - (0.09 + size_t * 0.03)),
+                    knee=0.0,
+                    ceiling=0.16 - size_t * 0.03,
+                    max_input=0.32,
                     curve=1.0,
                 )
                 if hot_hold_support > 0.0:
@@ -736,7 +744,7 @@ class BubbleSimulation:
                 sustained_component = min(sustained_scale, t * sustained_scale)
 
             if use_bass:
-                sustained_component = max(sustained_component, hot_hold_support)
+                sustained_component = max(sustained_component, hot_hold_support, hot_crest_support)
             else:
                 sustained_component = max(sustained_component, hot_bed_support * 0.85)
 
@@ -746,6 +754,11 @@ class BubbleSimulation:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * attack_rate)
             else:
                 b.pulse_energy += (gated_energy - b.pulse_energy) * min(1.0, dt * decay_rate)
+            if use_bass and hot_crest_support > 0.0:
+                b.pulse_energy = min(
+                    1.0,
+                    b.pulse_energy + hot_crest_support * min(0.34, dt * 10.5),
+                )
 
             if b.is_big:
                 big_lane_diag["big_count"] += 1.0
@@ -1174,12 +1187,25 @@ class BubbleSimulation:
         big_hold_boost = soft_ceiling(
             max(0.0, self._sustained_loud_energy - 0.68),
             knee=0.0,
-            ceiling=0.30,
-            max_input=0.24,
+            ceiling=0.42,
+            max_input=0.20,
             curve=1.0,
         )
         if bubble.is_big:
-            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost
+            big_crest_boost = soft_ceiling(
+                max(0.0, bubble.pulse_energy - 0.74),
+                knee=0.0,
+                ceiling=0.18,
+                max_input=0.18,
+                curve=1.0,
+            ) * soft_ceiling(
+                max(0.0, self._sustained_loud_energy - 0.58),
+                knee=0.0,
+                ceiling=1.0,
+                max_input=0.18,
+                curve=1.0,
+            )
+            pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost + big_crest_boost
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
         else:
