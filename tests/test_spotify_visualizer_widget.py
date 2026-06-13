@@ -5458,6 +5458,13 @@ def test_deep_sea_runtime_log_replay_vocal_and_snare_events_must_lift_small_lane
     bed_small = sum(m["max_small_delta"] for m in hot_bed) / len(hot_bed)
     vocal_small = sum(m["max_small_delta"] for m in vocal_window) / len(vocal_window)
     snare_small = sum(m["max_small_delta"] for m in snare_window) / len(snare_window)
+    bed_big = sum(m["big_max_render"] for m in hot_bed) / len(hot_bed)
+    vocal_big = sum(m["big_max_render"] for m in vocal_window) / len(vocal_window)
+    snare_big = sum(m["big_max_render"] for m in snare_window) / len(snare_window)
+    bed_pulse = sum(m["max_big_pulse"] for m in hot_bed) / len(hot_bed)
+    snare_pulse = sum(m["max_big_pulse"] for m in snare_window) / len(snare_window)
+    bed_expand = sum(m["top_big_expansion"] for m in hot_bed) / len(hot_bed)
+    snare_expand = sum(m["top_big_expansion"] for m in snare_window) / len(snare_window)
 
     assert bed_small >= 0.010, "Need a genuinely alive hot bed before checking the later event lift."
     assert vocal_small >= bed_small * 0.95, (
@@ -5465,6 +5472,18 @@ def test_deep_sea_runtime_log_replay_vocal_and_snare_events_must_lift_small_lane
     )
     assert snare_small >= bed_small * 0.95, (
         "Replay snare window still sinks below the restored hot-bed small-lane baseline."
+    )
+    assert vocal_big >= bed_big + 0.004, (
+        "Replay vocal-swell window still is not visibly stepping the hero lane above the hot bed."
+    )
+    assert snare_big >= bed_big + 0.004, (
+        "Replay snare window still is not visibly stepping the hero lane above the hot bed."
+    )
+    assert snare_pulse >= bed_pulse + 0.015, (
+        "Replay snare accent still is not producing a materially stronger hero-lane pulse than the hot bed."
+    )
+    assert snare_expand >= bed_expand + 0.10, (
+        "Replay snare accent still is not opening the crest shape enough above the hot bed."
     )
 
 
@@ -5691,18 +5710,24 @@ def test_deep_sea_runtime_loud_phrase_kick_crests_still_beat_the_hot_bed(
     bed_pulse = sum(m["max_big_pulse"] for m in bed_window) / len(bed_window)
     kick_small = sum(m["max_small_delta"] for m in kick_window) / len(kick_window)
     bed_small = sum(m["max_small_delta"] for m in bed_window) / len(bed_window)
+    kick_expand = sum(m["top_big_expansion"] for m in kick_window) / len(kick_window)
+    bed_expand = sum(m["top_big_expansion"] for m in bed_window) / len(bed_window)
 
     assert kick_bass >= bed_bass * 0.98, (
         "Kick/crest moments should not lose Bubble feed authority inside the hot bed: "
         f"kick_bass={kick_bass:.4f} bed_bass={bed_bass:.4f}"
     )
-    assert kick_big >= bed_big + 0.003, (
+    assert kick_big >= bed_big + 0.0025, (
         "Hero lane still fails to visibly step up on kick crests inside a loud hold: "
         f"kick_big={kick_big:.4f} bed_big={bed_big:.4f}"
     )
-    assert kick_pulse >= bed_pulse + 0.030, (
+    assert kick_pulse >= bed_pulse + 0.032, (
         "Kick crests still are not creating a materially stronger big-lane pulse than the hot bed: "
         f"kick_pulse={kick_pulse:.4f} bed_pulse={bed_pulse:.4f}"
+    )
+    assert kick_expand >= bed_expand + 0.06, (
+        "Kick crests still are not opening the big-bubble crest shape clearly beyond the hot bed: "
+        f"kick_expand={kick_expand:.4f} bed_expand={bed_expand:.4f}"
     )
     assert kick_small >= bed_small * 0.95, (
         "Kick crests should not rescue the hero lane by killing the small lane: "

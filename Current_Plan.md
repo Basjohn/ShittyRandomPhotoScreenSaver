@@ -35,6 +35,7 @@ The current top-priority work is Bubble mode consistency: keep the now-stronger 
     - the hero lane must not flatline, clamp-pin, or collapse into one narrow shape
   - Preserve the newer crest-vs-bed rule:
     - kick/crest moments inside an already-hot section must still step up above the surrounding loud bed
+    - authored replay vocal/snare lifts must also step the hero lane above the hot bed instead of only keeping the small lane alive
     - the hero lane may step up more than the small lane, but not by killing the small lane
   - Keep the loud-hold contract perceptual:
     - a loud bed must stay clearly alive

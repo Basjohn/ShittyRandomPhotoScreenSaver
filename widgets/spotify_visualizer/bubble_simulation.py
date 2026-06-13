@@ -197,6 +197,7 @@ class BubbleSimulation:
         self._diag_tick_count: int = 0
         self._smoothed_speed_energy: float = 0.0  # smoothed bass for travel speed reactivity
         self._sustained_loud_energy: float = 0.0  # compatibility loudness proxy for diagnostics/tests
+        self._hot_crest_energy: float = 0.0
         self._bass_running_avg: float = 0.0   # slow-tracking bass average for delta pulse
         self._midhi_running_avg: float = 0.0  # slow-tracking mid+high average for delta pulse
         self._overdrive_active: bool = False
@@ -219,6 +220,7 @@ class BubbleSimulation:
         self._diag_tick_count = 0
         self._smoothed_speed_energy = 0.0
         self._sustained_loud_energy = 0.0
+        self._hot_crest_energy = 0.0
         self._bass_running_avg = 0.0
         self._midhi_running_avg = 0.0
         self._overdrive_active = False
@@ -410,6 +412,11 @@ class BubbleSimulation:
         # Raw mid/high would jerk on every transient.
         smooth_mid = _clamp01(energy_bands.get('smooth_mid', mid)) if isinstance(energy_bands, dict) else mid
         smooth_high = _clamp01(energy_bands.get('smooth_high', high)) if isinstance(energy_bands, dict) else high
+        crest = _clamp01(energy_bands.get('crest', 0.0)) if isinstance(energy_bands, dict) else 0.0
+        if crest > self._hot_crest_energy:
+            self._hot_crest_energy += (crest - self._hot_crest_energy) * min(1.0, dt * 18.0)
+        else:
+            self._hot_crest_energy += (crest - self._hot_crest_energy) * min(1.0, dt * 11.0)
 
         # Perceptual curve: keep quiet passages visibly mobile while still
         # reserving extra headroom for loud vocal passages.
@@ -685,11 +692,15 @@ class BubbleSimulation:
                     curve=1.0,
                 )
                 hot_crest_support = soft_ceiling(
-                    max(0.0, raw_src - running_avg - (0.09 + size_t * 0.03)),
+                    max(0.0, raw_src - running_avg - (0.07 + size_t * 0.025)),
                     knee=0.0,
-                    ceiling=0.16 - size_t * 0.03,
-                    max_input=0.32,
+                    ceiling=0.19 - size_t * 0.03,
+                    max_input=0.36,
                     curve=1.0,
+                )
+                hot_crest_support = max(
+                    hot_crest_support,
+                    self._hot_crest_energy * (0.22 - size_t * 0.04),
                 )
                 if hot_hold_support > 0.0:
                     decay_rate = min(decay_rate, 1.90 + size_t * 0.70)
@@ -757,7 +768,7 @@ class BubbleSimulation:
             if use_bass and hot_crest_support > 0.0:
                 b.pulse_energy = min(
                     1.0,
-                    b.pulse_energy + hot_crest_support * min(0.34, dt * 10.5),
+                    b.pulse_energy + hot_crest_support * min(0.42, dt * 12.0),
                 )
 
             if b.is_big:
@@ -1184,27 +1195,8 @@ class BubbleSimulation:
     ) -> float:
         """Approximate rendered radius so collision and visuals stay aligned."""
         is_tiny = (not bubble.is_big) and bubble.radius < 0.008
-        big_hold_boost = soft_ceiling(
-            max(0.0, self._sustained_loud_energy - 0.68),
-            knee=0.0,
-            ceiling=0.42,
-            max_input=0.20,
-            curve=1.0,
-        )
+        big_hold_boost, big_crest_boost = self._compute_big_render_boosts(bubble)
         if bubble.is_big:
-            big_crest_boost = soft_ceiling(
-                max(0.0, bubble.pulse_energy - 0.74),
-                knee=0.0,
-                ceiling=0.18,
-                max_input=0.18,
-                curve=1.0,
-            ) * soft_ceiling(
-                max(0.0, self._sustained_loud_energy - 0.58),
-                knee=0.0,
-                ceiling=1.0,
-                max_input=0.18,
-                curve=1.0,
-            )
             pulse_factor = 1.0 + bubble.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost + big_crest_boost
         elif is_tiny:
             pulse_factor = 1.0 + bubble.pulse_energy * small_freq_pulse * 0.5
@@ -1222,6 +1214,43 @@ class BubbleSimulation:
             r = min(r, bubble.radius * max(1.5, big_size_clamp))
 
         return max(0.001, r)
+
+    def _compute_big_render_boosts(self, bubble: BubbleState) -> tuple[float, float]:
+        """Keep big-bubble loud-hold and hot-crest render boosts in sync."""
+        big_hold_boost = soft_ceiling(
+            max(0.0, self._sustained_loud_energy - 0.68),
+            knee=0.0,
+            ceiling=0.42,
+            max_input=0.20,
+            curve=1.0,
+        )
+        big_crest_boost = soft_ceiling(
+            max(0.0, bubble.pulse_energy - 0.74),
+            knee=0.0,
+            ceiling=0.18,
+            max_input=0.18,
+            curve=1.0,
+        ) * soft_ceiling(
+            max(0.0, self._sustained_loud_energy - 0.58),
+            knee=0.0,
+            ceiling=1.0,
+            max_input=0.18,
+            curve=1.0,
+        )
+        big_crest_boost += soft_ceiling(
+            max(0.0, self._hot_crest_energy - 0.08),
+            knee=0.0,
+            ceiling=0.10,
+            max_input=0.22,
+            curve=1.0,
+        ) * soft_ceiling(
+            max(0.0, bubble.pulse_energy - 0.68),
+            knee=0.0,
+            ceiling=1.0,
+            max_input=0.24,
+            curve=1.0,
+        )
+        return big_hold_boost, big_crest_boost
 
     def _overlaps_existing(
         self,
@@ -1555,15 +1584,9 @@ class BubbleSimulation:
             # Small bubbles below tiny threshold: suppress pulse to avoid
             # flicker between dot and outline rendering.
             is_tiny = (not b.is_big) and b.radius < 0.008
-            big_hold_boost = soft_ceiling(
-                max(0.0, self._sustained_loud_energy - 0.68),
-                knee=0.0,
-                ceiling=0.30,
-                max_input=0.24,
-                curve=1.0,
-            )
+            big_hold_boost, big_crest_boost = self._compute_big_render_boosts(b)
             if b.is_big:
-                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost
+                pulse_factor = 1.0 + b.pulse_energy * big_bass_pulse * 4.2 + big_hold_boost + big_crest_boost
             elif is_tiny:
                 # Tiny bubbles: minimal pulse to avoid dot/outline flicker
                 pulse_factor = 1.0 + b.pulse_energy * small_freq_pulse * 0.5

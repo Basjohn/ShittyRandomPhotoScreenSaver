@@ -393,6 +393,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             "overall": 0.0,
             "smooth_mid": 0.0,
             "smooth_high": 0.0,
+            "crest": 0.0,
         }
         widget._bubble_dispatch_energy_snapshot = eb_snap
     prev_dispatch_bass = float(eb_snap.get("bass", 0.0) or 0.0)
@@ -409,11 +410,15 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         eb_snap["overall"] = 0.015
         eb_snap["smooth_mid"] = idle_mid
         eb_snap["smooth_high"] = idle_high
+        eb_snap["crest"] = 0.0
     else:
         # Mix transient bass into pulse bass for immediate kick response
         _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
         _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
         _t_mid = getattr(tb, 'mid_transient', 0.0) if tb else 0.0
+        _onset_detected = bool(getattr(tb, 'onset_detected', False)) if tb else False
+        _onset_type = str(getattr(tb, 'onset_type', '')) if tb else ''
+        _onset_strength = float(getattr(tb, 'onset_strength', 0.0) or 0.0) if tb else 0.0
         _t_gain = getattr(widget, '_transient_pulse_gain', 1.0)
         _t_clamp = getattr(widget, '_transient_clamp', 1.5)
         _bmix_bass = getattr(widget, '_bubble_transient_mix_bass', 0.75)
@@ -439,6 +444,22 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             max_input=0.20,
             curve=1.0,
         ) * max(0.0, min(1.0, (_pulse_bass - 0.82) / 0.26))
+        _onset_crest_scale = 0.0
+        if _onset_detected:
+            if _onset_type == 'kick':
+                _onset_crest_scale = 1.0
+            elif _onset_type == 'snare':
+                _onset_crest_scale = 0.88
+            elif _onset_type == 'vocal_swell':
+                _onset_crest_scale = 0.46
+        _onset_crest_step = soft_ceiling(
+            max(0.0, _onset_strength - 0.10),
+            knee=0.0,
+            ceiling=0.12,
+            max_input=0.45,
+            curve=1.0,
+        ) * _onset_crest_scale * max(0.0, min(1.0, (_pulse_bass - 0.74) / 0.28))
+        _hot_crest_step += _onset_crest_step
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
         _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
         _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
@@ -461,6 +482,11 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
                 + eb_snap["smooth_mid"] * 0.34
                 + eb_snap["smooth_high"] * 0.20,
             ),
+        )
+        eb_snap["crest"] = min(
+            1.0,
+            _hot_crest_step * 4.2
+            + _onset_crest_step * 1.6,
         )
 
     sim_settings = getattr(widget, "_bubble_dispatch_settings", None)
