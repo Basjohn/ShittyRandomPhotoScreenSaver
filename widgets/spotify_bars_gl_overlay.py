@@ -41,6 +41,10 @@ from widgets.spotify_visualizer.overlay_diagnostics import (
     maybe_log_glow_diagnostics,
     maybe_log_sine_idle_state,
 )
+from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+    apply_overlay_spectrum_solid_hysteresis,
+    reset_overlay_spectrum_solid_hysteresis_state,
+)
 from widgets.spotify_visualizer.overlay_uniforms import (
     upload_common_uniforms,
 )
@@ -357,6 +361,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._spectrum_glow_enabled: bool = False
         self._spectrum_glow_intensity: float = 0.55
         self._spectrum_glow_color: QColor = QColor(110, 220, 255, 235)
+        self._spectrum_solid_display_segments: list[int] = []
+        self._spectrum_solid_pending_down_segments: list[int] = []
+        self._spectrum_solid_pending_down_started_ts: list[float] = []
+        self._spectrum_solid_hysteresis_segments: int = 0
+        self._spectrum_solid_hysteresis_bar_count: int = 0
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The
@@ -1476,6 +1485,22 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self.clear_overlay_buffer()
             return
 
+        if self._vis_mode == 'spectrum' and self._single_piece:
+            try:
+                now_ts = time.monotonic()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                now_ts = 0.0
+            clamped = apply_overlay_spectrum_solid_hysteresis(
+                self,
+                clamped,
+                segments=max(1, segs),
+                render_height=float(rect.height()),
+                now_ts=now_ts,
+            )
+        else:
+            reset_overlay_spectrum_solid_hysteresis_state(self)
+
         # Update per-bar peak state only for Spectrum. Other modes may still
         # pass bar arrays through the shared overlay, but they must not mutate
         # Spectrum ghost memory behind the scenes.
@@ -1654,6 +1679,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._bubble_extra_data = []
         self._bubble_trail_data = []
         self._bubble_count = 0
+        reset_overlay_spectrum_solid_hysteresis_state(self)
 
         if self._gl_state.is_ready():
             try:

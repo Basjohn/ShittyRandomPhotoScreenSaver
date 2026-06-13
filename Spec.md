@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-04
+Last updated: 2026-06-13
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -123,6 +123,7 @@ Active ids:
 - Bubble loud-path oracles must grade the actual Bubble worker snapshot path. Do not prove closure from a second helper-side `snapshot(...)` pass with neutral pulse params or from replay windows that accidentally mix soft and hot frames from the same repeated profile, because that turns a runtime-shaped bar back into a proxy and can hide the exact failure shape users still see live.
 - Spectrum startup/reactivity automation must also use an authored curated preset path, not only generic parity helpers. `Preset 1 (Organs)` is the standing Spectrum oracle for first-visible authority and startup/mode-switch parity.
 - Spectrum horizontal bar geometry has one shared contract. CPU helper math and shader layout must agree on the same slightly left-biased bar field so the mode does not reintroduce a visible left gutter or right-edge clipping through duplicate geometry calculations.
+- Spectrum solid-bar anti-flicker behavior is a display-only seam. Any hysteresis or chatter suppression for `single_piece` belongs after continuous bar computation at the overlay/display quantization layer, must not modify FFT/shared beat-engine floor logic, and should preserve intra-segment motion rather than snapping the visible body to one frozen segment value.
 - Idle-reveal modes must have a meaningful paused startup presentation without depending on a prior live audio frame. When playback is genuinely non-playing, the shared beat engine should still provide a low-energy idle waveform/bar seed so first visible startup does not collapse into a dead zero frame.
 - Visualizer latency warnings are activation-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation. Explicit probe-triggered latency requests may still log before readiness so reset/transition investigations remain visible.
 

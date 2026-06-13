@@ -4,7 +4,7 @@ Last updated: 2026-06-13
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
-The current top-priority work is Bubble mode consistency: keep the now-stronger loud-path oracle honest against real songs and only continue tuning Bubble-owned seams when fresh evidence shows a failure the current bars do not yet model.
+There are no active visualizer blockers at the moment. Keep this file minimal until the next concrete runtime issue or priority is chosen.
 
 ## Guardrails
 
@@ -20,41 +20,20 @@ The current top-priority work is Bubble mode consistency: keep the now-stronger 
 
 ## Active Tasks
 
-### 1. Keep Bubble loud-path work evidence-first and Bubble-owned
-
-- [ ] Keep Spectrum protected while Bubble continues moving.
-  - Preserve the current Spectrum regression guards:
-    - strong reactivity
-    - no visible jitter
-    - fluid larger reactions in louder passages
-  - Do not reopen shared floor semantics unless a new failure clearly escapes Bubble-owned seams.
-- [ ] Keep the Bubble oracle harsher than runtime complaints, not friendlier.
-  - Preserve the existing loud-path families:
-    - soft passages must not look more expressive overall than louder passages
-    - the small lane must stay alive in loud holds
-    - the hero lane must not flatline, clamp-pin, or collapse into one narrow shape
-  - Preserve the newer crest-vs-bed rule:
-    - kick/crest moments inside an already-hot section must still step up above the surrounding loud bed
-    - authored replay vocal/snare lifts must also step the hero lane above the hot bed instead of only keeping the small lane alive
-    - the hero lane may step up more than the small lane, but not by killing the small lane
-  - Keep the loud-hold contract perceptual:
-    - a loud bed must stay clearly alive
-    - it does not need to counterfeit the exact same size/pulse shape as a sharper crest hit
-- [ ] Use fresh runtime logs to decide whether another Bubble tuning pass is warranted.
-  - If a new song still shows missed loud beats or another inconsistent hot-window family, add that exact failure to the replay/fixture bar set before more tuning.
-  - Prefer Bubble-owned seams in this order:
-    - continuous feed / dispatch ranking inside hot sections
-    - BubbleSimulation pulse/size conversion
-    - only then additional oracle expansion if runtime still escapes the suite
+- No active tasks currently remain.
 
 ## Watchlist
 
+- Spectrum solid-bar visual hysteresis is close enough to close for now:
+  - the new display-only seam removed the earlier flicker/judder without reintroducing obvious stale behavior in the latest run
+  - a small amount of second-song blockiness remains watchlist material, not active work
+  - if Spectrum complaints return, keep the fix scoped to the solid-bar display seam rather than reopening shared audio/floor logic first
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
-- Bubble work must preserve mode isolation:
+- Bubble work is closed for now, but future changes should still preserve mode isolation:
   - shared floor/support behavior may remain the neutral baseline
   - Bubble-specific rescue logic belongs to Bubble-owned seams if Spectrum is already healthy
-- Bubble transition spikes are currently treated as non-sticky perf watch items, not active Bubble blockers:
-  - the `23:39:57` spike / latency burst completed cleanly and did not leave `waiting_engine`, `waiting_frame`, or transition-running drift behind in the following Bubble windows
+- Bubble transition spikes are currently treated as non-sticky perf watch items, not active blockers:
+  - the `23:39:57` spike / latency burst completed cleanly and did not leave `waiting_engine`, `waiting_frame`, or transition-running drift behind in the following windows
   - keep a regression eye on long-lived staleness, not one-off transition spikes by themselves
 
 - If transition watchdog/compositor-complete failures reappear under `--perf`, inspect `rendering/gl_profiler.py` and `rendering/gl_compositor.py` before treating it as a generic transition regression.
@@ -62,8 +41,8 @@ The current top-priority work is Bubble mode consistency: keep the now-stronger 
 ## Deferred / Not Active
 
 - Reddit fetch, cooldown, identity, and API work stays deferred until the ban/API situation changes.
-- Display 0 cadence re-validation stays deferred until Bubble loud-path investigation stops dominating validation time.
-- Bubble baseline, paused/idle startup, and same-track churn safety checks stay deferred behind the current loud-path/oracle blocker.
+- Display 0 cadence re-validation stays deferred until it becomes a real runtime priority again.
+- Bubble baseline, paused/idle startup, and same-track churn safety checks stay deferred unless a fresh Bubble complaint reopens them.
 - Startup update-policy observability and image-cache/prescale perf follow after the interactive geometry/audio blockers.
 - Multi-display compositor/desync/startup-order validation stays deferred unless directly needed for the active Display 0 cadence regression.
 - Secure-desktop long-runtime exit reliability stays deferred until the current interactive blockers stop dominating validation time.

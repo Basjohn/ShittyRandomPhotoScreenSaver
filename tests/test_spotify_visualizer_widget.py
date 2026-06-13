@@ -18,6 +18,15 @@ from widgets.spotify_visualizer import config_applier
 from widgets.spotify_visualizer import mode_transition
 from widgets.spotify_visualizer import tick_helpers
 from widgets.spotify_visualizer import tick_pipeline
+from widgets.spotify_visualizer import overlay_state
+from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+    SPECTRUM_SOLID_HYSTERESIS_DWELL_S,
+    apply_overlay_spectrum_solid_hysteresis,
+    compute_spectrum_height_scale,
+    segment_index_to_spectrum_bar,
+    spectrum_bar_to_segment_index,
+)
+from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerAudioWorker,
     SpotifyVisualizerWidget,
@@ -27,6 +36,7 @@ from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.beat_engine import BeatEngineRegistry, _SpotifyBeatEngine
 import widgets.spotify_visualizer_widget as vis_mod
 from PySide6.QtGui import QColor
+from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QWidget, QGraphicsDropShadowEffect
 
 
@@ -1770,6 +1780,16 @@ def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str
     }
     widget._apply_technical_config_for_mode(VisualizerMode.SPECTRUM, reason="organs_authored")
     return settings
+
+
+def _make_spectrum_solid_hysteresis_state():
+    return SimpleNamespace(
+        _spectrum_solid_display_segments=[],
+        _spectrum_solid_pending_down_segments=[],
+        _spectrum_solid_pending_down_started_ts=[],
+        _spectrum_solid_hysteresis_segments=0,
+        _spectrum_solid_hysteresis_bar_count=0,
+    )
 
 
 def _capture_first_visible_frame(
@@ -4145,6 +4165,215 @@ def test_spectrum_organs_hot_window_keeps_visible_headroom_under_dynamic_floor(
     assert min(hot_ranges) > 0.14, (
         f"Hot Organs spread collapsed to {min(hot_ranges):.3f}; Spectrum is still flattening into a narrow band."
     )
+
+
+def test_spectrum_solid_hysteresis_boundary_chatter_holds_single_segment_wobble():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+    bars = []
+    now_ts = 0.0
+
+    for target in [10, 11, 10, 11, 10, 11]:
+        now_ts += 0.016
+        value = segment_index_to_spectrum_bar(
+            target,
+            segments=segments,
+            height_scale=height_scale,
+        )
+        bars_out = apply_overlay_spectrum_solid_hysteresis(
+            overlay,
+            [value],
+            segments=segments,
+            render_height=render_height,
+            now_ts=now_ts,
+        )
+        bars.append(
+            spectrum_bar_to_segment_index(
+                bars_out[0],
+                segments=segments,
+                height_scale=height_scale,
+            )
+        )
+
+    assert bars == [10, 10, 10, 10, 10, 10]
+
+
+def test_spectrum_solid_hysteresis_preserves_continuous_motion_inside_accepted_band():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+
+    baseline = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
+    first = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [baseline],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.01,
+    )[0]
+
+    held_rise = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale) + 0.03
+    second = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [held_rise],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.02,
+    )[0]
+
+    assert spectrum_bar_to_segment_index(first, segments=segments, height_scale=height_scale) == 10
+    assert spectrum_bar_to_segment_index(second, segments=segments, height_scale=height_scale) == 10
+    assert second > first, "Solid-bar hysteresis should preserve intra-band motion instead of freezing to one snapped value."
+
+
+def test_spectrum_solid_hysteresis_accepts_true_two_segment_rise_and_fall():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+
+    start_value = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
+    bars_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [start_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.016,
+    )
+    assert spectrum_bar_to_segment_index(bars_out[0], segments=segments, height_scale=height_scale) == 10
+
+    rise_value = segment_index_to_spectrum_bar(12, segments=segments, height_scale=height_scale)
+    bars_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [rise_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.032,
+    )
+    assert spectrum_bar_to_segment_index(bars_out[0], segments=segments, height_scale=height_scale) == 12
+
+    fall_value = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
+    bars_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [fall_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.048,
+    )
+    assert spectrum_bar_to_segment_index(bars_out[0], segments=segments, height_scale=height_scale) == 10
+
+
+def test_spectrum_solid_hysteresis_releases_persistent_one_segment_drop_after_dwell():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+
+    start_value = segment_index_to_spectrum_bar(12, segments=segments, height_scale=height_scale)
+    apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [start_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.01,
+    )
+
+    held_outputs = []
+    drop_value = segment_index_to_spectrum_bar(11, segments=segments, height_scale=height_scale)
+    for now_ts in [0.02, 0.04, 0.06]:
+        bars_out = apply_overlay_spectrum_solid_hysteresis(
+            overlay,
+            [drop_value],
+            segments=segments,
+            render_height=render_height,
+            now_ts=now_ts,
+        )
+        held_outputs.append(
+            spectrum_bar_to_segment_index(
+                bars_out[0],
+                segments=segments,
+                height_scale=height_scale,
+            )
+        )
+
+    release_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [drop_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.08,
+    )
+    released = spectrum_bar_to_segment_index(
+        release_out[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+
+    assert held_outputs == [12, 12, 12]
+    assert released == 11
+    assert (0.08 - 0.02) >= SPECTRUM_SOLID_HYSTERESIS_DWELL_S
+
+
+@pytest.mark.qt
+def test_spectrum_solid_hysteresis_resets_on_mode_reset_and_only_applies_to_single_piece(
+    qt_app,
+    qtbot,
+    monkeypatch,
+):
+    times = iter([1.00, 1.02, 1.04, 1.06, 1.08, 1.10])
+    monkeypatch.setattr(time, "monotonic", lambda: next(times))
+
+    overlay = SpotifyBarsGLOverlay(parent=None)
+    qtbot.addWidget(overlay)
+    rect = QRect(0, 0, 600, 220)
+    height_scale = compute_spectrum_height_scale(float(rect.height()))
+    fill = QColor(255, 255, 255, 230)
+    border = QColor(255, 255, 255, 255)
+
+    def _set_state(value: float, *, single_piece: bool, vis_mode: str = "spectrum", segments: int = 18):
+        overlay.set_state(
+            rect=rect,
+            bars=[value],
+            bar_count=1,
+            segments=segments,
+            fill_color=fill,
+            border_color=border,
+            fade=1.0,
+            playing=True,
+            visible=True,
+            vis_mode=vis_mode,
+            single_piece=single_piece,
+        )
+        return overlay._bars[0] if overlay._bars else 0.0
+
+    solid_10 = segment_index_to_spectrum_bar(10, segments=18, height_scale=height_scale)
+    solid_11 = segment_index_to_spectrum_bar(11, segments=18, height_scale=height_scale)
+    segmented_11 = segment_index_to_spectrum_bar(11, segments=18, height_scale=height_scale)
+
+    _set_state(solid_10, single_piece=True)
+    held = _set_state(solid_11, single_piece=True)
+    assert overlay._spectrum_solid_display_segments == [10]
+    assert spectrum_bar_to_segment_index(held, segments=18, height_scale=height_scale) == 10
+
+    passthrough = _set_state(segmented_11, single_piece=False)
+    assert overlay._spectrum_solid_display_segments == []
+    assert spectrum_bar_to_segment_index(passthrough, segments=18, height_scale=height_scale) == 11
+
+    _set_state(solid_10, single_piece=True)
+    overlay_state.reset_mode_state(overlay, "spectrum", reason="test_reset")
+    after_reset_value = segment_index_to_spectrum_bar(3, segments=18, height_scale=height_scale)
+    after_reset = _set_state(after_reset_value, single_piece=True)
+    assert overlay._spectrum_solid_display_segments == [3]
+    assert spectrum_bar_to_segment_index(after_reset, segments=18, height_scale=height_scale) == 3
+
+    seg24_height_scale = compute_spectrum_height_scale(float(rect.height()))
+    seg24_value = segment_index_to_spectrum_bar(6, segments=24, height_scale=seg24_height_scale)
+    seg24_out = _set_state(seg24_value, single_piece=True, segments=24)
+    assert overlay._spectrum_solid_hysteresis_segments == 24
+    assert spectrum_bar_to_segment_index(seg24_out, segments=24, height_scale=seg24_height_scale) == 6
 
 
 @pytest.mark.qt

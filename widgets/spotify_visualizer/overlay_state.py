@@ -15,6 +15,9 @@ from core.settings.visualizer_mode_registry import (
     is_mode_active,
 )
 from widgets.spotify_visualizer.blob_pockets import reset_blob_pocket_state
+from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
+    reset_overlay_spectrum_solid_hysteresis_state,
+)
 
 logger = get_logger(__name__)
 
@@ -101,6 +104,7 @@ def reset_mode_state(overlay: Any, mode: str, *, reason: str) -> None:
     overlay._bubble_extra_data = []
     overlay._bubble_trail_data = []
     overlay._bubble_count = 0
+    reset_overlay_spectrum_solid_hysteresis_state(overlay)
     overlay._devcurve_curve_bass = []
     overlay._devcurve_curve_vocals = []
     overlay._devcurve_curve_mids = []

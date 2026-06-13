@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-04
+Last updated: 2026-06-13
 
 Living map of the current SRPSS codebase.
 
@@ -77,6 +77,7 @@ Living map of the current SRPSS codebase.
 | Bubble parity harness | `tools/bubble_parity_harness.py` | Historical comparison harness for Bubble curated presets against `9d4925e` / `510520e`, used when Deep Sea regressions are too severe for present-day proxy bars to be trusted |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, and ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist |
 | Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, and deferred warmup of remaining visualizer mode programs |
+| Spectrum solid-bar display hysteresis | `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` | Display-only solid Spectrum chatter suppression: asymmetric segment hysteresis plus intra-band continuous motion, intentionally kept out of shared audio/floor logic |
 | Overlay diagnostics | `widgets/spotify_visualizer/overlay_diagnostics.py` | Passive overlay diagnostics for Glow, Blob, and Sine idle-state logging, extracted so diagnostic payload assembly stays outside render authority code |
 | Overlay common uniforms | `widgets/spotify_visualizer/overlay_uniforms.py` | Shared mode-neutral GL uniform upload and rainbow hue/logging prep, extracted so common transport stays outside mode-owned renderer math |
 | Overlay render dispatch | `widgets/spotify_visualizer/overlay_render_dispatch.py` | Mode-program resolution and renderer-owned uniform dispatch, extracted so the overlay shell no longer owns lazy mode-program compilation and renderer registry calls inline |
