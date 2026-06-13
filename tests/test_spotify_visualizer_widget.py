@@ -1602,6 +1602,59 @@ def _manual_floor_late_loud_runtime_log_replay_profile() -> list[dict[str, objec
     ]
 
 
+def _manual_floor_bass_dominant_tail_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the later bass-dominant weak-tail family from `04:28:02 .. 04:28:15`.
+
+    This window matters because Bubble stayed in the improved loud-path regime
+    overall, but the tail end still softened more than it should while the
+    floor stayed manual, support pressure stayed at zero, and the section was
+    not actually quiet. The common shape is:
+    - bass authority remains materially hot
+    - mid/high presence is thinner or intermittent
+    - onset help is absent or too weak to carry the section by itself
+    """
+
+    return [
+        {
+            "pulse": {"bass": 1.79, "mid": 0.16, "high": 0.03, "overall": 0.66},
+            "broad": {"bass": 0.51, "mid": 0.14, "high": 0.02, "overall": 0.45},
+            "transient": {"bass_transient": 0.30, "mid_transient": 0.05, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 1.54, "mid": 0.43, "high": 0.06, "overall": 0.62},
+            "broad": {"bass": 0.44, "mid": 0.22, "high": 0.04, "overall": 0.47},
+            "transient": {"bass_transient": 0.19, "mid_transient": 0.33, "high_transient": 0.06},
+        },
+        {
+            "pulse": {"bass": 1.45, "mid": 0.14, "high": 0.03, "overall": 0.58},
+            "broad": {"bass": 0.46, "mid": 0.10, "high": 0.02, "overall": 0.40},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.94, "mid": 0.12, "high": 0.03, "overall": 0.49},
+            "broad": {"bass": 0.31, "mid": 0.08, "high": 0.02, "overall": 0.34},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.47, "mid": 0.26, "high": 0.02, "overall": 0.57},
+            "broad": {"bass": 0.41, "mid": 0.13, "high": 0.01, "overall": 0.39},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 1.43, "mid": 0.48, "high": 0.06, "overall": 0.61},
+            "broad": {"bass": 0.43, "mid": 0.22, "high": 0.04, "overall": 0.45},
+            "transient": {
+                "bass_transient": 1.24,
+                "mid_transient": 0.39,
+                "high_transient": 0.06,
+                "onset_detected": True,
+                "onset_type": "kick",
+                "onset_strength": 0.02,
+            },
+        },
+    ]
+
+
 def _organs_runtime_floor_sequence(np_module, *, n: int = 4096):
     base = _organs_phrase_sequence(np_module, n=n)
     sub = _synthetic_audio(np_module, hz=48.0, amp=0.30, n=n)
@@ -5557,6 +5610,83 @@ def test_manual_floor_runtime_log_replay_keeps_loud_window_alive_without_support
     )
     assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
         "Manual-floor late loud replay still collapses the hero lane into one narrow visible shape."
+    )
+
+
+@pytest.mark.qt
+def test_manual_floor_bass_dominant_tail_replay_stays_alive_without_presence_crutches(
+    qt_app,
+    qtbot,
+):
+    random.seed(10044)
+    profile = _manual_floor_bass_dominant_tail_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile[:2] * 18 + profile[2:] * 14
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    head_window = metrics_series[20:28]
+    weak_tail = metrics_series[-24:-8]
+    late_tail = metrics_series[-8:]
+
+    assert head_window and weak_tail and late_tail
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    head_feed = sum(m["bass"] for m in head_window) / len(head_window)
+    weak_feed = sum(m["bass"] for m in weak_tail) / len(weak_tail)
+    late_feed = sum(m["bass"] for m in late_tail) / len(late_tail)
+    head_big = sum(m["big_max_render"] for m in head_window) / len(head_window)
+    weak_big = sum(m["big_max_render"] for m in weak_tail) / len(weak_tail)
+    late_big = sum(m["big_max_render"] for m in late_tail) / len(late_tail)
+    head_small = sum(m["max_small_delta"] for m in head_window) / len(head_window)
+    weak_small = sum(m["max_small_delta"] for m in weak_tail) / len(weak_tail)
+    late_small = sum(m["max_small_delta"] for m in late_tail) / len(late_tail)
+    weak_pulse = sum(m["max_big_pulse"] for m in weak_tail) / len(weak_tail)
+    late_pulse = sum(m["max_big_pulse"] for m in late_tail) / len(late_tail)
+    weak_expand = sum(m["top_big_expansion"] for m in weak_tail) / len(weak_tail)
+    late_expand = sum(m["top_big_expansion"] for m in late_tail) / len(late_tail)
+
+    assert weak_feed >= 1.20 and late_feed >= 1.20, (
+        "Tail replay must stay genuinely hot or this guard is not modeling the real weak-tail family."
+    )
+    assert weak_feed >= head_feed * 0.96, (
+        "Tail replay unexpectedly lost bass authority before the Bubble guard could mean anything."
+    )
+    assert weak_big >= max(0.118, head_big * 0.95), (
+        "Bass-dominant weak tail still lets the hero lane shrink too far despite staying hot."
+    )
+    assert late_big >= max(0.116, head_big * 0.90), (
+        "Later weak tail still decays the hero lane too far in a still-hot section."
+    )
+    assert weak_small >= max(0.024, head_small * 0.82), (
+        "Bass-dominant weak tail still lets the small lane die when presence thins out."
+    )
+    assert late_small >= max(0.024, head_small * 0.78), (
+        "Later weak tail still leaves the small lane too soft for a not-quiet section."
+    )
+    assert weak_pulse >= 0.74 and late_pulse >= 0.70, (
+        "Bass-dominant weak tail still collapses hero-lane pulse authority too much."
+    )
+    assert weak_expand >= 3.40 and late_expand >= 3.25, (
+        "Bass-dominant weak tail still visibly compresses the hero expansion shape too far."
     )
 
 
