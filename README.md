@@ -132,7 +132,7 @@ All changes are applied immediately and persisted between runs.
 
 ---
 
-- **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` covers overlay styling/lifecycle rules.
+- **Docs**: `Spec.md` and `Index.md` are the canonical references for architecture/module mapping; `Docs/10_WIDGET_GUIDELINES.md` is the canonical new-widget creation guide, and `Docs/Custom_Style_Implementation.md` covers shared style/chrome rules.
 
 Keep contributions aligned with the centralized managers (ThreadManager, ResourceManager, SettingsManager) and the widget/theming policies documented above—rogue threads/shadows will be mocked relentlessly.
 
