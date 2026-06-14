@@ -45,7 +45,7 @@ class ImagePrefetcher:
         self._cache = cache
         self._max_concurrent = max(1, int(max_concurrent))
         self._inflight: Set[str] = set()
-        self._scaled_inflight: Optional[str] = None
+        self._scaled_inflight: Set[str] = set()
         self._pending_scaled_requests: List[Dict[str, Any]] = []
         self._pending_scaled_keys: Set[str] = set()
         self._lock = threading.Lock()
@@ -89,7 +89,7 @@ class ImagePrefetcher:
         """Clear the inflight set. Call when sources change to avoid stale paths."""
         with self._lock:
             self._inflight.clear()
-            self._scaled_inflight = None
+            self._scaled_inflight.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
         if is_verbose_logging():
@@ -121,7 +121,7 @@ class ImagePrefetcher:
             submitted += 1
 
     def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> None:
-        """Queue scaled-variant warmup requests and process them one at a time."""
+        """Queue scaled-variant warmup requests and process them with bounded concurrency."""
         if not requests:
             return
 
@@ -134,14 +134,16 @@ class ImagePrefetcher:
                     continue
                 if self._cache.contains(cache_key):
                     continue
-                if cache_key == self._scaled_inflight or cache_key in self._pending_scaled_keys:
+                if cache_key in self._scaled_inflight or cache_key in self._pending_scaled_keys:
                     continue
                 self._pending_scaled_requests.append(dict(request))
                 self._pending_scaled_keys.add(cache_key)
                 queued_any = True
 
         if queued_any:
-            _cache_trace("Registered scaled prefetch requests pending=%d", len(requests))
+            with self._lock:
+                pending_total = len(self._pending_scaled_requests)
+            _cache_trace("Registered scaled prefetch requests pending=%d", pending_total)
             self._pump_scaled_prefetch()
 
     def _submit_load(self, path: str) -> None:
@@ -184,41 +186,48 @@ class ImagePrefetcher:
         if self._is_in_post_transition_delay():
             return
 
-        request: Optional[Dict[str, Any]] = None
+        requests_to_submit: List[Dict[str, Any]] = []
         with self._lock:
-            if self._scaled_inflight is not None or not self._pending_scaled_requests:
+            available_slots = self._max_concurrent - len(self._scaled_inflight)
+            if available_slots <= 0 or not self._pending_scaled_requests:
                 return
 
-            candidate_index: Optional[int] = None
+            selected_indices: List[int] = []
             if preferred_path:
                 for idx, pending in enumerate(self._pending_scaled_requests):
+                    if len(selected_indices) >= available_slots:
+                        break
                     if pending.get("path") == preferred_path and self._cache.contains(str(pending.get("path") or "")):
-                        candidate_index = idx
-                        break
+                        selected_indices.append(idx)
 
-            if candidate_index is None:
-                for idx, pending in enumerate(self._pending_scaled_requests):
-                    if self._cache.contains(str(pending.get("path") or "")):
-                        candidate_index = idx
-                        break
+            for idx, pending in enumerate(self._pending_scaled_requests):
+                if len(selected_indices) >= available_slots:
+                    break
+                if idx in selected_indices:
+                    continue
+                if self._cache.contains(str(pending.get("path") or "")):
+                    selected_indices.append(idx)
 
-            if candidate_index is None:
+            if not selected_indices:
                 return
 
-            request = self._pending_scaled_requests.pop(candidate_index)
-            cache_key = str(request.get("cache_key") or "")
-            self._pending_scaled_keys.discard(cache_key)
-            self._scaled_inflight = cache_key
+            for idx in reversed(selected_indices):
+                request = self._pending_scaled_requests.pop(idx)
+                cache_key = str(request.get("cache_key") or "")
+                self._pending_scaled_keys.discard(cache_key)
+                self._scaled_inflight.add(cache_key)
+                requests_to_submit.append(request)
 
-        if request is not None:
+            requests_to_submit.reverse()
+
+        for request in requests_to_submit:
             _cache_trace(
                 "Dispatching scaled prefetch path=%s key=%s pending_remaining=%d",
                 request.get("path"),
                 request.get("cache_key"),
                 len(self._pending_scaled_requests),
             )
-
-        self._submit_scaled_request(request)
+            self._submit_scaled_request(request)
 
     def _submit_scaled_request(self, request: Dict[str, Any]) -> None:
         raw_path = str(request.get("path") or "")
@@ -281,7 +290,7 @@ class ImagePrefetcher:
                     )
             finally:
                 with self._lock:
-                    self._scaled_inflight = None
+                    self._scaled_inflight.discard(cache_key)
                 self._pump_scaled_prefetch()
 
         try:
@@ -293,5 +302,5 @@ class ImagePrefetcher:
         except Exception as e:
             logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
             with self._lock:
-                self._scaled_inflight = None
+                self._scaled_inflight.discard(cache_key)
             self._pump_scaled_prefetch()

@@ -156,6 +156,83 @@ def _get_prefetch_target_specs(engine: ScreensaverEngine) -> List[Dict[str, Any]
     return specs
 
 
+def _get_prefetch_target_specs_in_display_order(engine: ScreensaverEngine) -> List[Dict[str, Any]]:
+    """Return ordered display target specs without cross-product fan-out."""
+    specs: List[Dict[str, Any]] = []
+    display_manager = getattr(engine, "display_manager", None)
+    displays = getattr(display_manager, "displays", None) or []
+    for display in displays:
+        try:
+            if hasattr(display, "get_target_size"):
+                target_size = display.get_target_size()
+            else:
+                dpr = getattr(display, "_device_pixel_ratio", 1.0)
+                target_size = QSize(
+                    int(display.width() * dpr),
+                    int(display.height() * dpr),
+                )
+            width = int(target_size.width())
+            height = int(target_size.height())
+            if width <= 0 or height <= 0:
+                continue
+            specs.append(
+                {
+                    "width": width,
+                    "height": height,
+                    "display_mode": _normalize_display_mode(getattr(display, "display_mode", DisplayMode.FILL)),
+                }
+            )
+        except Exception as e:
+            logger.debug("[PREFETCH] Failed to inspect ordered display target size: %s", e)
+    return specs
+
+
+def _get_prefetch_request_plan(engine: ScreensaverEngine, paths: List[str]) -> List[tuple[str, Dict[str, Any]]]:
+    """Plan scaled warmup requests using the same broad image-consumption contract as runtime.
+
+    The previous implementation built a full cross-product of preview paths and
+    display target specs, which floods scaled warmup with requests that are
+    unlikely to complete before the next transition. We instead prioritize the
+    images the runtime will actually consume next:
+    - different-images mode: map preview order onto display order in round-robin
+    - same-image mode: warm the first preview image for every distinct display
+      target, then keep later previews on the primary target only
+    """
+    if not paths:
+        return []
+
+    ordered_specs = _get_prefetch_target_specs_in_display_order(engine)
+    if not ordered_specs:
+        return []
+
+    raw_same_image = True
+    settings_manager = getattr(engine, "settings_manager", None)
+    if settings_manager is not None:
+        raw_same_image = settings_manager.get("display.same_image_all_monitors", True)
+    same_image = SettingsManager.to_bool(raw_same_image, True)
+
+    if not same_image:
+        return [
+            (path, ordered_specs[idx % len(ordered_specs)])
+            for idx, path in enumerate(paths)
+        ]
+
+    distinct_specs: List[Dict[str, Any]] = []
+    seen_signatures: set[tuple[int, int, str]] = set()
+    for spec in ordered_specs:
+        signature = (spec["width"], spec["height"], spec["display_mode"].value)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+        distinct_specs.append(spec)
+
+    plan: List[tuple[str, Dict[str, Any]]] = [(paths[0], spec) for spec in distinct_specs]
+    primary_spec = distinct_specs[0]
+    for path in paths[1:]:
+        plan.append((path, primary_spec))
+    return plan
+
+
 def _build_prefetch_scaled_requests(
     engine: ScreensaverEngine,
     paths: List[str],
@@ -167,31 +244,30 @@ def _build_prefetch_scaled_requests(
     use_lanczos, sharpen = _get_display_quality_settings(engine)
     requests: List[Dict[str, Any]] = []
     seen_keys: set[str] = set()
-    for path in paths:
-        for spec in _get_prefetch_target_specs(engine):
-            cache_key = _build_scaled_cache_key(
-                path,
-                spec["width"],
-                spec["height"],
-                spec["display_mode"],
-                use_lanczos,
-                sharpen,
-            )
-            if cache_key in seen_keys or cache.contains(cache_key):
-                continue
-            seen_keys.add(cache_key)
-            requests.append(
-                {
-                    "stats": _ensure_cache_runtime_stats(engine),
-                    "path": path,
-                    "cache_key": cache_key,
-                    "width": spec["width"],
-                    "height": spec["height"],
-                    "display_mode": spec["display_mode"],
-                    "use_lanczos": use_lanczos,
-                    "sharpen": sharpen,
-                }
-            )
+    for path, spec in _get_prefetch_request_plan(engine, paths):
+        cache_key = _build_scaled_cache_key(
+            path,
+            spec["width"],
+            spec["height"],
+            spec["display_mode"],
+            use_lanczos,
+            sharpen,
+        )
+        if cache_key in seen_keys or cache.contains(cache_key):
+            continue
+        seen_keys.add(cache_key)
+        requests.append(
+            {
+                "stats": _ensure_cache_runtime_stats(engine),
+                "path": path,
+                "cache_key": cache_key,
+                "width": spec["width"],
+                "height": spec["height"],
+                "display_mode": spec["display_mode"],
+                "use_lanczos": use_lanczos,
+                "sharpen": sharpen,
+            }
+        )
     if requests:
         _cache_trace(
             "Prepared scaled warmup requests count=%d unique_paths=%d",

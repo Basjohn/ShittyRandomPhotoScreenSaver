@@ -41,7 +41,7 @@ class _FakeThreads:
         return "io-task"
 
 
-def test_scaled_prefetch_requests_are_serialized(qt_app):
+def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(3840, 2160, "blue")})
     threads = _FakeThreads()
@@ -71,12 +71,42 @@ def test_scaled_prefetch_requests_are_serialized(qt_app):
 
     prefetcher.register_scaled_requests([req1, req2])
 
-    assert len(threads.compute_callbacks) == 1
+    assert len(threads.compute_callbacks) == 2
 
     first_callback = threads.compute_callbacks[0][1]
     first_pixmap = QPixmap.fromImage(_solid_qimage(2560, 1440, "red"))
     first_callback(SimpleNamespace(success=True, result=("one-scaled", first_pixmap)))
 
-    assert len(threads.compute_callbacks) == 2
     assert "one-scaled" in cache.store
     assert stats["scaled_prefetch_completed"] == 1
+
+
+def test_scaled_prefetch_requests_queue_beyond_parallel_limit(qt_app):
+    raw_path = r"C:\wall\one.jpg"
+    cache = _FakeCache({raw_path: _solid_qimage(3840, 2160, "blue")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache)
+
+    requests = []
+    for idx, size in enumerate([(2560, 1440), (1920, 1080), (1707, 959)], start=1):
+        requests.append(
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": f"scaled-{idx}",
+                "width": size[0],
+                "height": size[1],
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        )
+
+    prefetcher.register_scaled_requests(requests)
+
+    assert len(threads.compute_callbacks) == 2
+
+    callback = threads.compute_callbacks[0][1]
+    callback(SimpleNamespace(success=True, result=("scaled-1", QPixmap.fromImage(_solid_qimage(2560, 1440, "red")))))
+
+    assert len(threads.compute_callbacks) == 3
