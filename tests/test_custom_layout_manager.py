@@ -2468,7 +2468,8 @@ def test_widget_setup_finalize_resettles_visualizer_custom_rect_after_startup_sq
     assert visualizer.maximumHeight() == 280
     assert display._spotify_bars_overlay.geometry() == custom_rect
     assert QRect(0, 0, 357, 357) in display._spotify_bars_overlay.history
-    assert QRect(0, 0, 420, 280) in visualizer.geometry_history
+    assert QRect(0, 0, 357, 357) not in visualizer.geometry_history
+    assert custom_rect in visualizer.geometry_history
 
 
 def test_custom_layout_manager_reasserts_media_outer_rect_after_artwork_scale_apply(qtbot):

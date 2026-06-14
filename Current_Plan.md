@@ -36,11 +36,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - fixing authority first keeps the long-term feature option open without using it as a workaround
 - [ ] Refresh the visualizer geometry audit.
   - Keep the current execution audit in `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md`.
-  - Separate what U-08 truly fixed from what remains open in the newer runtime-shape family.
-  - Keep the audit explicit about this remaining distinction:
-    - replay can recover
-    - first visible startup/runtime state can still be wrong
-    - recovery is not prevention
+  - Keep it explicit about what is now closed:
+    - creator-time committed CUSTOM rect priming
+    - widget-local rejection of foreign outer-geometry writes while committed CUSTOM authority is active
+  - Keep it explicit about what remains open:
+    - display recreation / display swap first-visible truth
+    - rescue policy only if the remaining bars still prove a real impossible-shape birth
 - [ ] Build stricter visualizer geometry bars before the next runtime ask.
   - [x] Land first-wave bars for:
     - top-left startup-origin recovery
@@ -49,10 +50,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - startup-finalize settle after forced square/startup pressure
     - live settings-refresh settle with stale overlay under active CUSTOM authority
     - creator-time CUSTOM startup guard that fails if the visualizer expands to authored preferred height before committed replay attaches the saved rect
-  - [ ] Add a first-visible startup bar that fails if staged startup can leave the visualizer materially inside the fallback/startup rect even when later replay logs recover.
-  - [ ] Add a display-recreation bar that fails if a recreated display can re-birth the visualizer in fallback geometry before the committed rect is visible again.
+    - creator-time CUSTOM committed-rect birth guard that fails if startup is born at a bogus default rect instead of the saved rect
+    - creator-time CUSTOM startup-pressure guard that fails if post-create geometry pressure can still push the visualizer away from the committed rect
+    - remote reconcile guard that fails if a remote CUSTOM visualizer accepts a square fallback rect once the committed rect is attached
+  - [ ] Add a display-recreation bar that fails if a recreated display can still make the first visible visualizer instance appear in fallback geometry before the committed rect is visible again.
   - [ ] Add a display-swap / monitor-handoff bar that fails if the committed custom rect is correct but the runtime instance for the destination display still starts from a poisoned local rect.
-  - [ ] Fail when `replay_final` is green but startup, mode-switch, display-swap, or rebuild still produces a live rect that disagrees with the committed custom rect.
+  - [ ] Fail when `replay_final` is green but display recreation, display-swap, or rebuild still produces a live rect that disagrees with the committed custom rect.
   - [ ] Extend aspect-ratio / unauthorized-width-drift coverage beyond the current repeated-drift lane so broader rebuild/display-swap drift cannot hide behind replay logs.
   - [ ] Add a “recovery is not prevention” assertion:
     - if the widget becomes visible in an obscene fallback rect and only later heals, the bar still fails
@@ -62,27 +65,26 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Block authored preferred-height / authored positioning fallback while the visualizer is routed through `Custom` but the committed rect is still pending.
   - [x] Block the duplicate create-time canonical refresh pass while the visualizer is routed through `Custom` and waiting for committed replay.
   - [x] Attach the real `WidgetManager` before `startup_create` so visualizer CUSTOM-route detection is truthful during initial mode/card-height work.
-  - [ ] Re-audit startup create, settings refresh, secondary-stage activation, preferred-height application, widget positioning, and GL overlay sync from the current tree.
+  - [x] Re-audit startup create, settings refresh, secondary-stage activation, preferred-height application, widget positioning, and GL overlay sync from the current tree.
   - [ ] Document the last-authority chain for each risky flow:
-    - cold startup
     - display recreation
     - display swap
-    - settings refresh
-    - mode switch while a committed custom rect already exists
-  - [ ] Prove where the first visible live rect comes from for the visualizer during staged startup:
-    - widget outer rect
-    - overlay target rect
-    - any prewarm rect
-    - any startup-finalize reposition
-  - [ ] Keep committed CUSTOM width/height authoritative once a visualizer rect is saved.
+    - rebuild after destination-display handoff
+  - [x] Prove where the startup widget rect authority now comes from:
+    - creator-time committed rect priming when a saved CUSTOM rect already exists
+    - widget-local CUSTOM rect guard for later outer-geometry writes
+  - [ ] Prove where the first visible overlay rect comes from for the remaining risky flows:
+    - display recreation
+    - display swap
+    - any prewarm rect tied to those flows
+  - [x] Keep committed CUSTOM width/height authoritative once a visualizer rect is saved.
   - [ ] Ensure “CUSTOM chosen but rect not yet attached” is treated as a protected pending-authority state everywhere that can still write geometry.
 - [ ] Collapse visualizer CUSTOM geometry onto one committed source while keeping authored follow-media intact outside `Custom`.
-  - [ ] Make the committed custom rect the sole authoritative shape source for:
-    - widget outer rect
-    - GL overlay target rect
-    - startup-finalize reposition when CUSTOM is active
+  - [x] Make the committed custom rect the sole authoritative shape source for widget outer rect while CUSTOM is active.
+  - [x] Keep GL overlay target resolution reading the committed custom rect / runtime custom rect path first.
+  - [ ] Prove that display recreation and display swap cannot strand overlay startup on a stale rect once the widget authority is correct.
   - [ ] Keep authored media-follow / preset-owned card sizing available only outside `Custom`.
-  - [ ] Do not let preset-owned preferred height re-enter as a second shape authority once a committed custom rect exists.
+  - [x] Do not let preset-owned preferred height re-enter as a second shape authority once a committed custom rect exists.
   - [ ] Keep the fix visualizer-local and CUSTOM-local; do not broaden it into generic overlay code unless the bars prove the generic seam guilty.
 - [ ] Design the lightest acceptable recovery path after the root cause is narrowed.
   - [ ] Detect impossible/obscene live shapes relative to the committed custom rect.
@@ -92,14 +94,6 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Rescue should only run when the widget is clearly birthed into an impossible shape; it must not be a steady-state correction loop.
   - [ ] Rescue must prefer “bring back onto the visible display with sane committed proportions” rather than inventing a new authored size.
   - [ ] Do not introduce steady-state frame churn, startup poison, or continuous geometry fighting.
-
-- [ ] Keep Spectrum solid-bar polish visual-only.
-  - [ ] Replace the robotic segment-hold feel with display-space continuous motion that still suppresses chatter.
-  - [ ] Keep audio/FFT/shared floor logic untouched.
-  - [ ] Use stricter bars that fail both extremes:
-    - robotic pinning
-    - frame-to-frame flicker/judder/shimmer
-  - [ ] Do not add blur/feathering in this pass.
 
 ## Watchlist
 

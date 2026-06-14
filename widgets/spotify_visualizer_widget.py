@@ -1075,7 +1075,7 @@ class SpotifyVisualizerWidget(QWidget):
     def _resolve_gpu_target_rect(self) -> Optional[QRect]:
         """Return the authoritative outer rect for GPU/overlay geometry work."""
 
-        custom_rect = self._active_custom_layout_rect()
+        custom_rect = self._resolve_runtime_custom_layout_rect()
         if custom_rect is not None:
             return custom_rect
         try:
@@ -1083,6 +1083,30 @@ class SpotifyVisualizerWidget(QWidget):
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to resolve GPU target rect", exc_info=True)
             return None
+
+    def _resolve_runtime_custom_layout_rect(self) -> Optional[QRect]:
+        """Resolve the committed CUSTOM rect against the current parent bounds."""
+
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return None
+        try:
+            parent = self.parent()
+            if parent is None:
+                return QRect(custom_rect)
+            from widgets.spotify_visualizer.card_geometry import resolve_custom_card_rect
+
+            resolved = resolve_custom_card_rect(
+                custom_rect,
+                parent_width=int(parent.width()),
+                parent_height=int(parent.height()),
+                size=custom_rect.size(),
+            )
+            if resolved.width() > 0 and resolved.height() > 0:
+                return resolved
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to resolve runtime CUSTOM visualizer rect", exc_info=True)
+        return QRect(custom_rect)
 
     def _apply_custom_layout_size_constraints_if_active(self) -> bool:
         """Lock the visualizer's QWidget min/max size to the committed CUSTOM rect."""
@@ -1161,6 +1185,13 @@ class SpotifyVisualizerWidget(QWidget):
         if custom_rect is None:
             return int(height)
         return int(custom_rect.height())
+
+    def setGeometry(self, *args) -> None:  # type: ignore[override]
+        runtime_custom_rect = self._resolve_runtime_custom_layout_rect()
+        if runtime_custom_rect is not None:
+            QWidget.setGeometry(self, runtime_custom_rect)
+            return
+        super().setGeometry(*args)
 
     def setMinimumWidth(self, minw: int) -> None:  # type: ignore[override]
         if self._apply_custom_layout_size_constraints_if_active():

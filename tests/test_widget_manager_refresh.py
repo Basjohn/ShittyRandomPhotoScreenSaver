@@ -728,9 +728,14 @@ def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_second
             self._geometry = QRect(0, 0, 100, 400)
             self.geometry_history = [QRect(self._geometry)]
             self.raised = 0
+            self._custom_layout_local_rect = QRect(700, 520, 420, 280)
 
         def setGeometry(self, rect):
-            self._geometry = QRect(rect)
+            target = QRect(rect)
+            custom_rect = getattr(self, "_custom_layout_local_rect", None)
+            if isinstance(custom_rect, QRect) and custom_rect.width() > 0 and custom_rect.height() > 0:
+                target = QRect(custom_rect)
+            self._geometry = QRect(target)
             self.geometry_history.append(QRect(self._geometry))
 
         def geometry(self):
@@ -805,7 +810,10 @@ def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_second
     )
     assert vis.geometry() == QRect(700, 520, 420, 280)
     assert target_display._spotify_bars_overlay.geometry() == QRect(700, 520, 420, 280)
-    assert QRect(0, 0, 357, 357) in vis.geometry_history
+    assert QRect(0, 0, 357, 357) not in vis.geometry_history, (
+        "Remote CUSTOM visualizer startup must not accept a square fallback rect "
+        "once the committed startup rect has been attached."
+    )
     assert QRect(0, 0, 357, 357) in target_display._spotify_bars_overlay.history
 
 

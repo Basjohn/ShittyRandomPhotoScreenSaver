@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING, Mapping
 
 from PySide6.QtGui import QColor
+from PySide6.QtCore import QRect
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
@@ -20,6 +21,12 @@ from rendering.widget_descriptors import (
     is_custom_position_selected_for_widget,
     restore_widget_family_to_authored_layout,
 )
+from rendering.custom_layout_contract import (
+    denormalize_local_rect,
+    deserialize_custom_layout_entry,
+    get_screen_layout_entries_for_screen,
+    load_custom_layout_map,
+)
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -31,6 +38,88 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+def _resolve_parent_screen(parent) -> object | None:
+    if parent is None:
+        return None
+    screen = getattr(parent, "_screen", None)
+    if screen is not None:
+        return screen
+    try:
+        screen_getter = getattr(parent, "screen", None)
+        if callable(screen_getter):
+            screen = screen_getter()
+            if screen is not None:
+                return screen
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to resolve parent screen via QWidget.screen()", exc_info=True)
+    try:
+        window_handle = getattr(parent, "windowHandle", None)
+        if callable(window_handle):
+            handle = window_handle()
+            if handle is not None:
+                handle_screen = handle.screen()
+                if handle_screen is not None:
+                    return handle_screen
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to resolve parent screen via window handle", exc_info=True)
+    return None
+
+
+def _prime_visualizer_custom_rect_for_startup(
+    mgr: "WidgetManager",
+    vis: SpotifyVisualizerWidget,
+    widgets_config: Mapping[str, object] | None,
+) -> QRect | None:
+    """Attach the committed CUSTOM rect before startup activation can inspect geometry."""
+
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+        return None
+
+    screen = _resolve_parent_screen(getattr(mgr, "_parent", None))
+    if screen is None:
+        return None
+
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    _matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+    if not screen_entries:
+        return None
+
+    entry = deserialize_custom_layout_entry(
+        "spotify_visualizer",
+        screen_entries.get("spotify_visualizer"),
+    )
+    if entry is None:
+        return None
+
+    try:
+        screen_geom = screen.geometry()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to resolve live screen geometry for CUSTOM visualizer priming", exc_info=True)
+        return None
+
+    local_rect = denormalize_local_rect(entry.rect, screen_geom.size())
+    if local_rect.width() <= 0 or local_rect.height() <= 0:
+        return None
+
+    try:
+        setattr(vis, "_custom_layout_local_rect", QRect(local_rect))
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to attach committed CUSTOM rect before startup activation", exc_info=True)
+        return None
+
+    try:
+        vis.setGeometry(local_rect)
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to seed committed CUSTOM geometry before startup activation", exc_info=True)
+    try:
+        apply_constraints = getattr(vis, "_apply_custom_layout_size_constraints_if_active", None)
+        if callable(apply_constraints):
+            apply_constraints()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to lock CUSTOM visualizer constraints during startup priming", exc_info=True)
+    return QRect(local_rect)
 
 
 def _resolve_visualizer_anchor_media_widget(
@@ -563,6 +652,14 @@ def create_spotify_visualizer_widget(
                 vis.set_widget_manager(mgr)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to seed WidgetManager onto visualizer before startup activation", exc_info=True)
+        try:
+            _prime_visualizer_custom_rect_for_startup(
+                mgr,
+                vis,
+                widgets_config if isinstance(widgets_config, Mapping) else None,
+            )
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to prime committed CUSTOM visualizer rect before startup activation", exc_info=True)
 
         mgr._log_spotify_vis_config(
             "create",

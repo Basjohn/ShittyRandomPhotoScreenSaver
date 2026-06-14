@@ -1292,12 +1292,14 @@ class TestCreateTimeRefreshParity:
                 self.initial_mode = initial_mode
                 self.activation_calls = []
                 self.activation_manager_attached = []
+                self.custom_rect_seen_during_activation = []
 
             def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
                 self.model = model
                 self.activation_payload = activation_payload
                 self.activation_calls.append(kwargs.get("reason"))
                 self.activation_manager_attached.append(getattr(self, "_widget_manager", None) is mgr)
+                self.custom_rect_seen_during_activation.append(getattr(self, "_custom_layout_local_rect", None))
 
             def set_anchor_media_widget(self, widget):
                 self.anchor = widget
@@ -1380,6 +1382,10 @@ class TestCreateTimeRefreshParity:
             "CUSTOM startup must attach a real WidgetManager before startup_create "
             "so route-aware geometry logic cannot freelance into authored sizing."
         )
+        assert vis.custom_rect_seen_during_activation == [None], (
+            "A pending CUSTOM route without a saved rect must stay unattached during "
+            "startup_create so the creator does not invent geometry authority."
+        )
         assert refresh_calls == [], (
             "CUSTOM-routed startup must not re-enter the generic refresh path "
             "before committed replay attaches the authoritative rect."
@@ -1396,6 +1402,7 @@ class TestCreateTimeRefreshParity:
         from PySide6.QtWidgets import QWidget
         from core.resources.manager import ResourceManager
         from rendering.widget_manager import WidgetManager
+        from rendering.custom_layout_contract import get_screen_signature
         from rendering import spotify_widget_creators as creators
 
         appdata = ROOT / "tests_tmp_appdata"
@@ -1419,12 +1426,34 @@ class TestCreateTimeRefreshParity:
                 self.media_updated = self._signal_host.media_updated
                 self.setGeometry(QRect(100, 700, 300, 100))
 
+        class _FakeScreen:
+            def __init__(self, rect: QRect):
+                self._rect = QRect(rect)
+
+            def geometry(self):
+                return QRect(self._rect)
+
+            def serialNumber(self):
+                return "geom-startup"
+
+            def manufacturer(self):
+                return "SRPSS"
+
+            def model(self):
+                return "GeometryHarness"
+
+            def name(self):
+                return "GeometryHarnessDisplay"
+
         parent = QWidget()
         parent.resize(1920, 1080)
+        fake_screen = _FakeScreen(QRect(0, 0, 1920, 1080))
+        parent._screen = fake_screen
         qtbot.addWidget(parent)
         parent.show()
 
         manager = WidgetManager(parent, ResourceManager())
+        screen_signature = get_screen_signature(fake_screen)
         widgets_config = {
             "media": {
                 "enabled": True,
@@ -1444,6 +1473,18 @@ class TestCreateTimeRefreshParity:
                 "preset_spectrum": 0,
                 "bar_count": 32,
             },
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    screen_signature: {
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                            "size_payload": {"width": 420, "height": 280},
+                            "resize_mode": "visualizer_rect",
+                        }
+                    }
+                },
+            },
         }
         manager._settings_manager = _SettingsStub(widgets_config)
 
@@ -1460,9 +1501,130 @@ class TestCreateTimeRefreshParity:
         )
 
         assert vis is not None
-        assert vis.height() == 88, (
-            "A CUSTOM-routed startup visualizer must not expand to authored "
-            "preferred height before committed replay attaches the saved rect."
+        assert vis.geometry() == QRect(207, 310, 420, 280), (
+            "A CUSTOM-routed startup visualizer with a committed rect must be born "
+            "at that rect so startup staging, overlay prewarm, and first reveal do "
+            "not see a bogus default shell."
+        )
+        assert vis.minimumWidth() == 420
+        assert vis.maximumWidth() == 420
+        assert vis.minimumHeight() == 280
+        assert vis.maximumHeight() == 280
+
+    @pytest.mark.qt
+    def test_create_spotify_visualizer_widget_custom_route_primes_constraints_before_startup_pressure(
+        self,
+        qt_app,
+        qtbot,
+        monkeypatch,
+    ):
+        from PySide6.QtCore import QObject, QRect, Signal
+        from PySide6.QtWidgets import QWidget
+        from core.resources.manager import ResourceManager
+        from rendering.widget_manager import WidgetManager
+        from rendering.custom_layout_contract import get_screen_signature
+        from rendering import spotify_widget_creators as creators
+
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+
+        class _SignalHost(QObject):
+            media_updated = Signal(object)
+
+        class _SettingsStub:
+            def __init__(self, widgets_map: dict):
+                self._widgets_map = dict(widgets_map)
+
+            def get_widgets_map(self):
+                return dict(self._widgets_map)
+
+        class _FakeMediaWidget(QWidget):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self._signal_host = _SignalHost()
+                self.media_updated = self._signal_host.media_updated
+                self.setGeometry(QRect(100, 700, 300, 100))
+
+        class _FakeScreen:
+            def __init__(self, rect: QRect):
+                self._rect = QRect(rect)
+
+            def geometry(self):
+                return QRect(self._rect)
+
+            def serialNumber(self):
+                return "geom-pressure"
+
+            def manufacturer(self):
+                return "SRPSS"
+
+            def model(self):
+                return "GeometryHarness"
+
+            def name(self):
+                return "GeometryHarnessDisplay"
+
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        fake_screen = _FakeScreen(QRect(0, 0, 1920, 1080))
+        parent._screen = fake_screen
+        qtbot.addWidget(parent)
+        parent.show()
+
+        manager = WidgetManager(parent, ResourceManager())
+        screen_signature = get_screen_signature(fake_screen)
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "1",
+                "position": "Bottom Left",
+                "show_background": True,
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "1",
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+                "bar_count": 32,
+            },
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    screen_signature: {
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                            "size_payload": {"width": 420, "height": 280},
+                            "resize_mode": "visualizer_rect",
+                        }
+                    }
+                },
+            },
+        }
+        manager._settings_manager = _SettingsStub(widgets_config)
+
+        media_widget = _FakeMediaWidget(parent)
+        qtbot.addWidget(media_widget)
+
+        vis = creators.create_spotify_visualizer_widget(
+            manager,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=media_widget,
+        )
+
+        assert vis is not None
+        vis.setGeometry(QRect(0, 0, 357, 357))
+        assert vis.geometry() == QRect(207, 310, 420, 280), (
+            "Once creator-time CUSTOM priming lands, startup pressure must not be able "
+            "to distort the visualizer away from its committed rect."
         )
 
     def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):
