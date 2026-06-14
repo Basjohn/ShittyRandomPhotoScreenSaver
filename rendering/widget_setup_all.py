@@ -158,10 +158,39 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
     if parent is None:
         return
 
+    vis = getattr(parent, "spotify_visualizer_widget", None)
+    before_geom = None
+    if vis is not None:
+        try:
+            before_geom = vis.geometry()
+        except Exception:
+            before_geom = None
+
     try:
         parent._apply_saved_custom_layouts()
     except Exception:
         logger.debug("%s Failed to apply saved custom layouts after startup", log_prefix, exc_info=True)
+
+    after_geom = None
+    if vis is not None:
+        try:
+            after_geom = vis.geometry()
+        except Exception:
+            after_geom = None
+    if before_geom is not None and after_geom is not None and before_geom != after_geom:
+        logger.warning(
+            "%s [SPOTIFY_VIS][FALLBACK] Immediate post-startup saved-layout reapply changed visualizer geometry "
+            "from (%d,%d,%d,%d) to (%d,%d,%d,%d)",
+            log_prefix,
+            before_geom.x(),
+            before_geom.y(),
+            before_geom.width(),
+            before_geom.height(),
+            after_geom.x(),
+            after_geom.y(),
+            after_geom.width(),
+            after_geom.height(),
+        )
 
     try:
         pending = getattr(parent, "_custom_layout_runtime_stabilize_pending", False)
@@ -173,7 +202,38 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
             def _stabilize_saved_custom_layouts() -> None:
                 try:
                     setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+                    stabilize_vis = getattr(parent, "spotify_visualizer_widget", None)
+                    stabilize_before = None
+                    if stabilize_vis is not None:
+                        try:
+                            stabilize_before = stabilize_vis.geometry()
+                        except Exception:
+                            stabilize_before = None
                     parent._apply_saved_custom_layouts()
+                    stabilize_after = None
+                    if stabilize_vis is not None:
+                        try:
+                            stabilize_after = stabilize_vis.geometry()
+                        except Exception:
+                            stabilize_after = None
+                    if (
+                        stabilize_before is not None
+                        and stabilize_after is not None
+                        and stabilize_before != stabilize_after
+                    ):
+                        logger.warning(
+                            "%s [SPOTIFY_VIS][FALLBACK] Deferred startup stabilization changed visualizer geometry "
+                            "from (%d,%d,%d,%d) to (%d,%d,%d,%d)",
+                            log_prefix,
+                            stabilize_before.x(),
+                            stabilize_before.y(),
+                            stabilize_before.width(),
+                            stabilize_before.height(),
+                            stabilize_after.x(),
+                            stabilize_after.y(),
+                            stabilize_after.width(),
+                            stabilize_after.height(),
+                        )
                 except Exception:
                     logger.debug(
                         "%s Failed to stabilize saved custom layouts after startup",

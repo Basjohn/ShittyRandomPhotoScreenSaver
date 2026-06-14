@@ -1,5 +1,6 @@
 """Tests for weather widget."""
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
 import pytest
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
@@ -153,6 +154,49 @@ def test_weather_cache(qapp, parent_widget, mock_weather_data):
     # Cache should be valid
     assert weather._is_cache_valid() is True
     assert weather._cached_data == mock_weather_data
+
+
+def test_weather_loads_persisted_cache_for_same_location(qapp, parent_widget, tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    widget_cache = tmp_path / "weather_widget_cache.json"
+    payload = {
+        "location": "London",
+        "temperature": 18.5,
+        "condition": "Clear sky",
+        "timestamp": (datetime.now() - timedelta(hours=4)).isoformat(),
+        "humidity": 44.0,
+        "precipitation_probability": 5.0,
+        "windspeed": 11.0,
+        "weather_code": 0,
+    }
+    widget_cache.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+
+    weather = WeatherWidget(parent=parent_widget, location="  london  ")
+
+    assert weather._cached_data is not None
+    assert weather._cached_data["location"] == "London"
+    assert weather._cached_data["temperature"] == 18.5
+    assert weather._cache_time is not None
+    assert "Loaded persisted widget cache for location=London" in caplog.text
+
+
+def test_weather_ignores_persisted_cache_for_different_location(qapp, parent_widget, tmp_path, monkeypatch, caplog):
+    caplog.set_level("INFO")
+    widget_cache = tmp_path / "weather_widget_cache.json"
+    payload = {
+        "location": "Paris",
+        "temperature": 18.5,
+        "condition": "Clear sky",
+        "timestamp": datetime.now().isoformat(),
+    }
+    widget_cache.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+
+    weather = WeatherWidget(parent=parent_widget, location="London")
+
+    assert weather._cached_data is None
+    assert "Ignoring persisted widget cache for location=Paris while active_location=London" in caplog.text
 
 
 def test_weather_all_positions(qapp, parent_widget):

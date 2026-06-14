@@ -18,6 +18,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - During display setup/rebuild, `rendering/widget_setup_all.py` is the sole lifecycle-start authority for factory-created widgets. `rendering/display_setup.py` and follow-on display glue must not immediately run a second initialize pass over the same created set.
 - Runtime diagnostics are CLI-first and family-scoped. `--perf`, `--viz`, `--geo`, `--set`, `--life`, and `--cache` are the primary operator surface for high-volume diagnostics. Dedicated sidecar families should keep `WARNING`/`ERROR`/`CRITICAL` visible in general logs while moving routine INFO/DEBUG family noise into the family log.
 - Startup logging should advertise the available specific sidecars and the ones active for the current run so tracing can begin in the right file without diving into verbose logs first.
+- Fallbacks are an explicit failure signal, not a success path. Any runtime fallback that changes ownership, geometry source, display target, or recovery path must log loudly at `WARNING` or higher through the relevant existing diagnostics family.
 
 ## 3. Centralized Ownership Contracts
 - Async business work uses `ThreadManager`.

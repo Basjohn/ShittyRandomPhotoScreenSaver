@@ -579,6 +579,155 @@ class TestSpotifyWidgetIntegration:
         finally:
             display.close()
 
+    @pytest.mark.qt
+    def test_spotify_visualizer_custom_unique_saved_rect_survives_display_widget_setup_chain_with_stale_signature(
+        self,
+        qt_app,
+        qtbot,
+        settings_manager,
+        thread_manager,
+        monkeypatch,
+    ):
+        from PySide6.QtCore import QRect
+        from PySide6.QtWidgets import QWidget
+        from rendering import spotify_widget_creators as creators
+
+        class _FakeVisualizer(QWidget):
+            def __init__(self, parent, bar_count, initial_mode=None):
+                super().__init__(parent)
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+                self._minimum_size = (0, 0)
+                self._maximum_size = (16777215, 16777215)
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self._anchor_media = widget
+
+            def set_widget_manager(self, manager):
+                self._widget_manager = manager
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+            def set_thread_manager(self, manager):
+                self._thread_manager = manager
+
+            def setMinimumWidth(self, value):
+                self._minimum_size = (int(value), self._minimum_size[1])
+                super().setMinimumWidth(int(value))
+
+            def setMaximumWidth(self, value):
+                self._maximum_size = (int(value), self._maximum_size[1])
+                super().setMaximumWidth(int(value))
+
+            def setMinimumHeight(self, value):
+                self._minimum_size = (self._minimum_size[0], int(value))
+                super().setMinimumHeight(int(value))
+
+            def setMaximumHeight(self, value):
+                self._maximum_size = (self._maximum_size[0], int(value))
+                super().setMaximumHeight(int(value))
+
+            def minimumWidth(self):
+                return int(self._minimum_size[0])
+
+            def maximumWidth(self):
+                return int(self._maximum_size[0])
+
+            def minimumHeight(self):
+                return int(self._minimum_size[1])
+
+            def maximumHeight(self):
+                return int(self._maximum_size[1])
+
+            def _apply_custom_layout_size_constraints_if_active(self):
+                rect = getattr(self, "_custom_layout_local_rect", None)
+                if not isinstance(rect, QRect):
+                    return False
+                self.setMinimumWidth(rect.width())
+                self.setMaximumWidth(rect.width())
+                self.setMinimumHeight(rect.height())
+                self.setMaximumHeight(rect.height())
+                return True
+
+        class _FakeScreen:
+            def geometry(self):
+                return QRect(0, 0, 1920, 1080)
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", _FakeVisualizer)
+
+        settings_manager.set(
+            "widgets",
+            {
+                "media": {
+                    "enabled": True,
+                    "monitor": "1",
+                    "show_background": True,
+                    "bg_color": [0, 0, 0, 180],
+                    "background_opacity": 0.5,
+                    "border_color": [255, 255, 255, 255],
+                    "border_opacity": 0.8,
+                },
+                "spotify_visualizer": {
+                    "enabled": True,
+                    "position": "Custom",
+                    "monitor": "1",
+                    "mode": "bubble",
+                    "preset_bubble": 0,
+                    "bar_count": 32,
+                },
+                "custom_layout": {
+                    "version": 1,
+                    "displays": {
+                        "screen:stale-signature": {
+                            "spotify_visualizer": {
+                                "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                                "size_payload": {"width": 420, "height": 280},
+                                "resize_mode": "visualizer_rect",
+                            }
+                        }
+                    },
+                },
+            },
+        )
+
+        widget = DisplayWidget(
+            screen_index=0,
+            display_mode=DisplayMode.FILL,
+            settings_manager=settings_manager,
+            thread_manager=thread_manager,
+        )
+        widget.resize(1920, 1080)
+        widget._screen = _FakeScreen()
+        qtbot.addWidget(widget)
+        qt_app.processEvents()
+
+        try:
+            widget._setup_widgets()
+            vis = widget.spotify_visualizer_widget
+            assert vis is not None
+            assert vis.geometry() == QRect(207, 310, 420, 280), (
+                "The real DisplayWidget setup chain must still recover the sole "
+                "authoritative saved visualizer rect when the active screen "
+                "signature no longer matches the saved bucket."
+            )
+            assert vis.minimumWidth() == 420
+            assert vis.maximumWidth() == 420
+            assert vis.minimumHeight() == 280
+            assert vis.maximumHeight() == 280
+        finally:
+            widget.clear()
+            widget.close()
+
 
 # ---------------------------------------------------------------------------
 # Screensaver engine integration

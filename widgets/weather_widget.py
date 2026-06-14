@@ -6,7 +6,6 @@ Displays current weather information using Open-Meteo API (no API key needed).
 from typing import Optional, Dict, Any, Tuple, List
 from datetime import datetime, timedelta
 from pathlib import Path
-import os
 import json
 import random
 from PySide6.QtWidgets import QWidget, QSizePolicy, QHBoxLayout, QVBoxLayout, QLabel
@@ -28,6 +27,7 @@ from widgets.service_widget_runtime import (
     stop_qtimer_attr,
 )
 from core.runtime_flags import automatic_service_updates_enabled
+from core.settings.storage_paths import get_weather_widget_cache_file, migrate_file
 from widgets.weather_components import (  # noqa: F401 (re-exports for tests/external)
     WeatherConditionIcon,
     WeatherDetailRow,
@@ -36,11 +36,9 @@ from widgets.weather_components import (  # noqa: F401 (re-exports for tests/ext
 )
 
 logger = get_logger(__name__)
-# Store the weather cache in the user's home directory so it is stable
-# across script, PyInstaller, and Nuitka onefile runs. Writing next to the
-# module (e.g. in a onefile temp extraction directory) can fail or be
-# ephemeral; the home directory is always present and writable.
-_CACHE_FILE = Path(os.path.expanduser("~")) / ".srpss_last_weather.json"
+_CACHE_FILE = get_weather_widget_cache_file()
+_LEGACY_CACHE_FILE = Path.home() / ".srpss_last_weather.json"
+migrate_file(_LEGACY_CACHE_FILE, _CACHE_FILE)
 
 # Weather icon directory (PNG files)
 _WEATHER_ICON_DIR = Path(__file__).resolve().parents[1] / "images" / "weather"
@@ -87,6 +85,11 @@ _ICON_ALIGNMENT_OPTIONS = {"LEFT", "RIGHT", "NONE"}
 _DEFAULT_ICON_ALIGNMENT = "RIGHT"
 _DEFAULT_ICON_SIZE = 120
 _DEFAULT_DETAIL_ICON_SIZE = 16
+
+
+def _normalize_weather_location_key(value: Any) -> str:
+    """Normalize location strings for persisted-cache identity checks."""
+    return " ".join(str(value or "").split()).casefold()
 
 
 class WeatherWidget(BaseOverlayWidget):
@@ -909,30 +912,39 @@ class WeatherWidget(BaseOverlayWidget):
         return bool(self._cached_data)
 
     def _load_persisted_cache(self) -> None:
+        if self._cached_data and self._cache_time is not None:
+            return
         try:
             if not _CACHE_FILE.exists():
                 return
             raw = _CACHE_FILE.read_text(encoding="utf-8")
             payload = json.loads(raw)
         except Exception:
-            logger.debug("Failed to load persisted weather cache", exc_info=True)
+            logger.warning("[CACHE][WEATHER] Failed to load persisted widget cache", exc_info=True)
             return
 
         loc = payload.get("location")
         ts = payload.get("timestamp")
         if not loc or not ts:
+            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with missing location/timestamp")
             return
         try:
             dt = datetime.fromisoformat(ts)
         except Exception as e:
-            logger.debug("[WEATHER] Exception suppressed: %s", e)
+            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with invalid timestamp: %s", e)
             return
-        if loc.lower() != self._location.lower():
+        if _normalize_weather_location_key(loc) != _normalize_weather_location_key(self._location):
+            logger.info(
+                "[CACHE][WEATHER] Ignoring persisted widget cache for location=%s while active_location=%s",
+                loc,
+                self._location,
+            )
             return
 
         temp = payload.get("temperature")
         condition = payload.get("condition")
         if temp is None or condition is None:
+            logger.warning("[CACHE][WEATHER] Ignoring persisted widget cache with missing temperature/condition")
             return
 
         # Load ALL fields from cache, not just temperature/condition/location
@@ -948,6 +960,15 @@ class WeatherWidget(BaseOverlayWidget):
             "weather_code": payload.get("weather_code"),
         }
         self._cache_time = dt
+        try:
+            age_s = max(0.0, (datetime.now() - dt).total_seconds())
+        except Exception:
+            age_s = -1.0
+        logger.info(
+            "[CACHE][WEATHER] Loaded persisted widget cache for location=%s age_s=%.1f",
+            loc,
+            age_s,
+        )
 
     def _schedule_retry(self, delay_ms: int = 5 * 60 * 1000) -> None:
         ensure_single_shot_timer(
@@ -1014,9 +1035,14 @@ class WeatherWidget(BaseOverlayWidget):
             if weather_code is not None:
                 payload["weather_code"] = int(weather_code)
 
+            _CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
             _CACHE_FILE.write_text(json.dumps(payload), encoding="utf-8")
+            logger.info(
+                "[CACHE][WEATHER] Persisted widget cache for location=%s",
+                location,
+            )
         except Exception:
-            logger.debug("Failed to persist weather cache", exc_info=True)
+            logger.warning("[CACHE][WEATHER] Failed to persist widget cache", exc_info=True)
 
     def _available_primary_text_width(self) -> int:
         """Return a safe text-column width that stays inside the weather card."""

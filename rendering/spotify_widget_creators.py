@@ -86,7 +86,8 @@ def _resolve_unique_visualizer_custom_entry(
         return None
 
     found_entry = None
-    for layouts in displays.values():
+    found_bucket = None
+    for screen_signature, layouts in displays.items():
         if not isinstance(layouts, Mapping):
             continue
         entry = deserialize_custom_layout_entry(
@@ -98,7 +99,10 @@ def _resolve_unique_visualizer_custom_entry(
         if found_entry is not None:
             return None
         found_entry = entry
-    return found_entry
+        found_bucket = str(screen_signature)
+    if found_entry is None:
+        return None
+    return found_bucket, found_entry
 
 
 def _prime_visualizer_custom_rect_for_startup(
@@ -116,13 +120,21 @@ def _prime_visualizer_custom_rect_for_startup(
         return None
 
     custom_layout_map = load_custom_layout_map(widgets_config)
-    _matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+    matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
     entry = deserialize_custom_layout_entry(
         "spotify_visualizer",
         screen_entries.get("spotify_visualizer"),
     )
     if entry is None:
-        entry = _resolve_unique_visualizer_custom_entry(custom_layout_map)
+        fallback = _resolve_unique_visualizer_custom_entry(custom_layout_map)
+        if fallback is not None:
+            fallback_bucket, entry = fallback
+            logger.warning(
+                "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
+                "reusing sole saved rect from bucket=%s",
+                matched_signature or "unmatched",
+                fallback_bucket,
+            )
     if entry is None:
         return None
 

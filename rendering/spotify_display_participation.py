@@ -9,7 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from core.logging.logger import get_logger
 from rendering.multi_monitor_coordinator import get_coordinator
+
+logger = get_logger(__name__)
 
 
 def _resolve_display_screen(instance: Any) -> Any | None:
@@ -76,4 +79,11 @@ def resolve_visualizer_spawn_display(
         if int(getattr(instance, "screen_index", -1)) == int(requested_screen_index):
             return instance
 
-    return participants[0]
+    chosen = participants[0]
+    logger.warning(
+        "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is not participating; "
+        "falling back to participating display screen_index=%s",
+        requested_screen_index,
+        getattr(chosen, "screen_index", "?"),
+    )
+    return chosen

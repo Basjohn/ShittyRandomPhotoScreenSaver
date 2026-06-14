@@ -129,6 +129,11 @@ def get_weather_cache_file(profile: Optional[str] = None) -> Path:
     return get_cache_dir(profile) / "weather.json"
 
 
+def get_weather_widget_cache_file(profile: Optional[str] = None) -> Path:
+    """Return ``<app_data>/cache/weather_widget_last.json``."""
+    return get_cache_dir(profile) / "weather_widget_last.json"
+
+
 def get_state_dir(profile: Optional[str] = None) -> Path:
     """Return ``<app_data>/state/`` for persistent runtime state files."""
     d = get_app_data_dir(profile) / "state"

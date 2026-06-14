@@ -838,7 +838,9 @@ def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_second
     assert QRect(0, 0, 357, 357) in target_display._spotify_bars_overlay.history
 
 
-def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_when_requested_target_is_not_active(monkeypatch):
+def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_when_requested_target_is_not_active(monkeypatch, caplog):
+    import logging
+
     from rendering import widget_setup_all
     from rendering import spotify_display_participation as display_participation
 
@@ -889,16 +891,17 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
     monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
 
-    widget_setup_all._reconcile_remote_custom_visualizer(
-        SimpleNamespace(_parent=source_display),
-        {
-            "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
-        },
-        shadows_config={},
-        screen_index=0,
-        thread_manager=None,
-        media_widget=object(),
-    )
+    with caplog.at_level(logging.WARNING):
+        widget_setup_all._reconcile_remote_custom_visualizer(
+            SimpleNamespace(_parent=source_display),
+            {
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+            },
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=object(),
+        )
 
     assert source_display.spotify_visualizer_widget is not None, (
         "If the requested CUSTOM monitor is not participating in the active "
@@ -906,9 +909,13 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
         "display owner instead of spawning into an unseen target."
     )
     assert inactive_target_display.spotify_visualizer_widget is None
+    assert "Requested CUSTOM monitor 1 is not participating" in caplog.text
+    assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
-def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_rect_when_requested_target_is_not_active(monkeypatch):
+def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_rect_when_requested_target_is_not_active(monkeypatch, caplog):
+    import logging
+
     from PySide6.QtCore import QRect
     from rendering import widget_setup_all
     from rendering import spotify_display_participation as display_participation
@@ -1022,28 +1029,29 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
     monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
 
-    widget_setup_all._reconcile_remote_custom_visualizer(
-        SimpleNamespace(_parent=source_display),
-        {
-            "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
-            "custom_layout": {
-                "version": 1,
-                "displays": {
-                    "screen:missing-monitor": {
-                        "spotify_visualizer": {
-                            "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
-                            "size_payload": {"width": 420, "height": 280},
-                            "resize_mode": "visualizer_rect",
+    with caplog.at_level(logging.WARNING):
+        widget_setup_all._reconcile_remote_custom_visualizer(
+            SimpleNamespace(_parent=source_display),
+            {
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+                "custom_layout": {
+                    "version": 1,
+                    "displays": {
+                        "screen:missing-monitor": {
+                            "spotify_visualizer": {
+                                "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                                "size_payload": {"width": 420, "height": 280},
+                                "resize_mode": "visualizer_rect",
+                            }
                         }
-                    }
+                    },
                 },
             },
-        },
-        shadows_config={},
-        screen_index=0,
-        thread_manager=None,
-        media_widget=object(),
-    )
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=object(),
+        )
 
     vis = source_display.spotify_visualizer_widget
     assert vis is not None, (
@@ -1063,6 +1071,164 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
         "Once fallback reconcile chooses a participating owner, startup must "
         "not leave the live visualizer on its default square shape."
     )
+    assert "reusing sole saved rect from bucket=screen:missing-monitor" in caplog.text
+    assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
+
+
+def test_reconcile_remote_custom_visualizer_reuses_unique_saved_rect_when_active_target_signature_changes(monkeypatch, caplog):
+    import logging
+
+    from PySide6.QtCore import QRect
+    from rendering import widget_setup_all
+    from rendering import spotify_display_participation as display_participation
+    from rendering import spotify_widget_creators as creators
+
+    class _Visualizer:
+        def __init__(self):
+            self._geometry = QRect(0, 0, 357, 357)
+            self.geometry_history = [QRect(self._geometry)]
+            self._minimum_size = (0, 0)
+            self._maximum_size = (16777215, 16777215)
+
+        def setGeometry(self, rect):
+            self._geometry = QRect(rect)
+            self.geometry_history.append(QRect(self._geometry))
+
+        def geometry(self):
+            return QRect(self._geometry)
+
+        def setMinimumWidth(self, value):
+            self._minimum_size = (int(value), self._minimum_size[1])
+
+        def setMaximumWidth(self, value):
+            self._maximum_size = (int(value), self._maximum_size[1])
+
+        def setMinimumHeight(self, value):
+            self._minimum_size = (self._minimum_size[0], int(value))
+
+        def setMaximumHeight(self, value):
+            self._maximum_size = (self._maximum_size[0], int(value))
+
+        def minimumWidth(self):
+            return int(self._minimum_size[0])
+
+        def maximumWidth(self):
+            return int(self._maximum_size[0])
+
+        def minimumHeight(self):
+            return int(self._minimum_size[1])
+
+        def maximumHeight(self):
+            return int(self._maximum_size[1])
+
+        def _apply_custom_layout_size_constraints_if_active(self):
+            rect = getattr(self, "_custom_layout_local_rect", None)
+            if not isinstance(rect, QRect):
+                return False
+            self.setMinimumWidth(rect.width())
+            self.setMaximumWidth(rect.width())
+            self.setMinimumHeight(rect.height())
+            self.setMaximumHeight(rect.height())
+            return True
+
+        def raise_(self):
+            return None
+
+    class _TargetManager:
+        def __init__(self, target):
+            self._target = target
+            self.registered = []
+            self._parent = target
+            self._widgets = {}
+            self._settings_manager = None
+
+        def create_spotify_visualizer_widget(self, *args, **kwargs):
+            vis = creators.create_spotify_visualizer_widget(self, *args, **kwargs)
+            self._target.spotify_visualizer_widget = vis
+            return vis
+
+        def _register_spotify_secondary_fade(self, widget):
+            self.registered.append(widget)
+
+        def _log_spotify_vis_config(self, *args, **kwargs):
+            return None
+
+        def register_widget(self, name, widget):
+            self._widgets[name] = widget
+
+        def _bind_parent_attribute(self, name, widget):
+            setattr(self._target, name, widget)
+
+        def _refresh_spotify_visualizer_config(self, payload=None):
+            return None
+
+    class _Display:
+        def __init__(self, screen_index):
+            self.screen_index = screen_index
+            self.media_widget = object()
+            self.spotify_visualizer_widget = None
+            self._screen = SimpleNamespace(
+                geometry=lambda: QRect(0, 0, 1920, 1080)
+            )
+            self._exiting = False
+            self._widget_manager = _TargetManager(self)
+            self.apply_calls = 0
+
+        def _apply_saved_custom_layouts(self):
+            self.apply_calls += 1
+
+    source_display = _Display(0)
+    target_display = _Display(1)
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [source_display, target_display]
+
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(creators, "SpotifyVisualizerWidget", lambda *args, **kwargs: _Visualizer())
+    monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+    monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+
+    with caplog.at_level(logging.WARNING):
+        widget_setup_all._reconcile_remote_custom_visualizer(
+            SimpleNamespace(_parent=source_display),
+            {
+                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+                "custom_layout": {
+                    "version": 1,
+                    "displays": {
+                        "screen:stale-signature": {
+                            "spotify_visualizer": {
+                                "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                                "size_payload": {"width": 420, "height": 280},
+                                "resize_mode": "visualizer_rect",
+                            }
+                        }
+                    },
+                },
+            },
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=object(),
+        )
+
+    vis = target_display.spotify_visualizer_widget
+    assert vis is not None
+    assert vis.geometry() == QRect(207, 310, 420, 280), (
+        "If the active requested CUSTOM target still participates but its screen "
+        "signature changed, remote reconcile must still recover the sole saved "
+        "visualizer rect instead of birthing fallback square geometry."
+    )
+    assert vis.minimumWidth() == 420
+    assert vis.maximumWidth() == 420
+    assert vis.minimumHeight() == 280
+    assert vis.maximumHeight() == 280
+    assert QRect(0, 0, 357, 357) not in vis.geometry_history[1:]
+    assert "reusing sole saved rect from bucket=screen:stale-signature" in caplog.text
+    assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
 def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
