@@ -149,7 +149,20 @@ def create_overlay_timer(
         with widget_timer_sample(widget, metric_name, interval_ms=interval_ms):
             callback()
 
-    timer = tm.schedule_recurring(interval_ms, _instrumented_callback)
+    try:
+        setattr(_instrumented_callback, "_srpss_timer_owner", widget)
+        setattr(_instrumented_callback, "_srpss_timer_description", metric_name)
+    except Exception:
+        logger.debug("[OVERLAY_TIMER] Failed to attach timer diagnostics metadata", exc_info=True)
+
+    try:
+        timer = tm.schedule_recurring(
+            interval_ms,
+            _instrumented_callback,
+            description=metric_name,
+        )
+    except TypeError:
+        timer = tm.schedule_recurring(interval_ms, _instrumented_callback)
     logger.debug(
         "[OVERLAY_TIMER] Created ThreadManager timer %r (%s ms) for %r (%s)",
         timer,

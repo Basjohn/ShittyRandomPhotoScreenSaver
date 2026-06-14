@@ -130,6 +130,54 @@ def _ensure_hidden_shared_warmup_context(
         return None
 
 
+def acquire_safe_warmup_context(
+    widget,
+    *,
+    fallback_label: str,
+    preserve_live_surface: bool = True,
+):
+    """Acquire a GL context for best-effort warm work without poisoning live presentation.
+
+    Preference order:
+    1. hidden shared offscreen context
+    2. compositor context only when no live visible base surface must be preserved
+
+    Returns a zero-arg release callable when a context was acquired, otherwise ``None``.
+    """
+
+    warmup_target = _ensure_hidden_shared_warmup_context(widget)
+    if warmup_target is not None:
+        context, surface = warmup_target
+        try:
+            if context.makeCurrent(surface):
+                return context.doneCurrent
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Failed to make hidden shared context current for %s",
+                fallback_label,
+                exc_info=True,
+            )
+
+    if preserve_live_surface and _has_live_visible_base_surface(widget):
+        logger.warning(
+            "[GL COMPOSITOR][FALLBACK] Hidden shared warmup context unavailable; "
+            "deferring %s to first-use warmup to preserve live surface",
+            fallback_label,
+        )
+        return None
+
+    try:
+        widget.makeCurrent()
+        return widget.doneCurrent
+    except Exception:
+        logger.debug(
+            "[GL COMPOSITOR] Failed to make compositor context current for %s",
+            fallback_label,
+            exc_info=True,
+        )
+        return None
+
+
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
     cache = get_program_cache()
     program_id = cache.get_program(program_name)
@@ -210,32 +258,13 @@ def _warm_next_transition_program(widget) -> None:
     if not queue:
         return
 
-    release_current = None
-    acquired = False
-    warmup_target = _ensure_hidden_shared_warmup_context(widget)
-    if warmup_target is not None:
-        context, surface = warmup_target
-        try:
-            acquired = bool(context.makeCurrent(surface))
-            if acquired:
-                release_current = context.doneCurrent
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to make hidden shared context current for deferred shader warmup", exc_info=True)
-            acquired = False
-
-    if not acquired:
-        if _has_live_visible_base_surface(widget):
-            logger.info(
-                "[GL COMPOSITOR] Hidden deferred warmup context unavailable; preserving live surface and deferring remaining programs to first-use ensure"
-            )
-            return
-        try:
-            widget.makeCurrent()
-            acquired = True
-            release_current = widget.doneCurrent
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to make compositor context current for deferred shader warmup", exc_info=True)
-            return
+    release_current = acquire_safe_warmup_context(
+        widget,
+        fallback_label="deferred shader warmup",
+        preserve_live_surface=True,
+    )
+    if release_current is None:
+        return
 
     try:
         while queue:
@@ -331,32 +360,13 @@ def _warm_next_transition_resources(widget) -> None:
         warmed = set()
         widget._startup_transition_resource_warm_types = warmed
 
-    release_current = None
-    acquired = False
-    warmup_target = _ensure_hidden_shared_warmup_context(widget)
-    if warmup_target is not None:
-        context, surface = warmup_target
-        try:
-            acquired = bool(context.makeCurrent(surface))
-            if acquired:
-                release_current = context.doneCurrent
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to make hidden shared context current for deferred resource warmup", exc_info=True)
-            acquired = False
-
-    if not acquired:
-        if _has_live_visible_base_surface(widget):
-            logger.info(
-                "[GL COMPOSITOR] Hidden deferred resource warmup context unavailable; preserving live surface and deferring remaining resources to first-use warmup"
-            )
-            return
-        try:
-            widget.makeCurrent()
-            acquired = True
-            release_current = widget.doneCurrent
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to make compositor context current for deferred resource warmup", exc_info=True)
-            return
+    release_current = acquire_safe_warmup_context(
+        widget,
+        fallback_label="deferred resource warmup",
+        preserve_live_surface=True,
+    )
+    if release_current is None:
+        return
 
     try:
         while queue:

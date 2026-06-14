@@ -498,8 +498,8 @@ def start_widget_fade_in(widget: Any, duration_ms: Optional[int] = None) -> None
             has_background_frame=widget._show_background,
         )
     except Exception:
-        logger.debug(
-            "[SPOTIFY_VIS] _start_widget_fade_in fallback path triggered",
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Fade-in failed; using direct show",
             exc_info=True,
         )
         try:
@@ -523,7 +523,7 @@ def start_widget_fade_out(
             on_complete=on_complete,
         )
     except Exception:
-        logger.debug("[SPOTIFY_VIS] _start_widget_fade_out fallback triggered", exc_info=True)
+        logger.warning("[SPOTIFY_VIS][FALLBACK] Fade-out failed; using direct hide", exc_info=True)
         try:
             widget.hide()
         except Exception as e:
@@ -702,7 +702,7 @@ def begin_mode_fade_in(widget: Any, now_ts: float) -> None:
     try:
         start_widget_fade_in(widget)
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Mode fade-in fallback path", exc_info=True)
+        logger.warning("[SPOTIFY_VIS][FALLBACK] Mode fade-in fallback path", exc_info=True)
 
 
 def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:

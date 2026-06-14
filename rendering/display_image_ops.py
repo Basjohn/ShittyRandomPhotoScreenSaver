@@ -154,7 +154,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     if processed_pixmap.isNull():
         if hasattr(widget, "set_transition_work_pending"):
             widget.set_transition_work_pending(False)
-        logger.warning("[FALLBACK] Received null processed pixmap")
+        logger.warning("[CACHE][FALLBACK] Received null processed pixmap")
         widget.error_message = "Failed to load image"
         widget.current_pixmap = None
         widget.update()

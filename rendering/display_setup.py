@@ -326,11 +326,19 @@ def detect_refresh_rate(widget) -> float:
         hz_attr = getattr(screen, 'refreshRate', None)
         rate = float(hz_attr()) if callable(hz_attr) else _FALLBACK_HZ
         if not (10.0 <= rate <= 500.0):
-            logger.debug("[DISPLAY_WIDGET] Refresh rate out of range (%.1f), using fallback %d", rate, int(_FALLBACK_HZ))
+            logger.warning(
+                "[REFRESH_DIAG][FALLBACK] Refresh rate out of range (%.1f), using fallback %d",
+                rate,
+                int(_FALLBACK_HZ),
+            )
             return _FALLBACK_HZ
         return rate
     except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Refresh rate detection failed: %s, using fallback %d", e, int(_FALLBACK_HZ))
+        logger.warning(
+            "[REFRESH_DIAG][FALLBACK] Refresh rate detection failed: %s, using fallback %d",
+            e,
+            int(_FALLBACK_HZ),
+        )
         return _FALLBACK_HZ
 
 def configure_refresh_rate_sync(widget) -> None:

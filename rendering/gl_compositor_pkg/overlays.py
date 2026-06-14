@@ -25,11 +25,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def paint_debug_overlay(widget, painter: QPainter) -> None:
-    """Paint debug overlay showing transition profiling metrics."""
-    if not is_perf_metrics_enabled():
-        return
-
+def _build_debug_overlay_payload(widget) -> Optional[tuple[str, str]]:
+    """Return the PERF HUD lines for the currently active transition."""
     # Map transition states to their profiler names and display labels
     transitions = [
         ("slide", widget._slide, "Slide"),
@@ -44,10 +41,6 @@ def paint_debug_overlay(widget, painter: QPainter) -> None:
         ("particle", widget._particle, "Particle"),
     ]
 
-    active_label = None
-    line1 = ""
-    line2 = ""
-
     for name, state, label in transitions:
         if state is None:
             continue
@@ -56,31 +49,44 @@ def paint_debug_overlay(widget, painter: QPainter) -> None:
             continue
         avg_fps, min_dt_ms, max_dt_ms, _ = metrics
         progress = getattr(state, "progress", 0.0)
-        active_label = label
         line1 = f"{label} t={progress:.2f}"
         line2 = f"{avg_fps:.1f} fps  dt_min={min_dt_ms:.1f}ms  dt_max={max_dt_ms:.1f}ms"
-        break
+        return line1, line2
+    return None
 
-    if not active_label:
+
+def _paint_debug_overlay_payload(painter: QPainter, payload: tuple[str, str]) -> None:
+    """Paint a previously computed PERF HUD payload."""
+    line1, line2 = payload
+    text = f"{line1}\n{line2}" if line2 else line1
+    fm = painter.fontMetrics()
+    lines = text.split("\n")
+    max_width = max(fm.horizontalAdvance(s) for s in lines)
+    line_height = fm.height()
+    margin = 6
+    rect_height = line_height * len(lines) + margin * 2
+    rect_width = max_width + margin * 2
+    rect = QRect(margin, margin, rect_width, rect_height)
+    painter.fillRect(rect, QColor(0, 0, 0, 160))
+    painter.setPen(Qt.GlobalColor.white)
+    y = margin + fm.ascent()
+    for s in lines:
+        painter.drawText(margin + 4, y, s)
+        y += line_height
+
+
+def paint_debug_overlay(widget, painter: QPainter) -> None:
+    """Paint debug overlay showing transition profiling metrics."""
+    if not is_perf_metrics_enabled():
+        return
+
+    payload = _build_debug_overlay_payload(widget)
+    if payload is None:
         return
 
     painter.save()
     try:
-        text = f"{line1}\n{line2}" if line2 else line1
-        fm = painter.fontMetrics()
-        lines = text.split("\n")
-        max_width = max(fm.horizontalAdvance(s) for s in lines)
-        line_height = fm.height()
-        margin = 6
-        rect_height = line_height * len(lines) + margin * 2
-        rect_width = max_width + margin * 2
-        rect = QRect(margin, margin, rect_width, rect_height)
-        painter.fillRect(rect, QColor(0, 0, 0, 160))
-        painter.setPen(Qt.GlobalColor.white)
-        y = margin + fm.ascent()
-        for s in lines:
-            painter.drawText(margin + 4, y, s)
-            y += line_height
+        _paint_debug_overlay_payload(painter, payload)
     finally:
         painter.restore()
 
@@ -185,20 +191,37 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     """
 
     if not is_perf_metrics_enabled():
+        widget._debug_overlay_cache_key = None
+        widget._debug_overlay_cache_image = None
         return None
     size = widget.size()
     if size.width() <= 0 or size.height() <= 0:
+        widget._debug_overlay_cache_key = None
+        widget._debug_overlay_cache_image = None
         return None
+    payload = _build_debug_overlay_payload(widget)
+    if payload is None:
+        widget._debug_overlay_cache_key = None
+        widget._debug_overlay_cache_image = None
+        return None
+
+    cache_key = (size.width(), size.height(), payload)
+    cached_key = getattr(widget, "_debug_overlay_cache_key", None)
+    cached_image = getattr(widget, "_debug_overlay_cache_image", None)
+    if cached_key == cache_key and cached_image is not None:
+        return cached_image
 
     image = QImage(size.width(), size.height(), QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(image)
     try:
-        widget._paint_debug_overlay(painter)
+        _paint_debug_overlay_payload(painter, payload)
     finally:
         painter.end()
 
+    widget._debug_overlay_cache_key = cache_key
+    widget._debug_overlay_cache_image = image
     return image
 
 def paint_dimming_gl(widget) -> None:

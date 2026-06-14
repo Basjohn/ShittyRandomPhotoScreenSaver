@@ -12,7 +12,10 @@ Tests the centralized threading functionality including:
 import threading
 import time
 import pytest
-from core.threading.manager import _should_suppress_large_timer_gap_warning
+from core.threading.manager import (
+    _classify_large_timer_gap_warning,
+    _should_suppress_large_timer_gap_warning,
+)
 
 from core.threading.manager import (
     ThreadManager,
@@ -536,6 +539,31 @@ class TestOverlayTimerIntegration:
         with pytest.raises(RuntimeError):
             create_overlay_timer(widget, 5, lambda: None, description="missing")
 
+    def test_overlay_timer_passes_description_and_owner_to_thread_manager(self):
+        widget = self._DummyWidget()
+        captured: dict[str, object] = {}
+
+        class _StubTimer:
+            def isActive(self) -> bool:
+                return True
+
+        class _StubManager:
+            def schedule_recurring(self, interval_ms, callback, *args, description=None, **kwargs):
+                captured["interval_ms"] = interval_ms
+                captured["callback"] = callback
+                captured["description"] = description
+                return _StubTimer()
+
+        widget._thread_manager = _StubManager()  # type: ignore[attr-defined]
+
+        handle = create_overlay_timer(widget, 2500, lambda: None, description="WeatherWidget refresh")
+
+        assert isinstance(handle, OverlayTimerHandle)
+        assert captured["interval_ms"] == 2500
+        assert captured["description"] == "WeatherWidget refresh"
+        callback = captured["callback"]
+        assert getattr(callback, "_srpss_timer_owner", None) is widget
+
     @pytest.mark.qt
     @pytest.mark.skip(reason="Flaky: Qt event loop cleanup causes access violations in CI. Run manually for validation.")
     def test_overlay_timer_stop_is_safe_from_other_threads(self, qt_app):
@@ -699,6 +727,31 @@ def test_large_timer_gap_warning_suppressed_for_visualizer_reconfiguration_windo
     }
 
     assert _should_suppress_large_timer_gap_warning(140.0, 16, context) is True
+
+
+def test_large_timer_gap_warning_classifies_active_compositor_transition():
+    context = {
+        "display_transition": {
+            "running": False,
+            "pending": False,
+        },
+        "compositor": {
+            "current_transition": "GLCompositorBlockSpinTransition",
+            "has_frame_state": True,
+        },
+    }
+
+    assert _classify_large_timer_gap_warning(context) == "compositor_transition_starvation"
+
+
+def test_large_timer_gap_warning_classifies_visualizer_reconfiguration():
+    context = {
+        "vis_pending_mode": "BUBBLE",
+        "vis_waiting_engine": False,
+        "vis_waiting_frame": True,
+    }
+
+    assert _classify_large_timer_gap_warning(context) == "visualizer_reconfiguration_starvation"
 
     @pytest.mark.qt_no_exception_capture
     def test_schedule_recurring_respects_description(self, qt_app):

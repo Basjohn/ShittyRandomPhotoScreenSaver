@@ -1558,7 +1558,7 @@ class WeatherWidget(BaseOverlayWidget):
             )
         except Exception:
             # Fallback: just show and, if available, apply the shared shadow.
-            logger.debug("[WEATHER] _fade_in fallback path triggered", exc_info=True)
+            logger.warning("[LIFECYCLE][FALLBACK] Weather fade-in failed; using direct show", exc_info=True)
             try:
                 self.show()
             except Exception as e:

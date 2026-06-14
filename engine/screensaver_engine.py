@@ -765,7 +765,7 @@ class ScreensaverEngine(QObject):
                     logger.info(f"{name} started successfully")
                     workers_started += 1
                 else:
-                    logger.warning(f"{name} failed to start - using {fallback_msg}")
+                    logger.warning(f"[LIFECYCLE][FALLBACK] {name} failed to start - using {fallback_msg}")
                     workers_failed += 1
         
         logger.info(f"Worker startup complete: {workers_started} started, {workers_failed} failed")
@@ -923,8 +923,8 @@ class ScreensaverEngine(QObject):
             if self.display_manager is None:
                 return
             if self._loading_in_progress:
-                logger.info(
-                    "[FALLBACK] Startup first-image retry deferred; load still in progress (attempt %s/%s)",
+                logger.warning(
+                    "[LIFECYCLE][FALLBACK] Startup first-image retry deferred; load still in progress (attempt %s/%s)",
                     attempt,
                     max_attempts,
                 )
@@ -933,9 +933,17 @@ class ScreensaverEngine(QObject):
             if any(getattr(display, "current_image_path", None) for display in getattr(self.display_manager, "displays", [])):
                 return
             if self._show_next_image():
-                logger.info("[FALLBACK] Startup first-image retry succeeded (attempt %s/%s)", attempt, max_attempts)
+                logger.warning(
+                    "[LIFECYCLE][FALLBACK] Startup first-image retry succeeded (attempt %s/%s)",
+                    attempt,
+                    max_attempts,
+                )
                 return
-            logger.warning("[FALLBACK] Startup first-image retry failed (attempt %s/%s)", attempt, max_attempts)
+            logger.warning(
+                "[LIFECYCLE][FALLBACK] Startup first-image retry failed (attempt %s/%s)",
+                attempt,
+                max_attempts,
+            )
             self._schedule_startup_first_image_retry(attempt + 1)
 
         QTimer.singleShot(delay_ms, _retry)

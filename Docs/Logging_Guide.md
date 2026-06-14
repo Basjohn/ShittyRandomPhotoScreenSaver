@@ -19,6 +19,12 @@ Operator-facing logging guide for SRPSS.
 Notes:
 - Dedicated sidecar families suppress their routine INFO/DEBUG from the general logs only when that sidecar is active.
 - Dedicated sidecars never suppress `WARNING`/`ERROR`/`CRITICAL` from the general logs.
+- Fallbacks should stay loud at `WARNING` or higher and, when possible, carry the owning family tag too:
+  - `"[CACHE][FALLBACK] ..."`
+  - `"[LIFECYCLE][FALLBACK] ..."`
+  - `"[REFRESH_DIAG][FALLBACK] ..."`
+  - `"[CUSTOM_LAYOUT][FALLBACK] ..."`
+  - `"[SPOTIFY_VIS][FALLBACK] ..."`
 
 ## Specific Sidecar Logs
 

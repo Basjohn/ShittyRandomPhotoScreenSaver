@@ -8,6 +8,8 @@ instrumentation around transition cancellation.
 
 from __future__ import annotations
 
+import logging
+
 import pytest
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtWidgets import QWidget
@@ -35,6 +37,12 @@ class DummySettings:
                     return default
             return cur
         return default
+
+    def get_widgets_map(self):
+        widgets = self._data.get("widgets", {})
+        if isinstance(widgets, dict):
+            return widgets
+        return {}
 
 
 def _setup_compositor(monkeypatch) -> tuple[QWidget, GLCompositorWidget]:
@@ -245,6 +253,10 @@ def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, mon
 
     comp._gl_disabled_for_session = False
     comp._gl_pipeline = type("_Pipeline", (), {"initialized": True})()
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle._ensure_hidden_shared_warmup_context",
+        lambda widget: None,
+    )
 
     calls: list[str] = []
     monkeypatch.setattr(comp, "_ensure_gl_pipeline_ready", lambda: True)
@@ -281,3 +293,115 @@ def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, mon
     assert calls == ["bind:GLCompositorSlideTransition", "textures", "state:GLCompositorSlideTransition"]
     assert make_current_calls["count"] == 1
     assert done_current_calls["count"] == 1
+
+
+@pytest.mark.qt_no_exception_capture
+def test_warm_transition_resources_skips_live_surface_when_hidden_context_is_unavailable(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    comp._gl_disabled_for_session = False
+    comp._gl_pipeline = type("_Pipeline", (), {"initialized": True})()
+    comp._base_pixmap = old_pm
+
+    monkeypatch.setattr(comp, "isVisible", lambda: True)
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle._ensure_hidden_shared_warmup_context",
+        lambda widget: None,
+    )
+
+    make_current_calls = {"count": 0}
+    done_current_calls = {"count": 0}
+    bind_calls: list[str] = []
+    texture_calls: list[str] = []
+    state_calls: list[str] = []
+
+    monkeypatch.setattr(
+        comp,
+        "makeCurrent",
+        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+    )
+    monkeypatch.setattr(
+        comp,
+        "doneCurrent",
+        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+    )
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.bind_transition_program_for_current_context",
+        lambda widget, identity: bind_calls.append(str(identity)) or True,
+    )
+    monkeypatch.setattr(
+        comp,
+        "_warm_pixmap_textures_in_current_context",
+        lambda old_pixmap, new_pixmap: texture_calls.append("textures") or True,
+    )
+    monkeypatch.setattr(
+        comp,
+        "_warm_transition_state_in_current_context",
+        lambda transition_name, old_pixmap, new_pixmap: state_calls.append(str(transition_name)) or True,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        assert comp.warm_transition_resources("GLCompositorSlideTransition", old_pm, new_pm) is False
+
+    assert make_current_calls["count"] == 0
+    assert done_current_calls["count"] == 0
+    assert bind_calls == []
+    assert texture_calls == []
+    assert state_calls == []
+    assert any("deferring GLCompositorSlideTransition resource warmup to first-use warmup" in message for message in caplog.messages)
+
+
+@pytest.mark.qt_no_exception_capture
+def test_warm_shader_textures_skips_live_surface_when_hidden_context_is_unavailable(
+    qt_app,
+    monkeypatch,
+    caplog,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    comp._gl_disabled_for_session = False
+    comp._gl_pipeline = type("_Pipeline", (), {"initialized": True})()
+    comp._base_pixmap = old_pm
+
+    monkeypatch.setattr(comp, "_ensure_gl_pipeline_ready", lambda: True)
+    monkeypatch.setattr(comp, "isVisible", lambda: True)
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle._ensure_hidden_shared_warmup_context",
+        lambda widget: None,
+    )
+
+    make_current_calls = {"count": 0}
+    done_current_calls = {"count": 0}
+    texture_calls: list[str] = []
+
+    monkeypatch.setattr(
+        comp,
+        "makeCurrent",
+        lambda: make_current_calls.__setitem__("count", make_current_calls["count"] + 1),
+    )
+    monkeypatch.setattr(
+        comp,
+        "doneCurrent",
+        lambda: done_current_calls.__setitem__("count", done_current_calls["count"] + 1),
+    )
+    monkeypatch.setattr(
+        comp,
+        "_warm_pixmap_textures_in_current_context",
+        lambda old_pixmap, new_pixmap: texture_calls.append("textures") or True,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        comp.warm_shader_textures(old_pm, new_pm)
+
+    assert make_current_calls["count"] == 0
+    assert done_current_calls["count"] == 0
+    assert texture_calls == []
+    assert any("deferring pair texture warmup to first-use warmup" in message for message in caplog.messages)

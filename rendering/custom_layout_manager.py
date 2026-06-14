@@ -671,7 +671,10 @@ class CustomLayoutManager:
                 try:
                     instance._apply_saved_custom_layouts()
                 except Exception:
-                    logger.debug("[CUSTOM_LAYOUT] Failed to apply saved custom layouts after rebuild fallback", exc_info=True)
+                    logger.warning(
+                        "[CUSTOM_LAYOUT][FALLBACK] Failed to apply saved custom layouts after rebuild fallback",
+                        exc_info=True,
+                    )
 
     def _reapply_saved_layouts_across_instances(self) -> None:
         instances: list[Any] = []

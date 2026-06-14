@@ -5,7 +5,7 @@ Last updated: 2026-05-22
 Use this as the lightweight drift-check routine for SRPSS's canonical docs.
 
 ## Purpose
-- Keep `Spec.md`, `Index.md`, `Current_Plan.md`, and long-lived reference docs aligned with the codebase.
+- Keep `Spec.md`, `Index.md`, `Docs/Contracts.md`, `Current_Plan.md`, and long-lived reference docs aligned with the codebase.
 - Prevent active plans from turning into changelogs.
 - Catch stale file references, ownership claims, and “recently shipped” text that belongs in history instead.
 
@@ -20,6 +20,7 @@ Use this as the lightweight drift-check routine for SRPSS's canonical docs.
 ### 1. Confirm the document roles still hold
 - `Spec.md` should state architecture and behavior contracts only.
 - `Index.md` should map live modules/files and their ownership.
+- `Docs/Contracts.md` should stay a routing index, not a second architecture spec or a changelog.
 - `Current_Plan.md` should contain active work only.
 - `Docs/Historical_Bugs.md` should capture dated regressions, failed attempts, and final fixes.
 

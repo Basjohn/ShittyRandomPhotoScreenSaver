@@ -224,6 +224,44 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
+    def test_safe_widget_update_coalesces_pending_dispatches(self):
+        """Timer-driven repaints should not flood the UI queue with duplicate updates."""
+        class _Widget:
+            def __init__(self):
+                self.update_count = 0
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+            adaptive_timer.Shiboken = None
+
+            _queue_safe_widget_update(widget)
+            _queue_safe_widget_update(widget)
+            _queue_safe_widget_update(widget)
+
+            self.assertEqual(len(queued), 1)
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+
+            queued[0]()
+
+            self.assertEqual(widget.update_count, 1)
+            self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
+
+            _queue_safe_widget_update(widget)
+            self.assertEqual(len(queued), 2)
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+
 
 class TestAdaptiveTimerAutoIdle(unittest.TestCase):
     """Test automatic IDLE transition after timeout."""
@@ -527,6 +565,24 @@ class TestRenderStrategyManager(unittest.TestCase):
         
         self.assertTrue(self.manager.is_running())
         self.manager.stop()
+
+    def test_manager_pause_logs_noop_when_timer_already_idle(self):
+        """Perf diagnostics should not claim a real pause when the timer was already idle."""
+        self.manager.start()
+        self.assertIsNotNone(self.manager._timer)
+        self.manager._timer._state.store(TimerState.IDLE)
+
+        from rendering import adaptive_timer
+
+        original_perf_enabled = adaptive_timer.is_perf_metrics_enabled
+        with self.assertLogs(adaptive_timer.logger.name, level="INFO") as logs:
+            try:
+                adaptive_timer.is_perf_metrics_enabled = lambda: True
+                self.manager.pause()
+            finally:
+                adaptive_timer.is_perf_metrics_enabled = original_perf_enabled
+
+        self.assertTrue(any("manager_pause_noop" in message for message in logs.output))
 
 
 def run_tests():

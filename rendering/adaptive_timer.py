@@ -38,21 +38,38 @@ def _queue_safe_widget_update(widget) -> None:
     if widget is None:
         return
 
+    try:
+        if bool(getattr(widget, "_srpss_timer_update_pending", False)):
+            return
+        setattr(widget, "_srpss_timer_update_pending", True)
+    except Exception:
+        # If the widget cannot host the flag, fall back to the old behavior.
+        pass
+
     def _apply_update() -> None:
         if widget is None:
-            return
-        if Shiboken is not None:
             try:
-                if not Shiboken.isValid(widget):
-                    return
+                setattr(widget, "_srpss_timer_update_pending", False)
             except Exception:
-                return
+                pass
+            return
         try:
+            if Shiboken is not None:
+                try:
+                    if not Shiboken.isValid(widget):
+                        return
+                except Exception:
+                    return
             widget.update()
         except RuntimeError as exc:
             logger.debug("[ADAPTIVE_TIMER] Suppressed stale widget update: %s", exc)
         except Exception as exc:
             logger.debug("[ADAPTIVE_TIMER] Widget update failed: %s", exc)
+        finally:
+            try:
+                setattr(widget, "_srpss_timer_update_pending", False)
+            except Exception:
+                pass
 
     ThreadManager.run_on_ui_thread(_apply_update)
 
@@ -517,24 +534,40 @@ class AdaptiveRenderStrategyManager:
     
     def pause(self) -> None:
         """Pause timer after transition ends."""
+        before_state = None
+        after_state = None
         with self._lock:
             if self._timer is not None:
+                before_state = self._timer.get_state().name
                 self._timer.pause()
+                after_state = self._timer.get_state().name
         if is_perf_metrics_enabled():
+            event = "manager_paused" if before_state == "RUNNING" and after_state == "PAUSED" else "manager_pause_noop"
             logger.info(
-                "[PERF][ADAPTIVE_TIMER] manager_paused state=%s compositor=%s",
+                "[PERF][ADAPTIVE_TIMER] %s before=%s after=%s state=%s compositor=%s",
+                event,
+                before_state,
+                after_state,
                 self.describe_state(),
                 self._describe_compositor_state(),
             )
     
     def resume(self) -> None:
         """Resume timer for new transition."""
+        before_state = None
+        after_state = None
         with self._lock:
             if self._timer is not None:
+                before_state = self._timer.get_state().name
                 self._timer.resume()
+                after_state = self._timer.get_state().name
         if is_perf_metrics_enabled():
+            event = "manager_resumed" if after_state == "RUNNING" and before_state != "RUNNING" else "manager_resume_noop"
             logger.info(
-                "[PERF][ADAPTIVE_TIMER] manager_resumed state=%s compositor=%s",
+                "[PERF][ADAPTIVE_TIMER] %s before=%s after=%s state=%s compositor=%s",
+                event,
+                before_state,
+                after_state,
                 self.describe_state(),
                 self._describe_compositor_state(),
             )

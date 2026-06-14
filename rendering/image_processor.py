@@ -41,7 +41,7 @@ class ImageProcessor:
         """
 
         if image.isNull():
-            logger.warning("[FALLBACK] Image is null, delegating to QImage path")
+            logger.warning("[CACHE][FALLBACK] Image is null, delegating to QImage path")
 
         qimage = image.toImage()
         processed_qimage = AsyncImageProcessor.process_qimage(

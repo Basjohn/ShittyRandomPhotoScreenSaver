@@ -473,11 +473,11 @@ def load_image_task(
         elif image_meta.url:
             logger.debug(f"Loading from URL: {image_meta.url}")
             if not image_meta.local_path:
-                logger.warning("[FALLBACK] No local path for URL image")
+                logger.warning("[CACHE][FALLBACK] No local path for URL image")
                 return None
             image_path = str(image_meta.local_path)
         else:
-            logger.warning("[FALLBACK] No path or URL for image")
+            logger.warning("[CACHE][FALLBACK] No path or URL for image")
             return None
 
         # Use cache if available (QImage decoded on IO thread)
@@ -1175,21 +1175,21 @@ def load_and_display_image(
         pixmap = load_image_task(engine, image_meta)
 
         if not pixmap:
-            logger.warning(f"[FALLBACK] Image load failed, attempting next image (retry {retry_count + 1}/10)")
+            logger.warning(f"[CACHE][FALLBACK] Image load failed, attempting next image (retry {retry_count + 1}/10)")
             engine._loading_in_progress = False
             try:
                 pending = getattr(engine.display_manager, "set_transition_work_pending", None)
                 if callable(pending):
                     pending(False)
             except Exception:
-                logger.debug("[FALLBACK] Failed to clear transition pending state", exc_info=True)
+                logger.warning("[CACHE][FALLBACK] Failed to clear transition pending state", exc_info=True)
 
             if retry_count < 10 and engine.image_queue:
                 next_image = engine.image_queue.next()
                 if next_image:
                     return load_and_display_image(engine, next_image, retry_count + 1)
 
-            logger.error("[FALLBACK] Failed to load any images after 10 attempts")
+            logger.error("[CACHE][FALLBACK] Failed to load any images after 10 attempts")
             engine.display_manager.show_error("No valid images available")
             return False
 
@@ -1235,7 +1235,7 @@ def load_and_display_image(
             if callable(pending):
                 pending(False)
         except Exception:
-            logger.debug("[FALLBACK] Failed to reconcile transition pending state", exc_info=True)
+            logger.warning("[CACHE][FALLBACK] Failed to reconcile transition pending state", exc_info=True)
         return True
 
     except Exception as e:
@@ -1246,7 +1246,7 @@ def load_and_display_image(
             if callable(pending):
                 pending(False)
         except Exception:
-            logger.debug("[FALLBACK] Failed to clear transition pending state", exc_info=True)
+            logger.warning("[CACHE][FALLBACK] Failed to clear transition pending state", exc_info=True)
         return False
 
 

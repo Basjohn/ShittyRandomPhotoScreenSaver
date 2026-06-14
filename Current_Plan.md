@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-14
+Last updated: 2026-06-15
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -22,6 +22,30 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
+- [ ] High priority: recover multi-display transition/compositor performance.
+  - Keep the investigation scoped to measured throughput loss, not generic widget paint suspicion.
+  - Maintain automation bars for:
+    - adaptive/compositor timer dispatch must not flood the UI queue with duplicate pending updates
+    - compositor warm helpers must not touch the live visible surface when hidden shared warmup is unavailable
+    - transition perf fixes must preserve cadence responsiveness rather than solving stalls by becoming stale
+    - PERF HUD / diagnostics work must not rebuild expensive overlay assets every compositor shader frame when the displayed content has not changed
+    - overlay timer gap diagnostics must name likely starvation cause rather than implying a cheap widget callback is the hot path
+    - adaptive timer manager logs must distinguish real pause/resume transitions from no-op state reports
+  - Trace and validate the remaining hot-path seams in this order:
+    - compositor render pacing during active transitions now that PERF HUD rebuild churn is reduced
+    - image prescale / scaled-cache reuse
+    - remaining per-image GL texture upload churn after live-surface warm deferral
+    - any residual noisy timer-gap diagnostics versus real stalls
+  - Immediate next runtime/log questions:
+    - does fresh multi-display startup still crater before the first few transitions have warmed naturally
+    - did warning-level `Hidden shared warmup context unavailable; deferring ... to first-use warmup` fire, and if so how often
+    - after the PERF HUD cache pass, are the worst remaining spikes dominated by `ImageWorker prescale`, `GL TEXTURE Slow upload`, or compositor paint cadence
+  - Use `--perf` evidence to separate:
+    - true paint/upload cost
+    - UI-queue backpressure
+    - cache miss / redundant prescale work
+  - Do not “fix” this by softening FPS targets, adding stale visual holds, or broad fallback behavior.
+
 - [ ] High priority: audit Weather cache blanking / premature expiry.
   - Confirm why Weather is going blank too often even though the cache should behave as replace-only, not expire-to-empty.
   - Trace `widgets/weather_widget.py` cache-read, startup-use, refresh, and replacement paths.
@@ -37,6 +61,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Watchlist
 
+- Visualizer requested-display participation/fallback warnings still need a later re-audit if they keep firing while the requested display is clearly live; keep that separate from the current perf pass unless logs prove it is causing rebuild churn.
 - Spectrum solid-bar visual smoothness is no longer active work, but future tuning must stay visual-only and must not reopen audio/reactivity regressions.
 - Bubble work is closed for now; future changes should preserve mode isolation rather than reopening shared-floor contracts casually.
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.

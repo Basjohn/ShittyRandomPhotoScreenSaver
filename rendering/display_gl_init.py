@@ -109,7 +109,9 @@ def ensure_render_surface(widget) -> None:
     try:
         surface = widget._renderer_backend.create_surface(descriptor)
     except NotImplementedError:
-        logger.debug("[RENDER] Backend create_surface not implemented; using widget fallback")
+        logger.warning(
+            "[LIFECYCLE][FALLBACK] Renderer backend create_surface not implemented; using widget fallback"
+        )
         return
     except Exception as exc:
         logger.exception("[RENDER] Failed to create render surface: %s", exc)

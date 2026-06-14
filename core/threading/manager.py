@@ -22,6 +22,8 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
     """Best-effort context for recurring-timer gap diagnostics."""
     owner = getattr(func, "__self__", None)
     if owner is None:
+        owner = getattr(func, "_srpss_timer_owner", None)
+    if owner is None:
         return None
 
     context: Dict[str, Any] = {
@@ -127,6 +129,32 @@ def _should_suppress_large_timer_gap_warning(
         return True
 
     return False
+
+
+def _classify_large_timer_gap_warning(context: dict | None) -> str:
+    """Return a coarse likely-cause label for loud timer-gap diagnostics."""
+    if not isinstance(context, dict):
+        return "unknown_ui_thread_stall"
+
+    if bool(context.get("vis_waiting_engine")) or bool(context.get("vis_waiting_frame")) or context.get("vis_pending_mode"):
+        return "visualizer_reconfiguration_starvation"
+
+    display_transition = context.get("display_transition")
+    if isinstance(display_transition, dict):
+        if bool(display_transition.get("running")) or bool(display_transition.get("pending")):
+            return "display_transition_starvation"
+
+    compositor = context.get("compositor")
+    if isinstance(compositor, dict):
+        if compositor.get("current_transition") or bool(compositor.get("has_frame_state")):
+            return "compositor_transition_starvation"
+        render_strategy = compositor.get("render_strategy")
+        if isinstance(render_strategy, dict):
+            timer = render_strategy.get("timer")
+            if isinstance(timer, dict) and timer.get("state") in {"RUNNING", "PAUSED"}:
+                return "compositor_cadence_starvation"
+
+    return "unknown_ui_thread_stall"
 
 
 # UI-thread invoker for reliable main thread dispatch
@@ -746,11 +774,13 @@ class ThreadManager:
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
                         context = _describe_timer_callable_context(func)
                         if not _should_suppress_large_timer_gap_warning(gap_ms, interval_ms, context):
+                            likely_cause = _classify_large_timer_gap_warning(context)
                             logger.warning(
-                                "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms context=%s)",
+                                "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms likely=%s context=%s)",
                                 timer_desc,
                                 gap_ms,
                                 interval_ms,
+                                likely_cause,
                                 context,
                             )
                 _last_invoke_ts[0] = now

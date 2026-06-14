@@ -49,7 +49,7 @@ class AsyncImageProcessor:
         """
 
         if image.isNull():
-            logger.warning("[FALLBACK] QImage is null, returning empty ARGB32 image")
+            logger.warning("[CACHE][FALLBACK] QImage is null, returning empty ARGB32 image")
             result = QImage(screen_size, QImage.Format.Format_ARGB32_Premultiplied)
             result.fill(Qt.GlobalColor.black)
             return result

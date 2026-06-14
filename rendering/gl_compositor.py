@@ -293,6 +293,8 @@ class GLCompositorWidget(QOpenGLWidget):
         # Invalidated on resize events.
         self._cached_viewport: Optional[tuple[int, int]] = None
         self._cached_widget_size: Optional[tuple[int, int]] = None
+        self._debug_overlay_cache_key = None
+        self._debug_overlay_cache_image: Optional[QImage] = None
 
         # Smoothed Spotify visualiser state pushed from DisplayWidget. When
         # present, bars are rendered as a thin overlay above the current
@@ -509,7 +511,10 @@ class GLCompositorWidget(QOpenGLWidget):
             pass
         if display_hz <= 0:
             display_hz = _FALLBACK_HZ
-            logger.debug("[GL COMPOSITOR] Screen Hz detection failed, using fallback %d", _FALLBACK_HZ)
+            logger.warning(
+                "[REFRESH_DIAG][FALLBACK] GL compositor screen Hz detection failed, using fallback %d",
+                _FALLBACK_HZ,
+            )
         return display_hz
 
     def _calculate_target_fps(self, display_hz: int) -> int:
@@ -1586,7 +1591,23 @@ class GLCompositorWidget(QOpenGLWidget):
         """Best-effort prewarm of shader textures for a pixmap pair."""
         if not self._ensure_gl_pipeline_ready():
             return
-        self._warm_pixmap_textures(old_pixmap, new_pixmap)
+        from rendering.gl_compositor_pkg.gl_lifecycle import acquire_safe_warmup_context
+
+        release_current = acquire_safe_warmup_context(
+            self,
+            fallback_label="pair texture warmup",
+            preserve_live_surface=True,
+        )
+        if release_current is None:
+            return
+
+        try:
+            self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
+        finally:
+            try:
+                release_current()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     def warm_transition_resources(
         self,
@@ -1602,15 +1623,20 @@ class GLCompositorWidget(QOpenGLWidget):
             warm_old = new_pixmap
         if not self._ensure_gl_pipeline_ready():
             return False
-        try:
-            self.makeCurrent()
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        from rendering.gl_compositor_pkg.gl_lifecycle import (
+            acquire_safe_warmup_context,
+            bind_transition_program_for_current_context,
+        )
+
+        release_current = acquire_safe_warmup_context(
+            self,
+            fallback_label=f"{transition_name} resource warmup",
+            preserve_live_surface=True,
+        )
+        if release_current is None:
             return False
 
         try:
-            from rendering.gl_compositor_pkg.gl_lifecycle import bind_transition_program_for_current_context
-
             if not bind_transition_program_for_current_context(self, transition_name):
                 logger.debug("[GL COMPOSITOR] Transition program ensure incomplete for %s", transition_name)
             textures_ready = self._warm_pixmap_textures_in_current_context(warm_old, new_pixmap)
@@ -1624,7 +1650,7 @@ class GLCompositorWidget(QOpenGLWidget):
             return state_ready
         finally:
             try:
-                self.doneCurrent()
+                release_current()
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 

@@ -11,6 +11,7 @@ Living map of the current SRPSS codebase.
 | `Spec.md` | Canonical architecture contract |
 | `Current_Plan.md` | Active short-term work and validation |
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
+| `Docs/Contracts.md` | Short contract index that routes quickly to the canonical owner for each major subsystem seam |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
 | `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Active geometry audit with risks, order of work, and start-to-finish checklist for the reopened visualizer CUSTOM/runtime shape family |
 | `audits/GeoAudit/README.md` | Small entrypoint that points at the active geometry audit |
@@ -161,7 +162,7 @@ Living map of the current SRPSS codebase.
 | Volume slider | `widgets/spotify_volume_widget.py` | Spotify volume overlay with local canonical flush-timer reset ownership, provider retargeting, deferred Core Audio writes, low-frequency mixer-session resync hooks, painted-frame/track shadow rendering, and intentionally media-owned CUSTOM move/resize participation through an authored slider scale contract |
 | Edit grid overlay | `widgets/edit_grid_overlay_widget.py` | Temporary per-display low-opacity grid overlay shown only during active CUSTOM edit sessions, above the compositor and below the temporary shells |
 | Visualizer parity | `widgets/spotify_visualizer_widget.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering, supports Custom-only independent display routing while keeping exact Follow Media parity outside Custom, and now treats the committed CUSTOM rect as the visualizer's active outer-geometry authority |
-| Analog clock geometry | `widgets/clock_widget.py` | Shared analogue face/card/numeral layout metrics, authored optical Roman-numeral placement map, framed outer-ring breathing-room contract, and below-face timezone spacing contract |
+| Analog clock geometry | `widgets/clock_widget.py` | Shared analogue face/card/numeral layout metrics, authored optical Roman-numeral placement map, framed outer-ring breathing-room contract, below-face timezone spacing contract, and CUSTOM runtime full-rect swap ownership between digital and analogue |
 
 ## Source Ingestion
 

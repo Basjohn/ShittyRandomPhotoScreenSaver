@@ -971,7 +971,10 @@ class SpotifyVolumeWidget(QWidget):
             )
             self._has_faded_in = True
         except Exception:
-            logger.debug("[SPOTIFY_VOL] _start_widget_fade_in fallback path triggered", exc_info=True)
+            logger.warning(
+                "[SPOTIFY_VOL][FALLBACK] Fade-in failed; using direct show",
+                exc_info=True,
+            )
             try:
                 self.show()
             except Exception as e:

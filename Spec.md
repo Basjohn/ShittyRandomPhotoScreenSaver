@@ -149,6 +149,7 @@ Active ids:
 - When a committed visualizer CUSTOM rect already exists, startup creation must prime that rect before `startup_create`/prewarm work reads geometry, and later foreign outer-geometry writes must not be allowed to override that committed CUSTOM rect while CUSTOM authority remains active.
 - Visualizer spawn ownership under `Custom` is a participating-display contract, not a media-follow shortcut: if the requested CUSTOM monitor is not currently part of the active compositor/display set, local/remote visualizer creation must choose a participating display instance instead of spawning into unseen territory.
 - Analog clock cache/paint geometry should stay explicit and shared: the analogue card ring is intentionally larger than the inner face, framed mode keeps extra outer-ring breathing room between numerals and the card edge, the numerals are intentionally smaller than the old digital-proportional fallback, and numeral placement uses an authored optical layout map rather than plain text centering so wide Roman numerals such as `VIII` remain visually balanced across future resizing work.
+- Clock mode swaps under a committed CUSTOM rect are full outer-geometry swaps, not inner-content mutations. Switching between digital and analogue must rebuild the saved CUSTOM rect around the target mode's natural shape, preserve the authored scale, and persist the rebuilt rect as the new custom truth instead of cramming the target mode into the previous mode's outer box.
 
 ## 6. Preset Architecture Contract
 - Authored curated source: `presets/visualizer_modes/`.
@@ -374,6 +375,7 @@ Active ids:
 
 ## 13. Documentation Contract
 - `Index.md`: module map.
+- `Docs/Contracts.md`: short contract index for fast owner lookup.
 - `Current_Plan.md`: active priorities only.
 - `Docs/Guardrails.md`: policy/rules.
 - `Docs/Historical_Bugs.md`: historical timeline and root-cause record.

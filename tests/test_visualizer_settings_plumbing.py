@@ -1762,6 +1762,145 @@ class TestCreateTimeRefreshParity:
         assert "Requested CUSTOM monitor 1 is not participating" in caplog.text
         assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
+    def test_create_spotify_visualizer_widget_does_not_birth_duplicate_fallback_when_requested_display_is_live_but_pending(
+        self,
+        monkeypatch,
+        caplog,
+    ):
+        import logging
+
+        from rendering import spotify_widget_creators as creators
+        from rendering import spotify_display_participation as display_participation
+
+        created_on_screens: list[int] = []
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+                created_on_screens.append(int(getattr(parent, "screen_index", -1)))
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_widget_manager(self, manager):
+                self._widget_manager = manager
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeScreen:
+            def geometry(self):
+                return QRect(0, 0, 1920, 1080)
+
+        screen0_parent = SimpleNamespace(
+            screen_index=0,
+            _screen=FakeScreen(),
+            _exiting=False,
+            _widget_manager=None,
+        )
+        screen1_parent = SimpleNamespace(
+            screen_index=1,
+            _screen=FakeScreen(),
+            _exiting=False,
+            _widget_manager=None,
+        )
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return [screen0_parent, screen1_parent]
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+        monkeypatch.setattr(display_participation, "get_coordinator", lambda: FakeCoordinator())
+
+        class FakeManager:
+            def __init__(self, parent):
+                self._parent = parent
+                self._widgets = {}
+                parent._widget_manager = self
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "ALL",
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+                "show_background": True,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "2",
+                "mode": "bubble",
+                "preset_bubble": 0,
+                "bar_count": 32,
+            },
+        }
+
+        screen0_mgr = FakeManager(screen0_parent)
+        with caplog.at_level(logging.WARNING):
+            first_attempt = creators.create_spotify_visualizer_widget(
+                screen0_mgr,
+                widgets_config,
+                shadows_config={},
+                screen_index=0,
+                thread_manager=None,
+                media_widget=FakeMediaWidget(),
+            )
+        assert first_attempt is None, (
+            "When the requested CUSTOM display already exists and is simply pending its own startup, "
+            "the current display must not birth a fallback visualizer that later duplicates."
+        )
+        assert "not participating" not in caplog.text
+
+        screen1_mgr = FakeManager(screen1_parent)
+        second_attempt = creators.create_spotify_visualizer_widget(
+            screen1_mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=1,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+        assert second_attempt is not None
+        assert created_on_screens == [1], (
+            "Sequential multi-display startup must create the CUSTOM visualizer only on the requested "
+            "display once that display becomes the real live owner."
+        )
+
     def test_create_spotify_visualizer_widget_fallback_spawn_reuses_unique_saved_custom_rect_when_requested_monitor_is_absent(
         self,
         monkeypatch,

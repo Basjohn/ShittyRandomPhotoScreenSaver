@@ -291,8 +291,11 @@ class ShadowFadeProfile:
             anim.start()
         except Exception as e:
             logger.debug("[SHADOW] Exception suppressed: %s", e)
-            if is_verbose_logging():
-                logger.debug("[SHADOW_FADE] start_fade_in fallback path triggered for %r", widget, exc_info=True)
+            logger.warning(
+                "[LIFECYCLE][FALLBACK] Shadow fade-in failed; using direct show for %r",
+                widget,
+                exc_info=True,
+            )
             try:
                 widget.show()
             except Exception as e:

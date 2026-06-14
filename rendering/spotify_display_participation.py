@@ -28,14 +28,10 @@ def _resolve_display_screen(instance: Any) -> Any | None:
     return None
 
 
-def display_instance_is_participating(instance: Any) -> bool:
-    """Return True when *instance* is a live runtime display participant."""
-
+def _display_instance_has_live_screen(instance: Any) -> bool:
     if instance is None:
         return False
     if bool(getattr(instance, "_exiting", False)):
-        return False
-    if getattr(instance, "_widget_manager", None) is None:
         return False
     screen = _resolve_display_screen(instance)
     if screen is None:
@@ -45,6 +41,23 @@ def display_instance_is_participating(instance: Any) -> bool:
     except Exception:
         return False
     return bool(geom is not None and geom.isValid() and geom.width() > 0 and geom.height() > 0)
+
+
+def _screen_index_matches(instance: Any, requested_screen_index: int) -> bool:
+    try:
+        return int(getattr(instance, "screen_index", -1)) == int(requested_screen_index)
+    except Exception:
+        return False
+
+
+def display_instance_is_participating(instance: Any) -> bool:
+    """Return True when *instance* is a live runtime display participant."""
+
+    if not _display_instance_has_live_screen(instance):
+        return False
+    if getattr(instance, "_widget_manager", None) is None:
+        return False
+    return True
 
 
 def resolve_visualizer_spawn_display(
@@ -60,15 +73,29 @@ def resolve_visualizer_spawn_display(
     """
 
     participants: list[Any] = []
+    requested_live_instance: Any | None = None
     try:
         for instance in get_coordinator().get_all_instances():
             if display_instance_is_participating(instance):
                 participants.append(instance)
+            if (
+                requested_live_instance is None
+                and _screen_index_matches(instance, requested_screen_index)
+                and _display_instance_has_live_screen(instance)
+            ):
+                requested_live_instance = instance
     except Exception:
         participants = []
+        requested_live_instance = None
 
     if display_instance_is_participating(current_display) and current_display not in participants:
         participants.append(current_display)
+    if (
+        requested_live_instance is None
+        and _screen_index_matches(current_display, requested_screen_index)
+        and _display_instance_has_live_screen(current_display)
+    ):
+        requested_live_instance = current_display
 
     if not participants:
         return None
@@ -76,8 +103,15 @@ def resolve_visualizer_spawn_display(
     participants.sort(key=lambda instance: int(getattr(instance, "screen_index", 0)))
 
     for instance in participants:
-        if int(getattr(instance, "screen_index", -1)) == int(requested_screen_index):
+        if _screen_index_matches(instance, requested_screen_index):
             return instance
+
+    if requested_live_instance is not None:
+        logger.debug(
+            "[SPOTIFY_VIS] Requested CUSTOM monitor %s is live but not ready yet; deferring spawn to that display",
+            requested_screen_index,
+        )
+        return requested_live_instance
 
     chosen = participants[0]
     logger.warning(
