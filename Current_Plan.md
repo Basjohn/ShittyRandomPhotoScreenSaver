@@ -39,6 +39,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - Keep it explicit about what is now closed:
     - creator-time committed CUSTOM rect priming
     - widget-local rejection of foreign outer-geometry writes while committed CUSTOM authority is active
+    - participating-display spawn fallback when the requested CUSTOM monitor is not part of the active compositor/display set
   - Keep it explicit about what remains open:
     - display recreation / display swap first-visible truth
     - rescue policy only if the remaining bars still prove a real impossible-shape birth
@@ -53,6 +54,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - creator-time CUSTOM committed-rect birth guard that fails if startup is born at a bogus default rect instead of the saved rect
     - creator-time CUSTOM startup-pressure guard that fails if post-create geometry pressure can still push the visualizer away from the committed rect
     - remote reconcile guard that fails if a remote CUSTOM visualizer accepts a square fallback rect once the committed rect is attached
+    - participating-display spawn guard that fails if a CUSTOM visualizer tries to spawn against a non-participating monitor instead of a live display instance
+    - absent-monitor fallback spawn guard that fails if a participating-display fallback still births the visualizer at a default square because the sole saved rect lived under a different screen bucket
+    - absent-monitor remote-reconcile fallback guard that fails if secondary-stage CUSTOM reconcile still loses the sole authoritative saved rect during participating-display fallback
   - [ ] Add a display-recreation bar that fails if a recreated display can still make the first visible visualizer instance appear in fallback geometry before the committed rect is visible again.
   - [ ] Add a display-swap / monitor-handoff bar that fails if the committed custom rect is correct but the runtime instance for the destination display still starts from a poisoned local rect.
   - [ ] Fail when `replay_final` is green but display recreation, display-swap, or rebuild still produces a live rect that disagrees with the committed custom rect.
@@ -66,6 +70,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Block the duplicate create-time canonical refresh pass while the visualizer is routed through `Custom` and waiting for committed replay.
   - [x] Attach the real `WidgetManager` before `startup_create` so visualizer CUSTOM-route detection is truthful during initial mode/card-height work.
   - [x] Re-audit startup create, settings refresh, secondary-stage activation, preferred-height application, widget positioning, and GL overlay sync from the current tree.
+  - [x] Keep CUSTOM visualizer spawn ownership tied to a participating display instance rather than an off-screen/non-participating monitor target.
+  - [x] Reuse the sole authoritative saved visualizer rect during creator-time fallback spawn when topology changes prevent the requested CUSTOM monitor bucket from matching the participating display owner.
   - [ ] Document the last-authority chain for each risky flow:
     - display recreation
     - display swap

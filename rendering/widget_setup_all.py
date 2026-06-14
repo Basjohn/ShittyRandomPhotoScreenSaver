@@ -20,6 +20,7 @@ from rendering.widget_descriptors import (
     get_factory_widget_descriptors,
     is_custom_position_selected_for_widget,
 )
+from rendering.spotify_display_participation import resolve_visualizer_spawn_display
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
@@ -304,15 +305,16 @@ def _reconcile_remote_custom_visualizer(
         target_screen_index = int(monitor_value) - 1
     except Exception:
         return
+    current_display = getattr(mgr, "_parent", None)
     if target_screen_index == screen_index:
         return
-    try:
-        instances = get_coordinator().get_all_instances()
-    except Exception:
-        logger.debug("[WIDGET_SETUP] Failed to enumerate displays for remote visualizer reconcile", exc_info=True)
-        return
-    target = next((inst for inst in instances if int(getattr(inst, "screen_index", -1)) == target_screen_index), None)
+    target = resolve_visualizer_spawn_display(
+        target_screen_index,
+        current_display=current_display,
+    )
     if target is None:
+        return
+    if target is current_display and target_screen_index == screen_index:
         return
     if getattr(target, "spotify_visualizer_widget", None) is not None:
         return

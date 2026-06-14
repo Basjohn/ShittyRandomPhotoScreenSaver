@@ -27,6 +27,7 @@ from rendering.custom_layout_contract import (
     get_screen_layout_entries_for_screen,
     load_custom_layout_map,
 )
+from rendering.spotify_display_participation import resolve_visualizer_spawn_display
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -67,6 +68,39 @@ def _resolve_parent_screen(parent) -> object | None:
     return None
 
 
+def _resolve_unique_visualizer_custom_entry(
+    custom_layout_map: Mapping[str, object],
+):
+    """Return the sole saved visualizer CUSTOM entry across all display buckets.
+
+    This is a topology-fallback contract only. Normal startup should still bind
+    against the live parent screen bucket. We only use this when the chosen
+    participating display cannot match a screen bucket but there is exactly one
+    saved visualizer rect in the layout map, which makes that rect the only
+    authoritative candidate instead of letting startup fall back to a default
+    square.
+    """
+
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, Mapping):
+        return None
+
+    found_entry = None
+    for layouts in displays.values():
+        if not isinstance(layouts, Mapping):
+            continue
+        entry = deserialize_custom_layout_entry(
+            "spotify_visualizer",
+            layouts.get("spotify_visualizer"),
+        )
+        if entry is None:
+            continue
+        if found_entry is not None:
+            return None
+        found_entry = entry
+    return found_entry
+
+
 def _prime_visualizer_custom_rect_for_startup(
     mgr: "WidgetManager",
     vis: SpotifyVisualizerWidget,
@@ -83,13 +117,12 @@ def _prime_visualizer_custom_rect_for_startup(
 
     custom_layout_map = load_custom_layout_map(widgets_config)
     _matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
-    if not screen_entries:
-        return None
-
     entry = deserialize_custom_layout_entry(
         "spotify_visualizer",
         screen_entries.get("spotify_visualizer"),
     )
+    if entry is None:
+        entry = _resolve_unique_visualizer_custom_entry(custom_layout_map)
     if entry is None:
         return None
 
@@ -618,11 +651,25 @@ def create_spotify_visualizer_widget(
                 "[SPOTIFY_VIS] Suppressing invalid Custom+ALL visualizer creation; unable to restore an authored route"
             )
             return None
-    try:
-        show_on_this = (effective_monitor_sel == 'ALL') or (int(effective_monitor_sel) == (screen_index + 1))
-    except Exception as e:
-        logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
-        show_on_this = False
+    current_display = getattr(mgr, "_parent", None)
+    show_on_this = False
+    if custom_routing_active:
+        try:
+            requested_screen_index = int(effective_monitor_sel) - 1
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            requested_screen_index = -1
+        spawn_owner = resolve_visualizer_spawn_display(
+            requested_screen_index,
+            current_display=current_display,
+        )
+        show_on_this = spawn_owner is current_display
+    else:
+        try:
+            show_on_this = (effective_monitor_sel == 'ALL') or (int(effective_monitor_sel) == (screen_index + 1))
+        except Exception as e:
+            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            show_on_this = False
 
     anchor_media_widget = _resolve_visualizer_anchor_media_widget(
         mgr,

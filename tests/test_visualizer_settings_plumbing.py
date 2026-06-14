@@ -1330,9 +1330,20 @@ class TestCreateTimeRefreshParity:
 
         class FakeManager:
             def __init__(self):
-                self._parent = object()
+                self._parent = SimpleNamespace(
+                    screen_index=0,
+                    _screen=SimpleNamespace(
+                        geometry=lambda: SimpleNamespace(
+                            isValid=lambda: True,
+                            width=lambda: 1920,
+                            height=lambda: 1080,
+                        )
+                    ),
+                    _exiting=False,
+                )
                 self._widgets = {}
                 self.bound = {}
+                self._parent._widget_manager = self
 
             def _log_spotify_vis_config(self, *args, **kwargs):
                 return None
@@ -1453,6 +1464,7 @@ class TestCreateTimeRefreshParity:
         parent.show()
 
         manager = WidgetManager(parent, ResourceManager())
+        parent._widget_manager = manager
         screen_signature = get_screen_signature(fake_screen)
         widgets_config = {
             "media": {
@@ -1573,6 +1585,7 @@ class TestCreateTimeRefreshParity:
         parent.show()
 
         manager = WidgetManager(parent, ResourceManager())
+        parent._widget_manager = manager
         screen_signature = get_screen_signature(fake_screen)
         widgets_config = {
             "media": {
@@ -1626,6 +1639,302 @@ class TestCreateTimeRefreshParity:
             "Once creator-time CUSTOM priming lands, startup pressure must not be able "
             "to distort the visualizer away from its committed rect."
         )
+
+    def test_create_spotify_visualizer_widget_falls_back_to_participating_display_when_requested_monitor_is_absent(
+        self,
+        monkeypatch,
+    ):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+        from rendering import spotify_display_participation as display_participation
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_widget_manager(self, manager):
+                self._widget_manager = manager
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeScreen:
+            def geometry(self):
+                from PySide6.QtCore import QRect
+                return QRect(0, 0, 1920, 1080)
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return []
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+        monkeypatch.setattr(display_participation, "get_coordinator", lambda: FakeCoordinator())
+
+        display_parent = SimpleNamespace(
+            screen_index=0,
+            _screen=FakeScreen(),
+            _exiting=False,
+            _widget_manager=object(),
+        )
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = display_parent
+                self._widgets = {}
+                display_parent._widget_manager = self
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        mgr = FakeManager()
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "1",
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+                "show_background": True,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "2",
+                "mode": "bubble",
+                "preset_bubble": 0,
+                "bar_count": 32,
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None, (
+            "When the requested CUSTOM monitor is not participating in the active "
+            "display/compositor set, the visualizer must still spawn on a "
+            "participating display instead of disappearing off-screen."
+        )
+
+    def test_create_spotify_visualizer_widget_fallback_spawn_reuses_unique_saved_custom_rect_when_requested_monitor_is_absent(
+        self,
+        monkeypatch,
+    ):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from PySide6.QtCore import QRect
+        from rendering import spotify_widget_creators as creators
+        from rendering import spotify_display_participation as display_participation
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+                self._geometry = QRect(0, 0, 357, 357)
+                self._minimum_size = (0, 0)
+                self._maximum_size = (16777215, 16777215)
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_widget_manager(self, manager):
+                self._widget_manager = manager
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+            def setGeometry(self, *args):
+                if len(args) == 1:
+                    self._geometry = QRect(args[0])
+                else:
+                    self._geometry = QRect(*args)
+
+            def geometry(self):
+                return QRect(self._geometry)
+
+            def setMinimumWidth(self, value):
+                self._minimum_size = (int(value), self._minimum_size[1])
+
+            def setMaximumWidth(self, value):
+                self._maximum_size = (int(value), self._maximum_size[1])
+
+            def setMinimumHeight(self, value):
+                self._minimum_size = (self._minimum_size[0], int(value))
+
+            def setMaximumHeight(self, value):
+                self._maximum_size = (self._maximum_size[0], int(value))
+
+            def minimumWidth(self):
+                return int(self._minimum_size[0])
+
+            def maximumWidth(self):
+                return int(self._maximum_size[0])
+
+            def minimumHeight(self):
+                return int(self._minimum_size[1])
+
+            def maximumHeight(self):
+                return int(self._maximum_size[1])
+
+            def _apply_custom_layout_size_constraints_if_active(self):
+                rect = getattr(self, "_custom_layout_local_rect", None)
+                if not isinstance(rect, QRect):
+                    return False
+                self.setMinimumWidth(rect.width())
+                self.setMaximumWidth(rect.width())
+                self.setMinimumHeight(rect.height())
+                self.setMaximumHeight(rect.height())
+                return True
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeScreen:
+            def geometry(self):
+                return QRect(0, 0, 1920, 1080)
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return []
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+        monkeypatch.setattr(display_participation, "get_coordinator", lambda: FakeCoordinator())
+
+        display_parent = SimpleNamespace(
+            screen_index=0,
+            _screen=FakeScreen(),
+            _exiting=False,
+            _widget_manager=object(),
+        )
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = display_parent
+                self._widgets = {}
+                display_parent._widget_manager = self
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        mgr = FakeManager()
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "1",
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+                "show_background": True,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "2",
+                "mode": "bubble",
+                "preset_bubble": 0,
+                "bar_count": 32,
+            },
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:missing-monitor": {
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                            "size_payload": {"width": 420, "height": 280},
+                            "resize_mode": "visualizer_rect",
+                        }
+                    }
+                },
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None
+        assert vis.geometry() == QRect(207, 310, 420, 280), (
+            "If a CUSTOM visualizer must fall back onto a participating display "
+            "because the requested monitor is absent, creator-time startup must "
+            "still recover the one authoritative saved rect instead of being born "
+            "as a dead default square in the top-left corner."
+        )
+        assert vis.minimumWidth() == 420
+        assert vis.maximumWidth() == 420
+        assert vis.minimumHeight() == 280
+        assert vis.maximumHeight() == 280
 
     def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
