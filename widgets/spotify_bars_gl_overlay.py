@@ -362,8 +362,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._spectrum_glow_intensity: float = 0.55
         self._spectrum_glow_color: QColor = QColor(110, 220, 255, 235)
         self._spectrum_solid_display_segments: list[int] = []
-        self._spectrum_solid_pending_down_segments: list[int] = []
-        self._spectrum_solid_pending_down_started_ts: list[float] = []
+        self._spectrum_solid_display_segment_values: list[float] = []
+        self._spectrum_solid_last_update_ts: list[float] = []
         self._spectrum_solid_hysteresis_segments: int = 0
         self._spectrum_solid_hysteresis_bar_count: int = 0
 

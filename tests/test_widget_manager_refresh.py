@@ -707,6 +707,108 @@ def test_finalize_widget_startup_reapplies_saved_custom_layouts_after_startup(mo
     assert created["reddit_widget"].raised == 1
 
 
+def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_secondary_start(monkeypatch):
+    from PySide6.QtCore import QRect
+    from rendering import widget_setup_all
+
+    class _Overlay:
+        def __init__(self):
+            self._geometry = QRect(0, 0, 100, 400)
+            self.history = [QRect(self._geometry)]
+
+        def setGeometry(self, rect):
+            self._geometry = QRect(rect)
+            self.history.append(QRect(self._geometry))
+
+        def geometry(self):
+            return QRect(self._geometry)
+
+    class _Visualizer:
+        def __init__(self):
+            self._geometry = QRect(0, 0, 100, 400)
+            self.geometry_history = [QRect(self._geometry)]
+            self.raised = 0
+
+        def setGeometry(self, rect):
+            self._geometry = QRect(rect)
+            self.geometry_history.append(QRect(self._geometry))
+
+        def geometry(self):
+            return QRect(self._geometry)
+
+        def raise_(self):
+            self.raised += 1
+
+    class _TargetManager:
+        def __init__(self, target):
+            self._target = target
+            self.registered = []
+
+        def create_spotify_visualizer_widget(self, *args, **kwargs):
+            vis = _Visualizer()
+            self._target.spotify_visualizer_widget = vis
+            return vis
+
+        def _register_spotify_secondary_fade(self, widget):
+            self.registered.append(widget)
+
+    class _TargetDisplay:
+        def __init__(self):
+            self.screen_index = 1
+            self.media_widget = object()
+            self.spotify_visualizer_widget = None
+            self._spotify_bars_overlay = _Overlay()
+            self._widget_manager = _TargetManager(self)
+            self.apply_calls = 0
+
+        def _apply_saved_custom_layouts(self):
+            self.apply_calls += 1
+            vis = self.spotify_visualizer_widget
+            if vis is not None:
+                rect = QRect(700, 520, 420, 280)
+                vis.setGeometry(rect)
+                self._spotify_bars_overlay.setGeometry(rect)
+
+    source_display = SimpleNamespace(screen_index=0)
+    target_display = _TargetDisplay()
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [source_display, target_display]
+
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
+
+    def _simulate_start(_widgets):
+        vis = target_display.spotify_visualizer_widget
+        assert vis is not None
+        vis.setGeometry(QRect(0, 0, 357, 357))
+        target_display._spotify_bars_overlay.setGeometry(QRect(0, 0, 357, 357))
+
+    monkeypatch.setattr(widget_setup_all, "_start_widgets", _simulate_start)
+
+    widget_setup_all._reconcile_remote_custom_visualizer(
+        SimpleNamespace(_parent=source_display),
+        {
+            "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        },
+        shadows_config={},
+        screen_index=0,
+        thread_manager=None,
+        media_widget=object(),
+    )
+
+    vis = target_display.spotify_visualizer_widget
+    assert vis is not None
+    assert target_display.apply_calls >= 2, (
+        "Remote CUSTOM visualizer reconcile must reapply committed layouts "
+        "again after secondary-stage startup pressure."
+    )
+    assert vis.geometry() == QRect(700, 520, 420, 280)
+    assert target_display._spotify_bars_overlay.geometry() == QRect(700, 520, 420, 280)
+    assert QRect(0, 0, 357, 357) in vis.geometry_history
+    assert QRect(0, 0, 357, 357) in target_display._spotify_bars_overlay.history
+
+
 def test_display_setup_does_not_run_second_lifecycle_initialize_pass():
     lifecycle_initialize_calls: list[str] = []
     spotify_calls: list[str] = []

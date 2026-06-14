@@ -153,6 +153,38 @@ def _start_secondary_widget(widget: Optional[QWidget], attr_name: str) -> None:
         logger.debug("[WIDGET_SETUP] Failed to raise %s after deferred create", attr_name, exc_info=True)
 
 
+def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, log_prefix: str) -> None:
+    if parent is None:
+        return
+
+    try:
+        parent._apply_saved_custom_layouts()
+    except Exception:
+        logger.debug("%s Failed to apply saved custom layouts after startup", log_prefix, exc_info=True)
+
+    try:
+        pending = getattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+        if not isinstance(pending, bool):
+            pending = False
+        if not pending:
+            setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
+
+            def _stabilize_saved_custom_layouts() -> None:
+                try:
+                    setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+                    parent._apply_saved_custom_layouts()
+                except Exception:
+                    logger.debug(
+                        "%s Failed to stabilize saved custom layouts after startup",
+                        log_prefix,
+                        exc_info=True,
+                    )
+
+            QTimer.singleShot(0, _stabilize_saved_custom_layouts)
+    except Exception:
+        logger.debug("%s Failed to schedule saved custom layout stabilization", log_prefix, exc_info=True)
+
+
 def _create_factory_widgets(
     mgr: "WidgetManager",
     created: Dict[str, QWidget],
@@ -302,6 +334,10 @@ def _reconcile_remote_custom_visualizer(
     except Exception:
         logger.debug("[WIDGET_SETUP] Failed to apply saved custom layouts on remote visualizer reconcile", exc_info=True)
     _start_secondary_widget(vis, "spotify_visualizer_widget")
+    _reapply_saved_custom_layouts_after_startup(
+        target,
+        log_prefix="[WIDGET_SETUP]",
+    )
 
 
 def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) -> None:
@@ -321,32 +357,10 @@ def _finalize_widget_startup(mgr: "WidgetManager", created: Dict[str, QWidget]) 
 
     _start_widgets(created)
 
-    if parent is not None:
-        try:
-            parent._apply_saved_custom_layouts()
-        except Exception:
-            logger.debug("[WIDGET_SETUP] Failed to apply saved custom layouts after startup", exc_info=True)
-
-        try:
-            pending = getattr(parent, "_custom_layout_runtime_stabilize_pending", False)
-            if not isinstance(pending, bool):
-                pending = False
-            if not pending:
-                setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
-
-                def _stabilize_saved_custom_layouts() -> None:
-                    try:
-                        setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
-                        parent._apply_saved_custom_layouts()
-                    except Exception:
-                        logger.debug(
-                            "[WIDGET_SETUP] Failed to stabilize saved custom layouts after startup",
-                            exc_info=True,
-                        )
-
-                QTimer.singleShot(0, _stabilize_saved_custom_layouts)
-        except Exception:
-            logger.debug("[WIDGET_SETUP] Failed to schedule saved custom layout stabilization", exc_info=True)
+    _reapply_saved_custom_layouts_after_startup(
+        parent,
+        log_prefix="[WIDGET_SETUP]",
+    )
 
     for attr_name, widget in created.items():
         if widget is not None:

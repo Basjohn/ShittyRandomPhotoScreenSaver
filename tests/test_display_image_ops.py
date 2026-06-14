@@ -255,6 +255,44 @@ def test_push_spotify_visualizer_frame_prefers_committed_custom_rect_over_stale_
     assert calls[0]["rect"] == QRect(24, 180, 402, 357)
 
 
+def test_sync_spotify_visualizer_overlay_geometry_prefers_committed_custom_rect_over_stale_widget_and_overlay():
+    class _FakeVisualizer:
+        _custom_layout_local_rect = QRect(24, 180, 402, 357)
+
+        def geometry(self) -> QRect:
+            return QRect(24, 180, 357, 357)
+
+        def _resolve_gpu_target_rect(self) -> QRect:
+            return QRect(self._custom_layout_local_rect)
+
+        def _active_custom_layout_rect(self) -> QRect:
+            return QRect(self._custom_layout_local_rect)
+
+    class _FakeOverlay:
+        def __init__(self) -> None:
+            self._geometry = QRect(0, 0, 100, 400)
+            self.updated = False
+
+        def geometry(self) -> QRect:
+            return QRect(self._geometry)
+
+        def setGeometry(self, rect: QRect) -> None:
+            self._geometry = QRect(rect)
+
+        def update(self) -> None:
+            self.updated = True
+
+    overlay = _FakeOverlay()
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=_FakeVisualizer(),
+        _spotify_bars_overlay=overlay,
+    )
+
+    assert display_image_ops.sync_spotify_visualizer_overlay_geometry(widget) is True
+    assert overlay.geometry() == QRect(24, 180, 402, 357)
+    assert overlay.updated is True
+
+
 def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
     scheduled = []
 

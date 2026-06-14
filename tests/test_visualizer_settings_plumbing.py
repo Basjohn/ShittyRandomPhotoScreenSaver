@@ -1279,6 +1279,192 @@ class TestCreateTimeRefreshParity:
             "that settings re-entry uses."
         )
 
+    def test_create_spotify_visualizer_widget_skips_immediate_refresh_for_pending_custom_route(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, parent, bar_count, initial_mode=None):
+                self.parent = parent
+                self.bar_count = bar_count
+                self.initial_mode = initial_mode
+                self.activation_calls = []
+                self.activation_manager_attached = []
+
+            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
+                self.model = model
+                self.activation_payload = activation_payload
+                self.activation_calls.append(kwargs.get("reason"))
+                self.activation_manager_attached.append(getattr(self, "_widget_manager", None) is mgr)
+
+            def set_anchor_media_widget(self, widget):
+                self.anchor = widget
+
+            def set_widget_manager(self, manager):
+                self._widget_manager = manager
+
+            def set_bar_style(self, **kwargs):
+                self.bar_style = kwargs
+
+            def set_shadow_config(self, cfg):
+                self.shadow = cfg
+
+            def handle_media_update(self, *args, **kwargs):
+                return None
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        refresh_calls = []
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = object()
+                self._widgets = {}
+                self.bound = {}
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                self.bound[name] = widget
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                refresh_calls.append(payload)
+
+        mgr = FakeManager()
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "1",
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+                "show_background": True,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "1",
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+                "bar_count": 32,
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is not None
+        assert vis.activation_calls == ["startup_create"]
+        assert vis.activation_manager_attached == [True], (
+            "CUSTOM startup must attach a real WidgetManager before startup_create "
+            "so route-aware geometry logic cannot freelance into authored sizing."
+        )
+        assert refresh_calls == [], (
+            "CUSTOM-routed startup must not re-enter the generic refresh path "
+            "before committed replay attaches the authoritative rect."
+        )
+
+    @pytest.mark.qt
+    def test_create_spotify_visualizer_widget_custom_route_does_not_expand_to_authored_height_before_replay(
+        self,
+        qt_app,
+        qtbot,
+        monkeypatch,
+    ):
+        from PySide6.QtCore import QObject, QRect, Signal
+        from PySide6.QtWidgets import QWidget
+        from core.resources.manager import ResourceManager
+        from rendering.widget_manager import WidgetManager
+        from rendering import spotify_widget_creators as creators
+
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+
+        class _SignalHost(QObject):
+            media_updated = Signal(object)
+
+        class _SettingsStub:
+            def __init__(self, widgets_map: dict):
+                self._widgets_map = dict(widgets_map)
+
+            def get_widgets_map(self):
+                return dict(self._widgets_map)
+
+        class _FakeMediaWidget(QWidget):
+            def __init__(self, parent=None):
+                super().__init__(parent)
+                self._signal_host = _SignalHost()
+                self.media_updated = self._signal_host.media_updated
+                self.setGeometry(QRect(100, 700, 300, 100))
+
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        qtbot.addWidget(parent)
+        parent.show()
+
+        manager = WidgetManager(parent, ResourceManager())
+        widgets_config = {
+            "media": {
+                "enabled": True,
+                "monitor": "1",
+                "position": "Bottom Left",
+                "show_background": True,
+                "bg_color": [0, 0, 0, 180],
+                "background_opacity": 0.5,
+                "border_color": [255, 255, 255, 255],
+                "border_opacity": 0.8,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "1",
+                "mode": "spectrum",
+                "preset_spectrum": 0,
+                "bar_count": 32,
+            },
+        }
+        manager._settings_manager = _SettingsStub(widgets_config)
+
+        media_widget = _FakeMediaWidget(parent)
+        qtbot.addWidget(media_widget)
+
+        vis = creators.create_spotify_visualizer_widget(
+            manager,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=media_widget,
+        )
+
+        assert vis is not None
+        assert vis.height() == 88, (
+            "A CUSTOM-routed startup visualizer must not expand to authored "
+            "preferred height before committed replay attaches the saved rect."
+        )
+
     def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
         appdata.mkdir(parents=True, exist_ok=True)
@@ -1483,12 +1669,6 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
         monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
-        monkeypatch.setattr(
-            creators,
-            "get_screen_signature_aliases",
-            lambda screen: ("screen:name:Display-B",) if screen is target_screen else ("screen:name:Display-A",),
-        )
-
         class FakeSignal:
             def __init__(self):
                 self.connected = []

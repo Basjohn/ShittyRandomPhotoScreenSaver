@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, Mapping
 import copy
 import time
 
@@ -1132,6 +1132,24 @@ class SpotifyVisualizerWidget(QWidget):
             logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM layout ownership", exc_info=True)
             return False
 
+    def _is_custom_layout_route_selected(self) -> bool:
+        """Return whether the visualizer is currently routed through the CUSTOM slot."""
+
+        try:
+            wm = getattr(self, "_widget_manager", None)
+            sm = getattr(wm, "_settings_manager", None) if wm is not None else None
+            if sm is None:
+                return False
+            widgets_config = sm.get_widgets_map()
+            if not isinstance(widgets_config, Mapping):
+                return False
+            from rendering.widget_descriptors import is_custom_position_selected_for_widget
+
+            return bool(is_custom_position_selected_for_widget("spotify_visualizer", widgets_config))
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM routing selection", exc_info=True)
+            return False
+
     def _resolve_custom_locked_width(self, width: int) -> int:
         custom_rect = self._active_custom_layout_rect()
         if custom_rect is None:
@@ -1177,7 +1195,7 @@ class SpotifyVisualizerWidget(QWidget):
             resolve_card_metrics,
         )
 
-        if self._is_custom_layout_active():
+        if self._is_custom_layout_active() or self._is_custom_layout_route_selected():
             logger.debug(
                 "[SPOTIFY_VIS] Deferring preferred-height resize to WidgetManager while CUSTOM layout is active"
             )

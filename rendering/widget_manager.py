@@ -1334,7 +1334,19 @@ class WidgetManager:
                 if resolved_custom_rect.isEmpty():
                     return
                 vis_widget.setGeometry(resolved_custom_rect)
+                try:
+                    from rendering.display_image_ops import sync_spotify_visualizer_overlay_geometry
+
+                    sync_spotify_visualizer_overlay_geometry(self._parent)
+                except Exception:
+                    logger.debug("[WIDGET_MANAGER] Failed to sync visualizer overlay geometry after custom rect apply", exc_info=True)
                 vis_widget.raise_()
+                return
+
+            if is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+                logger.debug(
+                    "[WIDGET_MANAGER] Deferring authored visualizer positioning because CUSTOM routing is selected but committed rect is not yet attached"
+                )
                 return
 
             if media_widget is None:
@@ -1356,6 +1368,12 @@ class WidgetManager:
                 resolved_rect.width(),
                 resolved_rect.height(),
             )
+            try:
+                from rendering.display_image_ops import sync_spotify_visualizer_overlay_geometry
+
+                sync_spotify_visualizer_overlay_geometry(self._parent)
+            except Exception:
+                logger.debug("[WIDGET_MANAGER] Failed to sync visualizer overlay geometry after authored apply", exc_info=True)
             vis_widget.raise_()
             if is_perf_metrics_enabled():
                 logger.info(

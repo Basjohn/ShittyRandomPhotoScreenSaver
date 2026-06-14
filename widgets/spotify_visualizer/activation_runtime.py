@@ -212,8 +212,20 @@ def apply_resolved_activation_payload(
     widget._last_gpu_geom = None
     widget._last_gpu_fade_sent = -1.0
     widget._has_pushed_first_frame = False
-    widget._mode_transition_apply_height_on_resume = True
-    if widget._mode_transition_phase == 0:
+    custom_route_selected = False
+    custom_rect_active = False
+    try:
+        custom_route_selected = bool(widget._is_custom_layout_route_selected())
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to evaluate CUSTOM route selection during activation payload apply", exc_info=True)
+    try:
+        custom_rect_active = bool(widget._is_custom_layout_active())
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to evaluate active CUSTOM rect during activation payload apply", exc_info=True)
+
+    defer_pending_layout = custom_route_selected and not custom_rect_active
+    widget._mode_transition_apply_height_on_resume = not defer_pending_layout
+    if widget._mode_transition_phase == 0 and widget._mode_transition_apply_height_on_resume:
         widget._apply_pending_mode_transition_layout()
 
     apply_authoritative_runtime_handoff(

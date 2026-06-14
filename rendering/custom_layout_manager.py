@@ -2289,6 +2289,12 @@ class CustomLayoutManager:
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
         try:
+            # Prime the real committed rect before any min/max constraint lock
+            # can resize the widget in-place at a stale authored/startup origin.
+            widget.setGeometry(local_rect)
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to prime committed custom rect for %s", descriptor.widget_id, exc_info=True)
+        try:
             apply_constraints = getattr(widget, "_apply_custom_layout_size_constraints_if_active", None)
             if callable(apply_constraints):
                 apply_constraints()
@@ -2350,6 +2356,13 @@ class CustomLayoutManager:
             )
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to log replay_final geometry", exc_info=True)
+        if descriptor.widget_id == "spotify_visualizer":
+            try:
+                from rendering.display_image_ops import sync_spotify_visualizer_overlay_geometry
+
+                sync_spotify_visualizer_overlay_geometry(self._display)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to sync visualizer overlay geometry after custom replay", exc_info=True)
         try:
             if bool(getattr(widget, "isVisible", lambda: False)()):
                 widget.raise_()

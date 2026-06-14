@@ -1971,6 +1971,56 @@ class TestSettingsRouting:
         assert vis._geometry == (210, 310, 420, 280)
         assert vis.raised is True
 
+    def test_position_spotify_visualizer_does_not_fall_back_to_authored_branch_when_custom_route_is_selected_but_rect_is_pending(self):
+        from PySide6.QtCore import QRect
+        from rendering.widget_manager import WidgetManager
+
+        class _FakeMedia:
+            def geometry(self):
+                return QRect(100, 320, 300, 160)
+
+        class _FakeVisualizer:
+            def __init__(self):
+                self._vis_mode_str = "blob"
+                self._base_height = 80
+                self._blob_width = 0.5
+                self._spectrum_growth = 2.0
+                self._blob_growth = 3.5
+                self._osc_growth = 2.0
+                self._bubble_growth = 3.0
+                self._devcurve_growth = 3.0
+                self._sine_wave_growth = 2.0
+                self._anchor_media = _FakeMedia()
+                self._geometry = None
+                self.raised = False
+
+            def setGeometry(self, *args):
+                if len(args) == 1 and isinstance(args[0], QRect):
+                    rect = args[0]
+                    self._geometry = (rect.x(), rect.y(), rect.width(), rect.height())
+                else:
+                    x, y, w, h = args
+                    self._geometry = (x, y, w, h)
+
+            def raise_(self):
+                self.raised = True
+
+        settings = MagicMock()
+        settings.get_widgets_map.return_value = {
+            "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+            "media": {"position": "Bottom Left", "monitor": "1"},
+        }
+        manager = WidgetManager(MagicMock())
+        manager._settings_manager = settings
+
+        vis = _FakeVisualizer()
+        media = _FakeMedia()
+
+        manager.position_spotify_visualizer(vis, media, 1920, 1080)
+
+        assert vis._geometry is None
+        assert vis.raised is False
+
     @pytest.mark.qt
     def test_position_spotify_visualizer_real_widget_applies_custom_constraints_before_replay(self, qt_app, qtbot):
         from PySide6.QtCore import QRect
@@ -1998,6 +2048,88 @@ class TestSettingsRouting:
         assert vis.geometry() == QRect(210, 310, 420, 280)
         assert vis.minimumHeight() == 280
         assert vis.maximumHeight() == 280
+
+    @pytest.mark.qt
+    def test_position_spotify_visualizer_real_widget_recovers_from_top_left_startup_origin_and_syncs_overlay(self, qt_app, qtbot):
+        from PySide6.QtCore import QRect
+        from PySide6.QtWidgets import QWidget
+        from rendering.widget_manager import WidgetManager
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        parent._spotify_bars_overlay = QWidget(parent)
+        parent._spotify_bars_overlay.setGeometry(QRect(0, 0, 100, 400))
+        qtbot.addWidget(parent)
+        parent.show()
+
+        settings = MagicMock()
+        settings.get_widgets_map.return_value = {}
+        manager = WidgetManager(parent)
+        manager._settings_manager = settings
+
+        vis = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        parent.spotify_visualizer_widget = vis
+        vis._custom_layout_local_rect = QRect(696, 520, 840, 560)
+        vis.setGeometry(0, 0, 100, 400)
+
+        manager.position_spotify_visualizer(vis, None, 1920, 1080)
+
+        assert vis.geometry() == QRect(696, 520, 840, 560)
+        assert vis.minimumWidth() == 840
+        assert vis.maximumWidth() == 840
+        assert vis.minimumHeight() == 560
+        assert vis.maximumHeight() == 560
+        assert parent._spotify_bars_overlay.geometry() == QRect(696, 520, 840, 560)
+
+    @pytest.mark.qt
+    def test_refresh_spotify_visualizer_config_resyncs_overlay_to_committed_custom_rect(self, qt_app, qtbot):
+        from PySide6.QtCore import QRect
+        from PySide6.QtWidgets import QWidget
+        from rendering.widget_manager import WidgetManager
+        from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
+
+        parent = QWidget()
+        parent.resize(1920, 1080)
+        parent._spotify_bars_overlay = QWidget(parent)
+        parent._spotify_bars_overlay.setGeometry(QRect(0, 0, 100, 400))
+        qtbot.addWidget(parent)
+        parent.show()
+
+        settings = MagicMock()
+        settings.get_widgets_map.return_value = {
+            "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        }
+        manager = WidgetManager(parent)
+        manager._settings_manager = settings
+
+        vis = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+        qtbot.addWidget(vis)
+        parent.spotify_visualizer_widget = vis
+        manager._widgets["spotify_visualizer"] = vis
+        vis._widget_manager = manager
+        vis._custom_layout_local_rect = QRect(333, 222, 420, 280)
+        vis.setGeometry(QRect(333, 222, 420, 280))
+
+        widgets_cfg = {
+            "spotify_visualizer": {
+                "enabled": True,
+                "position": "Custom",
+                "monitor": "1",
+                "mode": "bubble",
+                "preset_bubble": 0,
+            },
+            "media": {
+                "show_background": True,
+                "bg_color": [32, 32, 32, 255],
+                "border_color": [255, 255, 255, 255],
+            },
+        }
+
+        manager._refresh_spotify_visualizer_config(widgets_cfg)
+
+        assert vis.geometry() == QRect(333, 222, 420, 280)
+        assert parent._spotify_bars_overlay.geometry() == QRect(333, 222, 420, 280)
 
     def test_position_spotify_volume_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect

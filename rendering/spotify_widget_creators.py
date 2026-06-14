@@ -555,6 +555,14 @@ def create_spotify_visualizer_widget(
             bar_count=bar_count,
             initial_mode=activation_payload.mode,
         )
+        try:
+            # Startup activation must be able to see the real WidgetManager
+            # before mode/card-height logic runs, otherwise CUSTOM-routed
+            # visualizers freelance into authored growth during startup_create.
+            if hasattr(vis, "set_widget_manager"):
+                vis.set_widget_manager(mgr)
+        except Exception:
+            logger.debug("[WIDGET_MANAGER] Failed to seed WidgetManager onto visualizer before startup activation", exc_info=True)
 
         mgr._log_spotify_vis_config(
             "create",
@@ -664,7 +672,7 @@ def create_spotify_visualizer_widget(
         logger.debug("Spotify visualizer widget created: %d bars, will start with coordinated fade", bar_count)
         mgr._bind_parent_attribute("spotify_visualizer_widget", vis)
         try:
-            if hasattr(mgr, '_refresh_spotify_visualizer_config'):
+            if hasattr(mgr, '_refresh_spotify_visualizer_config') and not custom_routing_active:
                 # Keep launch-time visualizer state on the same canonical path
                 # that settings re-entry uses so startup cannot drift.
                 mgr._refresh_spotify_visualizer_config(widgets_config)

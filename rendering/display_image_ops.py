@@ -598,6 +598,46 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
     return True
 
 
+def sync_spotify_visualizer_overlay_geometry(widget) -> bool:
+    """Realign an existing Spotify GL overlay to the authoritative card rect.
+
+    This is intentionally geometry-only. It does not push fresh bars, mutate
+    fade state, or force visibility changes. The goal is to keep startup,
+    CUSTOM replay, and runtime rebuilds from leaving the overlay stranded on
+    an earlier stale rect when the card has already moved to its committed
+    geometry.
+    """
+
+    vis = getattr(widget, "spotify_visualizer_widget", None)
+    if vis is None:
+        return False
+
+    overlay = getattr(widget, "_spotify_bars_overlay", None)
+    if overlay is None:
+        return False
+
+    geom = _resolve_spotify_visualizer_overlay_rect(vis)
+    if geom is None or geom.width() <= 0 or geom.height() <= 0:
+        return False
+
+    try:
+        cur_geom = overlay.geometry()
+    except Exception:
+        cur_geom = None
+
+    try:
+        if cur_geom is None or QRect(cur_geom) != geom:
+            overlay.setGeometry(geom)
+            try:
+                overlay.update()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to update overlay after geometry sync", exc_info=True)
+        return True
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to sync SpotifyBarsGLOverlay geometry", exc_info=True)
+        return False
+
+
 def _resolve_spotify_visualizer_overlay_rect(vis) -> QRect | None:
     """Prefer the committed CUSTOM rect when it is available and valid.
 

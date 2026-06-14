@@ -8,9 +8,10 @@ This is the long-term anti-regression record for the project, not an active task
 ## Quick Navigation (Numbered IDs)
 
 ### Open Issues
-1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
-2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
+1. [U-09 — 2026-06-13 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Unresolved)](#U-09)
+2. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
+3. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+4. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
 1. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
@@ -50,6 +51,45 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="U-09"></a>
+### [U-09] 2026-06-13 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Unresolved)
+
+- [x] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current unresolved state:** the visualizer can still appear in impossible live shapes even when the committed CUSTOM rect is correct and the replay logs look green. Reported failures now include both the older square-creep family and a much worse narrow top-left block that does not automatically self-correct.
+- **Observed failure pattern:**
+  - the user did not edit preset card sizes or any non-uniform width contract
+  - `rendering.custom_layout_manager` can still log a correct `replay_final` rect while runtime visually disagrees
+  - the issue remains visualizer-specific; other widgets do not show the same bizarre shape corruption class
+- **Key evidence that re-opened the family:**
+  - `logs/screensaver_geometry.log` repeatedly shows startup replay beginning from poisoned live geometry such as:
+    - `05:18:16` `widget=spotify_visualizer phase=replay_start local=(696,840,840,560) global=(0,0,100,400)`
+    - `05:18:16` `phase=replay_after_payload local=(0,0,840,560)`
+    - `05:18:16` `phase=replay_final local=(696,840,840,560)`
+  - the same startup pattern appears again at `05:33:53` and `05:34:30`
+  - `logs/screensaver_spotify_vis.log` still shows staged startup/first-frame ownership churn around the same family:
+    - `Card height set: 88 -> 400 (mode=spectrum)`
+    - `startup_create`
+    - `settings_refresh`
+    - `FIRST_FRAME_PRIMER problems=overlay_generation_stale,overlay_activation_stale`
+- **Why U-08 was not enough:**
+  1. U-08 genuinely fixed shrink replay/min-constraint drift and improved replay parity.
+  2. It did not prove that replay was the final geometry authority through every later visualizer-owned seam.
+  3. The reopened family shows that startup, overlay, or post-replay runtime writers can still reintroduce impossible shapes after a correct replay.
+- **Current suspected root-cause family:**
+  1. The visualizer still has multiple geometry authorities after CUSTOM replay.
+  2. The widget outer rect and GL overlay rect can still resolve from different state snapshots.
+  3. Startup create, settings refresh, secondary-stage activation, preferred-height application, or generic overlay helpers may still mutate geometry after committed CUSTOM authority should have won.
+  4. Existing automation still proves local replay truths better than end-to-end runtime shape truth.
+- **Correct next direction:**
+  - document the full geometry authority map first
+  - strengthen the bar so replay-green/runtime-wrong cases fail decisively
+  - remove unauthorized post-replay geometry writers
+  - only after that, consider a lightweight obscene-shape recovery path as a safety net rather than the primary fix
 
 <a id="R-25"></a>
 ### [R-25] 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)

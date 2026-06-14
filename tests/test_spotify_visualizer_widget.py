@@ -20,10 +20,10 @@ from widgets.spotify_visualizer import tick_helpers
 from widgets.spotify_visualizer import tick_pipeline
 from widgets.spotify_visualizer import overlay_state
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
-    SPECTRUM_SOLID_HYSTERESIS_DWELL_S,
     apply_overlay_spectrum_solid_hysteresis,
     compute_spectrum_height_scale,
     segment_index_to_spectrum_bar,
+    spectrum_bar_to_segment_float,
     spectrum_bar_to_segment_index,
 )
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
@@ -320,6 +320,110 @@ def test_live_activation_logs_parity_warning_on_worker_config_mismatch(monkeypat
     )
 
     assert any("[SPOTIFY_VIS][PARITY]" in msg and "manual_floor" in msg for msg in warning_calls)
+
+
+def test_apply_resolved_activation_payload_skips_pending_layout_when_custom_route_is_selected_but_rect_is_pending(monkeypatch):
+    from widgets.spotify_visualizer import activation_runtime
+
+    layout_calls: list[str] = []
+    monkeypatch.setattr(
+        activation_runtime,
+        "_store_authoritative_settings_model",
+        lambda widget, model: model,
+    )
+    monkeypatch.setattr(
+        activation_runtime,
+        "apply_authoritative_runtime_handoff",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        activation_runtime,
+        "log_live_activation_state",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "rendering.spotify_widget_creators.apply_spotify_vis_model_config",
+        lambda *args, **kwargs: None,
+    )
+
+    widget = SimpleNamespace(
+        _map_mode_key_to_enum=lambda mode: VisualizerMode.BUBBLE,
+        _vis_mode=VisualizerMode.BUBBLE,
+        _sync_active_mode_legacy_ghost_bridge=lambda mode: None,
+        _last_gpu_geom=QRect(1, 2, 3, 4),
+        _last_gpu_fade_sent=0.5,
+        _has_pushed_first_frame=True,
+        _mode_transition_apply_height_on_resume=False,
+        _mode_transition_phase=0,
+        _is_custom_layout_route_selected=lambda: True,
+        _is_custom_layout_active=lambda: False,
+        _apply_pending_mode_transition_layout=lambda: layout_calls.append("layout"),
+    )
+    payload = SimpleNamespace(mode="bubble", preset_index=5, is_custom=True, preset_name="Custom", preset_path=None)
+    model = SimpleNamespace(mode="bubble")
+
+    activation_runtime.apply_resolved_activation_payload(
+        widget,
+        model,
+        payload,
+        reason="startup_create",
+        force_runtime_reset=False,
+    )
+
+    assert layout_calls == []
+    assert widget._mode_transition_apply_height_on_resume is False
+
+
+def test_apply_resolved_activation_payload_keeps_pending_layout_for_non_custom_route(monkeypatch):
+    from widgets.spotify_visualizer import activation_runtime
+
+    layout_calls: list[str] = []
+    monkeypatch.setattr(
+        activation_runtime,
+        "_store_authoritative_settings_model",
+        lambda widget, model: model,
+    )
+    monkeypatch.setattr(
+        activation_runtime,
+        "apply_authoritative_runtime_handoff",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        activation_runtime,
+        "log_live_activation_state",
+        lambda *args, **kwargs: None,
+    )
+    monkeypatch.setattr(
+        "rendering.spotify_widget_creators.apply_spotify_vis_model_config",
+        lambda *args, **kwargs: None,
+    )
+
+    widget = SimpleNamespace(
+        _map_mode_key_to_enum=lambda mode: VisualizerMode.BUBBLE,
+        _vis_mode=VisualizerMode.BUBBLE,
+        _sync_active_mode_legacy_ghost_bridge=lambda mode: None,
+        _last_gpu_geom=QRect(1, 2, 3, 4),
+        _last_gpu_fade_sent=0.5,
+        _has_pushed_first_frame=True,
+        _mode_transition_apply_height_on_resume=False,
+        _mode_transition_phase=0,
+        _is_custom_layout_route_selected=lambda: False,
+        _is_custom_layout_active=lambda: False,
+        _apply_pending_mode_transition_layout=lambda: layout_calls.append("layout"),
+    )
+    payload = SimpleNamespace(mode="bubble", preset_index=5, is_custom=False, preset_name="Preset 6", preset_path="preset_6.json")
+    model = SimpleNamespace(mode="bubble")
+
+    activation_runtime.apply_resolved_activation_payload(
+        widget,
+        model,
+        payload,
+        reason="startup_create",
+        force_runtime_reset=False,
+    )
+
+    assert layout_calls == ["layout"]
+    assert widget._mode_transition_apply_height_on_resume is True
 
 
 def test_update_timer_interval_corrects_stale_live_interval_even_when_target_matches():
@@ -1785,8 +1889,8 @@ def _apply_authored_spectrum_organs(widget: SpotifyVisualizerWidget) -> dict[str
 def _make_spectrum_solid_hysteresis_state():
     return SimpleNamespace(
         _spectrum_solid_display_segments=[],
-        _spectrum_solid_pending_down_segments=[],
-        _spectrum_solid_pending_down_started_ts=[],
+        _spectrum_solid_display_segment_values=[],
+        _spectrum_solid_last_update_ts=[],
         _spectrum_solid_hysteresis_segments=0,
         _spectrum_solid_hysteresis_bar_count=0,
     )
@@ -3057,6 +3161,25 @@ def test_visualizer_preferred_height_defers_direct_resize_when_custom_rect_activ
 
 
 @pytest.mark.qt
+def test_visualizer_preferred_height_defers_when_custom_route_is_selected_but_rect_is_pending(qt_app, qtbot):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    class _Settings:
+        def get_widgets_map(self):
+            return {"spotify_visualizer": {"position": "Custom"}}
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
+    widget._vis_mode = VisualizerMode.BLOB
+    widget.setGeometry(0, 0, 300, 160)
+
+    widget._apply_preferred_height()
+
+    assert widget.geometry() == QRect(0, 0, 300, 160)
+
+
+@pytest.mark.qt
 def test_visualizer_custom_rect_stays_authoritative_even_if_settings_snapshot_is_stale(qt_app, qtbot):
     from PySide6.QtCore import QRect
 
@@ -3120,6 +3243,8 @@ def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_r
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
     parent.resize(1280, 720)
+    parent._spotify_bars_overlay = QWidget(parent)
+    parent._spotify_bars_overlay.setGeometry(QRect(36, 200, 357, 357))
 
     class _Settings:
         def get_widgets_map(self):
@@ -3127,6 +3252,7 @@ def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_r
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     qtbot.addWidget(widget)
+    parent.spotify_visualizer_widget = widget
     widget._custom_layout_local_rect = QRect(36, 200, 402, 357)
     widget._widget_manager = WidgetManager(parent)
     widget._widget_manager._settings_manager = _Settings()
@@ -3134,6 +3260,7 @@ def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_r
 
     for _ in range(3):
         QWidget.setGeometry(widget, QRect(36, 200, 357, 357))
+        parent._spotify_bars_overlay.setGeometry(QRect(36, 200, 357, 357))
         widget._mode_transition_apply_height_on_resume = True
         widget._apply_pending_mode_transition_layout()
 
@@ -3142,6 +3269,7 @@ def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_r
         assert widget.minimumHeight() == 357
         assert widget.maximumHeight() == 357
         assert widget.geometry() == QRect(36, 200, 402, 357)
+        assert parent._spotify_bars_overlay.geometry() == QRect(36, 200, 402, 357)
 
 
 @pytest.mark.qt
@@ -4172,7 +4300,7 @@ def test_spectrum_solid_hysteresis_boundary_chatter_holds_single_segment_wobble(
     segments = 18
     render_height = 220.0
     height_scale = compute_spectrum_height_scale(render_height)
-    bars = []
+    segment_values = []
     now_ts = 0.0
 
     for target in [10, 11, 10, 11, 10, 11]:
@@ -4189,44 +4317,18 @@ def test_spectrum_solid_hysteresis_boundary_chatter_holds_single_segment_wobble(
             render_height=render_height,
             now_ts=now_ts,
         )
-        bars.append(
-            spectrum_bar_to_segment_index(
+        segment_values.append(
+            spectrum_bar_to_segment_float(
                 bars_out[0],
                 segments=segments,
                 height_scale=height_scale,
             )
         )
 
-    assert bars == [10, 10, 10, 10, 10, 10]
-
-
-def test_spectrum_solid_hysteresis_preserves_continuous_motion_inside_accepted_band():
-    overlay = _make_spectrum_solid_hysteresis_state()
-    segments = 18
-    render_height = 220.0
-    height_scale = compute_spectrum_height_scale(render_height)
-
-    baseline = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
-    first = apply_overlay_spectrum_solid_hysteresis(
-        overlay,
-        [baseline],
-        segments=segments,
-        render_height=render_height,
-        now_ts=0.01,
-    )[0]
-
-    held_rise = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale) + 0.03
-    second = apply_overlay_spectrum_solid_hysteresis(
-        overlay,
-        [held_rise],
-        segments=segments,
-        render_height=render_height,
-        now_ts=0.02,
-    )[0]
-
-    assert spectrum_bar_to_segment_index(first, segments=segments, height_scale=height_scale) == 10
-    assert spectrum_bar_to_segment_index(second, segments=segments, height_scale=height_scale) == 10
-    assert second > first, "Solid-bar hysteresis should preserve intra-band motion instead of freezing to one snapped value."
+    assert min(segment_values) >= 10.0
+    assert max(segment_values) < 10.75
+    assert any(10.05 < value < 10.95 for value in segment_values[1:])
+    assert len({round(value, 2) for value in segment_values}) > 2
 
 
 def test_spectrum_solid_hysteresis_accepts_true_two_segment_rise_and_fall():
@@ -4253,7 +4355,27 @@ def test_spectrum_solid_hysteresis_accepts_true_two_segment_rise_and_fall():
         render_height=render_height,
         now_ts=0.032,
     )
-    assert spectrum_bar_to_segment_index(bars_out[0], segments=segments, height_scale=height_scale) == 12
+    rise_seg_1 = spectrum_bar_to_segment_float(
+        bars_out[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+    assert 10.4 < rise_seg_1 < 12.0
+
+    bars_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [rise_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.048,
+    )
+    rise_seg_2 = spectrum_bar_to_segment_float(
+        bars_out[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+    assert rise_seg_2 > 11.5
+    assert rise_seg_2 < 12.0
 
     fall_value = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
     bars_out = apply_overlay_spectrum_solid_hysteresis(
@@ -4261,12 +4383,31 @@ def test_spectrum_solid_hysteresis_accepts_true_two_segment_rise_and_fall():
         [fall_value],
         segments=segments,
         render_height=render_height,
-        now_ts=0.048,
+        now_ts=0.064,
     )
-    assert spectrum_bar_to_segment_index(bars_out[0], segments=segments, height_scale=height_scale) == 10
+    fall_seg_1 = spectrum_bar_to_segment_float(
+        bars_out[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+    assert 10.0 < fall_seg_1 < rise_seg_2
+
+    bars_out = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [fall_value],
+        segments=segments,
+        render_height=render_height,
+        now_ts=0.080,
+    )
+    fall_seg_2 = spectrum_bar_to_segment_float(
+        bars_out[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+    assert fall_seg_2 < 10.6
 
 
-def test_spectrum_solid_hysteresis_releases_persistent_one_segment_drop_after_dwell():
+def test_spectrum_solid_hysteresis_one_segment_drop_settles_smoothly_without_robotic_pin():
     overlay = _make_spectrum_solid_hysteresis_state()
     segments = 18
     render_height = 220.0
@@ -4281,9 +4422,9 @@ def test_spectrum_solid_hysteresis_releases_persistent_one_segment_drop_after_dw
         now_ts=0.01,
     )
 
-    held_outputs = []
+    settled_outputs = []
     drop_value = segment_index_to_spectrum_bar(11, segments=segments, height_scale=height_scale)
-    for now_ts in [0.02, 0.04, 0.06]:
+    for now_ts in [0.02, 0.04, 0.06, 0.08]:
         bars_out = apply_overlay_spectrum_solid_hysteresis(
             overlay,
             [drop_value],
@@ -4291,30 +4432,19 @@ def test_spectrum_solid_hysteresis_releases_persistent_one_segment_drop_after_dw
             render_height=render_height,
             now_ts=now_ts,
         )
-        held_outputs.append(
-            spectrum_bar_to_segment_index(
+        settled_outputs.append(
+            spectrum_bar_to_segment_float(
                 bars_out[0],
                 segments=segments,
                 height_scale=height_scale,
             )
         )
 
-    release_out = apply_overlay_spectrum_solid_hysteresis(
-        overlay,
-        [drop_value],
-        segments=segments,
-        render_height=render_height,
-        now_ts=0.08,
-    )
-    released = spectrum_bar_to_segment_index(
-        release_out[0],
-        segments=segments,
-        height_scale=height_scale,
-    )
-
-    assert held_outputs == [12, 12, 12]
-    assert released == 11
-    assert (0.08 - 0.02) >= SPECTRUM_SOLID_HYSTERESIS_DWELL_S
+    assert settled_outputs[0] < 12.0
+    assert settled_outputs[0] > 11.5
+    assert settled_outputs[-1] < 11.35
+    assert settled_outputs[-1] > 11.0
+    assert settled_outputs == sorted(settled_outputs, reverse=True)
 
 
 @pytest.mark.qt
@@ -4355,11 +4485,14 @@ def test_spectrum_solid_hysteresis_resets_on_mode_reset_and_only_applies_to_sing
 
     _set_state(solid_10, single_piece=True)
     held = _set_state(solid_11, single_piece=True)
-    assert overlay._spectrum_solid_display_segments == [10]
-    assert spectrum_bar_to_segment_index(held, segments=18, height_scale=height_scale) == 10
+    assert len(overlay._spectrum_solid_display_segment_values) == 1
+    assert 10.0 < overlay._spectrum_solid_display_segment_values[0] < 11.0
+    held_seg = spectrum_bar_to_segment_float(held, segments=18, height_scale=height_scale)
+    assert 10.0 < held_seg < 11.0
 
     passthrough = _set_state(segmented_11, single_piece=False)
     assert overlay._spectrum_solid_display_segments == []
+    assert overlay._spectrum_solid_display_segment_values == []
     assert spectrum_bar_to_segment_index(passthrough, segments=18, height_scale=height_scale) == 11
 
     _set_state(solid_10, single_piece=True)
@@ -4373,7 +4506,7 @@ def test_spectrum_solid_hysteresis_resets_on_mode_reset_and_only_applies_to_sing
     seg24_value = segment_index_to_spectrum_bar(6, segments=24, height_scale=seg24_height_scale)
     seg24_out = _set_state(seg24_value, single_piece=True, segments=24)
     assert overlay._spectrum_solid_hysteresis_segments == 24
-    assert spectrum_bar_to_segment_index(seg24_out, segments=24, height_scale=seg24_height_scale) == 6
+    assert spectrum_bar_to_segment_float(seg24_out, segments=24, height_scale=seg24_height_scale) == pytest.approx(6.0, abs=0.02)
 
 
 @pytest.mark.qt
