@@ -440,10 +440,11 @@ class InputHandler(QObject):
         if self._context_menu_active:
             return False
 
+        global_pos = event.globalPosition().toPoint()
+
         # Try widget dispatch first
         if self._widget_manager is not None:
             try:
-                global_pos = event.globalPosition().toPoint()
                 if self._widget_manager.dispatch_double_click(global_pos):
                     return True
             except Exception:

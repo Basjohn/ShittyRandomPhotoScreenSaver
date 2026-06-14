@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+from copy import deepcopy
 
 import widgets.clock_widget as clock_mod
 from widgets.clock_widget import ClockWidget
-from PySide6.QtCore import QPoint
-from PySide6.QtGui import QImage, QPainter
+from PySide6.QtCore import QPoint, QRect
+from PySide6.QtGui import QFontMetrics, QImage, QPainter
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
+
+from rendering.custom_layout_contract import get_screen_signature
 
 
 def test_analog_clock_fade_in_uses_shared_fade_without_direct_show(qtbot, monkeypatch):
@@ -283,3 +287,281 @@ def test_analog_clock_numeral_layout_map_pushes_viii_outward(qtbot):
     vii_center_radius = ((vii_x + vii_rect.x() + (vii_rect.width() / 2.0) - metrics.center_x) ** 2 + (vii_y + vii_rect.y() + (vii_rect.height() / 2.0) - metrics.center_y) ** 2) ** 0.5
 
     assert viii_center_radius >= vii_center_radius - (metrics.numeral_height * 0.10)
+
+
+def test_digital_clock_timezone_label_stays_inside_widget_bounds(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.resize(240, 180)
+    clock.set_display_mode("digital")
+    clock.set_show_background(False)
+    clock.set_show_timezone(True)
+    clock.set_font_size(42)
+    clock.setText("11:59 PM")
+    clock._update_stylesheet()
+    assert clock._tz_label is not None
+    clock._tz_label.setText("SAST")
+    clock._tz_label.adjustSize()
+    clock._update_position()
+
+    assert clock._tz_label.y() >= 0
+    assert clock._tz_label.y() + clock._tz_label.height() <= clock.height()
+
+
+def test_digital_clock_framed_padding_leaves_room_for_wide_time_text(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.resize(189, 246)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_show_timezone(True)
+    clock.set_font_size(42)
+    clock.setText("11:59 PM")
+    clock._update_stylesheet()
+
+    margins = clock.contentsMargins()
+    available_width = clock.width() - margins.left() - margins.right()
+    text_width = QFontMetrics(clock.font()).horizontalAdvance(clock.text())
+
+    assert available_width >= text_width
+
+
+def test_digital_clock_fit_and_font_features_stay_stable_across_second_shapes(qtbot):
+    parent = QWidget()
+    parent.resize(800, 600)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.resize(220, 140)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_show_timezone(False)
+    clock.set_time_format(clock_mod.TimeFormat.TWELVE_HOUR)
+    clock.set_font_size(84)
+
+    clock.setText("11:11:11 PM")
+    clock._apply_digital_font_fit()
+    narrow_size = clock._effective_digital_font_size
+
+    clock.setText("08:58:58 PM")
+    clock._apply_digital_font_fit()
+    wide_size = clock._effective_digital_font_size
+
+    tabular_tag = clock_mod.QFont.Tag.fromString("tnum")
+    assert narrow_size == wide_size
+    assert clock.font().isFeatureSet(tabular_tag)
+    assert clock.font().featureValue(tabular_tag) == 1
+
+
+def test_digital_clock_timezone_label_biases_upward_inside_reserved_bottom_band(qtbot):
+    parent = QWidget()
+    parent.resize(900, 600)
+    parent._screen = QGuiApplication.primaryScreen()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.resize(871, 371)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_show_timezone(True)
+    clock.set_font_size(130)
+    clock.setText("18:49:11")
+    clock._update_stylesheet()
+    assert clock._tz_label is not None
+    clock._tz_label.setText("SAST")
+    clock._tz_label.adjustSize()
+    clock._update_position()
+
+    _, _, _, bottom_pad = clock._compute_digital_padding(clock._tz_label.height())
+    reserved_top = max(0, clock.height() - bottom_pad)
+    reserved_height = max(clock._tz_label.height(), clock.height() - reserved_top)
+    available_slack = max(0, reserved_height - clock._tz_label.height())
+    expected_y = reserved_top + max(
+        0,
+        int(round(available_slack * clock.DIGITAL_TZ_UPPER_SLACK_RATIO)),
+    )
+    bottom_gap = clock.height() - (clock._tz_label.y() + clock._tz_label.height())
+    top_gap = clock._tz_label.y() - reserved_top
+
+    assert clock._tz_label.y() == expected_y
+    assert bottom_gap > top_gap
+
+
+def test_clock_double_click_rebuilds_custom_runtime_rect_from_digital_to_analog(qtbot):
+    class _SettingsStub:
+        def __init__(self, widgets_map: dict) -> None:
+            self.widgets_map = deepcopy(widgets_map)
+            self.emit_change_calls: list[bool] = []
+            self.saved = False
+
+        def get_widgets_map(self) -> dict:
+            return deepcopy(self.widgets_map)
+
+        def set_widgets_map(self, widgets: dict, *, emit_change: bool = True) -> None:
+            self.widgets_map = deepcopy(widgets)
+            self.emit_change_calls.append(bool(emit_change))
+
+        def save(self) -> None:
+            self.saved = True
+
+    class _WidgetManagerStub:
+        def __init__(self, settings_manager) -> None:
+            self._settings_manager = settings_manager
+
+    parent = QWidget()
+    parent.resize(1400, 1000)
+    parent._screen = QGuiApplication.primaryScreen()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    screen_signature = get_screen_signature(parent._screen)
+    widgets_map = {
+        "clock": {
+            "position": "Custom",
+            "display_mode": "digital",
+            "clock_analog_mode": False,
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                screen_signature: {
+                    "clock": {
+                        "rect": {"x": 0.10, "y": 0.20, "width": 0.35, "height": 0.25},
+                        "size_payload": {"display_mode": "digital", "font_size": 55},
+                        "resize_mode": "clock_font",
+                    }
+                }
+            },
+        },
+    }
+    settings_stub = _SettingsStub(widgets_map)
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_show_timezone(True)
+    clock.set_show_background(True)
+    clock.resize(400, 160)
+    clock.move(300, 180)
+    clock._custom_layout_local_rect = QRect(300, 180, 400, 160)
+    clock.set_widget_manager(_WidgetManagerStub(settings_stub))
+    clock.set_display_mode("digital")
+    clock.set_font_size(55)
+
+    assert clock.handle_double_click(QPoint(40, 40)) is True
+    analog_rect = QRect(clock._custom_layout_local_rect)
+    saved_entry = settings_stub.widgets_map["custom_layout"]["displays"][screen_signature]["clock"]
+    saved_payload = saved_entry["size_payload"]
+
+    assert clock._display_mode == "analog"
+    assert clock._font_size == 55
+    assert analog_rect.height() > analog_rect.width()
+    assert analog_rect == QRect(376, 99, 248, 322)
+    assert saved_payload["display_mode"] == "analog"
+    assert saved_payload["font_size"] == 55
+    assert saved_entry["rect"] == {
+        "x": analog_rect.x() / parent.width(),
+        "y": analog_rect.y() / parent.height(),
+        "width": analog_rect.width() / parent.width(),
+        "height": analog_rect.height() / parent.height(),
+    }
+    assert settings_stub.widgets_map["clock"]["display_mode"] == "analog"
+    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is True
+    assert settings_stub.emit_change_calls == [False]
+    assert settings_stub.saved is True
+
+def test_clock_double_click_rebuilds_custom_runtime_rect_from_analog_to_digital(qtbot):
+    class _SettingsStub:
+        def __init__(self, widgets_map: dict) -> None:
+            self.widgets_map = deepcopy(widgets_map)
+            self.emit_change_calls: list[bool] = []
+            self.saved = False
+
+        def get_widgets_map(self) -> dict:
+            return deepcopy(self.widgets_map)
+
+        def set_widgets_map(self, widgets: dict, *, emit_change: bool = True) -> None:
+            self.widgets_map = deepcopy(widgets)
+            self.emit_change_calls.append(bool(emit_change))
+
+        def save(self) -> None:
+            self.saved = True
+
+    class _WidgetManagerStub:
+        def __init__(self, settings_manager) -> None:
+            self._settings_manager = settings_manager
+
+    parent = QWidget()
+    parent.resize(1400, 1000)
+    parent._screen = QGuiApplication.primaryScreen()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    screen_signature = get_screen_signature(parent._screen)
+    widgets_map = {
+        "clock": {
+            "position": "Custom",
+            "display_mode": "analog",
+            "clock_analog_mode": True,
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                screen_signature: {
+                    "clock": {
+                        "rect": {"x": 0.25, "y": 0.12, "width": 0.18, "height": 0.34},
+                        "size_payload": {"display_mode": "analog", "font_size": 55},
+                        "resize_mode": "clock_font",
+                    }
+                }
+            },
+        },
+    }
+    settings_stub = _SettingsStub(widgets_map)
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.set_show_timezone(True)
+    clock.set_show_background(True)
+    clock.resize(248, 322)
+    clock.move(326, 99)
+    clock._custom_layout_local_rect = QRect(326, 99, 248, 322)
+    clock.set_widget_manager(_WidgetManagerStub(settings_stub))
+    clock.set_display_mode("analog")
+    clock.set_font_size(55)
+
+    assert clock.handle_double_click(QPoint(40, 40)) is True
+    digital_rect = QRect(clock._custom_layout_local_rect)
+    saved_entry = settings_stub.widgets_map["custom_layout"]["displays"][screen_signature]["clock"]
+    saved_payload = saved_entry["size_payload"]
+
+    assert clock._display_mode == "digital"
+    assert clock._font_size == 55
+    assert digital_rect.width() > digital_rect.height() * 2
+    assert digital_rect.width() > 248
+    assert digital_rect.height() < 322
+    assert saved_payload["display_mode"] == "digital"
+    assert saved_payload["font_size"] == 55
+    assert saved_entry["rect"] == {
+        "x": digital_rect.x() / parent.width(),
+        "y": digital_rect.y() / parent.height(),
+        "width": digital_rect.width() / parent.width(),
+        "height": digital_rect.height() / parent.height(),
+    }
+    assert settings_stub.widgets_map["clock"]["display_mode"] == "digital"
+    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is False
+    assert settings_stub.emit_change_calls == [False]
+    assert settings_stub.saved is True

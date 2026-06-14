@@ -596,10 +596,16 @@ class CustomLayoutManager:
             target_geom.size(),
             min_size=self._min_size_for_state(state),
         )
+        size_payload = dict(state.current_size_payload)
+        if state.descriptor.custom_layout_resize_mode == "clock_font":
+            size_payload.setdefault(
+                "display_mode",
+                str(getattr(state.widget, "_display_mode", "digital") or "digital"),
+            )
         entry = CustomLayoutEntry(
             widget_id=widget_id,
             rect=normalize_local_rect(local_rect, target_geom.size()),
-            size_payload=dict(state.current_size_payload),
+            size_payload=size_payload,
             resize_mode=state.descriptor.custom_layout_resize_mode,
         )
         set_screen_layout_entry(custom_layout_map, target_signature, widget_id, entry)
@@ -1975,7 +1981,10 @@ class CustomLayoutManager:
     ) -> dict[str, Any]:
         mode = descriptor.custom_layout_resize_mode
         if mode == "clock_font":
-            return {"font_size": int(getattr(widget, "_font_size", 48))}
+            return {
+                "font_size": int(getattr(widget, "_font_size", 48)),
+                "display_mode": str(getattr(widget, "_display_mode", "digital") or "digital"),
+            }
         if mode == "weather_scale":
             return {
                 "font_size": int(getattr(widget, "_font_size", 18)),
@@ -2034,7 +2043,10 @@ class CustomLayoutManager:
         mode = descriptor.custom_layout_resize_mode
         if mode == "clock_font":
             base = int(baseline_payload.get("font_size", 48))
-            return {"font_size": max(12, int(round(base * scale)))}
+            return {
+                "font_size": max(12, int(round(base * scale))),
+                "display_mode": str(baseline_payload.get("display_mode", "digital") or "digital"),
+            }
         if mode == "weather_scale":
             font_size = max(10, int(round(int(baseline_payload.get("font_size", 18)) * scale)))
             icon_size = max(12, int(round(int(baseline_payload.get("icon_size", 32)) * scale)))
@@ -2093,6 +2105,8 @@ class CustomLayoutManager:
         mode = descriptor.custom_layout_resize_mode
         try:
             if mode == "clock_font":
+                if hasattr(widget, "set_display_mode"):
+                    widget.set_display_mode(str(payload.get("display_mode", getattr(widget, "_display_mode", "digital"))))
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 48))))
                 return
             if mode == "weather_scale":

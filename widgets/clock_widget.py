@@ -16,7 +16,7 @@ except ImportError:
     PYTZ_AVAILABLE = False
 
 from PySide6.QtWidgets import QLabel, QWidget
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QRect, QSize
 from PySide6.QtGui import QFont, QFontMetrics, QColor, QPainter, QPen, QPaintEvent, QPainterPath, QPainterPathStroker, QPixmap
 from PySide6.QtCore import QRectF
 from shiboken6 import Shiboken
@@ -27,6 +27,13 @@ from widgets.clock_ticker import get_global_clock_ticker
 from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
 from core.logging.logger import get_logger
 from core.performance import widget_paint_sample
+from rendering.custom_layout_contract import (
+    clamp_local_rect_to_bounds,
+    get_screen_layout_entries_for_screen,
+    load_custom_layout_map,
+    normalize_local_rect,
+    write_custom_layout_map,
+)
 
 logger = get_logger(__name__)
 
@@ -74,6 +81,12 @@ class ClockWidget(BaseOverlayWidget):
     # Override defaults for clock
     DEFAULT_FONT_SIZE = 48
     DIGITAL_TZ_GAP = 20
+    DIGITAL_MIN_SIDE_PAD = 8
+    DIGITAL_MAX_SIDE_PAD = 14
+    DIGITAL_MIN_TOP_PAD = 4
+    DIGITAL_MAX_TOP_PAD = 8
+    DIGITAL_BOTTOM_PAD = 6
+    DIGITAL_TZ_UPPER_SLACK_RATIO = 0.25
     ANALOG_NUMERAL_SCALE = 0.80
     ANALOG_CARD_RING_SCALE = 1.30
     ANALOG_FRAMED_NUMERAL_SCALE = 0.72
@@ -135,6 +148,7 @@ class ClockWidget(BaseOverlayWidget):
         self._show_numerals: bool = True
         # Optional analogue-only drop shadow under the clock face and hands.
         self._analog_face_shadow: bool = True
+        self._effective_digital_font_size: int = self._font_size
 
         # Last timestamp used for analogue rendering.
         self._current_dt: Optional[datetime] = None
@@ -189,6 +203,137 @@ class ClockWidget(BaseOverlayWidget):
             border: none;
         }}""")
         self._tz_label.hide()
+
+    def _set_main_clock_font(self, point_size: int) -> None:
+        font = QFont(self._font_family, max(8, int(point_size)), QFont.Weight.Bold)
+        if self._display_mode != "analog":
+            try:
+                font.setFeature(QFont.Tag.fromString("tnum"), 1)
+            except Exception:
+                logger.debug("[CLOCK] Failed to enable tabular numerals", exc_info=True)
+        self.setFont(font)
+
+    def _digital_measurement_text(self) -> str:
+        if self._time_format == TimeFormat.TWELVE_HOUR:
+            return "11:59:59 PM" if self._show_seconds else "11:59 PM"
+        return "23:59:59" if self._show_seconds else "23:59"
+
+    def _compute_digital_padding(self, tz_label_height: int | None = None) -> tuple[int, int, int, int]:
+        side_pad = max(
+            self.DIGITAL_MIN_SIDE_PAD,
+            min(self.DIGITAL_MAX_SIDE_PAD, int(round(self._font_size * 0.16))),
+        )
+        top_pad = max(
+            self.DIGITAL_MIN_TOP_PAD,
+            min(self.DIGITAL_MAX_TOP_PAD, int(round(self._font_size * 0.10))),
+        )
+        bottom_pad = self.DIGITAL_BOTTOM_PAD
+        if self._show_timezone and self._display_mode != "analog":
+            label_height = tz_label_height if tz_label_height is not None else self._get_tz_label_height_estimate()
+            bottom_pad += self.DIGITAL_TZ_GAP + max(0, int(label_height))
+        return side_pad, top_pad, side_pad, bottom_pad
+
+    def _fit_digital_font_to_bounds(self) -> int:
+        if self._display_mode == "analog":
+            self._effective_digital_font_size = self._font_size
+            return self._font_size
+
+        sample_text = self._digital_measurement_text()
+        sample_size = self._get_tz_label_height_estimate() if self._show_timezone else 0
+        left_pad, top_pad, right_pad, bottom_pad = self._compute_digital_padding(sample_size)
+        available_width = max(1, self.width() - left_pad - right_pad)
+        available_height = max(1, self.height() - top_pad - bottom_pad)
+
+        best_size = max(8, int(self._font_size))
+        for candidate in range(best_size, 7, -1):
+            metrics = QFontMetrics(QFont(self._font_family, candidate, QFont.Weight.Bold))
+            if (
+                metrics.horizontalAdvance(sample_text) <= available_width
+                and metrics.height() <= available_height
+            ):
+                best_size = candidate
+                break
+
+        self._effective_digital_font_size = best_size
+        return best_size
+
+    def _apply_digital_font_fit(self) -> None:
+        target_size = self._fit_digital_font_to_bounds()
+        self._set_main_clock_font(target_size)
+        self._update_tz_label_font()
+
+    def _natural_custom_size_for_mode(self, mode: str) -> QSize:
+        target = str(mode or "").lower()
+        font_size = max(12, int(self._font_size))
+        if target == "analog":
+            width = max(160, int(round(font_size * 4.5)))
+            height_factor = 1.3 if self._show_timezone else 1.0
+            height = max(width, int(round(width * height_factor)))
+            return QSize(width, height)
+
+        sample_text = self._digital_measurement_text()
+        digital_font = QFont(self._font_family, font_size, QFont.Weight.Bold)
+        try:
+            digital_font.setFeature(QFont.Tag.fromString("tnum"), 1)
+        except Exception:
+            logger.debug("[CLOCK] Failed to enable tabular numerals for natural size", exc_info=True)
+        metrics = QFontMetrics(digital_font)
+
+        tz_label_height = 0
+        if self._show_timezone:
+            tz_font_size = max(int(font_size / 4), 8)
+            tz_metrics = QFontMetrics(QFont(self._font_family, tz_font_size, QFont.Weight.Bold))
+            tz_text = self._timezone_abbrev or "SAST"
+            tz_rect = tz_metrics.tightBoundingRect(tz_text)
+            if tz_rect.isNull():
+                tz_rect = tz_metrics.boundingRect(tz_text)
+            tz_label_height = max(tz_metrics.height(), tz_rect.height())
+
+        left_pad, top_pad, right_pad, bottom_pad = self._compute_digital_padding(tz_label_height)
+        width = max(
+            160,
+            int(math.ceil(metrics.horizontalAdvance(sample_text) + left_pad + right_pad)),
+        )
+        height = max(
+            72,
+            int(math.ceil(metrics.height() + top_pad + bottom_pad)),
+        )
+        return QSize(width, height)
+
+    def _rebuild_custom_rect_for_mode(self, target_mode: str) -> QRect | None:
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return None
+        parent = self.parentWidget()
+        if parent is None:
+            return None
+
+        target_size = self._natural_custom_size_for_mode(target_mode)
+        center_x = custom_rect.x() + (custom_rect.width() / 2.0)
+        center_y = custom_rect.y() + (custom_rect.height() / 2.0)
+        rebuilt = QRect(
+            int(round(center_x - (target_size.width() / 2.0))),
+            int(round(center_y - (target_size.height() / 2.0))),
+            int(target_size.width()),
+            int(target_size.height()),
+        )
+        return clamp_local_rect_to_bounds(rebuilt, parent.size())
+
+    def _position_timezone_label(self) -> None:
+        if not self._show_timezone or self._tz_label is None:
+            return
+        if self._display_mode == "analog":
+            tz_x = self.width() - self._tz_label.width() - 18
+            tz_y = self.height() - self._tz_label.height() + 4
+        else:
+            _, _, _, bottom_pad = self._compute_digital_padding(self._tz_label.height())
+            tz_x = max(0, int((self.width() - self._tz_label.width()) / 2))
+            reserved_top = max(0, self.height() - bottom_pad)
+            reserved_height = max(self._tz_label.height(), self.height() - reserved_top)
+            available_slack = max(0, reserved_height - self._tz_label.height())
+            top_slack = int(round(available_slack * self.DIGITAL_TZ_UPPER_SLACK_RATIO))
+            tz_y = reserved_top + max(0, top_slack)
+        self._tz_label.move(tz_x, tz_y)
 
     def _get_tz_label_height_estimate(self) -> int:
         """Estimate timezone label height for padding calculations."""
@@ -573,6 +718,8 @@ class ClockWidget(BaseOverlayWidget):
         # Plain text display
         self.setText(display_text)
         self.setTextFormat(Qt.TextFormat.PlainText)
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
 
         # Update timezone label if shown (digital mode only). When in
         # analogue mode the timezone abbreviation is rendered directly in
@@ -588,6 +735,7 @@ class ClockWidget(BaseOverlayWidget):
                 self._tz_label.raise_()
             else:
                 self._tz_label.hide()
+            self._position_timezone_label()
         if self._show_background:
             self._update_stylesheet()
         
@@ -643,20 +791,7 @@ class ClockWidget(BaseOverlayWidget):
         
         # Delegate to base class for centralized margin/positioning logic
         super()._update_position()
-        
-        # Position timezone label inside the background frame (bottom-right)
-        if self._show_timezone and self._tz_label:
-            if self._display_mode == "analog":
-                tz_x = self.width() - self._tz_label.width() - 18
-                tz_y = self.height() - self._tz_label.height() + 4
-            else:
-                tz_x = max(0, int((self.width() - self._tz_label.width()) / 2))
-                tz_y = (
-                    self.height()
-                    - self.contentsMargins().bottom()
-                    + self.DIGITAL_TZ_GAP
-                )
-            self._tz_label.move(tz_x, tz_y)
+        self._position_timezone_label()
     
     def set_time_format(self, time_format: TimeFormat) -> None:
         """
@@ -669,10 +804,19 @@ class ClockWidget(BaseOverlayWidget):
         
         # Update stylesheet to tighten padding when timezone hidden
         self._update_stylesheet()
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
+            self._position_timezone_label()
 
         # Update display immediately if running
         if self._enabled:
             self._update_time()
+
+    def set_show_background(self, show: bool) -> None:
+        super().set_show_background(show)
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
+            self._position_timezone_label()
 
     def set_widget_manager(self, wm) -> None:
         """Store WidgetManager reference for settings persistence."""
@@ -680,23 +824,86 @@ class ClockWidget(BaseOverlayWidget):
 
     def handle_double_click(self, local_pos) -> bool:
         """Called by WidgetManager dispatch. Toggles digital/analog mode."""
+        del local_pos
         new_mode = "digital" if self._display_mode == "analog" else "analog"
+        rebuilt_custom_rect = self._rebuild_custom_rect_for_mode(new_mode)
+        if rebuilt_custom_rect is not None:
+            self._custom_layout_local_rect = QRect(rebuilt_custom_rect)
         self.set_display_mode(new_mode)
-        # Persist to SettingsManager
+        if rebuilt_custom_rect is not None:
+            self._apply_custom_layout_size_constraints_if_active()
+            self.setGeometry(rebuilt_custom_rect)
+        self._persist_display_mode_to_settings(new_mode)
+        logger.debug("[CLOCK] Double-click toggled display mode to %s", new_mode)
+        return True
+
+    def _persist_display_mode_to_settings(self, new_mode: str) -> None:
         wm = getattr(self, '_widget_manager', None)
         if wm is not None:
             sm = getattr(wm, '_settings_manager', None)
             if sm is not None:
                 try:
-                    cfg = sm.get('widgets', {}) or {}
-                    clock_cfg = cfg.get('clock', {}) or {}
+                    cfg = sm.get_widgets_map() if hasattr(sm, "get_widgets_map") else (sm.get('widgets', {}) or {})
+                    if not isinstance(cfg, dict):
+                        cfg = {}
+                    widget_id = str(getattr(self, "_overlay_name", "clock") or "clock")
+                    clock_cfg = cfg.get(widget_id, {}) or {}
                     clock_cfg['clock_analog_mode'] = (new_mode == "analog")
-                    cfg['clock'] = clock_cfg
-                    sm.set('widgets', cfg)
+                    clock_cfg['display_mode'] = new_mode
+                    cfg[widget_id] = clock_cfg
+                    self._persist_display_mode_to_custom_layout(cfg, widget_id, new_mode)
+                    if hasattr(sm, "set_widgets_map"):
+                        try:
+                            sm.set_widgets_map(cfg, emit_change=False)
+                        except TypeError:
+                            sm.set_widgets_map(cfg)
+                    else:
+                        sm.set('widgets', cfg)
+                    save = getattr(sm, "save", None)
+                    if callable(save):
+                        save()
                 except Exception:
                     logger.debug("[CLOCK] Failed to persist display mode", exc_info=True)
-        logger.debug("[CLOCK] Double-click toggled display mode to %s", new_mode)
-        return True
+
+    def _persist_display_mode_to_custom_layout(self, widgets_map: dict, widget_id: str, new_mode: str) -> None:
+        custom_rect = getattr(self, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return
+        parent = self.parentWidget()
+        screen = getattr(parent, "_screen", None) if parent is not None else None
+        if screen is None:
+            try:
+                screen = self.screen()
+            except Exception:
+                screen = None
+        if screen is None:
+            return
+        custom_layout_map = load_custom_layout_map(widgets_map)
+        matched_signature, _entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+        displays = custom_layout_map.get("displays", {})
+        candidate_layouts: list[dict] = []
+        if matched_signature:
+            matched_layout = displays.get(matched_signature)
+            if isinstance(matched_layout, dict):
+                candidate_layouts.append(matched_layout)
+        if not candidate_layouts:
+            for layouts in displays.values():
+                if isinstance(layouts, dict) and widget_id in layouts:
+                    candidate_layouts.append(layouts)
+        if len(candidate_layouts) != 1:
+            return
+        entry = candidate_layouts[0].get(widget_id)
+        if not isinstance(entry, dict):
+            return
+        payload = dict(entry.get("size_payload", {}) or {})
+        payload["display_mode"] = new_mode
+        payload["font_size"] = int(getattr(self, "_font_size", payload.get("font_size", self.DEFAULT_FONT_SIZE)))
+        entry["size_payload"] = payload
+        parent = self.parentWidget()
+        if parent is not None:
+            entry["rect"] = normalize_local_rect(custom_rect, parent.size()).to_mapping()
+        candidate_layouts[0][widget_id] = entry
+        write_custom_layout_map(widgets_map, custom_layout_map)
 
     def set_display_mode(self, mode: str) -> None:
         """Set display mode ("digital" or "analog")."""
@@ -709,6 +916,10 @@ class ClockWidget(BaseOverlayWidget):
         self._display_mode = mode_l
 
         self._apply_display_mode_size_constraints()
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
+        else:
+            self._set_main_clock_font(self._font_size)
 
         # Rebuild stylesheet for new mode (padding differs between digital/analog)
         self._update_stylesheet()
@@ -793,9 +1004,10 @@ class ClockWidget(BaseOverlayWidget):
     def set_font_family(self, family: str) -> None:
         """Set font family - override to use bold weight and update tz label."""
         super().set_font_family(family)
-        # Use bold weight for clock
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
-        self.setFont(font)
+        if self._display_mode == "analog":
+            self._set_main_clock_font(self._font_size)
+        else:
+            self._apply_digital_font_fit()
         # Invalidate analog clock face cache since numerals use this font
         self._invalidate_clock_face_cache()
         # Update timezone label font
@@ -813,10 +1025,11 @@ class ClockWidget(BaseOverlayWidget):
         if size_i <= 0:
             size_i = self.DEFAULT_FONT_SIZE
         super().set_font_size(size_i)
-        # Use bold weight for clock
-        font = QFont(self._font_family, self._font_size, QFont.Weight.Bold)
-        self.setFont(font)
         self._apply_display_mode_size_constraints()
+        if self._display_mode == "analog":
+            self._set_main_clock_font(self._font_size)
+        else:
+            self._apply_digital_font_fit()
         # Invalidate analog clock face cache since numerals use this font size
         self._invalidate_clock_face_cache()
         # Update timezone label font
@@ -837,7 +1050,8 @@ class ClockWidget(BaseOverlayWidget):
     def _update_tz_label_font(self) -> None:
         """Update timezone label font to match main font with bold weight."""
         if self._tz_label:
-            tz_font_size = max(int(self._font_size / 4), 8)
+            base_size = self._font_size if self._display_mode == "analog" else self._effective_digital_font_size
+            tz_font_size = max(int(base_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
             self._tz_label.setFont(tz_font)
     
@@ -869,11 +1083,13 @@ class ClockWidget(BaseOverlayWidget):
 
         self._show_timezone = show_timezone
         self._update_stylesheet()
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
 
         if show_timezone and self._tz_label is None and self.parent():
             # Lazily create timezone label if needed
             self._tz_label = QLabel(self)
-            self._tz_label.setAlignment(Qt.AlignmentFlag.AlignRight)
+            self._tz_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             tz_font_size = max(int(self._font_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size)
             self._tz_label.setFont(tz_font)
@@ -888,25 +1104,22 @@ class ClockWidget(BaseOverlayWidget):
         elif not show_timezone and self._tz_label:
             self._tz_label.hide()
 
+        self._position_timezone_label()
+
         # Update display immediately if running
         if self._enabled:
             self._update_time()
     
     def _update_stylesheet(self) -> None:
         """Update widget stylesheet based on current settings."""
-        tz_extra_space = 0
-        if self._show_timezone and self._display_mode != "analog":
-            tz_extra_space = self.DIGITAL_TZ_GAP + self._get_tz_label_height_estimate()
-
         if self.uses_painted_frame_shadow():
             if self._display_mode == "analog":
                 padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
                 padding_right = padding_left
+                padding_rule = f"{padding_top}px {padding_right}px {padding_bottom}px {padding_left}px"
             else:
-                padding_top = 6
-                padding_right = 28
-                padding_bottom = 6 + tz_extra_space
-                padding_left = 21
+                padding_left, padding_top, padding_right, padding_bottom = self._compute_digital_padding()
+                padding_rule = "0px"
 
             self.setStyleSheet(f"""
                 QLabel {{
@@ -915,7 +1128,7 @@ class ClockWidget(BaseOverlayWidget):
                     background-color: transparent;
                     border: {self._bg_border_width}px solid transparent;
                     border-radius: 8px;
-                    padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
+                    padding: {padding_rule};
                 }}
             """)
             self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
@@ -925,12 +1138,10 @@ class ClockWidget(BaseOverlayWidget):
             if self._display_mode == "analog":
                 padding_left, padding_top, padding_bottom, _ = self._compute_analog_padding()
                 padding_right = padding_left
+                padding_rule = f"{padding_top}px {padding_right}px {padding_bottom}px {padding_left}px"
             else:
-                padding_top = 6
-                padding_right = 28
-                padding_bottom = 6 + tz_extra_space
-                padding_left = 21
-                padding_right = 28
+                padding_left, padding_top, padding_right, padding_bottom = self._compute_digital_padding()
+                padding_rule = "0px"
 
             self.setStyleSheet(f"""
                 QLabel {{
@@ -943,7 +1154,7 @@ class ClockWidget(BaseOverlayWidget):
                                                                  {self._bg_border_color.blue()}, 
                                                                  {self._bg_border_color.alpha()});
                     border-radius: 8px;
-                    padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
+                    padding: {padding_rule};
                 }}
             """)
             self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
@@ -965,19 +1176,23 @@ class ClockWidget(BaseOverlayWidget):
                 self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
             else:
                 # Digital mode without background: use asymmetric padding for text alignment
-                padding_top = 6
-                padding_right = 28
-                padding_left = 21
-                padding_bottom = 6 + tz_extra_space
+                padding_left, padding_top, padding_right, padding_bottom = self._compute_digital_padding()
                 self.setStyleSheet(f"""
                     QLabel {{
                         color: rgba({self._text_color.red()}, {self._text_color.green()}, 
                                    {self._text_color.blue()}, {self._text_color.alpha()});
                         background-color: transparent;
-                        padding: {padding_top}px {padding_right}px {padding_bottom}px {padding_left}px;
+                        padding: 0px;
                     }}
                 """)
-                self.setContentsMargins(0, 0, 0, tz_extra_space)
+                self.setContentsMargins(padding_left, padding_top, padding_right, padding_bottom)
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self._display_mode != "analog":
+            self._apply_digital_font_fit()
+            self._update_stylesheet()
+        self._position_timezone_label()
     
     def paintEvent(self, event: QPaintEvent) -> None:
         """Custom paint for analogue mode; fall back to QLabel for digital."""
@@ -1397,6 +1612,10 @@ class ClockWidget(BaseOverlayWidget):
         base_tz_font_size = tz_font_size
         if self._show_background:
             tz_font_size = max(8, int(round(base_tz_font_size * self.ANALOG_FRAMED_TIMEZONE_SCALE)))
+        tz_font_size = min(
+            tz_font_size,
+            max(8, side // (6 if self._show_background else 5)),
+        )
 
         numeral_shadow_offset_px = 2 if self._show_background else 1
 
@@ -1466,6 +1685,12 @@ class ClockWidget(BaseOverlayWidget):
         vertical_padding = max(12, int(round(15 * dpi_y / 96.0)))
         horizontal_padding = vertical_padding
         tz_font_size = max(8, self._font_size // 3)
+        widget_height = max(0, int(self.height()))
+        if widget_height > 0:
+            tz_font_size = min(
+                tz_font_size,
+                max(8, widget_height // (9 if self._show_background else 8)),
+            )
         bottom_margin = vertical_padding
         if self._show_timezone:
             bottom_margin += tz_font_size + max(4, vertical_padding // 2)

@@ -908,6 +908,50 @@ def collect_widget_section_signal_block_targets(
     return tuple(targets)
 
 
+def collect_widget_section_signal_block_targets_for_sections(
+    owner: Any,
+    section_ids: tuple[str, ...],
+    *,
+    descriptors: tuple[WidgetSettingsSectionDescriptor, ...] | None = None,
+    extra_attr_names: tuple[str, ...] = (),
+) -> tuple[Any, ...]:
+    """Return signal-block targets for a descriptor-owned subset of sections."""
+
+    descriptor_iter = descriptors if descriptors is not None else get_widget_settings_section_descriptors()
+    attr_names: list[str] = []
+    seen_attrs: set[str] = set()
+
+    for section_id in section_ids:
+        descriptor = get_widget_settings_section_descriptor(section_id, descriptor_iter)
+        if descriptor is None:
+            continue
+        for attr_name in descriptor.signal_block_attrs:
+            if attr_name in seen_attrs:
+                continue
+            seen_attrs.add(attr_name)
+            attr_names.append(attr_name)
+
+    for attr_name in extra_attr_names:
+        if attr_name in seen_attrs:
+            continue
+        seen_attrs.add(attr_name)
+        attr_names.append(attr_name)
+
+    targets: list[Any] = []
+    seen_ids: set[int] = set()
+    for attr_name in attr_names:
+        widget = getattr(owner, attr_name, None)
+        if widget is None or not hasattr(widget, "blockSignals"):
+            continue
+        widget_id = id(widget)
+        if widget_id in seen_ids:
+            continue
+        seen_ids.add(widget_id)
+        targets.append(widget)
+
+    return tuple(targets)
+
+
 def load_widget_sections(
     owner: Any,
     widgets_config: Mapping[str, Any],

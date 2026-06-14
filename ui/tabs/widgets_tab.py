@@ -56,6 +56,7 @@ from rendering.widget_descriptors import (
     collect_widget_section_save_result,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
+    collect_widget_section_signal_block_targets_for_sections,
     collect_widget_stack_status_targets,
     get_widget_custom_position_option_descriptors,
     get_default_widget_section_index,
@@ -783,7 +784,9 @@ class WidgetsTab(QWidget):
             if is_perf_metrics_enabled():
                 self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
 
-            self._load_settings()
+            self._load_widget_sections_by_id(
+                self._widget_section_descriptors[subtab_id].section_id,
+            )
         finally:
             self._subtab_content_building.discard(subtab_id)
 
@@ -1069,6 +1072,58 @@ class WidgetsTab(QWidget):
         # Update stack status labels after loading settings
         try:
             self._refresh_custom_position_option_state()
+            self._update_stack_status()
+        except Exception as e:
+            logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+
+    def _load_widget_sections_by_id(self, *section_ids: str) -> None:
+        """Hydrate only the requested descriptor-owned sections from settings."""
+
+        ordered_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for section_id in section_ids:
+            normalized_id = str(section_id or "").strip()
+            if not normalized_id or normalized_id in seen_ids:
+                continue
+            seen_ids.add(normalized_id)
+            ordered_ids.append(normalized_id)
+        if not ordered_ids:
+            return
+
+        blockers = []
+        try:
+            widgets_value = self._settings.get("widgets", {})
+            if isinstance(widgets_value, dict):
+                widgets = dict(widgets_value)
+            else:
+                widgets = {}
+
+            for widget in collect_widget_section_signal_block_targets_for_sections(
+                self,
+                tuple(ordered_ids),
+                descriptors=self._widget_section_descriptors,
+            ):
+                widget.blockSignals(True)
+                blockers.append(widget)
+
+            for section_id in ordered_ids:
+                load_widget_section(
+                    self,
+                    section_id,
+                    widgets,
+                    self._widget_section_descriptors,
+                )
+
+        finally:
+            for widget in blockers:
+                try:
+                    widget.blockSignals(False)
+                except Exception as e:
+                    logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+
+        try:
+            self._refresh_custom_position_option_state()
+            self._refresh_custom_resize_lock_state()
             self._update_stack_status()
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)

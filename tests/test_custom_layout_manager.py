@@ -22,7 +22,7 @@ class _SettingsStub:
     def get_widgets_map(self) -> dict:
         return dict(self._widgets_map)
 
-    def set_widgets_map(self, widgets: dict) -> None:
+    def set_widgets_map(self, widgets: dict, *, emit_change: bool = True) -> None:
         self._widgets_map = dict(widgets)
 
     def save(self) -> None:
@@ -33,9 +33,11 @@ class _EditableTestWidget(QWidget):
     def __init__(self, parent: QWidget, *, font_size: int = 48) -> None:
         super().__init__(parent)
         self._font_size = font_size
+        self._display_mode = "digital"
         self._icon_size = 32
         self._detail_icon_size = 16
         self._artwork_size = 80
+        self.double_click_calls = 0
         self.setGeometry(30, 40, 180, 80)
         self.show()
 
@@ -47,6 +49,9 @@ class _EditableTestWidget(QWidget):
     def set_font_size(self, size: int) -> None:
         self._font_size = int(size)
 
+    def set_display_mode(self, mode: str) -> None:
+        self._display_mode = str(mode)
+
     def set_icon_size(self, size: int) -> None:
         self._icon_size = int(size)
 
@@ -55,6 +60,11 @@ class _EditableTestWidget(QWidget):
 
     def set_artwork_size(self, size: int) -> None:
         self._artwork_size = int(size)
+
+    def handle_double_click(self, local_pos) -> bool:
+        self.double_click_calls += 1
+        self._display_mode = "analog" if self._display_mode == "digital" else "digital"
+        return True
 
     def _update_position(self) -> None:
         custom_rect = getattr(self, "_custom_layout_local_rect", None)
@@ -144,6 +154,9 @@ class _GmailLikeTestWidget(_EditableTestWidget):
 
     def set_font_size(self, size: int) -> None:
         self._font_size = int(size)
+
+    def set_display_mode(self, mode: str) -> None:
+        self._display_mode = str(mode)
 
 
 class _ConstrainedOverlayWidget(BaseOverlayWidget):
@@ -337,11 +350,40 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert len(displays) == 1
     payload = next(iter(displays.values()))["clock"]
     assert payload["size_payload"]["font_size"] == 72
+    assert payload["size_payload"]["display_mode"] == "digital"
     assert payload["resize_mode"] == "clock_font"
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
 
     assert display._runtime_reload_requests == 1
     assert clock.isVisible() is False
+
+
+def test_custom_layout_manager_clock_payload_reapplies_display_mode(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    clock._display_mode = "analog"
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    state = manager._shell_states["clock"]
+    manager._apply_size_payload(
+        state.descriptor,
+        clock,
+        {"font_size": 54, "display_mode": "digital"},
+    )
+
+    assert clock._font_size == 54
+    assert clock._display_mode == "digital"
 
 
 def test_custom_layout_manager_save_session_persists_untouched_widgets_as_authoritative_custom_scene(qtbot):

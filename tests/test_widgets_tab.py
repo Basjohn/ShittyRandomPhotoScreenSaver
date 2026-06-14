@@ -182,6 +182,88 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_lazy_widgets_tab_subtab_build_uses_section_scoped_loader(self, qt_app, settings_manager, monkeypatch):
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "clock"},
+        )
+        try:
+            descriptors = get_widget_settings_section_descriptors()
+            weather_index = next(
+                idx for idx, descriptor in enumerate(descriptors)
+                if descriptor.section_id == "weather"
+            )
+            broad_calls: list[dict] = []
+            scoped_calls: list[str] = []
+
+            def _fake_load_sections(owner, widgets_config, descriptors=None):
+                broad_calls.append(
+                    {
+                        "owner": owner,
+                        "widgets_config": dict(widgets_config),
+                        "descriptors": descriptors,
+                    }
+                )
+
+            def _fake_load_section(owner, section_id, widgets_config, descriptors=None):
+                assert owner is tab
+                assert isinstance(widgets_config, dict)
+                scoped_calls.append(section_id)
+                return True
+
+            monkeypatch.setattr("ui.tabs.widgets_tab.load_widget_sections", _fake_load_sections)
+            monkeypatch.setattr("ui.tabs.widgets_tab.load_widget_section", _fake_load_section)
+
+            tab._on_subtab_changed(weather_index)
+            qt_app.processEvents()
+
+            assert broad_calls == []
+            assert scoped_calls == ["weather"]
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_widgets_tab_media_build_uses_dependency_scoped_loaders(self, qt_app, settings_manager, monkeypatch):
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "clock"},
+        )
+        try:
+            descriptors = get_widget_settings_section_descriptors()
+            media_index = next(
+                idx for idx, descriptor in enumerate(descriptors)
+                if descriptor.section_id == "media"
+            )
+            broad_calls: list[dict] = []
+            scoped_calls: list[str] = []
+
+            def _fake_load_sections(owner, widgets_config, descriptors=None):
+                broad_calls.append(
+                    {
+                        "owner": owner,
+                        "widgets_config": dict(widgets_config),
+                        "descriptors": descriptors,
+                    }
+                )
+
+            def _fake_load_section(owner, section_id, widgets_config, descriptors=None):
+                assert owner is tab
+                assert isinstance(widgets_config, dict)
+                scoped_calls.append(section_id)
+                return True
+
+            monkeypatch.setattr("ui.tabs.widgets_tab.load_widget_sections", _fake_load_sections)
+            monkeypatch.setattr("ui.tabs.widgets_tab.load_widget_section", _fake_load_section)
+
+            tab._on_subtab_changed(media_index)
+            qt_app.processEvents()
+
+            assert broad_calls == []
+            assert scoped_calls == ["visualizers", "media"]
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_custom_position_slot_tracks_saved_custom_layout_state(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
             "clock": {"enabled": True, "position": "Custom"},

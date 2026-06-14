@@ -10,6 +10,7 @@ from rendering.widget_descriptors import (
     collect_widget_section_save_result,
     collect_widget_section_save_results,
     collect_widget_section_signal_block_targets,
+    collect_widget_section_signal_block_targets_for_sections,
     collect_widget_stack_status_targets,
     get_factory_widget_descriptors,
     get_widget_custom_position_option_descriptors,
@@ -372,6 +373,53 @@ def test_collect_widget_section_signal_block_targets_uses_descriptor_attrs_and_d
     assert owner.weather_enabled in targets
     assert owner.not_blockable not in targets
     assert len(targets) == len({id(item) for item in targets})
+
+
+def test_collect_widget_section_signal_block_targets_for_sections_scopes_attrs():
+    class _Owner:
+        pass
+
+    owner = _Owner()
+
+    class _Blockable:
+        def __init__(self, name: str):
+            self.name = name
+
+        def blockSignals(self, _blocked: bool) -> None:
+            return None
+
+    owner.clock_enabled = _Blockable("clock")
+    owner.weather_enabled = _Blockable("weather")
+    owner.shared = _Blockable("shared")
+
+    descriptors = (
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "clock",
+                "signal_block_attrs": ("clock_enabled", "shared"),
+            },
+        )(),
+        type(
+            "_D",
+            (),
+            {
+                "section_id": "weather",
+                "signal_block_attrs": ("weather_enabled", "shared"),
+            },
+        )(),
+    )
+
+    targets = collect_widget_section_signal_block_targets_for_sections(
+        owner,
+        ("weather",),
+        descriptors=descriptors,
+    )
+
+    assert owner.weather_enabled in targets
+    assert owner.shared in targets
+    assert owner.clock_enabled not in targets
 
 
 def test_load_widget_sections_runs_descriptor_owned_loaders():
