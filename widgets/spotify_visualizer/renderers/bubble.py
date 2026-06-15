@@ -22,6 +22,42 @@ _DIRECTION_VECS = {
     'center_out': (0.0, 0.0),
 }
 
+_MAX_BUBBLES = 110
+_BUBBLE_POS_SIZE = _MAX_BUBBLES * 4
+_BUBBLE_EXTRA_SIZE = _MAX_BUBBLES * 4
+_BUBBLE_TRAIL_SIZE = _MAX_BUBBLES * 3 * 3
+
+
+def _copy_float_buffer(state, attr_name: str, source, size: int):
+    """Reuse a persistent float32 buffer on the overlay state.
+
+    Bubble's runtime output is already behavior-authoritative by the time it
+    reaches this seam; the hot path work here should stay transport-only.
+    """
+    buf = getattr(state, attr_name, None)
+    if not isinstance(buf, np.ndarray) or buf.dtype != np.float32 or int(buf.size) != int(size):
+        buf = np.zeros(size, dtype=np.float32)
+        setattr(state, attr_name, buf)
+    else:
+        buf.fill(0.0)
+
+    if source is None:
+        return buf
+
+    try:
+        source_len = len(source)
+    except Exception:
+        source_len = 0
+    copy_len = min(int(source_len), int(size))
+    if copy_len <= 0:
+        return buf
+
+    if source_len == copy_len:
+        buf[:copy_len] = source
+    else:
+        buf[:copy_len] = source[:copy_len]
+    return buf
+
 
 def get_uniform_names() -> list[str]:
     return [
@@ -54,38 +90,31 @@ def upload_uniforms(gl, u: dict, s) -> bool:
         gl.glUniform1f(loc, max(0.0, min(1.0, ga)))
 
     # Bubble count
-    bcount = min(s._bubble_count, 110)
+    bcount = min(s._bubble_count, _MAX_BUBBLES)
     _set1i(gl, u, "u_bubble_count", bcount)
 
     # Bubble position data (vec4 array: x, y, radius, alpha)
     loc = u.get("u_bubbles_pos", -1)
     if loc >= 0 and bcount > 0:
-        pos_data = s._bubble_pos_data
-        pos_buf = np.zeros(110 * 4, dtype="float32")
-        copy_len = min(len(pos_data), 110 * 4)
-        for i in range(copy_len):
-            pos_buf[i] = float(pos_data[i])
-        gl.glUniform4fv(loc, 110, pos_buf)
+        pos_buf = _copy_float_buffer(s, "_bubble_uniform_pos_buf", s._bubble_pos_data, _BUBBLE_POS_SIZE)
+        gl.glUniform4fv(loc, bcount, pos_buf)
 
     # Bubble extra data (vec4 array: spec_size, rotation, spec_ox, spec_oy)
     loc = u.get("u_bubbles_extra", -1)
     if loc >= 0 and bcount > 0:
-        extra_data = s._bubble_extra_data
-        extra_buf = np.zeros(110 * 4, dtype="float32")
-        copy_len = min(len(extra_data), 110 * 4)
-        for i in range(copy_len):
-            extra_buf[i] = float(extra_data[i])
-        gl.glUniform4fv(loc, 110, extra_buf)
+        extra_buf = _copy_float_buffer(s, "_bubble_uniform_extra_buf", s._bubble_extra_data, _BUBBLE_EXTRA_SIZE)
+        gl.glUniform4fv(loc, bcount, extra_buf)
 
     # Bubble trail data (vec3 array: TRAIL_STEPS xy + strength per bubble)
     loc = u.get("u_bubbles_trail", -1)
-    if loc >= 0 and bcount > 0:
-        trail_data = s._bubble_trail_data
-        trail_buf = np.zeros(110 * 3 * 3, dtype="float32")
-        copy_len = min(len(trail_data), 110 * 3 * 3)
-        for i in range(copy_len):
-            trail_buf[i] = float(trail_data[i])
-        gl.glUniform3fv(loc, 110 * 3, trail_buf)
+    trail_enabled = (
+        bcount > 0
+        and float(getattr(s, "_bubble_trail_strength", 0.0) or 0.0) > 0.001
+        and float(getattr(s, "_bubble_tail_opacity", 0.0) or 0.0) > 0.001
+    )
+    if loc >= 0 and trail_enabled:
+        trail_buf = _copy_float_buffer(s, "_bubble_uniform_trail_buf", s._bubble_trail_data, _BUBBLE_TRAIL_SIZE)
+        gl.glUniform3fv(loc, bcount * 3, trail_buf)
 
     _set1f(gl, u, "u_trail_strength", s._bubble_trail_strength)
     _set1f(gl, u, "u_tail_opacity", s._bubble_tail_opacity)

@@ -22,13 +22,17 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-- [ ] High priority: recover multi-display transition/compositor performance.
-  - Keep the investigation scoped to measured throughput loss, not generic widget paint suspicion.
+- [ ] High priority: recover runtime/compositor performance without altering Bubble feel.
+  - Bubble is the dominant current perf drag. Switching away from Bubble improves results regardless of transition family, so do not keep steering diagnosis toward specific transition types.
+  - Treat Bubble's current soft/hot runtime feel as locked for this perf pass.
+  - Keep the investigation scoped to measured throughput loss, not generic widget paint suspicion or speculative visualizer retuning.
   - Maintain automation bars for:
+    - Bubble's current runtime-shaped reactivity oracles and audio-fixture lanes must stay green with no softened thresholds
+    - Bubble transport/perf work must prove payload equivalence so render-path optimizations cannot silently alter Bubble feel
     - adaptive/compositor timer dispatch must not flood the UI queue with duplicate pending updates
     - compositor repaint dispatch must prefer the direct queued-Qt widget update path over the generic UI-invoker hot path, without reopening stale-pending or deleted-object regressions
     - compositor warm helpers must not touch the live visible surface when hidden shared warmup is unavailable
-    - transition perf fixes must preserve cadence responsiveness rather than solving stalls by becoming stale
+    - cadence fixes must preserve responsiveness rather than solving stalls by becoming stale
     - PERF HUD / diagnostics work must not rebuild expensive overlay assets every compositor shader frame when the displayed content has not changed
     - shader-path overlay painting must not open redundant QPainter sessions for the visualizer/debug HUD on the same compositor frame
     - overlay timer gap diagnostics must name likely starvation cause rather than implying a cheap widget callback is the hot path
@@ -36,25 +40,34 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - scaled prefetch planning must follow likely runtime consumption order rather than path-by-display cross-product fan-out
     - scaled prefetch throughput must stay bounded and useful: immediate display-pair requests may use small controlled parallelism, but warmup must not reopen churn
   - Trace and validate the remaining hot-path seams in this order:
+    - Bubble render transport: per-frame array packing/allocation and GL uniform upload churn in `widgets/spotify_visualizer/renderers/bubble.py`
+    - Bubble UI/compute handoff overhead once transport churn is reduced, without reopening stale-result or deleted-object regressions
     - compositor render pacing during active transitions now that PERF HUD rebuild churn, shader-path overlay painter churn, and repaint dispatch indirection have been reduced
     - image prescale / scaled-cache reuse after the new ordered/bounded scaled warmup pass
     - remaining per-image GL texture upload churn after live-surface warm deferral
     - any residual noisy timer-gap diagnostics versus real stalls
   - Immediate next runtime/log questions:
-    - after paint-consumption coalescing plus resumed-metric resets, do compositor render-timer metrics now read per-transition truth instead of smearing paused/idle gaps into fake 10s stalls
-    - after the CustomAnimator hot-path direct-callback pass, do compositor transition `GL ANIM` averages materially improve without reopening completion or listener compatibility regressions
+    - after Bubble transport-side churn is reduced, do `--perf` runs show materially better compositor/visualizer throughput without any Bubble oracle drift
+    - after paint-consumption coalescing plus resumed-metric resets, do compositor render-timer metrics now read per-activity truth instead of smearing paused/idle gaps into fake 10s stalls
+    - after the CustomAnimator hot-path direct-callback pass, do compositor `GL ANIM` averages materially improve without reopening completion or listener compatibility regressions
     - after the frame-budget warning burst throttle, do `--perf` runs stay loud enough for diagnosis without the warning stream itself becoming measurable churn
-    - after those passes together, do transition paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, stale-pending, or deleted-object regressions
+    - after those passes together, do paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, stale-pending, or deleted-object regressions
     - does fresh multi-display startup still crater before the first few transitions have warmed naturally
     - did warning-level `Hidden shared warmup context unavailable; deferring ... to first-use warmup` fire, and if so how often
-    - after the PERF HUD cache pass plus shader-path overlay batching, do transition `GL PAINT` `avg_fps` / `dt_max` materially improve under `--perf`
+    - after the PERF HUD cache pass plus shader-path overlay batching, do `GL PAINT` `avg_fps` / `dt_max` materially improve under `--perf`
     - after the PERF HUD cache pass plus the ordered/bounded scaled warmup pass, do `scaled_prefetch_completed`, `scaled_hits`, and `worker_fallbacks` materially improve
     - after those cache-side improvements, are the worst remaining spikes dominated by `ImageWorker prescale`, `GL TEXTURE Slow upload`, or compositor paint cadence
   - Use `--perf` evidence to separate:
+    - Bubble render-transport cost
     - true paint/upload cost
     - UI-queue backpressure
     - cache miss / redundant prescale work
-  - Do not “fix” this by softening FPS targets, adding stale visual holds, or broad fallback behavior.
+  - Keep these earlier broader suspicions alive until disproven by evidence:
+    - compositor render pacing can still hide real delivery collapse even after obvious hot spots are reduced
+    - image prescale / scaled-cache reuse may still be wasting work and stealing headroom
+    - remaining per-image GL texture upload churn may still dominate worst spikes after upstream reductions
+    - diagnostics truth still matters: logs must expose starvation sources clearly instead of blaming cheap callbacks by omission
+  - Do not “fix” this by softening FPS targets, adding stale visual holds, broad fallback behavior, or casually retuning Bubble itself.
 
 - [ ] High priority: audit Weather cache blanking / premature expiry.
   - Confirm why Weather is going blank too often even though the cache should behave as replace-only, not expire-to-empty.
@@ -73,7 +86,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - Visualizer requested-display participation/fallback warnings still need a later re-audit if they keep firing while the requested display is clearly live; keep that separate from the current perf pass unless logs prove it is causing rebuild churn.
 - Spectrum solid-bar visual smoothness is no longer active work, but future tuning must stay visual-only and must not reopen audio/reactivity regressions.
-- Bubble work is closed for now; future changes should preserve mode isolation rather than reopening shared-floor contracts casually.
+- Bubble behavior is locked during the current perf pass. Future perf work should stay mode-isolated and transport-focused rather than reopening shared-floor or Bubble-reactivity contracts casually.
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
 - Visualizer CUSTOM/runtime geometry is intentionally out of the active queue for now. The current long-term state, landed protections, and low/deferred follow-up work live in `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md`.
 

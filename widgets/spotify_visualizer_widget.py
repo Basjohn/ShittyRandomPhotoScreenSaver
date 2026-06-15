@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Dict, Any, Callable, Mapping
 import copy
+import threading
 import time
 
 from PySide6.QtCore import QRect, QRectF, Qt
@@ -365,6 +366,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_tail_opacity: float = 0.0
         self._bubble_count: int = 0
         self._bubble_compute_pending: bool = False  # coalescing flag
+        self._bubble_pending_result: Optional[tuple[list, list, list, int]] = None
+        self._bubble_pending_result_lock = threading.Lock()
+        self._bubble_pending_result_skip_count: int = 0
         self._bubble_last_tick_ts: float = 0.0
         self._bubble_dispatch_energy_snapshot: Dict[str, float] = {
             "bass": 0.0,
@@ -1302,7 +1306,7 @@ class SpotifyVisualizerWidget(QWidget):
         return (pos_data, extra_data, trail_data, count)
 
     def _bubble_compute_done(self, task_result) -> None:
-        """Callback from COMPUTE thread — post results to UI thread."""
+        """Callback from COMPUTE thread — stage the latest result for the next UI tick."""
         self._bubble_compute_pending = False
         if task_result.success and task_result.result is not None:
             pos_data, extra_data, trail_data, count = task_result.result
@@ -1312,22 +1316,46 @@ class SpotifyVisualizerWidget(QWidget):
                     task_result.success, count,
                 )
                 self._bubble_done_logged = True
-            from core.threading.manager import ThreadManager
-            ThreadManager.run_on_ui_thread(
-                self._bubble_apply_result, pos_data, extra_data, trail_data, count
-            )
+            self._store_pending_bubble_result(pos_data, extra_data, trail_data, count)
         elif not task_result.success:
             logger.warning(
                 "[SPOTIFY_VIS] Bubble compute FAILED: %s",
                 task_result.error,
             )
 
-    def _bubble_apply_result(self, pos_data: list, extra_data: list, trail_data: list, count: int) -> None:
-        """Apply bubble simulation results on UI thread (atomic swap)."""
+    def _store_pending_bubble_result(
+        self,
+        pos_data: list,
+        extra_data: list,
+        trail_data: list,
+        count: int,
+    ) -> None:
+        with self._bubble_pending_result_lock:
+            self._bubble_pending_result = (pos_data, extra_data, trail_data, count)
+
+    def _has_pending_bubble_result(self) -> bool:
+        with self._bubble_pending_result_lock:
+            return self._bubble_pending_result is not None
+
+    def _clear_pending_bubble_result(self) -> None:
+        with self._bubble_pending_result_lock:
+            self._bubble_pending_result = None
+
+    def _consume_pending_bubble_result(self) -> bool:
+        """Apply the newest Bubble snapshot on the ordinary UI tick."""
+        with self._bubble_pending_result_lock:
+            pending = self._bubble_pending_result
+            self._bubble_pending_result = None
+
+        if pending is None:
+            return False
+
+        pos_data, extra_data, trail_data, count = pending
         self._bubble_pos_data = pos_data
         self._bubble_extra_data = extra_data
         self._bubble_trail_data = trail_data
         self._bubble_count = count
+        return True
 
     def _ensure_tick_source(self) -> None:
         """Delegates to widgets.spotify_visualizer.tick_helpers."""

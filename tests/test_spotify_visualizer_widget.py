@@ -2232,6 +2232,73 @@ def test_bubble_dispatch_reuses_cached_payload_dicts_between_ticks(qt_app, qtbot
     assert second_call["args"][3]["big_bass_pulse"] == pytest.approx(0.92)
 
 
+@pytest.mark.qt
+def test_bubble_dispatch_skips_while_pending_result_waits_for_ui_tick(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.21, mid=0.31, high=0.41, overall=0.51)
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.0,
+        mid_transient=0.0,
+        high_transient=0.0,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._store_pending_bubble_result([1.0], [2.0], [3.0], 1)
+    widget._bubble_pending_result_skip_count = 0
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert widget._thread_manager.calls == []
+    assert widget._bubble_pending_result_skip_count == 1
+
+
+@pytest.mark.qt
+def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_app, qtbot):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._bubble_compute_pending = True
+
+    result = SimpleNamespace(
+        success=True,
+        result=([1.0, 2.0], [3.0], [4.0], 5),
+    )
+
+    widget._bubble_compute_done(result)
+
+    assert widget._bubble_compute_pending is False
+    assert widget._has_pending_bubble_result() is True
+    assert widget._bubble_pos_data == []
+
+    assert widget._consume_pending_bubble_result() is True
+    assert widget._has_pending_bubble_result() is False
+    assert widget._bubble_pos_data == [1.0, 2.0]
+    assert widget._bubble_extra_data == [3.0]
+    assert widget._bubble_trail_data == [4.0]
+    assert widget._bubble_count == 5
+
+
 def test_beat_engine_playback_state_keeps_worker_warm_for_short_pause():
     class _WorkerStub:
         def __init__(self) -> None:
@@ -6151,6 +6218,162 @@ def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
     assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
         "Manual-floor loud hold still flattens into one narrow hero-lane shape."
     )
+
+
+@pytest.mark.qt
+def test_bubble_current_feel_lock_soft_to_loud_fixture_signature(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(20001)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea(widget)
+
+    blocks = _load_audio_fixture_blocks(np_module, "soft_to_loud_transition")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    soft_window = metrics_series[4:10]
+    hot_window = metrics_series[-10:]
+
+    actual = {
+        "soft_feed": sum(m["bubble_feed_bass"] for m in soft_window) / len(soft_window),
+        "hot_feed": sum(m["bubble_feed_bass"] for m in hot_window) / len(hot_window),
+        "soft_small": sum(m["max_small_delta"] for m in soft_window) / len(soft_window),
+        "hot_small": sum(m["max_small_delta"] for m in hot_window) / len(hot_window),
+        "soft_big": sum(m["big_max_render"] for m in soft_window) / len(soft_window),
+        "hot_big": sum(m["big_max_render"] for m in hot_window) / len(hot_window),
+    }
+    expected = {
+        "soft_feed": 0.160760,
+        "hot_feed": 0.770648,
+        "soft_small": 0.022480,
+        "hot_small": 0.032684,
+        "soft_big": 0.093887,
+        "hot_big": 0.130797,
+    }
+
+    for key, value in expected.items():
+        assert actual[key] == pytest.approx(value, rel=0.15, abs=0.002), (
+            f"Bubble current feel drifted for {key}: expected near {value:.6f}, got {actual[key]:.6f}."
+        )
+
+
+@pytest.mark.qt
+def test_bubble_current_feel_lock_loud_hold_fixture_signature(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(20002)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    blocks = _load_audio_fixture_blocks(np_module, "loud_bass_hold")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    hot_window = metrics_series[8:]
+    early_window = hot_window[:6]
+    late_window = hot_window[-6:]
+
+    actual = {
+        "avg_feed": sum(m["bubble_feed_bass"] for m in hot_window) / len(hot_window),
+        "avg_small": sum(m["max_small_delta"] for m in hot_window) / len(hot_window),
+        "avg_big": sum(m["big_max_render"] for m in hot_window) / len(hot_window),
+        "early_big": sum(m["big_max_render"] for m in early_window) / len(early_window),
+        "late_big": sum(m["big_max_render"] for m in late_window) / len(late_window),
+        "late_small": sum(m["max_small_delta"] for m in late_window) / len(late_window),
+        "avg_clamp": sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window),
+    }
+    expected = {
+        "avg_feed": 0.770648,
+        "avg_small": 0.031891,
+        "avg_big": 0.130759,
+        "early_big": 0.134491,
+        "late_big": 0.125669,
+        "late_small": 0.033338,
+        "avg_clamp": 6.000000,
+    }
+
+    for key, value in expected.items():
+        rel = 0.15 if key != "avg_clamp" else 0.10
+        abs_tol = 0.002 if key != "avg_clamp" else 0.5
+        assert actual[key] == pytest.approx(value, rel=rel, abs=abs_tol), (
+            f"Bubble current loud-hold feel drifted for {key}: expected near {value:.6f}, got {actual[key]:.6f}."
+        )
+
+
+@pytest.mark.qt
+def test_bubble_current_feel_lock_runtime_log_replay_signature(
+    qt_app,
+    qtbot,
+):
+    random.seed(20003)
+    profile = _deep_sea_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(profile)
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, profile)
+    head_window = metrics_series[:2]
+    weak_window = metrics_series[3:8]
+    late_window = metrics_series[-2:]
+
+    actual = {
+        "head_small": sum(m["max_small_delta"] for m in head_window) / len(head_window),
+        "weak_small": sum(m["max_small_delta"] for m in weak_window) / len(weak_window),
+        "late_small": sum(m["max_small_delta"] for m in late_window) / len(late_window),
+        "weak_big": sum(m["big_max_render"] for m in weak_window) / len(weak_window),
+        "late_big": sum(m["big_max_render"] for m in late_window) / len(late_window),
+        "weak_pulse": sum(m["max_big_pulse"] for m in weak_window) / len(weak_window),
+        "late_pulse": sum(m["max_big_pulse"] for m in late_window) / len(late_window),
+        "weak_expand": sum(m["top_big_expansion"] for m in weak_window) / len(weak_window),
+        "late_expand": sum(m["top_big_expansion"] for m in late_window) / len(late_window),
+    }
+    expected = {
+        "head_small": 0.001557,
+        "weak_small": 0.016080,
+        "late_small": 0.031306,
+        "weak_big": 0.112027,
+        "late_big": 0.135653,
+        "weak_pulse": 0.625750,
+        "late_pulse": 0.974724,
+        "weak_expand": 2.954078,
+        "late_expand": 3.480000,
+    }
+
+    for key, value in expected.items():
+        rel = 0.18 if key == "head_small" else 0.15
+        abs_tol = 0.001 if key == "head_small" else 0.002
+        assert actual[key] == pytest.approx(value, rel=rel, abs=abs_tol), (
+            f"Bubble current log-replay feel drifted for {key}: expected near {value:.6f}, got {actual[key]:.6f}."
+        )
 
 
 @pytest.mark.qt

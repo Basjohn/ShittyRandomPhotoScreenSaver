@@ -436,6 +436,16 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                 )
         except Exception:
             logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
+        try:
+            bubble_result_skips = int(getattr(widget, "_bubble_pending_result_skip_count", 0) or 0)
+            if bubble_result_skips > 0:
+                logger.warning(
+                    "[PERF] [SPOTIFY_VIS][BUBBLE] result_apply_backpressure_skips=%d",
+                    bubble_result_skips,
+                )
+                widget._bubble_pending_result_skip_count = 0
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Bubble PERF metrics logging failed", exc_info=True)
     except Exception:
         logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
     finally:
@@ -453,3 +463,5 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
             widget._perf_audio_lag_last_ms = 0.0
             widget._perf_audio_lag_min_ms = 0.0
             widget._perf_audio_lag_max_ms = 0.0
+            if hasattr(widget, "_bubble_pending_result_skip_count"):
+                widget._bubble_pending_result_skip_count = 0

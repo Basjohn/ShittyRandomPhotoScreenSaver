@@ -269,6 +269,10 @@ def reset_visualizer_state(
     widget._bubble_trail_data = []
     widget._bubble_count = 0
     widget._bubble_compute_pending = False
+    clear_pending_bubble_result = getattr(widget, "_clear_pending_bubble_result", None)
+    if callable(clear_pending_bubble_result):
+        clear_pending_bubble_result()
+    widget._bubble_pending_result_skip_count = 0
     widget._bubble_last_tick_ts = 0.0
     # Reset the CPU-side bubble simulation so stale running averages,
     # burst state, and beat timestamps don't bleed across mode switches.
@@ -423,6 +427,10 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
     try:
         widget._bubble_count = 0
         widget._bubble_compute_pending = False
+        clear_pending_bubble_result = getattr(widget, "_clear_pending_bubble_result", None)
+        if callable(clear_pending_bubble_result):
+            clear_pending_bubble_result()
+        widget._bubble_pending_result_skip_count = 0
         bubble_sim = getattr(widget, "_bubble_simulation", None)
         if bubble_sim is not None and hasattr(bubble_sim, "reset"):
             bubble_sim.reset()

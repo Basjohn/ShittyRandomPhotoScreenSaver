@@ -353,11 +353,18 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
     """Snapshot bubble settings on UI thread and submit to COMPUTE pool."""
+    has_pending_result = getattr(widget, "_has_pending_bubble_result", None)
+    pending_result = bool(has_pending_result()) if callable(has_pending_result) else False
     if (
         widget._vis_mode_str != 'bubble'
         or widget._bubble_compute_pending
+        or pending_result
         or widget._mode_teardown_block_until_ready
     ):
+        if pending_result:
+            widget._bubble_pending_result_skip_count = int(
+                getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
+            ) + 1
         return
     if widget._thread_manager is None:
         return
@@ -1149,6 +1156,10 @@ def on_tick(widget: Any) -> None:
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
+
+    consume_pending_bubble = getattr(widget, "_consume_pending_bubble_result", None)
+    if widget._vis_mode_str == "bubble" and callable(consume_pending_bubble):
+        consume_pending_bubble()
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return

@@ -166,6 +166,12 @@ void main() {
     pop_col.rgb = apply_rainbow(pop_col.rgb, u_rainbow_hue_offset);
     
     int count = min(u_bubble_count, 110);
+    // Small-bubble adornments are visually weak but disproportionately
+    // expensive in Deep Sea because trails + ghosts would otherwise run across
+    // the dense 45-bubble small field. Keep the motion itself unchanged and
+    // reserve the heavier trail/ghost work for bubbles large enough to read.
+    float min_trail_radius = 4.5 * px;
+    float min_ghost_radius = 3.5 * px;
 
     // --- Water ripple wake trail behind each moving bubble ---
     // Each bubble's 3 trail samples become ripple source points at
@@ -187,7 +193,7 @@ void main() {
             vec4 bpos = u_bubbles_pos[i];
             float brad = bpos.z;
             float balpha = bpos.w;
-            if (balpha < 0.01 || brad < 2.0 * px) continue;
+            if (balpha < 0.01 || brad < min_trail_radius) continue;
 
             // Process each of the 3 trail samples as a ripple source
             // age_factor: 0=oldest (most expanded/faded), 2=newest (tightest)
@@ -252,7 +258,7 @@ void main() {
             vec2 bxy = bpos.xy;
             float brad = bpos.z;
             float balpha = bpos.w;
-            if (balpha < 0.01 || brad < 2.0 * px) continue;
+            if (balpha < 0.01 || brad < min_ghost_radius) continue;
 
             float ghost_r = brad * 1.18;
             vec2 gdelta = uv - bxy;
