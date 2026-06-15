@@ -21,6 +21,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager, ThreadPoolType
 from core.resources.manager import ResourceManager
 from utils.lockfree.spsc_queue import SPSCQueue
+from PySide6.QtCore import QMetaObject, Qt, QThread
 
 try:
     from shiboken6 import Shiboken
@@ -31,6 +32,7 @@ if TYPE_CHECKING:
     from rendering.gl_compositor import GLCompositorWidget
 
 logger = get_logger(__name__)
+_QT_UPDATE_FALLBACK_WARNED = False
 
 
 def _mark_widget_update_consumed(widget) -> None:
@@ -76,6 +78,32 @@ def _queue_safe_widget_update(widget) -> None:
         except Exception as exc:
             logger.debug("[ADAPTIVE_TIMER] Widget update failed: %s", exc)
             _mark_widget_update_consumed(widget)
+    try:
+        owner_thread = widget.thread() if hasattr(widget, "thread") else None
+        current_thread = QThread.currentThread()
+        if owner_thread is not None and current_thread is owner_thread:
+            _apply_update()
+            return
+        if owner_thread is not None:
+            ok = QMetaObject.invokeMethod(
+                widget,
+                "update",
+                Qt.ConnectionType.QueuedConnection,
+            )
+            if bool(ok):
+                return
+            global _QT_UPDATE_FALLBACK_WARNED
+            if not _QT_UPDATE_FALLBACK_WARNED and is_perf_metrics_enabled():
+                _QT_UPDATE_FALLBACK_WARNED = True
+                logger.warning(
+                    "[PERF] [FALLBACK] Adaptive timer update fell back to UI invoker after queued Qt update dispatch failed"
+                )
+    except RuntimeError as exc:
+        logger.debug("[ADAPTIVE_TIMER] Suppressed queued widget update dispatch: %s", exc)
+        _mark_widget_update_consumed(widget)
+        return
+    except Exception as exc:
+        logger.debug("[ADAPTIVE_TIMER] Queued widget update dispatch failed: %s", exc)
 
     ThreadManager.run_on_ui_thread(_apply_update)
 

@@ -376,6 +376,36 @@ def paint_spotify_visualizer_gl(comp: "GLCompositorWidget") -> None:
         painter.end()
 
 
+def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
+    """Paint QPainter-owned overlays in one session after shader rendering.
+
+    This keeps debug HUD and Spotify card overlays from opening separate
+    QPainter sessions on the same GL frame, which can add avoidable churn
+    under PERF runs and multi-display transitions.
+    """
+    debug_image = None
+    if is_perf_metrics_enabled():
+        from rendering.gl_compositor_pkg.overlays import render_debug_overlay_image
+
+        debug_image = render_debug_overlay_image(comp)
+
+    if not comp._spotify_vis_enabled and debug_image is None:
+        return
+
+    gl.glUseProgram(0)
+
+    painter = QPainter(comp)
+    try:
+        if comp._spotify_vis_enabled:
+            from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
+
+            paint_spotify_visualizer(comp, painter)
+        if debug_image is not None:
+            painter.drawImage(0, 0, debug_image)
+    finally:
+        painter.end()
+
+
 def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
     """Try to render a transition via shader path. Returns True if successful."""
     if state is None or not can_use_fn():
@@ -386,9 +416,7 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         paint_fn(target)
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
         paint_dimming_gl(comp)
-        paint_spotify_visualizer_gl(comp)
-        if is_perf_metrics_enabled():
-            paint_debug_overlay_gl(comp)
+        paint_qpainter_overlays_gl(comp)
         return True
     except Exception:
         logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)

@@ -29,12 +29,13 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - compositor warm helpers must not touch the live visible surface when hidden shared warmup is unavailable
     - transition perf fixes must preserve cadence responsiveness rather than solving stalls by becoming stale
     - PERF HUD / diagnostics work must not rebuild expensive overlay assets every compositor shader frame when the displayed content has not changed
+    - shader-path overlay painting must not open redundant QPainter sessions for the visualizer/debug HUD on the same compositor frame
     - overlay timer gap diagnostics must name likely starvation cause rather than implying a cheap widget callback is the hot path
     - adaptive timer manager logs must distinguish real pause/resume transitions from no-op state reports
     - scaled prefetch planning must follow likely runtime consumption order rather than path-by-display cross-product fan-out
     - scaled prefetch throughput must stay bounded and useful: immediate display-pair requests may use small controlled parallelism, but warmup must not reopen churn
   - Trace and validate the remaining hot-path seams in this order:
-    - compositor render pacing during active transitions now that PERF HUD rebuild churn is reduced
+    - compositor render pacing during active transitions now that PERF HUD rebuild churn and shader-path overlay painter churn are reduced
     - image prescale / scaled-cache reuse after the new ordered/bounded scaled warmup pass
     - remaining per-image GL texture upload churn after live-surface warm deferral
     - any residual noisy timer-gap diagnostics versus real stalls
@@ -45,6 +46,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - after those passes together, do transition paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, or stale-pending regressions
     - does fresh multi-display startup still crater before the first few transitions have warmed naturally
     - did warning-level `Hidden shared warmup context unavailable; deferring ... to first-use warmup` fire, and if so how often
+    - after the PERF HUD cache pass plus shader-path overlay batching, do transition `GL PAINT` `avg_fps` / `dt_max` materially improve under `--perf`
     - after the PERF HUD cache pass plus the ordered/bounded scaled warmup pass, do `scaled_prefetch_completed`, `scaled_hits`, and `worker_fallbacks` materially improve
     - after those cache-side improvements, are the worst remaining spikes dominated by `ImageWorker prescale`, `GL TEXTURE Slow upload`, or compositor paint cadence
   - Use `--perf` evidence to separate:

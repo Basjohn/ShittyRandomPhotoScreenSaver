@@ -301,6 +301,53 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
+    def test_safe_widget_update_prefers_qt_queued_invoke_for_qobject_widgets(self):
+        """Real QObject-owned compositor widgets should bypass the generic UI invoker hot path."""
+        class _ThreadedWidget:
+            def __init__(self):
+                self.update_count = 0
+                self._thread = object()
+
+            def update(self):
+                self.update_count += 1
+
+            def thread(self):
+                return self._thread
+
+        widget = _ThreadedWidget()
+        queued: list[tuple[object, str, object]] = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        original_current_thread = adaptive_timer.QThread.currentThread
+        original_invoke = adaptive_timer.QMetaObject.invokeMethod
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(
+                lambda func, *args, **kwargs: (_ for _ in ()).throw(
+                    AssertionError("ThreadManager.run_on_ui_thread should not be used")
+                )
+            )
+            adaptive_timer.Shiboken = None
+            adaptive_timer.QThread.currentThread = staticmethod(lambda: object())
+            adaptive_timer.QMetaObject.invokeMethod = staticmethod(
+                lambda obj, method, connection: queued.append((obj, method, connection)) or True
+            )
+
+            _queue_safe_widget_update(widget)
+
+            assert len(queued) == 1
+            assert queued[0][0] is widget
+            assert queued[0][1] == "update"
+            assert getattr(widget, "_srpss_timer_update_pending") is True
+            assert widget.update_count == 0
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+            adaptive_timer.QThread.currentThread = original_current_thread
+            adaptive_timer.QMetaObject.invokeMethod = original_invoke
+
 
 class TestAdaptiveTimerAutoIdle(unittest.TestCase):
     """Test automatic IDLE transition after timeout."""

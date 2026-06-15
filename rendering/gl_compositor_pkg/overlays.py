@@ -7,6 +7,7 @@ All functions accept the compositor widget instance as the first parameter.
 
 from __future__ import annotations
 
+import time
 from typing import Optional, TYPE_CHECKING
 
 try:
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+_DEBUG_OVERLAY_REFRESH_INTERVAL_S = 0.12
 
 
 def _build_debug_overlay_payload(widget) -> Optional[tuple[str, str]]:
@@ -203,11 +205,24 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     if payload is None:
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
+        widget._debug_overlay_cache_built_at = 0.0
         return None
 
-    cache_key = (size.width(), size.height(), payload)
+    now = time.monotonic()
     cached_key = getattr(widget, "_debug_overlay_cache_key", None)
     cached_image = getattr(widget, "_debug_overlay_cache_image", None)
+    cached_built_at = float(getattr(widget, "_debug_overlay_cache_built_at", 0.0) or 0.0)
+    cached_size = cached_key[:2] if isinstance(cached_key, tuple) and len(cached_key) >= 2 else None
+    size_key = (size.width(), size.height())
+    if (
+        cached_image is not None
+        and cached_size == size_key
+        and cached_built_at > 0.0
+        and (now - cached_built_at) < _DEBUG_OVERLAY_REFRESH_INTERVAL_S
+    ):
+        return cached_image
+
+    cache_key = (size.width(), size.height(), payload)
     if cached_key == cache_key and cached_image is not None:
         return cached_image
 
@@ -222,6 +237,7 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
 
     widget._debug_overlay_cache_key = cache_key
     widget._debug_overlay_cache_image = image
+    widget._debug_overlay_cache_built_at = now
     return image
 
 def paint_dimming_gl(widget) -> None:
