@@ -26,6 +26,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - Keep the investigation scoped to measured throughput loss, not generic widget paint suspicion.
   - Maintain automation bars for:
     - adaptive/compositor timer dispatch must not flood the UI queue with duplicate pending updates
+    - compositor repaint dispatch must prefer the direct queued-Qt widget update path over the generic UI-invoker hot path, without reopening stale-pending or deleted-object regressions
     - compositor warm helpers must not touch the live visible surface when hidden shared warmup is unavailable
     - transition perf fixes must preserve cadence responsiveness rather than solving stalls by becoming stale
     - PERF HUD / diagnostics work must not rebuild expensive overlay assets every compositor shader frame when the displayed content has not changed
@@ -35,7 +36,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - scaled prefetch planning must follow likely runtime consumption order rather than path-by-display cross-product fan-out
     - scaled prefetch throughput must stay bounded and useful: immediate display-pair requests may use small controlled parallelism, but warmup must not reopen churn
   - Trace and validate the remaining hot-path seams in this order:
-    - compositor render pacing during active transitions now that PERF HUD rebuild churn and shader-path overlay painter churn are reduced
+    - compositor render pacing during active transitions now that PERF HUD rebuild churn, shader-path overlay painter churn, and repaint dispatch indirection have been reduced
     - image prescale / scaled-cache reuse after the new ordered/bounded scaled warmup pass
     - remaining per-image GL texture upload churn after live-surface warm deferral
     - any residual noisy timer-gap diagnostics versus real stalls
@@ -43,7 +44,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - after paint-consumption coalescing plus resumed-metric resets, do compositor render-timer metrics now read per-transition truth instead of smearing paused/idle gaps into fake 10s stalls
     - after the CustomAnimator hot-path direct-callback pass, do compositor transition `GL ANIM` averages materially improve without reopening completion or listener compatibility regressions
     - after the frame-budget warning burst throttle, do `--perf` runs stay loud enough for diagnosis without the warning stream itself becoming measurable churn
-    - after those passes together, do transition paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, or stale-pending regressions
+    - after those passes together, do transition paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, stale-pending, or deleted-object regressions
     - does fresh multi-display startup still crater before the first few transitions have warmed naturally
     - did warning-level `Hidden shared warmup context unavailable; deferring ... to first-use warmup` fire, and if so how often
     - after the PERF HUD cache pass plus shader-path overlay batching, do transition `GL PAINT` `avg_fps` / `dt_max` materially improve under `--perf`
