@@ -39,6 +39,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - remaining per-image GL texture upload churn after live-surface warm deferral
     - any residual noisy timer-gap diagnostics versus real stalls
   - Immediate next runtime/log questions:
+    - after paint-consumption coalescing plus resumed-metric resets, do compositor render-timer metrics now read per-transition truth instead of smearing paused/idle gaps into fake 10s stalls
+    - after the CustomAnimator hot-path direct-callback pass, do compositor transition `GL ANIM` averages materially improve without reopening completion or listener compatibility regressions
+    - after the frame-budget warning burst throttle, do `--perf` runs stay loud enough for diagnosis without the warning stream itself becoming measurable churn
+    - after those passes together, do transition paint `avg_fps` / `dt_max` improve materially without reopening first-frame, last-frame, or stale-pending regressions
     - does fresh multi-display startup still crater before the first few transitions have warmed naturally
     - did warning-level `Hidden shared warmup context unavailable; deferring ... to first-use warmup` fire, and if so how often
     - after the PERF HUD cache pass plus the ordered/bounded scaled warmup pass, do `scaled_prefetch_completed`, `scaled_hits`, and `worker_fallbacks` materially improve

@@ -73,6 +73,10 @@ class FrameBudget:
         self._last_frame_time_ms: float = 0.0
         self._max_frame_time_ms: float = 0.0
         self._min_frame_time_ms: float = float('inf')
+        self._spike_warning_last_ts: float = 0.0
+        self._spike_warning_cooldown_s: float = 0.5
+        self._spike_warning_suppressed_count: int = 0
+        self._spike_warning_suppressed_max_ms: float = 0.0
         
         # Budget limits by category
         self._budgets = {
@@ -122,16 +126,49 @@ class FrameBudget:
                 if frame_time > self._config.spike_threshold_ms and frame_time < 500.0:
                     self._spike_count += 1
                     if is_perf_metrics_enabled():
-                        logger.warning(
-                            "[PERF] [FRAME] Frame spike: %.1fms (target: %.1fms)",
-                            frame_time, self._config.frame_time_ms
-                        )
+                        self._log_spike_warning(now, frame_time)
             
             self._frame_start = now
             self._frame_number += 1
             self._total_frames += 1
             self._category_times.clear()
             self._category_starts.clear()
+
+    def _log_spike_warning(self, now: float, frame_time_ms: float) -> None:
+        """Emit throttled warning bursts for frame spikes."""
+        cooldown_elapsed = (
+            self._spike_warning_last_ts <= 0.0
+            or (now - self._spike_warning_last_ts) >= self._spike_warning_cooldown_s
+        )
+        if cooldown_elapsed:
+            suppressed_count = self._spike_warning_suppressed_count
+            suppressed_max_ms = self._spike_warning_suppressed_max_ms
+            self._spike_warning_suppressed_count = 0
+            self._spike_warning_suppressed_max_ms = 0.0
+            self._spike_warning_last_ts = now
+            total_count = suppressed_count + 1
+            burst_max_ms = max(frame_time_ms, suppressed_max_ms)
+            if suppressed_count > 0:
+                logger.warning(
+                    "[PERF] [FRAME] Frame spike burst: count=%d max=%.1fms last=%.1fms (target: %.1fms)",
+                    total_count,
+                    burst_max_ms,
+                    frame_time_ms,
+                    self._config.frame_time_ms,
+                )
+            else:
+                logger.warning(
+                    "[PERF] [FRAME] Frame spike: %.1fms (target: %.1fms)",
+                    frame_time_ms,
+                    self._config.frame_time_ms,
+                )
+            return
+
+        self._spike_warning_suppressed_count += 1
+        self._spike_warning_suppressed_max_ms = max(
+            self._spike_warning_suppressed_max_ms,
+            frame_time_ms,
+        )
     
     def begin_category(self, category: str) -> None:
         """Mark the start of a budget category."""

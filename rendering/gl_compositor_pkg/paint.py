@@ -18,6 +18,7 @@ except ImportError:
 from PySide6.QtGui import QPainter
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from rendering.adaptive_timer import _mark_widget_update_consumed
 from rendering.gl_compositor_pkg.overlays import (
     paint_debug_overlay,
     paint_spotify_visualizer,
@@ -32,6 +33,7 @@ win_diag_logger = logging.getLogger("win_diag")
 
 def handle_paintGL(widget) -> None:  # type: ignore[override]
     _paint_start = time.time()
+    _mark_widget_update_consumed(widget)
     
     # Phase 4: Disable GC during frame rendering to prevent GC pauses
     gc_controller = None

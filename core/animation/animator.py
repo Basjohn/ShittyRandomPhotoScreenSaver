@@ -146,8 +146,10 @@ class Animation(QObject):
         if self.frame_state is not None:
             self.frame_state.push(eased_progress)
         
-        # Emit progress - removed per-frame timing overhead
-        self.progress_changed.emit(eased_progress)
+        # Dispatch progress through the subclass-owned seam. Property animations
+        # still use the Qt signal path, while hot custom-runtime animations can
+        # bypass that signal bounce and call their Python callback directly.
+        self._dispatch_progress(eased_progress)
         
         # Check if complete
         if progress >= 1.0:
@@ -159,6 +161,10 @@ class Animation(QObject):
             return False
         
         return True
+
+    def _dispatch_progress(self, progress: float) -> None:
+        """Deliver per-frame progress updates."""
+        self.progress_changed.emit(progress)
     
     def get_progress(self) -> float:
         """Get current progress (0.0 to 1.0)."""
@@ -258,9 +264,15 @@ class CustomAnimator(Animation):
             self.completed.connect(self.on_complete_callback)
         if self.on_cancel_callback:
             self.cancelled.connect(self.on_cancel_callback)
-        
-        # Connect progress to custom update
-        self.progress_changed.connect(self.update_callback)
+
+    def _dispatch_progress(self, progress: float) -> None:
+        """Custom animations call their Python callback directly on the hot path."""
+        self.update_callback(progress)
+        try:
+            if self.receivers("2progress_changed(double)") > 0:
+                self.progress_changed.emit(progress)
+        except Exception:
+            logger.debug("[ANIMATOR] Custom progress signal dispatch failed", exc_info=True)
 
 
 class AnimationManager(QObject):

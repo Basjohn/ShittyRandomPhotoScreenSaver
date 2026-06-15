@@ -446,3 +446,54 @@ def test_animation_manager_set_target_fps_updates_timer_interval(qt_app):
         assert not am.is_running(anim_id)
     finally:
         am.cleanup()
+
+
+def test_custom_animator_bypasses_progress_signal_connection(qt_app):
+    from core.animation.animator import CustomAnimator
+    from core.animation.types import CustomAnimationConfig
+
+    progress_values = []
+
+    animator = CustomAnimator(
+        "custom-test",
+        CustomAnimationConfig(
+            duration=0.1,
+            easing=EasingCurve.LINEAR,
+            update_callback=lambda progress: progress_values.append(progress),
+        ),
+    )
+
+    assert animator.receivers("2progress_changed(double)") == 0
+
+    animator.start()
+    still_running = animator.update(0.05)
+
+    assert still_running is True
+    assert progress_values
+    assert 0.0 < progress_values[-1] < 1.0
+
+
+def test_custom_animator_still_emits_progress_signal_for_external_listeners(qt_app):
+    from core.animation.animator import CustomAnimator
+    from core.animation.types import CustomAnimationConfig
+
+    callback_values = []
+    signal_values = []
+
+    animator = CustomAnimator(
+        "custom-signal-test",
+        CustomAnimationConfig(
+            duration=0.1,
+            easing=EasingCurve.LINEAR,
+            update_callback=lambda progress: callback_values.append(progress),
+        ),
+    )
+    animator.progress_changed.connect(lambda progress: signal_values.append(progress))
+
+    animator.start()
+    still_running = animator.update(0.05)
+
+    assert still_running is True
+    assert callback_values
+    assert signal_values
+    assert signal_values[-1] == callback_values[-1]

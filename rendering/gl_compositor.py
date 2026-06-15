@@ -25,6 +25,7 @@ from rendering.gl_compositor_pkg.shader_dispatch import get_viewport_size
 from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     AdaptiveTimerConfig,
+    _mark_widget_update_consumed,
 )
 
 from PySide6.QtCore import Qt, QPoint, QRect
@@ -583,17 +584,29 @@ class GLCompositorWidget(QOpenGLWidget):
         Uses adaptive timer for optimal performance with state management.
         VSync is completely disabled for maximum performance.
         """
+        display_hz = self._get_display_refresh_rate()
+        target_fps = self._calculate_target_fps(display_hz)
+        self._render_timer_fps = target_fps
+
+        interval_ms = max(1.0, 1000.0 / target_fps)
+        config = AdaptiveTimerConfig(
+            target_fps=target_fps,
+            idle_timeout_sec=5.0,  # Go idle after 5s of no transitions
+            max_deep_sleep_sec=60.0,
+            min_frame_time_ms=interval_ms,
+        )
+
         # Check if already running
         if self._render_strategy_manager is not None:
             if self._render_strategy_manager.is_running():
+                self._render_strategy_manager.configure(config)
+                if self._render_strategy_manager.get_timer_state_name() != "RUNNING":
+                    self._reset_render_timer_metrics(target_fps)
                 # Already running - just resume
                 self._render_strategy_manager.resume()
                 logger.debug("[GL COMPOSITOR] Render strategy resumed")
                 return
-        
-        display_hz = self._get_display_refresh_rate()
-        target_fps = self._calculate_target_fps(display_hz)
-        self._render_timer_fps = target_fps
+
         self._reset_render_timer_metrics(target_fps)
         
         # Start adaptive timer-based rendering
@@ -626,12 +639,14 @@ class GLCompositorWidget(QOpenGLWidget):
     
     def _pause_render_strategy(self) -> None:
         """Pause render strategy after transition ends (enter low-power mode)."""
+        _mark_widget_update_consumed(self)
         if self._render_strategy_manager is not None:
             self._render_strategy_manager.pause()
             logger.debug("[GL COMPOSITOR] Render strategy paused")
     
     def _stop_render_strategy(self) -> None:
         """Stop the render strategy."""
+        _mark_widget_update_consumed(self)
         if self._render_strategy_manager is not None:
             self._render_strategy_manager.stop()
         

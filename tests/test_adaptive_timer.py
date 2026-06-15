@@ -24,6 +24,7 @@ from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     TimerState,
     AtomicTimerState,
+    _mark_widget_update_consumed,
     _queue_safe_widget_update,
     _normalize_next_deadline,
 )
@@ -254,10 +255,48 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             queued[0]()
 
             self.assertEqual(widget.update_count, 1)
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+
+            _queue_safe_widget_update(widget)
+            self.assertEqual(len(queued), 1)
+
+            _mark_widget_update_consumed(widget)
             self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
 
             _queue_safe_widget_update(widget)
             self.assertEqual(len(queued), 2)
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+
+    def test_signal_frame_records_render_timer_tick_when_supported(self):
+        """Adaptive timer should publish real timer cadence into compositor metrics."""
+        class _Widget:
+            def __init__(self):
+                self.tick_count = 0
+                self.update_count = 0
+
+            def _record_render_timer_tick(self):
+                self.tick_count += 1
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: func())
+            adaptive_timer.Shiboken = None
+
+            timer = AdaptiveTimerStrategy(widget, self.config)
+            timer._signal_frame()
+
+            self.assertEqual(widget.tick_count, 1)
+            self.assertEqual(widget.update_count, 1)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken

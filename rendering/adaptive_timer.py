@@ -33,6 +33,16 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _mark_widget_update_consumed(widget) -> None:
+    """Release the coalescing flag once a queued update reaches paint consumption."""
+    if widget is None:
+        return
+    try:
+        setattr(widget, "_srpss_timer_update_pending", False)
+    except Exception:
+        pass
+
+
 def _queue_safe_widget_update(widget) -> None:
     """Queue a QWidget.update() call that tolerates teardown races."""
     if widget is None:
@@ -48,28 +58,24 @@ def _queue_safe_widget_update(widget) -> None:
 
     def _apply_update() -> None:
         if widget is None:
-            try:
-                setattr(widget, "_srpss_timer_update_pending", False)
-            except Exception:
-                pass
+            _mark_widget_update_consumed(widget)
             return
         try:
             if Shiboken is not None:
                 try:
                     if not Shiboken.isValid(widget):
+                        _mark_widget_update_consumed(widget)
                         return
                 except Exception:
+                    _mark_widget_update_consumed(widget)
                     return
             widget.update()
         except RuntimeError as exc:
             logger.debug("[ADAPTIVE_TIMER] Suppressed stale widget update: %s", exc)
+            _mark_widget_update_consumed(widget)
         except Exception as exc:
             logger.debug("[ADAPTIVE_TIMER] Widget update failed: %s", exc)
-        finally:
-            try:
-                setattr(widget, "_srpss_timer_update_pending", False)
-            except Exception:
-                pass
+            _mark_widget_update_consumed(widget)
 
     ThreadManager.run_on_ui_thread(_apply_update)
 
@@ -464,6 +470,8 @@ class AdaptiveTimerStrategy:
         """Signal UI thread to render."""
         if self._compositor is not None:
             try:
+                if hasattr(self._compositor, "_record_render_timer_tick"):
+                    self._compositor._record_render_timer_tick()
                 # Log occasional frame signals for debugging
                 if self._metrics.frame_count % 100 == 0:
                     logger.debug("[ADAPTIVE_TIMER] Signaling frame %d", self._metrics.frame_count)
@@ -597,6 +605,13 @@ class AdaptiveRenderStrategyManager:
         """Check if timer is active."""
         with self._lock:
             return self._timer is not None and self._timer.is_active()
+
+    def get_timer_state_name(self) -> Optional[str]:
+        """Return the current timer state name when the timer exists."""
+        with self._lock:
+            if self._timer is None:
+                return None
+            return self._timer.get_state().name
 
     def describe_state(self) -> dict:
         """Snapshot of manager/timer state for diagnostics."""
