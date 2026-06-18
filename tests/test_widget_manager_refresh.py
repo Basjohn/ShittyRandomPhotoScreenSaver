@@ -838,7 +838,7 @@ def test_reconcile_remote_custom_visualizer_reapplies_saved_layouts_after_second
     assert QRect(0, 0, 357, 357) in target_display._spotify_bars_overlay.history
 
 
-def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_when_requested_target_is_not_active(monkeypatch, caplog):
+def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_when_requested_target_is_absent(monkeypatch, caplog):
     import logging
 
     from rendering import widget_setup_all
@@ -881,22 +881,23 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
             self.apply_calls += 1
 
     source_display = _Display(0, participating=True)
-    inactive_target_display = _Display(1, participating=False)
-
     class _Coordinator:
         def get_all_instances(self):
-            return [source_display, inactive_target_display]
+            return [source_display]
 
     monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    mgr = SimpleNamespace(_parent=source_display)
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+    }
 
     with caplog.at_level(logging.WARNING):
         widget_setup_all._reconcile_remote_custom_visualizer(
-            SimpleNamespace(_parent=source_display),
-            {
-                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
-            },
+            mgr,
+            widgets_config,
             shadows_config={},
             screen_index=0,
             thread_manager=None,
@@ -908,12 +909,218 @@ def test_reconcile_remote_custom_visualizer_falls_back_to_participating_display_
         "display/compositor set, remote reconcile must choose a participating "
         "display owner instead of spawning into an unseen target."
     )
-    assert inactive_target_display.spotify_visualizer_widget is None
     assert "Requested CUSTOM monitor 1 is not participating" in caplog.text
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
-def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_rect_when_requested_target_is_not_active(monkeypatch, caplog):
+def test_reconcile_remote_custom_visualizer_defers_fallback_when_requested_target_is_temporarily_unavailable_but_recovers(monkeypatch, caplog):
+    import logging
+
+    from rendering import widget_setup_all
+    from rendering import spotify_display_participation as display_participation
+
+    scheduled_calls: list[tuple[int, object]] = []
+    class _Visualizer:
+        def raise_(self):
+            return None
+
+    class _TargetManager:
+        def __init__(self, target):
+            self._target = target
+            self.registered = []
+
+        def create_spotify_visualizer_widget(self, *args, **kwargs):
+            vis = _Visualizer()
+            self._target.spotify_visualizer_widget = vis
+            return vis
+
+        def _register_spotify_secondary_fade(self, widget):
+            self.registered.append(widget)
+
+    class _Display:
+        def __init__(self, screen_index, *, awake):
+            self.screen_index = screen_index
+            self.media_widget = object()
+            self.spotify_visualizer_widget = None
+            self.awake = bool(awake)
+            self._exiting = False
+            self._widget_manager = _TargetManager(self)
+            self.apply_calls = 0
+
+        @property
+        def _screen(self):
+            if self.awake:
+                return SimpleNamespace(
+                    geometry=lambda: SimpleNamespace(
+                        isValid=lambda: True,
+                        width=lambda: 1920,
+                        height=lambda: 1080,
+                    )
+                )
+            return SimpleNamespace(
+                geometry=lambda: SimpleNamespace(
+                    isValid=lambda: False,
+                    width=lambda: 0,
+                    height=lambda: 0,
+                )
+            )
+
+        def _apply_saved_custom_layouts(self):
+            self.apply_calls += 1
+
+    source_display = _Display(0, awake=True)
+    waking_target_display = _Display(1, awake=False)
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [source_display, waking_target_display]
+
+    def _capture_single_shot(delay_ms, callback, *args):
+        def _invoke(_callback=callback, _args=args):
+            _callback(*_args)
+
+        scheduled_calls.append((int(delay_ms), _invoke))
+
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", _capture_single_shot)
+    monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    mgr = SimpleNamespace(_parent=source_display)
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+    }
+
+    with caplog.at_level(logging.WARNING):
+        widget_setup_all._reconcile_remote_custom_visualizer(
+            mgr,
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=object(),
+        )
+
+    assert source_display.spotify_visualizer_widget is None
+    assert waking_target_display.spotify_visualizer_widget is None
+    assert len(scheduled_calls) == 1
+    assert scheduled_calls[0][0] == widget_setup_all.REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS
+    assert "delaying fallback recheck" in caplog.text
+
+    waking_target_display.awake = True
+    resolution = display_participation.describe_visualizer_spawn_display(
+        1,
+        current_display=source_display,
+    )
+    assert source_display.spotify_visualizer_widget is None
+    assert waking_target_display.spotify_visualizer_widget is None
+    assert resolution.requested_is_participating is True, (
+        "Once the requested runtime display wakes back up, the cautious recheck should see it as the "
+        "real owner again rather than keeping fallback pressure on another display."
+    )
+    assert resolution.chosen_display is waking_target_display
+    assert resolution.fallback_display is None
+
+
+def test_reconcile_remote_custom_visualizer_falls_back_after_delayed_recheck_when_requested_target_stays_unavailable(monkeypatch, caplog):
+    import logging
+
+    from rendering import widget_setup_all
+    from rendering import spotify_display_participation as display_participation
+
+    create_calls: list[int] = []
+
+    class _Visualizer:
+        def raise_(self):
+            return None
+
+    class _TargetManager:
+        def __init__(self, target):
+            self._target = target
+            self.registered = []
+
+        def create_spotify_visualizer_widget(self, *args, **kwargs):
+            vis = _Visualizer()
+            self._target.spotify_visualizer_widget = vis
+            return vis
+
+        def _register_spotify_secondary_fade(self, widget):
+            self.registered.append(widget)
+
+    class _Display:
+        def __init__(self, screen_index, *, awake):
+            self.screen_index = screen_index
+            self.media_widget = object()
+            self.spotify_visualizer_widget = None
+            self.awake = bool(awake)
+            self._exiting = False
+            self._widget_manager = _TargetManager(self)
+            self.apply_calls = 0
+
+        @property
+        def _screen(self):
+            if self.awake:
+                return SimpleNamespace(
+                    geometry=lambda: SimpleNamespace(
+                        isValid=lambda: True,
+                        width=lambda: 1920,
+                        height=lambda: 1080,
+                    )
+                )
+            return SimpleNamespace(
+                geometry=lambda: SimpleNamespace(
+                    isValid=lambda: False,
+                    width=lambda: 0,
+                    height=lambda: 0,
+                )
+            )
+
+        def _apply_saved_custom_layouts(self):
+            self.apply_calls += 1
+
+    source_display = _Display(0, awake=True)
+    sleeping_target_display = _Display(1, awake=False)
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [source_display, sleeping_target_display]
+
+    def _record_create(target, widgets_config, shadows_config, target_screen_index, thread_manager):
+        create_calls.append(int(getattr(target, "screen_index", -1)))
+        target.spotify_visualizer_widget = _Visualizer()
+
+    monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(widget_setup_all, "_create_remote_custom_visualizer_on_target", _record_create)
+    monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    mgr = SimpleNamespace(_parent=source_display)
+    mgr._remote_custom_visualizer_reconcile_token = 1
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+    }
+
+    with caplog.at_level(logging.WARNING):
+        widget_setup_all._run_remote_custom_visualizer_fallback_recheck(
+            mgr,
+            widgets_config,
+            {},
+            0,
+            None,
+            object(),
+            1,
+            1,
+        )
+
+    assert create_calls == [0]
+    assert source_display.spotify_visualizer_widget is not None, (
+        "If the requested runtime display still is not participating after the cautious recheck, "
+        "the last-resort fallback should restore one visible owner on a participating display."
+    )
+    assert sleeping_target_display.spotify_visualizer_widget is None
+    assert "still not participating after" in caplog.text
+
+
+def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_rect_when_requested_target_is_absent(monkeypatch, caplog):
     import logging
 
     from PySide6.QtCore import QRect
@@ -1016,11 +1223,9 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
             self.apply_calls += 1
 
     source_display = _Display(0, participating=True)
-    inactive_target_display = _Display(1, participating=False)
-
     class _Coordinator:
         def get_all_instances(self):
-            return [source_display, inactive_target_display]
+            return [source_display]
 
     monkeypatch.setattr(widget_setup_all, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(display_participation, "get_coordinator", lambda: _Coordinator())
@@ -1028,10 +1233,11 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
     monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
     monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    mgr = SimpleNamespace(_parent=source_display)
 
     with caplog.at_level(logging.WARNING):
         widget_setup_all._reconcile_remote_custom_visualizer(
-            SimpleNamespace(_parent=source_display),
+            mgr,
             {
                 "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
                 "custom_layout": {
@@ -1056,7 +1262,7 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
     vis = source_display.spotify_visualizer_widget
     assert vis is not None, (
         "Remote CUSTOM reconcile should still create the visualizer on a "
-        "participating display when the requested target monitor is inactive."
+        "participating display when the requested target monitor is absent."
     )
     assert vis.geometry() == QRect(207, 310, 420, 280), (
         "A remote CUSTOM reconcile fallback must reuse the sole authoritative "

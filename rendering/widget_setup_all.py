@@ -14,13 +14,14 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
+from core.threading.manager import ThreadManager
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_descriptors import (
     get_effective_monitor_value_for_widget,
     get_factory_widget_descriptors,
     is_custom_position_selected_for_widget,
 )
-from rendering.spotify_display_participation import resolve_visualizer_spawn_display
+from rendering.spotify_display_participation import describe_visualizer_spawn_display
 from widgets.base_overlay_widget import BaseOverlayWidget
 
 if TYPE_CHECKING:
@@ -28,6 +29,8 @@ if TYPE_CHECKING:
     from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS = 1500
 
 
 @dataclass
@@ -355,6 +358,8 @@ def _reconcile_remote_custom_visualizer(
     screen_index: int,
     thread_manager: Optional["ThreadManager"],
     media_widget: Optional[QWidget],
+    *,
+    allow_runtime_presence_fallback: bool = False,
 ) -> None:
     if media_widget is None:
         return
@@ -368,14 +373,63 @@ def _reconcile_remote_custom_visualizer(
     current_display = getattr(mgr, "_parent", None)
     if target_screen_index == screen_index:
         return
-    target = resolve_visualizer_spawn_display(
+    resolution = describe_visualizer_spawn_display(
         target_screen_index,
         current_display=current_display,
     )
+    target = resolution.chosen_display
     if target is None:
         return
-    if target is current_display and target_screen_index == screen_index:
+    if (
+        resolution.requested_has_runtime_presence
+        and not resolution.requested_is_participating
+    ):
+        if not allow_runtime_presence_fallback:
+            _schedule_remote_custom_visualizer_fallback_recheck(
+                mgr,
+                widgets_config,
+                shadows_config,
+                screen_index,
+                thread_manager,
+                media_widget,
+                target_screen_index=target_screen_index,
+            )
+            return
+        target = resolution.fallback_display
+        if target is None:
+            return
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still not participating after %sms; "
+            "falling back to participating display screen_index=%s",
+            target_screen_index,
+            REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
+            getattr(target, "screen_index", "?"),
+        )
+    elif not resolution.requested_has_runtime_presence:
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is not participating; "
+            "falling back to participating display screen_index=%s",
+            target_screen_index,
+            getattr(target, "screen_index", "?"),
+        )
+    elif target is current_display and target_screen_index == screen_index:
         return
+    _create_remote_custom_visualizer_on_target(
+        target,
+        widgets_config,
+        shadows_config,
+        target_screen_index,
+        thread_manager,
+    )
+
+
+def _create_remote_custom_visualizer_on_target(
+    target: object,
+    widgets_config: dict,
+    shadows_config: dict,
+    target_screen_index: int,
+    thread_manager: Optional["ThreadManager"],
+) -> None:
     if getattr(target, "spotify_visualizer_widget", None) is not None:
         return
     target_manager = getattr(target, "_widget_manager", None)
@@ -399,6 +453,83 @@ def _reconcile_remote_custom_visualizer(
     _reapply_saved_custom_layouts_after_startup(
         target,
         log_prefix="[WIDGET_SETUP]",
+    )
+
+
+def _schedule_remote_custom_visualizer_fallback_recheck(
+    mgr: "WidgetManager",
+    widgets_config: dict,
+    shadows_config: dict,
+    screen_index: int,
+    thread_manager: Optional["ThreadManager"],
+    media_widget: Optional[QWidget],
+    *,
+    target_screen_index: int,
+) -> None:
+    token = int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)) + 1
+    setattr(mgr, "_remote_custom_visualizer_reconcile_token", token)
+    logger.warning(
+        "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still part of runtime but not participating; "
+        "delaying fallback recheck by %sms",
+        target_screen_index,
+        REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
+    )
+    ThreadManager.single_shot(
+        REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
+        _run_remote_custom_visualizer_fallback_recheck,
+        mgr,
+        widgets_config,
+        shadows_config,
+        screen_index,
+        thread_manager,
+        media_widget,
+        target_screen_index,
+        token,
+    )
+
+
+def _run_remote_custom_visualizer_fallback_recheck(
+    mgr: "WidgetManager",
+    widgets_config: dict,
+    shadows_config: dict,
+    screen_index: int,
+    thread_manager: Optional["ThreadManager"],
+    media_widget: Optional[QWidget],
+    target_screen_index: int,
+    token: int,
+) -> None:
+    if token != int(getattr(mgr, "_remote_custom_visualizer_reconcile_token", 0)):
+        return
+    current_display = getattr(mgr, "_parent", None)
+    if current_display is None or bool(getattr(current_display, "_exiting", False)):
+        return
+    resolution = describe_visualizer_spawn_display(
+        target_screen_index,
+        current_display=current_display,
+    )
+    requested_display = resolution.requested_display
+    if getattr(requested_display, "spotify_visualizer_widget", None) is not None:
+        return
+    target = None
+    if resolution.requested_is_participating:
+        target = resolution.chosen_display
+    else:
+        target = resolution.fallback_display
+        if target is None:
+            return
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor %s is still not participating after %sms; "
+            "falling back to participating display screen_index=%s",
+            target_screen_index,
+            REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS,
+            getattr(target, "screen_index", "?"),
+        )
+    _create_remote_custom_visualizer_on_target(
+        target,
+        widgets_config,
+        shadows_config,
+        target_screen_index,
+        thread_manager,
     )
 
 

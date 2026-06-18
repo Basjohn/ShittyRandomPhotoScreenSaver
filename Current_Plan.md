@@ -82,7 +82,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - Spectrum solid-bar visual smoothness is no longer active work, but future tuning must stay visual-only and must not reopen audio/reactivity regressions.
 - Bubble behavior is locked during the current audit pass. Future work should stay mode-isolated and oracle-first rather than reopening shared-floor or casual cross-mode retuning.
-- Visualizer display-participation startup fallback / duplicate-owner work moved to `Docs/Historical_Bugs.md` entry `R-26`. Reopen it only if fresh runtime logs show fallbacks or duplicate owners after the startup-registration fix.
+- Visualizer display-participation fallback / duplicate-owner work moved to `Docs/Historical_Bugs.md` entry `R-26`. Reopen it only if fresh runtime logs show fallbacks or duplicate owners after the startup-registration fix plus the cautious sleep/wake recheck contract.
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
 - Visualizer CUSTOM/runtime geometry is intentionally out of the active queue for now. The current long-term state, landed protections, and low/deferred follow-up work live in `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md`.
 
