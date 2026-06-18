@@ -29,6 +29,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - Treat Bubble's current good soft/hot feel as locked until stricter bars say otherwise.
   - Immediate checklist:
     - [x] Add the newest late-hot replay lane from the 2026-06-15 live run so the current loud small-lane complaint fails before more Bubble tuning.
+    - [x] Add the newest 2026-06-18 mixed-hot replay lane so thinner-but-still-hot manual-floor windows cannot drift back toward soft-passage behavior unnoticed.
     - [x] Extend the Bubble feel-locks with the newest latest-live manual-floor replay signature so current good behavior is harder to erode.
     - [x] Keep a dispatch guard that proves repeated ticks cannot queue duplicate in-flight Bubble compute work.
     - [x] Keep all existing Bubble feel-locks and loud-path lanes green with no softened thresholds.
@@ -37,7 +38,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Remove Bubble trail snapshot payload when no visible trail exists anywhere in the frame, with direct bars proving trail-enabled output still keeps full layout.
     - [x] Stop recomputing effective collision radii for every pair inside the Bubble collision loop.
     - [x] Stop growing Bubble snapshot payload lists bubble by bubble; keep exact-size frame buffers while the feel-locks stay green.
-    - [ ] Add the Bubble transition-time perf oracle before deeper simulation/snapshot work.
+    - [x] Trim Bubble pair-loop policy arithmetic and per-bubble no-op trail writes while keeping the current replay and feel-lock bars green.
+    - [x] Add the Bubble transition-time perf oracle before deeper simulation/snapshot work.
+    - [x] Avoid needless `sqrt` work for non-overlapping Bubble pairs by comparing squared distances before normalization, while the replay/perf bars stay green.
     - [ ] Audit Bubble hot-path cost in this order:
       - collision path in `widgets/spotify_visualizer/bubble_simulation.py`
       - snapshot/trail list churn in `widgets/spotify_visualizer/bubble_simulation.py`

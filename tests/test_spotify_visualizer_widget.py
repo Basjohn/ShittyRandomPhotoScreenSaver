@@ -1263,6 +1263,14 @@ def _capture_bubble_runtime_snapshot(
     widget: SpotifyVisualizerWidget,
     now_ts: float,
 ) -> tuple[dict[str, float], list[float], list[float]]:
+    eb_snap, radii, big_expansion, _perf_diag = _capture_bubble_runtime_snapshot_with_perf(widget, now_ts)
+    return eb_snap, radii, big_expansion
+
+
+def _capture_bubble_runtime_snapshot_with_perf(
+    widget: SpotifyVisualizerWidget,
+    now_ts: float,
+) -> tuple[dict[str, float], list[float], list[float], dict[str, float]]:
     """Run Bubble's real dispatch seam and return the compute inputs/output radii.
 
     This intentionally goes through ``dispatch_bubble_simulation`` first so the
@@ -1292,7 +1300,7 @@ def _capture_bubble_runtime_snapshot(
                 base_radius = max(1e-6, float(getattr(bubble, "radius", 0.0) or 0.0))
                 render_radius = float(pos_data[idx * 4 + 2])
                 big_expansion_ratios.append(render_radius / base_radius)
-    return dict(args[1]), radii, big_expansion_ratios
+    return dict(args[1]), radii, big_expansion_ratios, dict(perf_diag)
 
 
 def _capture_bubble_lane_metrics(
@@ -1375,6 +1383,27 @@ def _capture_bubble_dispatch_profile_metrics(
     for idx, _frame in enumerate(frames):
         engine.set_frame(idx)
         series.append(_capture_bubble_lane_metrics(widget, start_ts + idx * dt))
+    return series
+
+
+def _capture_bubble_dispatch_profile_perf_metrics(
+    widget: SpotifyVisualizerWidget,
+    engine: _BubbleDispatchProfileEngine,
+    frames: list[dict[str, object]],
+    *,
+    start_ts: float = 0.0,
+    dt: float = 0.016,
+) -> list[dict[str, float]]:
+    series: list[dict[str, float]] = []
+    for idx, _frame in enumerate(frames):
+        engine.set_frame(idx)
+        eb_snap, _radii, _big_expansion, perf_diag = _capture_bubble_runtime_snapshot_with_perf(
+            widget,
+            start_ts + idx * dt,
+        )
+        diag = dict(perf_diag)
+        diag["bass"] = float(eb_snap.get("bass", 0.0))
+        series.append(diag)
     return series
 
 
@@ -1861,6 +1890,78 @@ def _latest_live_manual_floor_runtime_log_replay_profile() -> list[dict[str, obj
                 "onset_type": "kick",
                 "onset_strength": 0.08,
             },
+        },
+    ]
+
+
+def _latest_live_mixed_hot_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the newer 2026-06-18 Bubble family from `05:25:01 .. 05:25:57`.
+
+    This run matters because Bubble throughput improved materially, but the
+    logs still showed a mixed hot family we do not want to normalize away:
+    - soft/manual-floor windows with honest small-lane life
+    - fully hot kick-driven windows
+    - a thinner hot window where bass stays materially elevated but the visual
+      lanes must not collapse toward soft-passage behavior
+    - a later broader hot recovery that should look clearly more alive again
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.78, "mid": 0.51, "high": 0.08, "overall": 0.47},
+            "broad": {"bass": 0.30, "mid": 0.20, "high": 0.05, "overall": 0.31},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.67, "mid": 0.83, "high": 0.11, "overall": 0.69},
+            "broad": {"bass": 0.42, "mid": 0.30, "high": 0.07, "overall": 0.50},
+            "transient": {"bass_transient": 0.06, "mid_transient": 0.08, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 2.50, "mid": 1.40, "high": 0.36, "overall": 0.93},
+            "broad": {"bass": 0.44, "mid": 0.32, "high": 0.09, "overall": 0.58},
+            "transient": {
+                "bass_transient": 2.50,
+                "mid_transient": 1.40,
+                "high_transient": 0.36,
+                "onset_detected": True,
+                "onset_type": "kick",
+                "onset_strength": 0.31,
+            },
+        },
+        {
+            "pulse": {"bass": 1.13, "mid": 0.26, "high": 0.00, "overall": 0.53},
+            "broad": {"bass": 0.26, "mid": 0.10, "high": 0.01, "overall": 0.34},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 2.06, "mid": 1.80, "high": 0.21, "overall": 0.90},
+            "broad": {"bass": 0.50, "mid": 0.36, "high": 0.08, "overall": 0.63},
+            "transient": {
+                "bass_transient": 1.26,
+                "mid_transient": 1.32,
+                "high_transient": 0.21,
+                "onset_detected": True,
+                "onset_type": "vocal_swell",
+                "onset_strength": 0.15,
+            },
+        },
+        {
+            "pulse": {"bass": 2.50, "mid": 0.80, "high": 0.12, "overall": 0.79},
+            "broad": {"bass": 0.45, "mid": 0.21, "high": 0.04, "overall": 0.53},
+            "transient": {
+                "bass_transient": 1.77,
+                "mid_transient": 0.69,
+                "high_transient": 0.12,
+                "onset_detected": True,
+                "onset_type": "kick",
+                "onset_strength": 0.16,
+            },
+        },
+        {
+            "pulse": {"bass": 1.90, "mid": 0.81, "high": 0.25, "overall": 0.80},
+            "broad": {"bass": 0.42, "mid": 0.24, "high": 0.07, "overall": 0.56},
+            "transient": {"bass_transient": 0.34, "mid_transient": 0.00, "high_transient": 0.00},
         },
     ]
 
@@ -6330,6 +6431,153 @@ def test_latest_live_manual_floor_replay_keeps_small_lane_alive_through_mixed_ho
     )
     assert early_expand >= 3.20 and late_expand >= 3.10, (
         "Latest-live replay still compresses the hero expansion shape too far during mixed hot windows."
+    )
+
+
+@pytest.mark.qt
+def test_latest_live_mixed_hot_replay_keeps_thin_hot_windows_above_soft_passage_behavior(
+    qt_app,
+    qtbot,
+):
+    random.seed(10046)
+    profile = _latest_live_mixed_hot_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile * 10
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    stable_series = metrics_series[len(profile) * 2 :]
+
+    soft_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (0, 1)]
+    compressed_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 3]
+    late_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (4, 5, 6)]
+
+    assert soft_window and compressed_hot and late_hot
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    compressed_feed = sum(m["bass"] for m in compressed_hot) / len(compressed_hot)
+    compressed_small = sum(m["max_small_delta"] for m in compressed_hot) / len(compressed_hot)
+    compressed_big = sum(m["big_max_render"] for m in compressed_hot) / len(compressed_hot)
+    compressed_expand = sum(m["top_big_expansion"] for m in compressed_hot) / len(compressed_hot)
+    late_feed = sum(m["bass"] for m in late_hot) / len(late_hot)
+    late_small = sum(m["max_small_delta"] for m in late_hot) / len(late_hot)
+    late_big = sum(m["big_max_render"] for m in late_hot) / len(late_hot)
+    late_expand = sum(m["top_big_expansion"] for m in late_hot) / len(late_hot)
+
+    assert soft_small >= 0.020, "Need an honest soft baseline or the mixed-hot replay loses meaning."
+    assert compressed_feed >= 1.00 and late_feed >= 1.50, (
+        "Mixed-hot replay must stay materially hot or this Bubble guard is not modeling the live complaint."
+    )
+    assert compressed_small >= max(0.018, soft_small * 0.72), (
+        "Thin hot Bubble window still lets the small lane sag too close to soft-passage behavior."
+    )
+    assert compressed_big >= 0.112, (
+        "Thin hot Bubble window still lets the hero lane shrink too far for a materially hot section."
+    )
+    assert compressed_expand >= 2.90, (
+        "Thin hot Bubble window still compresses the hero expansion shape too far."
+    )
+    assert late_small >= max(0.022, compressed_small * 1.00), (
+        "Later hot recovery still does not restore enough small-lane authority after the thinner hot window."
+    )
+    assert late_big >= max(0.122, compressed_big * 0.99), (
+        "Later hot recovery still lets the hero lane sag too far after the thinner hot window."
+    )
+    assert late_expand >= max(3.15, compressed_expand * 1.00), (
+        "Later hot recovery still lets the hero expansion shape sag too far after the thinner hot window."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_band(
+    qt_app,
+    qtbot,
+):
+    random.seed(10047)
+    profile = _latest_live_mixed_hot_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile * 12
+    perf_series = _capture_bubble_dispatch_profile_perf_metrics(widget, engine, replay_frames)
+    stable_series = perf_series[len(profile) * 2 :]
+
+    soft_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (0, 1)]
+    compressed_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 3]
+    late_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (4, 5, 6)]
+
+    assert soft_window and compressed_hot and late_hot
+
+    avg_worker = sum(m["worker_total_ms"] for m in stable_series) / len(stable_series)
+    avg_collision = sum(m["collision_ms"] for m in stable_series) / len(stable_series)
+    avg_snapshot = sum(m["snapshot_ms"] for m in stable_series) / len(stable_series)
+    avg_active = sum(m["active_bubbles"] for m in stable_series) / len(stable_series)
+    max_pairs = max(m["collision_pairs"] for m in stable_series)
+    max_worker = max(m["worker_total_ms"] for m in stable_series)
+
+    soft_worker = sum(m["worker_total_ms"] for m in soft_window) / len(soft_window)
+    compressed_worker = sum(m["worker_total_ms"] for m in compressed_hot) / len(compressed_hot)
+    late_worker = sum(m["worker_total_ms"] for m in late_hot) / len(late_hot)
+
+    assert avg_active >= 45.0, (
+        "Bubble perf oracle must keep a real active field alive or the budget bar becomes meaningless."
+    )
+    assert max_pairs >= 1100.0, (
+        "Bubble perf oracle must exercise the real pair-loop pressure or it is not guarding the hot path."
+    )
+    assert avg_worker < 4.0, (
+        f"Bubble worker average drifted too high ({avg_worker:.2f}ms) for the current recovered transition-time budget band."
+    )
+    assert avg_collision < 2.6, (
+        f"Bubble collision average drifted too high ({avg_collision:.2f}ms) for the current recovered budget band."
+    )
+    assert avg_snapshot < 1.2, (
+        f"Bubble snapshot average drifted too high ({avg_snapshot:.2f}ms) for the current recovered budget band."
+    )
+    assert max_worker < 6.0, (
+        f"Bubble worker spike drifted too high ({max_worker:.2f}ms) inside the isolated dispatch oracle."
+    )
+    assert compressed_worker <= max(soft_worker * 1.60, 3.6), (
+        "Thin hot Bubble windows now cost materially more compute than the soft baseline inside the same recovered family."
+    )
+    assert late_worker <= max(compressed_worker * 1.20, 3.8), (
+        "Later hot Bubble recovery now costs materially more compute than the thinner hot window it is meant to recover from."
     )
 
 

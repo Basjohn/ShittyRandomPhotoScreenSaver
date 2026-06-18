@@ -1005,6 +1005,55 @@ class BubbleSimulation:
         if collision_pop_mode not in {"off", "one", "all"}:
             collision_pop_mode = "off"
 
+        def _pair_policy(
+            *,
+            gap_factor: float,
+            gap_bias: float,
+            softness: float,
+            max_push: float,
+            bounce_pct: float,
+            bounce_speed: float,
+        ) -> tuple[float, float, float, float, float, float, float, float]:
+            bounce_strength = max(0.0, min(1.0, bounce_pct / 100.0))
+            speed_norm = max(0.0, min(1.0, bounce_speed / 2.0))
+            strict_gap_factor = 0.92 + 0.08 * bounce_strength
+            strict_gap_bias = 0.0015 if bounce_strength >= 0.85 else 0.0
+            return (
+                gap_factor,
+                gap_bias,
+                softness,
+                max_push,
+                bounce_strength,
+                speed_norm,
+                strict_gap_factor,
+                strict_gap_bias,
+            )
+
+        big_policy = _pair_policy(
+            gap_factor=1.12,
+            gap_bias=0.008,
+            softness=0.22,
+            max_push=0.022,
+            bounce_pct=bounce_big_pct,
+            bounce_speed=bounce_big_speed,
+        )
+        mixed_policy = _pair_policy(
+            gap_factor=0.90,
+            gap_bias=0.0,
+            softness=0.08,
+            max_push=0.012,
+            bounce_pct=bounce_big_pct,
+            bounce_speed=bounce_big_speed,
+        )
+        small_policy = _pair_policy(
+            gap_factor=0.78,
+            gap_bias=0.0,
+            softness=0.045,
+            max_push=0.007,
+            bounce_pct=bounce_small_pct,
+            bounce_speed=bounce_small_speed,
+        )
+
         def _in_view(bubble: BubbleState) -> bool:
             return (
                 -view_margin <= bubble.x <= 1.0 + view_margin
@@ -1024,6 +1073,7 @@ class BubbleSimulation:
                 )
                 for bubble in active
             ]
+            active_big_flags = [_bubble_behaves_big(bubble) for bubble in active]
             for i in range(count):
                 a = active[i]
                 if a.popping or a.exiting:
@@ -1038,45 +1088,62 @@ class BubbleSimulation:
                     dx = b.x - a.x
                     dy = b.y - a.y
                     dist = math.hypot(dx, dy)
-                    a_big = _bubble_behaves_big(a)
-                    b_big = _bubble_behaves_big(b)
+                    a_big = active_big_flags[i]
+                    b_big = active_big_flags[j]
                     if a_big and b_big:
-                        target_gap = (a_radius + b_radius) * 1.12 + 0.008
-                        softness = 0.22
-                        max_push = 0.022
-                        bounce_pct = bounce_big_pct
-                        bounce_speed = bounce_big_speed
+                        (
+                            gap_factor,
+                            gap_bias,
+                            softness,
+                            max_push,
+                            bounce_strength,
+                            speed_norm,
+                            strict_gap_factor,
+                            strict_gap_bias,
+                        ) = big_policy
                     elif a_big or b_big:
                         if bounce_same_only:
                             continue
-                        target_gap = (a_radius + b_radius) * 0.90
-                        softness = 0.08
-                        max_push = 0.012
-                        bounce_pct = bounce_big_pct
-                        bounce_speed = bounce_big_speed
+                        (
+                            gap_factor,
+                            gap_bias,
+                            softness,
+                            max_push,
+                            bounce_strength,
+                            speed_norm,
+                            strict_gap_factor,
+                            strict_gap_bias,
+                        ) = mixed_policy
                     else:
-                        target_gap = (a_radius + b_radius) * 0.78
-                        softness = 0.045
-                        max_push = 0.007
-                        bounce_pct = bounce_small_pct
-                        bounce_speed = bounce_small_speed
+                        (
+                            gap_factor,
+                            gap_bias,
+                            softness,
+                            max_push,
+                            bounce_strength,
+                            speed_norm,
+                            strict_gap_factor,
+                            strict_gap_bias,
+                        ) = small_policy
 
-                    bounce_strength = max(0.0, min(1.0, bounce_pct / 100.0))
-                    speed_norm = max(0.0, min(1.0, bounce_speed / 2.0))
-                    strict_gap = (a_radius + b_radius) * (0.92 + 0.08 * bounce_strength)
-                    if bounce_strength >= 0.85:
-                        strict_gap += 0.0015
+                    radii_sum = a_radius + b_radius
+                    target_gap = radii_sum * gap_factor + gap_bias
+                    strict_gap = radii_sum * strict_gap_factor + strict_gap_bias
                     target_gap = max(target_gap, strict_gap)
+                    target_gap_sq = target_gap * target_gap
 
-                    if dist >= target_gap:
+                    dist_sq = dx * dx + dy * dy
+                    if dist_sq >= target_gap_sq:
                         continue
                     overlap_hits += 1
 
-                    if dist < 1e-5:
+                    if dist_sq < 1e-10:
                         angle = random.uniform(0.0, math.tau)
                         nx = math.cos(angle)
                         ny = math.sin(angle)
+                        dist = 0.0
                     else:
+                        dist = math.sqrt(dist_sq)
                         inv = 1.0 / dist
                         nx = dx * inv
                         ny = dy * inv
@@ -1144,13 +1211,13 @@ class BubbleSimulation:
                             self._trigger_collision_pop(b)
                         continue
 
-                    bounce_prob = max(0.0, min(1.0, bounce_pct / 100.0))
+                    bounce_prob = bounce_strength
                     pair_key = (min(id(a), id(b)), max(id(a), id(b)))
                     cooldown_until = self._pair_bounce_cooldowns.get(pair_key, 0.0)
                     in_pair_cooldown = self._time < cooldown_until
                     if (
                         bounce_prob > 0.0
-                        and bounce_speed > 0.0
+                        and speed_norm > 0.0
                         and both_in_view
                         and (not in_pair_cooldown)
                         and random.random() <= bounce_prob
@@ -1159,7 +1226,7 @@ class BubbleSimulation:
                         rel_vy = b.impulse_vy - a.impulse_vy
                         sep_speed = rel_vx * nx + rel_vy * ny
                         if sep_speed <= -0.004 or overlap > target_gap * 0.07:
-                            restitution = max(0.0, min(1.0, bounce_speed * 0.5))
+                            restitution = speed_norm
                             impulse = (-(1.0 + restitution) * sep_speed) * 0.5
                             floor_kick = min(
                                 MAX_IMPULSE_SPEED * (0.03 + 0.22 * speed_norm),
@@ -1702,13 +1769,6 @@ class BubbleSimulation:
                     trail_data[step_base] = sample_x
                     trail_data[step_base + 1] = sample_y
                     trail_data[step_base + 2] = b.trail_strength * falloff
-            elif trail_payload_active:
-                trail_base = idx * 9
-                for step in range(TRAIL_STEPS):
-                    step_base = trail_base + step * 3
-                    trail_data[step_base] = b.x
-                    trail_data[step_base + 1] = b.y
-                    trail_data[step_base + 2] = 0.0
 
         if big_render_diag["big_render_count"] > 0.0:
             big_render_diag["avg_big_render_radius"] /= big_render_diag["big_render_count"]
