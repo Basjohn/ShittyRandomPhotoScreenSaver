@@ -42,20 +42,22 @@ def _copy_float_buffer(state, attr_name: str, source, size: int, *, active_size:
         setattr(state, active_attr, 0)
 
     prev_active = int(getattr(state, active_attr, 0) or 0)
-    clear_upto = max(0, min(int(size), max(prev_active, int(active_size))))
-    if clear_upto > 0:
-        buf[:clear_upto].fill(0.0)
+    active_size = max(0, min(int(size), int(active_size)))
+    if prev_active > active_size:
+        buf[active_size:prev_active].fill(0.0)
 
     if source is None:
-        setattr(state, active_attr, clear_upto)
+        setattr(state, active_attr, active_size)
         return buf
 
     try:
         source_len = len(source)
     except Exception:
         source_len = 0
-    copy_len = min(int(source_len), int(size), max(0, int(active_size)))
-    setattr(state, active_attr, clear_upto)
+    copy_len = min(int(source_len), int(size), active_size)
+    if active_size > copy_len:
+        buf[copy_len:active_size].fill(0.0)
+    setattr(state, active_attr, active_size)
     if copy_len <= 0:
         return buf
 

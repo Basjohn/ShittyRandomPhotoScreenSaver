@@ -490,6 +490,68 @@ class TestDisplayManagerSync:
         manager._on_display_transition_ready(1)
         assert manager.wait_for_all_displays_ready(timeout_sec=0.5) is True
 
+    def test_initialize_displays_registers_all_allowed_displays_before_first_show(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        created_screen_indices: list[int] = []
+        show_seen_constructed_counts: list[int] = []
+
+        class _FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class _FakeDisplayWidget:
+            def __init__(self, screen_index=0, **kwargs):
+                self.screen_index = screen_index
+                self.exit_requested = _FakeSignal()
+                self.image_displayed = _FakeSignal()
+                self.transition_completed = _FakeSignal()
+                self.previous_requested = _FakeSignal()
+                self.next_requested = _FakeSignal()
+                self.cycle_transition_requested = _FakeSignal()
+                self.settings_requested = _FakeSignal()
+                self.custom_layout_reload_requested = _FakeSignal()
+                self.dimming_changed = _FakeSignal()
+                created_screen_indices.append(screen_index)
+
+            def show_on_screen(self):
+                show_seen_constructed_counts.append(len(created_screen_indices))
+
+            def close(self):
+                return None
+
+            def deleteLater(self):
+                return None
+
+        class _FakeScreen:
+            def __init__(self, index: int):
+                self._index = index
+
+            def name(self):
+                return f"Screen {self._index}"
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
+
+        monkeypatch.setattr("engine.display_manager.DisplayWidget", _FakeDisplayWidget)
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
+        )
+
+        manager = DisplayManager()
+        created = manager.initialize_displays()
+
+        assert created == 2
+        assert created_screen_indices == [0, 1]
+        assert show_seen_constructed_counts == [2, 2], (
+            "All allowed DisplayWidget instances must already exist before the first "
+            "show/widget-setup pass runs, so visualizer display participation can see "
+            "pending requested monitors instead of falling back too early."
+        )
+
 
 # ---------------------------------------------------------------------------
 # Spotify widget lifecycle integration

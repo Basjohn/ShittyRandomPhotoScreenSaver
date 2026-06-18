@@ -429,6 +429,32 @@ class BubbleSimulation:
         # reserving extra headroom for loud vocal passages.
         vocal_raw = smooth_mid * 0.65 + smooth_high * 0.35
         vocal_speed = min(1.0, max(0.0, vocal_raw)) ** 1.1
+        # Bubble should not go motion-dead just because a hot section is
+        # bass-dominant and the vocal/mid lane thins out.
+        bass_dominant_speed = soft_ceiling(
+            max(0.0, bass - 0.92),
+            knee=0.0,
+            ceiling=0.52,
+            max_input=1.10,
+            curve=1.0,
+        )
+        bass_dominant_speed *= soft_ceiling(
+            max(0.0, overall - 0.42),
+            knee=0.0,
+            ceiling=1.0,
+            max_input=0.52,
+            curve=1.0,
+        )
+        speed_vocal_gap = 1.0 - soft_ceiling(
+            max(0.0, vocal_raw - 0.24),
+            knee=0.0,
+            ceiling=0.82,
+            max_input=0.34,
+            curve=1.0,
+        )
+        speed_vocal_gap = speed_vocal_gap ** 1.35
+        bass_dominant_speed *= speed_vocal_gap
+        vocal_speed = max(vocal_speed, bass_dominant_speed * 0.74)
         vocal_delta = max(0.0, vocal_raw - midhi_prev_avg)
         vocal_burst_target = min(0.85, vocal_delta * 1.1)
         snare_evt = None
@@ -484,6 +510,15 @@ class BubbleSimulation:
                 sustained_speed * 0.94 + burst_speed * 0.28,
             ),
         )
+        bass_lane_speed = soft_ceiling(
+            max(0.0, max(bass, overall) - 0.82),
+            knee=0.0,
+            ceiling=0.42,
+            max_input=1.10,
+            curve=1.0,
+        )
+        bass_lane_speed *= speed_vocal_gap
+        speed_energy = max(speed_energy, bass_lane_speed * 1.18)
         big_lane_diag["speed_energy"] = speed_energy
         cap = max(0.1, stream_cap)
         baseline = max(0.05, min(cap, stream_const))
@@ -719,6 +754,13 @@ class BubbleSimulation:
                 # mid/high-led, but they need one shared body term so quiet and
                 # loud passages can both read without reintroducing a separate
                 # loud-mode helper stack.
+                hot_phase_small = soft_ceiling(
+                    max(0.0, max(bass, overall) - (0.54 + size_t * 0.05)),
+                    knee=0.0,
+                    ceiling=1.0,
+                    max_input=0.42,
+                    curve=1.0,
+                )
                 chorus_support = soft_ceiling(
                     max(0.0, overall - (0.14 + size_t * 0.04)),
                     knee=0.0,
@@ -733,14 +775,40 @@ class BubbleSimulation:
                     max_input=0.48,
                     curve=1.0,
                 )
+                tiny_small = b.radius < 0.008
+                loud_bass_support = soft_ceiling(
+                    max(0.0, bass - (0.62 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.09 - size_t * 0.015,
+                    max_input=0.42,
+                    curve=1.0,
+                ) * (0.24 + hot_phase_small * 0.56)
                 vocal_body = max(
                     mid * 0.58 + high * 0.34,
                     smooth_mid * 0.62 + smooth_high * 0.28,
                 )
-                raw_src = vocal_body + chorus_support + hot_bed_support
+                vocal_gap = 1.0 - soft_ceiling(
+                    max(0.0, vocal_body - (0.15 + size_t * 0.025)),
+                    knee=0.0,
+                    ceiling=0.92,
+                    max_input=0.20,
+                    curve=1.0,
+                )
+                vocal_gap = vocal_gap ** 1.35
+                loud_bass_support *= (1.0 if tiny_small else (0.34 + vocal_gap * 0.52))
+                bass_dominant_support = soft_ceiling(
+                    max(0.0, bass - (0.70 + size_t * 0.04)),
+                    knee=0.0,
+                    ceiling=0.10 - size_t * 0.016,
+                    max_input=0.70,
+                    curve=1.0,
+                )
+                bass_dominant_support *= (0.44 + hot_phase_small * 0.60)
+                bass_dominant_support *= (0.18 + vocal_gap * 0.94)
+                raw_src = vocal_body + chorus_support + hot_bed_support + bass_dominant_support
                 delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
-                sustained_knee = 0.25 + size_t * 0.15
-                sustained_scale = 0.54 - size_t * 0.08
+                sustained_knee = max(0.18, 0.25 + size_t * 0.15 - vocal_gap * 0.07)
+                sustained_scale = 0.54 - size_t * 0.08 + vocal_gap * 0.04
                 attack_rate = 14.0 - size_t * 3.0
                 decay_rate = 1.2 if b.radius < 0.008 else (3.5 + size_t * 1.5)
                 if hot_bed_support > 0.0:
@@ -764,7 +832,12 @@ class BubbleSimulation:
             if use_bass:
                 sustained_component = max(sustained_component, hot_hold_support, hot_crest_support)
             else:
-                sustained_component = max(sustained_component, hot_bed_support * 0.85)
+                sustained_component = max(
+                    sustained_component,
+                    hot_bed_support * 0.85,
+                    loud_bass_support,
+                    bass_dominant_support,
+                )
 
             gated_energy = min(1.0, max(delta_component, sustained_component))
 
@@ -776,6 +849,11 @@ class BubbleSimulation:
                 b.pulse_energy = min(
                     1.0,
                     b.pulse_energy + hot_crest_support * min(0.42, dt * 12.0),
+                )
+            elif (not use_bass) and bass_dominant_support > 0.0 and vocal_gap > 0.45:
+                b.pulse_energy = min(
+                    1.0,
+                    b.pulse_energy + bass_dominant_support * vocal_gap * min(0.18, dt * 9.0),
                 )
 
             if b.is_big:
@@ -1074,20 +1152,43 @@ class BubbleSimulation:
                 for bubble in active
             ]
             active_big_flags = [_bubble_behaves_big(bubble) for bubble in active]
-            for i in range(count):
+            if not collision_radii:
+                continue
+            max_collision_radius = max(collision_radii)
+            max_gap_factor = max(
+                big_policy[0],
+                mixed_policy[0],
+                small_policy[0],
+                big_policy[6],
+                mixed_policy[6],
+                small_policy[6],
+            )
+            max_gap_bias = max(
+                big_policy[1],
+                mixed_policy[1],
+                small_policy[1],
+                big_policy[7],
+                mixed_policy[7],
+                small_policy[7],
+            )
+            sorted_indices = sorted(range(count), key=lambda idx: active[idx].x)
+            for sorted_pos, i in enumerate(sorted_indices):
                 a = active[i]
                 if a.popping or a.exiting:
                     continue
-                for j in range(i + 1, count):
-                    pair_checks += 1
+                a_radius = collision_radii[i]
+                max_possible_gap = (a_radius + max_collision_radius) * max_gap_factor + max_gap_bias
+                for next_pos in range(sorted_pos + 1, count):
+                    j = sorted_indices[next_pos]
                     b = active[j]
+                    dx = b.x - a.x
+                    if dx > max_possible_gap:
+                        break
+                    pair_checks += 1
                     if b.popping or b.exiting:
                         continue
-                    a_radius = collision_radii[i]
                     b_radius = collision_radii[j]
-                    dx = b.x - a.x
                     dy = b.y - a.y
-                    dist = math.hypot(dx, dy)
                     a_big = active_big_flags[i]
                     b_big = active_big_flags[j]
                     if a_big and b_big:

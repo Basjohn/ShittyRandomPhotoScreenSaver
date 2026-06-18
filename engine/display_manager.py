@@ -206,32 +206,42 @@ class DisplayManager(QObject):
         # Resolve which screens should actually create DisplayWidgets
         allowed_indices = self._get_allowed_screen_indices(screen_count)
         
-        # Create display for each allowed screen with staggered initialization.
-        # This prevents simultaneous GL compositor init on multiple displays
-        # which can cause 100-200ms UI thread blocks.
-        stagger_ms = 100  # 100ms between display creations (increased from 50ms)
-        created_count = 0
+        # Instantiate the full active display set before the first display runs
+        # widget setup. Visualizer CUSTOM owner selection is participation-based,
+        # so screen 0 must be able to see later requested displays as pending
+        # startup instead of misclassifying them as absent.
+        pending_displays: List[DisplayWidget] = []
         for i in range(screen_count):
             if i in allowed_indices:
-                # Stagger after first display to spread GL init load
-                if created_count > 0 and stagger_ms > 0:
-                    from PySide6.QtCore import QCoreApplication
-                    # Process events in loop to stagger GL init while keeping UI responsive
-                    deadline = time.perf_counter() + stagger_ms / 1000.0
-                    while time.perf_counter() < deadline:
-                        QCoreApplication.processEvents()
-                self._create_display_for_screen(i)
-                created_count += 1
+                display = self._create_display_for_screen(i, show_immediately=False)
+                if display is not None:
+                    pending_displays.append(display)
             else:
                 logger.info(
                     "[DISPLAY] Skipping display for screen %d due to show_on_monitors",
                     i,
                 )
+
+        # Preserve staggered show behavior so GL/compositor startup still spreads
+        # heavy work across the UI thread.
+        stagger_ms = 100  # 100ms between display shows (increased from 50ms)
+        for idx, display in enumerate(pending_displays):
+            if idx > 0 and stagger_ms > 0:
+                from PySide6.QtCore import QCoreApplication
+                deadline = time.perf_counter() + stagger_ms / 1000.0
+                while time.perf_counter() < deadline:
+                    QCoreApplication.processEvents()
+            self._show_display_widget(display)
         
         logger.info("Created %d display widgets" % len(self.displays))
         return len(self.displays)
     
-    def _create_display_for_screen(self, screen_index: int) -> None:
+    def _create_display_for_screen(
+        self,
+        screen_index: int,
+        *,
+        show_immediately: bool = True,
+    ) -> Optional[DisplayWidget]:
         """
         Create display widget for a specific screen.
         
@@ -267,15 +277,43 @@ class DisplayManager(QObject):
             # Connect dimming sync signal - when one display changes dimming, update all
             display.dimming_changed.connect(self.set_dimming_all_displays)
             
-            # Show fullscreen
-            display.show_on_screen()
-            
             self.displays.append(display)
             logger.info("Display widget created for screen %d" % screen_index)
-        
+            if show_immediately:
+                self._show_display_widget(display)
+            return display
         except Exception as e:
             logger.error("Failed to create display for screen %d: %s" % (screen_index, e), exc_info=True)
-    
+            return None
+
+    def _show_display_widget(self, display: DisplayWidget) -> bool:
+        """Show a previously-instantiated display widget."""
+        try:
+            display.show_on_screen()
+            return True
+        except Exception as e:
+            screen_index = getattr(display, "screen_index", "?")
+            logger.error(
+                "Failed to show display for screen %s: %s",
+                screen_index,
+                e,
+                exc_info=True,
+            )
+            try:
+                if display in self.displays:
+                    self.displays.remove(display)
+            except Exception:
+                logger.debug("[DISPLAY_MANAGER] Failed to remove display after show failure", exc_info=True)
+            try:
+                display.close()
+            except Exception:
+                logger.debug("[DISPLAY_MANAGER] Failed to close display after show failure", exc_info=True)
+            try:
+                display.deleteLater()
+            except Exception:
+                logger.debug("[DISPLAY_MANAGER] Failed to delete display after show failure", exc_info=True)
+            return False
+
     def _cleanup_excess_displays(self) -> None:
         """Clean up displays for screens that no longer exist."""
         screen_count = len(QGuiApplication.screens())

@@ -1326,6 +1326,8 @@ def _capture_bubble_lane_metrics(
 
     big_count = 0
     active_big = 0
+    small_count = 0
+    active_small = 0
     big_deltas: list[float] = []
     small_deltas: list[float] = []
     for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
@@ -1341,6 +1343,9 @@ def _capture_bubble_lane_metrics(
                 active_big += 1
             big_deltas.append(delta)
         else:
+            small_count += 1
+            if delta > 0.006:
+                active_small += 1
             small_deltas.append(delta)
     diag = sim.get_big_lane_diagnostics()
     top_expansion_count = min(4, len(big_expansion))
@@ -1361,6 +1366,9 @@ def _capture_bubble_lane_metrics(
         ),
         "max_big_delta": max(big_deltas, default=0.0),
         "avg_big_delta": (sum(big_deltas) / len(big_deltas)) if big_deltas else 0.0,
+        "small_count": float(small_count),
+        "small_active_ratio": (active_small / small_count) if small_count else 0.0,
+        "avg_small_delta": (sum(small_deltas) / len(small_deltas)) if small_deltas else 0.0,
         "max_small_delta": max(small_deltas, default=0.0),
         "max_big_pulse": float(diag.get("max_big_pulse_after", 0.0)),
         "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
@@ -1962,6 +1970,174 @@ def _latest_live_mixed_hot_runtime_log_replay_profile() -> list[dict[str, object
             "pulse": {"bass": 1.90, "mid": 0.81, "high": 0.25, "overall": 0.80},
             "broad": {"bass": 0.42, "mid": 0.24, "high": 0.07, "overall": 0.56},
             "transient": {"bass_transient": 0.34, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+    ]
+
+
+def _latest_live_tail_hot_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the newest 2026-06-18 tail family from `13:40:10 .. 13:41:26`.
+
+    This run matters because Bubble is no longer broadly unhealthy here:
+    perf stayed strong and several hot windows looked honest. The remaining
+    contradiction is narrower and therefore easier to miss:
+    - an early strong hot window with visibly alive expansion
+    - a later materially hot tail window that still compresses too far
+    - a subsequent recovery window that looks more alive again despite lower
+      direct Bubble bass feed than that weak hot tail
+
+    The suite should fail if a materially hot late-tail window can still look
+    flatter than the friendlier recovery shape that follows it.
+    """
+
+    return [
+        {
+            "pulse": {"bass": 1.63, "mid": 0.87, "high": 0.20, "overall": 0.76},
+            "broad": {"bass": 0.52, "mid": 0.30, "high": 0.07, "overall": 0.56},
+            "transient": {
+                "bass_transient": 0.40,
+                "mid_transient": 0.20,
+                "high_transient": 0.04,
+                "onset_detected": True,
+                "onset_type": "snare",
+                "onset_strength": 0.14,
+            },
+        },
+        {
+            "pulse": {"bass": 1.13, "mid": 0.37, "high": 0.07, "overall": 0.61},
+            "broad": {"bass": 0.43, "mid": 0.18, "high": 0.03, "overall": 0.43},
+            "transient": {
+                "bass_transient": 0.22,
+                "mid_transient": 0.07,
+                "high_transient": 0.01,
+                "onset_detected": False,
+                "onset_type": "",
+                "onset_strength": 0.0,
+            },
+        },
+        {
+            "pulse": {"bass": 0.92, "mid": 0.27, "high": 0.04, "overall": 0.54},
+            "broad": {"bass": 0.32, "mid": 0.12, "high": 0.02, "overall": 0.35},
+            "transient": {
+                "bass_transient": 0.00,
+                "mid_transient": 0.00,
+                "high_transient": 0.00,
+                "onset_detected": False,
+                "onset_type": "",
+                "onset_strength": 0.0,
+            },
+        },
+        {
+            "pulse": {"bass": 1.38, "mid": 0.69, "high": 0.19, "overall": 0.68},
+            "broad": {"bass": 0.39, "mid": 0.23, "high": 0.06, "overall": 0.50},
+            "transient": {
+                "bass_transient": 1.69,
+                "mid_transient": 0.59,
+                "high_transient": 0.05,
+                "onset_detected": False,
+                "onset_type": "",
+                "onset_strength": 0.0,
+            },
+        },
+        {
+            "pulse": {"bass": 0.50, "mid": 0.32, "high": 0.05, "overall": 0.54},
+            "broad": {"bass": 0.30, "mid": 0.15, "high": 0.02, "overall": 0.39},
+            "transient": {
+                "bass_transient": 0.00,
+                "mid_transient": 0.00,
+                "high_transient": 0.00,
+                "onset_detected": False,
+                "onset_type": "",
+                "onset_strength": 0.0,
+            },
+        },
+        {
+            "pulse": {"bass": 0.48, "mid": 0.32, "high": 0.05, "overall": 0.55},
+            "broad": {"bass": 0.34, "mid": 0.16, "high": 0.03, "overall": 0.43},
+            "transient": {
+                "bass_transient": 1.67,
+                "mid_transient": 0.69,
+                "high_transient": 0.12,
+                "onset_detected": False,
+                "onset_type": "",
+                "onset_strength": 0.0,
+            },
+        },
+    ]
+
+
+def _latest_live_tail_hot_weighted_replay_sequence() -> list[dict[str, object]]:
+    """Stress the newest tail family with a more runtime-shaped dwell pattern.
+
+    The plain cyclic replay is useful for basic equivalence, but it can average
+    the late-tail drift shape away. This weighted sequence keeps the same
+    newest-log family while spending longer in the still-hot tail and recovery
+    windows so broad small-lane participation and motion-drive decay remain
+    visible to the suite.
+    """
+
+    profile = _latest_live_tail_hot_runtime_log_replay_profile()
+    return (
+        [profile[0]] * 24
+        + [profile[1]] * 16
+        + [profile[2]] * 12
+        + [profile[3]] * 24
+        + [profile[4]] * 12
+        + [profile[5]] * 12
+    )
+
+
+def _latest_live_bass_dominant_mixed_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the newer 2026-06-18 second-song mixed family from `14:10:45 .. 14:11:50`.
+
+    This run matters because it bundles several still-dangerous Bubble shapes in
+    one manual-floor song:
+    - a genuinely soft baseline that should keep honest motion
+    - bass-dominant thin hot windows where vocals/mids fall away and Bubble can
+      still compress too hard
+    - later broader hot recoveries that prove the mode can look much healthier
+      in the same song when the section feeds it more generously
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.03, "mid": 0.00, "high": 0.00, "overall": 0.06},
+            "broad": {"bass": 0.03, "mid": 0.00, "high": 0.00, "overall": 0.04},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.83, "mid": 0.00, "high": 0.00, "overall": 0.46},
+            "broad": {"bass": 0.22, "mid": 0.03, "high": 0.01, "overall": 0.21},
+            "transient": {"bass_transient": 0.92, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.42, "mid": 0.11, "high": 0.00, "overall": 0.60},
+            "broad": {"bass": 0.34, "mid": 0.10, "high": 0.02, "overall": 0.34},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.94, "mid": 0.00, "high": 0.00, "overall": 0.47},
+            "broad": {"bass": 0.30, "mid": 0.09, "high": 0.02, "overall": 0.30},
+            "transient": {"bass_transient": 0.30, "mid_transient": 0.00, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 1.45, "mid": 0.00, "high": 0.00, "overall": 0.61},
+            "broad": {"bass": 0.33, "mid": 0.07, "high": 0.02, "overall": 0.31},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.55, "mid": 0.84, "high": 0.19, "overall": 0.79},
+            "broad": {"bass": 0.46, "mid": 0.33, "high": 0.08, "overall": 0.59},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.26, "high_transient": 0.18},
+        },
+        {
+            "pulse": {"bass": 2.29, "mid": 0.94, "high": 0.22, "overall": 0.96},
+            "broad": {"bass": 0.58, "mid": 0.36, "high": 0.09, "overall": 0.68},
+            "transient": {"bass_transient": 0.53, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.22, "mid": 0.77, "high": 0.23, "overall": 0.72},
+            "broad": {"bass": 0.43, "mid": 0.28, "high": 0.07, "overall": 0.55},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.03},
         },
     ]
 
@@ -6466,14 +6642,19 @@ def test_latest_live_mixed_hot_replay_keeps_thin_hot_windows_above_soft_passage_
     stable_series = metrics_series[len(profile) * 2 :]
 
     soft_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (0, 1)]
+    strong_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 2]
     compressed_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 3]
     late_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (4, 5, 6)]
 
-    assert soft_window and compressed_hot and late_hot
+    assert soft_window and strong_hot and compressed_hot and late_hot
     assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
     assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
 
     soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    strong_feed = sum(m["bass"] for m in strong_hot) / len(strong_hot)
+    strong_small = sum(m["max_small_delta"] for m in strong_hot) / len(strong_hot)
+    strong_big = sum(m["big_max_render"] for m in strong_hot) / len(strong_hot)
+    strong_expand = sum(m["top_big_expansion"] for m in strong_hot) / len(strong_hot)
     compressed_feed = sum(m["bass"] for m in compressed_hot) / len(compressed_hot)
     compressed_small = sum(m["max_small_delta"] for m in compressed_hot) / len(compressed_hot)
     compressed_big = sum(m["big_max_render"] for m in compressed_hot) / len(compressed_hot)
@@ -6484,26 +6665,282 @@ def test_latest_live_mixed_hot_replay_keeps_thin_hot_windows_above_soft_passage_
     late_expand = sum(m["top_big_expansion"] for m in late_hot) / len(late_hot)
 
     assert soft_small >= 0.020, "Need an honest soft baseline or the mixed-hot replay loses meaning."
-    assert compressed_feed >= 1.00 and late_feed >= 1.50, (
+    assert strong_feed >= 1.45 and compressed_feed >= 1.00 and late_feed >= 1.50, (
         "Mixed-hot replay must stay materially hot or this Bubble guard is not modeling the live complaint."
     )
-    assert compressed_small >= max(0.018, soft_small * 0.72), (
+    assert compressed_small >= max(0.021, soft_small * 0.84, strong_small * 0.74), (
         "Thin hot Bubble window still lets the small lane sag too close to soft-passage behavior."
     )
-    assert compressed_big >= 0.112, (
+    assert compressed_big >= max(0.118, strong_big * 0.76), (
         "Thin hot Bubble window still lets the hero lane shrink too far for a materially hot section."
     )
-    assert compressed_expand >= 2.90, (
+    assert compressed_expand >= max(3.00, strong_expand * 0.78), (
         "Thin hot Bubble window still compresses the hero expansion shape too far."
     )
-    assert late_small >= max(0.022, compressed_small * 1.00), (
+    assert late_small >= max(0.024, compressed_small * 1.00, strong_small * 0.84), (
         "Later hot recovery still does not restore enough small-lane authority after the thinner hot window."
     )
-    assert late_big >= max(0.122, compressed_big * 0.99), (
+    assert late_big >= max(0.126, compressed_big * 0.99, strong_big * 0.86), (
         "Later hot recovery still lets the hero lane sag too far after the thinner hot window."
     )
-    assert late_expand >= max(3.15, compressed_expand * 1.00), (
+    assert late_expand >= max(3.20, compressed_expand * 1.00, strong_expand * 0.86), (
         "Later hot recovery still lets the hero expansion shape sag too far after the thinner hot window."
+    )
+
+
+@pytest.mark.qt
+def test_latest_live_tail_hot_replay_keeps_material_hot_tail_alive_against_recovery_windows(
+    qt_app,
+    qtbot,
+):
+    random.seed(10048)
+    profile = _latest_live_tail_hot_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile * 10
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    stable_series = metrics_series[len(profile) * 2 :]
+
+    strong_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 0]
+    weak_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 3]
+    recovery = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (4, 5)]
+
+    assert strong_hot and weak_hot and recovery
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    strong_feed = sum(m["bass"] for m in strong_hot) / len(strong_hot)
+    strong_small = sum(m["max_small_delta"] for m in strong_hot) / len(strong_hot)
+    strong_avg_small = sum(m["avg_small_delta"] for m in strong_hot) / len(strong_hot)
+    strong_small_active = sum(m["small_active_ratio"] for m in strong_hot) / len(strong_hot)
+    strong_big = sum(m["big_max_render"] for m in strong_hot) / len(strong_hot)
+    strong_big_avg = sum(m["big_avg_render"] for m in strong_hot) / len(strong_hot)
+    strong_big_gated = sum(m["max_big_gated"] for m in strong_hot) / len(strong_hot)
+    strong_speed = sum(m["speed_energy"] for m in strong_hot) / len(strong_hot)
+    strong_expand = sum(m["top_big_expansion"] for m in strong_hot) / len(strong_hot)
+
+    weak_feed = sum(m["bass"] for m in weak_hot) / len(weak_hot)
+    weak_small = sum(m["max_small_delta"] for m in weak_hot) / len(weak_hot)
+    weak_avg_small = sum(m["avg_small_delta"] for m in weak_hot) / len(weak_hot)
+    weak_small_active = sum(m["small_active_ratio"] for m in weak_hot) / len(weak_hot)
+    weak_big = sum(m["big_max_render"] for m in weak_hot) / len(weak_hot)
+    weak_big_avg = sum(m["big_avg_render"] for m in weak_hot) / len(weak_hot)
+    weak_big_gated = sum(m["max_big_gated"] for m in weak_hot) / len(weak_hot)
+    weak_speed = sum(m["speed_energy"] for m in weak_hot) / len(weak_hot)
+    weak_expand = sum(m["top_big_expansion"] for m in weak_hot) / len(weak_hot)
+
+    recovery_feed = sum(m["bass"] for m in recovery) / len(recovery)
+    recovery_small = sum(m["max_small_delta"] for m in recovery) / len(recovery)
+    recovery_avg_small = sum(m["avg_small_delta"] for m in recovery) / len(recovery)
+    recovery_small_active = sum(m["small_active_ratio"] for m in recovery) / len(recovery)
+    recovery_big = sum(m["big_max_render"] for m in recovery) / len(recovery)
+    recovery_big_avg = sum(m["big_avg_render"] for m in recovery) / len(recovery)
+    recovery_big_gated = sum(m["max_big_gated"] for m in recovery) / len(recovery)
+    recovery_speed = sum(m["speed_energy"] for m in recovery) / len(recovery)
+    recovery_expand = sum(m["top_big_expansion"] for m in recovery) / len(recovery)
+
+    assert strong_feed >= 1.20 and weak_feed >= 1.20, (
+        "Tail-hot replay must keep both comparison windows materially hot or it no longer models the live complaint."
+    )
+    assert recovery_feed <= weak_feed * 0.85, (
+        "Recovery window should stay the lower-direct-feed contrast case from the newest logs."
+    )
+    assert weak_small >= max(0.022, strong_small * 0.96, recovery_small * 1.00), (
+        "Materially hot late-tail Bubble window still lets the strongest small bubble fall below the recovery shape."
+    )
+    assert weak_avg_small >= max(0.017, strong_avg_small * 0.97, recovery_avg_small * 1.00), (
+        "Materially hot late-tail Bubble window still loses too much broad small-lane participation."
+    )
+    assert weak_small_active >= max(0.76, strong_small_active * 0.97, recovery_small_active * 1.00), (
+        "Materially hot late-tail Bubble window still lets too many small bubbles go inactive relative to recovery."
+    )
+    assert weak_big >= max(0.112, strong_big * 0.98, recovery_big * 1.00), (
+        "Materially hot late-tail Bubble window still lets the hero lane sag below the later recovery shape."
+    )
+    assert weak_big_avg >= max(0.110, strong_big_avg * 0.985, recovery_big_avg * 0.998), (
+        "Materially hot late-tail Bubble window still lets average hero-lane authority drift too low."
+    )
+    assert weak_big_gated >= max(0.80, strong_big_gated * 0.94, recovery_big_gated * 1.45), (
+        "Materially hot late-tail Bubble window still loses too much gated hero energy for a still-hot section."
+    )
+    assert weak_speed >= max(0.34, strong_speed * 0.88, recovery_speed * 1.20), (
+        "Materially hot late-tail Bubble window still lets the live motion drive sag too far."
+    )
+    assert weak_expand >= max(3.00, strong_expand * 0.98, recovery_expand * 1.00), (
+        "Materially hot late-tail Bubble window still compresses the expansion shape below the recovery shape."
+    )
+
+
+@pytest.mark.qt
+def test_latest_live_tail_hot_weighted_sequence_does_not_drift_into_late_tail_decay(
+    qt_app,
+    qtbot,
+):
+    random.seed(10049)
+    profile = _latest_live_tail_hot_runtime_log_replay_profile()
+    replay_frames = _latest_live_tail_hot_weighted_replay_sequence()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    early_window = metrics_series[:12]
+    mid_window = metrics_series[len(metrics_series) // 2 - 6 : len(metrics_series) // 2 + 6]
+    tail_window = metrics_series[-36:]
+
+    assert early_window and mid_window and tail_window
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    mid_avg_small = sum(m["avg_small_delta"] for m in mid_window) / len(mid_window)
+    tail_avg_small = sum(m["avg_small_delta"] for m in tail_window) / len(tail_window)
+    mid_small_active = sum(m["small_active_ratio"] for m in mid_window) / len(mid_window)
+    tail_small_active = sum(m["small_active_ratio"] for m in tail_window) / len(tail_window)
+    mid_big_avg = sum(m["big_avg_render"] for m in mid_window) / len(mid_window)
+    tail_big_avg = sum(m["big_avg_render"] for m in tail_window) / len(tail_window)
+    mid_big_gated = sum(m["max_big_gated"] for m in mid_window) / len(mid_window)
+    tail_big_gated = sum(m["max_big_gated"] for m in tail_window) / len(tail_window)
+    mid_speed = sum(m["speed_energy"] for m in mid_window) / len(mid_window)
+    tail_speed = sum(m["speed_energy"] for m in tail_window) / len(tail_window)
+
+    assert tail_avg_small >= max(0.0158, mid_avg_small * 0.88), (
+        "Weighted tail-hot Bubble replay still lets broad small-lane lift decay too far by the late tail."
+    )
+    assert tail_small_active >= max(0.79, mid_small_active * 0.93), (
+        "Weighted tail-hot Bubble replay still lets too many small bubbles drop out by the late tail."
+    )
+    assert tail_big_avg >= max(0.105, mid_big_avg * 0.91), (
+        "Weighted tail-hot Bubble replay still lets average hero-lane size decay too far by the late tail."
+    )
+    assert tail_big_gated >= max(0.38, mid_big_gated * 0.66), (
+        "Weighted tail-hot Bubble replay still lets gated hero authority decay too far by the late tail."
+    )
+    assert tail_speed >= max(0.304, mid_speed * 0.97), (
+        "Weighted tail-hot Bubble replay still lets motion drive decay too far by the late tail."
+    )
+
+
+@pytest.mark.qt
+def test_latest_live_bass_dominant_mixed_replay_keeps_thin_hot_windows_alive_against_broader_hot_recoveries(
+    qt_app,
+    qtbot,
+):
+    random.seed(10050)
+    profile = _latest_live_bass_dominant_mixed_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile * 10
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    stable_series = metrics_series[len(profile) * 2 :]
+
+    soft_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 0]
+    thin_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (1, 2, 3, 4)]
+    broad_hot = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (5, 6)]
+    recovery = [m for idx, m in enumerate(stable_series) if idx % len(profile) == 7]
+
+    assert soft_window and thin_hot and broad_hot and recovery
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    soft_avg_small = sum(m["avg_small_delta"] for m in soft_window) / len(soft_window)
+    thin_feed = sum(m["bass"] for m in thin_hot) / len(thin_hot)
+    thin_small = sum(m["max_small_delta"] for m in thin_hot) / len(thin_hot)
+    thin_avg_small = sum(m["avg_small_delta"] for m in thin_hot) / len(thin_hot)
+    thin_small_active = sum(m["small_active_ratio"] for m in thin_hot) / len(thin_hot)
+    thin_big = sum(m["big_max_render"] for m in thin_hot) / len(thin_hot)
+    thin_big_avg = sum(m["big_avg_render"] for m in thin_hot) / len(thin_hot)
+    thin_expand = sum(m["top_big_expansion"] for m in thin_hot) / len(thin_hot)
+    thin_speed = sum(m["speed_energy"] for m in thin_hot) / len(thin_hot)
+    broad_feed = sum(m["bass"] for m in broad_hot) / len(broad_hot)
+    broad_small = sum(m["max_small_delta"] for m in broad_hot) / len(broad_hot)
+    broad_avg_small = sum(m["avg_small_delta"] for m in broad_hot) / len(broad_hot)
+    broad_small_active = sum(m["small_active_ratio"] for m in broad_hot) / len(broad_hot)
+    broad_big = sum(m["big_max_render"] for m in broad_hot) / len(broad_hot)
+    broad_big_avg = sum(m["big_avg_render"] for m in broad_hot) / len(broad_hot)
+    broad_expand = sum(m["top_big_expansion"] for m in broad_hot) / len(broad_hot)
+    broad_speed = sum(m["speed_energy"] for m in broad_hot) / len(broad_hot)
+    recovery_avg_small = sum(m["avg_small_delta"] for m in recovery) / len(recovery)
+    recovery_speed = sum(m["speed_energy"] for m in recovery) / len(recovery)
+
+    assert soft_small >= 0.018 and soft_avg_small >= 0.009, (
+        "Need an honest soft baseline or this bass-dominant mixed replay loses diagnostic meaning."
+    )
+    assert thin_feed >= 1.10 and broad_feed >= 1.48, (
+        "Bass-dominant mixed replay must keep the thin and broad comparison windows materially hot."
+    )
+    assert thin_small >= max(0.022, soft_small * 1.03, broad_small * 0.82), (
+        "Bass-dominant thin hot windows still let the strongest small bubble collapse too far."
+    )
+    assert thin_avg_small >= max(0.0168, soft_avg_small * 0.97, broad_avg_small * 0.90, recovery_avg_small * 0.86), (
+        "Bass-dominant thin hot windows still lose too much broad small-lane participation."
+    )
+    assert thin_small_active >= max(0.70, broad_small_active * 0.78), (
+        "Bass-dominant thin hot windows still let too many small bubbles go inactive."
+    )
+    assert thin_big >= max(0.112, broad_big * 0.76), (
+        "Bass-dominant thin hot windows still leave the hero lane too modest for a materially hot section."
+    )
+    assert thin_big_avg >= max(0.108, broad_big_avg * 0.80), (
+        "Bass-dominant thin hot windows still pull average hero-lane authority too far down."
+    )
+    assert thin_expand >= max(3.00, broad_expand * 0.78), (
+        "Bass-dominant thin hot windows still compress the hero expansion shape too far."
+    )
+    assert thin_speed >= max(0.16, broad_speed * 0.42, recovery_speed * 0.39), (
+        "Bass-dominant thin hot windows still let Bubble's live motion drive sag too far when vocals thin out."
     )
 
 
@@ -6549,6 +6986,7 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     avg_snapshot = sum(m["snapshot_ms"] for m in stable_series) / len(stable_series)
     avg_active = sum(m["active_bubbles"] for m in stable_series) / len(stable_series)
     max_pairs = max(m["collision_pairs"] for m in stable_series)
+    avg_pairs = sum(m["collision_pairs"] for m in stable_series) / len(stable_series)
     max_worker = max(m["worker_total_ms"] for m in stable_series)
 
     soft_worker = sum(m["worker_total_ms"] for m in soft_window) / len(soft_window)
@@ -6558,25 +6996,28 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     assert avg_active >= 45.0, (
         "Bubble perf oracle must keep a real active field alive or the budget bar becomes meaningless."
     )
-    assert max_pairs >= 1100.0, (
-        "Bubble perf oracle must exercise the real pair-loop pressure or it is not guarding the hot path."
+    assert max_pairs >= 430.0 and avg_pairs >= 360.0, (
+        "Bubble perf oracle must still exercise a real Bubble collision field after broad-phase pruning."
     )
-    assert avg_worker < 4.0, (
+    assert avg_worker < 2.7, (
         f"Bubble worker average drifted too high ({avg_worker:.2f}ms) for the current recovered transition-time budget band."
     )
-    assert avg_collision < 2.6, (
+    assert avg_collision < 1.65, (
         f"Bubble collision average drifted too high ({avg_collision:.2f}ms) for the current recovered budget band."
     )
-    assert avg_snapshot < 1.2, (
+    assert avg_snapshot < 0.75, (
         f"Bubble snapshot average drifted too high ({avg_snapshot:.2f}ms) for the current recovered budget band."
     )
-    assert max_worker < 6.0, (
+    assert max_worker < 4.2, (
         f"Bubble worker spike drifted too high ({max_worker:.2f}ms) inside the isolated dispatch oracle."
     )
-    assert compressed_worker <= max(soft_worker * 1.60, 3.6), (
+    assert avg_pairs < 600.0, (
+        f"Bubble collision pair budget stayed too high ({avg_pairs:.1f} avg pairs) after broad-phase pruning."
+    )
+    assert compressed_worker <= max(soft_worker * 1.40, 2.5), (
         "Thin hot Bubble windows now cost materially more compute than the soft baseline inside the same recovered family."
     )
-    assert late_worker <= max(compressed_worker * 1.20, 3.8), (
+    assert late_worker <= max(compressed_worker * 1.15, 2.7), (
         "Later hot Bubble recovery now costs materially more compute than the thinner hot window it is meant to recover from."
     )
 

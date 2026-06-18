@@ -30,7 +30,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - Bubble sim now sits around `worker_ms=1.25..1.49`, `tick_ms=0.95..1.18`.
     - The biggest remaining Bubble-owned cost is still collision work: `collision_ms=0.57..0.74`.
     - Snapshot/transport remains second: `snapshot_ms=0.27..0.36`.
-    - Pair count stays high (`1225..1275`) while real overlaps stay tiny (`1..9`), which makes broad-phase pruning the safest next perf seam.
+    - The new broad-phase guard already cut the isolated Bubble oracle down from near-full quadratic scans to a still-meaningful but much smaller collision field, so the next perf seam is trail/upload churn rather than another blind pair-loop rewrite.
     - Trail transport is still always live in this run: `trail_payload=True`, `trail_floats=495..594`.
   - Immediate checklist:
     - [x] Add the newest late-hot replay lane from the 2026-06-15 live run so the current loud small-lane complaint fails before more Bubble tuning.
@@ -46,9 +46,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Trim Bubble pair-loop policy arithmetic and per-bubble no-op trail writes while keeping the current replay and feel-lock bars green.
     - [x] Add the Bubble transition-time perf oracle before deeper simulation/snapshot work.
     - [x] Avoid needless `sqrt` work for non-overlapping Bubble pairs by comparing squared distances before normalization, while the replay/perf bars stay green.
-    - [ ] Tighten the Bubble perf oracle to treat the current recovered floor as the minimum acceptable band for `worker_ms`, `collision_ms`, and `snapshot_ms`.
+    - [x] Tighten the Bubble perf oracle to treat the current recovered floor as the minimum acceptable band for `worker_ms`, `collision_ms`, and `snapshot_ms`.
+    - [x] Add a safe Bubble-only broad-phase pair-pruning pass so the collision loop no longer behaves like a near-full quadratic scan under the isolated oracle.
+    - [x] Stop clearing Bubble uniform transport buffers more broadly than the active payload requires, while keeping the payload-equivalence tests green.
     - [ ] Audit only these safe Bubble perf seams next:
-      - broad-phase / neighbor-pruning options in `widgets/spotify_visualizer/bubble_simulation.py` so `1225..1275` pair scans no longer run against `1..9` true overlaps
       - trail snapshot / upload churn in `widgets/spotify_visualizer/bubble_simulation.py` and `widgets/spotify_visualizer/renderers/bubble.py` without removing visible trail fidelity
       - leave cadence / delivery / shared-floor suspicion alone unless the strengthened bars or fresh logs reopen them
     - [ ] Keep every Bubble-touching perf task entering and exiting through improved Bubble bar evidence.
@@ -65,35 +66,29 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
       - `05:58:29` `raw_bass=1.118` but visible bar envelope stays close to a modest band
       - `05:58:59` `raw_bass=0.945` and still reads restrained
       - `05:59:19` `raw_bass=1.107` but lands well below the friendlier hot windows from the same run
+    - newest long-run tail family still worth preserving:
+      - `13:40:10` `raw_bass=1.627` with a clearly open, healthy hot shape
+      - `13:41:11` `raw_bass=1.377` while the visible shape compresses more than that still-hot section should
+      - `13:41:26` `raw_bass=0.476` but the later recovery looks friendlier again, so the remaining issue is inconsistency rather than universal loud failure
   - Immediate checklist:
-    - [ ] Strengthen the mixed-hot Bubble oracle so hot sparse/thin windows from this run must stay clearly above ordinary mid-level behavior and cannot hide behind “soft is still good” bars.
-    - [ ] Compare the weak-hot windows against the stronger hot windows from the same run, not only against soft passages, so inconsistency becomes decisively red before more tuning lands.
-    - [ ] If the stricter oracle goes red, keep the first code pass Bubble-only and feed-first; do not reopen shared Dynamic Volume Floor work unless new evidence proves the Bubble seam is already healthy.
+    - [x] Strengthen the mixed-hot Bubble oracle so hot sparse/thin windows from this run must stay clearly above ordinary mid-level behavior and cannot hide behind “soft is still good” bars.
+    - [x] Compare the weak-hot windows against the stronger hot windows from the same run, not only against soft passages, so inconsistency becomes decisively red before more tuning lands.
+    - [x] Add the newest late-tail hot replay lane so materially hot tail windows cannot quietly fall below later lower-feed recovery windows without the suite noticing.
+    - [x] Keep the first code pass Bubble-only and feed-first; do not reopen shared Dynamic Volume Floor work unless new evidence proves the Bubble seam is already healthy.
+    - [x] Land a narrow tiny-bubble sustained-loud support pass that stays simulation-owned, keeps the current hero-lane/soft-path feel locks green, and does not turn into a shared-floor retune.
     - [ ] Preserve the current soft-path feel and the recovered stronger hot windows as locked behavior while fixing the weaker mixed-hot windows.
-
-- [ ] Third priority: re-audit the visualizer display-participation recovery seam that is still firing fallbacks and has previously produced duplicate visualizers.
-  - The issue is no longer a watchlist note. The latest log fired a loud fallback during an ordinary run:
-    - `05:58:09 - rendering.spotify_display_participation - WARNING - [SPOTIFY_VIS][FALLBACK] Requested CUSTOM monitor 1 is not participating; falling back to participating display screen_index=0`
-  - This needs to be treated as one contract family:
-    - incorrect “not participating” detection during normal active multi-display runtime
-    - duplicate visualizer/extra owner risk after monitor off/on or wake-like display churn
-    - unclear behavior when prior state involved `All Displays` before entering `Custom`
-  - Immediate checklist:
-    - [ ] Trace `rendering/spotify_display_participation.py`, `rendering/widget_setup_all.py`, `rendering/spotify_widget_creators.py`, and the visualizer CUSTOM reconcile path to find why a requested live display can be marked non-participating during ordinary startup.
-    - [ ] Add/strengthen automation around requested-display ownership so a normal two-display participating run does not emit this fallback warning.
-    - [ ] Add/strengthen automation around display-loss/rejoin or monitor-wake style participation changes so recovery cannot spawn duplicate visualizer owners.
-    - [ ] Explicitly model the `All Displays` -> `Custom` route and prove the recovery path cannot multiply visualizers or freelance a second owner.
 
 ## Watchlist
 
 - Spectrum solid-bar visual smoothness is no longer active work, but future tuning must stay visual-only and must not reopen audio/reactivity regressions.
 - Bubble behavior is locked during the current audit pass. Future work should stay mode-isolated and oracle-first rather than reopening shared-floor or casual cross-mode retuning.
+- Visualizer display-participation startup fallback / duplicate-owner work moved to `Docs/Historical_Bugs.md` entry `R-26`. Reopen it only if fresh runtime logs show fallbacks or duplicate owners after the startup-registration fix.
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
 - Visualizer CUSTOM/runtime geometry is intentionally out of the active queue for now. The current long-term state, landed protections, and low/deferred follow-up work live in `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md`.
 
 ## Deferred / Not Active
 
-- Weather cache blanking / premature expiry stays queued but is no longer ahead of the current Bubble perf/loud pass or the visualizer participation duplicate issue.
+- Weather cache blanking / premature expiry stays queued but is no longer ahead of the current Bubble perf/loud pass.
   - When it returns to active work, confirm why Weather goes blank even though cache should remain visible until replacement data arrives.
   - Re-audit `widgets/weather_widget.py` cache-read, startup-use, refresh, and replacement authority.
   - Required bars when reactivated:
