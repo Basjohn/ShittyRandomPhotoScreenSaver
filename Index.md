@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-14
+Last updated: 2026-06-18
 
 Living map of the current SRPSS codebase.
 
@@ -13,6 +13,8 @@ Living map of the current SRPSS codebase.
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
 | `Docs/Contracts.md` | Short contract index that routes quickly to the canonical owner for each major subsystem seam |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
+| `audits/BubbleAudit/Bubble_End_To_End_Audit.md` | Active Bubble audit for transition-time perf collapse, loud small-lane under-participation, and root-cause-first execution order |
+| `audits/BubbleAudit/README.md` | Small entrypoint that points at the active Bubble audit |
 | `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Active geometry audit with risks, order of work, and start-to-finish checklist for the reopened visualizer CUSTOM/runtime shape family |
 | `audits/GeoAudit/README.md` | Small entrypoint that points at the active geometry audit |
 | `Docs/Regression_Notes.md` | Smaller resolved regression notes and follow-up hardening items |

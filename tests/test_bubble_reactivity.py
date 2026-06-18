@@ -238,6 +238,41 @@ def _render_lane_metrics(
     }
 
 
+def test_snapshot_omits_trail_payload_when_no_visible_trails_exist():
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_big_count=4,
+        bubble_small_count=10,
+        bubble_trail_strength=0.0,
+    )
+    _warm_up(sim, settings, frames=30)
+
+    pos_data, extra_data, trail_data = sim.snapshot()
+
+    assert len(pos_data) == len(sim._bubbles) * 4
+    assert len(extra_data) == len(sim._bubbles) * 4
+    assert trail_data == []
+
+
+def test_snapshot_keeps_full_trail_layout_when_any_visible_trail_exists():
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_big_count=2,
+        bubble_small_count=4,
+        bubble_trail_strength=1.0,
+    )
+    _warm_up(sim, settings, frames=30)
+    moving = _energy(bass=0.55, mid=0.32, high=0.14)
+    for _ in range(12):
+        sim.tick(1 / 60, moving, settings)
+
+    pos_data, extra_data, trail_data = sim.snapshot()
+
+    assert len(pos_data) == len(sim._bubbles) * 4
+    assert len(extra_data) == len(sim._bubbles) * 4
+    assert len(trail_data) == len(sim._bubbles) * 9
+
+
 def _load_historical_bubble_module(rev: str):
     root = pathlib.Path(__file__).resolve().parents[1]
     src = subprocess.check_output(

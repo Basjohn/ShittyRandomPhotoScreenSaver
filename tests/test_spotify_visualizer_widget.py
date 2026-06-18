@@ -1279,8 +1279,11 @@ def _capture_bubble_runtime_snapshot(
 
     assert manager.calls, "Bubble dispatch produced no compute task"
     args = manager.calls[-1]["args"]
-    pos_data, _extra_data, _trail_data, _count = manager.calls[-1]["worker"](*args)
+    pos_data, _extra_data, _trail_data, _count, perf_diag = manager.calls[-1]["worker"](*args)
     radii = [float(pos_data[i]) for i in range(2, len(pos_data), 4)]
+    assert isinstance(perf_diag, dict)
+    assert perf_diag["worker_total_ms"] >= 0.0
+    assert perf_diag["collision_pairs"] >= 0.0
     sim = getattr(widget, "_bubble_simulation", None)
     big_expansion_ratios: list[float] = []
     if sim is not None:
@@ -1764,6 +1767,99 @@ def _manual_floor_bass_dominant_tail_runtime_log_replay_profile() -> list[dict[s
                 "onset_detected": True,
                 "onset_type": "kick",
                 "onset_strength": 0.02,
+            },
+        },
+    ]
+
+
+def _latest_live_manual_floor_runtime_log_replay_profile() -> list[dict[str, object]]:
+    """Replay the newer 2026-06-15 Bubble live family from `21:10:54 .. 21:13:19`.
+
+    This newer run matters because it is closer to the current restored Bubble
+    baseline than the older failure windows. The shape we need to preserve is:
+    - a soft opener that still has honest small-lane life
+    - repeated hot manual-floor windows with `support=0.000`
+    - mixed hot sections where some windows are broad/mid-rich and some are
+      much thinner, without letting the small lane collapse back toward death
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.34, "mid": 0.28, "high": 0.08, "overall": 0.42},
+            "broad": {"bass": 0.18, "mid": 0.26, "high": 0.07, "overall": 0.36},
+            "transient": {"bass_transient": 0.05, "mid_transient": 0.06, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 0.42, "mid": 0.32, "high": 0.09, "overall": 0.49},
+            "broad": {"bass": 0.21, "mid": 0.29, "high": 0.08, "overall": 0.40},
+            "transient": {"bass_transient": 0.04, "mid_transient": 0.06, "high_transient": 0.01},
+        },
+        {
+            "pulse": {"bass": 1.43, "mid": 0.66, "high": 0.27, "overall": 0.76},
+            "broad": {"bass": 0.34, "mid": 0.31, "high": 0.09, "overall": 0.58},
+            "transient": {
+                "bass_transient": 1.02,
+                "mid_transient": 0.42,
+                "high_transient": 0.10,
+                "onset_detected": True,
+                "onset_type": "kick",
+                "onset_strength": 0.26,
+            },
+        },
+        {
+            "pulse": {"bass": 1.00, "mid": 0.49, "high": 0.10, "overall": 0.63},
+            "broad": {"bass": 0.28, "mid": 0.23, "high": 0.05, "overall": 0.46},
+            "transient": {"bass_transient": 0.18, "mid_transient": 0.11, "high_transient": 0.02},
+        },
+        {
+            "pulse": {"bass": 1.12, "mid": 0.30, "high": 0.13, "overall": 0.60},
+            "broad": {"bass": 0.30, "mid": 0.16, "high": 0.05, "overall": 0.43},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.44, "mid": 0.72, "high": 0.18, "overall": 0.75},
+            "broad": {"bass": 0.35, "mid": 0.35, "high": 0.07, "overall": 0.58},
+            "transient": {
+                "bass_transient": 0.72,
+                "mid_transient": 0.38,
+                "high_transient": 0.07,
+                "onset_detected": True,
+                "onset_type": "snare",
+                "onset_strength": 0.16,
+            },
+        },
+        {
+            "pulse": {"bass": 0.80, "mid": 0.33, "high": 0.07, "overall": 0.54},
+            "broad": {"bass": 0.24, "mid": 0.17, "high": 0.04, "overall": 0.38},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 1.26, "mid": 0.72, "high": 0.26, "overall": 0.73},
+            "broad": {"bass": 0.30, "mid": 0.34, "high": 0.10, "overall": 0.55},
+            "transient": {
+                "bass_transient": 0.35,
+                "mid_transient": 0.22,
+                "high_transient": 0.05,
+                "onset_detected": True,
+                "onset_type": "vocal_swell",
+                "onset_strength": 0.12,
+            },
+        },
+        {
+            "pulse": {"bass": 1.21, "mid": 0.63, "high": 0.13, "overall": 0.68},
+            "broad": {"bass": 0.29, "mid": 0.29, "high": 0.05, "overall": 0.50},
+            "transient": {"bass_transient": 0.16, "mid_transient": 0.08, "high_transient": 0.02},
+        },
+        {
+            "pulse": {"bass": 1.64, "mid": 0.51, "high": 0.12, "overall": 0.69},
+            "broad": {"bass": 0.36, "mid": 0.23, "high": 0.04, "overall": 0.49},
+            "transient": {
+                "bass_transient": 0.22,
+                "mid_transient": 0.07,
+                "high_transient": 0.01,
+                "onset_detected": True,
+                "onset_type": "kick",
+                "onset_strength": 0.08,
             },
         },
     ]
@@ -2273,6 +2369,50 @@ def test_bubble_dispatch_skips_while_pending_result_waits_for_ui_tick(qt_app, qt
 
 
 @pytest.mark.qt
+def test_bubble_dispatch_does_not_queue_duplicate_compute_while_previous_compute_is_in_flight(qt_app, qtbot, monkeypatch):
+    parent = _FakeDisplayParent()
+    qtbot.addWidget(parent)
+
+    fake_engine = _FakeEngine(bar_count=8)
+    fake_engine.get_pre_agc_energy_bands = lambda: SimpleNamespace(bass=0.52, mid=0.31, high=0.08, overall=0.44)
+    fake_engine.get_transient_energy_bands = lambda: SimpleNamespace(
+        bass_transient=0.11,
+        mid_transient=0.04,
+        high_transient=0.01,
+        onset_detected=False,
+        onset_type="",
+        onset_strength=0.0,
+    )
+    fake_engine.get_event_scheduler = lambda: None
+
+    monkeypatch.setattr(
+        vis_mod,
+        "get_shared_spotify_beat_engine",
+        lambda *_: fake_engine,
+    )
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    widget._engine = fake_engine
+    widget.set_visualization_mode(VisualizerMode.BUBBLE)
+    widget._mode_teardown_block_until_ready = False
+    widget._bubble_compute_pending = False
+    widget._thread_manager = _BubbleDispatchThreadManager()
+    widget._spotify_playing = True
+    widget._bubble_last_tick_ts = time.time() - 0.016
+
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+    first_call_count = len(widget._thread_manager.calls)
+
+    # No callback has run, so the prior compute is still considered in-flight.
+    widget._bubble_last_tick_ts = time.time() - 0.016
+    tick_pipeline.dispatch_bubble_simulation(widget, time.time())
+
+    assert first_call_count == 1
+    assert len(widget._thread_manager.calls) == 1
+    assert widget._bubble_compute_pending is True
+
+
+@pytest.mark.qt
 def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_app, qtbot):
     parent = _FakeDisplayParent()
     qtbot.addWidget(parent)
@@ -2282,7 +2422,7 @@ def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_
 
     result = SimpleNamespace(
         success=True,
-        result=([1.0, 2.0], [3.0], [4.0], 5),
+        result=([1.0, 2.0], [3.0], [4.0], 5, {"worker_total_ms": 1.25, "collision_pairs": 12.0}),
     )
 
     widget._bubble_compute_done(result)
@@ -2297,6 +2437,8 @@ def test_bubble_compute_done_stages_pending_result_until_ui_tick_consumes_it(qt_
     assert widget._bubble_extra_data == [3.0]
     assert widget._bubble_trail_data == [4.0]
     assert widget._bubble_count == 5
+    assert widget._bubble_last_perf_diag["worker_total_ms"] == pytest.approx(1.25)
+    assert widget._bubble_last_perf_diag["collision_pairs"] == pytest.approx(12.0)
 
 
 def test_beat_engine_playback_state_keeps_worker_warm_for_short_pause():
@@ -6120,6 +6262,78 @@ def test_manual_floor_bass_dominant_tail_replay_stays_alive_without_presence_cru
 
 
 @pytest.mark.qt
+def test_latest_live_manual_floor_replay_keeps_small_lane_alive_through_mixed_hot_windows(
+    qt_app,
+    qtbot,
+):
+    random.seed(10045)
+    profile = _latest_live_manual_floor_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile[:2] * 18 + profile[2:] * 16
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    soft_window = metrics_series[18:26]
+    early_hot = metrics_series[40:56]
+    late_hot = metrics_series[-16:]
+
+    assert soft_window and early_hot and late_hot
+    assert engine.get_floor_snapshot()["support_pressure"] == pytest.approx(0.0)
+    assert engine.get_floor_snapshot()["gate_floor"] == pytest.approx(0.20)
+
+    soft_small = sum(m["max_small_delta"] for m in soft_window) / len(soft_window)
+    early_feed = sum(m["bass"] for m in early_hot) / len(early_hot)
+    late_feed = sum(m["bass"] for m in late_hot) / len(late_hot)
+    early_small = sum(m["max_small_delta"] for m in early_hot) / len(early_hot)
+    late_small = sum(m["max_small_delta"] for m in late_hot) / len(late_hot)
+    early_big = sum(m["big_max_render"] for m in early_hot) / len(early_hot)
+    late_big = sum(m["big_max_render"] for m in late_hot) / len(late_hot)
+    early_expand = sum(m["top_big_expansion"] for m in early_hot) / len(early_hot)
+    late_expand = sum(m["top_big_expansion"] for m in late_hot) / len(late_hot)
+    late_activity = late_small + late_big
+
+    assert soft_small >= 0.020, "Need an alive soft opener or this latest-live Bubble oracle loses meaning."
+    assert early_feed >= 0.95 and late_feed >= 0.95, (
+        "Latest-live manual-floor replay must stay genuinely hot across both hot windows."
+    )
+    assert early_small >= 0.022, (
+        "Latest-live early hot window still leaves the small lane too close to dead flicker."
+    )
+    assert late_small >= 0.021, (
+        "Latest-live late hot window still lets the small lane collapse too far in a still-hot section."
+    )
+    assert late_small >= early_small * 0.78, (
+        "Latest-live late hot window still loses too much small-lane authority relative to the earlier hot window."
+    )
+    assert early_big >= 0.120 and late_big >= 0.118, (
+        "Latest-live replay still leaves the hero lane too modest for repeated hot manual-floor windows."
+    )
+    assert late_activity >= 0.150, (
+        "Latest-live replay still does not keep enough total Bubble activity alive through the late hot window."
+    )
+    assert early_expand >= 3.20 and late_expand >= 3.10, (
+        "Latest-live replay still compresses the hero expansion shape too far during mixed hot windows."
+    )
+
+
+@pytest.mark.qt
 def test_bubble_soft_to_loud_audio_fixture_keeps_loud_section_more_expressive_than_soft(
     qt_app,
     qtbot,
@@ -6373,6 +6587,68 @@ def test_bubble_current_feel_lock_runtime_log_replay_signature(
         abs_tol = 0.001 if key == "head_small" else 0.002
         assert actual[key] == pytest.approx(value, rel=rel, abs=abs_tol), (
             f"Bubble current log-replay feel drifted for {key}: expected near {value:.6f}, got {actual[key]:.6f}."
+        )
+
+
+@pytest.mark.qt
+def test_bubble_current_feel_lock_latest_live_manual_floor_replay_signature(
+    qt_app,
+    qtbot,
+):
+    random.seed(20004)
+    profile = _latest_live_manual_floor_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile[:2] * 18 + profile[2:] * 16
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    soft_window = metrics_series[18:26]
+    early_hot = metrics_series[40:56]
+    late_hot = metrics_series[-16:]
+
+    actual = {
+        "soft_small": sum(m["max_small_delta"] for m in soft_window) / len(soft_window),
+        "early_feed": sum(m["bass"] for m in early_hot) / len(early_hot),
+        "late_feed": sum(m["bass"] for m in late_hot) / len(late_hot),
+        "early_small": sum(m["max_small_delta"] for m in early_hot) / len(early_hot),
+        "late_small": sum(m["max_small_delta"] for m in late_hot) / len(late_hot),
+        "early_big": sum(m["big_max_render"] for m in early_hot) / len(early_hot),
+        "late_big": sum(m["big_max_render"] for m in late_hot) / len(late_hot),
+        "late_expand": sum(m["top_big_expansion"] for m in late_hot) / len(late_hot),
+    }
+    expected = {
+        "soft_small": 0.031724,
+        "early_feed": 1.103438,
+        "late_feed": 1.118250,
+        "early_small": 0.029433,
+        "late_small": 0.023371,
+        "early_big": 0.136217,
+        "late_big": 0.136358,
+        "late_expand": 3.438885,
+    }
+
+    for key, value in expected.items():
+        rel = 0.12
+        abs_tol = 0.002
+        assert actual[key] == pytest.approx(value, rel=rel, abs=abs_tol), (
+            f"Bubble latest-live manual-floor replay feel drifted for {key}: expected near {value:.6f}, got {actual[key]:.6f}."
         )
 
 
@@ -6940,12 +7216,25 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
     widget._perf_tick_frame_count = 60  # type: ignore[attr-defined]
     widget._perf_tick_min_dt = 1.0 / 120.0  # type: ignore[attr-defined]
     widget._perf_tick_max_dt = 1.0 / 20.0  # type: ignore[attr-defined]
+    widget._bubble_last_perf_diag = {  # type: ignore[attr-defined]
+        "worker_total_ms": 3.2,
+        "tick_ms": 2.4,
+        "collision_ms": 1.1,
+        "snapshot_ms": 0.6,
+        "collision_pairs": 48.0,
+        "collision_overlaps": 7.0,
+        "collision_passes": 2.0,
+        "active_bubbles": 24.0,
+        "snapshot_trail_payload_active": 0.0,
+        "snapshot_trail_floats": 0.0,
+    }
 
     with caplog.at_level("INFO"):
         widget._log_perf_snapshot(reset=True)  # type: ignore[attr-defined]
 
     messages = [r.message for r in caplog.records]
     assert any("[PERF] [SPOTIFY_VIS] Tick metrics" in m for m in messages)
+    assert any("[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=3.20" in m for m in messages)
 
 
 def test_compute_bars_returns_list_or_none(np_module):

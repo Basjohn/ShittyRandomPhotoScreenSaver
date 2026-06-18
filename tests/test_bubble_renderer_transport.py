@@ -151,3 +151,116 @@ def test_bubble_renderer_skips_trail_upload_when_tail_effect_disabled():
 
     assert bubble_renderer.upload_uniforms(gl, uniforms, state) is True
     assert not any(call[:2] == ("glUniform3fv", 10) for call in gl.calls)
+
+
+def test_bubble_renderer_transport_preserves_active_payload_prefix_exactly():
+    gl = _CaptureGL()
+    uniforms = {
+        "u_overall_energy": 1,
+        "u_bass_energy": 2,
+        "u_mid_energy": 3,
+        "u_high_energy": 4,
+        "u_playing": 5,
+        "u_ghost_alpha": 6,
+        "u_bubble_count": 7,
+        "u_bubbles_pos": 8,
+        "u_bubbles_extra": 9,
+        "u_bubbles_trail": 10,
+        "u_trail_strength": 11,
+        "u_tail_opacity": 12,
+        "u_specular_dir": 13,
+        "u_gradient_dir": 14,
+        "u_gradient_mode": 15,
+        "u_outline_color": 16,
+        "u_specular_color": 17,
+        "u_gradient_light": 18,
+        "u_gradient_dark": 19,
+        "u_pop_color": 20,
+    }
+    state = _make_state(
+        _bubble_count=2,
+        _bubble_pos_data=[0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80],
+        _bubble_extra_data=[0.91, 0.92, 0.93, 0.94, 1.01, 1.02, 1.03, 1.04],
+        _bubble_trail_data=[
+            0.11, 0.12, 0.13, 0.21, 0.22, 0.23, 0.31, 0.32, 0.33,
+            0.41, 0.42, 0.43, 0.51, 0.52, 0.53, 0.61, 0.62, 0.63,
+        ],
+        _bubble_trail_strength=0.40,
+        _bubble_tail_opacity=0.75,
+    )
+
+    assert bubble_renderer.upload_uniforms(gl, uniforms, state) is True
+
+    pos = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 8))
+    extra = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 9))
+    trail = next(call for call in gl.calls if call[:2] == ("glUniform3fv", 10))
+
+    assert pos[2] == 2
+    assert extra[2] == 2
+    assert trail[2] == 6
+    assert pos[4][:8].tolist() == pytest.approx(state._bubble_pos_data)
+    assert extra[4][:8].tolist() == pytest.approx(state._bubble_extra_data)
+    assert trail[4][:18].tolist() == pytest.approx(state._bubble_trail_data)
+
+
+def test_bubble_renderer_zeroes_only_the_active_prefix_when_count_shrinks():
+    gl = _CaptureGL()
+    uniforms = {
+        "u_overall_energy": 1,
+        "u_bass_energy": 2,
+        "u_mid_energy": 3,
+        "u_high_energy": 4,
+        "u_playing": 5,
+        "u_ghost_alpha": 6,
+        "u_bubble_count": 7,
+        "u_bubbles_pos": 8,
+        "u_bubbles_extra": 9,
+        "u_bubbles_trail": 10,
+        "u_trail_strength": 11,
+        "u_tail_opacity": 12,
+        "u_specular_dir": 13,
+        "u_gradient_dir": 14,
+        "u_gradient_mode": 15,
+        "u_outline_color": 16,
+        "u_specular_color": 17,
+        "u_gradient_light": 18,
+        "u_gradient_dark": 19,
+        "u_pop_color": 20,
+    }
+    state = _make_state(
+        _bubble_count=3,
+        _bubble_pos_data=[float(i) for i in range(12)],
+        _bubble_extra_data=[float(i) + 0.5 for i in range(12)],
+        _bubble_trail_data=[float(i) + 0.25 for i in range(27)],
+        _bubble_trail_strength=0.40,
+        _bubble_tail_opacity=0.75,
+    )
+
+    assert bubble_renderer.upload_uniforms(gl, uniforms, state) is True
+    first_pos = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 8))
+    first_extra = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 9))
+    first_trail = next(call for call in gl.calls if call[:2] == ("glUniform3fv", 10))
+
+    gl.calls.clear()
+    state._bubble_count = 1
+    state._bubble_pos_data = [9.1, 9.2, 9.3, 9.4]
+    state._bubble_extra_data = [8.1, 8.2, 8.3, 8.4]
+    state._bubble_trail_data = [7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9]
+
+    assert bubble_renderer.upload_uniforms(gl, uniforms, state) is True
+    second_pos = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 8))
+    second_extra = next(call for call in gl.calls if call[:2] == ("glUniform4fv", 9))
+    second_trail = next(call for call in gl.calls if call[:2] == ("glUniform3fv", 10))
+
+    assert second_pos[3] == first_pos[3]
+    assert second_extra[3] == first_extra[3]
+    assert second_trail[3] == first_trail[3]
+    assert second_pos[2] == 1
+    assert second_extra[2] == 1
+    assert second_trail[2] == 3
+    assert second_pos[4][:4].tolist() == pytest.approx([9.1, 9.2, 9.3, 9.4])
+    assert second_extra[4][:4].tolist() == pytest.approx([8.1, 8.2, 8.3, 8.4])
+    assert second_trail[4][:9].tolist() == pytest.approx([7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9])
+    assert second_pos[4][4:12].tolist() == pytest.approx([0.0] * 8)
+    assert second_extra[4][4:12].tolist() == pytest.approx([0.0] * 8)
+    assert second_trail[4][9:27].tolist() == pytest.approx([0.0] * 18)

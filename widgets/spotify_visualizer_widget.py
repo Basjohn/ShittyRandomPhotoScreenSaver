@@ -369,6 +369,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_pending_result: Optional[tuple[list, list, list, int]] = None
         self._bubble_pending_result_lock = threading.Lock()
         self._bubble_pending_result_skip_count: int = 0
+        self._bubble_last_perf_diag: Dict[str, float] = {}
         self._bubble_last_tick_ts: float = 0.0
         self._bubble_dispatch_energy_snapshot: Dict[str, float] = {
             "bass": 0.0,
@@ -1282,6 +1283,7 @@ class SpotifyVisualizerWidget(QWidget):
     def _bubble_compute_worker(self, dt: float, eb_snap: dict,
                                sim_settings: dict, pulse_params: dict):
         """Run bubble simulation on COMPUTE thread pool. Returns snapshot data."""
+        worker_start = time.perf_counter()
         if self._bubble_simulation is None:
             from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
             self._bubble_simulation = BubbleSimulation()
@@ -1297,25 +1299,35 @@ class SpotifyVisualizerWidget(QWidget):
             big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
         )
         count = self._bubble_simulation.count
+        perf_diag = {}
+        get_perf_diag = getattr(self._bubble_simulation, "get_perf_diagnostics", None)
+        if callable(get_perf_diag):
+            try:
+                perf_diag = dict(get_perf_diag())
+            except Exception:
+                perf_diag = {}
+        perf_diag["worker_total_ms"] = (time.perf_counter() - worker_start) * 1000.0
+        perf_diag["result_count"] = float(count)
         if not getattr(self, '_bubble_worker_logged', False):
             logger.debug(
                 "[SPOTIFY_VIS] Bubble worker: count=%d pos_len=%d extra_len=%d dt=%.3f",
                 count, len(pos_data), len(extra_data), dt,
             )
             self._bubble_worker_logged = True
-        return (pos_data, extra_data, trail_data, count)
+        return (pos_data, extra_data, trail_data, count, perf_diag)
 
     def _bubble_compute_done(self, task_result) -> None:
         """Callback from COMPUTE thread — stage the latest result for the next UI tick."""
         self._bubble_compute_pending = False
         if task_result.success and task_result.result is not None:
-            pos_data, extra_data, trail_data, count = task_result.result
+            pos_data, extra_data, trail_data, count, perf_diag = task_result.result
             if not getattr(self, '_bubble_done_logged', False):
                 logger.debug(
                     "[SPOTIFY_VIS] Bubble compute done: success=%s count=%d",
                     task_result.success, count,
                 )
                 self._bubble_done_logged = True
+            self._bubble_last_perf_diag = dict(perf_diag or {})
             self._store_pending_bubble_result(pos_data, extra_data, trail_data, count)
         elif not task_result.success:
             logger.warning(

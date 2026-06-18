@@ -446,6 +446,24 @@ def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
                 widget._bubble_pending_result_skip_count = 0
         except Exception:
             logger.debug("[SPOTIFY_VIS] Bubble PERF metrics logging failed", exc_info=True)
+        try:
+            bubble_perf = getattr(widget, "_bubble_last_perf_diag", None)
+            if isinstance(bubble_perf, dict) and bubble_perf:
+                logger.info(
+                    "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
+                    float(bubble_perf.get("worker_total_ms", 0.0) or 0.0),
+                    float(bubble_perf.get("tick_ms", 0.0) or 0.0),
+                    float(bubble_perf.get("collision_ms", 0.0) or 0.0),
+                    float(bubble_perf.get("snapshot_ms", 0.0) or 0.0),
+                    int(bubble_perf.get("collision_pairs", 0.0) or 0),
+                    int(bubble_perf.get("collision_overlaps", 0.0) or 0),
+                    int(bubble_perf.get("collision_passes", 0.0) or 0),
+                    int(bubble_perf.get("active_bubbles", 0.0) or 0),
+                    bool(bubble_perf.get("snapshot_trail_payload_active", 0.0)),
+                    int(bubble_perf.get("snapshot_trail_floats", 0.0) or 0),
+                )
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Bubble PERF diagnostics logging failed", exc_info=True)
     except Exception:
         logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
     finally:

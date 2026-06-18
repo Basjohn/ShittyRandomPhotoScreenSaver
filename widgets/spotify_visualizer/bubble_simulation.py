@@ -212,6 +212,7 @@ class BubbleSimulation:
         self._pair_bounce_cooldowns: Dict[Tuple[int, int], float] = {}
         self._last_big_lane_diag: Dict[str, float] = {}
         self._last_big_render_diag: Dict[str, float] = {}
+        self._last_perf_diag: Dict[str, float] = {}
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -235,6 +236,7 @@ class BubbleSimulation:
         self._pair_bounce_cooldowns.clear()
         self._last_big_lane_diag = {}
         self._last_big_render_diag = {}
+        self._last_perf_diag = {}
 
     @property
     def count(self) -> int:
@@ -248,10 +250,15 @@ class BubbleSimulation:
         """Compatibility diagnostics for the stricter Bubble oracle."""
         return dict(self._last_big_render_diag)
 
+    def get_perf_diagnostics(self) -> Dict[str, float]:
+        """Return the latest Bubble-owned perf breakdown for audit logging."""
+        return dict(self._last_perf_diag)
+
     def tick(self, dt: float, energy_bands: Optional[object], settings: Dict) -> None:
         """Advance simulation by *dt* seconds."""
         if dt <= 0.0 or dt > 1.0:
             return
+        tick_start = time.perf_counter()
 
         self._time += dt
 
@@ -894,6 +901,17 @@ class BubbleSimulation:
                 small_count += 1
                 small_spawn_budget -= 1
 
+        tick_ms = (time.perf_counter() - tick_start) * 1000.0
+        perf_diag = dict(self._last_perf_diag)
+        perf_diag.update(
+            {
+                "tick_ms": tick_ms,
+                "active_bubbles": float(sum(1 for b in self._bubbles if not b.popping and not b.exiting)),
+                "total_bubbles": float(len(self._bubbles)),
+            }
+        )
+        self._last_perf_diag = perf_diag
+
     def _spawn_bubble(self, is_big: bool, stream_dir: str,
                       surface_reach: float, drift_dir: str) -> None:
         if drift_dir in _SWIRL_DIRECTIONS:
@@ -956,7 +974,20 @@ class BubbleSimulation:
         """
         active = [b for b in self._bubbles if not b.popping and not b.exiting]
         count = len(active)
+        perf_start = time.perf_counter()
+        pair_checks = 0
+        overlap_hits = 0
         if count < 2:
+            perf_diag = dict(self._last_perf_diag)
+            perf_diag.update(
+                {
+                    "collision_ms": 0.0,
+                    "collision_pairs": 0.0,
+                    "collision_overlaps": 0.0,
+                    "collision_passes": 0.0,
+                }
+            )
+            self._last_perf_diag = perf_diag
             return
 
         max_bounce_pct = max(bounce_big_pct, bounce_small_pct)
@@ -983,28 +1014,27 @@ class BubbleSimulation:
         for _ in range(passes):
             pending_dx = [0.0] * count if smooth_mode else []
             pending_dy = [0.0] * count if smooth_mode else []
+            collision_radii = [
+                self._effective_collision_radius(
+                    bubble,
+                    big_bass_pulse=big_bass_pulse,
+                    small_freq_pulse=small_freq_pulse,
+                    big_contraction_bias=big_contraction_bias,
+                    big_size_clamp=big_size_clamp,
+                )
+                for bubble in active
+            ]
             for i in range(count):
                 a = active[i]
                 if a.popping or a.exiting:
                     continue
                 for j in range(i + 1, count):
+                    pair_checks += 1
                     b = active[j]
                     if b.popping or b.exiting:
                         continue
-                    a_radius = self._effective_collision_radius(
-                        a,
-                        big_bass_pulse=big_bass_pulse,
-                        small_freq_pulse=small_freq_pulse,
-                        big_contraction_bias=big_contraction_bias,
-                        big_size_clamp=big_size_clamp,
-                    )
-                    b_radius = self._effective_collision_radius(
-                        b,
-                        big_bass_pulse=big_bass_pulse,
-                        small_freq_pulse=small_freq_pulse,
-                        big_contraction_bias=big_contraction_bias,
-                        big_size_clamp=big_size_clamp,
-                    )
+                    a_radius = collision_radii[i]
+                    b_radius = collision_radii[j]
                     dx = b.x - a.x
                     dy = b.y - a.y
                     dist = math.hypot(dx, dy)
@@ -1040,6 +1070,7 @@ class BubbleSimulation:
 
                     if dist >= target_gap:
                         continue
+                    overlap_hits += 1
 
                     if dist < 1e-5:
                         angle = random.uniform(0.0, math.tau)
@@ -1183,6 +1214,16 @@ class BubbleSimulation:
             stale = [k for k, t in self._pair_bounce_cooldowns.items() if t <= now]
             for key in stale:
                 self._pair_bounce_cooldowns.pop(key, None)
+        perf_diag = dict(self._last_perf_diag)
+        perf_diag.update(
+            {
+                "collision_ms": (time.perf_counter() - perf_start) * 1000.0,
+                "collision_pairs": float(pair_checks),
+                "collision_overlaps": float(overlap_hits),
+                "collision_passes": float(passes),
+            }
+        )
+        self._last_perf_diag = perf_diag
 
     def _effective_collision_radius(
         self,
@@ -1566,9 +1607,15 @@ class BubbleSimulation:
             extra_data: [spec_size_factor, rotation, spec_ox, spec_oy] × count (vec4 per bubble)
             trail_data: [tail.xy,str, mid.xy,str, head.xy,str] × count representing smear streak samples
         """
-        pos_data: List[float] = []
-        extra_data: List[float] = []
-        trail_data: List[float] = []
+        snap_start = time.perf_counter()
+        bubble_count = len(self._bubbles)
+        trail_payload_active = any(
+            b.trail_strength > 0.001 and b.trail_ready
+            for b in self._bubbles
+        )
+        pos_data: List[float] = [0.0] * (bubble_count * 4)
+        extra_data: List[float] = [0.0] * (bubble_count * 4)
+        trail_data: List[float] = [0.0] * (bubble_count * 9) if trail_payload_active else []
         _snap_diag = (self._diag_tick_count <= 5 or self._diag_tick_count % 60 == 0)
         big_render_diag = {
             "big_render_count": 0.0,
@@ -1578,7 +1625,7 @@ class BubbleSimulation:
             "avg_big_render_radius": 0.0,
         }
 
-        for b in self._bubbles:
+        for idx, b in enumerate(self._bubbles):
             # Pulse: smoothed energy drives visible size thump.
             # Multipliers: big 4.0x, small 3.0x at max slider (slider 0-1).
             # Small bubbles below tiny threshold: suppress pulse to avoid
@@ -1628,13 +1675,21 @@ class BubbleSimulation:
             if b.is_big:
                 spec_factor = min(spec_factor, big_specular_max_size)
 
-            pos_data.extend([b.x, b.y, r, b.alpha])
-            extra_data.extend([spec_factor, b.rotation, b.spec_ox, b.spec_oy])
+            pos_base = idx * 4
+            pos_data[pos_base] = b.x
+            pos_data[pos_base + 1] = b.y
+            pos_data[pos_base + 2] = r
+            pos_data[pos_base + 3] = b.alpha
+            extra_data[pos_base] = spec_factor
+            extra_data[pos_base + 1] = b.rotation
+            extra_data[pos_base + 2] = b.spec_ox
+            extra_data[pos_base + 3] = b.spec_oy
 
             # Smear trail: emit interpolated samples from tail -> head
-            if b.trail_strength > 0.001 and b.trail_ready:
+            if trail_payload_active and b.trail_strength > 0.001 and b.trail_ready:
                 dx = b.x - b.trail_tail_x
                 dy = b.y - b.trail_tail_y
+                trail_base = idx * 9
                 for step in range(TRAIL_STEPS):
                     if TRAIL_STEPS > 1:
                         seg_t = float(step) / float(TRAIL_STEPS - 1)
@@ -1643,10 +1698,17 @@ class BubbleSimulation:
                     sample_x = b.trail_tail_x + dx * seg_t
                     sample_y = b.trail_tail_y + dy * seg_t
                     falloff = 0.45 + 0.55 * seg_t
-                    trail_data.extend([sample_x, sample_y, b.trail_strength * falloff])
-            else:
-                for _ in range(TRAIL_STEPS):
-                    trail_data.extend([b.x, b.y, 0.0])
+                    step_base = trail_base + step * 3
+                    trail_data[step_base] = sample_x
+                    trail_data[step_base + 1] = sample_y
+                    trail_data[step_base + 2] = b.trail_strength * falloff
+            elif trail_payload_active:
+                trail_base = idx * 9
+                for step in range(TRAIL_STEPS):
+                    step_base = trail_base + step * 3
+                    trail_data[step_base] = b.x
+                    trail_data[step_base + 1] = b.y
+                    trail_data[step_base + 2] = 0.0
 
         if big_render_diag["big_render_count"] > 0.0:
             big_render_diag["avg_big_render_radius"] /= big_render_diag["big_render_count"]
@@ -1663,4 +1725,15 @@ class BubbleSimulation:
                 fb.pulse_energy, pf, fb.radius, fb.radius * pf,
             )
 
+        perf_diag = dict(self._last_perf_diag)
+        perf_diag.update(
+            {
+                "snapshot_ms": (time.perf_counter() - snap_start) * 1000.0,
+                "snapshot_trail_payload_active": 1.0 if trail_payload_active else 0.0,
+                "snapshot_trail_floats": float(len(trail_data)),
+                "snapshot_pos_floats": float(len(pos_data)),
+                "snapshot_extra_floats": float(len(extra_data)),
+            }
+        )
+        self._last_perf_diag = perf_diag
         return pos_data, extra_data, trail_data
