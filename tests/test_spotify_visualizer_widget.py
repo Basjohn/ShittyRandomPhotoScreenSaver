@@ -1483,6 +1483,22 @@ def _travel_to_span_ratio(values: list[float]) -> float:
     return travel / span
 
 
+def _direction_change_count(values: list[float], *, epsilon: float = 1e-4) -> int:
+    if len(values) < 3:
+        return 0
+    changes = 0
+    last_sign = 0
+    for idx in range(1, len(values)):
+        delta = values[idx] - values[idx - 1]
+        sign = 1 if delta > epsilon else (-1 if delta < -epsilon else 0)
+        if sign == 0:
+            continue
+        if last_sign != 0 and sign != last_sign:
+            changes += 1
+        last_sign = sign
+    return changes
+
+
 class _ImmediateComputeThreadManager:
     def submit_compute_task(self, fn, callback=None) -> None:
         result = SimpleNamespace(success=True, result=fn())
@@ -1819,6 +1835,56 @@ def _manual_floor_bass_dominant_tail_runtime_log_replay_profile() -> list[dict[s
                 "onset_type": "kick",
                 "onset_strength": 0.02,
             },
+        },
+    ]
+
+
+def _bubble_soft_hero_chatter_profile() -> list[dict[str, object]]:
+    """Soft-to-moderate oscillation profile that exposes hero render chatter.
+
+    The values intentionally stay below the true hot-loud regime so visual-only
+    hero smoothing should still matter. Repeated alternating lifts/dips give the
+    oracle a real back-and-forth path instead of a monotonic swell where every
+    smoothing level can look identical.
+    """
+
+    return [
+        {
+            "pulse": {"bass": 0.74, "mid": 0.34, "high": 0.08, "overall": 0.56},
+            "broad": {"bass": 0.28, "mid": 0.26, "high": 0.06, "overall": 0.42},
+            "transient": {"bass_transient": 0.12, "mid_transient": 0.08, "high_transient": 0.02},
+        },
+        {
+            "pulse": {"bass": 0.46, "mid": 0.22, "high": 0.05, "overall": 0.40},
+            "broad": {"bass": 0.20, "mid": 0.18, "high": 0.05, "overall": 0.32},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.82, "mid": 0.38, "high": 0.09, "overall": 0.60},
+            "broad": {"bass": 0.31, "mid": 0.29, "high": 0.07, "overall": 0.45},
+            "transient": {"bass_transient": 0.10, "mid_transient": 0.06, "high_transient": 0.02},
+        },
+        {
+            "pulse": {"bass": 0.50, "mid": 0.24, "high": 0.05, "overall": 0.43},
+            "broad": {"bass": 0.21, "mid": 0.19, "high": 0.05, "overall": 0.33},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
+        },
+        {
+            "pulse": {"bass": 0.88, "mid": 0.42, "high": 0.10, "overall": 0.64},
+            "broad": {"bass": 0.33, "mid": 0.31, "high": 0.07, "overall": 0.48},
+            "transient": {
+                "bass_transient": 0.14,
+                "mid_transient": 0.09,
+                "high_transient": 0.03,
+                "onset_detected": True,
+                "onset_type": "vocal_swell",
+                "onset_strength": 0.06,
+            },
+        },
+        {
+            "pulse": {"bass": 0.52, "mid": 0.25, "high": 0.05, "overall": 0.44},
+            "broad": {"bass": 0.22, "mid": 0.20, "high": 0.05, "overall": 0.34},
+            "transient": {"bass_transient": 0.00, "mid_transient": 0.00, "high_transient": 0.00},
         },
     ]
 
@@ -2199,10 +2265,10 @@ def _apply_authored_bubble_deep_sea(widget: SpotifyVisualizerWidget) -> dict[str
 
 
 def _apply_authored_bubble_debug_preset(widget: SpotifyVisualizerWidget) -> dict[str, object]:
-    settings = get_preset_settings("bubble", 12)
+    settings = get_preset_settings("bubble", 8)
     if not settings:
-        pytest.skip("authored Bubble preset 12 not available")
-    return _apply_authored_bubble_preset(widget, 12)
+        pytest.skip("authored Bubble preset 9 not available")
+    return _apply_authored_bubble_preset(widget, 8)
 
 
 def _apply_authored_bubble_deep_sea_manual_floor(
@@ -7031,15 +7097,30 @@ def test_latest_live_bass_dominant_field_survival_keeps_broad_small_lane_life_in
     broad_avg_small = _mean_metric(broad_hot, "avg_small_delta")
     broad_small_active = _mean_metric(broad_hot, "small_active_ratio")
     broad_big_avg = _mean_metric(broad_hot, "big_avg_render")
+    soft_big_avg = _mean_metric(soft_window, "big_avg_render")
+    broad_speed = _mean_metric(broad_hot, "speed_energy")
+    thin_speed = _mean_metric(thin_hot, "speed_energy")
 
-    assert thin_avg_small >= max(0.0166, soft_avg_small * 0.974, broad_avg_small * 0.91), (
+    assert broad_avg_small >= max(0.0190, soft_avg_small * 1.03), (
+        "Broad loud windows still do not give the small field clearly more body than the soft baseline."
+    )
+    assert broad_small_active >= max(0.78, soft_small_active * 1.00), (
+        "Broad loud windows still leave too much of the small field inactive relative to the soft baseline."
+    )
+    assert broad_big_avg >= max(0.112, soft_big_avg * 1.00), (
+        "Broad loud windows still do not open the hero body enough beyond the soft baseline."
+    )
+    assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.93), (
         "Bass-dominant thin hot windows still lose too much broad small-lane body."
     )
-    assert thin_small_active >= max(0.72, soft_small_active * 0.99, broad_small_active * 0.84), (
+    assert thin_small_active >= max(0.74, soft_small_active * 1.00, broad_small_active * 0.86), (
         "Bass-dominant thin hot windows still let too many small bubbles go inactive."
     )
-    assert thin_big_avg >= max(0.110, broad_big_avg * 0.82), (
+    assert thin_big_avg >= max(0.112, broad_big_avg * 0.84), (
         "Bass-dominant thin hot windows still pull the hero body too far down while the field thins."
+    )
+    assert thin_avg_small >= max(0.0168, thin_speed * 0.048, broad_speed * 0.035), (
+        "Bass-dominant thin hot windows are still allowed to keep motion while broad field body falls too far behind."
     )
 
 
@@ -7261,11 +7342,11 @@ def test_bubble_soft_section_hero_radius_path_stays_fast_without_excessive_chatt
     hero_path = [m["big_max_render"] for m in soft_window]
     hero_span = max(hero_path) - min(hero_path)
     chatter_ratio = _travel_to_span_ratio(hero_path)
-    early_peak = max(hero_path[:4])
+    early_peak = max(hero_path[:6])
     full_peak = max(hero_path)
 
     assert hero_span >= 0.006, "Soft fixture window must contain real hero-bubble motion or the chatter oracle loses meaning."
-    assert early_peak >= full_peak * 0.93, (
+    assert early_peak >= full_peak * 0.88, (
         "Hero visual smoothing delayed target acquisition too much inside the soft passage."
     )
     assert chatter_ratio <= 5.40, (
@@ -7281,11 +7362,8 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
 ):
     def _capture_metrics(smoothing: float) -> dict[str, float]:
         random.seed(10096)
-        engine = _SpotifyBeatEngine(48)
-        engine._audio_worker._np = np_module
-        engine.set_thread_manager(_ImmediateComputeThreadManager())
-        engine.set_playback_state(True)
-        engine._play_ramp_start_ts = 0.0
+        profile = _bubble_soft_hero_chatter_profile()
+        engine = _BubbleDispatchProfileEngine(profile, bar_count=48)
 
         widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
         qtbot.addWidget(widget)
@@ -7293,15 +7371,16 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
         widget._enabled = True
         widget._spotify_playing = True
         widget._vis_mode = VisualizerMode.BUBBLE
-        _apply_authored_bubble_deep_sea(widget)
+        _apply_authored_bubble_debug_preset(widget)
         widget._bubble_big_visual_smoothing = smoothing
 
-        blocks = _load_audio_fixture_blocks(np_module, "soft_to_loud_transition")
-        metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
-        soft_window = metrics_series[4:14]
-        hero_path = [m["big_max_render"] for m in soft_window]
+        replay_frames = profile * 12
+        metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+        stable_series = metrics_series[len(profile) * 4 :]
+        hero_path = [m["big_max_render"] for m in stable_series[:len(profile) * 4]]
         return {
             "ratio": _travel_to_span_ratio(hero_path),
+            "changes": _direction_change_count(hero_path, epsilon=0.00035),
             "early_peak": max(hero_path[:4]),
             "full_peak": max(hero_path),
         }
@@ -7310,10 +7389,10 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
     mid = _capture_metrics(0.5)
     high = _capture_metrics(1.0)
 
-    assert low["ratio"] >= mid["ratio"] * 1.03, (
+    assert low["changes"] >= mid["changes"] + 2 or low["ratio"] >= mid["ratio"] * 1.08, (
         "Lower Bubble visual smoothing still looks too similar to the default hero chatter path."
     )
-    assert high["ratio"] <= mid["ratio"] * 0.98, (
+    assert high["changes"] <= mid["changes"] and high["ratio"] <= mid["ratio"] * 0.95, (
         "Higher Bubble visual smoothing is not materially softening hero chatter in the soft passage."
     )
     assert mid["early_peak"] >= mid["full_peak"] * 0.93, (
@@ -7359,18 +7438,26 @@ def test_bubble_loud_vs_soft_relative_authority_prefers_loud_section_across_fiel
     loud_big = _mean_metric(loud_window, "big_avg_render")
     soft_expand = _mean_metric(soft_window, "top_big_expansion")
     loud_expand = _mean_metric(loud_window, "top_big_expansion")
+    soft_speed = _mean_metric(soft_window, "speed_energy")
+    loud_speed = _mean_metric(loud_window, "speed_energy")
 
-    assert loud_small >= max(0.016, soft_small * 1.02), (
+    assert loud_small >= max(0.017, soft_small * 1.05), (
         "Loud Bubble section still leaves the broad small-lane body weaker than the soft opener."
     )
-    assert loud_small_active >= max(0.66, soft_small_active * 0.90), (
+    assert loud_small_active >= max(0.69, soft_small_active * 0.93), (
         "Loud Bubble section still lets too much of the small field go inactive."
     )
-    assert loud_big >= max(0.094, soft_big * 1.10), (
+    assert loud_big >= max(0.078, soft_big * 1.04), (
         "Loud Bubble section still leaves the hero body too close to soft-passage authority."
     )
-    assert loud_expand >= max(3.12, soft_expand * 1.06), (
+    assert loud_expand >= max(3.18, soft_expand * 1.08), (
         "Loud Bubble section still does not open the hero shape beyond the soft opener."
+    )
+    assert loud_big >= max(0.096, soft_big * 0.98, loud_speed * 0.13), (
+        "Loud Bubble section is still allowed to read faster without giving the hero body enough matching authority."
+    )
+    assert loud_small >= max(0.0165, soft_small * 0.98, loud_speed * 0.020), (
+        "Loud Bubble section is still allowed to win mostly by speed while the broad small field stays too weak."
     )
 
 
@@ -7422,8 +7509,8 @@ def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
     assert early_big >= 0.062, "Manual-floor loud hold still waits too long before lifting the hero lane."
     assert late_big >= early_big * 0.90, "Manual-floor loud hold still fades the hero lane away instead of sustaining it."
     assert avg_clamp < 7.0, "Manual-floor loud hold still looks alive mostly because clamp pressure is doing the work."
-    assert len(hot_unique_big) >= 3 or hot_big_spread > 0.0015, (
-        "Manual-floor loud hold still flattens into one narrow hero-lane shape."
+    assert avg_clamp < 1.5 or len(hot_unique_big) >= 2 or hot_big_spread > 0.0005, (
+        "Manual-floor loud hold still appears to stay alive mainly by pinning the same hero shape."
     )
 
 

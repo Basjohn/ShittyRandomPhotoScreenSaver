@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-06-14
+Last updated: 2026-06-19
 
 Short contract index for SRPSS.
 
@@ -91,8 +91,9 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 |---|---|---|---|
 | Shared service-widget lifecycle mechanics | `widgets/service_widget_runtime.py` | Gmail, Reddit, Weather | One place for transition-aware refresh deferral, visible fallback preservation, and timer ownership. |
 | Gmail backend routing | `core/gmail/gmail_backend.py` | OAuth, IMAP, REST, widget | One backend-selection seam for Gmail data/actions. |
+| Reddit post-source provider seam | `core/reddit_post_provider.py` | `widgets/reddit_widget.py`, widget factory, future external/authenticated feed backends | One explicit post-retrieval contract for the branded Reddit widget, with family-shared provider selection and hosted PullPush default, without moving card/runtime ownership out of the widget. |
 | Gmail overlay rendering / runtime behavior | `widgets/gmail_widget.py` | `widgets/gmail_components.py`, settings tab | One Gmail card/runtime contract. |
-| Reddit overlay rendering / runtime behavior | `widgets/reddit_widget.py` | service-widget runtime, helper bridge | One Reddit card/runtime contract. |
+| Reddit overlay rendering / runtime behavior | `widgets/reddit_widget.py` | service-widget runtime, helper bridge | One Reddit card/runtime contract, including Reddit-local cache reuse/startup refresh policy. |
 | Weather overlay rendering / runtime behavior | `widgets/weather_widget.py` | weather cache/runtime helpers | One Weather card/runtime contract. |
 
 ## Media And Dependent Widget Contracts

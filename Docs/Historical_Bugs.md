@@ -252,10 +252,10 @@ This is the long-term anti-regression record for the project, not an active task
   - this exposed one important truth cleanly: the "current feel" lock needed re-baselining, but the louder failure bars stayed valid and should not be discarded
   - because hardcoded hero-smoothing retunes were becoming another iteration loop, the display-only hero settling seam was extracted into a user/preset-facing control (`bubble_big_visual_smoothing`) so future soft-passage preference changes do not require more Bubble runtime rewrites
   - the Deep Sea authored preset itself is now a first-class suspect: runtime code changed repeatedly while the preset combination remained mostly stable, so a dedicated preset/runtime audit was created before more Bubble code retuning
-- **Latest evidence from the 2026-06-19 long run with user-tuned `Preset 13 (Deep Sea Hero Lift)`:**
+- **Latest evidence from the 2026-06-19 long run with user-tuned `Preset 9 (Deep Sea Hero Lift)`:**
   - Bubble no longer matched the old fully-dead loud shape once the authored controls moved away from the original Deep Sea balance.
   - The log stayed on manual-floor truth the whole run (`gate=0.100 manual=0.100 support=0.000`), which further weakens the theory that shared dynamic-floor behavior is the main remaining owner of the problem.
-  - The user-driven authored changes that coincided with the healthier run were concentrated in AGC / input / transient balance rather than another floor rewrite:
+  - The user-driven authored changes that coincided with the healthier run were concentrated in AGC / input / transient balance rather than another floor rewrite, and that combination helped somewhat even though it did not fully close the loud-path complaint:
     - `bubble_input_gain=0.70`
     - `bubble_agc_strength=0.20`
     - `bubble_transient_pulse_gain=0.40`
@@ -269,6 +269,10 @@ This is the long-term anti-regression record for the project, not an active task
     - hot (`1.5 .. 2.2`): average peak `0.250`
     - very hot (`>= 2.2`): average peak `0.300`
   - That does **not** close U-07, because the user still reports loud sections as only "better, not exceptional", especially for broad small-lane life. It does, however, move the next correct direction away from shared-floor churn and toward authored Bubble control balance plus stricter runtime-shaped bars around that authored truth.
+- **Latest correction from the 2026-06-19 stricter-oracle pass:**
+  - one of the newer Bubble loud-path bars had quietly drifted into a bad unit comparison by requiring hero render radius to scale against raw `speed_energy` with an impossible coefficient
+  - this created another version of the older "bar tightening without runtime truth" trap: the bar could stay red for reasons that were not the user-visible failure seam
+  - the corrected direction keeps the louder-vs-softer body contract, but maps speed-vs-body checks back onto realistic body-scale expectations and keeps clamp-faked single-shape holds guarded separately
 - **Concrete failed methods worth preserving:**
   - weakening the replay oracle from a stronger "loud must beat soft" expectation into "materially alive" ratios such as `hot_small >= soft_small * 0.80` and `hot_big >= soft_big * 0.88`
   - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime

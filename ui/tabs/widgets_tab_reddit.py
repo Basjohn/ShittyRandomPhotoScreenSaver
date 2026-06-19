@@ -100,7 +100,7 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_enabled = QCheckBox("Enable Reddit Widget")
     tab.reddit_enabled.setProperty("circleIndicator", True)
     tab.reddit_enabled.setToolTip(
-        "Shows a small list of posts from a subreddit using Reddit's public JSON feed."
+        "Shows a small list of posts from a subreddit using the selected Reddit provider."
     )
     tab.reddit_enabled.setChecked(tab._default_bool('reddit', 'enabled', True))
     tab.reddit_enabled.stateChanged.connect(tab._save_settings)
@@ -178,6 +178,25 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     tab.reddit_exit_on_click.setChecked(tab._default_bool('reddit', 'exit_on_click', True))
     tab.reddit_exit_on_click.stateChanged.connect(tab._save_settings)
     interaction_layout.addWidget(tab.reddit_exit_on_click)
+
+    provider_row = _aligned_row(reddit1_layout, "Provider:")
+    tab.reddit_provider_combo = StyledComboBox()
+    tab.reddit_provider_combo.addItem("PullPush (Hosted)", "pullpush")
+    tab.reddit_provider_combo.addItem("Reddit Public JSON", "public_json")
+    tab.reddit_provider_combo.setMinimumWidth(180)
+    tab.reddit_provider_combo.setToolTip(
+        "Shared post source for Reddit 1 and Reddit 2. PullPush is the default hosted provider."
+    )
+    default_provider = tab._default_str('reddit', 'provider', 'pullpush').strip().lower() or 'pullpush'
+    default_provider_idx = tab.reddit_provider_combo.findData(default_provider)
+    if default_provider_idx >= 0:
+        tab.reddit_provider_combo.setCurrentIndex(default_provider_idx)
+    tab.reddit_provider_combo.currentIndexChanged.connect(tab._save_settings)
+    provider_row.addWidget(tab.reddit_provider_combo)
+    provider_note = _inline_label("Shared by Reddit 1 and Reddit 2.")
+    provider_note.setStyleSheet(INFO_LABEL_STYLE)
+    provider_row.addWidget(provider_note)
+    provider_row.addStretch()
 
     # Subreddit name
     reddit_sub_row = _aligned_row(reddit1_layout, "Subreddit:")
@@ -470,6 +489,10 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
 
     subreddit = tab._config_str('reddit', reddit_config, 'subreddit', 'All')
     tab.reddit_subreddit.setText(subreddit)
+    provider = tab._config_str('reddit', reddit_config, 'provider', 'pullpush').strip().lower() or 'pullpush'
+    provider_idx = tab.reddit_provider_combo.findData(provider)
+    if provider_idx >= 0:
+        tab.reddit_provider_combo.setCurrentIndex(provider_idx)
 
     limit_val = clamp_list_capacity(tab._config_int('reddit', reddit_config, 'limit', 10), default=10)
     tab.reddit_items.setValue(limit_val)
@@ -542,6 +565,7 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     reddit_config = {
         'enabled': family_enabled,
         'exit_on_click': tab.reddit_exit_on_click.isChecked(),
+        'provider': (tab.reddit_provider_combo.currentData() or 'pullpush'),
         'subreddit': tab.reddit_subreddit.text().strip() or 'wallpapers',
         'limit': clamp_list_capacity(tab.reddit_items.value(), default=10),
         'position': tab.reddit_position.currentText(),

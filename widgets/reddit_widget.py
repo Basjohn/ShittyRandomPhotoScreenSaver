@@ -20,8 +20,6 @@ import random
 import json
 from pathlib import Path
 
-import requests
-
 from PySide6.QtCore import Qt, QTimer, QRect, QPoint, QUrl
 from PySide6.QtGui import (
     QFont,
@@ -38,6 +36,12 @@ from shiboken6 import isValid as shiboken_isValid
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.performance import widget_paint_sample
+from core.reddit_post_provider import (
+    RedditFetchRequest,
+    RedditPostProvider,
+    RedditProviderResult,
+    build_default_reddit_post_provider,
+)
 from core.settings.widget_capacity_policy import (
     LIST_WIDGET_MAX_CAPACITY,
     LIST_WIDGET_MIN_CAPACITY,
@@ -71,7 +75,6 @@ from widgets.service_widget_runtime import (
     defer_value_if_transition,
     end_fetch_guard,
     ensure_single_shot_timer,
-    get_automatic_startup_refresh_decision,
     parent_transition_running,
     preserve_visible_fallback,
     reset_deferred_runtime_state,
@@ -84,18 +87,14 @@ from core.runtime_flags import automatic_service_updates_enabled
 
 logger = get_logger(__name__)
 
-
-REDDIT_STARTUP_CACHE_FRESH_WINDOW = timedelta(hours=1)
-
-
 class RedditWidget(BaseOverlayWidget):
     """Reddit widget for displaying subreddit entries.
 
     Extends BaseOverlayWidget for common styling/positioning functionality.
 
     Features:
-    - Fetches top N posts from a configured subreddit via Reddit's
-      public JSON listing endpoints (no API key / OAuth).
+    - Fetches top N posts from a configured subreddit via a swappable
+      provider seam (default PullPush hosted API).
     - Displays each post as a single-line entry: small score on the
       left, elided title on the right.
     - Header row with Reddit logo + ``r/<subreddit>`` text, matching the
@@ -113,6 +112,7 @@ class RedditWidget(BaseOverlayWidget):
         parent: Optional[QWidget] = None,
         subreddit: str = "wallpapers",
         position: RedditPosition = RedditPosition.TOP_RIGHT,
+        post_provider: Optional[RedditPostProvider] = None,
     ) -> None:
         # Convert RedditPosition to OverlayPosition for base class
         overlay_pos = OverlayPosition(position.value)
@@ -191,6 +191,9 @@ class RedditWidget(BaseOverlayWidget):
         self._show_separators: bool = False
 
         self._shutdown_event = threading.Event()
+        self._post_provider: RedditPostProvider = (
+            post_provider if post_provider is not None else build_default_reddit_post_provider()
+        )
 
         self._setup_ui()
 
@@ -487,6 +490,11 @@ class RedditWidget(BaseOverlayWidget):
 
     def set_thread_manager(self, thread_manager: ThreadManager) -> None:
         self._thread_manager = thread_manager
+
+    def set_post_provider(self, provider: Optional[RedditPostProvider]) -> None:
+        self._post_provider = (
+            provider if provider is not None else build_default_reddit_post_provider()
+        )
 
     def set_subreddit(self, subreddit: str) -> None:
         self._subreddit = self._normalise_subreddit(subreddit)
@@ -807,124 +815,25 @@ class RedditWidget(BaseOverlayWidget):
 
         tm = self._thread_manager
 
-        def _do_fetch(subreddit: str, sort: str, limit: int) -> List[Dict[str, Any]] | dict[str, str]:
-            import time
-            start_time = time.perf_counter()
-            
-            # Reserve quota for widget fetches (prevents RSS from consuming it)
-            try:
-                from core.reddit_rate_limiter import RedditRateLimiter, RateLimitPriority
-                # Reserve 1 request for this fetch
-                reserved_quota = RedditRateLimiter.reserve_quota(count=1, namespace="widget")
-                if not reserved_quota:
-                    logger.warning("[RATE_LIMIT] Could not reserve quota for widget, waiting...")
-                try:
-                    slot_state = RedditRateLimiter.acquire_request_slot(
-                        priority=RateLimitPriority.HIGH,
-                        namespace="widget",
-                        shutdown_event=self._shutdown_event,
-                        skip_if_blocked=True,
-                    )
-                finally:
-                    if reserved_quota:
-                        RedditRateLimiter.release_quota(count=1, namespace="widget")
-                if slot_state == "shutdown":
-                    return {"skip_reason": "shutdown"}
-                if slot_state == "blocked":
-                    logger.warning("[RATE_LIMIT] Reddit widget skipping fetch after blocked cooldown re-check")
-                    return {"skip_reason": "blocked_cooldown"}
-            except ImportError:
-                logger.debug("[REDDIT] RedditRateLimiter not available")
-            
-            url = f"https://www.reddit.com/r/{subreddit}/{sort}.json"
-            
-            from core.reddit_rate_limiter import get_reddit_request_persona
-            persona = get_reddit_request_persona(f"{self._cache_key}:{subreddit}:{sort}")
-            headers = {"User-Agent": persona.user_agent, **persona.headers}
-
-            # Visible item limit (what the UI will actually show) is still
-            # derived from the configured limit, but we always fetch the same
-            # number of Reddit entries so that 4-item and 10-item modes share
-            # a common candidate pool before recency sorting.
-            effective_limit = clamp_list_capacity(limit)
-            fetch_limit = LIST_WIDGET_MAX_CAPACITY
-
-            params = {"limit": fetch_limit}
-
-            if is_perf_metrics_enabled():
-                logger.debug(
-                    "[PERF] Reddit API call starting: subreddit=%s sort=%s",
-                    subreddit, sort,
-                )
-            else:
-                logger.debug(
-                    "[REDDIT] Fetching feed: subreddit=%s sort=%s limit=%s (visible_limit=%s persona=%s)",
-                    subreddit,
-                    sort,
-                    params["limit"],
-                    effective_limit,
-                    persona.label,
-                )
-            resp = requests.get(url, headers=headers, params=params, timeout=10)
-            if resp.status_code == 403:
-                try:
-                    from core.reddit_rate_limiter import RedditRateLimiter
-                    RedditRateLimiter.record_blocked_response(reason=f"widget:{subreddit}")
-                except Exception:
-                    logger.debug("[REDDIT] Failed to record blocked Reddit response", exc_info=True)
-            resp.raise_for_status()
-            payload = resp.json()
-            
-            if is_perf_metrics_enabled():
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                logger.debug(
-                    "[PERF] Reddit API call completed in %.2fms: subreddit=%s posts=%d",
-                    elapsed_ms, subreddit, len(payload.get("data", {}).get("children", [])),
-                )
-
-            children = payload.get("data", {}).get("children", [])
-            posts: List[Dict[str, Any]] = []
-            for child in children:
-                data = child.get("data") or {}
-                title = str(data.get("title") or "").strip()
-                if not title:
-                    continue
-                try:
-                    score = int(data.get("score") or 0)
-                except Exception as e:
-                    logger.debug("[REDDIT] Exception suppressed: %s", e)
-                    score = 0
-                try:
-                    created_utc = float(data.get("created_utc") or 0.0)
-                except Exception as e:
-                    logger.debug("[REDDIT] Exception suppressed: %s", e)
-                    created_utc = 0.0
-                permalink = data.get("permalink")
-                if permalink:
-                    url_str = f"https://www.reddit.com{permalink}"
-                else:
-                    direct_url = data.get("url") or data.get("url_overridden_by_dest")
-                    if not direct_url:
-                        continue
-                    url_str = str(direct_url)
-                posts.append({
-                    "title": title,
-                    "url": url_str,
-                    "score": score,
-                    "created_utc": created_utc,
-                })
-
-            return posts
+        def _do_fetch(subreddit: str, sort: str, limit: int) -> RedditProviderResult:
+            request = RedditFetchRequest(
+                subreddit=subreddit,
+                sort=sort,
+                limit=limit,
+                cache_key=self._cache_key,
+                shutdown_event=self._shutdown_event,
+            )
+            return self._post_provider.fetch_posts(request)
 
         def _on_result(result) -> None:
             try:
                 if getattr(result, "success", False):
                     payload = getattr(result, "result", None)
-                    if isinstance(payload, dict) and payload.get("skip_reason"):
-                        ThreadManager.run_on_ui_thread(self._on_fetch_skipped, str(payload["skip_reason"]))
+                    if isinstance(payload, RedditProviderResult) and payload.skip_reason:
+                        ThreadManager.run_on_ui_thread(self._on_fetch_skipped, payload.skip_reason)
                         return
-                    if isinstance(payload, list):
-                        posts_data = payload
+                    if isinstance(payload, RedditProviderResult) and isinstance(payload.posts, list):
+                        posts_data = payload.posts
                         ThreadManager.run_on_ui_thread(self._on_feed_fetched, posts_data)
                         return
                 else:
@@ -954,11 +863,14 @@ class RedditWidget(BaseOverlayWidget):
         # Fallback: synchronous fetch on UI thread (rare, but bounded by timeout)
         try:
             payload = _do_fetch(self._subreddit, self._sort, self._configured_capacity)
-            if isinstance(payload, dict) and payload.get("skip_reason"):
-                self._on_fetch_skipped(str(payload["skip_reason"]))
+            if isinstance(payload, RedditProviderResult) and payload.skip_reason:
+                self._on_fetch_skipped(payload.skip_reason)
                 return True
-            posts_data = payload
-            self._on_feed_fetched(posts_data)
+            posts_data = payload.posts if isinstance(payload, RedditProviderResult) else None
+            if isinstance(posts_data, list):
+                self._on_feed_fetched(posts_data)
+                return True
+            self._on_fetch_error("No Reddit data returned")
             return True
         except Exception as exc:
             self._on_fetch_error(str(exc))
@@ -2188,7 +2100,10 @@ class RedditWidget(BaseOverlayWidget):
             return None
 
     def _get_startup_refresh_decision(self) -> StartupRefreshDecision:
-        """Return startup-refresh policy with a shared Reddit service cooldown gate."""
+        """Return Reddit startup-refresh policy with shared blocked-gate awareness."""
+
+        if not automatic_service_updates_enabled():
+            return StartupRefreshDecision(False, "automatic_updates_disabled", None)
 
         try:
             from core.reddit_rate_limiter import RedditRateLimiter
@@ -2202,10 +2117,14 @@ class RedditWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[REDDIT] Failed to evaluate shared startup gate", exc_info=True)
 
-        return get_automatic_startup_refresh_decision(
-            cache_timestamp=self._get_cache_timestamp(),
-            fresh_window=REDDIT_STARTUP_CACHE_FRESH_WINDOW,
-        )
+        cache_age = None
+        try:
+            cache_timestamp = self._get_cache_timestamp()
+            if cache_timestamp is not None:
+                cache_age = datetime.now() - cache_timestamp
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect cache age for startup logging", exc_info=True)
+        return StartupRefreshDecision(True, "updates_enabled_reuse_cache", cache_age)
 
     def _touch_service_gate_timestamp_now(self) -> None:
         """Refresh the shared Reddit startup gate after a blocked response."""

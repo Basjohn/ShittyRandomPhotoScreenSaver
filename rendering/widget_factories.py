@@ -511,6 +511,7 @@ class RedditWidgetFactory(WidgetFactory):
         shadows_config: Optional[Dict[str, Any]] = None,
     ) -> Optional[QWidget]:
         """Create and configure a RedditWidget with full settings inheritance."""
+        from core.reddit_post_provider import build_reddit_post_provider
         from widgets.reddit_widget import RedditWidget, RedditPosition
         from core.settings.models import RedditWidgetSettings, WidgetPosition, coerce_widget_position
         
@@ -549,6 +550,9 @@ class RedditWidgetFactory(WidgetFactory):
             position = position_map.get(widget_pos, RedditPosition.TOP_RIGHT)
             
             widget = RedditWidget(parent=parent, position=position)
+            if hasattr(widget, "set_post_provider"):
+                provider_id = inherit_style('provider', model.provider)
+                widget.set_post_provider(build_reddit_post_provider(provider_id))
             
             # Set overlay name for fade sync coordination and cache key
             widget._overlay_name = settings_key

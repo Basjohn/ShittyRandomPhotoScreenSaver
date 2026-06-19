@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-14
+Last updated: 2026-06-19
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -269,7 +269,7 @@ Active ids:
 - Shared fetch-in-progress begin/end guards for service-backed overlay widgets also belong in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract. Keep provider-specific fetch payload semantics local.
 - Shared manual-refresh request flow for service-backed overlay widgets also belongs in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract: enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup should not be recopied per widget.
 - Automatic service-update policy is also shared contract work: Gmail, Reddit, and Weather must honor one process-wide `--noupdates` CLI flag that disables automatic retrieval work, including startup fetches and periodic timers, while preserving manual refresh affordances such as double-click and refresh spirals.
-- Fresh cache is a separate startup-only contract from `--noupdates`: when Gmail/Reddit/Weather cache is newer than 15 minutes, startup should reuse that cache and skip the immediate startup refresh without disabling later periodic timers or manual refresh.
+- Fresh cache is a separate startup-only contract from `--noupdates` for Gmail/Weather-style widgets: when those caches are newer than 15 minutes, startup should reuse that cache and skip the immediate startup refresh without disabling later periodic timers or manual refresh. Reddit is the intentional exception: it always reuses cached posts visibly, but automatic startup refresh still runs whenever updates are enabled and the shared Reddit blocked-cooldown gate is not active.
 - Shared list-capacity policy belongs on the same kind of canonical seam: `reddit`, `reddit2`, and `gmail` should consume the shared `5..25` capacity contract rather than drifting into widget-local UI/runtime ranges. Dormant `imgur` remains excluded because it is grid-capacity, not row-capacity, work.
 - Authored non-`Custom` widget stacking remains a shared runtime contract too: stack participants belong in the canonical display/widget-manager stack seam, and content-height-driven overlays must request a shared deferred restack there rather than relying on widget-local special cases.
 - Non-`Custom` stacking is column-aware, not merely same-anchor-aware: `Top Left`, `Middle Left`, and `Bottom Left` share one authored left-column plan (likewise center/right). The planner must preserve authored `top` / `middle` / `bottom` band order while compressing inter-widget spacing as needed.
@@ -370,6 +370,7 @@ Active ids:
 - Reddit refresh spiral clicks must queue refresh through the existing Reddit fetch path, respect fetch-in-progress guards, and defer refresh start/result apply/cache regeneration while parent display transitions are pending or active when an existing cached pixmap can be reused. If a transition is requested after a Reddit refresh is already in flight, Reddit must suspend live refresh-spinner repainting immediately and keep result application deferred until idle.
 - Reddit transition-aware refresh deferral and deferred single-shot timer ownership should continue through `widgets/service_widget_runtime.py` rather than reintroducing private parent-probe/timer helpers.
 - Reddit empty/error fetches that arrive after valid content is already visible are non-authoritative by default and should continue to preserve the current display through the shared `widgets/service_widget_runtime.py` visible-fallback seam unless a future widget-specific rule explicitly overrides that behavior.
+- Reddit post-source acquisition is an explicit provider seam owned by `core/reddit_post_provider.py`. The branded Reddit widget keeps card rendering, cache authority, cooldown UX, staged growth, and click routing local; swapping future external or authenticated sources must not duplicate or replace that card/runtime ownership.
 
 ## 12. Spline Curve (`devcurve`) Visualizer
 

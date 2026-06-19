@@ -454,7 +454,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         saver_guard_attrs=("reddit_enabled",),
         persisted_widget_keys=("reddit", "reddit2"),
         signal_block_attrs=(
-            "reddit_enabled", "reddit_subreddit", "reddit_items",
+            "reddit_enabled", "reddit_provider_combo", "reddit_subreddit", "reddit_items",
             "reddit_position", "reddit_monitor_combo",
             "reddit_font_combo", "reddit_font_size", "reddit_margin",
             "reddit_header_logo_px_adjust",

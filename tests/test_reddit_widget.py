@@ -5,13 +5,14 @@ click handling for posts and the header.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QPoint, QRect
 
-from widgets.reddit_widget import RedditWidget, REDDIT_STARTUP_CACHE_FRESH_WINDOW
+from core.reddit_post_provider import RedditProviderResult
+from widgets.reddit_widget import RedditWidget
 
 
 @pytest.mark.qt
@@ -316,7 +317,7 @@ def test_reddit_fetch_skips_network_while_blocked_cooldown_is_active(qt_app, qtb
     try:
         RedditRateLimiter.reset()
         RedditRateLimiter.record_blocked_response(reason="test")
-        monkeypatch.setattr("widgets.reddit_widget.requests.get", lambda *args, **kwargs: calls.append("get"))
+        monkeypatch.setattr("core.reddit_post_provider.requests.get", lambda *args, **kwargs: calls.append("get"))
 
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
         assert calls == []
@@ -378,7 +379,7 @@ def test_reddit_startup_refresh_uses_shared_service_gate_before_rate_limiter(qt_
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
 
-        old_ts = time.time() - (REDDIT_STARTUP_CACHE_FRESH_WINDOW.total_seconds() * 2)
+        old_ts = time.time() - (2 * 3600)
         os.utime(cache_path, (old_ts, old_ts))
         widget._touch_service_gate_timestamp_now()  # type: ignore[attr-defined]
 
@@ -533,7 +534,7 @@ def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: 
 
 
 @pytest.mark.qt
-def test_reddit_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_activate_runs_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     try:
@@ -546,7 +547,56 @@ def test_reddit_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, qtbot, 
 
         widget._activate_impl()
 
-        assert calls == ["timer"]
+        assert calls == ["timer", ("fetch", {})]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_activate_runs_startup_fetch_when_cache_is_old(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        calls = []
+        widget.set_thread_manager(object())
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(days=3))
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+
+        widget._activate_impl()
+
+        assert calls == ["timer", ("fetch", {})]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        widget.set_thread_manager(object())
+        cached_posts = [
+            RedditPost(
+                title="Cached post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        calls = []
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(cached_posts))
+        monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+
+        widget._activate_impl()
+
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "Cached post"  # type: ignore[attr-defined]
+        assert calls == ["timer", ("fetch", {})]
     finally:
         widget.cleanup()
 
@@ -613,6 +663,106 @@ def test_reddit_fetch_result_defers_apply_during_parent_transition(qt_app, qtbot
     finally:
         widget.cleanup()
         parent.deleteLater()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_uses_injected_post_provider(qt_app, qtbot):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+
+    class StubProvider:
+        def fetch_posts(self, request):
+            calls.append(request)
+            return RedditProviderResult(
+                posts=[
+                    {
+                        "title": "Injected post",
+                        "url": "https://example.com/post",
+                        "score": 3,
+                        "created_utc": time.time(),
+                    }
+                ],
+                skip_reason=None,
+            )
+
+    try:
+        widget.set_post_provider(StubProvider())
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+        widget._subreddit = "wallpapers"  # type: ignore[attr-defined]
+
+        # Drive the sync path so the provider contract is exercised directly.
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+
+        assert len(calls) == 1
+        assert calls[0].subreddit == "wallpapers"
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "Injected post"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_provider_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    class FailingProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RuntimeError("pullpush unavailable")
+
+    try:
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Visible post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget.set_post_provider(FailingProvider())
+
+        assert widget._fetch_feed(defer_for_transition=False) is False  # type: ignore[attr-defined]
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "Visible post"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_empty_provider_result_keeps_displayed_cache_visible(qt_app, qtbot):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+
+    class EmptyProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            return RedditProviderResult(posts=[], skip_reason=None)
+
+    try:
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Visible post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget.set_post_provider(EmptyProvider())
+
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "Visible post"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
 
 
 @pytest.mark.qt

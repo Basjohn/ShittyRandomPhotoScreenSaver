@@ -117,6 +117,7 @@ class RedditWidgetSettings:
     enabled: bool = False
     monitor: str = "ALL"
     position: WidgetPosition = WidgetPosition.TOP_RIGHT
+    provider: str = "pullpush"
     subreddit: str = "technology"
     limit: int = 10
     font_family: str = "Inter"
@@ -143,6 +144,7 @@ class RedditWidgetSettings:
             enabled=settings.get(f"{prefix}.enabled", False),
             monitor=settings.get(f"{prefix}.monitor", "ALL"),
             position=position,
+            provider=settings.get(f"{prefix}.provider", "pullpush"),
             subreddit=settings.get(f"{prefix}.subreddit", "technology"),
             limit=clamp_list_capacity(settings.get(f"{prefix}.limit", 10), default=10),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),
@@ -174,6 +176,7 @@ class RedditWidgetSettings:
             enabled=_get("enabled", False),
             monitor=_get("monitor", "ALL"),
             position=position,
+            provider=_get("provider", "pullpush"),
             subreddit=_get("subreddit", "technology"),
             limit=clamp_list_capacity(_get("limit", 10), default=10),
             font_family=_get("font_family", "Inter"),
@@ -196,6 +199,7 @@ class RedditWidgetSettings:
             f"{prefix}.enabled": self.enabled,
             f"{prefix}.monitor": self.monitor,
             f"{prefix}.position": self.position.value if isinstance(self.position, WidgetPosition) else str(self.position),
+            f"{prefix}.provider": self.provider,
             f"{prefix}.subreddit": self.subreddit,
             f"{prefix}.limit": int(self.limit),
             f"{prefix}.font_family": self.font_family,

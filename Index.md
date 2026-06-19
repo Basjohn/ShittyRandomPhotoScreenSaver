@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-18
+Last updated: 2026-06-19
 
 Living map of the current SRPSS codebase.
 
@@ -152,7 +152,8 @@ Living map of the current SRPSS codebase.
 | Settings UI | `ui/tabs/widgets_tab_gmail.py` | Backend selector, credentials, non-blocking IMAP Save & Test, widget settings, sender/subject cleanup controls, grouping toggle, deferred auth refresh, and Gmail-specific signal-block/visibility guardrails |
 | Settings cache | `ui/settings_dialog_cache.py` | Settings dialog cached defaults/font data; cache generation includes canonical defaults modules so Gmail defaults do not go stale |
 | Overlay widget | `widgets/gmail_widget.py` | Screensaver overlay for Gmail list rendering, backend-safe actions, row/menu hit targets, shared transition-aware refresh/result deferral, empty-fetch preservation of valid displayed mail, fixed-window fetch/cache with configured-vs-visible capacity split (`limit` remains configured capacity), header-safe fallback layout, async cache writes, DPR-aware stable-content paint cache, grouping toggle support, and perf instrumentation |
-| Overlay widget | `widgets/reddit_widget.py` | Screensaver overlay for subreddit cards, progressive staged growth from cache, fixed-window fetch/cache with configured-vs-visible capacity split (`limit` remains configured capacity), transition-aware refresh/result deferral, refresh spiral interaction, visible-fallback preservation for non-authoritative empty/error fetches, cache-regenerated paint reuse, hit-target routing, and performance instrumentation |
+| Reddit post provider seam | `core/reddit_post_provider.py` | Provider-backed post retrieval contract for the branded Reddit widget; current default is hosted PullPush retrieval with selectable public-JSON fallback so future external/authenticated backends can swap in without changing Reddit card rendering/runtime ownership |
+| Overlay widget | `widgets/reddit_widget.py` | Screensaver overlay for subreddit cards, provider-backed staged post display, progressive staged growth from cache, fixed-window fetch/cache with configured-vs-visible capacity split (`limit` remains configured capacity), transition-aware refresh/result deferral, refresh spiral interaction, visible-fallback preservation for non-authoritative empty/error fetches, cache-regenerated paint reuse, hit-target routing, performance instrumentation, and Reddit-local startup policy that never expires cached posts while still attempting refresh when updates are enabled |
 | Blockflip controller | `transitions/gl_compositor_blockflip_transition.py` | Block Puzzle Flip controller that now limits itself to timing plus effective shader-grid hints; the compositor shader owns the reveal path instead of CPU-side per-block `QRegion` accumulation |
 | Asset guard tests | `tests/test_gmail_assets.py` | Verifies required Gmail image assets exist and normal/MC Nuitka scripts include only the notification OGG plus Qt multimedia requirements |
 

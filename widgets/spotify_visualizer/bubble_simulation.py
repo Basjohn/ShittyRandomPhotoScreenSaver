@@ -802,8 +802,9 @@ class BubbleSimulation:
                 bass_body_support *= (0.42 + vocal_gap * 1.10)
                 if b.radius < 0.008:
                     bass_body_support *= 1.12
-                hot_field_support *= (0.76 + vocal_gap * 0.24)
-                raw_src = vocal_body + chorus_support + hot_field_support + bass_body_support
+                hot_field_support *= (0.78 + shared_hot_presence * 0.18 + vocal_gap * 0.24)
+                field_body_carry = shared_hot_presence * max(0.0, 0.050 - size_t * 0.010)
+                raw_src = vocal_body + chorus_support + hot_field_support + bass_body_support + field_body_carry
                 delta_sens = 3.5 - size_t * 1.0  # 3.5x tiniest → 2.5x largest
                 sustained_knee = max(0.18, 0.25 + size_t * 0.15 - vocal_gap * 0.08)
                 sustained_scale = 0.52 - size_t * 0.06 + vocal_gap * 0.03
@@ -834,6 +835,7 @@ class BubbleSimulation:
                     sustained_component,
                     hot_field_support,
                     bass_body_support,
+                    field_body_carry * 0.90,
                 )
 
             gated_energy = min(1.0, max(delta_component, sustained_component))
@@ -1469,9 +1471,17 @@ class BubbleSimulation:
             bubble.display_radius = target_radius
             return target_radius
 
-        # Keep hotter sustained sections authoritative so the visual layer does
-        # not counterfeit a slow "loud mode" or mute real loud-passage growth.
-        if self._sustained_loud_energy >= 0.60 or bubble.pulse_energy >= 0.68:
+        # Loud passages still need fast truthful size authority, but completely
+        # disabling smoothing this early makes the authored setting feel like a
+        # lie. Blend smoothing down instead of hard-bypassing it.
+        hot_blend = _clamp01(
+            max(
+                (self._sustained_loud_energy - 0.64) / 0.26,
+                (bubble.pulse_energy - 0.74) / 0.22,
+            )
+        )
+        amount *= 1.0 - hot_blend * 0.65
+        if amount <= 0.001:
             bubble.display_radius = target_radius
             return target_radius
 
@@ -1480,24 +1490,31 @@ class BubbleSimulation:
 
         if amount <= 0.5:
             t = amount / 0.5
-            rise_hz = 180.0 + (60.0 - 180.0) * t
-            sharp_drop_hz = 70.0 + (14.0 - 70.0) * t
-            soft_drop_hz = 45.0 + (8.5 - 45.0) * t
-            snap_abs = 0.0004 + (0.0012 - 0.0004) * t
-            snap_ratio = 0.01 + (0.05 - 0.01) * t
+            rise_hz = 230.0 + (165.0 - 230.0) * t
+            sharp_drop_hz = 58.0 + (18.0 - 58.0) * t
+            soft_drop_hz = 26.0 + (7.0 - 26.0) * t
+            micro_drop_hz = 18.0 + (4.2 - 18.0) * t
+            micro_drop_ratio = 0.018 + (0.070 - 0.018) * t
+            snap_abs = 0.00035 + (0.0010 - 0.00035) * t
+            snap_ratio = 0.008 + (0.032 - 0.008) * t
         else:
             t = (amount - 0.5) / 0.5
-            rise_hz = 60.0 + (36.0 - 60.0) * t
-            sharp_drop_hz = 14.0 + (9.5 - 14.0) * t
-            soft_drop_hz = 8.5 + (5.5 - 8.5) * t
-            snap_abs = 0.0012 + (0.0019 - 0.0012) * t
-            snap_ratio = 0.05 + (0.075 - 0.05) * t
+            rise_hz = 165.0 + (120.0 - 165.0) * t
+            sharp_drop_hz = 18.0 + (10.5 - 18.0) * t
+            soft_drop_hz = 7.0 + (3.2 - 7.0) * t
+            micro_drop_hz = 4.2 + (1.8 - 4.2) * t
+            micro_drop_ratio = 0.070 + (0.150 - 0.070) * t
+            snap_abs = 0.0010 + (0.0015 - 0.0010) * t
+            snap_ratio = 0.032 + (0.055 - 0.032) * t
 
         if target_radius >= current:
             rate = min(1.0, dt * rise_hz)
         else:
             drop_ratio = (current - target_radius) / max(current, 1e-6)
-            rate = min(1.0, dt * (sharp_drop_hz if drop_ratio >= 0.22 else soft_drop_hz))
+            if drop_ratio <= micro_drop_ratio:
+                rate = min(1.0, dt * micro_drop_hz)
+            else:
+                rate = min(1.0, dt * (sharp_drop_hz if drop_ratio >= 0.22 else soft_drop_hz))
 
         current += (target_radius - current) * rate
         if target_radius < current and (current - target_radius) <= max(snap_abs, bubble.radius * snap_ratio):

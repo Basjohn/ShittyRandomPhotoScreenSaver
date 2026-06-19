@@ -127,6 +127,7 @@ def test_widget_settings_section_descriptors_capture_saver_routing():
     assert reddit.saver_module == "ui.tabs.widgets_tab_reddit"
     assert reddit.saver_name == "save_reddit_settings"
     assert reddit.persisted_widget_keys == ("reddit", "reddit2")
+    assert "reddit_provider_combo" in reddit.signal_block_attrs
     assert defaults.saver_module == "ui.tabs.widgets_tab_defaults"
     assert defaults.saver_name == "save_defaults_settings"
     assert defaults.persisted_widget_keys == ("shadows", "global")
