@@ -1,0 +1,110 @@
+{
+  "mode": "bubble",
+  "name": "Preset 13 (Deep Sea Hero Lift)",
+  "preset_index": 12,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "bubble",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "monitor": "2",
+        "bubble_big_bass_pulse": 0.85,
+        "bubble_small_freq_pulse": 1.0,
+        "bubble_stream_direction": "up",
+        "bubble_stream_constant_speed": 0.15,
+        "bubble_stream_speed_cap": 1.9,
+        "bubble_stream_reactivity": 1.2,
+        "bubble_rotation_amount": 0.15,
+        "bubble_drift_amount": 0.5,
+        "bubble_drift_speed": 0.35,
+        "bubble_drift_frequency": 0.5,
+        "bubble_drift_direction": "swish_horizontal",
+        "bubble_big_count": 5,
+        "bubble_small_count": 44,
+        "bubble_surface_reach": 0.9,
+        "bubble_bounce_big_pct": 0,
+        "bubble_bounce_small_pct": 15,
+        "bubble_bounce_big_speed": 0.0,
+        "bubble_bounce_small_speed": 0.4,
+        "bubble_bounce_same_only": true,
+        "bubble_collision_pop_mode": "off",
+        "bubble_outline_color": [
+          100,
+          200,
+          255,
+          220
+        ],
+        "bubble_specular_color": [
+          180,
+          220,
+          255,
+          255
+        ],
+        "bubble_gradient_light": [
+          0,
+          80,
+          180,
+          255
+        ],
+        "bubble_gradient_dark": [
+          0,
+          20,
+          60,
+          255
+        ],
+        "bubble_pop_color": [
+          40,
+          120,
+          200,
+          255
+        ],
+        "bubble_specular_direction": "top_left",
+        "bubble_gradient_direction": "top",
+        "bubble_big_size_max": 0.034,
+        "bubble_small_size_max": 0.012,
+        "bubble_big_visual_smoothing": 0.94,
+        "bubble_big_contraction_bias": 0.75,
+        "bubble_big_size_clamp": 2.29,
+        "bubble_big_specular_max_size": 1.8,
+        "bubble_growth": 5.0,
+        "bubble_trail_strength": 0.8,
+        "bubble_tail_opacity": 0.8,
+        "bubble_ghosting_enabled": true,
+        "bubble_ghost_alpha": 0.15,
+        "bubble_ghost_decay": 0.5,
+        "bubble_gradient_semantics_version": 2,
+        "bubble_bar_fill_color": [
+          12,
+          12,
+          12,
+          230
+        ],
+        "bubble_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_bar_border_opacity": 1.0,
+        "bubble_dynamic_floor": false,
+        "bubble_manual_floor": 0.1,
+        "bubble_dynamic_range_enabled": false,
+        "bubble_agc_strength": 0.2,
+        "bubble_input_gain": 0.7,
+        "bubble_kick_lane_gain": 1.0,
+        "bubble_transient_pulse_gain": 0.4,
+        "bubble_transient_clamp": 1.5,
+        "bubble_audio_block_size": 128,
+        "bubble_adaptive_sensitivity": false,
+        "bubble_sensitivity": 0.6,
+        "bubble_bar_count": 48,
+        "bubble_transient_mix_bass": 0.15,
+        "bubble_transient_mix_vocal": 0.4,
+        "bubble_rainbow_enabled": true,
+        "bubble_rainbow_speed": 0.15,
+        "mode": "bubble"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}

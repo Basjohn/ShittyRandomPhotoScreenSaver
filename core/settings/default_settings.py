@@ -433,6 +433,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
                                     'bubble_big_bass_pulse': 0.8,
                                     'bubble_big_count': 11,
                                     'bubble_big_size_max': 0.03,
+                                    'bubble_big_visual_smoothing': 0.5,
                                     'bubble_big_contraction_bias': 1.0,
                                     'bubble_big_size_clamp': 4.0,
                                     'bubble_bounce_big_pct': 70,

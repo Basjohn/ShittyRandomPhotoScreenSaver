@@ -77,6 +77,10 @@ def load_bubble_mode_settings(
         v = int(tab._config_float("spotify_visualizer", config, "bubble_small_freq_pulse", 0.5) * 100)
         tab.bubble_small_freq_pulse.setValue(max(0, min(200, v)))
         tab.bubble_small_freq_pulse_label.setText(f"{v}%")
+    if hasattr(tab, "bubble_big_visual_smoothing"):
+        v = int(tab._config_float("spotify_visualizer", config, "bubble_big_visual_smoothing", 0.5) * 100)
+        tab.bubble_big_visual_smoothing.setValue(max(0, min(100, v)))
+        tab.bubble_big_visual_smoothing_label.setText(f"{v}%")
 
     if hasattr(tab, "bubble_stream_direction"):
         stream_direction = tab._config_str("spotify_visualizer", config, "bubble_stream_direction", "up").lower()
@@ -241,6 +245,9 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
         ),
         "bubble_big_bass_pulse": (tab.bubble_big_bass_pulse.value() if hasattr(tab, "bubble_big_bass_pulse") else 50) / 100.0,
         "bubble_small_freq_pulse": (tab.bubble_small_freq_pulse.value() if hasattr(tab, "bubble_small_freq_pulse") else 50) / 100.0,
+        "bubble_big_visual_smoothing": (
+            tab.bubble_big_visual_smoothing.value() if hasattr(tab, "bubble_big_visual_smoothing") else 50
+        ) / 100.0,
         "bubble_stream_direction": (
             (tab.bubble_stream_direction.currentData() or "up")
             if hasattr(tab, "bubble_stream_direction")

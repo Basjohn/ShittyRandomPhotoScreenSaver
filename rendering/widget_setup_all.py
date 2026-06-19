@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, TYPE_CHECKING
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QRect
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -31,6 +31,8 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 REMOTE_CUSTOM_VISUALIZER_FALLBACK_RECHECK_MS = 1500
+SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS = 250
+SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS = 750
 
 
 @dataclass
@@ -157,6 +159,148 @@ def _start_secondary_widget(widget: Optional[QWidget], attr_name: str) -> None:
         logger.debug("[WIDGET_SETUP] Failed to raise %s after deferred create", attr_name, exc_info=True)
 
 
+def _capture_spotify_visualizer_custom_layout_snapshot(parent: Optional[QWidget]) -> dict[str, QRect | None] | None:
+    if parent is None:
+        return None
+
+    vis = getattr(parent, "spotify_visualizer_widget", None)
+    if vis is None:
+        return None
+
+    target_rect = None
+    try:
+        resolve_target_rect = getattr(vis, "_resolve_runtime_custom_layout_rect", None)
+        if callable(resolve_target_rect):
+            candidate = resolve_target_rect()
+            if isinstance(candidate, QRect) and candidate.width() > 0 and candidate.height() > 0:
+                target_rect = QRect(candidate)
+    except Exception:
+        logger.debug("[WIDGET_SETUP] Failed to resolve visualizer custom-layout target rect", exc_info=True)
+
+    if target_rect is None:
+        return None
+
+    try:
+        live_rect = QRect(vis.geometry())
+    except Exception:
+        logger.debug("[WIDGET_SETUP] Failed to read visualizer live geometry during startup stabilization", exc_info=True)
+        live_rect = None
+
+    overlay_rect = None
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    if overlay is not None:
+        try:
+            overlay_rect = QRect(overlay.geometry())
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to read visualizer overlay geometry during startup stabilization", exc_info=True)
+            overlay_rect = None
+
+    return {
+        "target": target_rect,
+        "live": live_rect,
+        "overlay": overlay_rect,
+    }
+
+
+def _spotify_visualizer_custom_layout_snapshot_needs_stabilization(
+    snapshot: dict[str, QRect | None] | None,
+) -> bool:
+    if not isinstance(snapshot, dict):
+        return False
+    target_rect = snapshot.get("target")
+    if not isinstance(target_rect, QRect):
+        return False
+    live_rect = snapshot.get("live")
+    if not isinstance(live_rect, QRect) or live_rect != target_rect:
+        return True
+    overlay_rect = snapshot.get("overlay")
+    if isinstance(overlay_rect, QRect) and overlay_rect != target_rect:
+        return True
+    return False
+
+
+def _verify_saved_custom_layouts_after_startup(
+    parent: Optional[QWidget],
+    *,
+    log_prefix: str,
+    token: int,
+    confirmed: bool,
+) -> None:
+    if parent is None:
+        return
+
+    try:
+        active_token = int(getattr(parent, "_spotify_custom_layout_stabilize_token", 0))
+    except Exception:
+        active_token = 0
+    if active_token != int(token):
+        return
+
+    snapshot = _capture_spotify_visualizer_custom_layout_snapshot(parent)
+    if not _spotify_visualizer_custom_layout_snapshot_needs_stabilization(snapshot):
+        if confirmed:
+            try:
+                setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+            except Exception:
+                logger.debug("[WIDGET_SETUP] Failed to clear custom-layout stabilize pending flag", exc_info=True)
+        return
+
+    if not confirmed:
+        try:
+            setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
+        except Exception:
+            logger.debug("[WIDGET_SETUP] Failed to set custom-layout stabilize pending flag", exc_info=True)
+        ThreadManager.single_shot(
+            SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS,
+            _verify_saved_custom_layouts_after_startup,
+            parent,
+            log_prefix=log_prefix,
+            token=token,
+            confirmed=True,
+        )
+        return
+
+    try:
+        setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+    except Exception:
+        logger.debug("[WIDGET_SETUP] Failed to clear custom-layout stabilize pending flag", exc_info=True)
+
+    before_live = snapshot.get("live") if isinstance(snapshot, dict) else None
+    before_overlay = snapshot.get("overlay") if isinstance(snapshot, dict) else None
+    target_rect = snapshot.get("target") if isinstance(snapshot, dict) else None
+
+    try:
+        parent._apply_saved_custom_layouts()
+    except Exception:
+        logger.debug("%s Failed delayed visualizer custom-layout stabilization", log_prefix, exc_info=True)
+        return
+
+    after_snapshot = _capture_spotify_visualizer_custom_layout_snapshot(parent)
+    after_live = after_snapshot.get("live") if isinstance(after_snapshot, dict) else None
+    after_overlay = after_snapshot.get("overlay") if isinstance(after_snapshot, dict) else None
+
+    if (
+        isinstance(target_rect, QRect)
+        and (
+            before_live != after_live
+            or before_overlay != after_overlay
+        )
+    ):
+        logger.warning(
+            "%s [SPOTIFY_VIS][FALLBACK] Delayed startup stabilization restored visualizer custom rect "
+            "target=(%d,%d,%d,%d) live_before=%s overlay_before=%s live_after=%s overlay_after=%s",
+            log_prefix,
+            target_rect.x(),
+            target_rect.y(),
+            target_rect.width(),
+            target_rect.height(),
+            tuple(before_live.getRect()) if isinstance(before_live, QRect) else None,
+            tuple(before_overlay.getRect()) if isinstance(before_overlay, QRect) else None,
+            tuple(after_live.getRect()) if isinstance(after_live, QRect) else None,
+            tuple(after_overlay.getRect()) if isinstance(after_overlay, QRect) else None,
+        )
+
+
 def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, log_prefix: str) -> None:
     if parent is None:
         return
@@ -196,55 +340,17 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
         )
 
     try:
-        pending = getattr(parent, "_custom_layout_runtime_stabilize_pending", False)
-        if not isinstance(pending, bool):
-            pending = False
-        if not pending:
-            setattr(parent, "_custom_layout_runtime_stabilize_pending", True)
-
-            def _stabilize_saved_custom_layouts() -> None:
-                try:
-                    setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
-                    stabilize_vis = getattr(parent, "spotify_visualizer_widget", None)
-                    stabilize_before = None
-                    if stabilize_vis is not None:
-                        try:
-                            stabilize_before = stabilize_vis.geometry()
-                        except Exception:
-                            stabilize_before = None
-                    parent._apply_saved_custom_layouts()
-                    stabilize_after = None
-                    if stabilize_vis is not None:
-                        try:
-                            stabilize_after = stabilize_vis.geometry()
-                        except Exception:
-                            stabilize_after = None
-                    if (
-                        stabilize_before is not None
-                        and stabilize_after is not None
-                        and stabilize_before != stabilize_after
-                    ):
-                        logger.warning(
-                            "%s [SPOTIFY_VIS][FALLBACK] Deferred startup stabilization changed visualizer geometry "
-                            "from (%d,%d,%d,%d) to (%d,%d,%d,%d)",
-                            log_prefix,
-                            stabilize_before.x(),
-                            stabilize_before.y(),
-                            stabilize_before.width(),
-                            stabilize_before.height(),
-                            stabilize_after.x(),
-                            stabilize_after.y(),
-                            stabilize_after.width(),
-                            stabilize_after.height(),
-                        )
-                except Exception:
-                    logger.debug(
-                        "%s Failed to stabilize saved custom layouts after startup",
-                        log_prefix,
-                        exc_info=True,
-                    )
-
-            QTimer.singleShot(0, _stabilize_saved_custom_layouts)
+        setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
+        token = int(getattr(parent, "_spotify_custom_layout_stabilize_token", 0)) + 1
+        setattr(parent, "_spotify_custom_layout_stabilize_token", token)
+        ThreadManager.single_shot(
+            SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS,
+            _verify_saved_custom_layouts_after_startup,
+            parent,
+            log_prefix=log_prefix,
+            token=token,
+            confirmed=False,
+        )
     except Exception:
         logger.debug("%s Failed to schedule saved custom layout stabilization", log_prefix, exc_info=True)
 

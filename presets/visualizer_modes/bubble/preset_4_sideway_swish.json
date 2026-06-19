@@ -15,6 +15,7 @@
         "bubble_big_size_clamp": 2.82,
         "bubble_big_size_max": 0.028,
         "bubble_big_specular_max_size": 1.5,
+        "bubble_big_visual_smoothing": 0.5,
         "bubble_drift_amount": 0.84,
         "bubble_drift_direction": "swish_vertical",
         "bubble_drift_frequency": 0.9,

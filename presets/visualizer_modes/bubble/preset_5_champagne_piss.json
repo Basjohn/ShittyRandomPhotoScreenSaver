@@ -16,6 +16,7 @@
         "bubble_big_size_clamp": 2.67,
         "bubble_big_size_max": 0.024,
         "bubble_big_specular_max_size": 2.0,
+        "bubble_big_visual_smoothing": 0.5,
         "bubble_bounce_big_pct": 90,
         "bubble_bounce_big_speed": 1.21,
         "bubble_bounce_same_only": false,

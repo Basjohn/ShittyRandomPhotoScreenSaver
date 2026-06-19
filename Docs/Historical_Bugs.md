@@ -109,6 +109,7 @@ This is the long-term anti-regression record for the project, not an active task
   - the user did not edit preset card sizes or any non-uniform width contract
   - `rendering.custom_layout_manager` can still log a correct `replay_final` rect while runtime visually disagrees
   - the issue remains visualizer-specific; other widgets do not show the same bizarre shape corruption class
+  - a fresh 2026-06-19 settings-close rebuild could still leave the visualizer misplaced into the top-left corner after returning from settings even though the newer duplicate-owner startup/sleep-wake fallback work looked clean in the latest logs
 - **Key evidence that re-opened the family:**
   - `logs/screensaver_geometry.log` repeatedly shows startup replay beginning from poisoned live geometry such as:
     - `05:18:16` `widget=spotify_visualizer phase=replay_start local=(696,840,840,560) global=(0,0,100,400)`
@@ -120,6 +121,8 @@ This is the long-term anti-regression record for the project, not an active task
     - `startup_create`
     - `settings_refresh`
     - `FIRST_FRAME_PRIMER problems=overlay_generation_stale,overlay_activation_stale`
+  - `logs/screensaver_geometry.log` from `2026-06-19 01:44:37 .. 01:44:38` shows the settings-close rebuild replaying other CUSTOM widgets from obviously poisoned `replay_start` globals before they recover, while the visualizer is recreated on `screen=1` with `custom_routing=True` but does not emit the same `GEO_AUDIT` replay trail in that rebuild window
+  - the same `2026-06-19 01:44:38` rebuild window does **not** show the newer `[SPOTIFY_VIS][FALLBACK]` duplicate-owner/reconcile path firing, which weakens the theory that R-26 is the direct cause of this top-left failure
 - **Why U-08 was not enough:**
   1. U-08 genuinely fixed shrink replay/min-constraint drift and improved replay parity.
   2. It did not prove that replay was the final geometry authority through every later visualizer-owned seam.
@@ -134,6 +137,7 @@ This is the long-term anti-regression record for the project, not an active task
   - strengthen the bar so replay-green/runtime-wrong cases fail decisively
   - remove unauthorized post-replay geometry writers
   - only after that, consider a lightweight obscene-shape recovery path as a safety net rather than the primary fix
+  - if a recovery/self-heal seam is kept, it should use a cautious delayed verify/confirm contract instead of a blind next-turn timer reapply
 
 <a id="R-25"></a>
 ### [R-25] 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)
@@ -242,6 +246,29 @@ This is the long-term anti-regression record for the project, not an active task
   - the loud oracle was repeatedly tuned to current code instead of staying anchored to the user-visible rule that louder music must not look less active than softer music
   - helper/proxy-style checks and permissive thresholds were allowed to coexist with an unresolved runtime complaint
   - sim-only or feed-only conclusions were trusted too early without matching the exact live failure shape
+- **Latest reopened lesson from the 2026-06-18 pass:**
+  - a newer visual-only hero smoothing pass improved soft-passage flicker but still did not materially solve the same loud-passage collapse
+  - the user asked for the Bubble runtime changes to be reverted back to the checked-in baseline while explicitly keeping the stronger Bubble oracles/tests
+  - this exposed one important truth cleanly: the "current feel" lock needed re-baselining, but the louder failure bars stayed valid and should not be discarded
+  - because hardcoded hero-smoothing retunes were becoming another iteration loop, the display-only hero settling seam was extracted into a user/preset-facing control (`bubble_big_visual_smoothing`) so future soft-passage preference changes do not require more Bubble runtime rewrites
+  - the Deep Sea authored preset itself is now a first-class suspect: runtime code changed repeatedly while the preset combination remained mostly stable, so a dedicated preset/runtime audit was created before more Bubble code retuning
+- **Latest evidence from the 2026-06-19 long run with user-tuned `Preset 13 (Deep Sea Hero Lift)`:**
+  - Bubble no longer matched the old fully-dead loud shape once the authored controls moved away from the original Deep Sea balance.
+  - The log stayed on manual-floor truth the whole run (`gate=0.100 manual=0.100 support=0.000`), which further weakens the theory that shared dynamic-floor behavior is the main remaining owner of the problem.
+  - The user-driven authored changes that coincided with the healthier run were concentrated in AGC / input / transient balance rather than another floor rewrite:
+    - `bubble_input_gain=0.70`
+    - `bubble_agc_strength=0.20`
+    - `bubble_transient_pulse_gain=0.40`
+    - `bubble_transient_mix_bass=0.15`
+    - `bubble_transient_mix_vocal=0.40`
+    - `bubble_transient_clamp=1.50`
+    - `bubble_sensitivity=0.60`
+  - A coarse bar/log bucket check from that run showed the visible bar envelope now scales upward with hotter raw-bass windows instead of staying trapped near the soft-path range:
+    - soft (`raw_bass < 0.8`): average peak `0.088`
+    - mid (`0.8 .. 1.5`): average peak `0.192`
+    - hot (`1.5 .. 2.2`): average peak `0.250`
+    - very hot (`>= 2.2`): average peak `0.300`
+  - That does **not** close U-07, because the user still reports loud sections as only "better, not exceptional", especially for broad small-lane life. It does, however, move the next correct direction away from shared-floor churn and toward authored Bubble control balance plus stricter runtime-shaped bars around that authored truth.
 - **Concrete failed methods worth preserving:**
   - weakening the replay oracle from a stronger "loud must beat soft" expectation into "materially alive" ratios such as `hot_small >= soft_small * 0.80` and `hot_big >= soft_big * 0.88`
   - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime
@@ -254,8 +281,9 @@ This is the long-term anti-regression record for the project, not an active task
   - historical-good commits such as `61ad4ba` are recovery baselines for the runtime seam only, not a reason to restore older weak tests wholesale
 - **Next correct direction:**
   - keep the restored Bubble runtime baseline
-  - rebuild the loud-path oracle from current logs so it strongly fails on the exact runtime complaint
-  - only after the oracle is honestly red should the next single-aspect Bubble loud-path fix land
+  - keep the stronger Bubble oracles red only where they honestly disagree with runtime, while allowing "current feel" locks to re-baseline when the user intentionally restores an older code state
+  - audit the authored Deep Sea preset/runtime setting combination before more Bubble code tuning
+  - only after that authored audit should the next single-aspect Bubble loud-path fix land
 
 
 <a id="R-24"></a>

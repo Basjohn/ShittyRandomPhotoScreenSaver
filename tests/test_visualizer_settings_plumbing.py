@@ -5205,6 +5205,21 @@ class TestSpectrumSettingsBinding:
 
 
 class TestBubbleSettingsBinding:
+    def test_bubble_big_visual_smoothing_round_trips_through_visualizer_model(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "bubble",
+                "bubble_big_visual_smoothing": 0.73,
+            },
+            apply_preset_overlay=False,
+        )
+
+        assert model.bubble_big_visual_smoothing == pytest.approx(0.73)
+        payload = model.to_dict()
+        assert payload["widgets.spotify_visualizer.bubble_big_visual_smoothing"] == pytest.approx(0.73)
+
     def test_load_bubble_mode_settings_updates_bubble_owned_controls(self):
         from ui.tabs.media.bubble_settings_binding import load_bubble_mode_settings
 
@@ -5264,6 +5279,8 @@ class TestBubbleSettingsBinding:
                 self.bubble_ghost_decay_label = _Label()
                 self.bubble_big_bass_pulse = _Slider()
                 self.bubble_big_bass_pulse_label = _Label()
+                self.bubble_big_visual_smoothing = _Slider()
+                self.bubble_big_visual_smoothing_label = _Label()
                 self.bubble_stream_direction = _TextCombo()
                 self.bubble_drift_direction = _Combo(["none", "left", "right", "random"])
                 self.bubble_swirl_enabled = _Check()
@@ -5312,6 +5329,7 @@ class TestBubbleSettingsBinding:
                 "bubble_ghost_alpha": 0.22,
                 "bubble_ghost_decay": 0.58,
                 "bubble_big_bass_pulse": 0.71,
+                "bubble_big_visual_smoothing": 0.62,
                 "bubble_stream_direction": "left",
                 "bubble_drift_direction": "swirl_ccw",
                 "bubble_big_count": 12,
@@ -5335,6 +5353,7 @@ class TestBubbleSettingsBinding:
         assert tab.bubble_ghost_opacity.value == 22
         assert tab.bubble_ghost_decay_slider.value == 58
         assert tab.bubble_big_bass_pulse.value == 71
+        assert tab.bubble_big_visual_smoothing.value == 62
         assert tab.bubble_stream_direction._index == 3
         assert tab.bubble_swirl_enabled.checked is True
         assert tab.bubble_swirl_direction.currentData() == "swirl_ccw"
@@ -5397,6 +5416,7 @@ class TestBubbleSettingsBinding:
             bubble_ghost_decay_slider = _Slider(48)
             bubble_big_bass_pulse = _Slider(76)
             bubble_small_freq_pulse = _Slider(44)
+            bubble_big_visual_smoothing = _Slider(68)
             bubble_stream_direction = _DataCombo("top_left")
             bubble_stream_constant_speed = _Slider(61)
             bubble_stream_speed_cap = _Slider(240)
@@ -5438,6 +5458,7 @@ class TestBubbleSettingsBinding:
         assert payload["bubble_ghosting_enabled"] is True
         assert payload["bubble_ghost_alpha"] == pytest.approx(0.33)
         assert payload["bubble_ghost_decay"] == pytest.approx(0.48)
+        assert payload["bubble_big_visual_smoothing"] == pytest.approx(0.68)
         assert payload["bubble_stream_direction"] == "top_left"
         assert payload["bubble_drift_direction"] == "swirl_ccw"
         assert payload["bubble_gradient_direction"] == "center_out"

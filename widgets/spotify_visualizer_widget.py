@@ -344,6 +344,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_gradient_direction: str = "top"
         self._bubble_big_size_max: float = 0.038
         self._bubble_small_size_max: float = 0.018
+        self._bubble_big_visual_smoothing: float = 0.5
         # Transient bus controls (Approach A dual-path)
         self._transient_pulse_gain: float = 1.0   # Bubble: transient bass pulse gain (0-3)
         self._transient_clamp: float = 1.5         # Global: max transient energy per channel (0-3)
@@ -409,6 +410,7 @@ class SpotifyVisualizerWidget(QWidget):
             "big_bass_pulse": self._bubble_big_bass_pulse,
             "small_freq_pulse": self._bubble_small_freq_pulse,
             "big_specular_max_size": self._bubble_big_specular_max_size,
+            "big_visual_smoothing": self._bubble_big_visual_smoothing,
             "big_contraction_bias": self._bubble_big_contraction_bias,
             "big_size_clamp": self._bubble_big_size_clamp,
         }
@@ -1295,6 +1297,7 @@ class SpotifyVisualizerWidget(QWidget):
             big_bass_pulse=pulse_params['big_bass_pulse'],
             small_freq_pulse=pulse_params['small_freq_pulse'],
             big_specular_max_size=pulse_params.get('big_specular_max_size', 2.5),
+            big_visual_smoothing=pulse_params.get('big_visual_smoothing', 0.5),
             big_contraction_bias=pulse_params.get('big_contraction_bias', 1.0),
             big_size_clamp=pulse_params.get('big_size_clamp', 4.0),
         )

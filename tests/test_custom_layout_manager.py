@@ -2492,17 +2492,25 @@ def test_widget_setup_finalize_resettles_visualizer_custom_rect_after_startup_sq
         visualizer.setGeometry(QRect(0, 0, 357, 357))
         display._spotify_bars_overlay.setGeometry(QRect(0, 0, 357, 357))
 
+    scheduled_callbacks: list[tuple[int, object]] = []
+
     monkeypatch.setattr(widget_setup_all, "_start_widgets", _simulate_startup_pressure)
     monkeypatch.setattr(
-        widget_setup_all.QTimer,
-        "singleShot",
-        lambda delay, callback: callback(),
+        widget_setup_all.ThreadManager,
+        "single_shot",
+        lambda delay, callback, *args, **kwargs: scheduled_callbacks.append(
+            (int(delay), lambda: callback(*args, **kwargs))
+        ),
     )
 
     widget_setup_all._finalize_widget_startup(wm, created)
 
+    assert len(scheduled_callbacks) == 1
+    assert scheduled_callbacks[0][0] == widget_setup_all.SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS
+    scheduled_callbacks[0][1]()
+
     custom_rect = QRect(204, 180, 420, 280)
-    assert display._apply_saved_layouts_calls == 3
+    assert display._apply_saved_layouts_calls == 2
     assert visualizer.geometry() == custom_rect
     assert visualizer.minimumWidth() == 420
     assert visualizer.maximumWidth() == 420
@@ -2512,6 +2520,93 @@ def test_widget_setup_finalize_resettles_visualizer_custom_rect_after_startup_sq
     assert QRect(0, 0, 357, 357) in display._spotify_bars_overlay.history
     assert QRect(0, 0, 357, 357) not in visualizer.geometry_history
     assert custom_rect in visualizer.geometry_history
+
+
+def test_widget_setup_startup_stabilizer_waits_for_persistent_visualizer_custom_rect_mismatch(qtbot, monkeypatch):
+    from rendering import widget_setup_all
+
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "spotify_visualizer": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.255, "y": 0.30, "width": 0.525, "height": 0.4666666667},
+                        "size_payload": {"width": 420, "height": 280},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.resize(800, 600)
+    display.show()
+
+    class _TrackingRealVisualizer(SpotifyVisualizerWidget):
+        def __init__(self, parent: QWidget) -> None:
+            self.geometry_history: list[QRect] = []
+            super().__init__(parent=parent, bar_count=8)
+
+        def setGeometry(self, *args) -> None:  # type: ignore[override]
+            super().setGeometry(*args)
+            self.geometry_history.append(QRect(self.geometry()))
+
+    visualizer = _TrackingRealVisualizer(display)
+    visualizer.setMinimumHeight(400)
+    visualizer.setGeometry(0, 0, 100, 400)
+    display.spotify_visualizer_widget = visualizer
+    display._spotify_bars_overlay = _OverlayGeometryStub(QRect(0, 0, 100, 400))
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+
+    scheduled_callbacks: list[tuple[int, object]] = []
+
+    monkeypatch.setattr(
+        widget_setup_all.ThreadManager,
+        "single_shot",
+        lambda delay, callback, *args, **kwargs: scheduled_callbacks.append(
+            (int(delay), lambda: callback(*args, **kwargs))
+        ),
+    )
+
+    widget_setup_all._reapply_saved_custom_layouts_after_startup(
+        display,
+        log_prefix="[TEST]",
+    )
+
+    custom_rect = QRect(204, 180, 420, 280)
+    assert display._apply_saved_layouts_calls == 1
+    assert visualizer.geometry() == custom_rect
+    assert display._spotify_bars_overlay.geometry() == custom_rect
+    assert len(scheduled_callbacks) == 1
+    assert scheduled_callbacks[0][0] == widget_setup_all.SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS
+
+    visualizer._restore_custom_layout_size_constraints()
+    QWidget.setGeometry(visualizer, QRect(0, 0, 357, 357))
+    display._spotify_bars_overlay.setGeometry(QRect(0, 0, 357, 357))
+
+    scheduled_callbacks.pop(0)[1]()
+
+    assert bool(getattr(display, "_custom_layout_runtime_stabilize_pending", False)) is True
+    assert len(scheduled_callbacks) == 1
+    assert scheduled_callbacks[0][0] == widget_setup_all.SPOTIFY_CUSTOM_LAYOUT_STABILIZE_CONFIRM_MS
+    assert display._apply_saved_layouts_calls == 1
+
+    scheduled_callbacks.pop(0)[1]()
+
+    assert bool(getattr(display, "_custom_layout_runtime_stabilize_pending", False)) is False
+    assert display._apply_saved_layouts_calls == 2
+    assert visualizer.geometry() == custom_rect
+    assert display._spotify_bars_overlay.geometry() == custom_rect
 
 
 def test_custom_layout_manager_reasserts_media_outer_rect_after_artwork_scale_apply(qtbot):

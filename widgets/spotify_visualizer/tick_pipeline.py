@@ -535,6 +535,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         'big_bass_pulse': widget._bubble_big_bass_pulse,
         'small_freq_pulse': widget._bubble_small_freq_pulse,
         'big_specular_max_size': widget._bubble_big_specular_max_size,
+        'big_visual_smoothing': getattr(widget, '_bubble_big_visual_smoothing', 0.5),
         'big_contraction_bias': widget._bubble_big_contraction_bias,
         'big_size_clamp': widget._bubble_big_size_clamp,
     })

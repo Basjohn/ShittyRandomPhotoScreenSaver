@@ -834,6 +834,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_big_size_max = max(0.010, min(0.060, float(kwargs['bubble_big_size_max'])))
     if 'bubble_small_size_max' in kwargs:
         widget._bubble_small_size_max = max(0.004, min(0.030, float(kwargs['bubble_small_size_max'])))
+    if 'bubble_big_visual_smoothing' in kwargs:
+        widget._bubble_big_visual_smoothing = max(0.0, min(1.0, float(kwargs['bubble_big_visual_smoothing'])))
     if 'bubble_big_contraction_bias' in kwargs:
         widget._bubble_big_contraction_bias = max(0.0, min(2.0, float(kwargs['bubble_big_contraction_bias'])))
     if 'bubble_big_size_clamp' in kwargs:

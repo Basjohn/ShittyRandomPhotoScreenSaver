@@ -177,6 +177,28 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_small_freq_pulse_label = QLabel(f"{val}%")
     bubble_freq_row.addWidget(tab.bubble_small_freq_pulse_label)
 
+    hero_visual_smoothing_row = _aligned_row(reactivity_bucket, "Hero Visual Smoothing:")
+    tab.bubble_big_visual_smoothing = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.bubble_big_visual_smoothing.setMinimum(0)
+    tab.bubble_big_visual_smoothing.setMaximum(100)
+    val = int(tab._default_float('spotify_visualizer', 'bubble_big_visual_smoothing', 0.5) * 100)
+    tab.bubble_big_visual_smoothing.setValue(max(0, min(100, val)))
+    tab.bubble_big_visual_smoothing.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.bubble_big_visual_smoothing.setTickInterval(10)
+    tab.bubble_big_visual_smoothing.setToolTip(
+        "Display-only smoothing for big/hero bubble size. "
+        "Lower = rawer motion, higher = softer visual settling. "
+        "Does not smooth the audio signal or Bubble loud-path authority."
+    )
+    bind_setting_signal(
+        tab,
+        tab.bubble_big_visual_smoothing.valueChanged,
+        updater=lambda v: tab.bubble_big_visual_smoothing_label.setText(f"{v}%"),
+    )
+    hero_visual_smoothing_row.addWidget(tab.bubble_big_visual_smoothing)
+    tab.bubble_big_visual_smoothing_label = QLabel(f"{val}%")
+    hero_visual_smoothing_row.addWidget(tab.bubble_big_visual_smoothing_label)
+
     tab._bubble_stream_direction_row_widget, stream_dir_row = _aligned_row_widget(motion_bucket, "Stream Direction:")
     tab.bubble_stream_direction = StyledComboBox(size_variant="compact")
     stream_options = [

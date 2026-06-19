@@ -294,6 +294,7 @@ _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_gradient_direction": lambda value: value,
     "bubble_big_size_max": float,
     "bubble_small_size_max": float,
+    "bubble_big_visual_smoothing": float,
     "bubble_big_contraction_bias": float,
     "bubble_big_size_clamp": float,
     "bubble_big_specular_max_size": float,
@@ -365,6 +366,7 @@ _BUBBLE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "bubble_pop_color": ([255, 255, 255, 180], list),
     "bubble_big_size_max": (0.038, float),
     "bubble_small_size_max": (0.018, float),
+    "bubble_big_visual_smoothing": (0.5, float),
     "bubble_big_contraction_bias": (1.0, float),
     "bubble_big_size_clamp": (4.0, float),
     "bubble_big_specular_max_size": (2.5, float),
@@ -1372,6 +1374,7 @@ class SpotifyVisualizerSettings:
     bubble_gradient_direction: str = "top"  # gradient vector independent of specular highlight
     bubble_big_size_max: float = 0.038
     bubble_small_size_max: float = 0.018
+    bubble_big_visual_smoothing: float = 0.5
     bubble_big_contraction_bias: float = 1.0
     bubble_big_size_clamp: float = 4.0
     bubble_big_specular_max_size: float = 2.5
