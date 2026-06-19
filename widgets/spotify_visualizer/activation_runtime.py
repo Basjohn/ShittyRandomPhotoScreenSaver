@@ -112,11 +112,15 @@ def log_live_activation_state(
         worker_recommended = bool(getattr(worker, "_use_recommended", True) if worker is not None else True)
         worker_block_pref = int(getattr(worker, "_preferred_block_size", 0) if worker is not None else 0)
         worker_block_effective = int(getattr(worker, "_effective_block_size", 0) if worker is not None else 0)
+        bubble_group_drift = bool(getattr(widget, "_bubble_group_drift", False))
+        bubble_drift_direction = str(getattr(widget, "_bubble_drift_direction", "none") or "none")
+        bubble_big_visual_smoothing = float(getattr(widget, "_bubble_big_visual_smoothing", 0.5) or 0.5)
         logger.info(
             (
                 "[SPOTIFY_VIS][LIVE] reason=%s mode=%s preset_index=%d preset_kind=%s preset_name=%s "
                 "preset_path=%s cache_manual=%.3f worker_manual=%.3f worker_dynamic=%s worker_sensitivity=%.3f "
                 "worker_recommended=%s worker_block=%d worker_block_pref=%d worker_input_gain=%.3f worker_agc=%.3f "
+                "bubble_group_drift=%s bubble_drift_direction=%s bubble_big_visual_smoothing=%.3f "
                 "widget_fill=%s widget_border=%s widget_border_opacity=%.3f "
                 "widget_ghost=%s widget_ghost_alpha=%.3f widget_ghost_decay=%.3f "
                 "overlay_fill=%s overlay_border=%s overlay_peak_decay=%.3f "
@@ -137,6 +141,9 @@ def log_live_activation_state(
             worker_block_pref,
             float(getattr(worker, "_input_gain", 1.0) if worker is not None else 1.0),
             float(getattr(worker, "_agc_strength", 0.5) if worker is not None else 0.5),
+            bubble_group_drift,
+            bubble_drift_direction,
+            bubble_big_visual_smoothing,
             widget._bar_fill_color.getRgb(),
             widget._bar_border_color.getRgb(),
             float(widget._bar_border_color.alphaF()),

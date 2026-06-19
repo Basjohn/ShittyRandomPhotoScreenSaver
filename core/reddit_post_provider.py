@@ -6,8 +6,11 @@ URL routing. This module owns only *where* post rows come from.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
+from email.utils import parsedate_to_datetime
 from threading import Event
 from typing import Any, Optional, Protocol
+from xml.etree import ElementTree as ET
 
 import requests
 
@@ -19,9 +22,11 @@ from core.settings.widget_capacity_policy import (
 
 logger = get_logger(__name__)
 
+REDDIT_PROVIDER_RSS = "rss"
 REDDIT_PROVIDER_PULLPUSH = "pullpush"
 REDDIT_PROVIDER_PUBLIC_JSON = "public_json"
 _VALID_PROVIDER_IDS = {
+    REDDIT_PROVIDER_RSS,
     REDDIT_PROVIDER_PULLPUSH,
     REDDIT_PROVIDER_PUBLIC_JSON,
 }
@@ -67,7 +72,187 @@ def normalize_reddit_provider_id(raw: object) -> str:
     provider_id = str(raw or "").strip().lower()
     if provider_id in _VALID_PROVIDER_IDS:
         return provider_id
-    return REDDIT_PROVIDER_PULLPUSH
+    return REDDIT_PROVIDER_RSS
+
+
+def _acquire_widget_reddit_request_slot(request: RedditFetchRequest) -> str:
+    """Acquire a shared Reddit-family request slot for widget fetches."""
+
+    from core.reddit_rate_limiter import (
+        RateLimitPriority,
+        RedditRateLimiter,
+    )
+
+    reserved_quota = RedditRateLimiter.reserve_quota(count=1, namespace="widget")
+    if not reserved_quota:
+        logger.warning("[RATE_LIMIT] Could not reserve quota for widget, waiting...")
+    try:
+        return RedditRateLimiter.acquire_request_slot(
+            priority=RateLimitPriority.HIGH,
+            namespace="widget",
+            shutdown_event=request.shutdown_event,
+            skip_if_blocked=True,
+        )
+    finally:
+        if reserved_quota:
+            RedditRateLimiter.release_quota(count=1, namespace="widget")
+
+
+def _record_reddit_blocked_response(reason: str) -> None:
+    """Refresh the shared blocked cooldown after a Reddit-family block."""
+
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    try:
+        RedditRateLimiter.record_blocked_response(reason=reason)
+    except Exception:
+        logger.debug("[REDDIT] Failed to record blocked Reddit response", exc_info=True)
+
+
+def _build_reddit_request_headers(stable_key: str, *, accept: str) -> dict[str, str]:
+    """Build stable persona headers for public Reddit-family endpoints."""
+
+    from core.reddit_rate_limiter import get_reddit_request_persona
+
+    persona = get_reddit_request_persona(stable_key)
+    return {
+        "User-Agent": persona.user_agent,
+        **persona.headers,
+        "Accept": accept,
+    }
+
+
+def _normalize_posts_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize heterogeneous provider rows into the widget's post shape."""
+
+    deduped: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        title = str(row.get("title") or "").strip()
+        if not title:
+            continue
+
+        url_str = str(row.get("url") or "").strip()
+        if not url_str:
+            continue
+
+        try:
+            score = int(row.get("score") or 0)
+        except Exception:
+            score = 0
+        try:
+            created_utc = float(row.get("created_utc") or 0.0)
+        except Exception:
+            created_utc = 0.0
+
+        post = {
+            "title": title,
+            "url": url_str,
+            "score": score,
+            "created_utc": created_utc,
+        }
+        existing = deduped.get(url_str)
+        if existing is None:
+            deduped[url_str] = post
+            continue
+        if created_utc > float(existing.get("created_utc") or 0.0):
+            deduped[url_str] = post
+            continue
+        if created_utc == float(existing.get("created_utc") or 0.0) and score > int(existing.get("score") or 0):
+            deduped[url_str] = post
+
+    posts = list(deduped.values())
+    posts.sort(
+        key=lambda post: (
+            -float(post.get("created_utc") or 0.0),
+            -int(post.get("score") or 0),
+            str(post.get("title") or ""),
+        )
+    )
+    return posts
+
+
+def _parse_reddit_timestamp(value: object) -> float:
+    """Parse Atom/RSS date strings into epoch seconds."""
+
+    text = str(value or "").strip()
+    if not text:
+        return 0.0
+    try:
+        return float(parsedate_to_datetime(text).timestamp())
+    except Exception:
+        pass
+    try:
+        normalized = text.replace("Z", "+00:00")
+        return float(datetime.fromisoformat(normalized).timestamp())
+    except Exception:
+        return 0.0
+
+
+class RedditRssProvider:
+    """Fresh subreddit feed provider using Reddit's public RSS/Atom endpoint."""
+
+    provider_id = REDDIT_PROVIDER_RSS
+
+    def fetch_posts(self, request: RedditFetchRequest) -> RedditProviderResult:
+        slot_state = _acquire_widget_reddit_request_slot(request)
+        if slot_state == "shutdown":
+            return RedditProviderResult.skipped("shutdown")
+        if slot_state == "blocked":
+            logger.warning("[RATE_LIMIT] Reddit RSS widget skipping fetch after blocked cooldown re-check")
+            return RedditProviderResult.skipped("blocked_cooldown")
+
+        url = f"https://www.reddit.com/r/{request.subreddit}/.rss"
+        headers = _build_reddit_request_headers(
+            f"{request.cache_key}:{request.subreddit}:rss",
+            accept="application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8",
+        )
+        logger.debug("[REDDIT] Fetching RSS feed: subreddit=%s", request.subreddit)
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code in {403, 429}:
+            _record_reddit_blocked_response(f"rss:{request.subreddit}:{resp.status_code}")
+        resp.raise_for_status()
+        posts = self._parse_feed(resp.content)
+        logger.debug(
+            "[REDDIT] RSS feed normalized: subreddit=%s rows=%s",
+            request.subreddit,
+            len(posts),
+        )
+        return RedditProviderResult.with_posts(posts)
+
+    def _parse_feed(self, payload: bytes) -> list[dict[str, Any]]:
+        root = ET.fromstring(payload)
+        rows: list[dict[str, Any]] = []
+        for entry in root.findall(".//{*}entry"):
+            title = "".join(entry.findtext("{*}title", default="")).strip()
+            if not title:
+                continue
+
+            link_href = ""
+            for link_node in entry.findall("{*}link"):
+                href = str(link_node.attrib.get("href") or "").strip()
+                rel = str(link_node.attrib.get("rel") or "").strip().lower()
+                if href and rel in {"alternate", ""}:
+                    link_href = href
+                    break
+                if href and not link_href:
+                    link_href = href
+            if not link_href:
+                link_href = str(entry.findtext("{*}id", default="")).strip()
+            if not link_href:
+                continue
+
+            created_utc = _parse_reddit_timestamp(
+                entry.findtext("{*}updated", default="") or entry.findtext("{*}published", default="")
+            )
+            rows.append(
+                {
+                    "title": title,
+                    "url": link_href,
+                    "score": 0,
+                    "created_utc": created_utc,
+                }
+            )
+        return _normalize_posts_from_rows(rows)
 
 
 class PullPushProvider:
@@ -76,16 +261,26 @@ class PullPushProvider:
     provider_id = REDDIT_PROVIDER_PULLPUSH
 
     def fetch_posts(self, request: RedditFetchRequest) -> RedditProviderResult:
-        effective_limit = clamp_list_capacity(request.limit)
+        rows = self._fetch_rows(
+            request.subreddit,
+            size=max(1, clamp_list_capacity(request.limit)),
+        )
+        posts = self._normalize_rows(rows)
+        logger.debug(
+            "[REDDIT] PullPush feed normalized: subreddit=%s rows=%s",
+            request.subreddit,
+            len(posts),
+        )
+        return RedditProviderResult.with_posts(posts)
+
+    def _fetch_rows(self, subreddit: str, *, size: int) -> list[dict[str, Any]]:
         params = {
-            "subreddit": request.subreddit,
-            "sort": "desc",
-            "sort_type": "created_utc",
-            "size": min(LIST_WIDGET_MAX_CAPACITY, max(1, effective_limit)),
+            "subreddit": subreddit,
+            "size": int(size),
         }
         logger.debug(
             "[REDDIT] Fetching PullPush feed: subreddit=%s size=%s",
-            request.subreddit,
+            subreddit,
             params["size"],
         )
         resp = requests.get(
@@ -95,15 +290,14 @@ class PullPushProvider:
         )
         resp.raise_for_status()
         payload = resp.json()
-
         rows = payload.get("data")
         if not isinstance(rows, list):
-            rows = []
+            return []
+        return [row for row in rows if isinstance(row, dict)]
 
-        posts: list[dict[str, Any]] = []
+    def _normalize_rows(self, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        normalized_rows: list[dict[str, Any]] = []
         for row in rows:
-            if not isinstance(row, dict):
-                continue
             title = str(row.get("title") or "").strip()
             if not title:
                 continue
@@ -117,25 +311,15 @@ class PullPushProvider:
             else:
                 continue
 
-            try:
-                score = int(row.get("score") or 0)
-            except Exception:
-                score = 0
-            try:
-                created_utc = float(row.get("created_utc") or 0.0)
-            except Exception:
-                created_utc = 0.0
-
-            posts.append(
+            normalized_rows.append(
                 {
                     "title": title,
                     "url": url_str,
-                    "score": score,
-                    "created_utc": created_utc,
+                    "score": row.get("score") or 0,
+                    "created_utc": row.get("created_utc") or 0.0,
                 }
             )
-
-        return RedditProviderResult.with_posts(posts)
+        return _normalize_posts_from_rows(normalized_rows)
 
 
 class RedditPublicJsonProvider:
@@ -151,27 +335,10 @@ class RedditPublicJsonProvider:
     def fetch_posts(self, request: RedditFetchRequest) -> RedditProviderResult:
         import time
 
-        from core.reddit_rate_limiter import (
-            RateLimitPriority,
-            RedditRateLimiter,
-            get_reddit_request_persona,
-        )
+        from core.reddit_rate_limiter import get_reddit_request_persona
 
         start_time = time.perf_counter()
-
-        reserved_quota = RedditRateLimiter.reserve_quota(count=1, namespace="widget")
-        if not reserved_quota:
-            logger.warning("[RATE_LIMIT] Could not reserve quota for widget, waiting...")
-        try:
-            slot_state = RedditRateLimiter.acquire_request_slot(
-                priority=RateLimitPriority.HIGH,
-                namespace="widget",
-                shutdown_event=request.shutdown_event,
-                skip_if_blocked=True,
-            )
-        finally:
-            if reserved_quota:
-                RedditRateLimiter.release_quota(count=1, namespace="widget")
+        slot_state = _acquire_widget_reddit_request_slot(request)
 
         if slot_state == "shutdown":
             return RedditProviderResult.skipped("shutdown")
@@ -205,11 +372,8 @@ class RedditPublicJsonProvider:
             )
 
         resp = requests.get(url, headers=headers, params=params, timeout=10)
-        if resp.status_code == 403:
-            try:
-                RedditRateLimiter.record_blocked_response(reason=f"widget:{request.subreddit}")
-            except Exception:
-                logger.debug("[REDDIT] Failed to record blocked Reddit response", exc_info=True)
+        if resp.status_code in {403, 429}:
+            _record_reddit_blocked_response(f"widget:{request.subreddit}:{resp.status_code}")
         resp.raise_for_status()
         payload = resp.json()
 
@@ -261,6 +425,8 @@ def build_reddit_post_provider(provider: object | None = None) -> RedditPostProv
     """Build the configured provider for the branded Reddit widget."""
 
     provider_id = normalize_reddit_provider_id(provider)
+    if provider_id == REDDIT_PROVIDER_RSS:
+        return RedditRssProvider()
     if provider_id == REDDIT_PROVIDER_PUBLIC_JSON:
         return RedditPublicJsonProvider()
     return PullPushProvider()

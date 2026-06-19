@@ -133,6 +133,15 @@ def _snapshot_max_radius(
     return max((pos_data[i] for i in range(2, len(pos_data), 4)), default=0.0)
 
 
+def _movement_signs(values):
+    signs = []
+    for value in values:
+        if abs(value) <= 1e-6:
+            continue
+        signs.append(1 if value > 0.0 else -1)
+    return signs
+
+
 def _snapshot_small_max_radius(
     sim,
     *,
@@ -958,6 +967,85 @@ class TestStreamSpeedReactivity:
             f"Bass-heavy sustained loud motion {hot_displacement:.4f} should exceed quiet motion "
             f"{quiet_displacement:.4f} even when the vocal lane stays calm."
         )
+
+
+@pytest.mark.parametrize(
+    ("drift_dir", "axis"),
+    [
+        ("random", "x"),
+        ("diagonal", "x"),
+        ("swish_horizontal", "x"),
+        ("swish_vertical", "y"),
+    ],
+)
+def test_group_drift_aligns_non_swirl_bubble_motion(drift_dir, axis):
+    from widgets.spotify_visualizer.bubble_simulation import BubbleState
+
+    sim = BubbleSimulation()
+    sim._time = 1.0
+    sim._bubbles = [
+        BubbleState(x=0.30, y=0.45, radius=0.012, is_big=False, phase=0.1, drift_bias=-0.9),
+        BubbleState(x=0.50, y=0.50, radius=0.012, is_big=False, phase=2.0, drift_bias=0.1),
+        BubbleState(x=0.70, y=0.55, radius=0.012, is_big=False, phase=4.0, drift_bias=0.9),
+    ]
+    starts = [(b.x, b.y) for b in sim._bubbles]
+    settings = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction="none",
+        bubble_drift_direction=drift_dir,
+        bubble_group_drift=True,
+        bubble_drift_amount=1.0,
+        bubble_drift_speed=0.8,
+        bubble_drift_frequency=0.5,
+    )
+
+    sim.tick(1 / 60, _energy(bass=0.55, mid=0.20, high=0.10), settings)
+
+    if axis == "x":
+        deltas = [bubble.x - start[0] for bubble, start in zip(sim._bubbles, starts)]
+    else:
+        deltas = [bubble.y - start[1] for bubble, start in zip(sim._bubbles, starts)]
+    signs = _movement_signs(deltas)
+
+    assert len(signs) == 3
+    assert len(set(signs)) == 1
+    assert max(abs(delta) for delta in deltas) > min(abs(delta) for delta in deltas)
+
+
+def test_group_drift_viz_diagnostics_path_does_not_crash(monkeypatch):
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_group_drift=True,
+        bubble_drift_direction="diagonal",
+    )
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.bubble_simulation.is_viz_diagnostics_enabled",
+        lambda: True,
+    )
+    _warm_up(sim, settings, frames=8)
+
+    sim.tick(
+        1 / 60,
+        {
+            "bass": 1.15,
+            "mid": 0.42,
+            "high": 0.11,
+            "overall": 0.78,
+            "pulse_bass": 1.15,
+            "pulse_mid": 0.42,
+            "pulse_high": 0.11,
+            "pulse_overall": 0.78,
+            "smooth_mid": 0.42,
+            "smooth_high": 0.11,
+            "crest": 0.08,
+        },
+        settings,
+    )
+
+    diag = sim.get_big_lane_diagnostics()
+    assert diag["group_drift_configured"] == pytest.approx(1.0)
+    assert diag["group_drift_active"] == pytest.approx(1.0)
 
     def test_sustained_loud_motion_releases_quickly_after_the_drop(self):
         sim = BubbleSimulation()

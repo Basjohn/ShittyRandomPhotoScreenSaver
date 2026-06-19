@@ -307,6 +307,20 @@ def build_bubble_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     tab.bubble_drift_amount_label = QLabel(f"{val}%")
     drift_amount_row.addWidget(tab.bubble_drift_amount_label)
 
+    group_drift_row = _aligned_row(motion_bucket, "Group Drift:")
+    tab.bubble_group_drift = QCheckBox("Enable")
+    tab.bubble_group_drift.setProperty("circleIndicator", True)
+    tab.bubble_group_drift.setChecked(
+        bool(tab._default_bool('spotify_visualizer', 'bubble_group_drift', False))
+    )
+    tab.bubble_group_drift.setToolTip(
+        "Uses one shared drift carrier for non-swirl Bubble drift modes, while still "
+        "keeping per-bubble force variation so the field moves together without becoming robotic."
+    )
+    bind_setting_signal(tab, tab.bubble_group_drift.toggled)
+    group_drift_row.addWidget(tab.bubble_group_drift)
+    group_drift_row.addStretch()
+
     drift_speed_row = _aligned_row(motion_bucket, "Drift Speed:")
     tab.bubble_drift_speed = NoWheelSlider(Qt.Orientation.Horizontal)
     tab.bubble_drift_speed.setMinimum(0)

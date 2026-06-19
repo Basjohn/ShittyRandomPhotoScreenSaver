@@ -16,6 +16,7 @@
         "bubble_stream_reactivity": 1.2,
         "bubble_rotation_amount": 0.15,
         "bubble_drift_amount": 0.5,
+        "bubble_group_drift": false,
         "bubble_drift_speed": 0.35,
         "bubble_drift_frequency": 0.5,
         "bubble_drift_direction": "swish_horizontal",

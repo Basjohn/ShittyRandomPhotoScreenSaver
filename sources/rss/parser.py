@@ -145,6 +145,24 @@ class RSSParser:
         logger.warning("[RSS_PARSER] Unrecognised JSON structure")
         return []
 
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        """Parse ISO-like timestamps without requiring optional dependencies."""
+
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except Exception:
+            pass
+        try:
+            from dateutil import parser as dp
+            return dp.parse(text)
+        except (ValueError, TypeError, ImportError):
+            logger.debug("[RSS_PARSER] Failed to parse date '%s'", text, exc_info=True)
+            return None
+
     # ------------------------------------------------------------------
     # Flickr entry parsing
     # ------------------------------------------------------------------
@@ -172,11 +190,7 @@ class RSSParser:
             created = None
             published = item.get("published")
             if published:
-                try:
-                    from dateutil import parser as dp
-                    created = dp.parse(published)
-                except (ValueError, TypeError, ImportError):
-                    logger.debug("[RSS_PARSER] Failed to parse date '%s'", published, exc_info=True)
+                created = RSSParser._parse_iso_datetime(published)
 
             entries.append(ParsedEntry(
                 image_url=image_url,

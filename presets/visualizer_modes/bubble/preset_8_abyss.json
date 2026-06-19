@@ -18,6 +18,7 @@
         "bubble_big_specular_max_size": 2.0,
         "bubble_big_visual_smoothing": 0.5,
         "bubble_drift_amount": 1.0,
+        "bubble_group_drift": false,
         "bubble_drift_direction": "swirl_cw",
         "bubble_drift_frequency": 0.9,
         "bubble_drift_speed": 0.7,

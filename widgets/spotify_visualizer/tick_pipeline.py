@@ -418,9 +418,19 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         eb_snap["smooth_mid"] = idle_mid
         eb_snap["smooth_high"] = idle_high
         eb_snap["crest"] = 0.0
+        eb_snap["pulse_bass"] = idle_bass
+        eb_snap["pulse_mid"] = idle_mid
+        eb_snap["pulse_high"] = idle_high
+        eb_snap["pulse_overall"] = 0.015
     else:
-        # Mix transient bass into pulse bass for immediate kick response
+        # Build two parallel Bubble feeds:
+        # - motion feed (`bass`/`mid`) can absorb transient/onset energy
+        # - pulse feed (`pulse_*`) stays clean so Bubble size authority can
+        #   come from sustained body plus non-transient body-delta
         _pulse_bass = getattr(eb_pulse, 'bass', 0.0) if eb_pulse else 0.0
+        _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
+        _pulse_high = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
+        _pulse_overall = getattr(eb_pulse, 'overall', 0.0) if eb_pulse else 0.0
         _t_bass = getattr(tb, 'bass_transient', 0.0) if tb else 0.0
         _t_mid = getattr(tb, 'mid_transient', 0.0) if tb else 0.0
         _onset_detected = bool(getattr(tb, 'onset_detected', False)) if tb else False
@@ -468,11 +478,10 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         ) * _onset_crest_scale * max(0.0, min(1.0, (_pulse_bass - 0.74) / 0.28))
         _hot_crest_step += _onset_crest_step
         _mixed_bass = min(_t_clamp, _pulse_bass + _t_bass * _t_gain * _bmix_bass)
-        _pulse_mid = getattr(eb_pulse, 'mid', 0.0) if eb_pulse else 0.0
         _mixed_mid = min(_t_clamp, _pulse_mid + _t_mid * _t_gain * _bmix_vocal)
         eb_snap["bass"] = min(_t_clamp, _mixed_bass + _hot_bass_lift + _hot_crest_step)
         eb_snap["mid"] = _mixed_mid
-        eb_snap["high"] = getattr(eb_pulse, 'high', 0.0) if eb_pulse else 0.0
+        eb_snap["high"] = _pulse_high
         eb_snap["smooth_mid"] = max(
             getattr(eb_smooth, 'mid', 0.0) if eb_smooth else 0.0,
             _hot_presence * 0.82 + _hot_crest_step * 0.12,
@@ -495,6 +504,18 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
             _hot_crest_step * 4.2
             + _onset_crest_step * 1.6,
         )
+        eb_snap["pulse_bass"] = _pulse_bass
+        eb_snap["pulse_mid"] = _pulse_mid
+        eb_snap["pulse_high"] = _pulse_high
+        eb_snap["pulse_overall"] = max(
+            _pulse_overall,
+            min(
+                1.0,
+                _pulse_bass * 0.46
+                + _pulse_mid * 0.34
+                + _pulse_high * 0.20,
+            ),
+        )
 
     sim_settings = getattr(widget, "_bubble_dispatch_settings", None)
     if not isinstance(sim_settings, dict):
@@ -510,6 +531,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         "bubble_stream_reactivity": widget._bubble_stream_reactivity,
         "bubble_rotation_amount": widget._bubble_rotation_amount,
         "bubble_drift_amount": widget._bubble_drift_amount,
+        "bubble_group_drift": getattr(widget, "_bubble_group_drift", False),
         "bubble_drift_speed": widget._bubble_drift_speed,
         "bubble_drift_frequency": widget._bubble_drift_frequency,
         "bubble_drift_direction": widget._bubble_drift_direction,

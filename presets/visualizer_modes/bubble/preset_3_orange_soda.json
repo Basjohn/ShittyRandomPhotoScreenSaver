@@ -24,6 +24,7 @@
         "bubble_bounce_small_speed": 0.5,
         "bubble_collision_pop_mode": "one",
         "bubble_drift_amount": 0.7,
+        "bubble_group_drift": false,
         "bubble_drift_direction": "swish_vertical",
         "bubble_drift_frequency": 0.55,
         "bubble_drift_speed": 0.5,

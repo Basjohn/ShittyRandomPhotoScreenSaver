@@ -22,72 +22,22 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-- [ ] Visualizer CUSTOM settings-close geometry audit
-  - [ ] Keep `U-09` open until a real settings-close rebuild no longer produces:
-    - top-left visualizer placement
-    - impossible narrow/square visualizer live shapes
-    - replay-green/runtime-wrong visualizer ownership
-  - [ ] Prove the startup/settings rebuild seam uses one cautious delayed verify/confirm contract before any last-resort visualizer custom-rect reapply.
-  - [ ] Add or keep regression bars for:
-    - startup square-pressure recovery without blind next-turn reapply churn
-    - persistent post-startup visualizer custom-rect mismatch self-healing after delayed confirmation
-    - no duplicate-owner regression from the separate sleep/wake fallback path
-  - [ ] Recheck the newest settings-close/runtime logs after the next live validation and prune this task immediately if the visualizer stays on its committed rect.
-
-- [ ] Bubble preset/runtime pass
-  - [ ] Treat `Preset 9 (Deep Sea Hero Lift)` as the current golden debug preset/oracle for loud-path Bubble work until the loud-collapse family is truly closed.
-  - [ ] Keep the `Preset 9` bars as the active minimum so Bubble tuning stays anchored to runtime-visible truth instead of drifting back into proxy math:
-    - broad hot windows must stay more alive than the soft opener
-    - loud fixture windows must gain visible hero openness, not just speed
-    - manual-floor loud holds must stay alive without clamp-faked single-shape pinning
-  - [ ] Re-run the difficult-song runtime with the current `Preset 9` authored envelope:
-    - `bubble_big_size_max=0.038`
-    - `bubble_big_size_clamp=4.0`
-    - `bubble_big_bass_pulse=0.85`
-    - `bubble_input_gain=0.75`
-    - `bubble_agc_strength=0.18`
-  - [ ] Keep the current logic order explicit:
-    - authored AGC/input/transient balance remains the first suspect because it already helped somewhat without reopening shared-floor churn
-    - Bubble-owned code changes should stay narrow and only serve seams the `Preset 9` bars still prove wrong
-  - [ ] If runtime still shows loud small-bubble under-participation, capture the exact `--viz` window and compare it against the corrected `Preset 9` replay/fixture bars before any more Bubble tuning.
-
-- [ ] Weather cache blanking audit
-  - [ ] Confirm why Weather can still go blank even though cache should remain visible until replacement data arrives.
-  - [ ] Keep/add cache-authority bars proving:
-    - stale cache stays visible through refresh
-    - empty/error replacements do not blank a valid card
-    - cache timestamps do not force an avoidable empty startup
+- No active tasks right now. Add new work here only when it is still live and unvalidated.
 
 ## Watchlist
 
-- Spectrum solid-bar smoothness is no longer active work; keep future changes visual-only.
-- Bubble end-to-end audit notes are historical reference now; use the new preset/runtime audit before more Bubble code tuning.
 - Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
 
 ## Deferred / Not Active
 
 - [ ] Feeds widget family (deferred architecture track)
   - [ ] Keep Reddit as its own branded widget and shared runtime owner; do not replace it with Feeds or duplicate its paint/cache/refresh/click machinery.
-  - [ ] Extract the reusable list-feed seams from Reddit into shared code without changing Reddit UX first:
-    - feed-item model (`title`, `url`, `created_utc`, optional score/source label)
-    - shared service-backed refresh/cooldown/startup-skip/cache-authority policy
-    - shared progressive visible-count growth and cache replay
-    - shared manual refresh / `--noupdates` behavior
-    - shared URL-open routing and secure-desktop handoff
-  - [ ] Keep provider/network semantics widget-owned and explicit:
-    - Reddit provider behavior stays local to Reddit
-    - Feeds provider behavior stays local to Feeds
-    - shared helpers must not become a second opaque backend framework
-  - [ ] Design `Feeds` as an additional widget family that reuses the shared Reddit-derived architecture but has its own identity and settings:
-    - allow user-configured feed widget spawns (`1..5`)
-    - per-spawn source URL with quick validation/test affordance
-    - per-spawn cache key/storage and visible-count settings
-    - shared cooldown / startup-skip policy aligned with current Reddit expectations, including `--noupdates`
-  - [ ] Add settings/runtime bars before activating Feeds work:
-    - feed-url validation does not block settings entry
-    - empty/error replacements do not blank valid cached content
-    - per-spawn caches stay isolated
-    - manual refresh and cooldown behavior match the intended user contract
+  - [ ] Extract reusable list-feed seams from Reddit without changing Reddit UX first: feed item model, shared service-backed refresh/cooldown/startup-skip/cache-authority policy, progressive visible-count growth, manual refresh, and URL-open routing.
+  - [ ] Keep provider/network semantics widget-owned and explicit so Reddit and Feeds can diverge cleanly without a second opaque backend framework.
+  - [ ] Design `Feeds` as an additional widget family with `1..5` user-configured spawns, per-spawn source URL, quick validation/test affordance, isolated cache key/storage, and shared `--noupdates` / cooldown behavior.
+  - [ ] Make official/feed-native sources the first-class Feeds contract: custom RSS/Atom, explicit JSON feeds, and source-specific adapters only when the site already offers a stable public feed contract.
+  - [ ] Keep likely friendly Feeds source candidates narrow and explicit: official publisher RSS/Atom feeds, project/blog feeds, public NASA/APOD-style feeds, Bing-style image/news feeds, Flickr public feeds, and other feed-native sources that do not require HTML scraping or session automation.
+  - [ ] Add settings/runtime bars before activating Feeds work: feed-url validation stays off the UI thread, empty/error replacements do not blank valid cached content, per-spawn caches stay isolated, and manual refresh/cooldown/startup-skip behavior matches the intended user contract.
 - Dynamic Volume Floor follow-up stays deferred.
 - Startup update-policy observability and image-cache/prescale perf stay deferred behind the current widget/runtime priorities.
 - Secure-desktop long-runtime exit reliability stays deferred.

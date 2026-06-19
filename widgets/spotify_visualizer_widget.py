@@ -323,6 +323,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_stream_reactivity: float = 0.5
         self._bubble_rotation_amount: float = 0.5
         self._bubble_drift_amount: float = 0.5
+        self._bubble_group_drift: bool = False
         self._bubble_drift_speed: float = 0.5
         self._bubble_drift_frequency: float = 0.5
         self._bubble_drift_direction: str = "random"
@@ -390,6 +391,7 @@ class SpotifyVisualizerWidget(QWidget):
             "bubble_stream_reactivity": self._bubble_stream_reactivity,
             "bubble_rotation_amount": self._bubble_rotation_amount,
             "bubble_drift_amount": self._bubble_drift_amount,
+            "bubble_group_drift": self._bubble_group_drift,
             "bubble_drift_speed": self._bubble_drift_speed,
             "bubble_drift_frequency": self._bubble_drift_frequency,
             "bubble_drift_direction": self._bubble_drift_direction,

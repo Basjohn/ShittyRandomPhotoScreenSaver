@@ -273,6 +273,7 @@ _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_stream_reactivity": float,
     "bubble_rotation_amount": float,
     "bubble_drift_amount": float,
+    "bubble_group_drift": bool,
     "bubble_drift_speed": float,
     "bubble_drift_frequency": float,
     "bubble_drift_direction": lambda value: value,
@@ -348,6 +349,7 @@ _BUBBLE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "bubble_stream_reactivity": (0.5, float),
     "bubble_rotation_amount": (0.5, float),
     "bubble_drift_amount": (0.5, float),
+    "bubble_group_drift": (False, bool),
     "bubble_drift_speed": (0.5, float),
     "bubble_drift_frequency": (0.5, float),
     "bubble_drift_direction": ("random", str),
@@ -1353,6 +1355,7 @@ class SpotifyVisualizerSettings:
     bubble_stream_reactivity: float = 0.5
     bubble_rotation_amount: float = 0.5
     bubble_drift_amount: float = 0.5
+    bubble_group_drift: bool = False
     bubble_drift_speed: float = 0.5
     bubble_drift_frequency: float = 0.5
     bubble_drift_direction: str = "random"  # none/left/right/diagonal/swish_{horizontal,vertical}/swirl_{cw,ccw}/random

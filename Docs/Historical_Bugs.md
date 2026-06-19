@@ -278,6 +278,8 @@ This is the long-term anti-regression record for the project, not an active task
   - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime
   - treating a green synthetic or widget-path bar as sufficient even after live logs still showed loud sections plateauing around modest visible output while raw/transient loudness was much higher
   - trying to fix several of these at once: signal source choice, small-lane support, big-lane hold, render sizing, and oracle expectations
+  - hardcoding extra loud-path Bubble body through more support-style branches while leaving the tiny-small render seam capped at a flat `0.5x` pulse multiplier; this let bars read "alive enough" while the actual tiny-small field still looked dead in loud/tail windows
+  - hero-only visual smoothing rewrites that improved soft flicker but left the same loud collapse shape intact; soft-passage settling and loud-path body authority need to stay separate seams
 - **Key lessons / guardrails from this failure family:**
   - when runtime says soft looks better than loud, the loud oracle must fail in that same shape before more code tuning continues
   - do one aspect change at a time once the oracle is suspect; otherwise good fixes can be buried under later overfit changes

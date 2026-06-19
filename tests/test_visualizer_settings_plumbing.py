@@ -85,6 +85,7 @@ class TestBubbleGpuPushKwargs:
             "bubble_stream_speed_cap", "bubble_stream_reactivity", "bubble_rotation_amount",
             "bubble_drift_amount", "bubble_drift_speed",
             "bubble_drift_frequency", "bubble_drift_direction",
+            "bubble_group_drift",
             "bubble_big_count", "bubble_small_count",
             "bubble_surface_reach",
             "bubble_bounce_big_pct", "bubble_bounce_small_pct",
@@ -567,6 +568,8 @@ class TestCreatorKwargs:
             bubble_bounce_small_speed=0.6,
             bubble_bounce_same_only=True,
             bubble_collision_pop_mode="one",
+            bubble_group_drift=True,
+            bubble_big_visual_smoothing=0.68,
         )
 
         apply_spotify_vis_model_config(FakeVis(), model)
@@ -587,6 +590,8 @@ class TestCreatorKwargs:
         assert captured["bubble_bounce_small_speed"] == pytest.approx(0.6)
         assert captured["bubble_bounce_same_only"] is True
         assert captured["bubble_collision_pop_mode"] == "one"
+        assert captured["bubble_group_drift"] is True
+        assert captured["bubble_big_visual_smoothing"] == pytest.approx(0.68)
 
     def test_apply_spotify_vis_model_config_passes_spectrum_glow_and_secondary_ghosts(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -5220,6 +5225,21 @@ class TestBubbleSettingsBinding:
         payload = model.to_dict()
         assert payload["widgets.spotify_visualizer.bubble_big_visual_smoothing"] == pytest.approx(0.73)
 
+    def test_bubble_group_drift_round_trips_through_visualizer_model(self):
+        from core.settings.models import SpotifyVisualizerSettings
+
+        model = SpotifyVisualizerSettings.from_mapping(
+            {
+                "mode": "bubble",
+                "bubble_group_drift": True,
+            },
+            apply_preset_overlay=False,
+        )
+
+        assert model.bubble_group_drift is True
+        payload = model.to_dict()
+        assert payload["widgets.spotify_visualizer.bubble_group_drift"] is True
+
     def test_load_bubble_mode_settings_updates_bubble_owned_controls(self):
         from ui.tabs.media.bubble_settings_binding import load_bubble_mode_settings
 
@@ -5281,6 +5301,7 @@ class TestBubbleSettingsBinding:
                 self.bubble_big_bass_pulse_label = _Label()
                 self.bubble_big_visual_smoothing = _Slider()
                 self.bubble_big_visual_smoothing_label = _Label()
+                self.bubble_group_drift = _Check()
                 self.bubble_stream_direction = _TextCombo()
                 self.bubble_drift_direction = _Combo(["none", "left", "right", "random"])
                 self.bubble_swirl_enabled = _Check()
@@ -5330,6 +5351,7 @@ class TestBubbleSettingsBinding:
                 "bubble_ghost_decay": 0.58,
                 "bubble_big_bass_pulse": 0.71,
                 "bubble_big_visual_smoothing": 0.62,
+                "bubble_group_drift": True,
                 "bubble_stream_direction": "left",
                 "bubble_drift_direction": "swirl_ccw",
                 "bubble_big_count": 12,
@@ -5354,6 +5376,7 @@ class TestBubbleSettingsBinding:
         assert tab.bubble_ghost_decay_slider.value == 58
         assert tab.bubble_big_bass_pulse.value == 71
         assert tab.bubble_big_visual_smoothing.value == 62
+        assert tab.bubble_group_drift.checked is True
         assert tab.bubble_stream_direction._index == 3
         assert tab.bubble_swirl_enabled.checked is True
         assert tab.bubble_swirl_direction.currentData() == "swirl_ccw"
@@ -5417,6 +5440,7 @@ class TestBubbleSettingsBinding:
             bubble_big_bass_pulse = _Slider(76)
             bubble_small_freq_pulse = _Slider(44)
             bubble_big_visual_smoothing = _Slider(68)
+            bubble_group_drift = _Check(True)
             bubble_stream_direction = _DataCombo("top_left")
             bubble_stream_constant_speed = _Slider(61)
             bubble_stream_speed_cap = _Slider(240)
@@ -5459,6 +5483,7 @@ class TestBubbleSettingsBinding:
         assert payload["bubble_ghost_alpha"] == pytest.approx(0.33)
         assert payload["bubble_ghost_decay"] == pytest.approx(0.48)
         assert payload["bubble_big_visual_smoothing"] == pytest.approx(0.68)
+        assert payload["bubble_group_drift"] is True
         assert payload["bubble_stream_direction"] == "top_left"
         assert payload["bubble_drift_direction"] == "swirl_ccw"
         assert payload["bubble_gradient_direction"] == "center_out"
@@ -5507,6 +5532,16 @@ class TestBubbleSwirlSettings:
             "bubble_drift_direction": "swirl_cw",
         })
         assert widget._bubble_drift_direction == "swirl_cw"
+
+    def test_config_applier_accepts_group_drift_flag(self):
+        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
+
+        class DummyWidget:
+            _bubble_group_drift = False
+
+        widget = DummyWidget()
+        apply_vis_mode_kwargs(widget, {"bubble_group_drift": True})
+        assert widget._bubble_group_drift is True
 
     def test_config_applier_accepts_directional_stream_diagonals(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs

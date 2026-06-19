@@ -79,6 +79,40 @@ def get_rss_background_cap(engine: ScreensaverEngine) -> int:
         return 35
 
 
+def get_rss_rotating_cache_size(engine: ScreensaverEngine) -> int:
+    """Return how many cached RSS images should be preloaded into the queue."""
+
+    try:
+        if not engine.settings_manager:
+            return 20
+
+        raw = engine.settings_manager.get('sources.rss_rotating_cache_size', 20)
+        rotating = int(raw)
+        return max(1, rotating)
+    except Exception as e:
+        logger.debug("[ENGINE] Exception suppressed: %s", e)
+        return 20
+
+
+def get_rss_startup_target_total(engine: ScreensaverEngine) -> int:
+    """Return the startup cache target for RSS source negotiation.
+
+    Startup should not keep negotiating new source downloads once the on-disk
+    RSS cache already satisfies the real runtime pool expectations. Use the
+    larger of the queue cap and preload cap so startup cache authority stays
+    aligned with what the engine can actually use.
+    """
+
+    try:
+        return max(
+            get_rss_background_cap(engine),
+            get_rss_rotating_cache_size(engine),
+        )
+    except Exception as e:
+        logger.debug("[ENGINE] Exception suppressed: %s", e)
+        return 35
+
+
 def get_rss_stale_minutes(engine: ScreensaverEngine) -> int:
     """Return TTL in minutes for stale RSS images.
 
@@ -143,13 +177,7 @@ def load_rss_images_async(engine: ScreensaverEngine) -> None:
             _preloaded = True
             cached = engine.rss_coordinator.get_cached_images()
             if cached:
-                rotating = 20
-                try:
-                    if engine.settings_manager:
-                        rotating = int(engine.settings_manager.get(
-                            'sources.rss_rotating_cache_size', 20))
-                except Exception:
-                    pass
+                rotating = get_rss_rotating_cache_size(engine)
                 if len(cached) > rotating:
                     random.shuffle(cached)
                     cached = cached[:rotating]

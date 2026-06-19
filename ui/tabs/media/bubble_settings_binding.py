@@ -109,6 +109,10 @@ def load_bubble_mode_settings(
         v = int(tab._config_float("spotify_visualizer", config, "bubble_drift_amount", 0.5) * 100)
         tab.bubble_drift_amount.setValue(max(0, min(100, v)))
         tab.bubble_drift_amount_label.setText(f"{v}%")
+    if hasattr(tab, "bubble_group_drift"):
+        tab.bubble_group_drift.setChecked(
+            tab._config_bool("spotify_visualizer", config, "bubble_group_drift", False)
+        )
     if hasattr(tab, "bubble_drift_speed"):
         v = int(tab._config_float("spotify_visualizer", config, "bubble_drift_speed", 0.5) * 100)
         tab.bubble_drift_speed.setValue(max(0, min(100, v)))
@@ -264,6 +268,9 @@ def collect_bubble_mode_settings(tab) -> dict[str, Any]:
         ) / 100.0,
         "bubble_rotation_amount": (tab.bubble_rotation_amount.value() if hasattr(tab, "bubble_rotation_amount") else 50) / 100.0,
         "bubble_drift_amount": (tab.bubble_drift_amount.value() if hasattr(tab, "bubble_drift_amount") else 50) / 100.0,
+        "bubble_group_drift": (
+            tab.bubble_group_drift.isChecked() if hasattr(tab, "bubble_group_drift") else False
+        ),
         "bubble_drift_speed": (tab.bubble_drift_speed.value() if hasattr(tab, "bubble_drift_speed") else 50) / 100.0,
         "bubble_drift_frequency": (
             tab.bubble_drift_frequency.value() if hasattr(tab, "bubble_drift_frequency") else 50

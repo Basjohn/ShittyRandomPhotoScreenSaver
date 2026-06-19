@@ -441,7 +441,7 @@
             "margin": 30,
             "monitor": 2,
             "position": "Bottom Center",
-            "provider": "pullpush",
+            "provider": "rss",
             "show_background": true,
             "show_refresh_spiral": true,
             "show_separators": true,

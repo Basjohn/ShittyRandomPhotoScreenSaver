@@ -448,8 +448,11 @@ class ScreensaverEngine(QObject):
             # Create single RSSCoordinator with all feed URLs
             if rss_feeds:
                 try:
+                    from engine.engine_rss import get_rss_startup_target_total
+
                     self.rss_coordinator = RSSCoordinator(
                         feed_urls=rss_feeds,
+                        target_total_images=get_rss_startup_target_total(self),
                         save_to_disk=bool(rss_save_to_disk and rss_save_directory),
                         save_directory=Path(rss_save_directory) if rss_save_directory else None,
                         thread_manager=self.thread_manager,
@@ -522,13 +525,9 @@ class ScreensaverEngine(QObject):
                         cached_imgs = self.rss_coordinator.get_cached_images()
                         if cached_imgs:
                             import random as _rnd
-                            cap = 35
-                            try:
-                                if self.settings_manager:
-                                    cap = int(self.settings_manager.get(
-                                        'sources.rss_rotating_cache_size', 20))
-                            except Exception:
-                                pass
+                            from engine.engine_rss import get_rss_rotating_cache_size
+
+                            cap = get_rss_rotating_cache_size(self)
                             if len(cached_imgs) > cap:
                                 _rnd.shuffle(cached_imgs)
                                 cached_imgs = cached_imgs[:cap]

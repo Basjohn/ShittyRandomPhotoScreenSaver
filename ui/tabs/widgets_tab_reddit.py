@@ -181,13 +181,14 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 
     provider_row = _aligned_row(reddit1_layout, "Provider:")
     tab.reddit_provider_combo = StyledComboBox()
+    tab.reddit_provider_combo.addItem("Reddit RSS (Live)", "rss")
     tab.reddit_provider_combo.addItem("PullPush (Hosted)", "pullpush")
     tab.reddit_provider_combo.addItem("Reddit Public JSON", "public_json")
     tab.reddit_provider_combo.setMinimumWidth(180)
     tab.reddit_provider_combo.setToolTip(
-        "Shared post source for Reddit 1 and Reddit 2. PullPush is the default hosted provider."
+        "Shared post source for Reddit 1 and Reddit 2. Reddit RSS is the default live provider."
     )
-    default_provider = tab._default_str('reddit', 'provider', 'pullpush').strip().lower() or 'pullpush'
+    default_provider = tab._default_str('reddit', 'provider', 'rss').strip().lower() or 'rss'
     default_provider_idx = tab.reddit_provider_combo.findData(default_provider)
     if default_provider_idx >= 0:
         tab.reddit_provider_combo.setCurrentIndex(default_provider_idx)
@@ -489,7 +490,7 @@ def load_reddit_settings(tab: WidgetsTab, widgets: dict) -> None:
 
     subreddit = tab._config_str('reddit', reddit_config, 'subreddit', 'All')
     tab.reddit_subreddit.setText(subreddit)
-    provider = tab._config_str('reddit', reddit_config, 'provider', 'pullpush').strip().lower() or 'pullpush'
+    provider = tab._config_str('reddit', reddit_config, 'provider', 'rss').strip().lower() or 'rss'
     provider_idx = tab.reddit_provider_combo.findData(provider)
     if provider_idx >= 0:
         tab.reddit_provider_combo.setCurrentIndex(provider_idx)
@@ -565,7 +566,7 @@ def save_reddit_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     reddit_config = {
         'enabled': family_enabled,
         'exit_on_click': tab.reddit_exit_on_click.isChecked(),
-        'provider': (tab.reddit_provider_combo.currentData() or 'pullpush'),
+        'provider': (tab.reddit_provider_combo.currentData() or 'rss'),
         'subreddit': tab.reddit_subreddit.text().strip() or 'wallpapers',
         'limit': clamp_list_capacity(tab.reddit_items.value(), default=10),
         'position': tab.reddit_position.currentText(),

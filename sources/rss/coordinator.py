@@ -3,7 +3,7 @@ RSSCoordinator - State machine, dynamic limits, orchestration.
 
 Responsibilities:
     - State machine: IDLE → LOADING → LOADED → ERROR
-    - Dynamic download budget based on cache size vs TARGET_TOTAL_IMAGES
+    - Dynamic download budget based on cache size vs startup target
     - Orchestrate cache, parser, downloader, and health tracker
     - Provide clean API for screensaver_engine (replaces raw RSSSource usage)
     - No time.sleep() in main flow - delegates to downloader's interruptible waits
@@ -72,6 +72,8 @@ class RSSCoordinator:
         timeout: int = DEFAULT_TIMEOUT_SECONDS,
         save_to_disk: bool = False,
         save_directory: Optional[Path] = None,
+        target_total_images: int = TARGET_TOTAL_IMAGES,
+        min_refresh_target: int = MIN_WALLPAPER_REFRESH_TARGET,
         thread_manager=None,
         resource_manager=None,
         shutdown_check: Optional[Callable[[], bool]] = None,
@@ -81,6 +83,8 @@ class RSSCoordinator:
         self._state = RSSState.IDLE
         self._thread_manager = thread_manager
         self._shutdown_check = shutdown_check
+        self._target_total_images = max(1, int(target_total_images))
+        self._min_refresh_target = max(1, min(int(min_refresh_target), self._target_total_images))
 
         # Save-to-disk config
         self._save_to_disk = save_to_disk
@@ -214,11 +218,12 @@ class RSSCoordinator:
 
         # Dynamic budget
         cached = self._cache.count
-        new_needed = max(0, TARGET_TOTAL_IMAGES - cached)
+        target_total = self._target_total_images
+        new_needed = max(0, target_total - cached)
 
         if new_needed == 0:
             logger.info(
-                f"[RSS_COORD] Cache full ({cached} >= {TARGET_TOTAL_IMAGES}), "
+                f"[RSS_COORD] Cache full ({cached} >= {target_total}), "
                 f"skipping all downloads"
             )
             self._set_state(RSSState.LOADED)
@@ -233,7 +238,7 @@ class RSSCoordinator:
         per_feed = min(per_feed, MAX_PER_FEED_DOWNLOAD)
 
         logger.info(
-            f"[RSS_COORD] Budget: cached={cached}, target={TARGET_TOTAL_IMAGES}, "
+            f"[RSS_COORD] Budget: cached={cached}, target={target_total}, "
             f"new_needed={new_needed}, per_feed={per_feed}, feeds={num_feeds}"
         )
 
@@ -394,15 +399,17 @@ class RSSCoordinator:
         processed_urls: List[str],
         existing_paths: Set[str],
     ) -> List[ImageMetadata]:
-        if len(current_new) >= MIN_WALLPAPER_REFRESH_TARGET:
+        if len(current_new) >= self._min_refresh_target:
             return current_new
 
-        budget_remaining = max(0, TARGET_TOTAL_IMAGES - self._cache.count)
+        if self._cache.count >= self._target_total_images:
+            return current_new
+        budget_remaining = max(0, self._target_total_images - self._cache.count)
         if budget_remaining == 0:
             return current_new
 
         deficit = min(
-            MIN_WALLPAPER_REFRESH_TARGET - len(current_new),
+            self._min_refresh_target - len(current_new),
             budget_remaining,
         )
         if deficit <= 0:

@@ -771,6 +771,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._bubble_rotation_amount = max(0.0, min(1.0, float(kwargs['bubble_rotation_amount'])))
     if 'bubble_drift_amount' in kwargs:
         widget._bubble_drift_amount = max(0.0, min(1.0, float(kwargs['bubble_drift_amount'])))
+    if 'bubble_group_drift' in kwargs:
+        widget._bubble_group_drift = bool(kwargs['bubble_group_drift'])
     if 'bubble_drift_speed' in kwargs:
         widget._bubble_drift_speed = max(0.0, min(1.0, float(kwargs['bubble_drift_speed'])))
     if 'bubble_drift_frequency' in kwargs:

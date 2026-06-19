@@ -9,10 +9,10 @@ from core.settings.models import RedditWidgetSettings
 from rendering.widget_factories import RedditWidgetFactory
 
 
-def test_reddit_defaults_use_pullpush_provider() -> None:
+def test_reddit_defaults_use_rss_provider() -> None:
     defaults = get_default_settings()
 
-    assert defaults["widgets"]["reddit"]["provider"] == "pullpush"
+    assert defaults["widgets"]["reddit"]["provider"] == "rss"
 
 
 def test_reddit_widget_settings_round_trip_provider() -> None:

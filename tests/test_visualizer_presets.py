@@ -309,7 +309,7 @@ def test_curated_bubble_presets_keep_direction_keys_when_present():
         assert sv["mode"] == "bubble"
 
         filtered = vp._filter_settings_for_mode("bubble", sv)
-        for key in ("bubble_gradient_direction", "bubble_specular_direction"):
+        for key in ("bubble_gradient_direction", "bubble_specular_direction", "bubble_group_drift"):
             if key in sv:
                 assert filtered.get(key) == sv[key], (
                     f"{preset_path} should preserve {key} during preset filtering"

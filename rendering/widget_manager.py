@@ -846,7 +846,8 @@ class WidgetManager:
                 (
                     "[SPOTIFY_VIS][CFG] %s adaptive=%s sensitivity=%.3f dynamic=%s manual=%.3f "
                     "mode=%s bars=%s block=%s input_gain=%.3f agc=%.3f density=%s displacement=%s heartbeat=%s "
-                    "vshift=%s preset_index=%s preset_kind=%s preset_name=%s preset_path=%s"
+                    "vshift=%s bubble_group_drift=%s bubble_drift_direction=%s "
+                    "preset_index=%s preset_kind=%s preset_name=%s preset_path=%s"
                 ),
                 context,
                 resolved_model.resolve_adaptive_sensitivity(mode_key),
@@ -862,6 +863,8 @@ class WidgetManager:
                 getattr(resolved_model, 'sine_displacement', cfg.get('sine_displacement')),
                 getattr(resolved_model, 'sine_heartbeat', cfg.get('sine_heartbeat')),
                 getattr(resolved_model, 'sine_vertical_shift', cfg.get('sine_vertical_shift')),
+                getattr(resolved_model, 'bubble_group_drift', cfg.get('bubble_group_drift')),
+                getattr(resolved_model, 'bubble_drift_direction', cfg.get('bubble_drift_direction')),
                 preset_index,
                 preset_kind,
                 preset_name,

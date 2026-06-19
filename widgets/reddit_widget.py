@@ -94,7 +94,7 @@ class RedditWidget(BaseOverlayWidget):
 
     Features:
     - Fetches top N posts from a configured subreddit via a swappable
-      provider seam (default PullPush hosted API).
+      provider seam (default Reddit RSS provider).
     - Displays each post as a single-line entry: small score on the
       left, elided title on the right.
     - Header row with Reddit logo + ``r/<subreddit>`` text, matching the
@@ -129,6 +129,7 @@ class RedditWidget(BaseOverlayWidget):
         self._configured_capacity: int = clamp_list_capacity(10, default=10)
         self._effective_visible_capacity: int = self._configured_capacity
         self._refresh_interval = timedelta(minutes=5)  # 5 min refresh for fresher data
+        self._startup_refresh_cooldown = self._refresh_interval
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
@@ -287,24 +288,7 @@ class RedditWidget(BaseOverlayWidget):
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
 
-        if automatic_service_updates_enabled():
-            self._schedule_timer()
-            decision = self._get_startup_refresh_decision()
-            if decision.run:
-                logger.info(
-                    "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-                self._fetch_feed()
-            else:
-                logger.info(
-                    "[CACHE][REDDIT] Startup refresh skipped (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-        else:
-            logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
+        self._run_startup_refresh_flow()
         logger.debug("[LIFECYCLE] RedditWidget activated")
     
     def _deactivate_impl(self) -> None:
@@ -393,24 +377,7 @@ class RedditWidget(BaseOverlayWidget):
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
 
-        if automatic_service_updates_enabled():
-            self._schedule_timer()
-            decision = self._get_startup_refresh_decision()
-            if decision.run:
-                logger.info(
-                    "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-                self._fetch_feed()
-            else:
-                logger.info(
-                    "[CACHE][REDDIT] Startup refresh skipped (%s%s)",
-                    decision.reason,
-                    f", cache_age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
-                )
-        else:
-            logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
+        self._run_startup_refresh_flow()
 
     def stop(self) -> None:
         """Stop refreshes and hide widget."""
@@ -1194,7 +1161,7 @@ class RedditWidget(BaseOverlayWidget):
             logger.warning("[REDDIT] Fetch error: %s", error)
 
         error_lower = str(error or "").lower()
-        if "403" in error_lower or "blocked for url" in error_lower:
+        if "403" in error_lower or "429" in error_lower or "blocked for url" in error_lower:
             try:
                 from core.reddit_rate_limiter import RedditRateLimiter
                 RedditRateLimiter.record_blocked_response(reason=error)
@@ -2077,6 +2044,11 @@ class RedditWidget(BaseOverlayWidget):
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir / "_startup_gate.touch"
 
+    def _get_startup_attempt_file_path(self) -> Path:
+        cache_dir = Path(__file__).resolve().parent.parent / "cache" / "reddit"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        return cache_dir / "_startup_attempt.touch"
+
     def _get_cache_timestamp(self):
         """Return the cache file modification time when available."""
         try:
@@ -2099,6 +2071,17 @@ class RedditWidget(BaseOverlayWidget):
             logger.debug("[REDDIT] Failed to inspect shared startup-gate timestamp", exc_info=True)
             return None
 
+    def _get_startup_attempt_timestamp(self):
+        """Return the shared Reddit startup-attempt timestamp when available."""
+        try:
+            attempt_path = self._get_startup_attempt_file_path()
+            if not attempt_path.exists():
+                return None
+            return datetime.fromtimestamp(attempt_path.stat().st_mtime)
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect shared startup-attempt timestamp", exc_info=True)
+            return None
+
     def _get_startup_refresh_decision(self) -> StartupRefreshDecision:
         """Return Reddit startup-refresh policy with shared blocked-gate awareness."""
 
@@ -2116,6 +2099,15 @@ class RedditWidget(BaseOverlayWidget):
                     return StartupRefreshDecision(False, "blocked_cooldown_cache_fresh", gate_age)
         except Exception:
             logger.debug("[REDDIT] Failed to evaluate shared startup gate", exc_info=True)
+
+        try:
+            attempt_timestamp = self._get_startup_attempt_timestamp()
+            if attempt_timestamp is not None:
+                attempt_age = datetime.now() - attempt_timestamp
+                if attempt_age < self._startup_refresh_cooldown:
+                    return StartupRefreshDecision(False, "startup_attempt_cooldown", attempt_age)
+        except Exception:
+            logger.debug("[REDDIT] Failed to evaluate startup-attempt cooldown", exc_info=True)
 
         cache_age = None
         try:
@@ -2143,6 +2135,49 @@ class RedditWidget(BaseOverlayWidget):
                 logger.debug("[REDDIT] Failed to force startup-gate timestamp via utime", exc_info=True)
         except Exception:
             logger.debug("[REDDIT] Failed to touch shared startup-gate timestamp", exc_info=True)
+
+    def _touch_startup_attempt_timestamp_now(self) -> None:
+        """Refresh the shared Reddit startup-attempt timestamp before fetch submission."""
+
+        attempt_path = self._get_startup_attempt_file_path()
+        try:
+            if not attempt_path.exists():
+                attempt_path.parent.mkdir(parents=True, exist_ok=True)
+                attempt_path.write_text("reddit_startup_attempt\n", encoding="utf-8")
+            now = time.time()
+            attempt_path.touch()
+            try:
+                import os
+                os.utime(attempt_path, (now, now))
+            except Exception:
+                logger.debug("[REDDIT] Failed to force startup-attempt timestamp via utime", exc_info=True)
+        except Exception:
+            logger.debug("[REDDIT] Failed to touch startup-attempt timestamp", exc_info=True)
+
+    def _run_startup_refresh_flow(self) -> None:
+        """Apply the shared Reddit startup refresh contract."""
+
+        if not automatic_service_updates_enabled():
+            logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
+            return
+
+        self._schedule_timer()
+        decision = self._get_startup_refresh_decision()
+        if decision.run:
+            logger.info(
+                "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
+                decision.reason,
+                f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+            )
+            self._touch_startup_attempt_timestamp_now()
+            self._fetch_feed()
+            return
+
+        logger.info(
+            "[CACHE][REDDIT] Startup refresh skipped (%s%s)",
+            decision.reason,
+            f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
+        )
 
     def _touch_cache_timestamp_now(self) -> None:
         """Refresh the cache timestamp so startup policy backs off after a block."""

@@ -117,7 +117,7 @@ class RedditWidgetSettings:
     enabled: bool = False
     monitor: str = "ALL"
     position: WidgetPosition = WidgetPosition.TOP_RIGHT
-    provider: str = "pullpush"
+    provider: str = "rss"
     subreddit: str = "technology"
     limit: int = 10
     font_family: str = "Inter"
@@ -144,7 +144,7 @@ class RedditWidgetSettings:
             enabled=settings.get(f"{prefix}.enabled", False),
             monitor=settings.get(f"{prefix}.monitor", "ALL"),
             position=position,
-            provider=settings.get(f"{prefix}.provider", "pullpush"),
+            provider=settings.get(f"{prefix}.provider", "rss"),
             subreddit=settings.get(f"{prefix}.subreddit", "technology"),
             limit=clamp_list_capacity(settings.get(f"{prefix}.limit", 10), default=10),
             font_family=settings.get(f"{prefix}.font_family", "Inter"),
@@ -176,7 +176,7 @@ class RedditWidgetSettings:
             enabled=_get("enabled", False),
             monitor=_get("monitor", "ALL"),
             position=position,
-            provider=_get("provider", "pullpush"),
+            provider=_get("provider", "rss"),
             subreddit=_get("subreddit", "technology"),
             limit=clamp_list_capacity(_get("limit", 10), default=10),
             font_family=_get("font_family", "Inter"),

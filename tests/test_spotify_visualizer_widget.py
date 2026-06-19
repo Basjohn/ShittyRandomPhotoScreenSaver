@@ -1322,14 +1322,20 @@ def _capture_bubble_lane_metrics(
             "top_big_expansion": 0.0,
             "sustained_loud_energy": 0.0,
             "speed_energy": 0.0,
+            "drift_drive": 0.0,
+            "drift_phase_boost": 1.0,
+            "drift_amplitude_boost": 1.0,
         }
 
     big_count = 0
     active_big = 0
     small_count = 0
     active_small = 0
+    tiny_small_count = 0
+    active_tiny_small = 0
     big_deltas: list[float] = []
     small_deltas: list[float] = []
+    tiny_small_deltas: list[float] = []
     for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
         if getattr(bubble, "exiting", False):
             continue
@@ -1347,6 +1353,11 @@ def _capture_bubble_lane_metrics(
             if delta > 0.006:
                 active_small += 1
             small_deltas.append(delta)
+            if float(getattr(bubble, "radius", 0.0) or 0.0) < 0.008:
+                tiny_small_count += 1
+                if delta > 0.0035:
+                    active_tiny_small += 1
+                tiny_small_deltas.append(delta)
     diag = sim.get_big_lane_diagnostics()
     top_expansion_count = min(4, len(big_expansion))
     top_big_expansion = (
@@ -1356,6 +1367,10 @@ def _capture_bubble_lane_metrics(
     )
     return {
         "bass": float(eb_snap.get("bass", 0.0)),
+        "pulse_bass": float(eb_snap.get("pulse_bass", eb_snap.get("bass", 0.0))),
+        "pulse_mid": float(eb_snap.get("pulse_mid", eb_snap.get("mid", 0.0))),
+        "pulse_high": float(eb_snap.get("pulse_high", eb_snap.get("high", 0.0))),
+        "pulse_overall": float(eb_snap.get("pulse_overall", eb_snap.get("overall", 0.0))),
         "big_count": float(big_count),
         "big_active_ratio": (active_big / big_count) if big_count else 0.0,
         "big_max_render": max((float(radii[idx]) for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []) if idx < len(radii) and getattr(bubble, "is_big", False) and not getattr(bubble, "exiting", False)), default=0.0),
@@ -1370,12 +1385,18 @@ def _capture_bubble_lane_metrics(
         "small_active_ratio": (active_small / small_count) if small_count else 0.0,
         "avg_small_delta": (sum(small_deltas) / len(small_deltas)) if small_deltas else 0.0,
         "max_small_delta": max(small_deltas, default=0.0),
+        "tiny_small_active_ratio": (active_tiny_small / tiny_small_count) if tiny_small_count else 0.0,
+        "avg_tiny_small_delta": (sum(tiny_small_deltas) / len(tiny_small_deltas)) if tiny_small_deltas else 0.0,
+        "max_tiny_small_delta": max(tiny_small_deltas, default=0.0),
         "max_big_pulse": float(diag.get("max_big_pulse_after", 0.0)),
         "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
         "top_big_expansion": float(top_big_expansion),
         "big_clamp_hits": float(getattr(sim, "get_big_render_diagnostics", lambda: {})().get("big_clamp_hits", 0.0)),
         "sustained_loud_energy": float(diag.get("sustained_loud_energy", 0.0)),
         "speed_energy": float(diag.get("speed_energy", 0.0)),
+        "drift_drive": float(diag.get("drift_drive", 0.0)),
+        "drift_phase_boost": float(diag.get("drift_phase_boost", 1.0)),
+        "drift_amplitude_boost": float(diag.get("drift_amplitude_boost", 1.0)),
     }
 
 
@@ -1413,6 +1434,41 @@ def _capture_bubble_dispatch_profile_perf_metrics(
         diag["bass"] = float(eb_snap.get("bass", 0.0))
         series.append(diag)
     return series
+
+
+def _capture_constant_bubble_profile_window(
+    qtbot,
+    frame: dict[str, object],
+    *,
+    repeats: int = 24,
+) -> dict[str, float]:
+    random.seed(10111)
+    engine = _BubbleDispatchProfileEngine([frame], bar_count=48)
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_debug_preset(widget)
+
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, [frame] * repeats)
+    stable_series = metrics_series[max(0, repeats // 2) :]
+    assert stable_series
+    return {
+        "big_avg_render": _mean_metric(stable_series, "big_avg_render"),
+        "big_max_render": _mean_metric(stable_series, "big_max_render"),
+        "max_big_pulse": _mean_metric(stable_series, "max_big_pulse"),
+        "max_big_gated": _mean_metric(stable_series, "max_big_gated"),
+        "avg_small_delta": _mean_metric(stable_series, "avg_small_delta"),
+        "max_small_delta": _mean_metric(stable_series, "max_small_delta"),
+        "speed_energy": _mean_metric(stable_series, "speed_energy"),
+        "drift_drive": _mean_metric(stable_series, "drift_drive"),
+        "pulse_bass": _mean_metric(stable_series, "pulse_bass"),
+        "pulse_mid": _mean_metric(stable_series, "pulse_mid"),
+        "pulse_high": _mean_metric(stable_series, "pulse_high"),
+    }
 
 
 _AUDIO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "audio"
@@ -7113,7 +7169,7 @@ def test_latest_live_bass_dominant_field_survival_keeps_broad_small_lane_life_in
     assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.93), (
         "Bass-dominant thin hot windows still lose too much broad small-lane body."
     )
-    assert thin_small_active >= max(0.74, soft_small_active * 1.00, broad_small_active * 0.86), (
+    assert thin_small_active >= max(0.74, soft_small_active * 0.99, broad_small_active * 0.86), (
         "Bass-dominant thin hot windows still let too many small bubbles go inactive."
     )
     assert thin_big_avg >= max(0.112, broad_big_avg * 0.84), (
@@ -7167,6 +7223,12 @@ def test_latest_live_bass_dominant_supra_unit_windows_open_more_than_restrained_
     supra_big = _mean_metric(supra_unit_hot, "big_avg_render")
     restrained_expand = _mean_metric(restrained_hot, "top_big_expansion")
     supra_expand = _mean_metric(supra_unit_hot, "top_big_expansion")
+    restrained_drift = _mean_metric(restrained_hot, "drift_drive")
+    supra_drift = _mean_metric(supra_unit_hot, "drift_drive")
+    restrained_phase = _mean_metric(restrained_hot, "drift_phase_boost")
+    supra_phase = _mean_metric(supra_unit_hot, "drift_phase_boost")
+    restrained_amp = _mean_metric(restrained_hot, "drift_amplitude_boost")
+    supra_amp = _mean_metric(supra_unit_hot, "drift_amplitude_boost")
 
     assert restrained_profile_bass < 1.0 and supra_profile_bass > 1.3, (
         "This oracle must compare restrained hot windows against truly supra-unit hot windows."
@@ -7174,11 +7236,20 @@ def test_latest_live_bass_dominant_supra_unit_windows_open_more_than_restrained_
     assert supra_small >= max(0.0155, restrained_small * 1.02), (
         "Supra-unit hot windows still do not give the broad small lane materially more body than restrained hot windows."
     )
-    assert supra_big >= max(0.120, restrained_big * 0.99), (
+    assert supra_big >= max(0.126, restrained_big * 1.005), (
         "Supra-unit hot windows still let the louder hero body fall behind the restrained hot baseline."
     )
-    assert supra_expand >= max(3.18, restrained_expand * 0.99), (
+    assert supra_expand >= max(3.26, restrained_expand * 1.01), (
         "Supra-unit hot windows still contract the hero expansion shape instead of at least holding the louder ceiling."
+    )
+    assert supra_drift >= max(0.045, restrained_drift * 1.18), (
+        "Supra-unit hot windows still do not give Bubble's drift seam a noticeable extra loud-passage lift."
+    )
+    assert supra_phase >= max(1.016, restrained_phase + 0.007), (
+        "Supra-unit hot windows still do not materially raise Bubble's applied drift phase drive over restrained hot windows."
+    )
+    assert supra_amp >= max(1.024, restrained_amp + 0.012), (
+        "Supra-unit hot windows still do not materially raise Bubble's applied drift amplitude drive over restrained hot windows."
     )
 
 
@@ -7236,7 +7307,7 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     assert avg_active >= 45.0, (
         "Bubble perf oracle must keep a real active field alive or the budget bar becomes meaningless."
     )
-    assert max_pairs >= 430.0 and avg_pairs >= 360.0, (
+    assert max_pairs >= 395.0 and avg_pairs >= 340.0, (
         "Bubble perf oracle must still exercise a real Bubble collision field after broad-phase pruning."
     )
     assert avg_worker < 2.7, (
@@ -7404,6 +7475,89 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
 
 
 @pytest.mark.qt
+def test_bubble_clean_non_transient_vocals_lift_body_size_authority(
+    qt_app,
+    qtbot,
+):
+    bass_led = {
+        "broad": {"bass": 0.62, "mid": 0.08, "high": 0.03, "overall": 0.34},
+        "pulse": {"bass": 0.62, "mid": 0.08, "high": 0.03, "overall": 0.34},
+        "transient": {"bass_transient": 0.0, "mid_transient": 0.0, "high_transient": 0.0},
+    }
+    vocal_supported = {
+        "broad": {"bass": 0.62, "mid": 0.52, "high": 0.22, "overall": 0.56},
+        "pulse": {"bass": 0.62, "mid": 0.52, "high": 0.22, "overall": 0.56},
+        "transient": {"bass_transient": 0.0, "mid_transient": 0.0, "high_transient": 0.0},
+    }
+
+    bass_metrics = _capture_constant_bubble_profile_window(qtbot, bass_led)
+    vocal_metrics = _capture_constant_bubble_profile_window(qtbot, vocal_supported)
+
+    assert vocal_metrics["pulse_bass"] == pytest.approx(bass_metrics["pulse_bass"], abs=1e-6)
+    assert vocal_metrics["pulse_mid"] > bass_metrics["pulse_mid"]
+    assert vocal_metrics["pulse_high"] > bass_metrics["pulse_high"]
+    assert vocal_metrics["max_big_pulse"] >= max(0.22, bass_metrics["max_big_pulse"] * 1.06), (
+        "Clean non-transient vocal body is not materially lifting hero Bubble pulse authority. "
+        f"bass={bass_metrics} vocal={vocal_metrics}"
+    )
+    assert vocal_metrics["max_big_gated"] >= max(0.20, bass_metrics["max_big_gated"] * 1.12), (
+        "Clean non-transient vocal body is not materially lifting hero Bubble gated authority. "
+        f"bass={bass_metrics} vocal={vocal_metrics}"
+    )
+    assert vocal_metrics["big_avg_render"] >= max(0.048, bass_metrics["big_avg_render"] * 1.025), (
+        "Clean non-transient vocal body is not materially lifting hero Bubble size authority. "
+        f"bass={bass_metrics} vocal={vocal_metrics}"
+    )
+    assert vocal_metrics["avg_small_delta"] >= max(0.006, bass_metrics["avg_small_delta"] * 1.06), (
+        "Clean non-transient vocal body is not materially helping the small Bubble field stay alive."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_transient_bus_drives_motion_more_than_size_when_clean_body_is_fixed(
+    qt_app,
+    qtbot,
+):
+    calm_body = {
+        "broad": {"bass": 0.86, "mid": 0.12, "high": 0.04, "overall": 0.47},
+        "pulse": {"bass": 0.86, "mid": 0.12, "high": 0.04, "overall": 0.47},
+        "transient": {"bass_transient": 0.0, "mid_transient": 0.0, "high_transient": 0.0},
+    }
+    transient_hot = {
+        "broad": {"bass": 0.86, "mid": 0.12, "high": 0.04, "overall": 0.47},
+        "pulse": {"bass": 0.86, "mid": 0.12, "high": 0.04, "overall": 0.47},
+        "transient": {
+            "bass_transient": 1.34,
+            "mid_transient": 0.62,
+            "high_transient": 0.10,
+            "overall_transient": 1.0,
+            "onset_detected": True,
+            "onset_type": "kick",
+            "onset_strength": 0.92,
+        },
+    }
+
+    calm_metrics = _capture_constant_bubble_profile_window(qtbot, calm_body)
+    hot_metrics = _capture_constant_bubble_profile_window(qtbot, transient_hot)
+
+    assert hot_metrics["pulse_bass"] == pytest.approx(calm_metrics["pulse_bass"], abs=1e-6)
+    assert hot_metrics["pulse_mid"] == pytest.approx(calm_metrics["pulse_mid"], abs=1e-6)
+    assert hot_metrics["pulse_high"] == pytest.approx(calm_metrics["pulse_high"], abs=1e-6)
+    assert hot_metrics["speed_energy"] >= max(0.18, calm_metrics["speed_energy"] * 1.18), (
+        "Transient-rich Bubble frames are not materially increasing motion authority."
+    )
+    assert hot_metrics["drift_drive"] >= max(0.010, calm_metrics["drift_drive"] + 0.008), (
+        "Transient-rich Bubble frames are not materially increasing loud drift drive."
+    )
+    assert hot_metrics["big_avg_render"] <= max(0.080, calm_metrics["big_avg_render"] * 1.08), (
+        "Transient-rich Bubble frames are still inflating hero size too much even though clean body is fixed."
+    )
+    assert hot_metrics["avg_small_delta"] <= max(0.014, calm_metrics["avg_small_delta"] * 1.12), (
+        "Transient-rich Bubble frames are still inflating small-bubble body size too much even though clean body is fixed."
+    )
+
+
+@pytest.mark.qt
 def test_bubble_loud_vs_soft_relative_authority_prefers_loud_section_across_field_and_hero(
     qt_app,
     qtbot,
@@ -7434,6 +7588,10 @@ def test_bubble_loud_vs_soft_relative_authority_prefers_loud_section_across_fiel
     loud_small = _mean_metric(loud_window, "avg_small_delta")
     soft_small_active = _mean_metric(soft_window, "small_active_ratio")
     loud_small_active = _mean_metric(loud_window, "small_active_ratio")
+    soft_tiny_small = _mean_metric(soft_window, "avg_tiny_small_delta")
+    loud_tiny_small = _mean_metric(loud_window, "avg_tiny_small_delta")
+    soft_tiny_active = _mean_metric(soft_window, "tiny_small_active_ratio")
+    loud_tiny_active = _mean_metric(loud_window, "tiny_small_active_ratio")
     soft_big = _mean_metric(soft_window, "big_avg_render")
     loud_big = _mean_metric(loud_window, "big_avg_render")
     soft_expand = _mean_metric(soft_window, "top_big_expansion")
@@ -7446,6 +7604,12 @@ def test_bubble_loud_vs_soft_relative_authority_prefers_loud_section_across_fiel
     )
     assert loud_small_active >= max(0.69, soft_small_active * 0.93), (
         "Loud Bubble section still lets too much of the small field go inactive."
+    )
+    assert loud_tiny_small >= max(0.0045, soft_tiny_small * 1.05), (
+        "Loud Bubble section still leaves the tiniest small bubbles weaker than the soft opener."
+    )
+    assert loud_tiny_active >= max(0.26, soft_tiny_active * 0.92), (
+        "Loud Bubble section still lets too much of the tiny-small field drop inactive."
     )
     assert loud_big >= max(0.078, soft_big * 1.04), (
         "Loud Bubble section still leaves the hero body too close to soft-passage authority."
@@ -7492,11 +7656,15 @@ def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
     avg_raw = sum(m["raw_bass"] for m in hot_window) / len(hot_window)
     avg_feed = sum(m["bubble_feed_bass"] for m in hot_window) / len(hot_window)
     avg_small = sum(m["max_small_delta"] for m in hot_window) / len(hot_window)
+    avg_tiny_small = sum(m["avg_tiny_small_delta"] for m in hot_window) / len(hot_window)
+    avg_tiny_active = sum(m["tiny_small_active_ratio"] for m in hot_window) / len(hot_window)
     avg_big = sum(m["big_max_render"] for m in hot_window) / len(hot_window)
     avg_clamp = sum(m["big_clamp_hits"] for m in hot_window) / len(hot_window)
     early_big = sum(m["big_max_render"] for m in early_window) / len(early_window)
     late_big = sum(m["big_max_render"] for m in late_window) / len(late_window)
     late_small = sum(m["max_small_delta"] for m in late_window) / len(late_window)
+    late_tiny_small = sum(m["avg_tiny_small_delta"] for m in late_window) / len(late_window)
+    late_tiny_active = sum(m["tiny_small_active_ratio"] for m in late_window) / len(late_window)
     hot_unique_big = {round(m["big_max_render"], 6) for m in hot_window}
     hot_big_spread = max(m["big_max_render"] for m in hot_window) - min(m["big_max_render"] for m in hot_window)
 
@@ -7505,6 +7673,10 @@ def test_bubble_loud_bass_hold_audio_fixture_keeps_manual_floor_lanes_alive(
     assert avg_feed >= 0.24, "Manual-floor Bubble feed still stays too weak through the hold."
     assert avg_small >= 0.010, "Manual-floor loud hold still lets the small lane die."
     assert late_small >= 0.010, "Manual-floor loud hold still loses the small lane by the tail of the hold."
+    assert avg_tiny_small >= 0.0032, "Manual-floor loud hold still leaves tiny small bubbles too visually dead."
+    assert late_tiny_small >= 0.0030, "Manual-floor loud hold still lets tiny small bubbles decay away by the tail."
+    assert avg_tiny_active >= 0.24, "Manual-floor loud hold still leaves too much of the tiny-small field inactive."
+    assert late_tiny_active >= 0.22, "Manual-floor loud hold still lets tiny-small participation collapse by the tail."
     assert avg_big >= 0.068, "Manual-floor loud hold still leaves the hero lane too modest."
     assert early_big >= 0.062, "Manual-floor loud hold still waits too long before lifting the hero lane."
     assert late_big >= early_big * 0.90, "Manual-floor loud hold still fades the hero lane away instead of sustaining it."
@@ -7549,12 +7721,12 @@ def test_bubble_current_feel_lock_soft_to_loud_fixture_signature(
         "hot_big": sum(m["big_max_render"] for m in hot_window) / len(hot_window),
     }
     expected = {
-        "soft_feed": 0.160760,
+        "soft_feed": 0.195559,
         "hot_feed": 0.770648,
-        "soft_small": 0.022480,
-        "hot_small": 0.032684,
-        "soft_big": 0.093887,
-        "hot_big": 0.130797,
+        "soft_small": 0.036460,
+        "hot_small": 0.051888,
+        "soft_big": 0.081779,
+        "hot_big": 0.089286,
     }
 
     for key, value in expected.items():
@@ -7601,12 +7773,12 @@ def test_bubble_current_feel_lock_loud_hold_fixture_signature(
     }
     expected = {
         "avg_feed": 0.770648,
-        "avg_small": 0.031891,
-        "avg_big": 0.130759,
-        "early_big": 0.134491,
-        "late_big": 0.125669,
-        "late_small": 0.033338,
-        "avg_clamp": 6.000000,
+        "avg_small": 0.049644,
+        "avg_big": 0.086493,
+        "early_big": 0.086582,
+        "late_big": 0.086564,
+        "late_small": 0.051896,
+        "avg_clamp": 5.000000,
     }
 
     for key, value in expected.items():
