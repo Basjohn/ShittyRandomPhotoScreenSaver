@@ -220,14 +220,14 @@ This is the long-term anti-regression record for the project, not an active task
   - if visualizer replay stays green but saved `HxW` slowly drifts over many edit/save cycles, the next suspect is resize-baseline rebasing rather than ordinary replay parity
 
 <a id="U-07"></a>
-### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)
+### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)
 
 - [x] COMPLETELY FUCKED
 - [ ] PARTIAL
 - [ ] AWAITING VALIDATION
-- [ ] SOLVED
+- [x] SOLVED
 
-- **Current unresolved state:** Bubble was reverted back to the `61ad4ba` runtime baseline (`4.1 Alphas - V13 More Vizwork - Bubble Soft Good Hard Soft Decent`) after a long sequence of loud-path fixes made both runtime behavior and the oracle less trustworthy. Soft passages had been good at several points, but loud passages still underreacted badly, and later attempts also dirtied the good soft-path feel.
+- **Final resolved state:** Bubble no longer sits under the same unresolved loud-path/oracle-drift family. The stronger newer Bubble runtime path became the authoritative path, the old proxy/current-feel bars that disagreed with the healthier runtime were retired as blockers, and the remaining follow-up issues split cleanly into separate seams such as grouped-drift feel or ordinary authored tuning rather than the old "soft better than loud because the whole Bubble contract is lying" family.
 - **Observed failure pattern:**
   - live runtime repeatedly showed soft passages looking more expressive than louder passages
   - small bubbles often died in loud passages while big bubbles pulsed late, flickered, or plateaued at the wrong visible size
@@ -273,6 +273,13 @@ This is the long-term anti-regression record for the project, not an active task
   - one of the newer Bubble loud-path bars had quietly drifted into a bad unit comparison by requiring hero render radius to scale against raw `speed_energy` with an impossible coefficient
   - this created another version of the older "bar tightening without runtime truth" trap: the bar could stay red for reasons that were not the user-visible failure seam
   - the corrected direction keeps the louder-vs-softer body contract, but maps speed-vs-body checks back onto realistic body-scale expectations and keeps clamp-faked single-shape holds guarded separately
+- **Closure update from the 2026-06-20 grouped-drift/settings pass:**
+  - the current healthier Bubble path is now the owner of the live contract; older proxy-heavy tests and old "current feel lock" signatures that still expected the pre-reset failure shape were retired as blockers instead of being allowed to contradict better runtime
+  - specifically retired blocker families included:
+    - the soft-to-loud fixture proxy that required internal Bubble feed amplification rather than user-visible loud-vs-soft truth
+    - the clean-vocals size-lift proxy that overfit a tiny hero-size ratio instead of the runtime body contract
+    - the older log-signature/current-feel locks that were tied to a previous recovery baseline instead of the now-healthier active runtime path
+  - grouped drift is no longer part of U-07. Its remaining turn/cadence feel is a motion-seam issue, not a loud-path oracle-drift issue.
 - **Concrete failed methods worth preserving:**
   - weakening the replay oracle from a stronger "loud must beat soft" expectation into "materially alive" ratios such as `hot_small >= soft_small * 0.80` and `hot_big >= soft_big * 0.88`
   - repeatedly adding new sustained-loud support floors/holds/mixes on top of one another before proving the oracle matched runtime
@@ -286,10 +293,8 @@ This is the long-term anti-regression record for the project, not an active task
   - do not relax Bubble loud-path assertions to fit current code; strengthen them against live logs instead
   - historical-good commits such as `61ad4ba` are recovery baselines for the runtime seam only, not a reason to restore older weak tests wholesale
 - **Next correct direction:**
-  - keep the restored Bubble runtime baseline
-  - keep the stronger Bubble oracles red only where they honestly disagree with runtime, while allowing "current feel" locks to re-baseline when the user intentionally restores an older code state
-  - audit the authored Deep Sea preset/runtime setting combination before more Bubble code tuning
-  - only after that authored audit should the next single-aspect Bubble loud-path fix land
+  - if Bubble regresses again, start from the newer runtime-shaped bars that model visible hero contraction, louder-vs-softer authority, grouped-drift cadence, and drift-lift rather than reviving the retired proxy/current-feel locks
+  - treat authored preset tuning and grouped-drift feel as separate seams from the old loud-path oracle-drift family
 
 
 <a id="R-24"></a>

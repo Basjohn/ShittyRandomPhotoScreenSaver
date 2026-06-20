@@ -1699,6 +1699,10 @@ class RedditWidget(BaseOverlayWidget):
                 self.setMinimumHeight(target)
             except Exception as e:
                 logger.debug("[REDDIT] Exception suppressed: %s", e)
+        try:
+            self._apply_runtime_content_height_in_custom_layout(target)
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
 
     def _update_card_height_from_limit(self) -> None:
         # Fallback used when the limit changes before we have data.

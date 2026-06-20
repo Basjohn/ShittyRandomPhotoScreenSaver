@@ -1008,6 +1008,10 @@ class GmailWidget(BaseOverlayWidget):
             self.setMaximumHeight(target)
         except Exception:
             pass
+        try:
+            self._apply_runtime_content_height_in_custom_layout(target)
+        except Exception:
+            pass
 
     def _update_card_height_for_error_state(self) -> None:
         base_font_pt = max(8, int(self._font_size))
@@ -1040,6 +1044,10 @@ class GmailWidget(BaseOverlayWidget):
         try:
             self.setMinimumHeight(target)
             self.setMaximumHeight(target)
+        except Exception:
+            pass
+        try:
+            self._apply_runtime_content_height_in_custom_layout(target)
         except Exception:
             pass
 

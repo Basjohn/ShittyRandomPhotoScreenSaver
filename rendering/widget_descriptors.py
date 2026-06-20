@@ -1092,6 +1092,7 @@ class WidgetRuntimeDescriptor:
     supports_layout_resize_edit: bool = False
     requires_size_reset_affordance: bool = False
     custom_layout_resize_mode: str = "none"
+    custom_layout_runtime_vertical_content_resize: bool = False
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
@@ -1314,6 +1315,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
+        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="reddit2",
@@ -1340,6 +1342,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="reddit_font",
+        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="gmail",
@@ -1365,6 +1368,7 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="gmail_font",
+        custom_layout_runtime_vertical_content_resize=True,
     ),
     WidgetRuntimeDescriptor(
         widget_id="imgur",

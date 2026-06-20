@@ -467,6 +467,51 @@ def test_reddit_activate_skips_startup_fetch_when_recent_startup_attempt_exists(
 
 
 @pytest.mark.qt
+def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+    attempt_path = tmp_path / "reddit_attempt.touch"
+    gate_path = tmp_path / "reddit_gate.touch"
+    cache_path_1 = tmp_path / "reddit_posts.json"
+    cache_path_2 = tmp_path / "reddit2_posts.json"
+
+    widget1 = RedditWidget()
+    widget2 = RedditWidget()
+    qtbot.addWidget(widget1)
+    qtbot.addWidget(widget2)
+
+    try:
+        widget1.set_thread_manager(object())
+        widget2.set_thread_manager(object())
+        widget1._cache_key = "reddit"  # type: ignore[attr-defined]
+        widget2._cache_key = "reddit2"  # type: ignore[attr-defined]
+
+        widget1._get_cache_file_path = lambda: Path(cache_path_1)  # type: ignore[method-assign]
+        widget2._get_cache_file_path = lambda: Path(cache_path_2)  # type: ignore[method-assign]
+        widget1._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        widget2._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        widget1._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
+        widget2._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
+
+        calls1 = []
+        calls2 = []
+        monkeypatch.setattr(widget1, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(widget2, "_load_cached_posts", lambda: [])
+        monkeypatch.setattr(widget1, "_schedule_timer", lambda: calls1.append("timer"))
+        monkeypatch.setattr(widget2, "_schedule_timer", lambda: calls2.append("timer"))
+        monkeypatch.setattr(widget1, "_fetch_feed", lambda **kwargs: calls1.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+        monkeypatch.setattr(widget2, "_fetch_feed", lambda **kwargs: calls2.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
+
+        widget1._activate_impl()
+        widget2._activate_impl()
+
+        assert calls1 == ["timer", ("fetch", {})]
+        assert calls2 == ["timer"]
+        assert widget2._get_startup_refresh_decision().reason == "startup_attempt_cooldown"  # type: ignore[attr-defined]
+    finally:
+        widget1.cleanup()
+        widget2.cleanup()
+
+
+@pytest.mark.qt
 def test_reddit_empty_fetch_keeps_displayed_cache_visible(qt_app, qtbot):  # noqa: ARG001
     """An empty live fetch must not replace valid displayed Reddit content."""
 
@@ -615,6 +660,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_fresh(qt_app, qtbot, m
         widget.set_thread_manager(object())
         monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now())
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
@@ -635,6 +681,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_old(qt_app, qtbot, mon
         widget.set_thread_manager(object())
         monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(days=3))
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
@@ -664,6 +711,7 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
         ]
         calls = []
         monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(cached_posts))
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]

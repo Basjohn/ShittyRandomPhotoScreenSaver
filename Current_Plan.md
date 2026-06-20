@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-19
+Last updated: 2026-06-20
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -22,7 +22,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-- No active tasks right now. Add new work here only when it is still live and unvalidated.
+- No active tasks right now.
 
 ## Watchlist
 
@@ -50,8 +50,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Dated regressions: `Docs/Historical_Bugs.md`
 - Drift-check routine: `Docs/Documentation_Maintenance.md`
 - Harness reference: `Docs/Harness_Index.md`
-- Active geometry audit: `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md`
-- Bubble preset/runtime audit: `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md`
+- Active geometry audit: `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` when geometry/runtime replay issues reopen
+- Bubble preset/runtime audit: `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` as historical authored-setting reference
 - Bubble historical audit reference: `audits/BubbleAudit/Bubble_End_To_End_Audit.md`
 
 #######

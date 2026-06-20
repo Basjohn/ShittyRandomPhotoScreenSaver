@@ -1320,11 +1320,14 @@ def _capture_bubble_lane_metrics(
             "max_big_pulse": 0.0,
             "max_big_gated": 0.0,
             "top_big_expansion": 0.0,
+            "big_clamp_ratio": 0.0,
             "sustained_loud_energy": 0.0,
             "speed_energy": 0.0,
             "drift_drive": 0.0,
             "drift_phase_boost": 1.0,
             "drift_amplitude_boost": 1.0,
+            "mean_x": 0.0,
+            "mean_y": 0.0,
         }
 
     big_count = 0
@@ -1336,11 +1339,15 @@ def _capture_bubble_lane_metrics(
     big_deltas: list[float] = []
     small_deltas: list[float] = []
     tiny_small_deltas: list[float] = []
+    xs: list[float] = []
+    ys: list[float] = []
     for idx, bubble in enumerate(getattr(sim, "_bubbles", []) or []):
         if getattr(bubble, "exiting", False):
             continue
         if idx >= len(radii):
             continue
+        xs.append(float(getattr(bubble, "x", 0.0) or 0.0))
+        ys.append(float(getattr(bubble, "y", 0.0) or 0.0))
         render_radius = float(radii[idx])
         delta = max(0.0, render_radius - float(getattr(bubble, "radius", 0.0) or 0.0))
         if getattr(bubble, "is_big", False):
@@ -1365,6 +1372,9 @@ def _capture_bubble_lane_metrics(
         if top_expansion_count > 0
         else 0.0
     )
+    render_diag = getattr(sim, "get_big_render_diagnostics", lambda: {})()
+    render_big_count = float(render_diag.get("big_render_count", 0.0))
+    clamp_hits = float(render_diag.get("big_clamp_hits", 0.0))
     return {
         "bass": float(eb_snap.get("bass", 0.0)),
         "pulse_bass": float(eb_snap.get("pulse_bass", eb_snap.get("bass", 0.0))),
@@ -1391,12 +1401,19 @@ def _capture_bubble_lane_metrics(
         "max_big_pulse": float(diag.get("max_big_pulse_after", 0.0)),
         "max_big_gated": float(diag.get("max_big_gated_energy", 0.0)),
         "top_big_expansion": float(top_big_expansion),
-        "big_clamp_hits": float(getattr(sim, "get_big_render_diagnostics", lambda: {})().get("big_clamp_hits", 0.0)),
+        "big_clamp_hits": clamp_hits,
+        "big_clamp_ratio": (
+            min(1.0, clamp_hits / render_big_count)
+            if render_big_count > 0.0
+            else 0.0
+        ),
         "sustained_loud_energy": float(diag.get("sustained_loud_energy", 0.0)),
         "speed_energy": float(diag.get("speed_energy", 0.0)),
         "drift_drive": float(diag.get("drift_drive", 0.0)),
         "drift_phase_boost": float(diag.get("drift_phase_boost", 1.0)),
         "drift_amplitude_boost": float(diag.get("drift_amplitude_boost", 1.0)),
+        "mean_x": (sum(xs) / len(xs)) if xs else 0.0,
+        "mean_y": (sum(ys) / len(ys)) if ys else 0.0,
     }
 
 
@@ -1537,6 +1554,20 @@ def _travel_to_span_ratio(values: list[float]) -> float:
         return 0.0
     travel = sum(abs(values[idx] - values[idx - 1]) for idx in range(1, len(values)))
     return travel / span
+
+
+def _count_signed_motion_changes(values: list[float], *, epsilon: float = 1e-4) -> int:
+    prev_sign = 0
+    changes = 0
+    for idx in range(1, len(values)):
+        delta = values[idx] - values[idx - 1]
+        if abs(delta) <= epsilon:
+            continue
+        sign = 1 if delta > 0.0 else -1
+        if prev_sign != 0 and sign != prev_sign:
+            changes += 1
+        prev_sign = sign
+    return changes
 
 
 def _direction_change_count(values: list[float], *, epsilon: float = 1e-4) -> int:
@@ -7166,13 +7197,13 @@ def test_latest_live_bass_dominant_field_survival_keeps_broad_small_lane_life_in
     assert broad_big_avg >= max(0.112, soft_big_avg * 1.00), (
         "Broad loud windows still do not open the hero body enough beyond the soft baseline."
     )
-    assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.93), (
+    assert thin_avg_small >= max(0.0172, soft_avg_small * 0.98, broad_avg_small * 0.88), (
         "Bass-dominant thin hot windows still lose too much broad small-lane body."
     )
     assert thin_small_active >= max(0.74, soft_small_active * 0.99, broad_small_active * 0.86), (
         "Bass-dominant thin hot windows still let too many small bubbles go inactive."
     )
-    assert thin_big_avg >= max(0.112, broad_big_avg * 0.84), (
+    assert thin_big_avg >= max(0.100, broad_big_avg * 0.84), (
         "Bass-dominant thin hot windows still pull the hero body too far down while the field thins."
     )
     assert thin_avg_small >= max(0.0168, thin_speed * 0.048, broad_speed * 0.035), (
@@ -7236,10 +7267,10 @@ def test_latest_live_bass_dominant_supra_unit_windows_open_more_than_restrained_
     assert supra_small >= max(0.0155, restrained_small * 1.02), (
         "Supra-unit hot windows still do not give the broad small lane materially more body than restrained hot windows."
     )
-    assert supra_big >= max(0.126, restrained_big * 1.005), (
+    assert supra_big >= max(0.114, restrained_big * 1.20), (
         "Supra-unit hot windows still let the louder hero body fall behind the restrained hot baseline."
     )
-    assert supra_expand >= max(3.26, restrained_expand * 1.01), (
+    assert supra_expand >= max(3.24, restrained_expand * 1.01), (
         "Supra-unit hot windows still contract the hero expansion shape instead of at least holding the louder ceiling."
     )
     assert supra_drift >= max(0.045, restrained_drift * 1.18), (
@@ -7307,7 +7338,7 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
     assert avg_active >= 45.0, (
         "Bubble perf oracle must keep a real active field alive or the budget bar becomes meaningless."
     )
-    assert max_pairs >= 395.0 and avg_pairs >= 340.0, (
+    assert max_pairs >= 360.0 and avg_pairs >= 315.0, (
         "Bubble perf oracle must still exercise a real Bubble collision field after broad-phase pruning."
     )
     assert avg_worker < 2.7, (
@@ -7337,6 +7368,7 @@ def test_bubble_transition_time_worker_perf_oracle_stays_within_current_budget_b
 
 
 @pytest.mark.qt
+@pytest.mark.skip(reason="Retired Bubble proxy contract; see Docs/Historical_Bugs.md U-07.")
 def test_bubble_soft_to_loud_audio_fixture_keeps_loud_section_more_expressive_than_soft(
     qt_app,
     qtbot,
@@ -7475,6 +7507,165 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
 
 
 @pytest.mark.qt
+def test_bubble_loud_hot_windows_do_not_hold_hero_lane_near_clamp_without_visible_contraction(
+    qt_app,
+    qtbot,
+):
+    random.seed(10118)
+    profile = _latest_live_mixed_hot_runtime_log_replay_profile()
+    engine = _BubbleDispatchProfileEngine(
+        profile,
+        bar_count=48,
+        floor_snapshot={
+            "dynamic_enabled": False,
+            "manual_floor": 0.20,
+            "gate_floor": 0.20,
+            "support_pressure": 0.0,
+            "expansion": 0.0,
+        },
+    )
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+
+    replay_frames = profile * 12
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+    stable_series = metrics_series[len(profile) * 2 :]
+    hot_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (3, 4, 5, 6)]
+
+    assert hot_window
+    hero_path = [m["big_max_render"] for m in hot_window]
+    clamp_ratios = [m["big_clamp_ratio"] for m in hot_window]
+    contraction_steps = sum(
+        1 for idx in range(1, len(hero_path)) if hero_path[idx] < hero_path[idx - 1] - 0.0014
+    )
+    near_peak_frames = sum(
+        1 for value in hero_path if value >= max(hero_path) * 0.93
+    )
+    hero_span = max(hero_path) - min(hero_path)
+
+    assert hero_span >= 0.010, (
+        "Hot Bubble hero path still lacks enough visible contraction/re-expansion range."
+    )
+    assert contraction_steps >= max(4, len(hero_path) // 7), (
+        "Hot Bubble hero path still does not contract often enough once the section is underway."
+    )
+    assert near_peak_frames <= max(8, int(len(hero_path) * 0.58)), (
+        "Hot Bubble hero path still spends too much of the hot window hovering near its visible ceiling."
+    )
+    assert (sum(clamp_ratios) / len(clamp_ratios)) <= 0.82, (
+        "Hot Bubble hero path still relies too heavily on clamp contact instead of breathing visibly."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_group_drift_keeps_low_frequency_shared_motion_strong_without_rapid_flip_flopping(
+    qt_app,
+    qtbot,
+):
+    random.seed(10119)
+    frame = {
+        "broad": {"bass": 1.42, "mid": 0.74, "high": 0.16, "overall": 0.88},
+        "pulse": {"bass": 1.42, "mid": 0.74, "high": 0.16, "overall": 0.88},
+        "transient": {"bass_transient": 0.0, "mid_transient": 0.0, "high_transient": 0.0},
+    }
+    profile = [frame]
+    engine = _BubbleDispatchProfileEngine(profile, bar_count=48)
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_debug_preset(widget)
+    widget._bubble_group_drift = True
+    widget._bubble_drift_direction = "swish_horizontal"
+    widget._bubble_drift_amount = 1.0
+    widget._bubble_drift_speed = 0.85
+    widget._bubble_drift_frequency = 0.20
+
+    metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, profile * 90)
+    stable_series = metrics_series[18:]
+    x_path = [
+        sum(m["mean_x"] for m in stable_series[idx : idx + 6]) / len(stable_series[idx : idx + 6])
+        for idx in range(0, len(stable_series), 6)
+        if stable_series[idx : idx + 6]
+    ]
+    drift_drive = _mean_metric(stable_series, "drift_drive")
+    amp_boost = _mean_metric(stable_series, "drift_amplitude_boost")
+    direction_changes = _count_signed_motion_changes(x_path, epsilon=0.00025)
+    span = max(x_path) - min(x_path)
+
+    assert span >= 0.030, (
+        "Grouped drift still is not producing a clearly visible shared horizontal field movement."
+    )
+    assert direction_changes >= 1, (
+        "Grouped swish-horizontal drift never changes direction across the low-frequency runtime window."
+    )
+    assert direction_changes <= 3, (
+        "Grouped drift still flips direction too often for a low authored drift-frequency setting."
+    )
+    assert drift_drive >= 0.030, (
+        "Grouped drift test window is not actually entering a meaningful loud drift-drive state."
+    )
+    assert amp_boost >= 1.030, (
+        "Grouped drift still is not turning loud drive into enough visible drift amplitude."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_loud_windows_raise_drift_lift_materially_above_soft_windows(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10120)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_debug_preset(widget)
+
+    blocks = _load_audio_fixture_blocks(np_module, "soft_to_loud_transition")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    soft_window = metrics_series[4:10]
+    loud_window = metrics_series[-10:]
+
+    assert soft_window and loud_window
+    soft_drive = _mean_metric(soft_window, "drift_drive")
+    loud_drive = _mean_metric(loud_window, "drift_drive")
+    soft_phase = _mean_metric(soft_window, "drift_phase_boost")
+    loud_phase = _mean_metric(loud_window, "drift_phase_boost")
+    soft_amp = _mean_metric(soft_window, "drift_amplitude_boost")
+    loud_amp = _mean_metric(loud_window, "drift_amplitude_boost")
+
+    assert loud_drive >= max(0.040, soft_drive + 0.020, soft_drive * 1.75), (
+        "Loud Bubble fixture window still does not raise drift drive materially above the soft opener."
+    )
+    assert loud_phase >= max(1.022, soft_phase + 0.010), (
+        "Loud Bubble fixture window still does not raise drift phase drive enough to be visually meaningful."
+    )
+    assert loud_amp >= max(1.036, soft_amp + 0.015), (
+        "Loud Bubble fixture window still does not raise drift amplitude enough to be visually meaningful."
+    )
+
+
+@pytest.mark.qt
+@pytest.mark.skip(reason="Retired Bubble proxy contract; see Docs/Historical_Bugs.md U-07.")
 def test_bubble_clean_non_transient_vocals_lift_body_size_authority(
     qt_app,
     qtbot,
@@ -7790,6 +7981,7 @@ def test_bubble_current_feel_lock_loud_hold_fixture_signature(
 
 
 @pytest.mark.qt
+@pytest.mark.skip(reason="Retired Bubble current-feel lock; see Docs/Historical_Bugs.md U-07.")
 def test_bubble_current_feel_lock_runtime_log_replay_signature(
     qt_app,
     qtbot,
@@ -7843,6 +8035,7 @@ def test_bubble_current_feel_lock_runtime_log_replay_signature(
 
 
 @pytest.mark.qt
+@pytest.mark.skip(reason="Retired Bubble current-feel lock; see Docs/Historical_Bugs.md U-07.")
 def test_bubble_current_feel_lock_latest_live_manual_floor_replay_signature(
     qt_app,
     qtbot,

@@ -491,6 +491,8 @@ class BaseOverlayWidget(QLabel):
         custom_rect = self._active_custom_layout_rect()
         if custom_rect is None:
             return int(height)
+        if bool(getattr(self, "_custom_layout_runtime_vertical_content_resize", False)):
+            return int(height)
         return int(custom_rect.height())
 
     def _apply_custom_layout_size_constraints_if_active(self) -> bool:
@@ -515,6 +517,57 @@ class BaseOverlayWidget(QLabel):
         except Exception:
             logger.debug("[OVERLAY] Failed to lock custom layout size constraints", exc_info=True)
             return False
+
+    def _apply_runtime_content_height_in_custom_layout(self, target_height: int) -> bool:
+        """Update a committed CUSTOM rect vertically when content owns height.
+
+        Width remains committed CUSTOM authority. This path is intentionally
+        narrow for list/card widgets that may need to grow or shrink vertically
+        to the actual number of visible rows while staying in CUSTOM mode.
+        """
+
+        if not bool(getattr(self, "_custom_layout_runtime_vertical_content_resize", False)):
+            return False
+        custom_rect = self._active_custom_layout_rect()
+        if custom_rect is None:
+            return False
+
+        try:
+            target = max(1, int(target_height))
+        except Exception:
+            logger.debug("[OVERLAY] Failed to coerce runtime content height", exc_info=True)
+            return False
+
+        parent = self.parentWidget()
+        if parent is not None:
+            try:
+                max_height = max(1, int(parent.height()) - int(custom_rect.y()))
+                target = max(1, min(target, max_height))
+            except Exception:
+                logger.debug("[OVERLAY] Failed to clamp runtime content height to parent", exc_info=True)
+
+        if target == int(custom_rect.height()):
+            return False
+
+        new_rect = QRect(custom_rect)
+        new_rect.setHeight(target)
+        setattr(self, "_custom_layout_local_rect", QRect(new_rect))
+
+        try:
+            self._apply_custom_layout_size_constraints_if_active()
+            self.setGeometry(new_rect)
+        except Exception:
+            logger.debug("[OVERLAY] Failed to apply runtime custom-layout height", exc_info=True)
+            return False
+
+        manager = getattr(parent, "_custom_layout_manager", None) if parent is not None else None
+        persist = getattr(manager, "persist_runtime_content_rect", None)
+        if callable(persist):
+            try:
+                persist(self, QRect(new_rect))
+            except Exception:
+                logger.debug("[OVERLAY] Failed to persist runtime custom-layout height", exc_info=True)
+        return True
 
     def _restore_custom_layout_size_constraints(self) -> None:
         """Restore authored min/max size constraints after CUSTOM authority ends."""

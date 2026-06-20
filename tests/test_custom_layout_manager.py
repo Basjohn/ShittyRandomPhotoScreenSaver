@@ -2832,6 +2832,144 @@ def test_custom_layout_manager_can_shrink_overlay_below_authored_minimums_when_c
     assert gmail.geometry() == custom_rect
 
 
+def test_custom_layout_manager_persists_runtime_vertical_growth_for_reddit_custom_rect(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "reddit": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "reddit": {
+                        "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.20},
+                        "size_payload": {"font_size": 18},
+                        "resize_mode": "reddit_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    reddit = _ConstrainedOverlayWidget(display, overlay_name="reddit", font_size=18)
+    display.reddit_widget = reddit
+    qtbot.addWidget(reddit)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    assert reddit._apply_runtime_content_height_in_custom_layout(260) is True  # type: ignore[attr-defined]
+
+    custom_rect = getattr(reddit, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 420
+    assert custom_rect.height() == 260
+    assert reddit.geometry() == custom_rect
+
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["reddit"]
+    assert payload["rect"]["width"] == pytest.approx(0.42)
+    assert payload["rect"]["height"] == pytest.approx(260 / 700)
+
+
+def test_custom_layout_manager_persists_runtime_vertical_shrink_for_gmail_custom_rect(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "gmail": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "gmail": {
+                        "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.40},
+                        "size_payload": {"font_size": 13},
+                        "resize_mode": "gmail_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    gmail = _ConstrainedOverlayWidget(display, overlay_name="gmail", font_size=13)
+    display.gmail_widget = gmail
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    assert gmail._apply_runtime_content_height_in_custom_layout(180) is True  # type: ignore[attr-defined]
+
+    custom_rect = getattr(gmail, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect.width() == 440
+    assert custom_rect.height() == 180
+    assert gmail.geometry() == custom_rect
+
+    payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]
+    assert payload["rect"]["width"] == pytest.approx(0.44)
+    assert payload["rect"]["height"] == pytest.approx(180 / 700)
+
+
+def test_custom_layout_manager_persists_runtime_vertical_resize_for_reddit2_without_touching_reddit1(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "reddit": {"position": "Custom", "monitor": "1"},
+        "reddit2": {"position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "reddit": {
+                        "rect": {"x": 0.10, "y": 0.14, "width": 0.42, "height": 0.28},
+                        "size_payload": {"font_size": 18},
+                        "resize_mode": "reddit_font",
+                    },
+                    "reddit2": {
+                        "rect": {"x": 0.55, "y": 0.16, "width": 0.42, "height": 0.24},
+                        "size_payload": {"font_size": 18},
+                        "resize_mode": "reddit_font",
+                    },
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    reddit = _ConstrainedOverlayWidget(display, overlay_name="reddit", font_size=18)
+    reddit2 = _ConstrainedOverlayWidget(display, overlay_name="reddit2", font_size=18)
+    display.reddit_widget = reddit
+    display.reddit2_widget = reddit2
+    qtbot.addWidget(reddit)
+    qtbot.addWidget(reddit2)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    assert reddit2._apply_runtime_content_height_in_custom_layout(210) is True  # type: ignore[attr-defined]
+
+    displays_payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))
+    assert displays_payload["reddit"]["rect"]["height"] == pytest.approx(0.28)
+    assert displays_payload["reddit2"]["rect"]["height"] == pytest.approx(210 / 700)
+
+
 def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

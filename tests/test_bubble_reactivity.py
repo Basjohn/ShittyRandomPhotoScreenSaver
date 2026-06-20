@@ -1047,47 +1047,115 @@ def test_group_drift_viz_diagnostics_path_does_not_crash(monkeypatch):
     assert diag["group_drift_configured"] == pytest.approx(1.0)
     assert diag["group_drift_active"] == pytest.approx(1.0)
 
-    def test_sustained_loud_motion_releases_quickly_after_the_drop(self):
-        sim = BubbleSimulation()
-        settings = _default_settings(
-            bubble_stream_constant_speed=0.18,
-            bubble_stream_speed_cap=1.9,
-            bubble_stream_reactivity=0.95,
-        )
-        _warm_up(sim, settings, frames=60)
 
-        dt = 1 / 60
-        sustained_hot = {
-            "bass": 0.90,
-            "mid": 0.16,
-            "high": 0.06,
-            "overall": 0.43,
-            "smooth_mid": 0.16,
-            "smooth_high": 0.06,
-        }
-        quiet = {
-            "bass": 0.12,
-            "mid": 0.10,
-            "high": 0.05,
-            "overall": 0.10,
-            "smooth_mid": 0.10,
-            "smooth_high": 0.05,
-        }
+def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapping():
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction="none",
+        bubble_drift_direction="swish_horizontal",
+        bubble_group_drift=True,
+        bubble_drift_amount=1.0,
+        bubble_drift_speed=0.8,
+        bubble_drift_frequency=0.15,
+    )
 
-        for _ in range(30):
-            sim.tick(dt, sustained_hot, settings)
-        hot_energy = sim._sustained_loud_energy
+    dx_series: list[float] = []
+    for _ in range(420):
+        sim.tick(1 / 60, _energy(bass=0.92, mid=0.28, high=0.08), settings)
+        dx_series.append(sim._group_drift_dx)
 
-        for _ in range(18):
-            sim.tick(dt, quiet, settings)
+    strong_signs = [1 if dx > 0.55 else -1 if dx < -0.55 else 0 for dx in dx_series]
+    non_zero_signs = [sign for sign in strong_signs if sign != 0]
+    sign_changes = sum(
+        1
+        for idx in range(1, len(non_zero_signs))
+        if non_zero_signs[idx] != non_zero_signs[idx - 1]
+    )
+    easing_frames = sum(1 for dx in dx_series if abs(dx) < 0.80)
 
-        assert hot_energy >= 0.24, (
-            f"Expected the hot section to build a meaningful loud-motion envelope, got {hot_energy:.3f}."
-        )
-        assert sim._sustained_loud_energy < hot_energy * 0.76, (
-            "Sustained loud motion is still lingering too long after the section drops."
-        )
-        assert sim._sustained_loud_energy < 0.26, (
+    assert sign_changes >= 1, (
+        "Grouped swish-horizontal drift never reversed direction under a long low-frequency run."
+    )
+    assert easing_frames >= 10, (
+        "Grouped swish-horizontal drift still snaps between directions instead of easing through the turn."
+    )
+
+
+def test_group_drift_random_turns_progressively_instead_of_single_frame_snaps():
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=0,
+        bubble_stream_direction="none",
+        bubble_drift_direction="random",
+        bubble_group_drift=True,
+        bubble_drift_amount=1.0,
+        bubble_drift_speed=0.8,
+        bubble_drift_frequency=0.18,
+    )
+
+    vectors: list[tuple[float, float]] = []
+    for _ in range(360):
+        sim.tick(1 / 60, _energy(bass=0.90, mid=0.32, high=0.10), settings)
+        vectors.append((sim._group_drift_dx, sim._group_drift_dy))
+
+    angle_steps: list[float] = []
+    for (prev_dx, prev_dy), (curr_dx, curr_dy) in zip(vectors, vectors[1:]):
+        prev_mag = math.hypot(prev_dx, prev_dy)
+        curr_mag = math.hypot(curr_dx, curr_dy)
+        if prev_mag <= 1e-6 or curr_mag <= 1e-6:
+            continue
+        dot = max(-1.0, min(1.0, (prev_dx * curr_dx + prev_dy * curr_dy) / (prev_mag * curr_mag)))
+        angle_steps.append(math.degrees(math.acos(dot)))
+
+    assert angle_steps, "Expected grouped random drift to produce measurable shared-direction turns."
+    assert max(angle_steps) <= 35.0, (
+        "Grouped random drift still changes shared direction too abruptly frame-to-frame."
+    )
+
+def test_sustained_loud_motion_releases_quickly_after_the_drop():
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_stream_constant_speed=0.18,
+        bubble_stream_speed_cap=1.9,
+        bubble_stream_reactivity=0.95,
+    )
+    _warm_up(sim, settings, frames=60)
+
+    dt = 1 / 60
+    sustained_hot = {
+        "bass": 0.90,
+        "mid": 0.16,
+        "high": 0.06,
+        "overall": 0.43,
+        "smooth_mid": 0.16,
+        "smooth_high": 0.06,
+    }
+    quiet = {
+        "bass": 0.12,
+        "mid": 0.10,
+        "high": 0.05,
+        "overall": 0.10,
+        "smooth_mid": 0.10,
+        "smooth_high": 0.05,
+    }
+
+    for _ in range(30):
+        sim.tick(dt, sustained_hot, settings)
+    hot_energy = sim._sustained_loud_energy
+
+    for _ in range(18):
+        sim.tick(dt, quiet, settings)
+
+    assert hot_energy >= 0.24, (
+        f"Expected the hot section to build a meaningful loud-motion envelope, got {hot_energy:.3f}."
+    )
+    assert sim._sustained_loud_energy < hot_energy * 0.76, (
+        "Sustained loud motion is still lingering too long after the section drops."
+    )
+    assert sim._sustained_loud_energy < 0.26, (
             f"Sustained loud motion only decayed to {sim._sustained_loud_energy:.3f}; Bubble still feels too sticky."
         )
 

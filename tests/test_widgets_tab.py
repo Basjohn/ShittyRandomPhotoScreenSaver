@@ -264,6 +264,53 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_lazy_widgets_tab_media_hydration_does_not_trigger_save_while_building(
+        self,
+        qt_app,
+        settings_manager,
+        monkeypatch,
+    ):
+        settings_manager.set("widgets", {
+            "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
+            "spotify_visualizer": {
+                "enabled": True,
+                "visualizers_enabled": True,
+                "mode": "bubble",
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "clock"},
+        )
+        try:
+            descriptors = get_widget_settings_section_descriptors()
+            media_index = next(
+                idx for idx, descriptor in enumerate(descriptors)
+                if descriptor.section_id == "media"
+            )
+            save_calls: list[str] = []
+            original_save = tab._save_settings
+
+            def _record_save():
+                if not tab._loading:
+                    save_calls.append("save")
+                return original_save()
+
+            monkeypatch.setattr(tab, "_save_settings", _record_save)
+
+            tab._on_subtab_changed(media_index)
+            qt_app.processEvents()
+
+            assert save_calls == []
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg.get("media", {}).get("enabled") is True
+        finally:
+            tab.deleteLater()
+
     def test_widgets_tab_custom_position_slot_tracks_saved_custom_layout_state(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
             "clock": {"enabled": True, "position": "Custom"},

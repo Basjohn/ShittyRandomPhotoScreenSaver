@@ -41,6 +41,7 @@ from rendering.widget_descriptors import (
     get_effective_monitor_settings_key_for_widget,
     get_effective_position_settings_key_for_widget,
     get_layout_edit_runtime_descriptors,
+    get_widget_runtime_descriptor,
     is_custom_position_selected_for_widget,
     restore_widget_family_to_authored_layout,
     sync_custom_layout_restore_routes,
@@ -821,6 +822,60 @@ class CustomLayoutManager:
                 self._clear_widget_custom_layout(widget)
                 continue
             self._apply_entry_to_widget(widget, descriptor, entry)
+
+    def persist_runtime_content_rect(self, widget: Any, local_rect: QRect) -> bool:
+        """Persist a live CUSTOM rect adjustment without triggering rebuild churn."""
+
+        descriptor = get_widget_runtime_descriptor(str(getattr(widget, "_custom_layout_widget_id", "") or ""))
+        if descriptor is None or not descriptor.custom_layout_runtime_vertical_content_resize:
+            return False
+        if self._active:
+            return False
+        if self._screen is None:
+            self._sync_display_screen_binding()
+        if self._screen is None:
+            return False
+
+        custom_rect = getattr(widget, "_custom_layout_local_rect", None)
+        if not isinstance(custom_rect, QRect):
+            return False
+
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return False
+
+        widgets_map = settings_manager.get_widgets_map()
+        sync_custom_layout_restore_routes(widgets_map)
+        custom_layout_map = load_custom_layout_map(widgets_map)
+        screen_signature = canonicalize_screen_layout_bucket(custom_layout_map, self._screen)
+        if not screen_signature:
+            screen_signature = get_screen_signature(self._screen)
+
+        entry = CustomLayoutEntry(
+            widget_id=descriptor.widget_id,
+            rect=normalize_local_rect(QRect(local_rect), self._screen.geometry().size()),
+            size_payload=self._capture_size_payload(descriptor, widget),
+            resize_mode=descriptor.custom_layout_resize_mode,
+        )
+        set_screen_layout_entry(custom_layout_map, screen_signature, descriptor.widget_id, entry)
+        write_custom_layout_map(widgets_map, custom_layout_map)
+        try:
+            settings_manager.set_widgets_map(widgets_map, emit_change=False)
+            settings_manager.save()
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to persist runtime content rect for %s", descriptor.widget_id, exc_info=True)
+            return False
+
+        self._log_geo_audit(
+            descriptor.widget_id,
+            "runtime_content_height_persist",
+            local_rect=QRect(local_rect),
+            global_rect=QRect(widget.geometry()),
+            payload=entry.size_payload,
+            source="persist_runtime_content_rect",
+            extra=f"resize_mode={descriptor.custom_layout_resize_mode}",
+        )
+        return True
 
     def _finish_session(
         self,
@@ -2155,6 +2210,12 @@ class CustomLayoutManager:
                 delattr(widget, "_custom_layout_local_rect")
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to clear custom rect", exc_info=True)
+        for attr_name in ("_custom_layout_widget_id", "_custom_layout_runtime_vertical_content_resize"):
+            try:
+                if hasattr(widget, attr_name):
+                    delattr(widget, attr_name)
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to clear %s", attr_name, exc_info=True)
         try:
             restore_constraints = getattr(widget, "_restore_custom_layout_size_constraints", None)
             if callable(restore_constraints):
@@ -2305,6 +2366,12 @@ class CustomLayoutManager:
             extra=f"resize_mode={entry.resize_mode}",
         )
         setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
+        setattr(widget, "_custom_layout_widget_id", descriptor.widget_id)
+        setattr(
+            widget,
+            "_custom_layout_runtime_vertical_content_resize",
+            bool(descriptor.custom_layout_runtime_vertical_content_resize),
+        )
         try:
             # Prime the real committed rect before any min/max constraint lock
             # can resize the widget in-place at a stale authored/startup origin.

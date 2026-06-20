@@ -763,6 +763,8 @@ class WidgetsTab(QWidget):
 
         self._subtab_content_building.add(subtab_id)
         try:
+            previous_loading = self._loading
+            self._loading = True
             for dep_index in get_widget_lazy_dependency_indices(
                 subtab_id,
                 self._widget_section_descriptors,
@@ -788,6 +790,7 @@ class WidgetsTab(QWidget):
                 self._widget_section_descriptors[subtab_id].section_id,
             )
         finally:
+            self._loading = previous_loading
             self._subtab_content_building.discard(subtab_id)
 
     def ensure_all_sections_built(self) -> None:
@@ -1091,6 +1094,8 @@ class WidgetsTab(QWidget):
             return
 
         blockers = []
+        previous_loading = self._loading
+        self._loading = True
         try:
             widgets_value = self._settings.get("widgets", {})
             if isinstance(widgets_value, dict):
@@ -1120,6 +1125,7 @@ class WidgetsTab(QWidget):
                     widget.blockSignals(False)
                 except Exception as e:
                     logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
+            self._loading = previous_loading
 
         try:
             self._refresh_custom_position_option_state()
