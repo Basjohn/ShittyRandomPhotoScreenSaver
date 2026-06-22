@@ -23,7 +23,10 @@ import types
 
 import pytest
 
-from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
+from widgets.spotify_visualizer.bubble_simulation import (
+    BubbleSimulation,
+    _shape_authored_bubble_control,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +162,13 @@ def _snapshot_small_max_radius(
         if (not bubble.is_big) and not bubble.exiting:
             radii.append(pos_data[idx * 4 + 2])
     return max(radii, default=0.0)
+
+
+def test_authored_bubble_drift_controls_keep_lower_lows():
+    """Low authored drift controls should map to truly gentle effective values."""
+    assert _shape_authored_bubble_control(0.20, low_power=3.20, high_power=0.70) < 0.03
+    assert _shape_authored_bubble_control(0.20, low_power=2.05, high_power=0.76) < 0.08
+    assert _shape_authored_bubble_control(0.20, low_power=1.95, high_power=0.78) < 0.09
 
 
 def _big_lane_metrics(
@@ -1062,11 +1072,13 @@ def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapp
     )
 
     dx_series: list[float] = []
-    for _ in range(420):
+    arc_series: list[float] = []
+    for _ in range(540):
         sim.tick(1 / 60, _energy(bass=0.92, mid=0.28, high=0.08), settings)
         dx_series.append(sim._group_drift_dx)
+        arc_series.append(abs(sim._group_drift_arc_y))
 
-    strong_signs = [1 if dx > 0.55 else -1 if dx < -0.55 else 0 for dx in dx_series]
+    strong_signs = [1 if dx > 0.40 else -1 if dx < -0.40 else 0 for dx in dx_series]
     non_zero_signs = [sign for sign in strong_signs if sign != 0]
     sign_changes = sum(
         1
@@ -1074,12 +1086,20 @@ def test_group_drift_swish_horizontal_reverses_on_authored_cadence_without_snapp
         if non_zero_signs[idx] != non_zero_signs[idx - 1]
     )
     easing_frames = sum(1 for dx in dx_series if abs(dx) < 0.80)
+    turn_frames = sum(1 for dx in dx_series if abs(dx) < 0.92)
+    turn_ratio = turn_frames / len(dx_series)
 
     assert sign_changes >= 1, (
         "Grouped swish-horizontal drift never reversed direction under a long low-frequency run."
     )
     assert easing_frames >= 10, (
         "Grouped swish-horizontal drift still snaps between directions instead of easing through the turn."
+    )
+    assert max(arc_series) >= 0.03, (
+        "Grouped swish-horizontal drift still lacks the gentle curved turn lane needed to avoid a harsh axis jerk."
+    )
+    assert turn_ratio <= 0.40, (
+        "Grouped swish-horizontal drift now spends too much of its cadence inside the turn, reading as constant wobble instead of a shared direction."
     )
 
 
@@ -1113,6 +1133,70 @@ def test_group_drift_random_turns_progressively_instead_of_single_frame_snaps():
     assert angle_steps, "Expected grouped random drift to produce measurable shared-direction turns."
     assert max(angle_steps) <= 35.0, (
         "Grouped random drift still changes shared direction too abruptly frame-to-frame."
+    )
+
+
+def test_group_drift_swish_horizontal_keeps_signed_lag_spread_instead_of_rigid_slab_motion():
+    random.seed(10122)
+    sim = BubbleSimulation()
+    settings = _default_settings(
+        bubble_big_count=0,
+        bubble_small_count=18,
+        bubble_stream_direction="none",
+        bubble_drift_direction="swish_horizontal",
+        bubble_group_drift=True,
+        bubble_drift_amount=1.0,
+        bubble_drift_speed=0.8,
+        bubble_drift_frequency=0.30,
+    )
+
+    for _ in range(80):
+        sim.tick(1 / 60, _energy(bass=0.78, mid=0.32, high=0.10), settings)
+
+    sim._group_drift_dx = 1.0
+    sim._group_drift_dy = 0.0
+    sim._group_drift_target_dx = 1.0
+    sim._group_drift_target_dy = 0.0
+    sim._group_drift_remaining = 10.0
+    sim._group_drift_turn_duration = 0.0
+    sim._group_drift_arc_x = 0.0
+    sim._group_drift_arc_y = 0.0
+
+    tracked = [
+        (idx, float(getattr(b, "drift_bias", 0.0) or 0.0), float(getattr(b, "x", 0.0) or 0.0))
+        for idx, b in enumerate(sim._bubbles)
+        if not getattr(b, "is_big", False) and not getattr(b, "exiting", False)
+    ]
+    assert tracked, "Need active small bubbles for grouped-drift spread verification."
+
+    for _ in range(4):
+        sim.tick(1 / 60, _energy(bass=0.78, mid=0.32, high=0.10), settings)
+
+    positive_moves: list[float] = []
+    negative_moves: list[float] = []
+    for idx, drift_bias, start_x in tracked:
+        if idx >= len(sim._bubbles):
+            continue
+        bubble = sim._bubbles[idx]
+        if getattr(bubble, "exiting", False):
+            continue
+        move_x = float(getattr(bubble, "x", 0.0) or 0.0) - start_x
+        if drift_bias >= 0.20:
+            positive_moves.append(move_x)
+        elif drift_bias <= -0.20:
+            negative_moves.append(move_x)
+
+    assert positive_moves and negative_moves, (
+        "Grouped-drift spread oracle needs both positive and negative drift-bias bubbles."
+    )
+    pos_mean = sum(positive_moves) / len(positive_moves)
+    neg_mean = sum(negative_moves) / len(negative_moves)
+
+    assert neg_mean > 0.0002, (
+        "Grouped swish-horizontal drift still leaves the trailing-side field too dead; lagging stragglers are not surviving the sweep."
+    )
+    assert pos_mean >= neg_mean + 0.0018, (
+        "Grouped swish-horizontal drift still moves the field too uniformly; signed lag spread is not strong enough to leave natural stragglers."
     )
 
 def test_sustained_loud_motion_releases_quickly_after_the_drop():

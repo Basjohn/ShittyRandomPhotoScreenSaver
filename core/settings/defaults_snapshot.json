@@ -249,7 +249,7 @@
         },
         "global": {
             "card_border_width_px": 4,
-            "stacking_enabled": false
+            "stacking_enabled": true
         },
         "gmail": {
             "account_slot": "0",
@@ -396,7 +396,7 @@
             "font_size": 20,
             "margin": 30,
             "monitor": 2,
-            "mute_button_enabled": true,
+            "mute_button_enabled": false,
             "position": "Bottom Left",
             "provider": "spotify",
             "rounded_artwork_border": true,
@@ -677,6 +677,7 @@
                 255
             ],
             "bubble_gradient_semantics_version": 2,
+            "bubble_group_drift": false,
             "bubble_growth": 5.0,
             "bubble_input_gain": 1.0,
             "bubble_kick_lane_gain": 1.0,

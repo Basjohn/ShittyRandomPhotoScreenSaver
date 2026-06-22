@@ -163,6 +163,27 @@ class OpenMeteoProvider:
         result = {k: v for k, v in cached.items() if not k.startswith('_')}
         result['_stale'] = True  # Mark as stale so UI can indicate
         return result
+
+    def get_persisted_weather(self, city: str, *, allow_stale: bool = True) -> Optional[Dict[str, Any]]:
+        """Return persisted cache for *city* without forcing a network request.
+
+        This is the startup-display seam for widgets that should prefer showing
+        known weather immediately instead of blanking while a refresh is queued.
+        """
+        if city not in self._weather_cache:
+            return None
+
+        cached = self._weather_cache[city]
+        cached_time = float(cached.get('_cached_at', 0) or 0)
+        is_fresh = (time.time() - cached_time) < _WEATHER_CACHE_TTL_SECONDS
+        if not is_fresh and not allow_stale:
+            return None
+
+        result = {k: v for k, v in cached.items() if not k.startswith('_')}
+        result['_cached_at'] = cached_time
+        if not is_fresh:
+            result['_stale'] = True
+        return result
     
     def geocode(self, city: str) -> Optional[Tuple[float, float]]:
         """

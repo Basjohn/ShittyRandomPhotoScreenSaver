@@ -24,7 +24,9 @@ from rendering.widget_descriptors import (
 from rendering.custom_layout_contract import (
     denormalize_local_rect,
     deserialize_custom_layout_entry,
+    get_custom_layout_restore_entry,
     get_screen_layout_entries_for_screen,
+    load_custom_layout_restore_map,
     load_custom_layout_map,
 )
 from rendering.spotify_display_participation import resolve_visualizer_spawn_display
@@ -165,6 +167,62 @@ def _prime_visualizer_custom_rect_for_startup(
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to lock CUSTOM visualizer constraints during startup priming", exc_info=True)
     return QRect(local_rect)
+
+
+def _recover_visualizer_custom_monitor_from_saved_layout(
+    mgr: "WidgetManager",
+    widgets_config: Mapping[str, object] | None,
+    *,
+    screen_index: int,
+) -> tuple[str, str] | None:
+    """Recover a missing CUSTOM visualizer monitor from the saved screen bucket.
+
+    This is intentionally narrower than the unique-rect topology fallback used
+    for geometry priming. Owner routing is only safe to recover here when the
+    current live parent screen actually matches a saved visualizer bucket; a
+    sole saved rect without a live bucket match is enough for geometry priming
+    but not enough to let every display guess ownership for itself.
+    """
+
+    if not isinstance(widgets_config, Mapping):
+        return None
+
+    screen = _resolve_parent_screen(getattr(mgr, "_parent", None))
+    if screen is None:
+        return None
+
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+    entry = deserialize_custom_layout_entry(
+        "spotify_visualizer",
+        screen_entries.get("spotify_visualizer"),
+    )
+    if entry is None:
+        return None
+
+    return str(int(screen_index) + 1), str(matched_signature or "unknown")
+
+
+def _has_valid_visualizer_authored_restore_route(
+    widgets_config: Mapping[str, object] | None,
+) -> bool:
+    if not isinstance(widgets_config, Mapping):
+        return False
+    restore_entry = get_custom_layout_restore_entry(
+        load_custom_layout_restore_map(widgets_config),
+        "spotify_visualizer",
+    )
+    if not isinstance(restore_entry, Mapping):
+        return False
+    position = str(restore_entry.get("position", "") or "").strip()
+    monitor = str(restore_entry.get("monitor", "ALL") or "ALL").strip() or "ALL"
+    if not position:
+        return False
+    if position.lower() == "custom":
+        return False
+    if monitor.upper() == "ALL":
+        return False
+    return True
 
 
 def _resolve_visualizer_anchor_media_widget(
@@ -631,6 +689,46 @@ def create_spotify_visualizer_widget(
         widgets_config if isinstance(widgets_config, Mapping) else None,
     )
     if custom_routing_active and str(effective_monitor_sel or "ALL").strip().upper() == "ALL":
+        recovered_monitor = _recover_visualizer_custom_monitor_from_saved_layout(
+            mgr,
+            widgets_config if isinstance(widgets_config, Mapping) else None,
+            screen_index=screen_index,
+        )
+        if recovered_monitor is not None:
+            effective_monitor_sel, matched_signature = recovered_monitor
+            logger.warning(
+                "[SPOTIFY_VIS][FALLBACK] Recovered missing CUSTOM visualizer monitor route from saved layout "
+                "bucket=%s monitor=%s",
+                matched_signature,
+                effective_monitor_sel,
+            )
+            if isinstance(widgets_config, dict):
+                visualizer_section = widgets_config.get("spotify_visualizer", {})
+                if not isinstance(visualizer_section, dict):
+                    visualizer_section = {}
+                    widgets_config["spotify_visualizer"] = visualizer_section
+                visualizer_section["position"] = "Custom"
+                visualizer_section["monitor"] = effective_monitor_sel
+                settings_manager = getattr(mgr, "_settings_manager", None)
+                if settings_manager is not None:
+                    try:
+                        settings_manager.set_widgets_map(widgets_config, emit_change=False)
+                        settings_manager.save()
+                    except Exception:
+                        logger.debug(
+                            "[SPOTIFY_VIS] Failed to persist recovered CUSTOM visualizer monitor route",
+                            exc_info=True,
+                        )
+
+    if custom_routing_active and str(effective_monitor_sel or "ALL").strip().upper() == "ALL":
+        if not _has_valid_visualizer_authored_restore_route(
+            widgets_config if isinstance(widgets_config, Mapping) else None,
+        ):
+            logger.warning(
+                "[SPOTIFY_VIS][FALLBACK] Suppressing invalid Custom+ALL visualizer creation; "
+                "no valid authored restore route exists"
+            )
+            return None
         restored_to_authored = False
         if isinstance(widgets_config, dict):
             restored_to_authored = restore_widget_family_to_authored_layout(
@@ -647,6 +745,11 @@ def create_spotify_visualizer_widget(
                 widgets_config if isinstance(widgets_config, Mapping) else None,
                 default=str(media_model.monitor or "ALL"),
             )
+            if custom_routing_active or str(effective_monitor_sel or "ALL").strip().upper() == "ALL":
+                logger.warning(
+                    "[SPOTIFY_VIS][FALLBACK] Refused false authored-route recovery for invalid Custom+ALL visualizer state"
+                )
+                return None
             logger.warning(
                 "[SPOTIFY_VIS] Restored invalid Custom+ALL visualizer route back to authored layout"
             )

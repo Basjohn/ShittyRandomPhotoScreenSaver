@@ -1489,6 +1489,122 @@ class TestNoCrossModeGhostBleed:
             if b.is_big:
                 assert sf <= cap + 1e-6, f"big bubble spec_factor {sf} exceeds cap {cap}"
 
+    def test_bubble_specular_growth_does_not_double_count_render_growth(self):
+        """Specular size must stay bounded relative to the rendered bubble radius."""
+        from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
+        import random
+
+        random.seed(10123)
+        sim = BubbleSimulation()
+        settings = {
+            "bubble_big_count": 6,
+            "bubble_small_count": 18,
+            "bubble_surface_reach": 0.75,
+            "bubble_stream_direction": "up",
+            "bubble_stream_constant_speed": 0.15,
+            "bubble_stream_speed_cap": 1.8,
+            "bubble_stream_reactivity": 0.9,
+            "bubble_rotation_amount": 0.15,
+            "bubble_drift_amount": 0.5,
+            "bubble_drift_speed": 0.3,
+            "bubble_drift_frequency": 0.5,
+            "bubble_drift_direction": "swish_horizontal",
+            "bubble_big_size_max": 0.035,
+            "bubble_small_size_max": 0.012,
+            "bubble_trail_strength": 0.8,
+            "bubble_big_bass_pulse": 0.8,
+            "bubble_small_freq_pulse": 0.6,
+            "bubble_big_contraction_bias": 0.5,
+            "bubble_big_size_clamp": 3.0,
+        }
+
+        quiet = {"bass": 0.15, "mid": 0.10, "high": 0.05, "overall": 0.15, "smooth_mid": 0.10, "smooth_high": 0.05}
+        hot = {"bass": 1.55, "mid": 0.65, "high": 0.16, "overall": 1.55, "smooth_mid": 0.65, "smooth_high": 0.16}
+
+        for _ in range(80):
+            sim.tick(1 / 60, quiet, settings)
+        for _ in range(24):
+            sim.tick(1 / 60, hot, settings)
+
+        pos, extra, _trail = sim.snapshot(
+            bass=1.55,
+            mid_high=0.81,
+            big_bass_pulse=settings["bubble_big_bass_pulse"],
+            small_freq_pulse=settings["bubble_small_freq_pulse"],
+            big_specular_max_size=2.5,
+            big_contraction_bias=settings["bubble_big_contraction_bias"],
+            big_size_clamp=settings["bubble_big_size_clamp"],
+        )
+
+        ratios = []
+        for idx, bubble in enumerate(sim._bubbles):
+            if getattr(bubble, "exiting", False):
+                continue
+            render_radius = pos[idx * 4 + 2]
+            spec_factor = extra[idx * 4]
+            if render_radius <= 1e-6:
+                continue
+            ratios.append(0.18 * spec_factor)
+
+        assert ratios, "Need live Bubble specular ratios for the highlight-size regression guard."
+        assert max(ratios) <= 0.24, (
+            f"Bubble specular highlight ratio still balloons too far beyond the rendered bubble size (max {max(ratios):.3f})."
+        )
+
+    def test_bubble_big_specular_scales_modestly_with_larger_big_bubbles(self):
+        """Very large big bubbles should earn a slightly larger highlight than medium big bubbles."""
+        from widgets.spotify_visualizer.bubble_simulation import BubbleSimulation
+
+        sim = BubbleSimulation()
+        settings = {
+            "bubble_big_count": 2,
+            "bubble_small_count": 0,
+            "bubble_surface_reach": 0.75,
+            "bubble_stream_direction": "up",
+            "bubble_stream_constant_speed": 0.15,
+            "bubble_stream_speed_cap": 1.8,
+            "bubble_stream_reactivity": 0.9,
+            "bubble_rotation_amount": 0.15,
+            "bubble_drift_amount": 0.5,
+            "bubble_drift_speed": 0.3,
+            "bubble_drift_frequency": 0.5,
+            "bubble_drift_direction": "swish_horizontal",
+            "bubble_big_size_max": 0.035,
+            "bubble_small_size_max": 0.012,
+            "bubble_trail_strength": 0.0,
+        }
+
+        quiet = {"bass": 0.15, "mid": 0.10, "high": 0.05, "overall": 0.15, "smooth_mid": 0.10, "smooth_high": 0.05}
+        for _ in range(24):
+            sim.tick(1 / 60, quiet, settings)
+
+        bigs = [b for b in sim._bubbles if b.is_big and not getattr(b, "exiting", False)]
+        assert len(bigs) >= 2, "Need two active big bubbles for Bubble specular proportionality coverage."
+        bigs[0].radius = 0.024
+        bigs[1].radius = 0.040
+        bigs[0].pulse_energy = 1.0
+        bigs[1].pulse_energy = 1.0
+        bigs[0].spec_size_mut = 1.0
+        bigs[1].spec_size_mut = 1.0
+        bigs[0].size_gate_energy = 1.0
+        bigs[1].size_gate_energy = 1.0
+
+        pos, extra, _trail = sim.snapshot(
+            bass=1.25,
+            mid_high=0.50,
+            big_bass_pulse=1.0,
+            small_freq_pulse=0.5,
+            big_specular_max_size=2.5,
+        )
+
+        large_idx = sim._bubbles.index(bigs[1])
+        medium_idx = sim._bubbles.index(bigs[0])
+        large_spec_r = pos[large_idx * 4 + 2] * 0.18 * extra[large_idx * 4]
+        medium_spec_r = pos[medium_idx * 4 + 2] * 0.18 * extra[medium_idx * 4]
+        assert large_spec_r >= medium_spec_r * 1.18, (
+            "Largest Bubble highlights still are not separating enough from medium big bubbles."
+        )
+
     def test_spectrum_ghost_ui_save_includes_mode_specific_keys(self):
         """The UI save dict must include spectrum_ghosting_enabled/alpha/decay
         alongside legacy global keys so from_mapping picks them up."""

@@ -104,6 +104,19 @@ def _clamp01(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _shape_authored_bubble_control(
+    value: float,
+    *,
+    low_power: float,
+    high_power: float,
+) -> float:
+    """Give low authored values more subtlety and high values more authority."""
+    x = _clamp01(value)
+    if x <= 0.5:
+        return 0.5 * ((x / 0.5) ** low_power)
+    return 0.5 + 0.5 * (((x - 0.5) / 0.5) ** high_power)
+
+
 def _random_direction() -> Tuple[float, float]:
     angle = random.uniform(0.0, math.tau)
     return (math.cos(angle), math.sin(angle))
@@ -227,6 +240,9 @@ class BubbleSimulation:
         self._group_drift_remaining: float = 0.0
         self._group_drift_turn_elapsed: float = 0.0
         self._group_drift_turn_duration: float = 0.0
+        self._group_drift_arc_x: float = 0.0
+        self._group_drift_arc_y: float = 0.0
+        self._group_drift_arc_sign: float = 1.0
 
     def reset(self) -> None:
         """Clear all accumulated state for a clean cold-start on mode re-entry."""
@@ -263,6 +279,9 @@ class BubbleSimulation:
         self._group_drift_remaining = 0.0
         self._group_drift_turn_elapsed = 0.0
         self._group_drift_turn_duration = 0.0
+        self._group_drift_arc_x = 0.0
+        self._group_drift_arc_y = 0.0
+        self._group_drift_arc_sign = 1.0
 
     @property
     def count(self) -> int:
@@ -304,11 +323,26 @@ class BubbleSimulation:
         ))
         stream_reactivity = float(settings.get("bubble_stream_reactivity", 0.5))
         rotation_amount = float(settings.get("bubble_rotation_amount", 0.5))
-        drift_amount = float(settings.get("bubble_drift_amount", 0.5))
+        drift_amount_authored = float(settings.get("bubble_drift_amount", 0.5))
         group_drift = bool(settings.get("bubble_group_drift", False))
-        drift_speed = float(settings.get("bubble_drift_speed", 0.5))
-        drift_freq = float(settings.get("bubble_drift_frequency", 0.5))
+        drift_speed_authored = float(settings.get("bubble_drift_speed", 0.5))
+        drift_freq_authored = float(settings.get("bubble_drift_frequency", 0.5))
         drift_dir = str(settings.get("bubble_drift_direction", "random"))
+        drift_amount = _shape_authored_bubble_control(
+            drift_amount_authored,
+            low_power=1.95,
+            high_power=0.78,
+        )
+        drift_speed = _shape_authored_bubble_control(
+            drift_speed_authored,
+            low_power=2.05,
+            high_power=0.76,
+        )
+        drift_freq = _shape_authored_bubble_control(
+            drift_freq_authored,
+            low_power=3.20,
+            high_power=0.70,
+        )
         big_bass_pulse = float(settings.get("bubble_big_bass_pulse", 0.5))
         small_freq_pulse = float(settings.get("bubble_small_freq_pulse", 0.5))
         big_contraction_bias = float(settings.get("bubble_big_contraction_bias", 1.0))
@@ -575,26 +609,32 @@ class BubbleSimulation:
             curve=1.0,
         )
         base_drift_drive = soft_ceiling(
-            max(0.0, self._sustained_loud_energy - 0.56),
+            max(0.0, self._sustained_loud_energy - 0.48),
             knee=0.0,
-            ceiling=0.06,
-            max_input=0.28,
+            ceiling=0.10,
+            max_input=0.34,
             curve=1.0,
         )
         body_drift_bonus = soft_ceiling(
-            max(0.0, self._render_body_energy - 0.60),
+            max(0.0, self._render_body_energy - 0.54),
             knee=0.0,
             ceiling=0.82,
-            max_input=0.52,
+            max_input=0.58,
             curve=1.0,
         )
         loud_drift_drive = min(
             1.0,
-            base_drift_drive + body_drift_bonus * (0.34 + bass_drift_gate * 0.66),
+            base_drift_drive + body_drift_bonus * (0.44 + bass_drift_gate * 0.70),
         )
         big_lane_diag["drift_drive"] = loud_drift_drive
-        drift_phase_boost = 1.0 + loud_drift_drive * (0.32 + drift_speed * 0.55)
-        drift_amplitude_boost = 1.0 + loud_drift_drive * (0.62 + drift_amount * 0.95)
+        big_lane_diag["drift_amount_authored"] = drift_amount_authored
+        big_lane_diag["drift_amount_effective"] = drift_amount
+        big_lane_diag["drift_speed_authored"] = drift_speed_authored
+        big_lane_diag["drift_speed_effective"] = drift_speed
+        big_lane_diag["drift_frequency_authored"] = drift_freq_authored
+        big_lane_diag["drift_frequency_effective"] = drift_freq
+        drift_phase_boost = 1.0 + loud_drift_drive * (0.44 + drift_speed * 0.78)
+        drift_amplitude_boost = 1.0 + loud_drift_drive * (0.90 + drift_amount * 1.20)
         big_lane_diag["drift_phase_boost"] = drift_phase_boost
         big_lane_diag["drift_amplitude_boost"] = drift_amplitude_boost
         group_drift_active = group_drift and drift_dir not in _SWIRL_DIRECTIONS and drift_dir != "none"
@@ -610,7 +650,7 @@ class BubbleSimulation:
                 )
             ):
                 logger.info(
-                    "[SPOTIFY_VIS][BUBBLE][DRIFT] bass=%.3f overall=%.3f speed=%.3f drive=%.3f phase=%.3f amp=%.3f dir=%s group_cfg=%s group_active=%s",
+                    "[SPOTIFY_VIS][BUBBLE][DRIFT] bass=%.3f overall=%.3f speed=%.3f drive=%.3f phase=%.3f amp=%.3f dir=%s group_cfg=%s group_active=%s authored(amount=%.3f speed=%.3f freq=%.3f) effective(amount=%.3f speed=%.3f freq=%.3f)",
                     bass,
                     overall,
                     speed_energy,
@@ -620,6 +660,12 @@ class BubbleSimulation:
                     drift_dir,
                     group_drift,
                     group_drift_active,
+                    drift_amount_authored,
+                    drift_speed_authored,
+                    drift_freq_authored,
+                    drift_amount,
+                    drift_speed,
+                    drift_freq,
                 )
                 self._last_drift_diag_log_ts = now
         cap = max(0.1, stream_cap)
@@ -771,19 +817,52 @@ class BubbleSimulation:
             # otherwise stay perpendicular to stream
             if group_drift_active:
                 drift_gain = 0.82 + 0.42 * abs(b.drift_bias)
+                group_loud_lift = 1.0 + loud_drift_drive * (0.92 + drift_amount * 0.42)
+                lag_spread = max(0.72, min(1.28, 1.0 + b.drift_bias * 0.24))
                 group_mag = (
-                    (0.046 + drift_amount * 0.086)
-                    * (0.76 + drift_speed * 1.34)
+                    (0.056 + drift_amount * 0.096)
+                    * (0.84 + drift_speed * 1.46)
                     * drift_amplitude_boost
                     * drift_gain
+                    * group_loud_lift
+                    * lag_spread
+                    * drift_follow
+                )
+                bias_slip = (
+                    b.drift_bias
+                    * drift_amount
+                    * (0.010 + 0.010 * abs(b.drift_bias))
+                    * (0.88 + loud_drift_drive * 0.24)
+                    * drift_follow
+                )
+                soft_wander_scale = 0.20 + 0.55 * loud_drift_drive
+                soft_wander = (
+                    local_drift_noise
+                    * drift_amount
+                    * 0.0045
+                    * soft_wander_scale
                     * drift_follow
                 )
                 if drift_dir == "swish_horizontal":
-                    move_x += (group_drift_dx * group_mag) * dt
+                    carrier_align = group_drift_dx * b.drift_bias
+                    lead_align = max(0.0, carrier_align)
+                    lag_align = max(0.0, -carrier_align)
+                    carrier_mag = group_mag * (1.0 + lead_align * 0.12 - lag_align * 0.54)
+                    straggler_slip = bias_slip
+                    straggler_slip -= group_drift_dx * group_mag * lag_align * (0.16 + drift_amount * 0.07)
+                    move_x += (group_drift_dx * carrier_mag + straggler_slip) * dt
+                    move_y += (group_drift_dy * group_mag * (0.56 + lead_align * 0.08) + soft_wander) * dt
                 elif drift_dir == "swish_vertical":
-                    move_y += (group_drift_dy * group_mag) * dt
+                    carrier_align = group_drift_dy * b.drift_bias
+                    lead_align = max(0.0, carrier_align)
+                    lag_align = max(0.0, -carrier_align)
+                    carrier_mag = group_mag * (1.0 + lead_align * 0.12 - lag_align * 0.54)
+                    straggler_slip = bias_slip
+                    straggler_slip -= group_drift_dy * group_mag * lag_align * (0.16 + drift_amount * 0.07)
+                    move_y += (group_drift_dy * carrier_mag + straggler_slip) * dt
+                    move_x += (group_drift_dx * group_mag * (0.56 + lead_align * 0.08) + soft_wander) * dt
                 else:
-                    local_jitter = local_drift_noise * group_mag * 0.018
+                    local_jitter = local_drift_noise * group_mag * 0.010
                     move_x += (group_drift_dx * group_mag + local_jitter) * dt
                     move_y += (group_drift_dy * group_mag + local_jitter * 0.45) * dt
             elif drift_dir == "swish_horizontal":
@@ -1706,7 +1785,8 @@ class BubbleSimulation:
                 (bubble.pulse_energy - 0.74) / 0.22,
             )
         )
-        amount *= 1.0 - hot_blend * 0.992
+        hot_smoothing_floor = 0.62 + amount * 0.16
+        amount *= max(hot_smoothing_floor, 1.0 - hot_blend * 0.24)
         if amount <= 0.001:
             bubble.display_radius = target_radius
             return target_radius
@@ -1716,34 +1796,56 @@ class BubbleSimulation:
 
         if amount <= 0.5:
             t = amount / 0.5
-            rise_hz = 230.0 + (165.0 - 230.0) * t
+            rise_hz = 196.0 + (112.0 - 196.0) * t
+            micro_rise_hz = 28.0 + (14.0 - 28.0) * t
             sharp_drop_hz = 92.0 + (42.0 - 92.0) * t
-            soft_drop_hz = 46.0 + (20.0 - 46.0) * t
-            micro_drop_hz = 34.0 + (12.0 - 34.0) * t
+            soft_drop_hz = 42.0 + (18.0 - 42.0) * t
+            micro_drop_hz = 20.0 + (9.0 - 20.0) * t
             micro_drop_ratio = 0.018 + (0.070 - 0.018) * t
+            settle_band_abs = 0.00032 + (0.00120 - 0.00032) * t
+            settle_band_ratio = 0.020 + (0.060 - 0.020) * t
             snap_abs = 0.00035 + (0.0010 - 0.00035) * t
             snap_ratio = 0.008 + (0.032 - 0.008) * t
         else:
             t = (amount - 0.5) / 0.5
-            rise_hz = 165.0 + (120.0 - 165.0) * t
-            sharp_drop_hz = 42.0 + (24.0 - 42.0) * t
-            soft_drop_hz = 20.0 + (10.0 - 20.0) * t
-            micro_drop_hz = 12.0 + (6.0 - 12.0) * t
+            rise_hz = 112.0 + (40.0 - 112.0) * t
+            micro_rise_hz = 14.0 + (4.0 - 14.0) * t
+            sharp_drop_hz = 42.0 + (22.0 - 42.0) * t
+            soft_drop_hz = 18.0 + (8.0 - 18.0) * t
+            micro_drop_hz = 9.0 + (3.0 - 9.0) * t
             micro_drop_ratio = 0.070 + (0.150 - 0.070) * t
+            settle_band_abs = 0.00120 + (0.00340 - 0.00120) * t
+            settle_band_ratio = 0.060 + (0.160 - 0.060) * t
             snap_abs = 0.0010 + (0.0015 - 0.0010) * t
             snap_ratio = 0.032 + (0.055 - 0.032) * t
 
-        if target_radius >= current:
-            rate = min(1.0, dt * rise_hz)
+        delta = target_radius - current
+        delta_abs = abs(delta)
+        settle_band = max(settle_band_abs, max(bubble.radius, current) * settle_band_ratio)
+        hold_band = settle_band * (0.82 + amount * 0.38)
+
+        if delta_abs <= hold_band:
+            bubble.display_radius = max(0.001, current)
+            return bubble.display_radius
+
+        if delta >= 0.0:
+            if delta_abs <= settle_band:
+                rate = min(1.0, dt * micro_rise_hz)
+            else:
+                rate = min(1.0, dt * rise_hz)
         else:
             drop_ratio = (current - target_radius) / max(current, 1e-6)
-            if drop_ratio <= micro_drop_ratio:
+            if delta_abs <= settle_band or drop_ratio <= micro_drop_ratio:
                 rate = min(1.0, dt * micro_drop_hz)
             else:
                 rate = min(1.0, dt * (sharp_drop_hz if drop_ratio >= 0.22 else soft_drop_hz))
 
         current += (target_radius - current) * rate
-        if target_radius < current and (current - target_radius) <= max(snap_abs, bubble.radius * snap_ratio):
+        if (
+            amount < 0.45
+            and target_radius < current
+            and (current - target_radius) <= max(snap_abs, bubble.radius * snap_ratio)
+        ):
             current = target_radius
         bubble.display_radius = max(0.001, current)
         return bubble.display_radius
@@ -1751,16 +1853,16 @@ class BubbleSimulation:
     @staticmethod
     def _group_drift_period(drift_freq: float) -> float:
         freq = _clamp01(drift_freq)
-        return 1.25 + (1.0 - freq) * 2.35
+        return 2.40 + (1.0 - freq) * 5.20
 
     @staticmethod
     def _resolve_group_drift_turn_duration(drift_freq: float, drift_dir: str, period: float) -> float:
         freq = _clamp01(drift_freq)
         if drift_dir in {"swish_horizontal", "swish_vertical"}:
-            portion = 0.34 + (1.0 - freq) * 0.12
+            portion = 0.20 + (1.0 - freq) * 0.08
         else:
-            portion = 0.22 + (1.0 - freq) * 0.10
-        return max(0.10, min(period * 0.55, period * portion))
+            portion = 0.28 + (1.0 - freq) * 0.10
+        return max(0.18, min(period * 0.44, period * portion))
 
     @staticmethod
     def _normalize_group_drift_vector(dx: float, dy: float) -> tuple[float, float]:
@@ -1775,8 +1877,12 @@ class BubbleSimulation:
             self._group_drift_target_dy or self._group_drift_dy,
         )
         if drift_dir == "swish_horizontal":
+            if previous != (0.0, 0.0):
+                return (-previous[0], 0.0)
             candidates = [(-1.0, 0.0), (1.0, 0.0)]
         elif drift_dir == "swish_vertical":
+            if previous != (0.0, 0.0):
+                return (0.0, -previous[1])
             candidates = [(0.0, -1.0), (0.0, 1.0)]
         elif drift_dir == "diagonal":
             candidates = list(_DIAGONAL_STREAM_VECTORS)
@@ -1810,6 +1916,8 @@ class BubbleSimulation:
             self._group_drift_remaining = 0.0
             self._group_drift_turn_elapsed = 0.0
             self._group_drift_turn_duration = 0.0
+            self._group_drift_arc_x = 0.0
+            self._group_drift_arc_y = 0.0
             return (0.0, 0.0)
         self._group_drift_remaining = max(0.0, self._group_drift_remaining - dt)
         period = self._group_drift_period(drift_freq)
@@ -1838,14 +1946,25 @@ class BubbleSimulation:
                     drift_dir,
                     period,
                 )
-            self._group_drift_remaining = period * random.uniform(0.94, 1.08)
+                self._group_drift_arc_sign = random.choice((-1.0, 1.0))
+                if is_viz_diagnostics_enabled():
+                    logger.info(
+                        "[SPOTIFY_VIS][BUBBLE][GROUP_DRIFT] dir=%s target=(%.3f,%.3f) period=%.3fs turn=%.3fs freq=%.3f",
+                        drift_dir,
+                        next_dx,
+                        next_dy,
+                        period,
+                        self._group_drift_turn_duration,
+                        drift_freq,
+                    )
+            self._group_drift_remaining = period * random.uniform(0.98, 1.06)
         if self._group_drift_turn_duration > 0.0:
             self._group_drift_turn_elapsed = min(
                 self._group_drift_turn_duration,
                 self._group_drift_turn_elapsed + dt,
             )
             blend = self._group_drift_turn_elapsed / max(1e-6, self._group_drift_turn_duration)
-            eased = blend * blend * (3.0 - 2.0 * blend)
+            eased = blend * blend * blend * (blend * (blend * 6.0 - 15.0) + 10.0)
             mixed_dx = self._group_drift_from_dx + (
                 self._group_drift_target_dx - self._group_drift_from_dx
             ) * eased
@@ -1855,20 +1974,37 @@ class BubbleSimulation:
             if drift_dir in {"swish_horizontal", "swish_vertical"}:
                 self._group_drift_dx = mixed_dx
                 self._group_drift_dy = mixed_dy
+                arc_wave = math.sin(math.pi * blend)
+                arc_strength = 0.032 + (1.0 - _clamp01(drift_freq)) * 0.022
+                if drift_dir == "swish_horizontal":
+                    self._group_drift_arc_x = 0.0
+                    self._group_drift_arc_y = self._group_drift_arc_sign * arc_strength * arc_wave
+                else:
+                    self._group_drift_arc_x = self._group_drift_arc_sign * arc_strength * arc_wave
+                    self._group_drift_arc_y = 0.0
             else:
                 self._group_drift_dx, self._group_drift_dy = self._normalize_group_drift_vector(
                     mixed_dx,
                     mixed_dy,
                 )
+                self._group_drift_arc_x = 0.0
+                self._group_drift_arc_y = 0.0
             if self._group_drift_turn_elapsed >= self._group_drift_turn_duration:
                 self._group_drift_dx = self._group_drift_target_dx
                 self._group_drift_dy = self._group_drift_target_dy
                 self._group_drift_turn_duration = 0.0
+                self._group_drift_arc_x = 0.0
+                self._group_drift_arc_y = 0.0
         else:
             if self._group_drift_target_dx != 0.0 or self._group_drift_target_dy != 0.0:
                 self._group_drift_dx = self._group_drift_target_dx
                 self._group_drift_dy = self._group_drift_target_dy
-        return (self._group_drift_dx, self._group_drift_dy)
+            self._group_drift_arc_x = 0.0
+            self._group_drift_arc_y = 0.0
+        return (
+            self._group_drift_dx + self._group_drift_arc_x,
+            self._group_drift_dy + self._group_drift_arc_y,
+        )
 
     def _overlaps_existing(
         self,
@@ -2256,13 +2392,19 @@ class BubbleSimulation:
                 )
                 big_render_diag["avg_big_render_radius"] += r
 
-            # Specular pulses at slightly less than half the bubble outline rate.
-            # Base specular size (spec_size_mut) is unchanged; only the
-            # pulse-driven delta is scaled (0.475 = half rate minus 5%).
-            spec_pulse = (pulse_factor - 1.0) * 0.475
-            spec_factor = b.spec_size_mut * (1.0 + spec_pulse)
+            # Specular size should follow the rendered bubble radius itself.
+            # Let pulse make the bubble larger, but do not let specular size
+            # double-count that growth or a few bubbles will balloon far beyond
+            # the intended relative highlight size.
+            spec_growth = min(0.14, max(0.0, pulse_factor - 1.0) * 0.085)
             if b.is_big:
-                spec_factor = min(spec_factor, big_specular_max_size)
+                big_size_authority = _clamp01((r - 0.024) / 0.020)
+                spec_growth += big_size_authority * 0.055
+            spec_factor = b.spec_size_mut + spec_growth
+            spec_cap = 1.32
+            if b.is_big:
+                spec_cap = min(spec_cap, big_specular_max_size)
+            spec_factor = min(spec_factor, spec_cap)
 
             pos_base = idx * 4
             pos_data[pos_base] = b.x

@@ -148,6 +148,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._has_displayed_valid_data = False
         self._pending_first_show = False
         self._load_persisted_cache()
+        self._load_provider_startup_cache()
         
         # Background thread
         # Override base class font size default
@@ -967,6 +968,42 @@ class WeatherWidget(BaseOverlayWidget):
         logger.info(
             "[CACHE][WEATHER] Loaded persisted widget cache for location=%s age_s=%.1f",
             loc,
+            age_s,
+        )
+
+    def _load_provider_startup_cache(self) -> None:
+        """Use provider-backed persisted weather when widget-local cache is missing."""
+        if self._cached_data and self._cache_time is not None:
+            return
+        if not self._location:
+            return
+        try:
+            provider = OpenMeteoProvider(timeout=10)
+            payload = provider.get_persisted_weather(self._location, allow_stale=True)
+        except Exception:
+            logger.warning("[CACHE][WEATHER] Failed to load provider startup cache", exc_info=True)
+            return
+        if not isinstance(payload, dict):
+            return
+
+        cached_at = payload.pop("_cached_at", None)
+        is_stale = bool(payload.pop("_stale", False))
+        try:
+            if cached_at:
+                self._cache_time = datetime.fromtimestamp(float(cached_at))
+            else:
+                self._cache_time = datetime.now()
+        except Exception:
+            self._cache_time = datetime.now()
+        self._cached_data = payload
+        try:
+            age_s = max(0.0, (datetime.now() - self._cache_time).total_seconds())
+        except Exception:
+            age_s = -1.0
+        logger.info(
+            "[CACHE][WEATHER] Loaded provider %sstartup cache for location=%s age_s=%.1f",
+            "stale " if is_stale else "",
+            self._location,
             age_s,
         )
 

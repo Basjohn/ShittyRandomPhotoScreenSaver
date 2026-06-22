@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-06-19
+Last updated: 2026-06-20
 
 Short contract index for SRPSS.
 
@@ -68,7 +68,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 |---|---|---|---|
 | CUSTOM session orchestration | `rendering/custom_layout_manager.py` | `rendering/custom_layout_contract.py`, `widgets/edit_shell_widget.py`, display rebuild hooks | One edit-session/save/replay/reload seam across active displays. |
 | Temporary edit shell behavior | `widgets/edit_shell_widget.py` | custom layout manager | One shell-only drag/resize/reset UI, not live widget truth. |
-| Saved custom rect authority reassertion | `widgets/base_overlay_widget.py` | widget subclasses, custom layout manager | Prevent live content sizing from overriding committed custom rects. |
+| Saved custom rect authority reassertion | `widgets/base_overlay_widget.py` | widget subclasses, custom layout manager | Prevent live content sizing from overriding committed custom rects, except for descriptor-approved vertical-only CUSTOM height adjustments that persist back through the shared layout seam while width stays authoritative. |
 | Visualizer CUSTOM outer-card authority | `widgets/spotify_visualizer/card_geometry.py`, `widgets/spotify_visualizer_widget.py` | custom layout manager, widget creators | Keep visualizer custom rect authority separate from mode/preset preferred geometry. |
 | Clock CUSTOM mode-swap rect ownership | `widgets/clock_widget.py` | custom layout persistence, tests | Digital/analog swaps rebuild and persist the full custom rect, not just inner scaling. |
 
@@ -91,9 +91,9 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 |---|---|---|---|
 | Shared service-widget lifecycle mechanics | `widgets/service_widget_runtime.py` | Gmail, Reddit, Weather | One place for transition-aware refresh deferral, visible fallback preservation, and timer ownership. |
 | Gmail backend routing | `core/gmail/gmail_backend.py` | OAuth, IMAP, REST, widget | One backend-selection seam for Gmail data/actions. |
-| Reddit post-source provider seam | `core/reddit_post_provider.py` | `widgets/reddit_widget.py`, widget factory, future external/authenticated feed backends | One explicit post-retrieval contract for the branded Reddit widget, with family-shared provider selection and Reddit RSS default, without moving card/runtime ownership out of the widget. |
-| Gmail overlay rendering / runtime behavior | `widgets/gmail_widget.py` | `widgets/gmail_components.py`, settings tab | One Gmail card/runtime contract. |
-| Reddit overlay rendering / runtime behavior | `widgets/reddit_widget.py` | service-widget runtime, helper bridge | One Reddit card/runtime contract, including Reddit-local cache reuse/startup refresh policy. |
+| Reddit post-source provider seam | `core/reddit_post_provider.py` | `widgets/reddit_widget.py`, widget factory, future external/authenticated feed backends | One explicit post-retrieval contract for the branded Reddit widget, with family-shared provider selection, PullPush/public-JSON/RSS provider support, and no movement of card/runtime ownership out of the widget. |
+| Gmail overlay rendering / runtime behavior | `widgets/gmail_widget.py` | `widgets/gmail_components.py`, settings tab | One Gmail card/runtime contract, including width-fixed CUSTOM vertical content-fit participation for descriptor-approved height persistence. |
+| Reddit overlay rendering / runtime behavior | `widgets/reddit_widget.py` | service-widget runtime, helper bridge | One Reddit card/runtime contract, including Reddit-local cache reuse/startup refresh policy plus width-fixed CUSTOM vertical content-fit participation for descriptor-approved height persistence. |
 | Weather overlay rendering / runtime behavior | `widgets/weather_widget.py` | weather cache/runtime helpers | One Weather card/runtime contract. |
 
 ## Media And Dependent Widget Contracts

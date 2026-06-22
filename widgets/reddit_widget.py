@@ -94,7 +94,7 @@ class RedditWidget(BaseOverlayWidget):
 
     Features:
     - Fetches top N posts from a configured subreddit via a swappable
-      provider seam (default Reddit RSS provider).
+      provider seam (settings-selected Reddit provider).
     - Displays each post as a single-line entry: small score on the
       left, elided title on the right.
     - Header row with Reddit logo + ``r/<subreddit>`` text, matching the

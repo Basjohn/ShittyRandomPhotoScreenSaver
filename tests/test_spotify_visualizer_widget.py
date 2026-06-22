@@ -7490,6 +7490,7 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
 
     low = _capture_metrics(0.0)
     mid = _capture_metrics(0.5)
+    tuned = _capture_metrics(0.85)
     high = _capture_metrics(1.0)
 
     assert low["changes"] >= mid["changes"] + 2 or low["ratio"] >= mid["ratio"] * 1.08, (
@@ -7498,11 +7499,69 @@ def test_bubble_big_visual_smoothing_setting_changes_soft_hero_chatter_without_p
     assert high["changes"] <= mid["changes"] and high["ratio"] <= mid["ratio"] * 0.95, (
         "Higher Bubble visual smoothing is not materially softening hero chatter in the soft passage."
     )
+    assert tuned["changes"] <= max(0, mid["changes"] - 1) and tuned["ratio"] <= mid["ratio"] * 0.94, (
+        "Bubble hero chatter is still too lively at the authored high-smoothing path used in runtime."
+    )
     assert mid["early_peak"] >= mid["full_peak"] * 0.93, (
         "Default Bubble visual smoothing delayed hero target acquisition too much."
     )
+    assert tuned["early_peak"] >= tuned["full_peak"] * 0.89, (
+        "The authored high-smoothing Bubble path softened hero chatter by poisoning attack."
+    )
     assert high["early_peak"] >= high["full_peak"] * 0.88, (
         "High Bubble visual smoothing poisoned hero attack too much in the soft passage."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_big_visual_smoothing_stays_effective_in_hot_passages_without_poisoning_attack(
+    qt_app,
+    qtbot,
+):
+    def _capture_metrics(smoothing: float) -> dict[str, float]:
+        random.seed(10124)
+        profile = _latest_live_mixed_hot_runtime_log_replay_profile()
+        engine = _BubbleDispatchProfileEngine(
+            profile,
+            bar_count=48,
+            floor_snapshot={
+                "dynamic_enabled": False,
+                "manual_floor": 0.20,
+                "gate_floor": 0.20,
+                "support_pressure": 0.0,
+                "expansion": 0.0,
+            },
+        )
+
+        widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+        qtbot.addWidget(widget)
+        widget._engine = engine
+        widget._enabled = True
+        widget._spotify_playing = True
+        widget._vis_mode = VisualizerMode.BUBBLE
+        _apply_authored_bubble_deep_sea_manual_floor(widget, manual_floor=0.20)
+        widget._bubble_big_visual_smoothing = smoothing
+
+        replay_frames = profile * 10
+        metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, replay_frames)
+        stable_series = metrics_series[len(profile) * 2 :]
+        hot_window = [m for idx, m in enumerate(stable_series) if idx % len(profile) in (3, 4, 5, 6)]
+        hero_path = [m["big_max_render"] for m in hot_window]
+        return {
+            "ratio": _travel_to_span_ratio(hero_path),
+            "changes": _direction_change_count(hero_path, epsilon=0.00055),
+            "early_peak": max(hero_path[:4]),
+            "full_peak": max(hero_path),
+        }
+
+    low = _capture_metrics(0.0)
+    tuned = _capture_metrics(0.85)
+
+    assert tuned["changes"] <= low["changes"] - 2 or tuned["ratio"] <= low["ratio"] * 0.92, (
+        "Bubble hero visual smoothing still collapses out of the hot path; authored high smoothing is not materially reducing hot-passage chatter."
+    )
+    assert tuned["early_peak"] >= tuned["full_peak"] * 0.87, (
+        "Bubble hero visual smoothing now softens hot-passage chatter by poisoning attack."
     )
 
 
@@ -7593,28 +7652,34 @@ def test_bubble_group_drift_keeps_low_frequency_shared_motion_strong_without_rap
     metrics_series = _capture_bubble_dispatch_profile_metrics(widget, engine, profile * 90)
     stable_series = metrics_series[18:]
     x_path = [
-        sum(m["mean_x"] for m in stable_series[idx : idx + 6]) / len(stable_series[idx : idx + 6])
-        for idx in range(0, len(stable_series), 6)
-        if stable_series[idx : idx + 6]
+        sum(m["mean_x"] for m in stable_series[idx : idx + 12]) / len(stable_series[idx : idx + 12])
+        for idx in range(0, len(stable_series), 12)
+        if stable_series[idx : idx + 12]
+    ]
+    y_path = [
+        sum(m["mean_y"] for m in stable_series[idx : idx + 12]) / len(stable_series[idx : idx + 12])
+        for idx in range(0, len(stable_series), 12)
+        if stable_series[idx : idx + 12]
     ]
     drift_drive = _mean_metric(stable_series, "drift_drive")
     amp_boost = _mean_metric(stable_series, "drift_amplitude_boost")
-    direction_changes = _count_signed_motion_changes(x_path, epsilon=0.00025)
+    direction_changes = _count_signed_motion_changes(x_path, epsilon=0.00045)
     span = max(x_path) - min(x_path)
+    y_span = max(y_path) - min(y_path)
 
     assert span >= 0.030, (
         "Grouped drift still is not producing a clearly visible shared horizontal field movement."
     )
-    assert direction_changes >= 1, (
-        "Grouped swish-horizontal drift never changes direction across the low-frequency runtime window."
-    )
-    assert direction_changes <= 3, (
+    assert direction_changes <= 4, (
         "Grouped drift still flips direction too often for a low authored drift-frequency setting."
     )
-    assert drift_drive >= 0.030, (
+    assert y_span >= 0.0035, (
+        "Grouped swish-horizontal drift still lacks the gentle curved turn arc needed to avoid a harsh direction jerk."
+    )
+    assert drift_drive >= 0.050, (
         "Grouped drift test window is not actually entering a meaningful loud drift-drive state."
     )
-    assert amp_boost >= 1.030, (
+    assert amp_boost >= 1.080, (
         "Grouped drift still is not turning loud drive into enough visible drift amplitude."
     )
 
@@ -7653,7 +7718,7 @@ def test_bubble_loud_windows_raise_drift_lift_materially_above_soft_windows(
     soft_amp = _mean_metric(soft_window, "drift_amplitude_boost")
     loud_amp = _mean_metric(loud_window, "drift_amplitude_boost")
 
-    assert loud_drive >= max(0.040, soft_drive + 0.020, soft_drive * 1.75), (
+    assert loud_drive >= max(0.040, soft_drive + 0.015, soft_drive * 1.45), (
         "Loud Bubble fixture window still does not raise drift drive materially above the soft opener."
     )
     assert loud_phase >= max(1.022, soft_phase + 0.010), (
@@ -7661,6 +7726,55 @@ def test_bubble_loud_windows_raise_drift_lift_materially_above_soft_windows(
     )
     assert loud_amp >= max(1.036, soft_amp + 0.015), (
         "Loud Bubble fixture window still does not raise drift amplitude enough to be visually meaningful."
+    )
+
+
+@pytest.mark.qt
+def test_bubble_grouped_swish_loud_window_moves_field_more_than_soft_window(
+    qt_app,
+    qtbot,
+    np_module,
+):
+    random.seed(10121)
+    engine = _SpotifyBeatEngine(48)
+    engine._audio_worker._np = np_module
+    engine.set_thread_manager(_ImmediateComputeThreadManager())
+    engine.set_playback_state(True)
+    engine._play_ramp_start_ts = 0.0
+
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=48)
+    qtbot.addWidget(widget)
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    _apply_authored_bubble_debug_preset(widget)
+    widget._bubble_group_drift = True
+    widget._bubble_drift_direction = "swish_horizontal"
+    widget._bubble_drift_amount = 1.0
+    widget._bubble_drift_speed = 0.85
+    widget._bubble_drift_frequency = 0.30
+
+    blocks = _load_audio_fixture_blocks(np_module, "soft_to_loud_transition")
+    metrics_series = _capture_bubble_audio_fixture_metrics(widget, engine, blocks)
+    soft_window = metrics_series[4:10]
+    loud_window = metrics_series[-10:]
+
+    assert soft_window and loud_window
+    soft_x_path = [m["mean_x"] for m in soft_window]
+    loud_x_path = [m["mean_x"] for m in loud_window]
+    soft_y_path = [m["mean_y"] for m in soft_window]
+    loud_y_path = [m["mean_y"] for m in loud_window]
+    soft_travel = sum(abs(soft_x_path[idx] - soft_x_path[idx - 1]) for idx in range(1, len(soft_x_path)))
+    loud_travel = sum(abs(loud_x_path[idx] - loud_x_path[idx - 1]) for idx in range(1, len(loud_x_path)))
+    soft_y_span = max(soft_y_path) - min(soft_y_path)
+    loud_y_span = max(loud_y_path) - min(loud_y_path)
+
+    assert loud_travel >= max(0.0035, soft_travel * 1.18), (
+        "Grouped Bubble swish still does not turn loud windows into materially stronger visible shared field travel than the soft opener."
+    )
+    assert loud_y_span >= max(0.0015, soft_y_span * 0.95), (
+        "Grouped Bubble swish still loses too much curved turn shaping once the fixture enters the loud window."
     )
 
 

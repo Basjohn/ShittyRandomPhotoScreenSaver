@@ -18,11 +18,19 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - mode-reset or preferred-height side effects
 - A green `replay_final` log is necessary but not sufficient for visualizer geometry closure.
 - Recovery paths are allowed only after the root-cause map and the stronger bars exist.
-- Gmail/Reddit may adjust height for visible count/cache/dead-space QoL, but no widget gets width authority from that path.
 
 ## Active Tasks
 
-- No active tasks right now.
+- [ ] Close the reopened visualizer false `Custom+ALL` route-recovery seam before more CUSTOM geometry work
+  - [ ] Prove the creator is reading a transient routing lie rather than bad saved geometry; keep `--geo` / `--viz` evidence attached to the `17:27:06` family where `replay_final` stays correct but the creator still logs `Restored invalid Custom+ALL...`
+  - [ ] Keep custom visualizer route validation authoritative to committed custom-layout evidence first:
+    - recover a missing/`ALL` visualizer monitor only from a matching saved visualizer screen bucket
+    - do not let a broad authored-restore helper mutate valid CUSTOM state during recreate
+  - [ ] Refuse to claim a route was restored unless the visualizer actually exits `Custom` and lands on a non-`ALL` authored route
+  - [ ] Strengthen the visualizer plumbing bars so this branch fails if it:
+    - "restores" authored routing while `custom_routing` is still true
+    - clears the saved visualizer rect when only the monitor field was transiently wrong
+    - suppresses creation without a genuinely invalid route
 
 ## Watchlist
 

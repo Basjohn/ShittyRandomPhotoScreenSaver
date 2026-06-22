@@ -295,6 +295,27 @@ This is the long-term anti-regression record for the project, not an active task
 - **Next correct direction:**
   - if Bubble regresses again, start from the newer runtime-shaped bars that model visible hero contraction, louder-vs-softer authority, grouped-drift cadence, and drift-lift rather than reviving the retired proxy/current-feel locks
   - treat authored preset tuning and grouped-drift feel as separate seams from the old loud-path oracle-drift family
+- **Resolved contract state after the 2026-06-20 closure pass:**
+  - Bubble size authority is now cleaner and narrower:
+    - hero/big visible size breathing stays owned by the Bubble runtime plus a display-only hero smoothing seam
+    - transient-heavy churn no longer gets to reopen the old "soft looks better than loud" failure by default
+  - hero chatter closure:
+    - `bubble_big_visual_smoothing` remains the user/preset-facing display-only control for hero settling
+    - high authored smoothing now truly suppresses hero chatter instead of being silently nulled out in runtime
+  - grouped drift closure:
+    - grouped swish cadence and turn shape are now motion-owned rather than another Bubble loud-path support seam
+    - low authored drift-frequency values are remapped to genuinely calmer effective motion instead of acting deceptively busy
+    - drift diagnostics now log authored vs effective Bubble drift controls so runtime logs tell the truth about slider behavior
+  - specular closure:
+    - Bubble specular size no longer double-counts render growth
+    - largest big bubbles now earn a slightly stronger highlight before the cap, while `bubble_big_specular_max_size` remains a hard ceiling rather than a gain control
+  - preset closure:
+    - `Preset 1 (Deep Sea)` is now the practical authored baseline for the healthier Bubble path
+    - the remaining shipped Bubble presets were normalized around that runtime/technical baseline while preserving their own directions, palette, size/count, and bounce identity
+  - startup/runtime support work that accompanied closure:
+    - stronger bars now cover low-end drift remap truth, grouped-drift cadence, hot/soft hero chatter, and Bubble specular proportionality so these seams can fail in automation before runtime is requested again
+  - remaining non-closure note:
+    - `bubble_rotation_amount` is currently a cosmetic/false control because Bubble’s shader still reserves the uploaded rotation channel without rendering it; treat it as a future cleanup/design decision rather than an active Bubble regression
 
 
 <a id="R-24"></a>

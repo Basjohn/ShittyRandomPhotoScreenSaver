@@ -1323,6 +1323,14 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
         monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(
+            creators,
+            "get_screen_layout_entries_for_screen",
+            lambda custom_layout_map, screen: (
+                "screen:name:Display-B",
+                custom_layout_map.get("displays", {}).get("screen:name:Display-B", {}),
+            ),
+        )
 
         class FakeSignal:
             def connect(self, *args, **kwargs):
@@ -2569,7 +2577,7 @@ class TestCreateTimeRefreshParity:
 
         assert vis is None
 
-    def test_create_spotify_visualizer_widget_restores_authored_route_instead_of_inferring_display(self, monkeypatch):
+    def test_create_spotify_visualizer_widget_recovers_custom_monitor_from_matching_saved_layout(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
         appdata.mkdir(parents=True, exist_ok=True)
         monkeypatch.setenv("APPDATA", str(appdata))
@@ -2598,6 +2606,14 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
         monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+        monkeypatch.setattr(
+            creators,
+            "get_screen_layout_entries_for_screen",
+            lambda custom_layout_map, screen: (
+                "screen:name:Display-B",
+                custom_layout_map.get("displays", {}).get("screen:name:Display-B", {}),
+            ),
+        )
 
         class FakeSignal:
             def __init__(self):
@@ -2620,7 +2636,7 @@ class TestCreateTimeRefreshParity:
 
         class FakeManager:
             def __init__(self):
-                self._parent = SimpleNamespace(_screen=object())
+                self._parent = SimpleNamespace(_screen=object(), screen_index=1)
                 self._widgets = {}
                 self._settings_manager = SimpleNamespace(
                     saved_widgets=None,
@@ -2674,9 +2690,9 @@ class TestCreateTimeRefreshParity:
 
         assert vis is not None
         assert vis.anchor is remote_media
-        assert widgets_cfg["spotify_visualizer"]["position"] == "Bottom Center"
+        assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
         assert widgets_cfg["spotify_visualizer"]["monitor"] == "2"
-        assert widgets_cfg["custom_layout"]["displays"].get("screen:name:Display-B", {}) == {}
+        assert "spotify_visualizer" in widgets_cfg["custom_layout"]["displays"].get("screen:name:Display-B", {})
         assert manager._settings_manager.saved_widgets is widgets_cfg
         assert manager._settings_manager.saved is True
 
@@ -2787,6 +2803,81 @@ class TestCreateTimeRefreshParity:
         assert widgets_cfg["custom_layout"]["displays"].get("screen:name:Missing", {}) == {}
         assert manager._settings_manager.saved_widgets is widgets_cfg
         assert manager._settings_manager.saved is True
+
+    def test_create_spotify_visualizer_widget_suppresses_custom_all_without_matching_layout_or_authored_restore(self, monkeypatch):
+        appdata = ROOT / "tests_tmp_appdata"
+        appdata.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("APPDATA", str(appdata))
+        from rendering import spotify_widget_creators as creators
+
+        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
+
+        class FakeCoordinator:
+            def get_all_instances(self):
+                return []
+
+        monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
+
+        class FakeManager:
+            def __init__(self):
+                self._parent = SimpleNamespace(_screen=object())
+                self._widgets = {}
+                self._settings_manager = SimpleNamespace(
+                    saved_widgets=None,
+                    saved=False,
+                    set_widgets_map=lambda widgets, emit_change=False: setattr(self._settings_manager, "saved_widgets", widgets),
+                    save=lambda: setattr(self._settings_manager, "saved", True),
+                )
+
+            def _log_spotify_vis_config(self, *args, **kwargs):
+                return None
+
+            def register_widget(self, name, widget):
+                self._widgets[name] = widget
+
+            def _bind_parent_attribute(self, name, widget):
+                return None
+
+            def _refresh_spotify_visualizer_config(self, payload=None):
+                return None
+
+        widgets_cfg = {
+            "media": {"enabled": True, "monitor": "ALL"},
+            "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "ALL", "mode": "bubble"},
+            "custom_layout": {
+                "version": 1,
+                "displays": {
+                    "screen:name:Missing": {
+                        "spotify_visualizer": {
+                            "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2}
+                        }
+                    }
+                },
+            },
+            "custom_layout_restore": {
+                "version": 1,
+                "widgets": {
+                    "spotify_visualizer": {"position": "Custom", "monitor": "2"},
+                },
+            },
+        }
+
+        manager = FakeManager()
+        vis = creators.create_spotify_visualizer_widget(
+            manager,
+            widgets_cfg,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=None,
+        )
+
+        assert vis is None
+        assert widgets_cfg["spotify_visualizer"]["position"] == "Custom"
+        assert widgets_cfg["spotify_visualizer"]["monitor"] == "ALL"
+        assert "spotify_visualizer" in widgets_cfg["custom_layout"]["displays"].get("screen:name:Missing", {})
+        assert manager._settings_manager.saved_widgets is None
+        assert manager._settings_manager.saved is False
 
 
 class TestDisplayFramePush:
