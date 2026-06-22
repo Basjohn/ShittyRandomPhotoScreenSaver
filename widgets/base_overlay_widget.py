@@ -31,6 +31,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from core.resources.types import ResourceType
 from core.settings.shadow_tuning import CARD_SHADOW_TUNING as PAINTED_FRAME_SHADOW_TUNING
+from core.threading.manager import ThreadManager
 from widgets.shadow_utils import (
     configure_overlay_widget_attributes,
     draw_text_rect_shadow_only,
@@ -707,12 +708,15 @@ class BaseOverlayWidget(QLabel):
             return False
         if custom_rect.width() <= 0 or custom_rect.height() <= 0:
             return False
-        self._apply_custom_layout_size_constraints_if_active()
         try:
+            self._custom_layout_geometry_reentry = True
+            self._apply_custom_layout_size_constraints_if_active()
             current = self.geometry()
         except Exception:
             logger.debug("[OVERLAY] Failed to read geometry while enforcing custom layout", exc_info=True)
             return False
+        finally:
+            self._custom_layout_geometry_reentry = False
         if current == custom_rect:
             return False
         try:
@@ -726,11 +730,13 @@ class BaseOverlayWidget(QLabel):
             self._custom_layout_geometry_reentry = False
 
     def _schedule_custom_layout_geometry_reapply(self) -> None:
+        if self._custom_layout_geometry_reentry:
+            return
         if self._custom_layout_geometry_reapply_pending:
             return
         self._custom_layout_geometry_reapply_pending = True
         try:
-            QTimer.singleShot(0, self._reapply_custom_layout_geometry_now)
+            ThreadManager.single_shot(0, self._reapply_custom_layout_geometry_now)
         except Exception:
             self._custom_layout_geometry_reapply_pending = False
             logger.debug("[OVERLAY] Failed to schedule custom layout geometry reapply", exc_info=True)

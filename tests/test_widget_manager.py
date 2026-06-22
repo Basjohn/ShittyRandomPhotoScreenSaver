@@ -1420,6 +1420,41 @@ class TestStartupCoordination:
 
         assert remote_visualizer.sync_calls == 1
 
+    def test_spotify_visibility_sync_uses_thread_manager_and_coalesces(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+
+        callbacks: list[tuple[int, object]] = []
+        monkeypatch.setattr(
+            "rendering.widget_manager.ThreadManager.single_shot",
+            lambda delay_ms, callback: callbacks.append((int(delay_ms), callback)),
+        )
+
+        class _MediaAnchor:
+            def __init__(self):
+                self.notify_calls = 0
+
+            def isVisible(self):
+                return True
+
+            def _notify_spotify_widgets_visibility(self):
+                self.notify_calls += 1
+
+        manager = WidgetManager(MagicMock())
+        media_anchor = _MediaAnchor()
+
+        manager._queue_spotify_visibility_sync(media_anchor)
+        manager._queue_spotify_visibility_sync(media_anchor)
+
+        assert len(callbacks) == 1
+        assert callbacks[0][0] == 0
+        assert manager._pending_spotify_visibility_sync is True
+        assert media_anchor.notify_calls == 0
+
+        callbacks[0][1]()
+
+        assert media_anchor.notify_calls == 1
+        assert manager._pending_spotify_visibility_sync is False
+
 
 class TestCleanup:
     """Tests for cleanup operations."""

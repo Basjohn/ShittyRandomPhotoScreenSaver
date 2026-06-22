@@ -7,6 +7,7 @@ to preserve the original interface.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import time
 
@@ -33,9 +34,9 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def _cache_trace(message: str, *args: Any) -> None:
+def _cache_trace(message: str, *args: Any, level: int = logging.INFO) -> None:
     if is_cache_logging_enabled():
-        logger.info("[CACHE] " + message, *args)
+        logger.log(level, "[CACHE] " + message, *args)
 
 
 # ------------------------------------------------------------------
@@ -787,7 +788,7 @@ def load_and_display_image_async(
                             _bump_cache_runtime_stat(engine, "worker_fallbacks")
                             raw_state = "raw_cached" if qimage is not None and not qimage.isNull() else "raw_missing"
                             _cache_trace(
-                                "Worker fallback display=%d reason=%s raw_state=%s path=%s target=%dx%d mode=%s",
+                                "[FALLBACK] Worker fallback display=%d reason=%s raw_state=%s path=%s target=%dx%d mode=%s",
                                 i,
                                 fallback_reason,
                                 raw_state,
@@ -795,6 +796,7 @@ def load_and_display_image_async(
                                 target_size.width(),
                                 target_size.height(),
                                 display_mode_str,
+                                level=logging.WARNING,
                             )
                             worker_qimage = load_image_via_worker(
                                 engine,
@@ -814,12 +816,13 @@ def load_and_display_image_async(
                         elif processed_pixmap is None:
                             if qimage is not None and not qimage.isNull():
                                 _cache_trace(
-                                    "Compute-thread scale fallback display=%d reason=raw_available_no_worker path=%s target=%dx%d mode=%s",
+                                    "[FALLBACK] Compute-thread scale fallback display=%d reason=raw_available_no_worker path=%s target=%dx%d mode=%s",
                                     i,
                                     img_path,
                                     target_size.width(),
                                     target_size.height(),
                                     display_mode_str,
+                                    level=logging.WARNING,
                                 )
                                 processed_qimage = AsyncImageProcessor.process_qimage(
                                     qimage,

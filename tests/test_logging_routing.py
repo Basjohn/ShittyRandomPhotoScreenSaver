@@ -139,10 +139,10 @@ def test_cache_log_filter_accepts_only_cache_tagged_records():
 
     cache_record = logging.LogRecord(
         name="engine.image_pipeline",
-        level=logging.INFO,
+        level=logging.WARNING,
         pathname="",
         lineno=0,
-        msg="[CACHE] Worker fallback reason=scaled_miss",
+        msg="[CACHE] [FALLBACK] Worker fallback reason=scaled_miss",
         args=(),
         exc_info=None,
     )

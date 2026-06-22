@@ -1638,8 +1638,8 @@ class MediaWidget(BaseOverlayWidget):
                 on_finished=self._handle_fade_in_complete,
             )
         except Exception:
-            logger.debug(
-                "[MEDIA] _start_widget_fade_in fallback path triggered",
+            logger.warning(
+                "[MEDIA][FALLBACK] _start_widget_fade_in fallback path triggered",
                 exc_info=True,
             )
             try:

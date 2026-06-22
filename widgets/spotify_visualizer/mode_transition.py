@@ -750,8 +750,9 @@ def check_mode_teardown_ready(widget: Any, engine: Any, now_ts: float) -> None:
     timeout_s = 1.50 if capture_now else 0.35
     if not ready and waited_s >= timeout_s:
         ready = True
-        logger.debug(
-            "[SPOTIFY_VIS] Mode teardown timeout fallback (capture_now=%s waited=%.2fs target_gen=%s)",
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Mode teardown timeout fallback "
+            "(capture_now=%s waited=%.2fs target_gen=%s)",
             capture_now,
             waited_s,
             getattr(widget, "_mode_teardown_target_generation", -1),

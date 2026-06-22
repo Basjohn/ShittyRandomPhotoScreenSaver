@@ -26,17 +26,17 @@ class TestRSSBehavior:
         shutil.rmtree(cache_dir, ignore_errors=True)
     
     @pytest.fixture
-    def mock_reddit_response(self):
-        """Create a mock Reddit JSON response with multiple images."""
-        def create_response(subreddit: str, num_posts: int = 10):
+    def mock_feed_response(self):
+        """Create a mock JSON feed response with multiple images."""
+        def create_response(feed_name: str, num_posts: int = 10):
             posts = []
             for i in range(num_posts):
                 # Create unique image URLs for each post
-                image_url = f"https://images.example.test/{subreddit}_{i}_unique_image.jpg"
+                image_url = f"https://images.nasa.example.test/{feed_name}_{i}_unique_image.jpg"
                 posts.append({
                     "kind": "t3",
                     "data": {
-                        "title": f"Test Post {i} from {subreddit}",
+                        "title": f"Test Post {i} from {feed_name}",
                         "url_overridden_by_dest": image_url,
                         "url": image_url,
                         "author": f"test_user_{i}",
@@ -56,7 +56,7 @@ class TestRSSBehavior:
             }
         return create_response
     
-    def test_rss_source_fetches_from_multiple_feeds(self, temp_cache_dir, mock_reddit_response):
+    def test_rss_source_fetches_from_multiple_feeds(self, temp_cache_dir, mock_feed_response):
         """Test that RSSSource fetches images from all configured feeds."""
         from sources.rss_source import RSSSource
         import io
@@ -70,23 +70,24 @@ class TestRSSBehavior:
         valid_jpeg = _make_valid_jpeg((0, 96, 192))
         
         feeds = [
-            "https://feeds.example.test/EarthPorn.json",
-            "https://feeds.example.test/CityPorn.json",
-            "https://feeds.example.test/SpacePorn.json",
+            "https://feeds.nasa.example.test/apod.json",
+            "https://feeds.nasa.example.test/earth-observatory.json",
+            "https://feeds.nasa.example.test/solar-system.json",
         ]
         
         # Mock requests.get to return different images for each feed
         def mock_get(url, **kwargs):
+            assert "reddit" not in str(url).lower()
             mock_resp = Mock()
             mock_resp.raise_for_status = Mock()
             
-            if "EarthPorn" in url and "json" in url:
-                mock_resp.json.return_value = mock_reddit_response("EarthPorn", 5)
-            elif "CityPorn" in url and "json" in url:
-                mock_resp.json.return_value = mock_reddit_response("CityPorn", 5)
-            elif "SpacePorn" in url and "json" in url:
-                mock_resp.json.return_value = mock_reddit_response("SpacePorn", 5)
-            elif "images.example.test" in url:
+            if "apod" in url and "json" in url:
+                mock_resp.json.return_value = mock_feed_response("apod", 5)
+            elif "earth-observatory" in url and "json" in url:
+                mock_resp.json.return_value = mock_feed_response("earth_observatory", 5)
+            elif "solar-system" in url and "json" in url:
+                mock_resp.json.return_value = mock_feed_response("solar_system", 5)
+            elif "images.nasa.example.test" in url:
                 # Mock image download - iter_content must return an iterator
                 mock_resp.headers = {"Content-Type": "image/jpeg"}
                 mock_resp.iter_content = lambda chunk_size=8192: iter([valid_jpeg])
@@ -114,7 +115,7 @@ class TestRSSBehavior:
         assert len(source_ids) >= 2, f"Expected images from multiple feeds, got: {source_ids}"
         assert len(images) >= 6, f"Expected at least 6 images, got {len(images)}"
     
-    def test_rss_source_tracks_cached_urls(self, temp_cache_dir, mock_reddit_response):
+    def test_rss_source_tracks_cached_urls(self, temp_cache_dir, mock_feed_response):
         """Test that RSSSource tracks cached URLs and doesn't re-download."""
         from sources.rss_source import RSSSource
         import io
@@ -128,16 +129,17 @@ class TestRSSBehavior:
 
         valid_jpeg = _make_valid_jpeg()
 
-        feeds = ["https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=5"]
+        feeds = ["https://feeds.nasa.example.test/apod.json?limit=5"]
         download_count = [0]
         
         def mock_get(url, **kwargs):
+            assert "reddit" not in str(url).lower()
             mock_resp = Mock()
             mock_resp.raise_for_status = Mock()
             
-            if "EarthPorn" in url and "json" in url:
-                mock_resp.json.return_value = mock_reddit_response("EarthPorn", 5)
-            elif "i.redd.it" in url:
+            if "apod" in url and "json" in url:
+                mock_resp.json.return_value = mock_feed_response("apod", 5)
+            elif "images.nasa.example.test" in url:
                 download_count[0] += 1
                 mock_resp.headers = {"Content-Type": "image/jpeg"}
                 mock_resp.iter_content = lambda chunk_size=8192: iter([valid_jpeg])
@@ -277,23 +279,24 @@ class TestRSSBehavior:
         assert consecutive_duplicates <= 2, \
             f"Too many consecutive duplicates: {consecutive_duplicates}"
     
-    def test_rss_refresh_adds_new_images_only(self, temp_cache_dir, mock_reddit_response):
+    def test_rss_refresh_adds_new_images_only(self, temp_cache_dir, mock_feed_response):
         """Test that refresh only adds NEW images, not duplicates."""
         from sources.rss_source import RSSSource
         
-        feeds = ["https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=10"]
+        feeds = ["https://feeds.nasa.example.test/apod.json?limit=10"]
         
         call_count = [0]
         
         def mock_get(url, **kwargs):
+            assert "reddit" not in str(url).lower()
             mock_resp = Mock()
             mock_resp.raise_for_status = Mock()
             
-            if "EarthPorn" in url and "json" in url:
+            if "apod" in url and "json" in url:
                 call_count[0] += 1
                 # Return same images on both calls
-                mock_resp.json.return_value = mock_reddit_response("EarthPorn", 5)
-            elif "i.redd.it" in url:
+                mock_resp.json.return_value = mock_feed_response("apod", 5)
+            elif "images.nasa.example.test" in url:
                 mock_resp.headers = {"Content-Type": "image/jpeg"}
                 jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF' + b'\x00' * 1000
                 mock_resp.iter_content = lambda chunk_size=8192: iter([jpeg_data])

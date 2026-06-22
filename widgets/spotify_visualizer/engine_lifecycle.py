@@ -178,7 +178,8 @@ def update_fallback_force_state(widget: Any, audio_active: bool) -> None:
             if not is_fallback_forced(widget):
                 widget._fallback_forced_until = now + 20.0
                 logger.warning(
-                    "[SPOTIFY_VIS] Forcing audio fallback for 20s (bridge reports paused but audio active)",
+                    "[SPOTIFY_VIS][FALLBACK] Forcing audio fallback for 20s "
+                    "(bridge reports paused but audio active)",
                 )
     else:
         widget._fallback_mismatch_start = 0.0

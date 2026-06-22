@@ -2328,7 +2328,7 @@ class WidgetManager:
                 self._pending_spotify_visibility_sync = False
 
         try:
-            QTimer.singleShot(0, _run)
+            ThreadManager.single_shot(0, _run)
         except Exception:
             _run()
 

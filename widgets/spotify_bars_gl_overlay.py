@@ -1654,8 +1654,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 try:
                     self.grabFramebuffer()
                 except Exception:
-                    logger.debug(
-                        "[SPOTIFY_VIS] grabFramebuffer prewarm fallback triggered",
+                    logger.warning(
+                        "[SPOTIFY_VIS][FALLBACK] grabFramebuffer prewarm fallback triggered",
                         exc_info=True,
                     )
                     self.repaint()

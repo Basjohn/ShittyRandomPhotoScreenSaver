@@ -5,10 +5,11 @@ import math
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from PySide6.QtCore import QPoint, QRect, QSize, QTimer, QObject, QEvent, Qt
+from PySide6.QtCore import QPoint, QRect, QSize, QObject, QEvent, Qt
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap, QKeyEvent
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from rendering.custom_layout_contract import (
     CUSTOM_LAYOUT_GRID_STEP_PX,
     CUSTOM_LAYOUT_MIN_WIDGET_SIZE,
@@ -291,7 +292,7 @@ class CustomLayoutManager:
                 return
             cls.raise_all_active_shells()
 
-        QTimer.singleShot(max(0, int(delay_ms)), _run)
+        ThreadManager.single_shot(max(0, int(delay_ms)), _run)
 
     @classmethod
     def begin_menu_interaction(cls) -> None:

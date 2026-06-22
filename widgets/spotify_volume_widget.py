@@ -62,6 +62,7 @@ class SpotifyVolumeWidget(QWidget):
         self._anchor_media: Optional[QWidget] = None
         self._last_volume_sync_request_ts: float = 0.0
         self._spotify_secondary_stage_started: bool = False
+        self._custom_layout_geometry_reapply_pending: bool = False
         self._painted_frame_shadow_enabled: bool = True
         self._painted_frame_shadow_pixmap: Optional[QPixmap] = None
         self._painted_frame_shadow_cache_key: Optional[tuple] = None
@@ -187,21 +188,28 @@ class SpotifyVolumeWidget(QWidget):
         custom_rect = self._active_custom_layout_rect()
         if custom_rect is None:
             return
+        if self._custom_layout_geometry_reapply_pending:
+            return
+        self._custom_layout_geometry_reapply_pending = True
 
         def _reapply() -> None:
             try:
-                if Shiboken is not None and not Shiboken.isValid(self):
+                try:
+                    if Shiboken is not None and not Shiboken.isValid(self):
+                        return
+                except Exception:
                     return
-            except Exception:
-                return
-            try:
-                self.setGeometry(custom_rect)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+                try:
+                    self.setGeometry(custom_rect)
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
+            finally:
+                self._custom_layout_geometry_reapply_pending = False
 
         try:
-            QTimer.singleShot(0, _reapply)
+            ThreadManager.single_shot(0, _reapply)
         except Exception as e:
+            self._custom_layout_geometry_reapply_pending = False
             logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)
     
     def set_anchor_media_widget(self, widget: Optional[QWidget]) -> None:

@@ -25,10 +25,18 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Audit widget lifecycle ownership and add parity bars before any broad activation-path migration
   - [x] Inventory and classify production raw `QTimer.singleShot(...)` callsites as authoritative delayed work vs UI-local one-shots
   - [ ] Migrate only the risky runtime-reconcile/stabilize shots after each target has token/cancellation ownership and a regression bar
+    - [x] Move CUSTOM edit-shell global restack scheduling to `ThreadManager.single_shot(...)` with coalesce/menu-deferral bars
+    - [x] Move `BaseOverlayWidget` CUSTOM geometry reapply scheduling to `ThreadManager.single_shot(...)` and guard against self-triggered reapply churn during authoritative correction
+    - [x] Move `SpotifyVolumeWidget` CUSTOM geometry reapply scheduling to `ThreadManager.single_shot(...)` with coalescing so dependent-volume rect correction does not queue duplicate corrections
+    - [x] Move `WidgetManager` deferred Spotify visibility sync to `ThreadManager.single_shot(...)` with a coalescing bar
+    - [ ] Audit remaining visualizer/volume reveal-stage retry shots only with owner-thread and no-first-frame-poisoning bars
   - [ ] Audit bounded compositor / GL churn-reduction opportunities before any broad FBO/render-target experiment:
     - reduce expensive framebuffer-grab prewarm fallbacks where safe
     - verify first-frame and transition warmup parity with stronger bars
     - document or retire viewport/DPR hacks only with proof
+  - [ ] Reconcile current Bubble oracle drift before treating the full visualizer widget suite as a reliable audit gate
+    - identify whether the failures reflect intended Preset 1/runtime contract changes or stale expected values
+    - keep authored Bubble feel/runtime bars strict; do not relax them just to get green
 
 - [ ] Close the remaining visualizer CUSTOM geometry authority family without adding more mitigation churn
   - [ ] Keep `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` as the root-cause map owner

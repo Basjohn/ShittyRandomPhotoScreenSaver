@@ -78,6 +78,42 @@ class TestVisualPaddingSetterGetter:
 
         assert widget.geometry() == custom_rect
 
+    def test_custom_layout_geometry_reapply_uses_thread_manager_single_shot(self, qtbot, monkeypatch):
+        parent = QWidget()
+        parent.resize(800, 600)
+        qtbot.addWidget(parent)
+        parent.show()
+
+        widget = ConcreteOverlayWidget(parent, OverlayPosition.TOP_LEFT)
+        qtbot.addWidget(widget)
+        widget.resize(100, 50)
+        widget.show()
+
+        custom_rect = QRect(123, 234, 160, 90)
+        widget._custom_layout_local_rect = QRect(custom_rect)
+        queued_callbacks: list[object] = []
+
+        monkeypatch.setattr(
+            "widgets.base_overlay_widget.ThreadManager.single_shot",
+            lambda delay_ms, callback, *args, **kwargs: queued_callbacks.append(
+                (int(delay_ms), lambda: callback(*args, **kwargs))
+            ),
+        )
+
+        widget.resize(160, 140)
+
+        assert widget.geometry() != custom_rect
+        assert len(queued_callbacks) == 1
+        widget.resize(150, 130)
+        assert len(queued_callbacks) == 1
+
+        delay_ms, callback = queued_callbacks.pop()
+        assert delay_ms == 0
+        callback()
+
+        assert widget.geometry() == custom_rect
+        assert widget._custom_layout_geometry_reapply_pending is False
+
     def test_custom_layout_rect_suppresses_parent_stacking_recalc_requests(self, qtbot):
         class _Parent(QWidget):
             def __init__(self):

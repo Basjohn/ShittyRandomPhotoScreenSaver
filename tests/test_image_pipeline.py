@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from types import SimpleNamespace
 
 from PySide6.QtGui import QColor, QImage, QPixmap
@@ -7,6 +8,7 @@ from PySide6.QtCore import QSize
 
 from engine.image_pipeline import (
     _build_scaled_cache_key,
+    _cache_trace,
     _get_cached_pixmap_variants,
     notify_transition_complete,
     schedule_prefetch,
@@ -18,6 +20,16 @@ def _solid_qimage(width: int, height: int, color: QColor) -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32)
     image.fill(color)
     return image
+
+
+def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):
+    monkeypatch.setattr("engine.image_pipeline.is_cache_logging_enabled", lambda: True)
+
+    with caplog.at_level(logging.WARNING, logger="engine.image_pipeline"):
+        _cache_trace("[FALLBACK] Worker fallback reason=%s", "scaled_miss", level=logging.WARNING)
+
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+    assert "[CACHE] [FALLBACK] Worker fallback reason=scaled_miss" in caplog.text
 
 
 def test_cached_pixmap_variants_prefer_scaled_variant(qt_app):

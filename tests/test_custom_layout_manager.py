@@ -1345,8 +1345,11 @@ def test_custom_layout_manager_schedule_raise_all_active_shells_coalesces(monkey
     queued_callbacks: list[object] = []
 
     monkeypatch.setattr(
-        "rendering.custom_layout_manager.QTimer.singleShot",
-        lambda delay_ms, callback: (scheduled.append(int(delay_ms)), queued_callbacks.append(callback)),
+        "rendering.custom_layout_manager.ThreadManager.single_shot",
+        lambda delay_ms, callback, *args, **kwargs: (
+            scheduled.append(int(delay_ms)),
+            queued_callbacks.append(lambda: callback(*args, **kwargs)),
+        ),
     )
     monkeypatch.setattr(
         CustomLayoutManager,
@@ -1381,8 +1384,8 @@ def test_custom_layout_manager_schedule_raise_all_active_shells_defers_during_me
     invocations: list[str] = []
 
     monkeypatch.setattr(
-        "rendering.custom_layout_manager.QTimer.singleShot",
-        lambda delay_ms, callback: scheduled.append(int(delay_ms)),
+        "rendering.custom_layout_manager.ThreadManager.single_shot",
+        lambda delay_ms, callback, *args, **kwargs: scheduled.append(int(delay_ms)),
     )
     monkeypatch.setattr(
         CustomLayoutManager,
@@ -1406,8 +1409,8 @@ def test_custom_layout_manager_schedule_raise_all_active_shells_defers_during_me
     assert CustomLayoutManager._restack_pending_during_menu is True
 
     monkeypatch.setattr(
-        "rendering.custom_layout_manager.QTimer.singleShot",
-        lambda delay_ms, callback: callback(),
+        "rendering.custom_layout_manager.ThreadManager.single_shot",
+        lambda delay_ms, callback, *args, **kwargs: callback(*args, **kwargs),
     )
     CustomLayoutManager.end_menu_interaction()
 

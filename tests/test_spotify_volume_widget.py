@@ -158,6 +158,37 @@ def test_spotify_volume_scale_contract_respects_active_custom_rect(qt_app, monke
         widget.deleteLater()
 
 
+def test_spotify_volume_custom_reapply_uses_thread_manager_and_coalesces(qt_app, monkeypatch):
+    widget = SpotifyVolumeWidget()
+    try:
+        widget.setGeometry(0, 0, 20, 120)
+        custom_rect = QRect(12, 34, 66, 288)
+        widget._custom_layout_local_rect = QRect(custom_rect)  # type: ignore[attr-defined]
+        queued_callbacks = []
+
+        monkeypatch.setattr(
+            "widgets.spotify_volume_widget.ThreadManager.single_shot",
+            lambda delay_ms, callback, *args, **kwargs: queued_callbacks.append(
+                (int(delay_ms), lambda: callback(*args, **kwargs))
+            ),
+        )
+
+        widget._schedule_custom_layout_geometry_reapply()  # type: ignore[attr-defined]
+        widget._schedule_custom_layout_geometry_reapply()  # type: ignore[attr-defined]
+
+        assert len(queued_callbacks) == 1
+        assert widget.geometry() != custom_rect
+        delay_ms, callback = queued_callbacks.pop()
+        assert delay_ms == 0
+
+        callback()
+
+        assert widget.geometry() == custom_rect
+        assert widget._custom_layout_geometry_reapply_pending is False  # type: ignore[attr-defined]
+    finally:
+        widget.deleteLater()
+
+
 def test_spotify_volume_secondary_stage_forces_sync_against_visible_anchor(qt_app, monkeypatch):
     parent = QWidget()
     parent.resize(640, 480)
