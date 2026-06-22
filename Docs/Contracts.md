@@ -46,6 +46,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Canonical defaults | `core/settings/default_settings.py` | `core/settings/defaults.py` | One source of default truth. |
 | Preserve-on-reset / default loading | `core/settings/defaults.py` | settings reset/import flows | One preservation contract for resets/imports. |
 | Widgets-map normalization / schema ownership | `core/settings/settings_manager.py` | SST import, `set_widgets_map`, root `widgets` writes | Prevent drift between settings write paths. |
+| Silent widgets-map repair writes | `core/settings/settings_manager.py` | `set_widgets_map(..., emit_change=False)`, CUSTOM/runtime repair paths | Only owner-local repair/rebuild paths may suppress `settings_changed`; the write must still sync, normalize, and invalidate dotted caches while the caller refreshes runtime state explicitly. |
 | Visualizer settings grouped model | `core/settings/models/_spotify_visualizer.py` | snapshot/serializer/build callers | One ordered grouped field-spec contract for visualizer persistence. |
 | Visualizer normalization / legacy migration | `core/settings/visualizer_settings_snapshot.py`, `core/settings/visualizer_settings_contract.py` | preset import/runtime apply | One mapping-normalization seam and one technical migration seam. |
 | Shared list-widget capacity policy | `core/settings/widget_capacity_policy.py` | Gmail/Reddit settings + runtime | One active visible-capacity/growth envelope for list widgets. |

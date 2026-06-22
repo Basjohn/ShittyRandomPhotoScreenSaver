@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-05-22
+Last updated: 2026-06-22
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -45,7 +45,7 @@ No shadow frameworks or parallel ownership paths.
 - Non-`Custom` authored stacking must stay column-aware and shared. If `Top Left`, `Middle Left`, and `Bottom Left` (or their center/right equivalents) can interact, resolve that through the canonical shared stacking planner rather than treating only identical anchors as possible conflicts. Preserve authored `top` / `middle` / `bottom` band intent inside each column and keep companion/media-relative widgets such as `spotify_visualizer` out of authored stacking altogether.
 - Authored stacking must measure visible/runtime footprint, not shadow padding or debug collision envelopes. If a widget needs a larger collision/debug rect for other reasons, add that through a different seam instead of feeding it back into lane-fit math.
 - Companion/media-relative widgets should not become independently movable authored stack participants just to fix fade-in overlap. Reserve their known runtime footprint through the same shared stacking seam instead, and when that footprint follows a host card such as media, model it as one fixed occupied block rather than something the planner can negotiate away.
-- Because authored stacking is still fragile under some real layouts, it must remain explicit opt-in through `widgets.global.stacking_enabled` and default off. Do not silently re-enable it by default until a future re-audit proves the planner against real authored screenshots plus `--geo` traces.
+- Because authored stacking is still fragile under some real layouts, it must remain explicit and switchable through `widgets.global.stacking_enabled`. New-user defaults are currently on, so future work must validate the planner against real authored screenshots plus `--geo` traces instead of assuming the default setting is protective by itself.
 
 ## 4. Visualizer Safety
 - Mode identity and labels come from the mode registry.

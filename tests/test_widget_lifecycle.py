@@ -563,35 +563,78 @@ class TestFullLifecycleCycle:
 
 
 # ---------------------------------------------------------------------------
-# Single Activation Path Tests (Phase 1 - Jan 2026)
+# Widget setup activation arbitration tests
 # ---------------------------------------------------------------------------
 
 class TestSingleActivationPath:
-    """Test that widgets activate via single path (legacy start() only).
+    """Test the current widget_setup_all lifecycle-first startup arbitration."""
+
+    class _SetupLifecycleWidget:
+        def __init__(self, *, initialize_result=True, activate_result=True, already_active=False):
+            self.initialize_result = initialize_result
+            self.activate_result = activate_result
+            self.initialized = already_active
+            self.active = already_active
+            self.initialize_calls = 0
+            self.activate_calls = 0
+            self.start_calls = 0
+
+        def is_lifecycle_active(self):
+            return self.active
+
+        def is_lifecycle_initialized(self):
+            return self.initialized
+
+        def initialize(self):
+            self.initialize_calls += 1
+            self.initialized = bool(self.initialize_result)
+            return self.initialize_result
+
+        def activate(self):
+            self.activate_calls += 1
+            self.active = bool(self.activate_result)
+            return self.activate_result
+
+        def start(self):
+            self.start_calls += 1
     
-    The lifecycle system (_activate_impl) is dormant. Only the legacy start()
-    method should be used for widget activation. This test verifies that
-    setup_all_widgets() uses start() and not activate_all_widgets().
-    """
+    def test_start_widgets_prefers_lifecycle_and_does_not_double_start(self):
+        """Successful lifecycle activation must not also call legacy start()."""
+        from rendering.widget_setup_all import _start_widgets
+
+        widget = self._SetupLifecycleWidget()
+
+        _start_widgets({"weather": widget})
+
+        assert widget.initialize_calls == 1
+        assert widget.activate_calls == 1
+        assert widget.start_calls == 0
     
-    def test_widget_start_method_exists(self, qt_app, parent_widget):
-        """Verify all widgets have start() method."""
-        widget = ConcreteOverlayWidget(parent_widget)
-        assert hasattr(widget, 'start') or hasattr(widget, '_activate_impl')
-    
-    def test_lifecycle_methods_are_dormant(self, qt_app, parent_widget):
-        """Verify lifecycle methods exist but are not auto-called."""
-        widget = ConcreteOverlayWidget(parent_widget)
-        
-        # Widget should start in CREATED state
-        assert widget.get_lifecycle_state() == WidgetLifecycleState.CREATED
-        
-        # Lifecycle methods should NOT be auto-called on construction
-        assert not widget.initialize_called
-        assert not widget.activate_called
-        
-        # The widget should remain in CREATED until explicitly transitioned
-        assert widget.get_lifecycle_state() == WidgetLifecycleState.CREATED
+    def test_start_widgets_falls_back_to_legacy_start_when_lifecycle_declines(self, caplog):
+        """Legacy start remains a fallback while lifecycle parity is being proven."""
+        from rendering.widget_setup_all import _start_widgets
+
+        caplog.set_level("WARNING")
+        widget = self._SetupLifecycleWidget(initialize_result=False)
+
+        _start_widgets({"reddit": widget})
+
+        assert widget.initialize_calls == 1
+        assert widget.activate_calls == 0
+        assert widget.start_calls == 1
+        assert "[LIFECYCLE][FALLBACK] reddit lifecycle startup did not activate" in caplog.text
+
+    def test_start_widgets_skips_reused_active_widget_without_starting_again(self):
+        """Reused active widgets should not be reinitialized or legacy-started."""
+        from rendering.widget_setup_all import _start_widgets
+
+        widget = self._SetupLifecycleWidget(already_active=True)
+
+        _start_widgets({"media": widget})
+
+        assert widget.initialize_calls == 0
+        assert widget.activate_calls == 0
+        assert widget.start_calls == 0
 
 
 if __name__ == "__main__":

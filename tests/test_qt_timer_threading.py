@@ -1,92 +1,79 @@
 from __future__ import annotations
 
-import threading
+from typing import Any
 
-import pytest
-from PySide6.QtCore import QObject, QTimer, Qt, qInstallMessageHandler
-
-from widgets.overlay_timers import create_overlay_timer
+import widgets.overlay_timers as overlay_timers
 
 
-class _StubThreadManager:
-    """Minimal ThreadManager stand-in that schedules real Qt timers."""
-
-    def __init__(self) -> None:
-        self._timers: list[QTimer] = []
-
-    def schedule_recurring(self, interval_ms: int, callback):
-        timer = QTimer()
-        timer.setTimerType(Qt.TimerType.PreciseTimer)
-        timer.timeout.connect(callback)
-        timer.start(max(1, interval_ms))
-        self._timers.append(timer)
-        return timer
-
-    def shutdown(self) -> None:
-        for timer in self._timers:
-            try:
-                if timer.isActive():
-                    timer.stop()
-                timer.deleteLater()
-            except RuntimeError:
-                # Timer may already be deleted; ignore.
-                pass
-        self._timers.clear()
+class _FakeThread:
+    pass
 
 
-class _DummyWidget(QObject):
-    """Minimal QObject used to host overlay timers in tests."""
+class _FakeTimer:
+    def __init__(self, owner_thread: _FakeThread) -> None:
+        self.owner_thread = owner_thread
+        self.stop_calls = 0
 
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
-        self._thread_manager = _StubThreadManager()
+    def thread(self) -> _FakeThread:
+        return self.owner_thread
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+
+    def isActive(self) -> bool:
+        return self.stop_calls == 0
 
 
-@pytest.mark.qt
-@pytest.mark.skip(reason="Flaky: Qt event loop cleanup causes access violations in CI. Run manually for validation.")
-def test_overlay_timer_stop_is_safe_from_other_threads(qt_app) -> None:
-    """Stopping an overlay timer from a non-UI thread must not trigger Qt warnings.
+def test_overlay_timer_stop_runs_directly_on_owner_thread(monkeypatch) -> None:
+    owner_thread = _FakeThread()
+    timer = _FakeTimer(owner_thread)
 
-    This guards against the `QObject::killTimer: Timers cannot be stopped from another
-    thread` warning by ensuring OverlayTimerHandle.stop() always routes the stop call
-    to the timer's owning thread.
-    
-    Note: raw threading.Thread is used here intentionally to simulate external
-    library behavior (e.g., pycaw callbacks) that may call from non-Qt threads.
-    """
+    class _FakeQThread:
+        @staticmethod
+        def currentThread() -> _FakeThread:
+            return owner_thread
 
-    messages: list[str] = []
+    queued_calls: list[tuple[Any, str, Any]] = []
 
-    def _handler(mode, context, message):  # type: ignore[override]
-        try:
-            messages.append(str(message))
-        except Exception:
-            # Best-effort only; never raise from the Qt message handler.
-            pass
+    class _FakeQMetaObject:
+        @staticmethod
+        def invokeMethod(timer_arg, method_name: str, connection_type) -> None:
+            queued_calls.append((timer_arg, method_name, connection_type))
 
-    previous = qInstallMessageHandler(_handler)
-    try:
-        widget = _DummyWidget()
+    monkeypatch.setattr(overlay_timers, "QThread", _FakeQThread)
+    monkeypatch.setattr(overlay_timers, "QMetaObject", _FakeQMetaObject)
 
-        fired = {"count": 0}
+    handle = overlay_timers.OverlayTimerHandle(timer)  # type: ignore[arg-type]
+    handle.stop()
 
-        def _cb() -> None:
-            fired["count"] += 1
+    assert timer.stop_calls == 1
+    assert queued_calls == []
+    assert not handle.is_active()
 
-        handle = create_overlay_timer(widget, 10, _cb, description="cross-thread-stop-test")
-        assert handle.is_active()
 
-        # Stop the timer from a background Python thread (simulates external lib behavior).
-        t = threading.Thread(target=handle.stop)
-        t.start()
-        t.join(timeout=2.0)
+def test_overlay_timer_stop_queues_to_owner_thread_when_called_off_thread(monkeypatch) -> None:
+    owner_thread = _FakeThread()
+    caller_thread = _FakeThread()
+    timer = _FakeTimer(owner_thread)
 
-        # Allow the queued stop to execute on the timer's owning thread.
-        qt_app.processEvents()
+    class _FakeQThread:
+        @staticmethod
+        def currentThread() -> _FakeThread:
+            return caller_thread
 
-    finally:
-        qInstallMessageHandler(previous)
-        widget._thread_manager.shutdown()
+    queued_calls: list[tuple[Any, str, Any]] = []
 
-    # No Qt warning about stopping timers from another thread should appear.
-    assert not any("Timers cannot be stopped from another thread" in m for m in messages)
+    class _FakeQMetaObject:
+        @staticmethod
+        def invokeMethod(timer_arg, method_name: str, connection_type) -> None:
+            queued_calls.append((timer_arg, method_name, connection_type))
+
+    monkeypatch.setattr(overlay_timers, "QThread", _FakeQThread)
+    monkeypatch.setattr(overlay_timers, "QMetaObject", _FakeQMetaObject)
+
+    handle = overlay_timers.OverlayTimerHandle(timer)  # type: ignore[arg-type]
+    handle.stop()
+
+    assert timer.stop_calls == 0
+    assert queued_calls == [(timer, "stop", overlay_timers.Qt.ConnectionType.QueuedConnection)]
+    assert not handle.is_active()

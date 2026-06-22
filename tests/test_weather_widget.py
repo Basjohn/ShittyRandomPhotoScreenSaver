@@ -250,6 +250,61 @@ def test_weather_uses_provider_cache_when_widget_cache_location_mismatches(
     assert "Loaded provider stale startup cache for location=London" in caplog.text
 
 
+def test_weather_lifecycle_initialize_uses_provider_startup_cache_when_widget_cache_mismatches(
+    qapp,
+    parent_widget,
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    """Lifecycle initialize must not regress to widget-cache-only startup truth."""
+    caplog.set_level("INFO")
+    widget_cache = tmp_path / "weather_widget_cache.json"
+    provider_cache = tmp_path / "open_meteo_cache.json"
+    widget_cache.write_text(
+        json.dumps(
+            {
+                "location": "Paris",
+                "temperature": 18.5,
+                "condition": "Clear sky",
+                "timestamp": datetime.now().isoformat(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    provider_cache.write_text(
+        json.dumps(
+            {
+                "London": {
+                    "location": "London",
+                    "temperature": 9.0,
+                    "condition": "Overcast",
+                    "humidity": 55.0,
+                    "_cached_at": datetime.now().timestamp() - 3600,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("widgets.weather_widget._CACHE_FILE", widget_cache, raising=False)
+    monkeypatch.setattr(
+        "weather.open_meteo_provider._WEATHER_CACHE_FILE",
+        provider_cache,
+        raising=False,
+    )
+
+    weather = WeatherWidget(parent=parent_widget, location="London")
+    weather._cached_data = None
+    weather._cache_time = None
+
+    weather._initialize_impl()
+
+    assert weather._cached_data is not None
+    assert weather._cached_data["location"] == "London"
+    assert weather._cached_data["temperature"] == 9.0
+    assert "Loaded provider stale startup cache for location=London" in caplog.text
+
+
 def test_weather_all_positions(qapp, parent_widget):
     """Test all weather positions."""
     positions = [

@@ -141,11 +141,12 @@ class TestImgurScraper:
         assert scraper._consecutive_failures == 1
     
     def test_get_headers_has_user_agent(self):
-        """Test that headers include User-Agent."""
+        """Test that headers include an Imgur-owned User-Agent."""
         scraper = ImgurScraper()
         headers = scraper._get_headers()
         assert "User-Agent" in headers
         assert len(headers["User-Agent"]) > 0
+        assert "ImgurGalleryDesktop" in headers["User-Agent"]
     
     @patch('widgets.imgur.scraper.requests.get')
     def test_scrape_tag_success(self, mock_get):

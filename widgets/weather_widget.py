@@ -147,8 +147,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._cache_duration = timedelta(minutes=30)
         self._has_displayed_valid_data = False
         self._pending_first_show = False
-        self._load_persisted_cache()
-        self._load_provider_startup_cache()
+        self._load_startup_cache()
         
         # Background thread
         # Override base class font size default
@@ -573,8 +572,7 @@ class WeatherWidget(BaseOverlayWidget):
     
     def _initialize_impl(self) -> None:
         """Initialize weather resources (lifecycle hook)."""
-        # Load any persisted cache
-        self._load_persisted_cache()
+        self._load_startup_cache()
         logger.debug("[LIFECYCLE] WeatherWidget initialized")
     
     def _activate_impl(self) -> None:
@@ -911,6 +909,11 @@ class WeatherWidget(BaseOverlayWidget):
         """
 
         return bool(self._cached_data)
+
+    def _load_startup_cache(self) -> None:
+        """Load the best available startup cache without letting Weather start blank."""
+        self._load_persisted_cache()
+        self._load_provider_startup_cache()
 
     def _load_persisted_cache(self) -> None:
         if self._cached_data and self._cache_time is not None:

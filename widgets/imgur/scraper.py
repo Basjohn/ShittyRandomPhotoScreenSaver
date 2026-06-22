@@ -20,7 +20,6 @@ import requests
 from bs4 import BeautifulSoup
 
 from core.logging.logger import get_logger
-from core.reddit_rate_limiter import get_reddit_user_agent
 
 logger = get_logger(__name__)
 
@@ -64,6 +63,11 @@ MIN_REQUEST_INTERVAL_MS = 500  # 500ms between requests
 BACKOFF_MULTIPLIER = 2.0
 MAX_BACKOFF_MS = 60000  # 60 seconds max backoff
 DEFAULT_TIMEOUT = 10  # seconds
+IMGUR_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/136.0.0.0 Safari/537.36 ImgurGalleryDesktop/2.1"
+)
 
 # Regex to extract image IDs from Imgur HTML
 IMAGE_ID_PATTERN = re.compile(r'data-id=["\']([a-zA-Z0-9]+)["\']')
@@ -164,9 +168,9 @@ class ImgurScraper:
         self._window_seconds: int = 600  # 10 minutes
         
     def _get_headers(self) -> dict:
-        """Get request headers with rotated User-Agent."""
+        """Get Imgur-owned request headers."""
         return {
-            "User-Agent": get_reddit_user_agent(),
+            "User-Agent": IMGUR_USER_AGENT,
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
             "Accept-Language": "en-US,en;q=0.5",
             "Accept-Encoding": "gzip, deflate, br",

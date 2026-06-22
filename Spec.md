@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-19
+Last updated: 2026-06-22
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -67,7 +67,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Persisted `limit` remains the configured-capacity key. Runtime may still distinguish configured capacity from effective visible capacity when staged growth or future custom-height behavior needs that split.
 - Reddit and Gmail may fetch/cache a wider candidate pool than they currently show. Do not re-couple visible row count directly to network fetch size when extending later vertical resize work.
 - Under a committed `Custom` rect, `reddit`, `reddit2`, and `gmail` keep width authority on the saved rect, but runtime content may still adjust the committed height vertically to the real visible-row need. Any such vertical-only adjustment must persist back through the shared CUSTOM layout map so replay/ settings-close/startup do not restore stale height.
-- Non-`Custom` authored widget stacking is an explicit opt-in under `widgets.global.stacking_enabled`, default `False`. Runtime stacking and settings-side stack prediction must both respect that flag instead of silently mutating or promising authored-position collision handling.
+- Non-`Custom` authored widget stacking is owned by the explicit `widgets.global.stacking_enabled` contract and currently defaults `True` for new users. Runtime stacking and settings-side stack prediction must both respect that flag instead of silently mutating or promising authored-position collision handling.
 
 ## 5. Visualizer System Contract
 

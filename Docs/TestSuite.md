@@ -55,6 +55,10 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Descriptor-driven factory-backed widget setup parity for clock/weather/media/reddit/gmail creation paths.
 - `tests/test_service_widget_runtime.py`
   Shared service-backed widget lifecycle helper coverage: parent transition probing, deferred single-shot timer reuse, deferred refresh/value staging, spinner suspend/resume, shared fetch-in-progress guards, shared manual-refresh flow, visible-fallback preservation for non-authoritative empty/error results, shared deferred-runtime timer/state reset, and timer-stop cleanup.
+- `tests/test_widget_lifecycle.py`
+  Base overlay lifecycle state machine coverage plus widget setup startup arbitration guards: lifecycle-first activation, loud legacy `start()` fallback only when lifecycle declines, and reused active widget no-op behavior.
+- `tests/test_qt_timer_threading.py`
+  Overlay timer stop-thread routing guard: direct owner-thread stop and queued off-thread stop through the timer owner seam without relying on flaky real Qt event-loop cleanup.
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
@@ -81,7 +85,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_media_widget_runtime_methods.py`
   Media deferred callbacks, canonical smart-poll timer reset, pending-state debounce cleanup, optimistic media-control repaint/update behavior, and the rule that live media visibility re-entry stays suppressed while a CUSTOM shell session is active.
 - `tests/test_weather_widget.py`
-  Weather retry timer cleanup, retry timer reuse, retry timeout state handling, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
+  Weather retry timer cleanup, retry timer reuse, retry timeout state handling, provider-backed stale startup cache recovery when widget-local cache is invalid or mismatched, lifecycle initialize cache-authority parity, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
 - `tests/test_imgur_widget.py`
   Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
 - `tests/test_spotify_volume_widget.py`
@@ -94,6 +98,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Gmail cache/fallback behavior, empty-fetch preservation of valid displayed mail, empty-state header-safe layout, shared transition-aware refresh deferral, shared manual-refresh short-circuiting, timer cleanup, grouping formatting, and stable-content caching rules.
 - `tests/test_reddit_widget.py`
   Reddit fetch/result transition deferral, spinner suspend/resume, deferred timer cleanup, cache-regeneration deferral, shared manual-refresh short-circuiting, visible-content preservation on non-authoritative empty/error fetches, and interactive refresh behavior.
+- `tests/test_rss_behavior.py`
+  RSS facade/current pipeline behavior: mocked multi-feed JSON ingestion, wallpaper-sized image validation/download caching, queue rotation across RSS/local pools, and duplicate-history protection without relying on live Reddit access.
 - `tests/test_gmail_imap_actions.py`
   Gmail IMAP UID action helpers, mailbox order preservation, and partial-fetch failure rejection so truncated IMAP snapshots cannot overwrite valid Gmail display/cache state.
 - `tests/test_settings_dialog.py`

@@ -186,6 +186,19 @@ class TestSettingsManagerCacheInvalidation:
 
         assert manager.get("widgets.clock.enabled") is False
 
+    def test_silent_set_widgets_map_invalidates_cache_without_emitting(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set_widgets_map({"clock": {"enabled": True}})
+        assert manager.get("widgets.clock.enabled") is True
+
+        received: list[tuple[str, object]] = []
+        manager.settings_changed.connect(lambda k, v: received.append((k, v)))
+
+        manager.set_widgets_map({"clock": {"enabled": False}}, emit_change=False)
+
+        assert manager.get("widgets.clock.enabled") is False
+        assert received == []
+
     def test_set_section_invalidates_descendant_cache(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
         manager.set("transitions.type", "Fade")

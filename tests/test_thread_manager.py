@@ -25,7 +25,7 @@ from core.threading.manager import (
     Task,
 )
 from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
-from PySide6.QtCore import QObject, QThread, qInstallMessageHandler
+from PySide6.QtCore import QObject, QThread
 
 
 class TestThreadManagerInit:
@@ -563,37 +563,6 @@ class TestOverlayTimerIntegration:
         assert captured["description"] == "WeatherWidget refresh"
         callback = captured["callback"]
         assert getattr(callback, "_srpss_timer_owner", None) is widget
-
-    @pytest.mark.qt
-    @pytest.mark.skip(reason="Flaky: Qt event loop cleanup causes access violations in CI. Run manually for validation.")
-    def test_overlay_timer_stop_is_safe_from_other_threads(self, qt_app):
-        """Stopping overlay timers from non-UI threads should not emit Qt warnings."""
-        messages: list[str] = []
-
-        def _handler(mode, context, message):  # type: ignore[override]
-            try:
-                messages.append(str(message))
-            except Exception:
-                pass
-
-        previous = qInstallMessageHandler(_handler)
-        try:
-            widget = self._DummyWidget()
-            manager = ThreadManager()
-            widget._thread_manager = manager  # type: ignore[attr-defined]
-
-            handle = create_overlay_timer(widget, 10, lambda: None, description="cross-thread-stop-test")
-            assert handle.is_active()
-
-            t = threading.Thread(target=handle.stop)
-            t.start()
-            t.join(timeout=2.0)
-            qt_app.processEvents()
-        finally:
-            qInstallMessageHandler(previous)
-            manager.shutdown()
-
-        assert not any("Timers cannot be stopped from another thread" in m for m in messages)
 
 
 class TestUiThreadDispatch:

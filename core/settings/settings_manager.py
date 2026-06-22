@@ -1420,7 +1420,9 @@ class SettingsManager(QObject):
         """Replace the widgets map with the given mapping.
 
         This is a thin wrapper around set_section('widgets', ...) to keep
-        callers from hard-coding the 'widgets' key.
+        callers from hard-coding the 'widgets' key. Use emit_change=False only
+        for owner-local repair/rebuild paths that also refresh their runtime
+        state explicitly; silent writes still sync and invalidate dotted caches.
         """
 
         self.set_section('widgets', widgets, emit_change=emit_change)

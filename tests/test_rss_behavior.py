@@ -32,7 +32,7 @@ class TestRSSBehavior:
             posts = []
             for i in range(num_posts):
                 # Create unique image URLs for each post
-                image_url = f"https://i.redd.it/{subreddit}_{i}_unique_image.jpg"
+                image_url = f"https://images.example.test/{subreddit}_{i}_unique_image.jpg"
                 posts.append({
                     "kind": "t3",
                     "data": {
@@ -56,15 +56,23 @@ class TestRSSBehavior:
             }
         return create_response
     
-    @pytest.mark.skip(reason="RSSSource implementation changed - test needs updating")
     def test_rss_source_fetches_from_multiple_feeds(self, temp_cache_dir, mock_reddit_response):
         """Test that RSSSource fetches images from all configured feeds."""
         from sources.rss_source import RSSSource
+        import io
+        from PIL import Image as PILImage
+
+        def _make_valid_jpeg(color: tuple[int, int, int]) -> bytes:
+            buf = io.BytesIO()
+            PILImage.new("RGB", (1920, 1080), color).save(buf, format="JPEG")
+            return buf.getvalue()
+
+        valid_jpeg = _make_valid_jpeg((0, 96, 192))
         
         feeds = [
-            "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=10",
-            "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=10",
-            "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=10",
+            "https://feeds.example.test/EarthPorn.json",
+            "https://feeds.example.test/CityPorn.json",
+            "https://feeds.example.test/SpacePorn.json",
         ]
         
         # Mock requests.get to return different images for each feed
@@ -78,12 +86,10 @@ class TestRSSBehavior:
                 mock_resp.json.return_value = mock_reddit_response("CityPorn", 5)
             elif "SpacePorn" in url and "json" in url:
                 mock_resp.json.return_value = mock_reddit_response("SpacePorn", 5)
-            elif "i.redd.it" in url:
+            elif "images.example.test" in url:
                 # Mock image download - iter_content must return an iterator
                 mock_resp.headers = {"Content-Type": "image/jpeg"}
-                # Create valid JPEG header bytes
-                jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF' + b'\x00' * 1000
-                mock_resp.iter_content = lambda chunk_size=8192: iter([jpeg_data])
+                mock_resp.iter_content = lambda chunk_size=8192: iter([valid_jpeg])
             else:
                 mock_resp.json.return_value = {"kind": "Listing", "data": {"children": []}}
             

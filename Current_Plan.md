@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-20
+Last updated: 2026-06-22
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -21,20 +21,24 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-- [ ] Close the reopened visualizer false `Custom+ALL` route-recovery seam before more CUSTOM geometry work
-  - [ ] Prove the creator is reading a transient routing lie rather than bad saved geometry; keep `--geo` / `--viz` evidence attached to the `17:27:06` family where `replay_final` stays correct but the creator still logs `Restored invalid Custom+ALL...`
-  - [ ] Keep custom visualizer route validation authoritative to committed custom-layout evidence first:
-    - recover a missing/`ALL` visualizer monitor only from a matching saved visualizer screen bucket
-    - do not let a broad authored-restore helper mutate valid CUSTOM state during recreate
-  - [ ] Refuse to claim a route was restored unless the visualizer actually exits `Custom` and lands on a non-`ALL` authored route
-  - [ ] Strengthen the visualizer plumbing bars so this branch fails if it:
-    - "restores" authored routing while `custom_routing` is still true
-    - clears the saved visualizer rect when only the monitor field was transiently wrong
-    - suppresses creation without a genuinely invalid route
+- [ ] Execute the project-wide runtime health audit in [audits/ArchitectureAudit/Project_Health_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/ArchitectureAudit/Project_Health_Audit.md)
+  - [ ] Audit widget lifecycle ownership and add parity bars before any broad activation-path migration
+  - [x] Inventory and classify production raw `QTimer.singleShot(...)` callsites as authoritative delayed work vs UI-local one-shots
+  - [ ] Migrate only the risky runtime-reconcile/stabilize shots after each target has token/cancellation ownership and a regression bar
+  - [ ] Audit bounded compositor / GL churn-reduction opportunities before any broad FBO/render-target experiment:
+    - reduce expensive framebuffer-grab prewarm fallbacks where safe
+    - verify first-frame and transition warmup parity with stronger bars
+    - document or retire viewport/DPR hacks only with proof
+
+- [ ] Close the remaining visualizer CUSTOM geometry authority family without adding more mitigation churn
+  - [ ] Keep `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` as the root-cause map owner
+  - [ ] Enumerate every post-replay writer that can still touch visualizer live rect or overlay rect after committed CUSTOM authority should have won
+  - [ ] Keep fallback/recovery layers temporary and loud; do not add another self-heal layer before the owner map is narrower
+  - [ ] Strengthen the bars so `replay_final` green but runtime-wrong still fails decisively
 
 ## Watchlist
 
-- Non-`Custom` authored stacking stays default-off until a future re-audit proves it against real authored layouts plus `--geo`.
+- Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
 
 ## Deferred / Not Active
 

@@ -769,6 +769,7 @@ def _start_widgets(created: Dict[str, QWidget]) -> None:
             continue
 
         started = False
+        lifecycle_attempted = False
         is_already_active = (
             hasattr(widget, "is_lifecycle_active") and
             callable(getattr(widget, "is_lifecycle_active")) and
@@ -787,6 +788,7 @@ def _start_widgets(created: Dict[str, QWidget]) -> None:
             logger.debug("[LIFECYCLE] %s already initialized, skipping init", attr_name)
             if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
                 try:
+                    lifecycle_attempted = True
                     activated = widget.activate()
                     started = started or bool(activated)
                     logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
@@ -806,12 +808,14 @@ def _start_widgets(created: Dict[str, QWidget]) -> None:
                             logger.debug("[LIFECYCLE] %s already initialized (late check), skipping init", attr_name)
                             if hasattr(widget, "activate") and callable(getattr(widget, "activate")):
                                 try:
+                                    lifecycle_attempted = True
                                     activated = widget.activate()
                                     started = started or bool(activated)
                                     logger.debug(f"[LIFECYCLE] {attr_name} activate() returned {activated}")
                                 except Exception as e:
                                     logger.debug("[LIFECYCLE] Failed to activate %s: %s", attr_name, e)
                             continue
+                    lifecycle_attempted = True
                     initialized = widget.initialize()
                     logger.debug(f"[LIFECYCLE] {attr_name} initialize() returned {initialized}")
                     if initialized and hasattr(widget, "activate") and callable(getattr(widget, "activate")):
@@ -823,6 +827,11 @@ def _start_widgets(created: Dict[str, QWidget]) -> None:
 
         if not started and hasattr(widget, 'start') and callable(getattr(widget, 'start')):
             try:
+                if lifecycle_attempted:
+                    logger.warning(
+                        "[LIFECYCLE][FALLBACK] %s lifecycle startup did not activate; falling back to legacy start()",
+                        attr_name,
+                    )
                 widget.start()
             except Exception as e:
                 logger.debug("Failed to start %s: %s", attr_name, e)
