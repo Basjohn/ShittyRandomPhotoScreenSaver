@@ -24,6 +24,14 @@ except Exception:
 logger = get_logger(__name__)
 
 
+def _record_shader_path_failure(comp: "GLCompositorWidget", name: str, reason: str) -> None:
+    """Store the most recent active shader failure for the paint fallback log."""
+    try:
+        comp._last_shader_path_failure = f"{name}:{reason}"
+    except Exception:
+        pass
+
+
 # ======================================================================
 # Shader capability checks
 # ======================================================================
@@ -408,17 +416,26 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
 
 def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
     """Try to render a transition via shader path. Returns True if successful."""
-    if state is None or not can_use_fn():
+    if state is None:
+        return False
+    if not can_use_fn():
+        _record_shader_path_failure(comp, name, "capability_unavailable")
         return False
     try:
         if prep_fn is not None and not prep_fn():
+            _record_shader_path_failure(comp, name, "texture_prep_failed")
             return False
         paint_fn(target)
         from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
         paint_dimming_gl(comp)
         paint_qpainter_overlays_gl(comp)
+        try:
+            comp._last_shader_path_failure = ""
+        except Exception:
+            pass
         return True
-    except Exception:
+    except Exception as exc:
+        _record_shader_path_failure(comp, name, f"exception:{type(exc).__name__}")
         logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
         comp._gl_disabled_for_session = True
         comp._use_shaders = False

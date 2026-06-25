@@ -8,6 +8,7 @@ Image prefetcher built on ThreadManager and ImageCache.
 """
 from __future__ import annotations
 
+from collections import deque
 from typing import Any, Dict, List, Optional, Set
 import threading
 import time
@@ -45,6 +46,8 @@ class ImagePrefetcher:
         self._cache = cache
         self._max_concurrent = max(1, int(max_concurrent))
         self._inflight: Set[str] = set()
+        self._pending_raw_paths: deque[str] = deque()
+        self._pending_raw_keys: Set[str] = set()
         self._scaled_inflight: Set[str] = set()
         self._pending_scaled_requests: List[Dict[str, Any]] = []
         self._pending_scaled_keys: Set[str] = set()
@@ -84,17 +87,29 @@ class ImagePrefetcher:
         if isinstance(img, QImage):
             return img
         return None
+
+    def snapshot_state(self) -> Dict[str, int]:
+        """Return lightweight queue state for cache fallback diagnostics."""
+        with self._lock:
+            return {
+                "raw_inflight": len(self._inflight),
+                "raw_pending": len(self._pending_raw_paths),
+                "scaled_inflight": len(self._scaled_inflight),
+                "scaled_pending": len(self._pending_scaled_requests),
+            }
     
     def clear_inflight(self) -> None:
         """Clear the inflight set. Call when sources change to avoid stale paths."""
         with self._lock:
             self._inflight.clear()
+            self._pending_raw_paths.clear()
+            self._pending_raw_keys.clear()
             self._scaled_inflight.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
         if is_verbose_logging():
             logger.debug("Prefetcher inflight set cleared")
-        _cache_trace("Cleared inflight and pending scaled-prefetch state")
+        _cache_trace("Cleared inflight and pending prefetch state")
 
     def prefetch_paths(self, paths: List[str]) -> None:
         if not paths:
@@ -104,28 +119,81 @@ class ImagePrefetcher:
             if is_verbose_logging():
                 logger.debug("ImagePrefetcher: skipping prefetch due to post-transition delay")
             return
-        # Submit up to max_concurrent new loads that are not already cached or in-flight
-        submitted = 0
-        for p in paths:
-            if not p:
-                continue
-            if self._cache.contains(p):
-                continue
-            with self._lock:
-                if p in self._inflight:
+        # Submit up to max_concurrent immediately; keep the rest as a bounded
+        # producer backlog so scaled warmups do not orphan later preview paths.
+        submissions: List[str] = []
+        queued_count = 0
+        skipped_count = 0
+        with self._lock:
+            active_slots = max(0, self._max_concurrent - len(self._inflight))
+            for p in paths:
+                if not p:
                     continue
-                if submitted >= self._max_concurrent:
-                    break
-                self._inflight.add(p)
-            self._submit_load(p)
-            submitted += 1
+                if self._cache.contains(p) or p in self._inflight or p in self._pending_raw_keys:
+                    skipped_count += 1
+                    continue
+                if active_slots > 0:
+                    self._inflight.add(p)
+                    submissions.append(p)
+                    active_slots -= 1
+                else:
+                    self._pending_raw_paths.append(p)
+                    self._pending_raw_keys.add(p)
+                    queued_count += 1
 
-    def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> None:
-        """Queue scaled-variant warmup requests and process them with bounded concurrency."""
-        if not requests:
+        for path in submissions:
+            self._submit_load(path)
+
+        if submissions or queued_count:
+            _cache_trace(
+                "Registered raw prefetch producers active=%d pending=%d skipped=%d",
+                len(submissions),
+                queued_count,
+                skipped_count,
+            )
+
+    def _pump_raw_prefetch(self) -> None:
+        if self._is_in_post_transition_delay():
             return
 
+        submissions: List[str] = []
+        with self._lock:
+            active_slots = max(0, self._max_concurrent - len(self._inflight))
+            while active_slots > 0 and self._pending_raw_paths:
+                path = self._pending_raw_paths.popleft()
+                self._pending_raw_keys.discard(path)
+                if not path or self._cache.contains(path) or path in self._inflight:
+                    continue
+                self._inflight.add(path)
+                submissions.append(path)
+                active_slots -= 1
+
+        for path in submissions:
+            self._submit_load(path)
+
+        if submissions:
+            with self._lock:
+                pending_total = len(self._pending_raw_paths)
+            _cache_trace(
+                "Dispatched raw prefetch backlog active_new=%d pending_remaining=%d",
+                len(submissions),
+                pending_total,
+            )
+
+    def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> int:
+        """Queue scaled-variant warmup requests and process them with bounded concurrency."""
+        if not requests:
+            return 0
+        if self._is_in_post_transition_delay():
+            _cache_trace(
+                "Skipping scaled prefetch registration during transition cool-down request_count=%d",
+                len(requests),
+            )
+            return 0
+
         queued_any = False
+        queued_count = 0
+        skipped_without_raw = 0
         with self._lock:
             for request in requests:
                 cache_key = str(request.get("cache_key") or "")
@@ -134,17 +202,28 @@ class ImagePrefetcher:
                     continue
                 if self._cache.contains(cache_key):
                     continue
+                raw_has_producer = raw_path in self._inflight or raw_path in self._pending_raw_keys
+                if not self._cache.contains(raw_path) and not raw_has_producer:
+                    skipped_without_raw += 1
+                    continue
                 if cache_key in self._scaled_inflight or cache_key in self._pending_scaled_keys:
                     continue
                 self._pending_scaled_requests.append(dict(request))
                 self._pending_scaled_keys.add(cache_key)
                 queued_any = True
+                queued_count += 1
 
         if queued_any:
             with self._lock:
                 pending_total = len(self._pending_scaled_requests)
             _cache_trace("Registered scaled prefetch requests pending=%d", pending_total)
             self._pump_scaled_prefetch()
+        if skipped_without_raw:
+            _cache_trace(
+                "Skipped scaled prefetch requests without raw producer skipped=%d",
+                skipped_without_raw,
+            )
+        return queued_count
 
     def _submit_load(self, path: str) -> None:
         # inflight is already marked by caller under lock
@@ -155,19 +234,25 @@ class ImagePrefetcher:
 
         def _on_done(res) -> None:
             # res is TaskResult
+            cached = False
             try:
                 img: Optional[QImage] = res.result if res and res.success else None
                 if img is not None:
                     try:
                         self._cache.put(path, img)
+                        cached = True
                         if is_verbose_logging():
                             logger.debug(f"Prefetched and cached: {path}")
-                        self._pump_scaled_prefetch(preferred_path=path)
                     except Exception as e:
                         logger.debug("[MISC] Exception suppressed: %s", e)
             finally:
                 with self._lock:
                     self._inflight.discard(path)
+                self._pump_raw_prefetch()
+                if cached:
+                    self._pump_scaled_prefetch(preferred_path=path)
+                else:
+                    self._pump_scaled_prefetch()
 
         try:
             self._threads.submit_task(
@@ -181,6 +266,7 @@ class ImagePrefetcher:
             logger.debug(f"Prefetch submit failed for {path}: {e}")
             with self._lock:
                 self._inflight.discard(path)
+            self._pump_raw_prefetch()
 
     def _pump_scaled_prefetch(self, preferred_path: Optional[str] = None) -> None:
         if self._is_in_post_transition_delay():

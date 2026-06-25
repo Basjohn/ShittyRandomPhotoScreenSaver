@@ -324,6 +324,28 @@ def _derive_scaled_pixmap_from_raw_cache(
     )
     return scaled_pixmap
 
+
+def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
+    prefetcher = getattr(engine, "_prefetcher", None)
+    snapshot = None
+    if prefetcher is not None:
+        snapshot_state = getattr(prefetcher, "snapshot_state", None)
+        if callable(snapshot_state):
+            try:
+                snapshot = snapshot_state()
+            except Exception as exc:
+                logger.debug("[CACHE] Failed to snapshot prefetcher state: %s", exc)
+    if not isinstance(snapshot, dict):
+        return "prefetch_state=unavailable"
+    return (
+        "prefetch_state="
+        f"raw_inflight:{int(snapshot.get('raw_inflight', 0))},"
+        f"raw_pending:{int(snapshot.get('raw_pending', 0))},"
+        f"scaled_inflight:{int(snapshot.get('scaled_inflight', 0))},"
+        f"scaled_pending:{int(snapshot.get('scaled_pending', 0))}"
+    )
+
+
 def _get_cached_pixmap_variants(
     engine: ScreensaverEngine,
     image_path: str,
@@ -788,10 +810,11 @@ def load_and_display_image_async(
                             _bump_cache_runtime_stat(engine, "worker_fallbacks")
                             raw_state = "raw_cached" if qimage is not None and not qimage.isNull() else "raw_missing"
                             _cache_trace(
-                                "[FALLBACK] Worker fallback display=%d reason=%s raw_state=%s path=%s target=%dx%d mode=%s",
+                                "[FALLBACK] Worker fallback display=%d reason=%s raw_state=%s %s path=%s target=%dx%d mode=%s",
                                 i,
                                 fallback_reason,
                                 raw_state,
+                                _describe_prefetcher_state(engine),
                                 img_path,
                                 target_size.width(),
                                 target_size.height(),
@@ -1381,10 +1404,14 @@ def schedule_prefetch(engine: ScreensaverEngine) -> None:
         if scaled_requests:
             _bump_cache_runtime_stat(engine, "scaled_prefetch_requests", len(scaled_requests))
             register_scaled_requests = getattr(engine._prefetcher, "register_scaled_requests", None)
+            queued_count = len(scaled_requests)
             if callable(register_scaled_requests):
-                register_scaled_requests(scaled_requests)
+                queued = register_scaled_requests(scaled_requests)
+                if isinstance(queued, int):
+                    queued_count = queued
             _cache_trace(
-                "Queued scaled warmup request_count=%d preview_source=%s",
+                "Queued scaled warmup request_count=%d prepared=%d preview_source=%s",
+                queued_count,
                 len(scaled_requests),
                 preview_source,
             )

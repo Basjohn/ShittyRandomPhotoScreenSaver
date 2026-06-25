@@ -315,6 +315,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._dimming_enabled: bool = False
         self._dimming_opacity: float = 0.0  # 0.0-1.0
 
+        # Loud-but-bounded shader fallback diagnostics. These are intentionally
+        # compositor-local so repeated fallback frames do not flood the logs.
+        self._last_shader_path_failure: str = ""
+        self._last_shader_fallback_signature: Optional[tuple] = None
+        self._shader_fallback_suppressed_count: int = 0
+
         # Mapping of transition controller class names to shader program keys.
         self._transition_program_map: Dict[str, str] = get_transition_program_map()
 

@@ -1181,7 +1181,7 @@ def on_tick(widget: Any) -> None:
     process_heartbeat(widget, now_ts)
 
     consume_pending_bubble = getattr(widget, "_consume_pending_bubble_result", None)
-    if widget._vis_mode_str == "bubble" and callable(consume_pending_bubble):
+    if getattr(widget, "_vis_mode_str", "") == "bubble" and callable(consume_pending_bubble):
         consume_pending_bubble()
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:

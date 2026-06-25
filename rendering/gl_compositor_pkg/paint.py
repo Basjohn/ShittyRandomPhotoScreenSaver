@@ -31,6 +31,47 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+def _active_shader_names(shader_paths) -> list[str]:
+    return [name for name, state, *_ in shader_paths if state is not None]
+
+
+def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
+    """Emit one loud fallback record per repeated shader-failure signature."""
+    last_failure = getattr(widget, "_last_shader_path_failure", "") or "<none>"
+    signature = (
+        tuple(active_names),
+        last_failure,
+        bool(getattr(widget, "_gl_disabled_for_session", False)),
+        bool(getattr(widget, "_use_shaders", False)),
+        getattr(widget, "_current_transition_name", None),
+    )
+    previous = getattr(widget, "_last_shader_fallback_signature", None)
+    if previous == signature:
+        try:
+            widget._shader_fallback_suppressed_count = int(getattr(widget, "_shader_fallback_suppressed_count", 0)) + 1
+        except Exception:
+            pass
+        return
+
+    suppressed = int(getattr(widget, "_shader_fallback_suppressed_count", 0) or 0)
+    try:
+        widget._last_shader_fallback_signature = signature
+        widget._shader_fallback_suppressed_count = 0
+    except Exception:
+        pass
+
+    logger.error(
+        "[GL PAINT][FALLBACK] All active shader paths failed; rendering base image only "
+        "active=%s current=%s disabled=%s use_shaders=%s last_failure=%s suppressed_previous=%d",
+        ",".join(active_names) if active_names else "<none>",
+        getattr(widget, "_current_transition_name", None),
+        bool(getattr(widget, "_gl_disabled_for_session", False)),
+        bool(getattr(widget, "_use_shaders", False)),
+        last_failure,
+        suppressed,
+    )
+
+
 def handle_paintGL(widget) -> None:  # type: ignore[override]
     _paint_start = time.time()
     _mark_widget_update_consumed(widget)
@@ -135,7 +176,8 @@ def paintGL_impl(widget) -> None:
 
     # Check if ANY transition state is active (non-None).
     # When idle (between transitions), all states are None — that's normal.
-    any_transition_active = any(state is not None for _, state, *_ in shader_paths)
+    active_names = _active_shader_names(shader_paths)
+    any_transition_active = bool(active_names)
 
     shader_success = False
     if any_transition_active:
@@ -149,7 +191,7 @@ def paintGL_impl(widget) -> None:
     if not shader_success:
         # Idle or shader failure — render base image via QPainter.
         if any_transition_active:
-            logger.error("[GL PAINT] All shader paths failed — rendering base image only")
+            _log_shader_fallback_once(widget, active_names)
         painter = QPainter(widget)
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)

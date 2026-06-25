@@ -1117,9 +1117,21 @@ def test_spectrum_gpu_push_extras_dict_is_reused(qt_app, qtbot, monkeypatch):
 class _OverlayStub:
     def __init__(self) -> None:
         self.reset_requests: list[str] = []
+        self.hidden = False
+        self.cleared = False
+        self.updated = False
 
     def request_mode_reset(self, mode: str) -> None:  # pragma: no cover - trivial
         self.reset_requests.append(mode)
+
+    def hide(self) -> None:  # pragma: no cover - trivial
+        self.hidden = True
+
+    def clear_overlay_buffer(self) -> None:  # pragma: no cover - trivial
+        self.cleared = True
+
+    def update(self) -> None:  # pragma: no cover - trivial
+        self.updated = True
 
 
 class _FakeDisplayParent(QWidget):
@@ -3452,6 +3464,8 @@ def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeyp
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
 
+    widget.start()
+    qt_app.processEvents()
     widget._engine = fake_engine
     widget.apply_vis_mode_config(
         mode="oscilloscope",
@@ -3461,8 +3475,6 @@ def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeyp
         osc_ghost_line2_enabled=True,
         osc_ghost_line3_enabled=False,
     )
-    widget.start()
-    qt_app.processEvents()
     fake_engine.publish_frame([0.55] * widget._bar_count)
     fake_engine.publish_waveform_only()
 
@@ -4198,11 +4210,16 @@ def test_widget_cycle_does_not_activate_target_before_overlay_teardown(qt_app, q
     assert widget._mode_transition_pending is VisualizerMode.OSCILLOSCOPE
     assert parent._spotify_bars_overlay is not None
 
+    overlay = parent._spotify_bars_overlay
     mode_transition.on_mode_fade_out_complete(widget)
 
     assert widget._vis_mode is VisualizerMode.OSCILLOSCOPE
     assert widget._mode_transition_pending is None
-    assert parent._spotify_bars_overlay is None
+    assert parent._spotify_bars_overlay is overlay
+    assert overlay.reset_requests[-1] == "oscilloscope"
+    assert overlay.hidden is True
+    assert overlay.cleared is True
+    assert overlay.updated is True
     assert widget._mode_teardown_block_until_ready is True
 
 

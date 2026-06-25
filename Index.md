@@ -14,7 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
 | `Docs/Contracts.md` | Short contract index that routes quickly to the canonical owner for each major subsystem seam |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
-| `audits/ArchitectureAudit/Project_Health_Audit.md` | Active project-wide runtime-health audit for compositor/startup timing, timers, settings, legacy seams, stale tests, and long-term prevention work |
+| `audits/ArchitectureAudit/Project_Health_Audit.md` | Active project-wide runtime-health audit for compositor/startup timing, timers, settings, legacy seams, stale tests, cache fallback pressure, and long-term prevention work; currently routes shared visualizer work through the reactivity lock in `Docs/Harness_Index.md` first |
 | `audits/ArchitectureAudit/README.md` | Small entrypoint that points at the active project-wide audit |
 | `audits/BubbleAudit/Bubble_End_To_End_Audit.md` | Historical Bubble audit reference for the transition-time perf collapse and loud small-lane recovery work that informed the current tighter runtime-shaped Bubble oracles |
 | `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` | Document-only audit of Bubble runtime-touching preset settings, with Deep Sea Preset 1 hypotheses and authored experiment order before more Bubble code tuning |
@@ -26,7 +26,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
 | `Docs/Logging_Guide.md` | CLI-first logging flags, sidecar files, and correlation workflow |
-| `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes |
+| `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes, including the focused current-good visualizer reactivity lock |
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
 | `Docs/00_PROJECT_OVERVIEW.md` | High-level orientation to the documentation set and main runtime areas |
 | `Docs/Custom_Style_Implementation.md` | Styling/reference guardrails for shared settings-dialog and UI chrome work |

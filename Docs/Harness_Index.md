@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-06-04
+Last updated: 2026-06-22
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -63,6 +63,29 @@ python tools/media_key_reality_harness.py --profile-mode mirrored --scenario foc
 
 ## Visualizer / Distribution / Presets
 
+### Current-good visualizer reactivity lock
+- Purpose: protect the currently accepted behavior of `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` before touching shared visualizer/audio/activation/render/transition seams.
+- Use when:
+  - editing visualizer tick/render/audio feed plumbing
+  - changing mode activation/reset/first-frame behavior
+  - changing overlay payloads or transition handoff
+  - changing shared perf paths that could alter visualizer timing
+- Typical command:
+```powershell
+python -m pytest `
+  tests/test_spotify_visualizer_widget.py::test_spectrum_organs_first_visible_frame_is_nontrivial_under_authored_phrase `
+  tests/test_spotify_visualizer_widget.py::test_mode_switch_organs_first_visible_frame_matches_fresh_activation_oracle `
+  tests/test_spotify_visualizer_widget.py::test_mode_switch_deep_sea_first_visible_frame_matches_fresh_activation_oracle `
+  tests/test_spotify_visualizer_widget.py::test_runtime_cycle_all_modes_and_settle_devcurve_matches_settings_refresh `
+  tests/test_transient_per_mode_integration.py::TestSineOscTransientWidthMix::test_sine_width_reaction_modulated `
+  tests/test_devcurve_runtime.py::test_devcurve_active_amplitude_exceeds_idle_amplitude `
+  -q --tb=short
+```
+- Notes:
+  - Bubble oracle failures that only reflect stale expected values are re-baseline work, not permission to change Bubble feel.
+  - `Oscilloscope` remains a watchlist mode; do not block unrelated health work on Osc behavior unless the task explicitly targets it.
+  - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
+
 ### Visualizer distribution harness
 - Purpose: inspect transition-random distribution or mode-selection skew over longer sessions.
 - Tool: `tools/visualizer_distribution_harness.py`
@@ -89,6 +112,17 @@ python tools/bubble_parity_harness.py --preset preset_9_deap_sea_experimental.js
   - curated preset loading behavior drifts
 
 ## Performance / Metrics
+
+### Image cache / prewarm producer contract
+- Purpose: guard the transition-adjacent image prewarm path so scaled warmups cannot orphan work, skip later preview images only because active IO slots are full, or hide fallback state from `--cache` logs.
+- Use when:
+  - editing `utils/image_prefetcher.py`
+  - editing `engine/image_pipeline.py` cache/prefetch scheduling
+  - investigating `[CACHE] [FALLBACK] Worker fallback reason=scaled_miss raw_state=raw_missing`
+- Typical command:
+```powershell
+python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q --tb=short
+```
 
 ### Widget and integration perf probes
 - Tools:

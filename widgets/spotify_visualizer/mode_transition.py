@@ -134,6 +134,12 @@ def _activate_pending_mode_after_fade_out(widget: Any, *, resume_ts: float) -> N
             apply_full(widget._vis_mode, reason="mode_fade_out_complete")
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to apply target config at fade completion", exc_info=True)
+    request_overlay_reset = getattr(widget, "_request_overlay_mode_reset", None)
+    if callable(request_overlay_reset):
+        try:
+            request_overlay_reset(mode=widget._vis_mode_str, reason="mode_fade_out_complete")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to request target overlay reset at fade completion", exc_info=True)
 
 
 def mode_transition_fade_factor(widget: Any, now_ts: float) -> float:

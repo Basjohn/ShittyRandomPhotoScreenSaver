@@ -10,6 +10,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Prune validated work aggressively. This is not a changelog.
 - Prefer automation bars over repeated runtime-verification asks.
 - Do not close visual/runtime bugs from polite unit doubles alone.
+- Before touching shared visualizer/audio/activation/render/transition seams, protect the current-good modes with the visualizer reactivity lock in `Docs/Harness_Index.md`: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must match their current accepted bars or the change stops. `Oscilloscope` remains a watchlist mode, not a priority target.
 - For visualizer geometry, treat these as separate seams until proven otherwise:
   - saved/custom rect authority
   - live widget rect authority
@@ -22,6 +23,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 ## Active Tasks
 
 - [ ] Execute the project-wide runtime health audit in [audits/ArchitectureAudit/Project_Health_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/ArchitectureAudit/Project_Health_Audit.md)
+  - [ ] Establish the visualizer reactivity lock before any shared visualizer/perf/lifecycle work
+    - [ ] Keep `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` green against the focused lock commands in [Docs/Harness_Index.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/Docs/Harness_Index.md)
+    - [ ] Treat stale Bubble oracle failures as oracle re-baseline work only; do not touch Bubble feel/reactivity unless fresh runtime evidence contradicts the accepted current behavior
+    - [ ] Re-run the same lock after any change touching visualizer audio feeds, activation reset, overlay payloads, transition handoff, or shared tick/render plumbing
   - [ ] Audit widget lifecycle ownership and add parity bars before any broad activation-path migration
   - [x] Inventory and classify production raw `QTimer.singleShot(...)` callsites as authoritative delayed work vs UI-local one-shots
   - [ ] Migrate only the risky runtime-reconcile/stabilize shots after each target has token/cancellation ownership and a regression bar
@@ -34,9 +39,24 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - reduce expensive framebuffer-grab prewarm fallbacks where safe
     - verify first-frame and transition warmup parity with stronger bars
     - document or retire viewport/DPR hacks only with proof
-  - [ ] Reconcile current Bubble oracle drift before treating the full visualizer widget suite as a reliable audit gate
-    - identify whether the failures reflect intended Preset 1/runtime contract changes or stale expected values
-    - keep authored Bubble feel/runtime bars strict; do not relax them just to get green
+    - [x] Make active shader-path fallback logs loud, bounded, and reason-bearing instead of repeating blind per-frame errors
+    - [ ] Use the next `--perf`/main log to classify RainDrops/Diffuse shader fallback as capability, texture-prep, or exception before changing render behavior
+  - [ ] Reduce image-cache/prescale fallback pressure without moving work onto the UI thread
+    - [x] Explain repeated `[CACHE] [FALLBACK] Worker fallback reason=scaled_miss raw_state=raw_missing` during real transition runs
+      - Fresh `--cache` evidence showed the old idle-pending bug was gone, but preview warmup still prepared 5 images while only the first 2 raw producers were scheduled; later preview paths were skipped and then fell back during fast transitions.
+    - [x] Investigate the newest `--cache` evidence where fallback logs show `raw_inflight:0`, `scaled_inflight:0`, and a growing `scaled_pending` queue; this pointed at scaled warmup registration during post-transition raw-prefetch cool-down
+    - [x] Add a cache/pipeline bar so transition cool-down cannot leave scaled warmup pending while no raw/scaled worker is active
+    - [x] Add a cache/pipeline bar so scaled warmup registration cannot orphan pending entries for raw paths that were never scheduled or cached
+    - [x] Include prefetcher queue/inflight state in loud `--cache` fallback diagnostics so the next run distinguishes worker starvation from missing scheduling
+    - [x] Add a bounded raw-prefetch backlog so the full preview window has raw producers without exceeding active IO concurrency
+    - [x] Add a cache bar so preview windows larger than `max_concurrent` retain queued raw producers and scaled warmups instead of silently accepting only the first active paths
+    - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
+    - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
+  - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
+    - [ ] Re-baseline Bubble oracle values against current accepted runtime feel only; do not touch Bubble reactivity or visuals for this task
+    - [x] Fix non-Bubble/test-fixture drift separately from Bubble, including Oscilloscope runtime push and tick-pipeline unit doubles
+    - [x] Keep mode-switch overlay reuse contract covered: preserved overlay must be reset/hidden/blanked and target-mode reset before fresh-frame reveal
+    - [ ] Re-run and classify the remaining full visualizer suite failures so stale Bubble expectations do not mask real non-Bubble regressions
 
 - [ ] Close the remaining visualizer CUSTOM geometry authority family without adding more mitigation churn
   - [ ] Keep `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` as the root-cause map owner

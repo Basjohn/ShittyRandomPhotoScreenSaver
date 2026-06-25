@@ -9,6 +9,7 @@ from PySide6.QtCore import QSize
 from engine.image_pipeline import (
     _build_scaled_cache_key,
     _cache_trace,
+    _describe_prefetcher_state,
     _get_cached_pixmap_variants,
     notify_transition_complete,
     schedule_prefetch,
@@ -30,6 +31,22 @@ def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):
 
     assert any(record.levelno == logging.WARNING for record in caplog.records)
     assert "[CACHE] [FALLBACK] Worker fallback reason=scaled_miss" in caplog.text
+
+
+def test_cache_fallback_diagnostics_include_prefetcher_state():
+    prefetcher = SimpleNamespace(
+        snapshot_state=lambda: {
+            "raw_inflight": 1,
+            "raw_pending": 4,
+            "scaled_inflight": 2,
+            "scaled_pending": 3,
+        }
+    )
+    engine = SimpleNamespace(_prefetcher=prefetcher)
+
+    assert _describe_prefetcher_state(engine) == (
+        "prefetch_state=raw_inflight:1,raw_pending:4,scaled_inflight:2,scaled_pending:3"
+    )
 
 
 def test_cached_pixmap_variants_prefer_scaled_variant(qt_app):
