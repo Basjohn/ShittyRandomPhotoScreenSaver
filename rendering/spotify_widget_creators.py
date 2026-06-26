@@ -70,43 +70,6 @@ def _resolve_parent_screen(parent) -> object | None:
     return None
 
 
-def _resolve_unique_visualizer_custom_entry(
-    custom_layout_map: Mapping[str, object],
-):
-    """Return the sole saved visualizer CUSTOM entry across all display buckets.
-
-    This is a topology-fallback contract only. Normal startup should still bind
-    against the live parent screen bucket. We only use this when the chosen
-    participating display cannot match a screen bucket but there is exactly one
-    saved visualizer rect in the layout map, which makes that rect the only
-    authoritative candidate instead of letting startup fall back to a default
-    square.
-    """
-
-    displays = custom_layout_map.get("displays", {})
-    if not isinstance(displays, Mapping):
-        return None
-
-    found_entry = None
-    found_bucket = None
-    for screen_signature, layouts in displays.items():
-        if not isinstance(layouts, Mapping):
-            continue
-        entry = deserialize_custom_layout_entry(
-            "spotify_visualizer",
-            layouts.get("spotify_visualizer"),
-        )
-        if entry is None:
-            continue
-        if found_entry is not None:
-            return None
-        found_entry = entry
-        found_bucket = str(screen_signature)
-    if found_entry is None:
-        return None
-    return found_bucket, found_entry
-
-
 def _prime_visualizer_custom_rect_for_startup(
     mgr: "WidgetManager",
     vis: SpotifyVisualizerWidget,
@@ -128,15 +91,11 @@ def _prime_visualizer_custom_rect_for_startup(
         screen_entries.get("spotify_visualizer"),
     )
     if entry is None:
-        fallback = _resolve_unique_visualizer_custom_entry(custom_layout_map)
-        if fallback is not None:
-            fallback_bucket, entry = fallback
-            logger.warning(
-                "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
-                "reusing sole saved rect from bucket=%s",
-                matched_signature or "unmatched",
-                fallback_bucket,
-            )
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
+            "foreign-bucket geometry priming rejected",
+            matched_signature or "unmatched",
+        )
     if entry is None:
         return None
 
@@ -169,6 +128,41 @@ def _prime_visualizer_custom_rect_for_startup(
     return QRect(local_rect)
 
 
+def _has_exact_visualizer_custom_rect_for_startup(
+    mgr: "WidgetManager",
+    widgets_config: Mapping[str, object] | None,
+) -> bool:
+    """Return whether the live parent screen owns an exact CUSTOM visualizer rect."""
+
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+        return True
+
+    screen = _resolve_parent_screen(getattr(mgr, "_parent", None))
+    if screen is None:
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Suppressing CUSTOM visualizer creation because no live screen is available"
+        )
+        return False
+
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+    entry = deserialize_custom_layout_entry(
+        "spotify_visualizer",
+        screen_entries.get("spotify_visualizer"),
+    )
+    if entry is None:
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] No saved CUSTOM visualizer rect matched live screen bucket=%s; "
+            "foreign-bucket geometry priming rejected",
+            matched_signature or "unmatched",
+        )
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
+        )
+        return False
+    return True
+
+
 def _recover_visualizer_custom_monitor_from_saved_layout(
     mgr: "WidgetManager",
     widgets_config: Mapping[str, object] | None,
@@ -177,11 +171,9 @@ def _recover_visualizer_custom_monitor_from_saved_layout(
 ) -> tuple[str, str] | None:
     """Recover a missing CUSTOM visualizer monitor from the saved screen bucket.
 
-    This is intentionally narrower than the unique-rect topology fallback used
-    for geometry priming. Owner routing is only safe to recover here when the
-    current live parent screen actually matches a saved visualizer bucket; a
-    sole saved rect without a live bucket match is enough for geometry priming
-    but not enough to let every display guess ownership for itself.
+    Owner routing is only safe to recover here when the current live parent
+    screen actually matches a saved visualizer bucket. A sole saved rect without
+    a live bucket match is not enough for owner routing or geometry priming.
     """
 
     if not isinstance(widgets_config, Mapping):
@@ -798,6 +790,12 @@ def create_spotify_visualizer_widget(
     if not (spotify_vis_enabled and show_on_this and anchor_media_widget is not None):
         return None
 
+    if custom_routing_active and not _has_exact_visualizer_custom_rect_for_startup(
+        mgr,
+        widgets_config if isinstance(widgets_config, Mapping) else None,
+    ):
+        return None
+
     try:
         try:
             bar_count = int(model.resolve_bar_count(str(model.mode)))
@@ -817,13 +815,19 @@ def create_spotify_visualizer_widget(
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to seed WidgetManager onto visualizer before startup activation", exc_info=True)
         try:
-            _prime_visualizer_custom_rect_for_startup(
+            primed_custom_rect = _prime_visualizer_custom_rect_for_startup(
                 mgr,
                 vis,
                 widgets_config if isinstance(widgets_config, Mapping) else None,
             )
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to prime committed CUSTOM visualizer rect before startup activation", exc_info=True)
+            primed_custom_rect = None
+        if custom_routing_active and primed_custom_rect is None:
+            logger.warning(
+                "[SPOTIFY_VIS][FALLBACK] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
+            )
+            return None
 
         mgr._log_spotify_vis_config(
             "create",

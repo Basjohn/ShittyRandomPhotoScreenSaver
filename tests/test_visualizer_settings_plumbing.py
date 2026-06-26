@@ -1653,7 +1653,7 @@ class TestCreateTimeRefreshParity:
             "to distort the visualizer away from its committed rect."
         )
 
-    def test_create_spotify_visualizer_widget_falls_back_to_participating_display_when_requested_monitor_is_absent(
+    def test_create_spotify_visualizer_widget_suppresses_custom_without_exact_rect_when_requested_monitor_is_absent(
         self,
         monkeypatch,
         caplog,
@@ -1767,12 +1767,12 @@ class TestCreateTimeRefreshParity:
                 media_widget=FakeMediaWidget(),
             )
 
-        assert vis is not None, (
-            "When the requested CUSTOM monitor is not participating in the active "
-            "display/compositor set, the visualizer must still spawn on a "
-            "participating display instead of disappearing off-screen."
+        assert vis is None, (
+            "A CUSTOM visualizer route without an exact saved local rect must "
+            "fail closed instead of inventing a participating-display placement."
         )
         assert "Requested CUSTOM monitor 1 is not participating" in caplog.text
+        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
         assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
     def test_create_spotify_visualizer_widget_does_not_birth_duplicate_fallback_when_requested_display_is_live_but_pending(
@@ -1908,13 +1908,13 @@ class TestCreateTimeRefreshParity:
             thread_manager=None,
             media_widget=FakeMediaWidget(),
         )
-        assert second_attempt is not None
-        assert created_on_screens == [1], (
-            "Sequential multi-display startup must create the CUSTOM visualizer only on the requested "
-            "display once that display becomes the real live owner."
+        assert second_attempt is None
+        assert created_on_screens == [], (
+            "CUSTOM visualizer startup without an exact saved local rect must not "
+            "construct a hidden/default-square widget on either display."
         )
 
-    def test_create_spotify_visualizer_widget_fallback_spawn_reuses_unique_saved_custom_rect_when_requested_monitor_is_absent(
+    def test_create_spotify_visualizer_widget_rejects_foreign_saved_custom_rect_when_requested_monitor_is_absent(
         self,
         monkeypatch,
         caplog,
@@ -2086,21 +2086,12 @@ class TestCreateTimeRefreshParity:
                 media_widget=FakeMediaWidget(),
             )
 
-        assert vis is not None
-        assert vis.geometry() == QRect(207, 310, 420, 280), (
-            "If a CUSTOM visualizer must fall back onto a participating display "
-            "because the requested monitor is absent, creator-time startup must "
-            "still recover the one authoritative saved rect instead of being born "
-            "as a dead default square in the top-left corner."
-        )
-        assert vis.minimumWidth() == 420
-        assert vis.maximumWidth() == 420
-        assert vis.minimumHeight() == 280
-        assert vis.maximumHeight() == 280
-        assert "reusing sole saved rect from bucket=screen:missing-monitor" in caplog.text
+        assert vis is None
+        assert "foreign-bucket geometry priming rejected" in caplog.text
+        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
         assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
-    def test_create_spotify_visualizer_widget_reuses_unique_saved_custom_rect_when_active_target_signature_changes(
+    def test_create_spotify_visualizer_widget_rejects_foreign_saved_custom_rect_when_active_target_signature_changes(
         self,
         monkeypatch,
         caplog,
@@ -2270,18 +2261,9 @@ class TestCreateTimeRefreshParity:
                 media_widget=FakeMediaWidget(),
             )
 
-        assert vis is not None
-        assert vis.geometry() == QRect(207, 310, 420, 280), (
-            "If the active requested CUSTOM monitor is still participating but its "
-            "screen signature no longer matches the saved bucket, startup must "
-            "still reuse the sole authoritative saved rect instead of birthing a "
-            "default square."
-        )
-        assert vis.minimumWidth() == 420
-        assert vis.maximumWidth() == 420
-        assert vis.minimumHeight() == 280
-        assert vis.maximumHeight() == 280
-        assert "reusing sole saved rect from bucket=screen:stale-signature" in caplog.text
+        assert vis is None
+        assert "foreign-bucket geometry priming rejected" in caplog.text
+        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
         assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
     def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):

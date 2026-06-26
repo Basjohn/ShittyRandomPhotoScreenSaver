@@ -195,6 +195,8 @@ class WidgetsTab(QWidget):
         self._scroll_area: Optional[QScrollArea] = None
         self._subtab_content_built: set[int] = set()
         self._subtab_content_building: set[int] = set()
+        self._hydrated_widget_sections: set[str] = set()
+        self._blocked_unhydrated_save_sections: set[str] = set()
         self._subtab_host_layouts: list[QVBoxLayout | None] = []
         self._custom_resize_lock_notice_labels: Dict[str, QLabel] = {}
         self._initialize_descriptor_default_attrs()
@@ -217,6 +219,45 @@ class WidgetsTab(QWidget):
         self._loading = False
         
         logger.debug("WidgetsTab created")
+
+    def _mark_widget_section_hydrated(self, section_id: str) -> None:
+        section = str(section_id or "").strip()
+        if not section:
+            return
+        self._hydrated_widget_sections.add(section)
+        self._blocked_unhydrated_save_sections.discard(section)
+        try:
+            logger.debug(
+                "[WIDGETS_HYDRATION] phase=load_complete section=%s hydrated=true",
+                section,
+            )
+        except Exception:
+            pass
+
+    def _can_save_widget_section(self, section_id: str) -> bool:
+        section = str(section_id or "").strip()
+        if not section:
+            return True
+        if not getattr(self, "_lazy_sections", False):
+            return True
+        return section in getattr(self, "_hydrated_widget_sections", set())
+
+    def _log_widget_hydration_blocked_save(self, section_id: str) -> None:
+        section = str(section_id or "").strip()
+        if not section:
+            return
+        blocked = getattr(self, "_blocked_unhydrated_save_sections", set())
+        if section in blocked:
+            return
+        blocked.add(section)
+        self._blocked_unhydrated_save_sections = blocked
+        try:
+            logger.warning(
+                "[WIDGETS_HYDRATION][WARNING] blocked_save_from_unhydrated_section=%s",
+                section,
+            )
+        except Exception:
+            pass
     
     def load_from_settings(self) -> None:
         """Reload all UI controls from settings manager (called after preset change)."""
@@ -765,10 +806,25 @@ class WidgetsTab(QWidget):
         try:
             previous_loading = self._loading
             self._loading = True
-            for dep_index in get_widget_lazy_dependency_indices(
+            dependency_indices = get_widget_lazy_dependency_indices(
                 subtab_id,
                 self._widget_section_descriptors,
-            ):
+            )
+            try:
+                requested_section = self._widget_section_descriptors[subtab_id].section_id
+                dependency_sections = [
+                    self._widget_section_descriptors[idx].section_id
+                    for idx in dependency_indices
+                    if 0 <= idx < len(self._widget_section_descriptors)
+                ]
+                logger.debug(
+                    "[WIDGETS_HYDRATION] phase=build_start requested=%s dependency_chain=%s",
+                    requested_section,
+                    ">".join(dependency_sections + [requested_section]),
+                )
+            except Exception:
+                pass
+            for dep_index in dependency_indices:
                 if dep_index != subtab_id:
                     self._build_lazy_subtab_content(dep_index)
 
@@ -1112,12 +1168,20 @@ class WidgetsTab(QWidget):
                 blockers.append(widget)
 
             for section_id in ordered_ids:
-                load_widget_section(
+                loaded = load_widget_section(
                     self,
                     section_id,
                     widgets,
                     self._widget_section_descriptors,
                 )
+                if not loaded:
+                    try:
+                        logger.debug(
+                            "[WIDGETS_HYDRATION] phase=load_deferred section=%s hydrated=false",
+                            section_id,
+                        )
+                    except Exception:
+                        pass
 
         finally:
             for widget in blockers:
@@ -1244,7 +1308,7 @@ class WidgetsTab(QWidget):
         """Return a live spotify_visualizer config built from current UI state.
 
         This preserves any unrelated stored keys while overlaying the current
-        widget state exactly as save_media_settings would serialize it.
+        widget state exactly as save_visualizer_settings would serialize it.
         """
         config: dict[str, Any] = {}
         if isinstance(base_config, Mapping):
@@ -1255,9 +1319,6 @@ class WidgetsTab(QWidget):
         # preserve the stored visualizer config instead of logging a misleading
         # preset/runtime failure.
         required_attrs = (
-            'media_enabled',
-            'media_position',
-            'media_font_combo',
             'vis_enabled_checkbox',
             'vis_mode_combo',
         )
@@ -1267,14 +1328,12 @@ class WidgetsTab(QWidget):
         try:
             save_result = collect_widget_section_save_result(
                 self,
-                "media",
+                "visualizers",
                 descriptors=self._widget_section_descriptors,
             )
-            if not isinstance(save_result, tuple) or len(save_result) < 2:
+            if not isinstance(save_result, dict):
                 return config
-            _, live_visualizer = save_result
-            if isinstance(live_visualizer, dict):
-                config.update(deepcopy(live_visualizer))
+            config.update(deepcopy(save_result))
         except Exception:
             logger.debug("[WIDGETS_TAB] Failed to build live visualizer config", exc_info=True)
 
@@ -1569,6 +1628,15 @@ class WidgetsTab(QWidget):
 
         try:
             logger.debug("[WIDGETS_TAB] _save_settings_now start")
+            logger.debug(
+                "[WIDGETS_HYDRATION] phase=save_start built_sections=%s hydrated_sections=%s",
+                sorted(
+                    self._widget_section_descriptors[idx].section_id
+                    for idx in getattr(self, "_subtab_content_built", set())
+                    if 0 <= idx < len(self._widget_section_descriptors)
+                ),
+                sorted(getattr(self, "_hydrated_widget_sections", set())),
+            )
         except Exception as e:
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
@@ -1637,6 +1705,18 @@ class WidgetsTab(QWidget):
             logger.debug("[WIDGETS_TAB] Exception suppressed: %s", e)
 
         sync_custom_layout_restore_routes(existing_widgets)
+        try:
+            logger.debug(
+                "[WIDGETS_HYDRATION] phase=save_commit hydrated_sections=%s media_enabled=%s "
+                "visualizer_enabled=%s visualizer_mode=%s visualizer_preset=%s",
+                sorted(getattr(self, "_hydrated_widget_sections", set())),
+                existing_widgets.get("media", {}).get("enabled") if isinstance(existing_widgets.get("media"), dict) else None,
+                spotify_vis_config.get("enabled"),
+                current_vis_mode,
+                current_preset_index,
+            )
+        except Exception:
+            pass
         self._settings.set('widgets', existing_widgets)
         self._settings.save()
         self._refresh_custom_resize_lock_state()
@@ -1748,7 +1828,7 @@ class WidgetsTab(QWidget):
                     full_widgets['spotify_visualizer'] = dict(spotify_vis_config)
                     load_widget_section(
                         self,
-                        "media",
+                        "visualizers",
                         full_widgets,
                         descriptors=self._widget_section_descriptors,
                     )
@@ -1793,7 +1873,7 @@ class WidgetsTab(QWidget):
             try:
                 load_widget_section(
                     self,
-                    "media",
+                    "visualizers",
                     full_widgets,
                     descriptors=self._widget_section_descriptors,
                 )

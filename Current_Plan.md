@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-22
+Last updated: 2026-06-26
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -42,14 +42,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Make active shader-path fallback logs loud, bounded, and reason-bearing instead of repeating blind per-frame errors
     - [ ] Use the next `--perf`/main log to classify RainDrops/Diffuse shader fallback as capability, texture-prep, or exception before changing render behavior
   - [ ] Reduce image-cache/prescale fallback pressure without moving work onto the UI thread
-    - [x] Explain repeated `[CACHE] [FALLBACK] Worker fallback reason=scaled_miss raw_state=raw_missing` during real transition runs
-      - Fresh `--cache` evidence showed the old idle-pending bug was gone, but preview warmup still prepared 5 images while only the first 2 raw producers were scheduled; later preview paths were skipped and then fell back during fast transitions.
-    - [x] Investigate the newest `--cache` evidence where fallback logs show `raw_inflight:0`, `scaled_inflight:0`, and a growing `scaled_pending` queue; this pointed at scaled warmup registration during post-transition raw-prefetch cool-down
-    - [x] Add a cache/pipeline bar so transition cool-down cannot leave scaled warmup pending while no raw/scaled worker is active
-    - [x] Add a cache/pipeline bar so scaled warmup registration cannot orphan pending entries for raw paths that were never scheduled or cached
-    - [x] Include prefetcher queue/inflight state in loud `--cache` fallback diagnostics so the next run distinguishes worker starvation from missing scheduling
-    - [x] Add a bounded raw-prefetch backlog so the full preview window has raw producers without exceeding active IO concurrency
-    - [x] Add a cache bar so preview windows larger than `max_concurrent` retain queued raw producers and scaled warmups instead of silently accepting only the first active paths
+    - [x] Runtime-validate the bounded raw-prefetch backlog: latest `--cache` logs show full preview coverage (`active=2 pending=3`, scaled `request_count=5 prepared=5`) instead of the old first-two-only skip.
+    - [ ] If cache fallbacks remain after media-loader work, investigate paths that miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`) rather than reopening the solved raw-backlog bug.
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
   - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
@@ -63,6 +57,14 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Enumerate every post-replay writer that can still touch visualizer live rect or overlay rect after committed CUSTOM authority should have won
   - [ ] Keep fallback/recovery layers temporary and loud; do not add another self-heal layer before the owner map is narrower
   - [ ] Strengthen the bars so `replay_final` green but runtime-wrong still fails decisively
+
+- [ ] Runtime-validate the Media/Visualizer loader fix from [Docs/Media_Loader_Fix_Plan.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/Docs/Media_Loader_Fix_Plan.md)
+  - [x] Split Media and Visualizer settings load/save ownership so each lazy section serializes only its own hydrated controls
+  - [x] Preserve existing settings for unhydrated lazy sections and log blocked writes loudly as `[WIDGETS_HYDRATION][WARNING]`
+  - [x] Reject foreign-bucket CUSTOM visualizer rectangles and suppress Custom creation when no exact local rect exists
+  - [x] Add default-on Media edit-shell `Reset Visualizer` recovery that creates/restores an editable visualizer shell rect without clearing Custom authority, saving settings, leaving edit mode, or forcing a runtime reload
+  - [x] Cover the fix with focused WidgetsTab hydration, custom-bucket authority, remote reconcile, and reset-action bars, including no-live-widget transparent-shell recovery
+  - [ ] Run one manual `--set --life --geo --viz` sequence opening Widgets -> Visualizers first, then closing settings, to confirm Media stays enabled and visualizer state remains stable in the real app
 
 ## Watchlist
 

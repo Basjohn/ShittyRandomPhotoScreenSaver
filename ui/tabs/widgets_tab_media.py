@@ -728,7 +728,6 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     widgets = widgets or {}
 
     media_config = widgets.get('media', {}) if isinstance(widgets, dict) else {}
-    spotify_vis_config = widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
     tab.media_enabled.setChecked(tab._config_bool('media', media_config, 'enabled', True))
 
     # Provider (spotify / musicbee)
@@ -802,7 +801,25 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
         tab.media_monitor_combo.setCurrentIndex(midx)
 
     _update_media_bg_visibility(tab)
+    _update_media_enabled_visibility(tab)
 
+
+def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
+    """Load Spotify visualizer settings from the widgets config dict."""
+
+    def _apply_color_to_button(btn_attr: str, color_attr: str) -> None:
+        btn = getattr(tab, btn_attr, None)
+        color = getattr(tab, color_attr, None)
+        if btn is not None and color is not None and hasattr(btn, "set_color"):
+            try:
+                btn.set_color(color)
+            except Exception:
+                logger.debug(
+                    "[MEDIA_TAB] Failed to sync %s with %s", btn_attr, color_attr, exc_info=True
+                )
+
+    widgets = widgets or {}
+    spotify_vis_config = widgets.get('spotify_visualizer', {}) if isinstance(widgets, dict) else {}
     tab.vis_enabled_checkbox.setChecked(
         tab._config_bool('spotify_visualizer', spotify_vis_config, 'enabled', True)
     )
@@ -889,12 +906,12 @@ def load_media_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
 
     load_visualizer_preset_indices(tab, spotify_vis_config)
 
-    _update_media_enabled_visibility(tab)
     _update_spotify_vis_enabled_visibility(tab)
+    _update_visualizers_enabled_visibility(tab)
 
 
-def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
-    """Return (media_config, spotify_vis_config) from current UI state."""
+def save_media_settings(tab: WidgetsTab) -> dict:
+    """Return media_config from current UI state."""
     _provider_combo = getattr(tab, 'media_provider_combo', None)
     _provider_val = _provider_combo.currentData() if _provider_combo is not None else "spotify"
     media_config = {
@@ -929,6 +946,11 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
     mmon_text = tab.media_monitor_combo.currentText()
     media_config['monitor'] = mmon_text if mmon_text == 'ALL' else int(mmon_text)
 
+    return media_config
+
+
+def save_visualizer_settings(tab: WidgetsTab) -> dict:
+    """Return spotify_visualizer config from current UI state."""
     current_mode = collect_visualizer_mode_selection(tab)
     spotify_vis_config = {
         'visualizers_enabled': tab.visualizers_enabled.isChecked() if hasattr(tab, 'visualizers_enabled') else True,
@@ -980,6 +1002,6 @@ def save_media_settings(tab: WidgetsTab) -> tuple[dict, dict]:
 
     collect_visualizer_preset_indices(tab, spotify_vis_config)
 
-    return media_config, spotify_vis_config
+    return spotify_vis_config
 
 

@@ -1120,7 +1120,7 @@ def test_reconcile_remote_custom_visualizer_falls_back_after_delayed_recheck_whe
     assert "still not participating after" in caplog.text
 
 
-def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_rect_when_requested_target_is_absent(monkeypatch, caplog):
+def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requested_target_is_absent(monkeypatch, caplog):
     import logging
 
     from PySide6.QtCore import QRect
@@ -1260,28 +1260,13 @@ def test_reconcile_remote_custom_visualizer_fallback_spawn_reuses_unique_saved_r
         )
 
     vis = source_display.spotify_visualizer_widget
-    assert vis is not None, (
-        "Remote CUSTOM reconcile should still create the visualizer on a "
-        "participating display when the requested target monitor is absent."
-    )
-    assert vis.geometry() == QRect(207, 310, 420, 280), (
-        "A remote CUSTOM reconcile fallback must reuse the sole authoritative "
-        "saved visualizer rect instead of birthing a dead default square when "
-        "the requested monitor bucket is unavailable."
-    )
-    assert vis.minimumWidth() == 420
-    assert vis.maximumWidth() == 420
-    assert vis.minimumHeight() == 280
-    assert vis.maximumHeight() == 280
-    assert QRect(0, 0, 357, 357) not in vis.geometry_history[1:], (
-        "Once fallback reconcile chooses a participating owner, startup must "
-        "not leave the live visualizer on its default square shape."
-    )
-    assert "reusing sole saved rect from bucket=screen:missing-monitor" in caplog.text
+    assert vis is None
+    assert "foreign-bucket geometry priming rejected" in caplog.text
+    assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
-def test_reconcile_remote_custom_visualizer_reuses_unique_saved_rect_when_active_target_signature_changes(monkeypatch, caplog):
+def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_active_target_signature_changes(monkeypatch, caplog):
     import logging
 
     from PySide6.QtCore import QRect
@@ -1422,18 +1407,9 @@ def test_reconcile_remote_custom_visualizer_reuses_unique_saved_rect_when_active
         )
 
     vis = target_display.spotify_visualizer_widget
-    assert vis is not None
-    assert vis.geometry() == QRect(207, 310, 420, 280), (
-        "If the active requested CUSTOM target still participates but its screen "
-        "signature changed, remote reconcile must still recover the sole saved "
-        "visualizer rect instead of birthing fallback square geometry."
-    )
-    assert vis.minimumWidth() == 420
-    assert vis.maximumWidth() == 420
-    assert vis.minimumHeight() == 280
-    assert vis.maximumHeight() == 280
-    assert QRect(0, 0, 357, 357) not in vis.geometry_history[1:]
-    assert "reusing sole saved rect from bucket=screen:stale-signature" in caplog.text
+    assert vis is None
+    assert "foreign-bucket geometry priming rejected" in caplog.text
+    assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 

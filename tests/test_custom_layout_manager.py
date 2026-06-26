@@ -1026,6 +1026,154 @@ def test_custom_layout_manager_volume_save_does_not_clobber_media_monitor_route(
     assert widgets_map["media"]["monitor"] == "2"
 
 
+def test_custom_layout_manager_media_shell_reset_visualizer_recovers_edit_rect_without_committing(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("reset-vis-screen", QRect(0, 0, 800, 600))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
+        "spotify_visualizer": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+            "mode": "bubble",
+            "preset_bubble": 3,
+            "bubble_big_count": 7,
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                get_screen_signature(screen): {
+                    "media": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                        "size_payload": {"font_size": 22, "artwork_size": 220},
+                        "resize_mode": "media_scale",
+                    },
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.2, "y": 0.1, "width": 0.4, "height": 0.2},
+                        "size_payload": {"width": 420, "height": 180},
+                        "resize_mode": "visualizer_rect",
+                    },
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+    media = _EditableTestWidget(display, font_size=22)
+    visualizer = _VisualizerLikeTestWidget(display)
+    setattr(visualizer, "_custom_layout_local_rect", QRect(160, 60, 320, 120))
+    display.media_widget = media
+    display.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(media)
+    qtbot.addWidget(visualizer)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    media_shell = manager._shell_states["media"].shell
+    assert media_shell._reset_visualizer_btn.isVisible() is True
+    assert media_shell._reset_visualizer_btn.isEnabled() is True
+
+    assert manager._reset_visualizer_from_media_shell() is True
+
+    assert manager.is_active() is True
+    assert settings_stub.saved is False
+    assert display._runtime_reload_requests == 0
+
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["media"]["position"] == "Bottom Left"
+    assert widgets_map["spotify_visualizer"]["position"] == "Custom"
+    assert widgets_map["spotify_visualizer"]["monitor"] == "1"
+    assert widgets_map["spotify_visualizer"]["mode"] == "bubble"
+    assert widgets_map["spotify_visualizer"]["preset_bubble"] == 3
+    assert widgets_map["spotify_visualizer"]["bubble_big_count"] == 7
+    saved_layout = widgets_map["custom_layout"]["displays"][get_screen_signature(screen)]
+    assert "media" in saved_layout
+    assert "spotify_visualizer" in saved_layout
+    assert hasattr(visualizer, "_custom_layout_local_rect")
+
+    state = manager._shell_states["spotify_visualizer"]
+    assert state.removed is False
+    assert state.shell.isVisible() is True
+    local_rect = QRect(display.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
+    assert local_rect == QRect(160, 60, 320, 120)
+    assert state.current_size_payload == {"width": 320, "height": 120}
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["spotify_visualizer"]["position"] == "Custom"
+    assert widgets_map["spotify_visualizer"]["monitor"] == "1"
+    saved_layout = widgets_map["custom_layout"]["displays"][get_screen_signature(screen)]
+    assert "spotify_visualizer" in saved_layout
+    assert settings_stub.saved is True
+    assert display._runtime_reload_requests == 1
+
+
+def test_custom_layout_manager_media_shell_reset_visualizer_creates_transparent_shell_without_live_widget(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("reset-vis-placeholder-screen", QRect(0, 0, 800, 600))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
+        "spotify_visualizer": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+            "mode": "spectrum",
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                get_screen_signature(screen): {
+                    "media": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.2},
+                        "size_payload": {"font_size": 22, "artwork_size": 220},
+                        "resize_mode": "media_scale",
+                    },
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.25, "y": 0.15, "width": 0.5, "height": 0.25},
+                        "size_payload": {"width": 400, "height": 150},
+                        "resize_mode": "visualizer_rect",
+                    },
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+    media = _EditableTestWidget(display, font_size=22)
+    display.media_widget = media
+    display.spotify_visualizer_widget = None
+    qtbot.addWidget(media)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    assert "spotify_visualizer" not in manager._shell_states
+
+    assert manager._reset_visualizer_from_media_shell() is True
+
+    assert manager.is_active() is True
+    assert settings_stub.saved is False
+    assert display._runtime_reload_requests == 0
+    state = manager._shell_states["spotify_visualizer"]
+    assert getattr(state.widget, "_custom_layout_recovery_placeholder", False) is True
+    assert state.shell.isVisible() is True
+    local_rect = QRect(display.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
+    assert local_rect == QRect(200, 90, 400, 150)
+
+    assert manager.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["spotify_visualizer"]["position"] == "Custom"
+    assert widgets_map["spotify_visualizer"]["monitor"] == "1"
+    saved_layout = widgets_map["custom_layout"]["displays"][get_screen_signature(screen)]
+    assert "spotify_visualizer" in saved_layout
+    assert display._runtime_reload_requests == 1
+
+
 def test_custom_layout_manager_duplicate_all_shell_can_be_removed_to_single_display(qtbot, monkeypatch):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()

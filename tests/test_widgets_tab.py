@@ -105,7 +105,7 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
-    def test_lazy_widgets_tab_media_restore_builds_visualizer_dependency_first(self, qt_app, settings_manager):
+    def test_lazy_widgets_tab_media_restore_hydrates_media_only(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Bottom Left", "monitor": "ALL"},
             "spotify_visualizer": {"enabled": True, "mode": "bubble"},
@@ -120,14 +120,14 @@ class TestWidgetsTab:
         )
         try:
             assert hasattr(tab, "media_enabled")
-            assert hasattr(tab, "vis_enabled_checkbox")
+            assert not hasattr(tab, "vis_enabled_checkbox")
             assert tab.media_enabled.isChecked() is True
             assert tab.media_position.currentText() == "Bottom Left"
             assert tab.media_monitor_combo.currentText() == "ALL"
         finally:
             tab.deleteLater()
 
-    def test_lazy_widgets_tab_visualizers_restore_builds_media_dependency_first(self, qt_app, settings_manager):
+    def test_lazy_widgets_tab_visualizers_restore_hydrates_visualizers_only(self, qt_app, settings_manager):
         settings_manager.set("widgets", {
             "media": {"enabled": True, "position": "Bottom Right", "monitor": "ALL"},
             "spotify_visualizer": {
@@ -145,10 +145,8 @@ class TestWidgetsTab:
             initial_view_state={"subtab_id": "visualizers"},
         )
         try:
-            assert hasattr(tab, "media_enabled")
+            assert not hasattr(tab, "media_enabled")
             assert hasattr(tab, "vis_enabled_checkbox")
-            assert tab.media_enabled.isChecked() is True
-            assert tab.media_position.currentText() == "Bottom Right"
             assert tab.vis_enabled_checkbox.isChecked() is False
             assert tab.vis_mode_combo.currentData() == "devcurve"
         finally:
@@ -260,7 +258,93 @@ class TestWidgetsTab:
             qt_app.processEvents()
 
             assert broad_calls == []
-            assert scoped_calls == ["visualizers", "media"]
+            assert scoped_calls == ["media"]
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_widgets_tab_visualizers_first_save_preserves_media_config(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        settings_manager.set("widgets", {
+            "media": {
+                "enabled": True,
+                "position": "Bottom Right",
+                "monitor": "ALL",
+                "font_size": 27,
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "visualizers_enabled": True,
+                "mode": "spectrum",
+                "preset_spectrum": 2,
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "visualizers"},
+        )
+        try:
+            assert hasattr(tab, "vis_enabled_checkbox")
+            assert not hasattr(tab, "media_enabled")
+            tab.vis_enabled_checkbox.setChecked(False)
+            tab._save_settings_now()
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg.get("spotify_visualizer", {}).get("enabled") is False
+            assert widgets_cfg.get("media", {}).get("enabled") is True
+            assert widgets_cfg.get("media", {}).get("position") == "Bottom Right"
+            assert widgets_cfg.get("media", {}).get("font_size") == 27
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_widgets_tab_media_first_save_preserves_visualizer_config(
+        self,
+        qt_app,
+        settings_manager,
+    ):
+        settings_manager.set("widgets", {
+            "media": {
+                "enabled": True,
+                "position": "Bottom Left",
+                "monitor": "ALL",
+            },
+            "spotify_visualizer": {
+                "enabled": True,
+                "visualizers_enabled": True,
+                "mode": "bubble",
+                "preset_bubble": 3,
+                "bubble_big_count": 7,
+                "bubble_small_count": 38,
+            },
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "media"},
+        )
+        try:
+            assert hasattr(tab, "media_enabled")
+            assert not hasattr(tab, "vis_enabled_checkbox")
+            tab.media_enabled.setChecked(False)
+            tab._save_settings_now()
+
+            widgets_cfg = settings_manager.get("widgets", {})
+            assert widgets_cfg.get("media", {}).get("enabled") is False
+            vis_cfg = widgets_cfg.get("spotify_visualizer", {})
+            assert vis_cfg.get("enabled") is True
+            assert vis_cfg.get("mode") == "bubble"
+            assert vis_cfg.get("preset_bubble") == 3
+            assert vis_cfg.get("bubble_big_count") == 7
+            assert vis_cfg.get("bubble_small_count") == 38
         finally:
             tab.deleteLater()
 

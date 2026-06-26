@@ -25,6 +25,7 @@ class EditShellWidget(QWidget):
     resize_drag_finished = Signal(str, str, QRect, QPoint)
     reset_size_requested = Signal(str)
     reset_position_requested = Signal(str)
+    reset_visualizer_requested = Signal(str)
     remove_requested = Signal(str)
     context_menu_requested = Signal(QPoint)
 
@@ -91,17 +92,22 @@ class EditShellWidget(QWidget):
             """
         self._reset_position_btn = QPushButton("Reset Position", self)
         self._reset_size_btn = QPushButton("Reset Size", self)
+        self._reset_visualizer_btn = QPushButton("Reset Visualizer", self)
         self._remove_btn = QPushButton("×", self)
         self._reset_size_btn.clicked.connect(self._on_reset_size_clicked)
         self._reset_position_btn.clicked.connect(self._on_reset_position_clicked)
+        self._reset_visualizer_btn.clicked.connect(self._on_reset_visualizer_clicked)
         self._remove_btn.clicked.connect(self._on_remove_clicked)
         self._reset_size_btn.installEventFilter(self)
         self._reset_position_btn.installEventFilter(self)
+        self._reset_visualizer_btn.installEventFilter(self)
         self._remove_btn.installEventFilter(self)
         self._reset_size_btn.setStyleSheet(button_stylesheet)
         self._reset_position_btn.setStyleSheet(button_stylesheet)
+        self._reset_visualizer_btn.setStyleSheet(button_stylesheet)
         self._reset_size_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reset_position_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._reset_visualizer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._remove_btn.setStyleSheet(
             """
             QPushButton {
@@ -127,6 +133,8 @@ class EditShellWidget(QWidget):
         self._remove_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._reset_size_btn.setEnabled(False)
         self._reset_position_btn.setEnabled(False)
+        self._reset_visualizer_btn.hide()
+        self._reset_visualizer_btn.setEnabled(False)
         self._remove_btn.hide()
         self._remove_btn.setEnabled(False)
 
@@ -144,8 +152,9 @@ class EditShellWidget(QWidget):
     def eventFilter(self, watched, event):  # type: ignore[override]
         reset_size_btn = getattr(self, "_reset_size_btn", None)
         reset_position_btn = getattr(self, "_reset_position_btn", None)
+        reset_visualizer_btn = getattr(self, "_reset_visualizer_btn", None)
         remove_btn = getattr(self, "_remove_btn", None)
-        if watched in (reset_size_btn, reset_position_btn, remove_btn):
+        if watched in (reset_size_btn, reset_position_btn, reset_visualizer_btn, remove_btn):
             if event.type() == QEvent.Type.MouseButtonPress:
                 if isinstance(watched, QPushButton) and watched.isEnabled():
                     self._pressed_button = watched
@@ -158,6 +167,8 @@ class EditShellWidget(QWidget):
                     self._on_reset_size_clicked()
                 elif pressed is self._reset_position_btn and self._reset_position_btn.isEnabled():
                     self._on_reset_position_clicked()
+                elif pressed is self._reset_visualizer_btn and self._reset_visualizer_btn.isEnabled():
+                    self._on_reset_visualizer_clicked()
                 elif pressed is self._remove_btn and self._remove_btn.isEnabled():
                     self._on_remove_clicked()
                 event.accept()
@@ -236,22 +247,41 @@ class EditShellWidget(QWidget):
         if visible:
             self._remove_btn.raise_()
 
+    def set_reset_visualizer_enabled(self, enabled: bool) -> None:
+        visible = bool(enabled)
+        self._reset_visualizer_btn.setVisible(visible)
+        self._reset_visualizer_btn.setEnabled(visible)
+        self._reposition_reset_button()
+        if visible:
+            self._reset_visualizer_btn.raise_()
+
     def _reposition_reset_button(self) -> None:
         size_hint = self._reset_size_btn.sizeHint()
         pos_hint = self._reset_position_btn.sizeHint()
+        vis_hint = self._reset_visualizer_btn.sizeHint()
         remove_size = self._remove_btn.sizeHint()
         self._reset_size_btn.resize(size_hint)
         self._reset_position_btn.resize(pos_hint)
+        self._reset_visualizer_btn.resize(vis_hint)
         self._remove_btn.resize(max(22, remove_size.width()), max(22, remove_size.height()))
         spacing = 8
-        total_width = size_hint.width() + pos_hint.width() + spacing
+        button_widths = [size_hint.width(), pos_hint.width()]
+        if self._reset_visualizer_btn.isVisible():
+            button_widths.append(vis_hint.width())
+        total_width = sum(button_widths) + spacing * (len(button_widths) - 1)
         start_x = max(6, int((self.width() - total_width) / 2))
         y = max(6, self.height() - max(size_hint.height(), pos_hint.height()) - 10)
-        self._reset_size_btn.move(start_x, y)
-        self._reset_position_btn.move(start_x + size_hint.width() + spacing, y)
+        x = start_x
+        self._reset_size_btn.move(x, y)
+        x += size_hint.width() + spacing
+        self._reset_position_btn.move(x, y)
+        x += pos_hint.width() + spacing
+        self._reset_visualizer_btn.move(x, y)
         self._remove_btn.move(max(6, self.width() - self._remove_btn.width() - 8), 8)
         self._reset_size_btn.raise_()
         self._reset_position_btn.raise_()
+        if self._reset_visualizer_btn.isVisible():
+            self._reset_visualizer_btn.raise_()
         if self._remove_btn.isVisible():
             self._remove_btn.raise_()
 
@@ -260,6 +290,9 @@ class EditShellWidget(QWidget):
 
     def _on_reset_position_clicked(self) -> None:
         self.reset_position_requested.emit(self.widget_id)
+
+    def _on_reset_visualizer_clicked(self) -> None:
+        self.reset_visualizer_requested.emit(self.widget_id)
 
     def _on_remove_clicked(self) -> None:
         self.remove_requested.emit(self.widget_id)
@@ -307,6 +340,8 @@ class EditShellWidget(QWidget):
             return Qt.CursorShape.PointingHandCursor
         if self._reset_position_btn.geometry().contains(local_pos):
             return Qt.CursorShape.PointingHandCursor
+        if self._reset_visualizer_btn.isVisible() and self._reset_visualizer_btn.geometry().contains(local_pos):
+            return Qt.CursorShape.PointingHandCursor
         if self._remove_btn.isVisible() and self._remove_btn.geometry().contains(local_pos):
             return Qt.CursorShape.PointingHandCursor
         resize_cursor = self._resize_corner_cursor_for_pos(local_pos)
@@ -343,6 +378,7 @@ class EditShellWidget(QWidget):
         if (
             self._reset_size_btn.geometry().contains(local_pos)
             or self._reset_position_btn.geometry().contains(local_pos)
+            or self._reset_visualizer_btn.geometry().contains(local_pos)
             or self._remove_btn.geometry().contains(local_pos)
         ):
             event.accept()
@@ -409,6 +445,7 @@ class EditShellWidget(QWidget):
         if (
             self._reset_size_btn.geometry().contains(local_pos)
             or self._reset_position_btn.geometry().contains(local_pos)
+            or self._reset_visualizer_btn.geometry().contains(local_pos)
             or self._remove_btn.geometry().contains(local_pos)
         ):
             self._pressed_button = None

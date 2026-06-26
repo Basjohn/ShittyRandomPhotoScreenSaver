@@ -396,20 +396,19 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         builder_name="build_media_ui",
         loader_module="ui.tabs.widgets_tab_media",
         loader_name="load_media_settings",
-        loader_guard_attrs=("media_enabled", "vis_enabled_checkbox"),
+        loader_guard_attrs=("media_enabled",),
         saver_module="ui.tabs.widgets_tab_media",
         saver_name="save_media_settings",
-        saver_guard_attrs=("media_enabled", "vis_enabled_checkbox"),
-        persisted_widget_keys=("media", "spotify_visualizer"),
+        saver_guard_attrs=("media_enabled",),
+        persisted_widget_keys=("media",),
         signal_block_attrs=(
             "media_enabled", "media_position", "media_monitor_combo",
             "media_font_combo", "media_font_size", "media_margin",
             "media_show_background", "media_bg_opacity", "media_border_opacity",
             "media_artwork_size", "media_rounded_artwork",
             "media_show_header_frame", "media_show_controls",
-            "media_spotify_volume_enabled",
+            "media_spotify_volume_enabled", "media_mute_button_enabled",
         ),
-        lazy_dependency_section_ids=("visualizers",),
         programmatic_dependency_section_ids=("visualizers", "defaults"),
     ),
     WidgetSettingsSectionDescriptor(
@@ -419,6 +418,13 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         container_attr_name="_visualizers_container",
         builder_module="ui.tabs.widgets_tab_media",
         builder_name="build_visualizers_ui",
+        loader_module="ui.tabs.widgets_tab_media",
+        loader_name="load_visualizer_settings",
+        loader_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox", "vis_mode_combo"),
+        saver_module="ui.tabs.widgets_tab_media",
+        saver_name="save_visualizer_settings",
+        saver_guard_attrs=("visualizers_enabled", "vis_enabled_checkbox", "vis_mode_combo"),
+        persisted_widget_keys=("spotify_visualizer",),
         signal_block_attrs=(
             "visualizers_enabled", "vis_enabled_checkbox",
             "vis_border_opacity", "vis_ghost_enabled",
@@ -436,8 +442,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "devcurve_layer_mids_enabled", "devcurve_layer_mids_alpha", "devcurve_layer_mids_offset",
             "devcurve_layer_transients_enabled", "devcurve_layer_transients_alpha", "devcurve_layer_transients_offset",
         ),
-        lazy_dependency_section_ids=("media",),
-        programmatic_dependency_section_ids=("media", "defaults"),
+        programmatic_dependency_section_ids=("defaults",),
     ),
     WidgetSettingsSectionDescriptor(
         section_id="reddit",
@@ -967,6 +972,9 @@ def load_widget_sections(
         if loader is None:
             continue
         loader(owner, widgets_config)
+        marker = getattr(owner, "_mark_widget_section_hydrated", None)
+        if callable(marker):
+            marker(descriptor.section_id)
 
 
 def load_widget_section(
@@ -984,6 +992,9 @@ def load_widget_section(
     if loader is None:
         return False
     loader(owner, widgets_config)
+    marker = getattr(owner, "_mark_widget_section_hydrated", None)
+    if callable(marker):
+        marker(descriptor.section_id)
     return True
 
 
@@ -1002,7 +1013,12 @@ def collect_widget_section_save_results(
         if not keys:
             continue
 
-        if descriptor.can_save_for_owner(owner):
+        hydration_checker = getattr(owner, "_can_save_widget_section", None)
+        hydration_safe = True
+        if callable(hydration_checker):
+            hydration_safe = bool(hydration_checker(descriptor.section_id))
+
+        if hydration_safe and descriptor.can_save_for_owner(owner):
             saver = descriptor.resolve_saver()
             if saver is None:
                 continue
@@ -1017,6 +1033,11 @@ def collect_widget_section_save_results(
                 for key_name, value in zip(keys, result):
                     results[key_name] = value
             continue
+
+        if not hydration_safe:
+            blocked_logger = getattr(owner, "_log_widget_hydration_blocked_save", None)
+            if callable(blocked_logger):
+                blocked_logger(descriptor.section_id)
 
         for key_name in keys:
             existing_value = existing_widgets.get(key_name, {})

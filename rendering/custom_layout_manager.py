@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from PySide6.QtCore import QPoint, QRect, QSize, QObject, QEvent, Qt
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QPixmap, QKeyEvent
+from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.threading.manager import ThreadManager
@@ -891,6 +892,12 @@ class CustomLayoutManager:
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to destroy edit shell", exc_info=True)
             self._set_shell_session_flag(state.widget, False)
+            if getattr(state.widget, "_custom_layout_recovery_placeholder", False):
+                try:
+                    state.widget.deleteLater()
+                except Exception:
+                    logger.debug("[CUSTOM_LAYOUT] Failed to destroy recovery placeholder", exc_info=True)
+                continue
             if restore_live_visibility and state.was_visible:
                 try:
                     state.widget.show()
@@ -1144,19 +1151,7 @@ class CustomLayoutManager:
             ),
             parent=self._display,
         )
-        shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
-        shell.drag_finished.connect(self._on_shell_drag_finished)
-        shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
-        shell.resize_drag_started.connect(self._on_shell_resize_drag_started)
-        shell.resize_drag_live_changed.connect(self._on_shell_resize_drag_live_changed)
-        shell.resize_drag_finished.connect(self._on_shell_resize_drag_finished)
-        shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
-        shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
-        shell.remove_requested.connect(self._on_shell_remove_requested)
-        shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
-        shell.set_reset_size_enabled(False)
-        shell.set_reset_position_enabled(False)
-        shell.set_remove_enabled(False)
+        self._connect_shell_signals(shell)
         self._log_geo_audit(
             descriptor.widget_id,
             "edit_shell_create",
@@ -1170,7 +1165,7 @@ class CustomLayoutManager:
                 f"had_prior_custom={str(isinstance(prior_custom_rect, QRect)).lower()}"
             ),
         )
-        return _ShellState(
+        state = _ShellState(
             descriptor=descriptor,
             widget=widget,
             shell=shell,
@@ -1188,6 +1183,25 @@ class CustomLayoutManager:
             current_monitor_value=current_monitor_value,
             last_drag_axis="both",
         )
+        self._update_shell_reset_affordances(state)
+        return state
+
+    def _connect_shell_signals(self, shell: EditShellWidget) -> None:
+        shell.geometry_live_changed.connect(self._on_shell_geometry_live_changed)
+        shell.drag_finished.connect(self._on_shell_drag_finished)
+        shell.resize_wheel_requested.connect(self._on_shell_resize_wheel_requested)
+        shell.resize_drag_started.connect(self._on_shell_resize_drag_started)
+        shell.resize_drag_live_changed.connect(self._on_shell_resize_drag_live_changed)
+        shell.resize_drag_finished.connect(self._on_shell_resize_drag_finished)
+        shell.reset_size_requested.connect(self._on_shell_reset_size_requested)
+        shell.reset_position_requested.connect(self._on_shell_reset_position_requested)
+        shell.reset_visualizer_requested.connect(self._on_shell_reset_visualizer_requested)
+        shell.remove_requested.connect(self._on_shell_remove_requested)
+        shell.context_menu_requested.connect(self._on_shell_context_menu_requested)
+        shell.set_reset_size_enabled(False)
+        shell.set_reset_position_enabled(False)
+        shell.set_reset_visualizer_enabled(False)
+        shell.set_remove_enabled(False)
 
     def _capture_visualizer_shell_snapshot(
         self,
@@ -1621,6 +1635,11 @@ class CustomLayoutManager:
         self._set_shell_geometry_silently(state, reset_rect)
         self._update_shell_reset_affordances(state)
 
+    def _on_shell_reset_visualizer_requested(self, widget_id: str) -> None:
+        if widget_id != "media":
+            return
+        self._reset_visualizer_from_media_shell()
+
     def _on_shell_remove_requested(self, widget_id: str) -> None:
         state = self._shell_states.get(widget_id)
         if state is None or state.removed:
@@ -1666,6 +1685,7 @@ class CustomLayoutManager:
         if state.removed:
             state.shell.set_reset_size_enabled(False)
             state.shell.set_reset_position_enabled(False)
+            state.shell.set_reset_visualizer_enabled(False)
             state.shell.set_remove_enabled(False)
             return
         size_changed = abs(state.resize_scale - 1.0) > 1e-6
@@ -1675,6 +1695,10 @@ class CustomLayoutManager:
         )
         state.shell.set_reset_size_enabled(size_changed)
         state.shell.set_reset_position_enabled(position_changed)
+        state.shell.set_reset_visualizer_enabled(
+            state.descriptor.widget_id == "media"
+            and self._can_reset_visualizer_from_media_shell()
+        )
 
     def _refresh_duplicate_shell_remove_affordances_global(self) -> None:
         grouped: dict[str, list[_ShellState]] = {}
@@ -2229,6 +2253,267 @@ class CustomLayoutManager:
                 update_position()
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to restore default position after clearing custom layout", exc_info=True)
+
+    def _can_reset_visualizer_from_media_shell(self) -> bool:
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return False
+        try:
+            widgets_map = settings_manager.get_widgets_map()
+        except Exception:
+            return False
+        if not isinstance(widgets_map, dict):
+            return False
+        media_section = widgets_map.get("media", {})
+        if isinstance(media_section, dict) and media_section.get("enabled") is False:
+            return False
+        return isinstance(widgets_map.get("spotify_visualizer", {}), dict)
+
+    def _resolve_saved_visualizer_recovery_rect(
+        self,
+        widgets_map: dict[str, Any],
+    ) -> tuple[QRect | None, str]:
+        screen, _screen_signature = self._sync_display_screen_binding()
+        if screen is None:
+            return None, "no_screen"
+        try:
+            custom_layout_map = load_custom_layout_map(widgets_map)
+            matched, entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+            if not matched:
+                return None, "no_current_screen_entry"
+            entry = deserialize_custom_layout_entry("spotify_visualizer", entries.get("spotify_visualizer"))
+            if entry is None:
+                return None, "no_saved_visualizer_entry"
+            rect = denormalize_local_rect(entry.rect, screen.geometry().size())
+            rect = clamp_local_rect_to_bounds(
+                rect,
+                screen.geometry().size(),
+                min_size=QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT)),
+            )
+            if rect.width() <= 0 or rect.height() <= 0:
+                return None, "invalid_saved_rect"
+            return rect, "saved_custom_rect"
+        except Exception:
+            logger.debug("[CUSTOM_LAYOUT] Failed to resolve saved visualizer recovery rect", exc_info=True)
+            return None, "saved_rect_error"
+
+    def _resolve_visualizer_recovery_local_rect(
+        self,
+        state: _ShellState | None,
+        widgets_map: dict[str, Any],
+    ) -> tuple[QRect, str]:
+        screen, _screen_signature = self._sync_display_screen_binding()
+        display_size = screen.geometry().size() if screen is not None else self._display.size()
+        saved_rect, saved_source = self._resolve_saved_visualizer_recovery_rect(widgets_map)
+        if saved_rect is not None:
+            return saved_rect, saved_source
+
+        if state is not None:
+            state_rect = QRect(
+                self._display.mapFromGlobal(state.current_global_rect.topLeft()),
+                state.current_global_rect.size(),
+            )
+            if state_rect.width() > 0 and state_rect.height() > 0:
+                return clamp_local_rect_to_bounds(state_rect, display_size), "active_shell_rect"
+
+        live_vis = getattr(self._display, "spotify_visualizer_widget", None)
+        if live_vis is not None:
+            prior_custom_rect = getattr(live_vis, "_custom_layout_local_rect", None)
+            if (
+                isinstance(prior_custom_rect, QRect)
+                and prior_custom_rect.width() > 0
+                and prior_custom_rect.height() > 0
+            ):
+                return clamp_local_rect_to_bounds(prior_custom_rect, display_size), "live_custom_rect"
+            try:
+                live_rect = live_vis.geometry()
+                if live_rect.width() > 0 and live_rect.height() > 0:
+                    return clamp_local_rect_to_bounds(live_rect, display_size), "live_widget_rect"
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to read live visualizer rect for recovery", exc_info=True)
+
+        media_state = self._shell_states.get("media")
+        if media_state is not None and media_state.current_global_rect.width() > 0:
+            media_local = QRect(
+                self._display.mapFromGlobal(media_state.current_global_rect.topLeft()),
+                media_state.current_global_rect.size(),
+            )
+            width = max(320, min(media_local.width(), int(display_size.width() * 0.72)))
+            height = max(160, min(int(width * 0.45), int(display_size.height() * 0.36)))
+            x = media_local.x()
+            y = media_local.y() - height - CUSTOM_LAYOUT_SNAP_GUTTER_PX
+            if y < 0:
+                y = media_local.y() + media_local.height() + CUSTOM_LAYOUT_SNAP_GUTTER_PX
+            return (
+                clamp_local_rect_to_bounds(QRect(x, y, width, height), display_size),
+                f"safe_rect_near_media:{saved_source}",
+            )
+
+        width = max(320, int(display_size.width() * 0.45))
+        height = max(160, int(width * 0.45))
+        rect = QRect(
+            max(0, int((display_size.width() - width) / 2)),
+            max(0, int((display_size.height() - height) / 2)),
+            width,
+            height,
+        )
+        return clamp_local_rect_to_bounds(rect, display_size), f"safe_center_rect:{saved_source}"
+
+    def _create_visualizer_recovery_shell_state(
+        self,
+        descriptor: WidgetRuntimeDescriptor,
+        local_rect: QRect,
+    ) -> _ShellState:
+        screen, screen_signature = self._sync_display_screen_binding()
+        placeholder = QWidget(self._display)
+        placeholder.setGeometry(local_rect)
+        placeholder.hide()
+        setattr(placeholder, "_custom_layout_recovery_placeholder", True)
+        setattr(placeholder, "_custom_layout_local_rect", QRect(local_rect))
+
+        snapshot = QPixmap(max(1, local_rect.width()), max(1, local_rect.height()))
+        snapshot.fill(Qt.GlobalColor.transparent)
+        global_rect = QRect(self._display.mapToGlobal(local_rect.topLeft()), local_rect.size())
+        shell = EditShellWidget(
+            widget_id=descriptor.widget_id,
+            snapshot=snapshot,
+            initial_global_rect=global_rect,
+            resizable=descriptor.supports_layout_resize_edit,
+            live_geometry_resolver=lambda rect, cursor, _widget_id=descriptor.widget_id: self._resolve_shell_geometry_for_widget_id(
+                _widget_id,
+                rect,
+                cursor_global=cursor,
+                snap_to_grid=False,
+            ),
+            live_geometry_applier=lambda rect, _widget_id=descriptor.widget_id: self._apply_live_shell_geometry_for_widget_id(
+                _widget_id,
+                rect,
+            ),
+            parent=self._display,
+        )
+        self._connect_shell_signals(shell)
+        payload = {"width": int(local_rect.width()), "height": int(local_rect.height())}
+        state = _ShellState(
+            descriptor=descriptor,
+            widget=placeholder,
+            shell=shell,
+            baseline_global_rect=QRect(global_rect),
+            current_global_rect=QRect(global_rect),
+            baseline_size_payload=dict(payload),
+            current_size_payload=dict(payload),
+            resize_scale=1.0,
+            was_visible=False,
+            source_screen=screen,
+            source_screen_signature=screen_signature,
+            source_monitor_value=self._read_monitor_value_for_widget(descriptor),
+            current_screen=screen,
+            current_screen_signature=screen_signature,
+            current_monitor_value=self._read_monitor_value_for_widget(descriptor),
+            last_drag_axis="both",
+        )
+        self._update_shell_reset_affordances(state)
+        self._log_geo_audit(
+            descriptor.widget_id,
+            "edit_shell_recovery_create",
+            local_rect=local_rect,
+            global_rect=global_rect,
+            payload=payload,
+            source="_create_visualizer_recovery_shell_state",
+            extra="preview=transparent_placeholder",
+        )
+        return state
+
+    def _apply_visualizer_recovery_rect_to_state(
+        self,
+        state: _ShellState,
+        local_rect: QRect,
+        *,
+        source: str,
+    ) -> None:
+        screen, screen_signature = self._sync_display_screen_binding()
+        global_rect = QRect(self._display.mapToGlobal(local_rect.topLeft()), local_rect.size())
+        payload = {"width": int(local_rect.width()), "height": int(local_rect.height())}
+        state.baseline_global_rect = QRect(global_rect)
+        state.current_global_rect = QRect(global_rect)
+        state.baseline_size_payload = dict(payload)
+        state.current_size_payload = dict(payload)
+        state.resize_scale = 1.0
+        state.last_drag_axis = "both"
+        state.removed = False
+        state.resize_origin_rect = None
+        state.resize_origin_cursor = None
+        state.resize_origin_scale = 1.0
+        state.resize_origin_payload = None
+        state.resize_corner = None
+        state.current_screen = screen
+        state.current_screen_signature = screen_signature
+        state.current_monitor_value = self._monitor_value_for_screen(screen)
+        if getattr(state.widget, "_custom_layout_recovery_placeholder", False):
+            setattr(state.widget, "_custom_layout_local_rect", QRect(local_rect))
+            state.widget.setGeometry(local_rect)
+        self._set_shell_geometry_silently(state, global_rect)
+        state.shell.show()
+        state.shell.raise_()
+        self._update_shell_reset_affordances(state)
+        self._log_geo_audit(
+            "spotify_visualizer",
+            "edit_shell_recovery_rect",
+            local_rect=local_rect,
+            global_rect=global_rect,
+            payload=payload,
+            source=source,
+            extra="commits_on_save_only=true",
+        )
+
+    def _reset_visualizer_from_media_shell(self) -> bool:
+        if not self._active:
+            return False
+        settings_manager = getattr(self._display, "settings_manager", None)
+        if settings_manager is None:
+            return False
+
+        widgets_map = settings_manager.get_widgets_map()
+        if not isinstance(widgets_map, dict):
+            return False
+        spotify_section = widgets_map.get("spotify_visualizer", {})
+        if not isinstance(spotify_section, dict):
+            return False
+        media_section = widgets_map.get("media", {})
+        if isinstance(media_section, dict) and media_section.get("enabled") is False:
+            return False
+
+        descriptor = get_widget_runtime_descriptor("spotify_visualizer")
+        if descriptor is None:
+            return False
+
+        state = self._shell_states.get("spotify_visualizer")
+        if state is None:
+            live_vis = getattr(self._display, "spotify_visualizer_widget", None)
+            if live_vis is not None:
+                state = self._create_shell_state(descriptor, live_vis)
+                if state is not None:
+                    self._shell_states["spotify_visualizer"] = state
+                    self._set_shell_session_flag(live_vis, True)
+                    self._pause_visualizer_for_edit_mode(live_vis)
+                    if state.was_visible:
+                        live_vis.hide()
+            if state is None:
+                local_rect, _source = self._resolve_visualizer_recovery_local_rect(None, widgets_map)
+                state = self._create_visualizer_recovery_shell_state(descriptor, local_rect)
+                self._shell_states["spotify_visualizer"] = state
+
+        local_rect, source = self._resolve_visualizer_recovery_local_rect(state, widgets_map)
+        self._apply_visualizer_recovery_rect_to_state(state, local_rect, source=source)
+        self._normalize_session_stack()
+        logger.warning(
+            "[CUSTOM_LAYOUT] action=recover_visualizer_edit_rect route=%s monitor=%s source=%s rect=%s "
+            "settings_saved=false runtime_reload=false",
+            str(spotify_section.get("position", "") or "-"),
+            str(spotify_section.get("monitor", "") or "-"),
+            source,
+            self._format_rect(local_rect),
+        )
+        return True
 
     def _resolve_visualizer_shell_preview_size(
         self,
