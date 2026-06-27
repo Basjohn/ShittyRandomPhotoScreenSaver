@@ -338,3 +338,49 @@ def test_notify_transition_complete_tracks_resume_counts(monkeypatch):
 
     assert engine._prefetch_resume_scheduled is False
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
+
+
+def test_notify_transition_complete_rearms_resume_while_other_display_is_pending(monkeypatch):
+    callbacks = []
+    monkeypatch.setattr("engine.image_pipeline.QTimer.singleShot", lambda delay, fn: callbacks.append((delay, fn)))
+
+    pending_state = {"pending": True}
+
+    class _FakeDisplayManager:
+        def has_running_transition(self):
+            return False
+
+        def has_transition_work_pending(self):
+            return pending_state["pending"]
+
+    class _FakePrefetcher:
+        def notify_transition_complete(self):
+            self.notified = True
+
+        def get_post_transition_delay_ms(self):
+            return 75
+
+    engine = SimpleNamespace(
+        _prefetcher=_FakePrefetcher(),
+        _prefetch_resume_scheduled=False,
+        _cache_runtime_stats={},
+        image_queue=None,
+        display_manager=_FakeDisplayManager(),
+    )
+
+    notify_transition_complete(engine, screen_index=0)
+
+    assert engine._prefetch_resume_scheduled is True
+    assert callbacks and callbacks[0][0] == 75
+
+    callbacks.pop(0)[1]()
+
+    assert engine._prefetch_resume_scheduled is True
+    assert engine._cache_runtime_stats.get("prefetch_resume_runs", 0) == 0
+    assert callbacks and callbacks[0][0] == 75
+
+    pending_state["pending"] = False
+    callbacks.pop(0)[1]()
+
+    assert engine._prefetch_resume_scheduled is False
+    assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1

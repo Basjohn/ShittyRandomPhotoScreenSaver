@@ -1356,21 +1356,28 @@ def load_and_display_image(
 # Prefetch scheduling
 # ------------------------------------------------------------------
 
+def _has_transition_work_pending(engine: ScreensaverEngine) -> bool:
+    """Return True while any display still owns transition/image-change work."""
+    try:
+        if engine.display_manager and (
+            engine.display_manager.has_running_transition()
+            or engine.display_manager.has_transition_work_pending()
+        ):
+            return True
+    except Exception as e:
+        logger.debug("[ENGINE] Exception suppressed: %s", e)
+    return False
+
+
 def schedule_prefetch(engine: ScreensaverEngine) -> None:
     """Schedule prefetch of upcoming images."""
     try:
         if not engine.image_queue or not engine._prefetcher or engine._prefetch_ahead <= 0:
             return
-        try:
-            if engine.display_manager and (
-                engine.display_manager.has_running_transition()
-                or engine.display_manager.has_transition_work_pending()
-            ):
-                if is_verbose_logging():
-                    logger.debug("Prefetch deferred: transition still active or pending")
-                return
-        except Exception as e:
-            logger.debug("[ENGINE] Exception suppressed: %s", e)
+        if _has_transition_work_pending(engine):
+            if is_verbose_logging():
+                logger.debug("Prefetch deferred: transition still active or pending")
+            return
         preview_many = getattr(engine.image_queue, "preview_upcoming", None)
         if callable(preview_many):
             upcoming = preview_many(engine._prefetch_ahead)
@@ -1474,6 +1481,15 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
 
     def _resume_prefetch() -> None:
         try:
+            if _has_transition_work_pending(engine):
+                recheck_delay_ms = max(50, delay_ms)
+                _cache_trace(
+                    "Transition-delayed prefetch resume rearmed reason=transition_work_pending delay_ms=%d",
+                    recheck_delay_ms,
+                )
+                QTimer.singleShot(recheck_delay_ms, _resume_prefetch)
+                return
+
             engine._prefetch_resume_scheduled = False
             _bump_cache_runtime_stat(engine, "prefetch_resume_runs")
             _cache_trace("Transition-delayed prefetch resume running")

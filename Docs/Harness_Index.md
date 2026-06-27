@@ -131,10 +131,19 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
   - `tools/overlay_log_parser.py`
   - `tools/spotify_vis_metrics_parser.py`
   - `tools/slide_metrics_parser.py`
+  - `tools/transition_perf_health_parser.py`
 - Use when:
   - widget repaint churn is suspected
   - transition contention is suspected
   - visualizer perf logs need aggregation
+  - mixed-refresh transition windows need a fail-fast health check
+  - cache fallback warnings need producer-state classification
+- Transition/cache health commands:
+```powershell
+python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8
+python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
+```
+- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags high-refresh transition windows stuck near 60fps, 60Hz transition/render windows far under target, AnimationManager windows far under target, zero-producer cache worker fallbacks, and loud shader fallbacks.
 
 ## Maintenance
 - If a harness becomes part of a real recurring workflow, add it here and link the relevant bug/history doc.

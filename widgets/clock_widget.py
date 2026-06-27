@@ -736,8 +736,9 @@ class ClockWidget(BaseOverlayWidget):
             else:
                 self._tz_label.hide()
             self._position_timezone_label()
-        if self._show_background:
-            self._update_stylesheet()
+        # Digital/analog frame styling is setting-driven, not time-driven.
+        # Rebuilding the stylesheet every tick can perturb QLabel layout hints
+        # in fixed CUSTOM rects and reintroduce second-by-second wobble.
         
         # Note: No need for adjustSize() or _update_position() here - 
         # clock dimensions only change when font/size settings change, not every second.

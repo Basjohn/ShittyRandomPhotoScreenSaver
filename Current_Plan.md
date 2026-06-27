@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-26
+Last updated: 2026-06-27
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -40,10 +40,20 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - verify first-frame and transition warmup parity with stronger bars
     - document or retire viewport/DPR hacks only with proof
     - [x] Make active shader-path fallback logs loud, bounded, and reason-bearing instead of repeating blind per-frame errors
-    - [ ] Use the next `--perf`/main log to classify RainDrops/Diffuse shader fallback as capability, texture-prep, or exception before changing render behavior
+    - [x] Classify the latest Diffuse shader fallback as `capability_unavailable`; do not change shader behavior until the capability gate and selected transition path are audited together
+  - [ ] Investigate transition/display FPS asymmetry without degrading visualizer fidelity or first-frame correctness
+    - [x] Add a perf/cache parser bar in [tools/transition_perf_health_parser.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tools/transition_perf_health_parser.py) for high-refresh near-60 windows, 60Hz under-target windows, AnimationManager under-target windows, zero-producer cache fallbacks, and shader fallbacks
+    - [ ] Extend the parser only where needed to correlate visualizer mode and GC windows; do not make it a bloated log dashboard
+    - [ ] Prove whether the Display 0 near-60 behavior is a real target/cap mutation, a Qt/vsync/paint-cadence lock, or event-loop starvation despite `target_fps=165`; latest parser pass shows both GL animation and AnimationManager under-target evidence
+    - [ ] Explain why Display 1 can sit around `38-40fps` against a `60Hz` target during transition windows, and why it sometimes recovers to ~60
+    - [ ] Search for duplicate hidden visualizer owners, duplicate beat engines, extra worker loops, stale overlays, or uncollected visualizer resources before optimizing render paths
+    - [ ] Treat current-good visualizer modes as locked: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must keep accepted behavior before and after any shared render/tick changes
+    - [ ] Keep FPS work off the UI thread; root-cause cache/worker/timer ownership instead of adding synchronous decode, scaling, or render retries
   - [ ] Reduce image-cache/prescale fallback pressure without moving work onto the UI thread
     - [x] Runtime-validate the bounded raw-prefetch backlog: latest `--cache` logs show full preview coverage (`active=2 pending=3`, scaled `request_count=5 prepared=5`) instead of the old first-two-only skip.
-    - [ ] If cache fallbacks remain after media-loader work, investigate paths that miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`) rather than reopening the solved raw-backlog bug.
+    - [x] Add a parser/bar that fails the still-active fallback path where transition images miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
+    - [x] Keep the delayed post-transition prefetch resume armed while another display still reports transition work pending, instead of consuming the resume and leaving no producers registered
+    - [ ] Runtime-check the next `--cache` run for reduced zero-producer fallback count; if it persists, inspect cache promotion, cancellation, and worker wakeup ownership next
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
   - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
@@ -58,20 +68,25 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Keep fallback/recovery layers temporary and loud; do not add another self-heal layer before the owner map is narrower
   - [ ] Strengthen the bars so `replay_final` green but runtime-wrong still fails decisively
 
-- [ ] Runtime-validate the Media/Visualizer loader fix from [Docs/Media_Loader_Fix_Plan.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/Docs/Media_Loader_Fix_Plan.md)
-  - [x] Split Media and Visualizer settings load/save ownership so each lazy section serializes only its own hydrated controls
-  - [x] Preserve existing settings for unhydrated lazy sections and log blocked writes loudly as `[WIDGETS_HYDRATION][WARNING]`
-  - [x] Reject foreign-bucket CUSTOM visualizer rectangles and suppress Custom creation when no exact local rect exists
-  - [x] Add default-on Media edit-shell `Reset Visualizer` recovery that creates/restores an editable visualizer shell rect without clearing Custom authority, saving settings, leaving edit mode, or forcing a runtime reload
-  - [x] Cover the fix with focused WidgetsTab hydration, custom-bucket authority, remote reconcile, and reset-action bars, including no-live-widget transparent-shell recovery
-  - [ ] Run one manual `--set --life --geo --viz` sequence opening Widgets -> Visualizers first, then closing settings, to confirm Media stays enabled and visualizer state remains stable in the real app
+- [ ] Fix Digital Clock edge-case wobble without regressing analogue or CUSTOM mode swaps
+  - [ ] Use `--geo` evidence to model the Display 0 digital-clock case where seconds changes still resize/shift the clock while Display 1 remains stable
+  - [x] Add a bar that compares digital text/layout geometry across changing seconds (`08:08:08`, `11:11:11`, `18:49:11`, `23:59:59`) inside the Display-0-shaped CUSTOM rect
+  - [x] Remove time-tick stylesheet rebuild churn so digital background/frame styling remains setting-driven instead of second-driven
+  - [x] Ensure digital mode uses a stable measured template/container instead of live-text-dependent width/scale changes
+  - [ ] Runtime-check the next `--geo` run for Display 0 digital-clock stability; if wobble persists, inspect parent/custom replay writers rather than text measurement
+  - [ ] Preserve the already-fixed contracts: no clipping, timezone balanced inside the frame, double-click swaps work in CUSTOM runtime, and mode swaps rebuild cleanly around the current rect
 
 ## Watchlist
 
 - Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
+- Oscilloscope needs a later focused audit: current runtime appears to flicker/strobe in brightness and ghosting is not visually obvious even though `--viz` logs still report `ghost2=True ghost3=True`.
 
 ## Deferred / Not Active
 
+- [ ] Oscilloscope visual audit (deferred until transition perf and clock wobble are stable)
+  - [ ] Capture current Oscilloscope behavior under `--viz --perf` and confirm whether the brightness flicker is shader state, glow/reactivity, alpha/ghost layer, or activation reset churn
+  - [ ] Add a visual/runtime-shaped oracle before changing Oscilloscope rendering so current-good modes stay isolated
+  - [ ] Restore ghost visibility only through mode-owned rendering contracts; do not touch shared visualizer audio/floor/tick behavior for this audit
 - [ ] Feeds widget family (deferred architecture track)
   - [ ] Keep Reddit as its own branded widget and shared runtime owner; do not replace it with Feeds or duplicate its paint/cache/refresh/click machinery.
   - [ ] Extract reusable list-feed seams from Reddit without changing Reddit UX first: feed item model, shared service-backed refresh/cooldown/startup-skip/cache-authority policy, progressive visible-count growth, manual refresh, and URL-open routing.

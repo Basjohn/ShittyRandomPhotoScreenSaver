@@ -365,6 +365,57 @@ def test_digital_clock_fit_and_font_features_stay_stable_across_second_shapes(qt
     assert clock.font().featureValue(tabular_tag) == 1
 
 
+def test_digital_clock_custom_rect_fit_stays_stable_across_wide_second_shapes(qtbot):
+    parent = QWidget()
+    parent.resize(1600, 900)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.setGeometry(0, 24, 676, 196)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_show_timezone(True)
+    clock.set_time_format(clock_mod.TimeFormat.TWENTY_FOUR_HOUR)
+    clock.set_font_size(130)
+    clock._custom_layout_local_rect = QRect(clock.geometry())
+
+    observed: list[tuple[QRect, int, tuple[int, int, int, int]]] = []
+    for text in ("08:08:08", "11:11:11", "18:49:11", "23:59:59"):
+        clock.setText(text)
+        clock._apply_digital_font_fit()
+        clock._update_stylesheet()
+        clock._position_timezone_label()
+        margins = clock.contentsMargins()
+        observed.append(
+            (
+                QRect(clock.geometry()),
+                clock._effective_digital_font_size,
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+            )
+        )
+
+    assert {entry[0].getRect() for entry in observed} == {(0, 24, 676, 196)}
+    assert len({entry[1] for entry in observed}) == 1
+    assert len({entry[2] for entry in observed}) == 1
+
+
+def test_digital_clock_tick_does_not_rebuild_stylesheet_for_time_only_change(qtbot, monkeypatch):
+    clock = ClockWidget()
+    qtbot.addWidget(clock)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_font_size(72)
+
+    calls: list[str] = []
+    monkeypatch.setattr(clock, "_update_stylesheet", lambda: calls.append("style"))
+
+    clock._update_time()
+
+    assert calls == []
+
+
 def test_digital_clock_timezone_label_biases_upward_inside_reserved_bottom_band(qtbot):
     parent = QWidget()
     parent.resize(900, 600)
