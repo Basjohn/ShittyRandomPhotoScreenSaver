@@ -69,7 +69,7 @@ def _start_with_desync(
             )
 
     QTimer.singleShot(delay_ms, deferred_start)
-    return None
+    return f"{transition_label}:deferred:{id(widget)}"
 
 
 def start_crossfade(

@@ -39,6 +39,33 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+def _raise_runtime_widgets_above_compositor(widget, *, stage: str) -> None:
+    """Synchronously restore runtime widget stacking after compositor use.
+
+    GL compositor-backed transitions raise the compositor before they know
+    whether the shader path will actually start. If a transition refuses after
+    that point, the final image can be displayed with the compositor still
+    above all overlay widgets. Use the WidgetManager owner rather than adding
+    another handwritten widget inventory here.
+    """
+
+    manager = getattr(widget, "_widget_manager", None)
+    if manager is not None:
+        try:
+            manager.raise_all_widgets()
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to raise runtime widgets after %s: %s", stage, e)
+
+    for attr in ("_spotify_bars_overlay", "_ctrl_cursor_hint"):
+        overlay = getattr(widget, attr, None)
+        if overlay is None:
+            continue
+        try:
+            overlay.raise_()
+        except Exception as e:
+            logger.debug("[DISPLAY_WIDGET] Failed to raise %s after %s: %s", attr, stage, e)
+
+
 def _complete_startup_first_frame_ready(widget, image_path: str, token: int) -> None:
     """Mark the startup first frame as truly ready after a presentation flush."""
     if int(getattr(widget, "_pending_startup_frame_token", 0)) != token:
@@ -244,21 +271,9 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
                         exc_info=True,
                     )
-                # Raise all overlay widgets above the compositor ONCE here.
-                # The rate-limited raise_overlay() handles ongoing raises.
-                # Raise all widgets above the compositor
-                for attr_name in (
-                    "clock_widget", "clock2_widget", "clock3_widget",
-                    "weather_widget", "media_widget", "spotify_visualizer_widget",
-                    "_spotify_bars_overlay", "spotify_volume_widget", "reddit_widget",
-                    "reddit2_widget", "_ctrl_cursor_hint",
-                ):
-                    w = getattr(widget, attr_name, None)
-                    if w is not None:
-                        try:
-                            w.raise_()
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                # Restore runtime widget stacking after compositor prewarm
+                # without maintaining a stale handwritten widget inventory.
+                _raise_runtime_widgets_above_compositor(widget, stage="compositor_prewarm")
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to pre-warm compositor with base frame", exc_info=True)
 
@@ -349,19 +364,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         )
                     if overlay_key:
                         widget._overlay_timeouts[overlay_key] = widget._current_transition_started_at
-                    # Raise widgets SYNCHRONOUSLY
-                    if widget._widget_manager is not None:
-                        try:
-                            widget._widget_manager.raise_all_widgets()
-                        except Exception as e:
-                            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                    for attr in ("_spotify_bars_overlay", "_ctrl_cursor_hint"):
-                        w = getattr(widget, attr, None)
-                        if w is not None:
-                            try:
-                                w.raise_()
-                            except Exception as e:
-                                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                    # Raise widgets SYNCHRONOUSLY after compositor start.
+                    _raise_runtime_widgets_above_compositor(widget, stage="transition_start")
                     logger.debug(f"Transition started: {transition.__class__.__name__}")
                     return
                 else:
@@ -377,6 +381,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget._current_transition_name = None
                     widget._current_transition_first_run = False
                     widget._pending_transition_finish_args = None
+                    _raise_runtime_widgets_above_compositor(widget, stage="transition_refused")
                     use_transition = False
             else:
                 use_transition = False

@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from PySide6.QtCore import QRect
+from PySide6.QtGui import QPixmap
 
 from rendering import display_image_ops
 
@@ -394,3 +395,125 @@ def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
     assert emitted == ["second.png"]
     assert widget.current_image_path == "second.png"
     assert widget._first_frame_committed_image_path == "second.png"
+
+
+def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
+    calls: list[str] = []
+
+    class _FakeSignal:
+        def connect(self, _callback):
+            calls.append("connect")
+
+        def emit(self, *_args):
+            calls.append("emit")
+
+    class _FakeManager:
+        def raise_all_widgets(self):
+            calls.append("raise_widgets")
+
+    class _FakeCompositor:
+        def setGeometry(self, *_args):
+            calls.append("comp_geom")
+
+        def set_base_pixmap(self, *_args):
+            calls.append("comp_base")
+
+        def show(self):
+            calls.append("comp_show")
+
+        def raise_(self):
+            calls.append("comp_raise")
+
+        def warm_shader_textures(self, *_args):
+            calls.append("comp_warm")
+
+    class _FakeTransition:
+        finished = _FakeSignal()
+
+        def __init__(self):
+            self.cleaned = False
+
+        def start(self, *_args):
+            calls.append("transition_start")
+            return False
+
+        def cleanup(self):
+            calls.append("transition_cleanup")
+            self.cleaned = True
+
+    monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
+
+    old_pixmap = QPixmap(8, 8)
+    old_pixmap.fill()
+    new_pixmap = QPixmap(8, 8)
+    new_pixmap.fill()
+    transition = _FakeTransition()
+
+    class _FakeWidget:
+        def __init__(self):
+            self._transition_skip_count = 0
+            self.settings_manager = object()
+            self._has_rendered_first_frame = True
+            self._transitions_enabled = True
+            self._animation_manager = None
+            self._overlay_timeouts = {}
+            self._pre_raise_log_emitted = False
+            self._base_fallback_paint_logged = False
+            self._device_pixel_ratio = 1.0
+            self._updates_blocked_until_seed = False
+            self._image_presenter = None
+            self._gl_compositor = _FakeCompositor()
+            self._transition_controller = None
+            self._current_transition = None
+            self.current_pixmap = old_pixmap
+            self.previous_pixmap = None
+            self.current_image_path = None
+            self.image_displayed = _FakeSignal()
+            self._widget_manager = _FakeManager()
+            self._spotify_bars_overlay = None
+            self._ctrl_cursor_hint = None
+
+        def has_running_transition(self):
+            return False
+
+        def set_transition_work_pending(self, value):
+            calls.append(f"pending:{value}")
+
+        def _ensure_gl_compositor(self):
+            calls.append("ensure_comp")
+
+        def width(self):
+            return 8
+
+        def height(self):
+            return 8
+
+        def _create_transition(self):
+            return transition
+
+        def _resolve_overlay_key_for_transition(self, _transition):
+            return None
+
+        def _warm_transition_if_needed(self, *_args):
+            calls.append("warm_transition")
+
+        def _cancel_transition_watchdog(self):
+            calls.append("cancel_watchdog")
+
+        def _ensure_overlay_stack(self, stage):
+            calls.append(f"ensure_stack:{stage}")
+
+        def update(self):
+            calls.append("update")
+
+    widget = _FakeWidget()
+
+    display_image_ops.set_processed_image(widget, new_pixmap, new_pixmap, "next.png")
+
+    assert "transition_start" in calls
+    assert "transition_cleanup" in calls
+    assert "raise_widgets" in calls
+    raise_indices = [idx for idx, call in enumerate(calls) if call == "raise_widgets"]
+    assert any(idx > calls.index("transition_cleanup") for idx in raise_indices)
+    assert max(raise_indices) < calls.index("ensure_stack:display")
+    assert widget.current_image_path == "next.png"

@@ -223,10 +223,48 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
         on_started=lambda duration_ms: started.append(duration_ms),
     )
 
-    assert anim_id is None
+    assert anim_id is not None
+    assert "wipe:deferred:" in anim_id
     assert scheduled == [75]
     assert started == []
     assert start_calls == []
+
+    anim_mgr.cancel_all()
+    anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_raindrops_desync_returns_deferred_token_instead_of_unavailable(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    anim_mgr = AnimationManager(fps=60)
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    comp._gl_disabled_for_session = False
+    comp._gl_pipeline = type(
+        "_Pipeline",
+        (),
+        {"initialized": True, "raindrops_program": 1},
+    )()
+    monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (50, duration_ms + 50))
+    scheduled: list[int] = []
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
+        lambda delay, callback: scheduled.append(delay),
+    )
+
+    anim_id = comp.start_raindrops(
+        old_pm,
+        new_pm,
+        duration_ms=120,
+        easing=EasingCurve.LINEAR,
+        animation_manager=anim_mgr,
+        on_finished=None,
+    )
+
+    assert anim_id is not None
+    assert "raindrops:deferred:" in anim_id
+    assert scheduled == [50]
 
     anim_mgr.cancel_all()
     anim_mgr.stop()

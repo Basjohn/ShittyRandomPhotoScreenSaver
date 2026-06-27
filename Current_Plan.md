@@ -41,7 +41,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - document or retire viewport/DPR hacks only with proof
     - [x] Make active shader-path fallback logs loud, bounded, and reason-bearing instead of repeating blind per-frame errors
     - [x] Refuse Rain Drops cleanly when its shader/compositor path cannot start; do not report a legacy diffuse substitute as a successful transition
-    - [ ] Runtime-check the next `--perf` / transition log for Rain Drops/Diffuse failures: success must name the real shader path, and failure must be loud rather than silently substituting another transition
+    - [x] Fix the deferred/desynced transition-start contract so a delayed compositor start returns a deferred token instead of `None`, preventing real delayed Rain Drops starts from being misreported as refused failures
+    - [x] Replace the stale handwritten compositor-prewarm widget raise list with the owner-based runtime-widget raise helper
+    - [ ] Runtime-check the next `--perf` / transition log for Rain Drops/Diffuse failures: success must name the real shader path or deferred start, and failure must be loud rather than silently substituting another transition
   - [ ] Investigate transition/display FPS asymmetry without degrading visualizer fidelity or first-frame correctness
     - [x] Add a perf/cache parser bar in [tools/transition_perf_health_parser.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tools/transition_perf_health_parser.py) for high-refresh near-60 windows, 60Hz under-target windows, AnimationManager under-target windows, zero-producer cache fallbacks, and shader fallbacks
     - [x] Make `_show_next_image()` the single random-transition choice owner for each image batch so startup/rotation cannot prepare conflicting transition choices for different displays
