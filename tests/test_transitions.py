@@ -11,6 +11,8 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from transitions.base_transition import BaseTransition, TransitionState, SlideDirection, WipeDirection
 from transitions.gl_compositor_crossfade_transition import GLCompositorCrossfadeTransition
+from transitions.gl_compositor_raindrops_transition import GLCompositorRainDropsTransition
+import transitions.gl_compositor_raindrops_transition as raindrops_module
 
 
 class _DummyTransition(BaseTransition):
@@ -179,3 +181,71 @@ def test_crossfade_cleanup(qapp, test_widget, test_pixmap, test_pixmap2):
     assert transition.get_state() in [
         TransitionState.IDLE, TransitionState.CANCELLED, TransitionState.FINISHED
     ]
+
+
+def test_raindrops_refuses_legacy_diffuse_substitute(qapp, test_widget, test_pixmap, test_pixmap2, monkeypatch):
+    class _FakeCompositor:
+        def __init__(self):
+            self.diffuse_calls = 0
+
+        def setGeometry(self, *_args):
+            pass
+
+        def show(self):
+            pass
+
+        def raise_(self):
+            pass
+
+        def warm_shader_textures(self, *_args):
+            pass
+
+        def start_raindrops(self, *_args, **_kwargs):
+            return None
+
+        def start_diffuse(self, *_args, **_kwargs):
+            self.diffuse_calls += 1
+            return "legacy-diffuse"
+
+    monkeypatch.setattr(raindrops_module, "GLCompositorWidget", _FakeCompositor)
+    comp = _FakeCompositor()
+    test_widget._gl_compositor = comp
+
+    transition = GLCompositorRainDropsTransition(duration_ms=200)
+
+    assert transition.start(test_pixmap, test_pixmap2, test_widget) is False
+    assert comp.diffuse_calls == 0
+    assert transition.get_state() == TransitionState.IDLE
+
+
+def test_raindrops_refuses_missing_compositor_instead_of_fake_success(qapp, test_widget, test_pixmap, test_pixmap2):
+    transition = GLCompositorRainDropsTransition(duration_ms=200)
+
+    assert transition.start(test_pixmap, test_pixmap2, test_widget) is False
+    assert transition.get_state() == TransitionState.IDLE
+
+
+def test_raindrops_reports_success_only_for_shader_start(qapp, test_widget, test_pixmap, test_pixmap2, monkeypatch):
+    class _FakeCompositor:
+        def setGeometry(self, *_args):
+            pass
+
+        def show(self):
+            pass
+
+        def raise_(self):
+            pass
+
+        def warm_shader_textures(self, *_args):
+            pass
+
+        def start_raindrops(self, *_args, **_kwargs):
+            return "raindrops-shader"
+
+    monkeypatch.setattr(raindrops_module, "GLCompositorWidget", _FakeCompositor)
+    test_widget._gl_compositor = _FakeCompositor()
+
+    transition = GLCompositorRainDropsTransition(duration_ms=200)
+
+    assert transition.start(test_pixmap, test_pixmap2, test_widget) is True
+    assert transition.get_state() == TransitionState.RUNNING

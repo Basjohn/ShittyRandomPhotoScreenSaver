@@ -40,9 +40,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - verify first-frame and transition warmup parity with stronger bars
     - document or retire viewport/DPR hacks only with proof
     - [x] Make active shader-path fallback logs loud, bounded, and reason-bearing instead of repeating blind per-frame errors
-    - [x] Classify the latest Diffuse shader fallback as `capability_unavailable`; do not change shader behavior until the capability gate and selected transition path are audited together
+    - [x] Refuse Rain Drops cleanly when its shader/compositor path cannot start; do not report a legacy diffuse substitute as a successful transition
+    - [ ] Runtime-check the next `--perf` / transition log for Rain Drops/Diffuse failures: success must name the real shader path, and failure must be loud rather than silently substituting another transition
   - [ ] Investigate transition/display FPS asymmetry without degrading visualizer fidelity or first-frame correctness
     - [x] Add a perf/cache parser bar in [tools/transition_perf_health_parser.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tools/transition_perf_health_parser.py) for high-refresh near-60 windows, 60Hz under-target windows, AnimationManager under-target windows, zero-producer cache fallbacks, and shader fallbacks
+    - [x] Make `_show_next_image()` the single random-transition choice owner for each image batch so startup/rotation cannot prepare conflicting transition choices for different displays
+    - [ ] Runtime-check the next transition log for one random choice per image batch and matching transition identity on all participating displays
     - [ ] Extend the parser only where needed to correlate visualizer mode and GC windows; do not make it a bloated log dashboard
     - [ ] Prove whether the Display 0 near-60 behavior is a real target/cap mutation, a Qt/vsync/paint-cadence lock, or event-loop starvation despite `target_fps=165`; latest parser pass shows both GL animation and AnimationManager under-target evidence
     - [ ] Explain why Display 1 can sit around `38-40fps` against a `60Hz` target during transition windows, and why it sometimes recovers to ~60
@@ -53,6 +56,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Runtime-validate the bounded raw-prefetch backlog: latest `--cache` logs show full preview coverage (`active=2 pending=3`, scaled `request_count=5 prepared=5`) instead of the old first-two-only skip.
     - [x] Add a parser/bar that fails the still-active fallback path where transition images miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
     - [x] Keep the delayed post-transition prefetch resume armed while another display still reports transition work pending, instead of consuming the resume and leaving no producers registered
+    - [x] Preserve raw/scaled prefetch registration intent through post-transition cooldown without dispatching new work during the cooldown window
+    - [x] Rearm transition-complete prefetch resume until the prefetcher cooldown has actually expired, avoiding the just-before-expiry lost-wakeup shape
     - [ ] Runtime-check the next `--cache` run for reduced zero-producer fallback count; if it persists, inspect cache promotion, cancellation, and worker wakeup ownership next
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
@@ -80,6 +85,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
 - Oscilloscope needs a later focused audit: current runtime appears to flicker/strobe in brightness and ghosting is not visually obvious even though `--viz` logs still report `ghost2=True ghost3=True`.
+- Visualizer mode-change targeting should eventually prefer the visualizer owned by the display where the user invoked the change, then fall back to the sole existing visualizer only when that display owns none; do not let this reopen duplicate visualizer ownership.
 
 ## Deferred / Not Active
 

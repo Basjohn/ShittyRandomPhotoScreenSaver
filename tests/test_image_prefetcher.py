@@ -228,3 +228,41 @@ def test_scaled_prefetch_registration_skips_during_transition_cooldown(qt_app):
         "scaled_pending": 0,
     }
     assert threads.compute_callbacks == []
+
+
+def test_prefetch_registration_survives_transition_cooldown(qt_app):
+    raw_path = r"C:\wall\one.jpg"
+    cache = _FakeCache()
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(
+        threads,
+        cache,
+        post_transition_delay_ms=10_000,
+    )
+    prefetcher.notify_transition_complete()
+
+    prefetcher.prefetch_paths([raw_path])
+    queued = prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "one-scaled",
+                "width": 2560,
+                "height": 1440,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
+    )
+
+    assert queued == 1
+    assert prefetcher.snapshot_state() == {
+        "raw_inflight": 0,
+        "raw_pending": 1,
+        "scaled_inflight": 0,
+        "scaled_pending": 1,
+    }
+    assert threads.io_callbacks == []
+    assert threads.compute_callbacks == []

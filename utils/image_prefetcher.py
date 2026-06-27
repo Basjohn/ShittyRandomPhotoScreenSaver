@@ -78,9 +78,20 @@ class ImagePrefetcher:
         elapsed_ms = (time.time() - self._transition_end_time) * 1000
         return elapsed_ms < self._post_transition_delay_ms
 
+    def is_in_post_transition_delay(self) -> bool:
+        """Public, read-only cool-down state for scheduler coordination."""
+        return self._is_in_post_transition_delay()
+
     def get_post_transition_delay_ms(self) -> int:
         """Return the configured post-transition delay in whole milliseconds."""
         return max(0, int(round(self._post_transition_delay_ms)))
+
+    def get_remaining_post_transition_delay_ms(self) -> int:
+        """Return remaining cool-down time in whole milliseconds."""
+        if self._post_transition_delay_ms <= 0:
+            return 0
+        elapsed_ms = (time.time() - self._transition_end_time) * 1000
+        return max(0, int(round(self._post_transition_delay_ms - elapsed_ms)))
 
     def get_cached(self, path: str) -> Optional[QImage]:
         img = self._cache.get(path)
@@ -114,18 +125,17 @@ class ImagePrefetcher:
     def prefetch_paths(self, paths: List[str]) -> None:
         if not paths:
             return
-        # Desync: Skip prefetching during post-transition delay to reduce IO contention
-        if self._is_in_post_transition_delay():
-            if is_verbose_logging():
-                logger.debug("ImagePrefetcher: skipping prefetch due to post-transition delay")
-            return
         # Submit up to max_concurrent immediately; keep the rest as a bounded
         # producer backlog so scaled warmups do not orphan later preview paths.
+        # During post-transition cool-down we still register the intent, but
+        # _pump_raw_prefetch() will avoid dispatching work until the cool-down
+        # ends. Dropping the registration here makes the next transition pay the
+        # worker fallback cost.
         submissions: List[str] = []
         queued_count = 0
         skipped_count = 0
         with self._lock:
-            active_slots = max(0, self._max_concurrent - len(self._inflight))
+            active_slots = 0 if self._is_in_post_transition_delay() else max(0, self._max_concurrent - len(self._inflight))
             for p in paths:
                 if not p:
                     continue
@@ -183,12 +193,6 @@ class ImagePrefetcher:
     def register_scaled_requests(self, requests: List[Dict[str, Any]]) -> int:
         """Queue scaled-variant warmup requests and process them with bounded concurrency."""
         if not requests:
-            return 0
-        if self._is_in_post_transition_delay():
-            _cache_trace(
-                "Skipping scaled prefetch registration during transition cool-down request_count=%d",
-                len(requests),
-            )
             return 0
 
         queued_any = False

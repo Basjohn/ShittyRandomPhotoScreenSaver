@@ -13,6 +13,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Runtime logging families should present a CLI-first operator surface. Prefer explicit flags such as `--perf`, `--viz`, `--geo`, `--set`, and `--life`; do not reintroduce environment-variable activation for diagnostic families.
 - Logs must use their relevant CLI family whenever possible. If diagnostics belong to geometry, cache, lifecycle, settings, or another existing family, route them there instead of inventing ad hoc always-on chatter.
 - All runtime fallbacks must log loudly. If a fallback changes ownership, geometry source, display target, recovery behavior, or another authoritative contract, emit `WARNING` or higher through the relevant existing diagnostics family instead of silently absorbing it.
+- Prefer root-cause clean success or explicit clean failure over fallback behavior; a logged fallback is a diagnostic safety net, not a successful fix.
 - Any fallback usage must be log loud. Silent fallback activation is not acceptable.
 - Churn should be avoided, but when it is noticed anywhere it should still be documented as future work instead of being silently ignored just because the current task is elsewhere.
 

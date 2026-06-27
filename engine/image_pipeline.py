@@ -1490,6 +1490,23 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
                 QTimer.singleShot(recheck_delay_ms, _resume_prefetch)
                 return
 
+            in_cooldown = getattr(prefetcher, "is_in_post_transition_delay", None)
+            if callable(in_cooldown) and in_cooldown():
+                remaining_ms = delay_ms
+                remaining_reader = getattr(prefetcher, "get_remaining_post_transition_delay_ms", None)
+                if callable(remaining_reader):
+                    try:
+                        remaining_ms = int(remaining_reader())
+                    except Exception:
+                        remaining_ms = delay_ms
+                recheck_delay_ms = max(25, remaining_ms)
+                _cache_trace(
+                    "Transition-delayed prefetch resume rearmed reason=prefetch_cooldown delay_ms=%d",
+                    recheck_delay_ms,
+                )
+                QTimer.singleShot(recheck_delay_ms, _resume_prefetch)
+                return
+
             engine._prefetch_resume_scheduled = False
             _bump_cache_runtime_stat(engine, "prefetch_resume_runs")
             _cache_trace("Transition-delayed prefetch resume running")

@@ -1,16 +1,14 @@
 """GL compositor-driven Rain Drops transition.
 
-This transition delegates all rendering to the shared GLCompositorWidget. It
-uses the compositor's diffuse region API to reveal the new image through a
-field of expanding, raindrop-like circular regions.
+This transition delegates all rendering to the shared GLCompositorWidget
+raindrops shader. If the shader path cannot start, the transition fails loudly
+instead of substituting a different legacy reveal shape.
 """
 from __future__ import annotations
 
-import random
-from typing import Optional, List
+from typing import Optional
 
-from PySide6.QtCore import QRect, QRectF, QPoint
-from PySide6.QtGui import QPixmap, QRegion, QPainterPath
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
@@ -23,20 +21,12 @@ from rendering.gl_compositor import GLCompositorWidget
 logger = get_logger(__name__)
 
 
-class _RainDrop:
-    def __init__(self, center: QPoint, radius: int, threshold: float) -> None:
-        self.center = center
-        self.radius = max(1, int(radius))
-        # Normalized time at which this drop begins to expand (0..1).
-        self.threshold = max(0.0, min(1.0, float(threshold)))
-
-
 class GLCompositorRainDropsTransition(BaseTransition):
     """GPU-backed Rain Drops targeting the shared GL compositor widget.
 
-    The controller builds a sparse field of circular droplets that expand over
-    time. Rendering is handled entirely by GLCompositorWidget via its diffuse
-    API; this class only owns timing and region construction.
+    Rendering is handled entirely by GLCompositorWidget via its shader path.
+    This class must not report a legacy substitute as a successful Rain Drops
+    transition.
     """
 
     def __init__(
@@ -52,8 +42,6 @@ class GLCompositorRainDropsTransition(BaseTransition):
         self._animation_id: Optional[str] = None
         self._easing_str: str = easing
         self._ripple_count: int = max(1, min(8, int(ripple_count)))
-        self._drops: List[_RainDrop] = []
-        self._region: QRegion = QRegion()
 
     # ------------------------------------------------------------------
     # BaseTransition API
@@ -76,14 +64,14 @@ class GLCompositorRainDropsTransition(BaseTransition):
             self._show_image_immediately()
             return True
 
-        # Resolve compositor from widget; fall back to immediate display if absent.
+        # Resolve compositor from widget. Rain Drops is shader-owned, so a
+        # missing compositor is a refused transition rather than a fake success.
         comp = getattr(widget, "_gl_compositor", None)
         if comp is None or not isinstance(comp, GLCompositorWidget):
-            logger.warning(
-                "[GL COMPOSITOR] No compositor attached to widget; falling back to immediate display (rain drops)"
+            logger.error(
+                "[GL COMPOSITOR][ERROR] No compositor attached; Rain Drops transition refused"
             )
-            self._show_image_immediately()
-            return True
+            return False
 
         self._compositor = comp
 
@@ -106,9 +94,9 @@ class GLCompositorRainDropsTransition(BaseTransition):
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm raindrops textures", exc_info=True)
 
-        # Drive via shared AnimationManager. Try the shader-based raindrops
-        # path first; if it is unavailable or fails to start, fall back to the
-        # existing diffuse-region implementation.
+        # Drive via shared AnimationManager. Rain Drops is shader-owned: if
+        # this path is unavailable, fail loudly rather than hiding the problem
+        # behind a different transition.
         easing_curve = self._resolve_easing()
         am = self._get_animation_manager(widget)
 
@@ -128,10 +116,11 @@ class GLCompositorRainDropsTransition(BaseTransition):
                 on_started=self._mark_compositor_actual_start,
             )
         except Exception:
-            logger.debug(
-                "[GL COMPOSITOR] Failed to start shader-based rain drops; falling back to diffuse region API",
+            logger.error(
+                "[GL COMPOSITOR][ERROR] Rain Drops shader start raised; refusing legacy substitute",
                 exc_info=True,
             )
+            return False
 
         if shader_anim_id:
             self._animation_id = shader_anim_id
@@ -143,37 +132,10 @@ class GLCompositorRainDropsTransition(BaseTransition):
             )
             return True
 
-        # Fallback: build raindrop regions and drive the diffuse API as
-        # before.
-        width = max(1, widget.width())
-        height = max(1, widget.height())
-        self._build_drops(width, height)
-
-        def _update(progress: float) -> None:
-            self._on_anim_update(progress)
-
-        def _on_finished_diffuse() -> None:
-            self._on_anim_complete()
-
-        self._animation_id = comp.start_diffuse(
-            old_pixmap,
-            new_pixmap,
-            duration_ms=self.duration_ms,
-            easing=easing_curve,
-            animation_manager=am,
-            update_callback=_update,
-            on_finished=_on_finished_diffuse,
-            on_started=self._mark_compositor_actual_start,
+        logger.error(
+            "[GL COMPOSITOR][ERROR] Rain Drops shader unavailable; transition refused instead of using diffuse substitute"
         )
-
-        self._set_state(TransitionState.RUNNING)
-        self.started.emit()
-        logger.info(
-            "GLCompositorRainDropsTransition started (diffuse, %dms, drops=%d)",
-            self.duration_ms,
-            len(self._drops),
-        )
-        return True
+        return False
 
     def stop(self) -> None:  # type: ignore[override]
         if self._state != TransitionState.RUNNING:
@@ -207,8 +169,6 @@ class GLCompositorRainDropsTransition(BaseTransition):
 
         self._widget = None
         self._animation_id = None
-        self._drops = []
-        self._region = QRegion()
 
         if self._state not in (TransitionState.FINISHED, TransitionState.CANCELLED):
             self._set_state(TransitionState.IDLE)
@@ -216,89 +176,6 @@ class GLCompositorRainDropsTransition(BaseTransition):
     # ------------------------------------------------------------------
     # Internals
     # ------------------------------------------------------------------
-
-    def _build_drops(self, width: int, height: int) -> None:
-        """Create a field of raindrop centres across the frame.
-
-        Drops are distributed pseudo-randomly but with a gentle stratified
-        pattern so the coverage feels even without clumping.
-        """
-
-        self._drops = []
-        area = float(width * height)
-        # Target drop count scales with resolution but is clamped to avoid
-        # excessive region complexity. Values tuned for typical 1080p–4K.
-        target = int(max(32, min(120, area / 160000.0)))
-
-        # Base radius scales with the shorter dimension for a photo-friendly
-        # droplet size (not too tiny, not dominating the frame).
-        base_radius = max(8, min(width, height) // 24)
-
-        cols = int(max(4, (target ** 0.5)))
-        rows = int(max(3, target / max(1.0, cols)))
-        cell_w = width / float(cols)
-        cell_h = height / float(rows)
-
-        for r in range(rows):
-            for c in range(cols):
-                if len(self._drops) >= target:
-                    break
-                # Jitter the centre within the cell for a natural layout.
-                cx = int((c + 0.5 + (random.random() - 0.5) * 0.6) * cell_w)
-                cy = int((r + 0.5 + (random.random() - 0.5) * 0.6) * cell_h)
-                cx = max(0, min(width - 1, cx))
-                cy = max(0, min(height - 1, cy))
-                radius = int(base_radius * random.uniform(0.7, 1.3))
-                # Early/late thresholds so some drops start sooner and some lag.
-                threshold = random.uniform(0.0, 0.7)
-                self._drops.append(_RainDrop(QPoint(cx, cy), radius, threshold))
-
-    def _on_anim_update(self, progress: float) -> None:
-        if self._state != TransitionState.RUNNING or self._compositor is None:
-            return
-
-        p = max(0.0, min(1.0, float(progress)))
-
-        region = QRegion()
-        finished = 0
-        for drop in self._drops:
-            # Local time for this drop once its threshold has been reached.
-            local = (p - drop.threshold) / 0.75
-            if local <= 0.0:
-                continue
-            if local >= 1.0:
-                local = 1.0
-                finished += 1
-            # Expand radius over time; clamp to full radius.
-            cur_radius = int(drop.radius * local)
-            if cur_radius <= 1:
-                continue
-            rect = QRect(
-                drop.center.x() - cur_radius,
-                drop.center.y() - cur_radius,
-                cur_radius * 2,
-                cur_radius * 2,
-            )
-            path = QPainterPath()
-            path.addEllipse(QRectF(rect))
-            region = region.united(QRegion(path.toFillPolygon().toPolygon()))
-
-        self._region = region
-
-        if not region.isEmpty():
-            try:
-                self._compositor.set_diffuse_region(region)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to update rain drops region", exc_info=True)
-
-        total = len(self._drops) or 1
-        # Progress is based on the fraction of droplets that have fully
-        # expanded, blended with the global timeline to avoid stalling.
-        frac_finished = finished / float(total)
-        self._emit_progress(max(p, frac_finished))
-
-        if p >= 1.0 and finished >= total:
-            self._on_anim_complete()
 
     def _on_anim_complete(self) -> None:
         if self._state != TransitionState.RUNNING:

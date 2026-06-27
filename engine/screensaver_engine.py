@@ -794,8 +794,6 @@ class ScreensaverEngine(QObject):
         try:
             logger.info("Starting screensaver engine...")
             
-            # Choose random transition for this cycle if enabled
-            self._prepare_random_transition_if_needed()
             # Show first image immediately
             if not self._show_next_image():
                 logger.warning("[FALLBACK] Failed to show first image")
@@ -981,8 +979,6 @@ class ScreensaverEngine(QObject):
     def _on_rotation_timer(self) -> None:
         """Handle rotation timer timeout."""
         logger.debug("Rotation timer triggered")
-        # Update random transition choice for this rotation if enabled
-        self._prepare_random_transition_if_needed()
         self._show_next_image()
 
     def _prepare_random_transition_if_needed(self) -> None:

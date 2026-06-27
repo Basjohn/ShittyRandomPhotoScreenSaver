@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import random
 from collections import Counter
+from types import SimpleNamespace
 
 from engine.screensaver_engine import ScreensaverEngine
 
@@ -146,3 +147,23 @@ def test_random_transition_distribution_is_approximately_uniform_for_enabled_poo
             lower,
             upper,
         )
+
+
+def test_rotation_timer_does_not_prepare_random_choice_twice() -> None:
+    calls = {"show": 0, "prepare": 0}
+
+    def _show_next_image():
+        calls["show"] += 1
+        return True
+
+    def _prepare_random_transition_if_needed():
+        calls["prepare"] += 1
+
+    engine = SimpleNamespace(
+        _show_next_image=_show_next_image,
+        _prepare_random_transition_if_needed=_prepare_random_transition_if_needed,
+    )
+
+    ScreensaverEngine._on_rotation_timer(engine)
+
+    assert calls == {"show": 1, "prepare": 0}

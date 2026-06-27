@@ -365,7 +365,13 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     logger.debug(f"Transition started: {transition.__class__.__name__}")
                     return
                 else:
-                    logger.warning("Transition failed to start, displaying immediately")
+                    logger.error(
+                        "[TRANSITION][ERROR] Transition refused/failed to start; displaying final image immediately "
+                        "screen=%s transition=%s overlay=%s",
+                        getattr(widget, "screen_index", "?"),
+                        transition.__class__.__name__,
+                        overlay_key or "<none>",
+                    )
                     transition.cleanup()
                     widget._current_transition = None
                     widget._current_transition_name = None
