@@ -229,9 +229,30 @@ class ClockWidget(BaseOverlayWidget):
         )
         bottom_pad = self.DIGITAL_BOTTOM_PAD
         if self._show_timezone and self._display_mode != "analog":
-            label_height = tz_label_height if tz_label_height is not None else self._get_tz_label_height_estimate()
+            if tz_label_height is None:
+                label_height = self._measure_digital_timezone_height_for_font(
+                    self._effective_digital_font_size
+                )
+            else:
+                label_height = tz_label_height
             bottom_pad += self.DIGITAL_TZ_GAP + max(0, int(label_height))
         return side_pad, top_pad, side_pad, bottom_pad
+
+    def _measure_digital_timezone_height_for_font(self, point_size: int) -> int:
+        """Measure the timezone label height for a candidate digital font size."""
+        if not self._show_timezone or self._display_mode == "analog":
+            return 0
+        tz_font_size = max(int(max(8, point_size) / 4), 8)
+        try:
+            metrics = QFontMetrics(QFont(self._font_family, tz_font_size, QFont.Weight.Bold))
+            tz_text = self._timezone_abbrev or "SAST"
+            tz_rect = metrics.tightBoundingRect(tz_text)
+            if tz_rect.isNull():
+                tz_rect = metrics.boundingRect(tz_text)
+            return max(tz_font_size, metrics.height(), tz_rect.height())
+        except Exception as e:
+            logger.debug("[CLOCK] Exception suppressed: %s", e)
+            return tz_font_size
 
     def _fit_digital_font_to_bounds(self) -> int:
         if self._display_mode == "analog":
@@ -239,14 +260,18 @@ class ClockWidget(BaseOverlayWidget):
             return self._font_size
 
         sample_text = self._digital_measurement_text()
-        sample_size = self._get_tz_label_height_estimate() if self._show_timezone else 0
-        left_pad, top_pad, right_pad, bottom_pad = self._compute_digital_padding(sample_size)
-        available_width = max(1, self.width() - left_pad - right_pad)
-        available_height = max(1, self.height() - top_pad - bottom_pad)
-
         best_size = max(8, int(self._font_size))
         for candidate in range(best_size, 7, -1):
-            metrics = QFontMetrics(QFont(self._font_family, candidate, QFont.Weight.Bold))
+            tz_height = self._measure_digital_timezone_height_for_font(candidate)
+            left_pad, top_pad, right_pad, bottom_pad = self._compute_digital_padding(tz_height)
+            available_width = max(1, self.width() - left_pad - right_pad)
+            available_height = max(1, self.height() - top_pad - bottom_pad)
+            candidate_font = QFont(self._font_family, candidate, QFont.Weight.Bold)
+            try:
+                candidate_font.setFeature(QFont.Tag.fromString("tnum"), 1)
+            except Exception:
+                logger.debug("[CLOCK] Failed to enable tabular numerals for fit", exc_info=True)
+            metrics = QFontMetrics(candidate_font)
             if (
                 metrics.horizontalAdvance(sample_text) <= available_width
                 and metrics.height() <= available_height
@@ -1055,6 +1080,10 @@ class ClockWidget(BaseOverlayWidget):
             tz_font_size = max(int(base_size / 4), 8)
             tz_font = QFont(self._font_family, tz_font_size, QFont.Weight.Bold)
             self._tz_label.setFont(tz_font)
+            try:
+                self._tz_label.adjustSize()
+            except Exception as e:
+                logger.debug("[CLOCK] Exception suppressed: %s", e)
     
     def set_timezone(self, timezone_str: str) -> None:
         """

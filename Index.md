@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
 
 Living map of the current SRPSS codebase.
 
@@ -75,6 +75,7 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Frame budget / GC controller | `core/performance/frame_budget.py` | Frame pacing and GC budget helpers for render/runtime hot paths |
 | Widget perf profiler | `core/performance/widget_profiler.py` | Widget paint/timer metrics sampling and perf log emission |
+| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/cache log bar for paired render-healthy/paint-starved cadence collapse, stable-divisor FPS locks, visualizer timing warnings, slow GL uploads, fallback loudness, and timeline correlation |
 
 ## Visualizer System
 
@@ -117,6 +118,7 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
 | Transition registry | `rendering/transition_registry.py` | Canonical transition identity, legacy alias canonicalization, UI ordering, cycle/random-pool participation, hardware gating, compositor program routing, and startup shader warmup metadata |
+| GL compositor paint/metrics | `rendering/gl_compositor_pkg/paint.py` / `rendering/gl_compositor_pkg/compositor_metrics.py` | Paint-time shader dispatch, loud shader-fallback reporting, visual transition progress sync from `FrameState`, and `GL PAINT` / render-timer metrics that distinguish visible cadence from `AnimationManager` progress-sample cadence |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff, startup-equivalent fade-coordinator re-prime on CUSTOM rebuild, full authored-stacking shutdown whenever any widget family is currently in `Custom`, shared authored-position stacking offsets/geometry diagnostics for non-`Custom` overlays only when the global opt-in is enabled, shadow-free visible-footprint measurement plus fixed follow-media media+visualizer lane occupancy for authored stacking, live media refresh reapplication of authored typography/artwork inputs even while CUSTOM resize is active, and the narrow runtime-pause quiesce hook used before display teardown/settings entry |
 | Shared stacking planner | `rendering/widget_stacking.py` | Pure non-`Custom` authored stacking planner shared by runtime and settings prediction: left/center/right column grouping, stable top/middle/bottom band ordering, fixed obstacle occupancy for companion blocks, fit reporting, and no CUSTOM layout ownership |
 | Widget effect refresh seam | `rendering/widget_effects.py` | Narrow transient-opacity refresh helpers for widgets that currently own a live `QGraphicsOpacityEffect`; intentionally no longer a broad menu/focus/display-change shadow cache-busting path |

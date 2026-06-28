@@ -6,7 +6,7 @@ from copy import deepcopy
 import widgets.clock_widget as clock_mod
 from widgets.clock_widget import ClockWidget
 from PySide6.QtCore import QPoint, QRect
-from PySide6.QtGui import QFontMetrics, QImage, QPainter
+from PySide6.QtGui import QFont, QFontMetrics, QImage, QPainter
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
@@ -399,6 +399,47 @@ def test_digital_clock_custom_rect_fit_stays_stable_across_wide_second_shapes(qt
     assert {entry[0].getRect() for entry in observed} == {(0, 24, 676, 196)}
     assert len({entry[1] for entry in observed}) == 1
     assert len({entry[2] for entry in observed}) == 1
+
+
+def test_digital_clock_fit_ignores_stale_timezone_label_height_in_tight_custom_rect(qtbot):
+    parent = QWidget()
+    parent.resize(1600, 900)
+    qtbot.addWidget(parent)
+    parent.show()
+
+    clock = ClockWidget(parent=parent)
+    qtbot.addWidget(clock)
+    clock.setGeometry(456, 60, 786, 221)
+    clock.set_display_mode("digital")
+    clock.set_show_background(True)
+    clock.set_show_timezone(True)
+    clock.set_time_format(clock_mod.TimeFormat.TWENTY_FOUR_HOUR)
+    clock.set_font_size(129)
+    clock._custom_layout_local_rect = QRect(clock.geometry())
+    assert clock._tz_label is not None
+
+    observed: list[tuple[int, tuple[int, int, int, int], tuple[int, int, int, int]]] = []
+    for stale_tz_size in (8, 60, 12, 48):
+        clock._tz_label.setFont(QFont(clock._font_family, stale_tz_size, QFont.Weight.Bold))
+        clock._tz_label.setText("SAST")
+        clock._tz_label.adjustSize()
+        clock.setText("18:49:11")
+        clock._apply_digital_font_fit()
+        clock._update_stylesheet()
+        clock._position_timezone_label()
+        margins = clock.contentsMargins()
+        observed.append(
+            (
+                clock._effective_digital_font_size,
+                clock._tz_label.geometry().getRect(),
+                (margins.left(), margins.top(), margins.right(), margins.bottom()),
+            )
+        )
+
+    assert len({entry[0] for entry in observed}) == 1
+    assert len({entry[1] for entry in observed}) == 1
+    assert len({entry[2] for entry in observed}) == 1
+    assert clock.geometry().getRect() == (456, 60, 786, 221)
 
 
 def test_digital_clock_tick_does_not_rebuild_stylesheet_for_time_only_change(qtbot, monkeypatch):

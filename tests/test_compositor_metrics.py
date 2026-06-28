@@ -4,6 +4,7 @@ from rendering.adaptive_timer import _queue_safe_widget_update
 from rendering.gl_compositor import GLCompositorWidget
 from rendering.gl_compositor_pkg.compositor_metrics import _is_active_transition_paint_window
 from rendering.gl_compositor_pkg import paint as paint_module
+from rendering.gl_compositor_pkg.paint import _sync_transition_progress_from_frame_state
 
 
 def test_active_transition_paint_window_true_while_transition_running():
@@ -116,17 +117,78 @@ def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
         adaptive_timer.Shiboken = original_shiboken
 
 
+def test_paint_time_progress_sync_updates_active_transition_state():
+    class _FrameState:
+        def get_interpolated_progress(self):
+            return 0.42
+
+    widget = SimpleNamespace(
+        _frame_state=_FrameState(),
+        _raindrops=SimpleNamespace(progress=0.10),
+        _warp=None,
+        _blockspin=None,
+        _blockflip=None,
+        _diffuse=None,
+        _blinds=None,
+        _crumble=None,
+        _particle=None,
+        _burn=None,
+        _crossfade=None,
+        _slide=None,
+        _wipe=None,
+    )
+
+    _sync_transition_progress_from_frame_state(widget)
+
+    assert widget._raindrops.progress == 0.42
+
+
+def test_paint_time_progress_sync_clamps_progress_and_keeps_inactive_states_untouched():
+    class _FrameState:
+        def get_interpolated_progress(self):
+            return 1.7
+
+    inactive = SimpleNamespace(progress=0.25)
+    widget = SimpleNamespace(
+        _frame_state=_FrameState(),
+        _raindrops=None,
+        _warp=SimpleNamespace(progress=0.10),
+        _blockspin=None,
+        _blockflip=None,
+        _diffuse=None,
+        _blinds=None,
+        _crumble=None,
+        _particle=None,
+        _burn=None,
+        _crossfade=None,
+        _slide=None,
+        _wipe=None,
+        unrelated=inactive,
+    )
+
+    _sync_transition_progress_from_frame_state(widget)
+
+    assert widget._warp.progress == 1.0
+    assert inactive.progress == 0.25
+
+
 def test_pause_render_strategy_clears_stale_pending_update():
+    calls: list[str] = []
+
     class _StubCompositor:
         def __init__(self):
             self._render_strategy_manager = SimpleNamespace(pause=lambda: None)
             self._srpss_timer_update_pending = True
+
+        def _finalize_render_timer_metrics(self, outcome="stopped"):
+            calls.append(("finalize", outcome))
 
     stub = _StubCompositor()
 
     GLCompositorWidget._pause_render_strategy(stub)
 
     assert stub._srpss_timer_update_pending is False
+    assert calls == [("finalize", "paused")]
 
 
 def test_stop_render_strategy_clears_stale_pending_update():

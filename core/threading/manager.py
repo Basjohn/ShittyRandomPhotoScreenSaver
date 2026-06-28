@@ -30,6 +30,23 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
         "owner_type": owner.__class__.__name__,
     }
     try:
+        object_name_getter = getattr(owner, "objectName", None)
+        if callable(object_name_getter):
+            object_name = object_name_getter()
+        else:
+            object_name = object_name_getter
+        if object_name:
+            context["object_name"] = object_name
+    except Exception:
+        pass
+    try:
+        if hasattr(owner, "isVisible"):
+            context["owner_visible"] = bool(owner.isVisible())
+        if hasattr(owner, "isEnabled"):
+            context["owner_enabled"] = bool(owner.isEnabled())
+    except Exception:
+        pass
+    try:
         if hasattr(owner, "screen_index"):
             context["screen_index"] = getattr(owner, "screen_index")
     except Exception:
@@ -59,6 +76,8 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
         pass
     try:
         parent = owner.parent() if hasattr(owner, "parent") else None
+        if parent is not None and hasattr(parent, "screen_index"):
+            context["parent_screen_index"] = getattr(parent, "screen_index")
         if parent is not None and hasattr(parent, "get_transition_snapshot"):
             context["display_transition"] = parent.get_transition_snapshot()
         gl_compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
@@ -66,6 +85,22 @@ def _describe_timer_callable_context(func: Callable) -> dict | None:
             context["compositor"] = gl_compositor.describe_stall_context()
     except Exception:
         logger.debug("[THREADING] Failed to describe timer callable context", exc_info=True)
+    try:
+        if context.get("owner_type") == "MediaWidget":
+            for attr_name, context_name in (
+                ("_provider", "media_provider"),
+                ("_current_poll_stage", "media_poll_stage"),
+                ("_update_timer_interval_ms", "media_timer_interval_ms"),
+                ("_refresh_in_flight", "media_refresh_in_flight"),
+                ("_is_idle", "media_idle"),
+                ("_app_process_running", "media_app_process_running"),
+                ("_fade_in_completed", "media_fade_in_completed"),
+                ("_has_seen_first_track", "media_seen_first_track"),
+            ):
+                if hasattr(owner, attr_name):
+                    context[context_name] = getattr(owner, attr_name)
+    except Exception:
+        logger.debug("[THREADING] Failed to describe MediaWidget timer context", exc_info=True)
     return context
 
 
@@ -138,6 +173,9 @@ def _classify_large_timer_gap_warning(context: dict | None) -> str:
 
     if bool(context.get("vis_waiting_engine")) or bool(context.get("vis_waiting_frame")) or context.get("vis_pending_mode"):
         return "visualizer_reconfiguration_starvation"
+
+    if context.get("owner_type") == "MediaWidget":
+        return "media_widget_poll_starvation"
 
     display_transition = context.get("display_transition")
     if isinstance(display_transition, dict):
@@ -760,26 +798,35 @@ class ThreadManager:
                 logger.debug("[THREADING] Exception suppressed: %s", e)
                 timer_desc = "recurring_timer"
 
+        timer_ref: list[Optional[QTimer]] = [None]
+
         def _invoke():
             try:
                 now = time.time()
                 if _last_invoke_ts[0] > 0.0:
                     gap_ms = (now - _last_invoke_ts[0]) * 1000.0
+                    active_interval_ms = int(interval_ms)
+                    timer = timer_ref[0]
+                    if timer is not None:
+                        try:
+                            active_interval_ms = int(timer.interval())
+                        except Exception:
+                            active_interval_ms = int(interval_ms)
                     # Only warn if gap exceeds 2x the expected interval AND is
                     # significant (>100ms). For slow timers (e.g. 1000ms weather
                     # refresh) a gap of 1007ms is normal jitter, not a problem.
                     # Modal dialogs (settings) also block the event loop, causing
                     # expected gaps that should not spam warnings.
-                    threshold_ms = max(100.0, float(interval_ms) * 2.0)
+                    threshold_ms = max(100.0, float(active_interval_ms) * 2.0)
                     if gap_ms > threshold_ms and is_perf_metrics_enabled():
                         context = _describe_timer_callable_context(func)
-                        if not _should_suppress_large_timer_gap_warning(gap_ms, interval_ms, context):
+                        if not _should_suppress_large_timer_gap_warning(gap_ms, active_interval_ms, context):
                             likely_cause = _classify_large_timer_gap_warning(context)
                             logger.warning(
                                 "[PERF] [TIMER] Large gap for %s: %.2fms (interval=%dms likely=%s context=%s)",
                                 timer_desc,
                                 gap_ms,
-                                interval_ms,
+                                active_interval_ms,
                                 likely_cause,
                                 context,
                             )
@@ -789,6 +836,7 @@ class ThreadManager:
                 logger.exception("Recurring task raised: %s", e)
         
         timer = QTimer()
+        timer_ref[0] = timer
         timer.setTimerType(Qt.TimerType.PreciseTimer)
         timer.timeout.connect(_invoke)
         timer.start(max(1, int(interval_ms)))

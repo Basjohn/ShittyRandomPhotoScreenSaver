@@ -12,8 +12,10 @@ Tests the centralized threading functionality including:
 import threading
 import time
 import pytest
+from core.threading import manager as manager_module
 from core.threading.manager import (
     _classify_large_timer_gap_warning,
+    _describe_timer_callable_context,
     _should_suppress_large_timer_gap_warning,
 )
 
@@ -628,6 +630,50 @@ class TestRecurringTimers:
 
         assert len(ticks) >= 1
 
+    def test_schedule_recurring_gap_diagnostics_use_live_timer_interval(
+        self,
+        qt_app,
+        monkeypatch,
+        caplog,
+    ):
+        manager = ThreadManager()
+        ticks: list[float] = []
+        fake_times = [100.0, 102.6, 105.2]
+
+        def _fake_time():
+            if fake_times:
+                return fake_times.pop(0)
+            return 105.2
+
+        monkeypatch.setattr(manager_module, "is_perf_metrics_enabled", lambda: True)
+        monkeypatch.setattr(manager_module.time, "time", _fake_time)
+        monkeypatch.setattr(manager_module, "_describe_timer_callable_context", lambda _func: {})
+        monkeypatch.setattr(
+            manager_module,
+            "_should_suppress_large_timer_gap_warning",
+            lambda _gap, _interval, _context: False,
+        )
+
+        timer = manager.schedule_recurring(
+            1000,
+            lambda: ticks.append(time.monotonic()),
+            description="retuned_timer",
+        )
+        try:
+            with caplog.at_level("WARNING"):
+                timer.timeout.emit()
+                timer.setInterval(2500)
+                timer.timeout.emit()
+                assert "Large gap for retuned_timer" not in caplog.text
+
+                timer.setInterval(1000)
+                timer.timeout.emit()
+                assert "Large gap for retuned_timer" in caplog.text
+                assert "interval=1000ms" in caplog.text
+        finally:
+            timer.stop()
+            manager.shutdown()
+
 
 def test_large_timer_gap_warning_suppressed_during_transition_handoff():
     context = {
@@ -721,6 +767,46 @@ def test_large_timer_gap_warning_classifies_visualizer_reconfiguration():
     }
 
     assert _classify_large_timer_gap_warning(context) == "visualizer_reconfiguration_starvation"
+
+
+def test_timer_context_includes_media_widget_poll_state(qt_app):
+    class _Display(QObject):
+        screen_index = 1
+
+    class _MediaOwner(QObject):
+        def __init__(self, parent: QObject) -> None:
+            super().__init__(parent)
+            self.setObjectName("media_overlay")
+            self._provider = "spotify"
+            self._current_poll_stage = 0
+            self._update_timer_interval_ms = 1000
+            self._refresh_in_flight = False
+            self._is_idle = False
+            self._app_process_running = True
+            self._fade_in_completed = True
+            self._has_seen_first_track = True
+
+    _MediaOwner.__name__ = "MediaWidget"
+    display = _Display()
+    owner = _MediaOwner(display)
+
+    def _callback() -> None:
+        return None
+
+    setattr(_callback, "_srpss_timer_owner", owner)
+
+    context = _describe_timer_callable_context(_callback)
+
+    assert context is not None
+    assert context["owner_type"] == "MediaWidget"
+    assert context["object_name"] == "media_overlay"
+    assert context["parent_screen_index"] == 1
+    assert context["media_provider"] == "spotify"
+    assert context["media_poll_stage"] == 0
+    assert context["media_timer_interval_ms"] == 1000
+    assert context["media_refresh_in_flight"] is False
+    assert context["media_fade_in_completed"] is True
+    assert _classify_large_timer_gap_warning(context) == "media_widget_poll_starvation"
 
     @pytest.mark.qt_no_exception_capture
     def test_schedule_recurring_respects_description(self, qt_app):

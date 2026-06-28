@@ -22,6 +22,22 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def _get_screen_index(widget) -> int | None:
+    parent = None
+    try:
+        parent = widget.parent()
+    except Exception:
+        parent = None
+    for owner in (parent, widget):
+        try:
+            screen_index = getattr(owner, "screen_index", None)
+            if screen_index is not None:
+                return int(screen_index)
+        except Exception:
+            continue
+    return None
+
+
 def _get_stall_context(widget) -> dict | None:
     try:
         if hasattr(widget, "describe_stall_context"):
@@ -96,8 +112,9 @@ def log_animation_spike(
         return
     dt_ms = dt_seconds * 1000.0
     logger.warning(
-        "[PERF] [GL ANIM] Tick dt spike %.2fms (name=%s frame=%d progress=%.2f target_fps=%d)",
+        "[PERF] [GL ANIM] Tick dt spike %.2fms (screen=%s name=%s frame=%d progress=%.2f target_fps=%d)",
         dt_ms,
+        _get_screen_index(widget),
         metrics.name,
         metrics.frame_count,
         metrics.last_progress,
@@ -118,9 +135,10 @@ def finalize_animation_metrics(widget, outcome: str) -> None:
     max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
 
     logger.info(
-        "[PERF] [GL ANIM] %s metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
+        "[PERF] [GL ANIM] %s metrics: screen=%s, duration=%.1fms, frames=%d, avg_fps=%.1f, "
         "dt_min=%.2fms, dt_max=%.2fms, spikes=%d, target_fps=%d, outcome=%s",
         metrics.name.capitalize(),
+        _get_screen_index(widget),
         duration_ms,
         metrics.frame_count,
         avg_fps,
@@ -185,10 +203,17 @@ def finalize_paint_metrics(widget, outcome: str = "stopped") -> None:
     avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
     min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
     max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
+    target_fps = int(getattr(widget, "_render_timer_fps", 0) or 0)
+    if target_fps <= 0:
+        try:
+            target_fps = int(getattr(getattr(widget, "_animation_manager", None), "fps", 0) or 0)
+        except Exception:
+            target_fps = 0
     logger.info(
-        "[PERF] [GL PAINT] %s metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-        "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, outcome=%s",
+        "[PERF] [GL PAINT] %s metrics: screen=%s, frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+        "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, target_fps=%d, outcome=%s",
         metrics.label.capitalize(),
+        _get_screen_index(widget),
         metrics.frame_count,
         avg_fps,
         min_dt_ms,
@@ -196,6 +221,7 @@ def finalize_paint_metrics(widget, outcome: str = "stopped") -> None:
         metrics.min_duration_ms,
         metrics.max_duration_ms,
         metrics.slow_count,
+        target_fps,
         outcome,
     )
 
@@ -220,8 +246,9 @@ def log_render_timer_stall(widget, dt_seconds: float, metrics: _RenderTimerMetri
         return
     anim_label = widget._current_anim_metrics.name if widget._current_anim_metrics else "idle"
     logger.warning(
-        "[PERF] [GL RENDER] Render timer stall %.2fms (target=%dHz interval=%dms frames=%d anim=%s)",
+        "[PERF] [GL RENDER] Render timer stall %.2fms (screen=%s target=%dHz interval=%dms frames=%d anim=%s)",
         dt_seconds * 1000.0,
+        _get_screen_index(widget),
         metrics.target_fps,
         metrics.interval_ms,
         metrics.frame_count,
@@ -239,8 +266,9 @@ def finalize_render_timer_metrics(widget, outcome: str = "stopped") -> None:
     min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
     max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
     logger.info(
-        "[PERF] [GL RENDER] Timer metrics: frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+        "[PERF] [GL RENDER] Timer metrics: screen=%s, frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
         "stalls=%d, target=%dHz, outcome=%s",
+        _get_screen_index(widget),
         metrics.frame_count,
         avg_fps,
         min_dt_ms,

@@ -33,6 +33,52 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 _QT_UPDATE_FALLBACK_WARNED = False
+_PENDING_UPDATE_LOG_AFTER_MS = 250.0
+_PENDING_UPDATE_LOG_INTERVAL_MS = 1000.0
+_DEADLINE_SLEEP_CAP_S = 0.004
+_DEADLINE_YIELD_WINDOW_S = 0.00075
+
+
+def _safe_attr(widget, name: str, default=None):
+    try:
+        return getattr(widget, name, default)
+    except Exception:
+        return default
+
+
+def _mark_widget_update_pending(widget) -> None:
+    now = time.perf_counter()
+    setattr(widget, "_srpss_timer_update_pending", True)
+    setattr(widget, "_srpss_timer_update_pending_since", now)
+    setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
+
+
+def _maybe_log_pending_widget_update(widget) -> None:
+    """Report paint-delivery starvation without queuing extra UI work."""
+    if not is_perf_metrics_enabled():
+        return
+    now = time.perf_counter()
+    pending_since = _safe_attr(widget, "_srpss_timer_update_pending_since")
+    if not isinstance(pending_since, (int, float)) or pending_since <= 0.0:
+        return
+    age_ms = (now - float(pending_since)) * 1000.0
+    if age_ms < _PENDING_UPDATE_LOG_AFTER_MS:
+        return
+    last_log = _safe_attr(widget, "_srpss_timer_update_pending_last_log", 0.0)
+    if isinstance(last_log, (int, float)) and last_log > 0.0:
+        if (now - float(last_log)) * 1000.0 < _PENDING_UPDATE_LOG_INTERVAL_MS:
+            return
+    try:
+        setattr(widget, "_srpss_timer_update_pending_last_log", now)
+    except Exception:
+        pass
+    logger.warning(
+        "[PERF] [GL RENDER] Paint update still pending without delivery "
+        "age_ms=%.2f target_fps=%s screen=%s no_requeue=True",
+        age_ms,
+        _safe_attr(widget, "_render_timer_fps", "<unknown>"),
+        _safe_attr(widget, "_screen_index", "<unknown>"),
+    )
 
 
 def _mark_widget_update_consumed(widget) -> None:
@@ -41,6 +87,8 @@ def _mark_widget_update_consumed(widget) -> None:
         return
     try:
         setattr(widget, "_srpss_timer_update_pending", False)
+        setattr(widget, "_srpss_timer_update_pending_since", 0.0)
+        setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
     except Exception:
         pass
 
@@ -52,8 +100,9 @@ def _queue_safe_widget_update(widget) -> None:
 
     try:
         if bool(getattr(widget, "_srpss_timer_update_pending", False)):
+            _maybe_log_pending_widget_update(widget)
             return
-        setattr(widget, "_srpss_timer_update_pending", True)
+        _mark_widget_update_pending(widget)
     except Exception:
         # If the widget cannot host the flag, fall back to the old behavior.
         pass
@@ -120,6 +169,34 @@ def _normalize_next_deadline(next_deadline: float, now_ts: float, interval_s: fl
         return next_deadline
     missed = int((now_ts - next_deadline) / interval_s) + 1
     return next_deadline + (missed * interval_s)
+
+
+def _wait_until_deadline_without_gil_spin(
+    deadline: float,
+    stop_event: threading.Event,
+    state: AtomicTimerState,
+) -> None:
+    """Wait for a render deadline without monopolizing the Python GIL.
+
+    The old high-precision tail used a tight ``pass`` loop. At high refresh
+    rates that can make the timer metrics look healthy while starving Qt's
+    Python paint/event-loop delivery. Sleeping/yielding here may be a hair less
+    theoretically precise, but it preserves the UI thread's chance to consume
+    the queued paint.
+    """
+
+    while True:
+        if stop_event.is_set() or state.load() != TimerState.RUNNING:
+            return
+
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0.0:
+            return
+
+        if remaining > _DEADLINE_YIELD_WINDOW_S:
+            time.sleep(min(_DEADLINE_SLEEP_CAP_S, remaining - _DEADLINE_YIELD_WINDOW_S))
+        else:
+            time.sleep(0)
 
 
 class TimerState(Enum):
@@ -406,7 +483,6 @@ class AdaptiveTimerStrategy:
         """Main timer loop with state machine."""
         fps = self._config.target_fps if self._config.target_fps > 0 else 240.0
         target_interval = max(1.0, 1000.0 / fps) / 1000.0
-        sleep_threshold = 0.002
         next_tick_deadline: Optional[float] = None
         
         logger.debug("[ADAPTIVE_TIMER] Loop started (target=%.2fms)", target_interval * 1000)
@@ -459,24 +535,11 @@ class AdaptiveTimerStrategy:
                     
                     # Precise timing anchored to the carried deadline so callback
                     # overhead does not accumulate into long-run drift.
-                    while True:
-                        remaining = next_tick_deadline - time.perf_counter()
-                        if remaining <= sleep_threshold:
-                            break
-                        if self._stop_event.is_set():
-                            break
-                        if self._state.load() != TimerState.RUNNING:
-                            break
-                        sleep_chunk = min(0.01, max(0.0, remaining - sleep_threshold))
-                        if sleep_chunk <= 0.0:
-                            break
-                        time.sleep(sleep_chunk)
-
-                    # Busy-wait for precision
-                    while time.perf_counter() < next_tick_deadline:
-                        if self._stop_event.is_set() or self._state.load() != TimerState.RUNNING:
-                            break
-                        pass
+                    _wait_until_deadline_without_gil_spin(
+                        next_tick_deadline,
+                        self._stop_event,
+                        self._state,
+                    )
                     
                     # Only signal if still running
                     if (not self._stop_event.is_set() and 

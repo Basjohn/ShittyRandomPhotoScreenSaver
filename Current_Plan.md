@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-27
+Last updated: 2026-06-28
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -43,24 +43,34 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Refuse Rain Drops cleanly when its shader/compositor path cannot start; do not report a legacy diffuse substitute as a successful transition
     - [x] Fix the deferred/desynced transition-start contract so a delayed compositor start returns a deferred token instead of `None`, preventing real delayed Rain Drops starts from being misreported as refused failures
     - [x] Replace the stale handwritten compositor-prewarm widget raise list with the owner-based runtime-widget raise helper
-    - [ ] Runtime-check the next `--perf` / transition log for Rain Drops/Diffuse failures: success must name the real shader path or deferred start, and failure must be loud rather than silently substituting another transition
-  - [ ] Investigate transition/display FPS asymmetry without degrading visualizer fidelity or first-frame correctness
-    - [x] Add a perf/cache parser bar in [tools/transition_perf_health_parser.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tools/transition_perf_health_parser.py) for high-refresh near-60 windows, 60Hz under-target windows, AnimationManager under-target windows, zero-producer cache fallbacks, and shader fallbacks
-    - [x] Make `_show_next_image()` the single random-transition choice owner for each image batch so startup/rotation cannot prepare conflicting transition choices for different displays
-    - [ ] Runtime-check the next transition log for one random choice per image batch and matching transition identity on all participating displays
-    - [ ] Extend the parser only where needed to correlate visualizer mode and GC windows; do not make it a bloated log dashboard
-    - [ ] Prove whether the Display 0 near-60 behavior is a real target/cap mutation, a Qt/vsync/paint-cadence lock, or event-loop starvation despite `target_fps=165`; latest parser pass shows both GL animation and AnimationManager under-target evidence
-    - [ ] Explain why Display 1 can sit around `38-40fps` against a `60Hz` target during transition windows, and why it sometimes recovers to ~60
+    - [x] Runtime-check the next `--perf` / transition log for Rain Drops/Diffuse failures: latest logs show named shader starts and no silent substitute/refusal path
+    - [ ] Keep Rain Drops/Diffuse failure semantics clean if this path reopens: success must name the real shader path or deferred start, and failure must be loud rather than silently substituting another transition
+  - [ ] Root-cause transition paint-delivery collapse without degrading visual fidelity, first-frame correctness, or visualizer feel
+    - [x] Lock in the failed pending-paint requeue lesson: parser stays red for requeue rescues, production must not queue extra UI work to force cadence
+    - [x] Strengthen [tools/transition_perf_health_parser.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tools/transition_perf_health_parser.py) to flag paired starvation where `GL RENDER` is healthy but same-screen/same-target `GL PAINT` under-delivers
+    - [x] Add parser timeline markers for settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow texture uploads, cache fallbacks, shader fallbacks, and pending-paint rescues
+    - [x] Add passive adaptive-timer observability for stale pending paint updates with `no_requeue=True`; do not add any repaint/update retry path
+    - [x] Split paint-time transition progress sync into its own `GL PAINT` section metric so future logs can prove whether interpolation sync is a real hot-path cost
+    - [x] Current evidence: latest `--perf` parser run reports `47` paired paint-delivery starvation windows, `0` pending-paint requeues, `0` shader fallbacks, `0` cache worker fallbacks, `174` visualizer timing warnings, and `0` slow GL texture uploads
+    - [x] Separate the latest collapse into two log-backed seams: early `GL RENDER` healthy / `GL PAINT` starved windows, and later `GL ANIM` control-callback cadence near `60fps` while paint-time interpolation still delivers higher visual paint cadence
+    - [x] Remove the adaptive render timer's Python busy-spin deadline tail so high-refresh timing no longer monopolizes the GIL while Qt paint/event-loop delivery is trying to consume queued updates
+    - [ ] Runtime-check whether removing the adaptive-timer GIL spin reduces paired paint-delivery starvation and visualizer tick spikes without reintroducing first-frame issues, update requeues, or transition fidelity regressions
+    - [ ] Correlate any remaining paired starvation windows with settings open/close, edit-mode save, display clear/recreate, frame-budget spikes, and visualizer tick spikes using the parser timeline
+    - [ ] Root-cause any remaining Qt/GL paint delivery under-delivery while render timers remain at target; inspect update consumption, pending-flag lifecycle, compositor/widget lifecycle churn, display-specific refresh target state, and event-loop stalls
+    - [ ] Root-cause settings UI stalls around widget tab hydration (`~2.3s` class stalls in latest logs) without breaking settings persistence, buckets, or scroll persistence
+    - [ ] Correlate slow GL texture uploads with image-cache warmup and display rebuild boundaries; prefer cache/prewarm ownership fixes over UI-thread upload retries
+    - [ ] Inspect visualizer tick-listener cadence separately from Bubble worker cost; Bubble compute is low in the latest collapse logs and must not be retuned for this perf task
     - [ ] Search for duplicate hidden visualizer owners, duplicate beat engines, extra worker loops, stale overlays, or uncollected visualizer resources before optimizing render paths
     - [ ] Treat current-good visualizer modes as locked: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must keep accepted behavior before and after any shared render/tick changes
-    - [ ] Keep FPS work off the UI thread; root-cause cache/worker/timer ownership instead of adding synchronous decode, scaling, or render retries
+    - [ ] Keep FPS work off the UI thread; root-cause cache/worker/timer ownership instead of adding synchronous decode, scaling, render retries, repaint loops, or update rescue timers
   - [ ] Reduce image-cache/prescale fallback pressure without moving work onto the UI thread
     - [x] Runtime-validate the bounded raw-prefetch backlog: latest `--cache` logs show full preview coverage (`active=2 pending=3`, scaled `request_count=5 prepared=5`) instead of the old first-two-only skip.
     - [x] Add a parser/bar that fails the still-active fallback path where transition images miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
     - [x] Keep the delayed post-transition prefetch resume armed while another display still reports transition work pending, instead of consuming the resume and leaving no producers registered
     - [x] Preserve raw/scaled prefetch registration intent through post-transition cooldown without dispatching new work during the cooldown window
     - [x] Rearm transition-complete prefetch resume until the prefetcher cooldown has actually expired, avoiding the just-before-expiry lost-wakeup shape
-    - [ ] Runtime-check the next `--cache` run for reduced zero-producer fallback count; if it persists, inspect cache promotion, cancellation, and worker wakeup ownership next
+    - [x] Runtime-check the latest `--cache` run: one zero-producer fallback remains at `16:45:43` (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
+    - [ ] Inspect cache promotion, cancellation, and worker wakeup ownership next; do not repeat the already-fixed first-two-only backlog or cooldown lost-wakeup hypotheses unless new evidence matches them
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
   - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
@@ -72,6 +82,13 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Close the remaining visualizer CUSTOM geometry authority family without adding more mitigation churn
   - [ ] Keep `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` as the root-cause map owner
   - [ ] Enumerate every post-replay writer that can still touch visualizer live rect or overlay rect after committed CUSTOM authority should have won
+  - [x] Add a save-time bar for the poisoned route shape where `spotify_visualizer` is physically on one display but carries another display's monitor route
+  - [x] Repair `spotify_visualizer` CUSTOM save ownership from the shell's actual global rect before persisting monitor/bucket authority, with a loud log when a poisoned route is corrected
+  - [x] Add a recovery-button bar for the case where no exact current-screen visualizer bucket exists but one saved visualizer rect exists elsewhere
+  - [x] Make explicit visualizer recovery create a centered, visualizer-aspect rescue shell instead of inheriting media-shaped or polluted active-shell geometry when exact saved data is unavailable
+  - [x] Runtime-check the next `--geo` run for the clock-edit scenario: latest long run shows the visualizer surviving edit saves and replaying a valid corrected rect after save-route repair
+  - [x] Runtime-check the media recovery button only as a rescue path: user run shows the recovery seam now creates a usable edit rect instead of removing the visualizer from all displays or exiting edit mode
+  - [ ] Eliminate the upstream reason save-route repair still fires: latest logs still emit `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...`, so recovery is validated but not a clean steady-state success
   - [ ] Keep fallback/recovery layers temporary and loud; do not add another self-heal layer before the owner map is narrower
   - [ ] Strengthen the bars so `replay_final` green but runtime-wrong still fails decisively
 
@@ -80,6 +97,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Add a bar that compares digital text/layout geometry across changing seconds (`08:08:08`, `11:11:11`, `18:49:11`, `23:59:59`) inside the Display-0-shaped CUSTOM rect
   - [x] Remove time-tick stylesheet rebuild churn so digital background/frame styling remains setting-driven instead of second-driven
   - [x] Ensure digital mode uses a stable measured template/container instead of live-text-dependent width/scale changes
+  - [x] Remove stale timezone-label-height feedback from the digital font fit path so tight CUSTOM rects cannot oscillate between previous-label and next-font measurements
   - [ ] Runtime-check the next `--geo` run for Display 0 digital-clock stability; if wobble persists, inspect parent/custom replay writers rather than text measurement
   - [ ] Preserve the already-fixed contracts: no clipping, timezone balanced inside the frame, double-click swaps work in CUSTOM runtime, and mode swaps rebuild cleanly around the current rect
 
@@ -122,6 +140,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 #######
 ### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.
 ----
-No unintegrated user tasks.
+1. Edit mode guide lines should have a line for horizontal and vertical centering with both other widgets and the entire display the widget being adjusted is on (a simple crosshair of the whole display made up of 2 lines, can be done as our current style showing up only when the widget is touching either or both)
+
+2. Context menu change visualizer mode should change it globally if there is only one visualizer instance across all displays so clicking change on display 0 will change it even if it is one display 1.
 ----
 ######

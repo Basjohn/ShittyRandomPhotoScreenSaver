@@ -27,6 +27,7 @@ from rendering.adaptive_timer import (
     _mark_widget_update_consumed,
     _queue_safe_widget_update,
     _normalize_next_deadline,
+    _wait_until_deadline_without_gil_spin,
 )
 
 
@@ -133,6 +134,37 @@ class TestAdaptiveTimerDeadlineMath(unittest.TestCase):
     def test_normalize_next_deadline_skips_missed_intervals_without_rebasing(self):
         result = _normalize_next_deadline(10.00, 10.051, 0.016)
         self.assertAlmostEqual(result, 10.064, places=6)
+
+    def test_deadline_wait_yields_instead_of_busy_spinning(self):
+        """High-refresh precision waits must not monopolize the Python GIL."""
+        from rendering import adaptive_timer
+
+        calls = {"perf": 0}
+        sleep_calls: list[float] = []
+        state = AtomicTimerState(TimerState.RUNNING)
+        stop_event = threading.Event()
+
+        original_perf_counter = adaptive_timer.time.perf_counter
+        original_sleep = adaptive_timer.time.sleep
+        try:
+            def _perf_counter() -> float:
+                calls["perf"] += 1
+                return {1: 10.0000, 2: 10.0054}.get(calls["perf"], 10.0061)
+
+            def _sleep(value: float) -> None:
+                sleep_calls.append(value)
+
+            adaptive_timer.time.perf_counter = _perf_counter
+            adaptive_timer.time.sleep = _sleep
+
+            _wait_until_deadline_without_gil_spin(10.0060, stop_event, state)
+
+            self.assertGreaterEqual(len(sleep_calls), 2)
+            self.assertGreater(sleep_calls[0], 0.0)
+            self.assertEqual(sleep_calls[-1], 0)
+        finally:
+            adaptive_timer.time.perf_counter = original_perf_counter
+            adaptive_timer.time.sleep = original_sleep
 
 
 class TestAdaptiveTimerLifecycle(unittest.TestCase):
@@ -265,6 +297,129 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
             _queue_safe_widget_update(widget)
             self.assertEqual(len(queued), 2)
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+
+    def test_safe_widget_update_keeps_idle_coalescing_even_when_pending_is_old(self):
+        """Idle widgets must not repaint repeatedly just because a flag is old."""
+        class _Widget:
+            def __init__(self):
+                self.update_count = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = 1.0
+                self._render_timer_fps = 165
+                self._frame_state = None
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+            adaptive_timer.Shiboken = None
+
+            _queue_safe_widget_update(widget)
+
+            self.assertEqual(queued, [])
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            self.assertEqual(widget.update_count, 0)
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+
+    def test_safe_widget_update_logs_stale_pending_without_requeueing(self):
+        """Stale pending paint diagnostics must not become another UI-pressure loop."""
+        class _Widget:
+            def __init__(self):
+                self.update_count = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = time.perf_counter() - 1.0
+                self._render_timer_fps = 165
+                self._screen_index = 0
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        original_perf_enabled = adaptive_timer.is_perf_metrics_enabled
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+            adaptive_timer.Shiboken = None
+            adaptive_timer.is_perf_metrics_enabled = lambda: True
+
+            with self.assertLogs(adaptive_timer.logger.name, level="WARNING") as logs:
+                _queue_safe_widget_update(widget)
+
+            self.assertEqual(queued, [])
+            self.assertEqual(widget.update_count, 0)
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            self.assertTrue(any("no_requeue=True" in message for message in logs.output))
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+            adaptive_timer.is_perf_metrics_enabled = original_perf_enabled
+
+    def test_mark_widget_update_consumed_clears_pending_diagnostics(self):
+        class _Widget:
+            _srpss_timer_update_pending = True
+            _srpss_timer_update_pending_since = 123.0
+            _srpss_timer_update_pending_last_log = 456.0
+
+        widget = _Widget()
+
+        _mark_widget_update_consumed(widget)
+
+        self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
+        self.assertEqual(getattr(widget, "_srpss_timer_update_pending_since"), 0.0)
+        self.assertEqual(getattr(widget, "_srpss_timer_update_pending_last_log"), 0.0)
+
+    def test_safe_widget_update_does_not_requeue_stale_transition_pending_dispatch(self):
+        """Transition repaint coalescing must not become a UI-thread requeue loop."""
+        class _FrameState:
+            started = True
+            completed = False
+
+        class _Widget:
+            def __init__(self):
+                self.update_count = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = 1.0
+                self._render_timer_fps = 165
+                self._frame_state = _FrameState()
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+            adaptive_timer.Shiboken = None
+
+            _queue_safe_widget_update(widget)
+
+            self.assertEqual(queued, [])
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            self.assertEqual(getattr(widget, "_srpss_timer_update_pending_since"), 1.0)
+            self.assertEqual(widget.update_count, 0)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken

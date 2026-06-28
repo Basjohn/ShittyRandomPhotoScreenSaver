@@ -57,6 +57,8 @@ from widgets.edit_shell_widget import EditShellWidget
 logger = get_logger(__name__)
 _MIN_CUSTOM_WIDGET_WIDTH = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width())
 _MIN_CUSTOM_WIDGET_HEIGHT = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height())
+_VISUALIZER_RECOVERY_ASPECT = 1.5
+_VISUALIZER_RECOVERY_MIN_SIZE = QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT))
 
 
 class _CustomLayoutSessionKeyFilter(QObject):
@@ -195,6 +197,46 @@ class CustomLayoutManager:
         if screens:
             return screens
         return list(QGuiApplication.screens())
+
+    def _screen_overlapping_global_rect(self, global_rect: QRect) -> Any | None:
+        screens = self._get_available_screens()
+        if not screens or global_rect.width() <= 0 or global_rect.height() <= 0:
+            return None
+        best_screen = choose_best_screen_for_global_rect(global_rect, screens=screens)
+        if best_screen is None:
+            return None
+        overlap = best_screen.geometry().intersected(global_rect)
+        if overlap.width() <= 0 or overlap.height() <= 0:
+            return None
+        return best_screen
+
+    def _repair_visualizer_save_screen_if_needed(self, state: _ShellState) -> str | None:
+        actual_screen = self._screen_overlapping_global_rect(state.current_global_rect)
+        if actual_screen is None:
+            return None
+        actual_signature = get_screen_signature(actual_screen)
+        actual_monitor = self._monitor_value_for_screen(actual_screen)
+        if (
+            actual_signature == state.current_screen_signature
+            and str(state.current_monitor_value or "ALL") == actual_monitor
+        ):
+            return None
+
+        old_signature = state.current_screen_signature
+        old_monitor = state.current_monitor_value
+        state.current_screen = actual_screen
+        state.current_screen_signature = actual_signature
+        state.current_monitor_value = actual_monitor
+        logger.warning(
+            "[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route from shell rect ownership "
+            "old_monitor=%s new_monitor=%s old_screen=%s new_screen=%s rect=%s",
+            old_monitor,
+            actual_monitor,
+            old_signature,
+            actual_signature,
+            self._format_rect(state.current_global_rect),
+        )
+        return actual_monitor
 
     def _get_global_display_instances(self) -> list[Any]:
         instances: list[Any] = []
@@ -416,6 +458,10 @@ class CustomLayoutManager:
                 continue
             for manager, state in survivors:
                 monitor_value = state.current_monitor_value
+                if widget_id == "spotify_visualizer":
+                    repaired_monitor = manager._repair_visualizer_save_screen_if_needed(state)
+                    if repaired_monitor is not None:
+                        monitor_value = repaired_monitor
                 if source_had_duplicates and len(survivors) == 1 and manager._monitor_value_is_all(state.source_monitor_value):
                     monitor_value = manager._monitor_value_for_screen(state.current_screen)
                 elif state.current_screen_signature != state.source_screen_signature:
@@ -2280,15 +2326,21 @@ class CustomLayoutManager:
             custom_layout_map = load_custom_layout_map(widgets_map)
             matched, entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
             if not matched:
+                foreign_rect = self._resolve_single_foreign_saved_visualizer_recovery_rect(custom_layout_map, screen)
+                if foreign_rect[0] is not None:
+                    return foreign_rect
                 return None, "no_current_screen_entry"
             entry = deserialize_custom_layout_entry("spotify_visualizer", entries.get("spotify_visualizer"))
             if entry is None:
+                foreign_rect = self._resolve_single_foreign_saved_visualizer_recovery_rect(custom_layout_map, screen)
+                if foreign_rect[0] is not None:
+                    return foreign_rect
                 return None, "no_saved_visualizer_entry"
             rect = denormalize_local_rect(entry.rect, screen.geometry().size())
             rect = clamp_local_rect_to_bounds(
                 rect,
                 screen.geometry().size(),
-                min_size=QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT)),
+                min_size=_VISUALIZER_RECOVERY_MIN_SIZE,
             )
             if rect.width() <= 0 or rect.height() <= 0:
                 return None, "invalid_saved_rect"
@@ -2296,6 +2348,59 @@ class CustomLayoutManager:
         except Exception:
             logger.debug("[CUSTOM_LAYOUT] Failed to resolve saved visualizer recovery rect", exc_info=True)
             return None, "saved_rect_error"
+
+    def _resolve_single_foreign_saved_visualizer_recovery_rect(
+        self,
+        custom_layout_map: dict[str, Any],
+        screen: Any,
+    ) -> tuple[QRect | None, str]:
+        displays = custom_layout_map.get("displays", {})
+        if not isinstance(displays, dict):
+            return None, "no_saved_visualizer_entry"
+        entries: list[CustomLayoutEntry] = []
+        for layouts in displays.values():
+            if not isinstance(layouts, dict):
+                continue
+            entry = deserialize_custom_layout_entry("spotify_visualizer", layouts.get("spotify_visualizer"))
+            if entry is not None:
+                entries.append(entry)
+        if len(entries) != 1:
+            return None, "no_saved_visualizer_entry" if not entries else "multiple_foreign_visualizer_entries"
+        size_payload = entries[0].size_payload
+        preferred = QSize(
+            int(size_payload.get("width", 0) or 0),
+            int(size_payload.get("height", 0) or 0),
+        )
+        rect = self._centered_visualizer_recovery_rect(screen.geometry().size(), preferred_size=preferred)
+        return rect, "saved_foreign_visualizer_centered"
+
+    def _centered_visualizer_recovery_rect(
+        self,
+        display_size: QSize,
+        *,
+        preferred_size: QSize | None = None,
+    ) -> QRect:
+        max_width = max(_VISUALIZER_RECOVERY_MIN_SIZE.width(), int(display_size.width() * 0.72))
+        max_height = max(_VISUALIZER_RECOVERY_MIN_SIZE.height(), int(display_size.height() * 0.52))
+        if preferred_size is not None and preferred_size.width() > 0 and preferred_size.height() > 0:
+            aspect = max(0.9, min(2.2, float(preferred_size.width()) / float(preferred_size.height())))
+            width = max(_VISUALIZER_RECOVERY_MIN_SIZE.width(), min(preferred_size.width(), max_width))
+        else:
+            aspect = _VISUALIZER_RECOVERY_ASPECT
+            width = max(_VISUALIZER_RECOVERY_MIN_SIZE.width(), int(display_size.width() * 0.45))
+        height = max(_VISUALIZER_RECOVERY_MIN_SIZE.height(), int(round(width / aspect)))
+        if height > max_height:
+            height = max_height
+            width = max(_VISUALIZER_RECOVERY_MIN_SIZE.width(), int(round(height * aspect)))
+        width = min(width, max_width)
+        height = min(height, max_height)
+        rect = QRect(
+            max(0, int((display_size.width() - width) / 2)),
+            max(0, int((display_size.height() - height) / 2)),
+            width,
+            height,
+        )
+        return clamp_local_rect_to_bounds(rect, display_size, min_size=_VISUALIZER_RECOVERY_MIN_SIZE)
 
     def _resolve_visualizer_recovery_local_rect(
         self,
@@ -2334,30 +2439,9 @@ class CustomLayoutManager:
 
         media_state = self._shell_states.get("media")
         if media_state is not None and media_state.current_global_rect.width() > 0:
-            media_local = QRect(
-                self._display.mapFromGlobal(media_state.current_global_rect.topLeft()),
-                media_state.current_global_rect.size(),
-            )
-            width = max(320, min(media_local.width(), int(display_size.width() * 0.72)))
-            height = max(160, min(int(width * 0.45), int(display_size.height() * 0.36)))
-            x = media_local.x()
-            y = media_local.y() - height - CUSTOM_LAYOUT_SNAP_GUTTER_PX
-            if y < 0:
-                y = media_local.y() + media_local.height() + CUSTOM_LAYOUT_SNAP_GUTTER_PX
-            return (
-                clamp_local_rect_to_bounds(QRect(x, y, width, height), display_size),
-                f"safe_rect_near_media:{saved_source}",
-            )
+            return self._centered_visualizer_recovery_rect(display_size), f"safe_visualizer_center_rect:{saved_source}"
 
-        width = max(320, int(display_size.width() * 0.45))
-        height = max(160, int(width * 0.45))
-        rect = QRect(
-            max(0, int((display_size.width() - width) / 2)),
-            max(0, int((display_size.height() - height) / 2)),
-            width,
-            height,
-        )
-        return clamp_local_rect_to_bounds(rect, display_size), f"safe_center_rect:{saved_source}"
+        return self._centered_visualizer_recovery_rect(display_size), f"safe_visualizer_center_rect:{saved_source}"
 
     def _create_visualizer_recovery_shell_state(
         self,

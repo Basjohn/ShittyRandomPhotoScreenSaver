@@ -31,8 +31,50 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
+_TRANSITION_PROGRESS_ATTRS = (
+    "_blockspin",
+    "_blockflip",
+    "_raindrops",
+    "_warp",
+    "_diffuse",
+    "_blinds",
+    "_crumble",
+    "_particle",
+    "_burn",
+    "_crossfade",
+    "_slide",
+    "_wipe",
+)
+
+
 def _active_shader_names(shader_paths) -> list[str]:
     return [name for name, state, *_ in shader_paths if state is not None]
+
+
+def _sync_transition_progress_from_frame_state(widget) -> None:
+    """Refresh active shader progress from paint-time interpolation.
+
+    AnimationManager still owns duration/completion.  Paint frames should not
+    be limited to the slower QTimer callback cadence when the compositor render
+    timer is producing additional high-refresh frames.
+    """
+
+    frame_state = getattr(widget, "_frame_state", None)
+    if frame_state is None:
+        return
+    try:
+        progress = float(frame_state.get_interpolated_progress())
+    except Exception:
+        logger.debug("[GL COMPOSITOR] FrameState interpolation failed", exc_info=True)
+        return
+    progress = max(0.0, min(1.0, progress))
+    for attr in _TRANSITION_PROGRESS_ATTRS:
+        state = getattr(widget, attr, None)
+        if state is not None and hasattr(state, "progress"):
+            try:
+                state.progress = progress
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
 
 
 def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
@@ -144,6 +186,8 @@ def paintGL_impl(widget) -> None:
     
     target = widget.rect()
     _mark_section("init")
+    _sync_transition_progress_from_frame_state(widget)
+    _mark_section("progress_sync")
 
     # Try shader paths in priority order. On failure, fall back to QPainter.
     _mark_section("pre_shader")

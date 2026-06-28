@@ -211,8 +211,8 @@ class GLCompositorWidget(QOpenGLWidget):
         # interpolates to actual render time for smooth motion.
         self._frame_state: Optional[FrameState] = None
         
-        # TIMER-BASED RENDERING: Pure timer strategy capped at display refresh rate.
-        # VSync is completely disabled - we use timer for maximum performance.
+        # TIMER-BASED RENDERING: timer strategy capped at display refresh rate.
+        # Paint delivery is measured separately because Qt may still coalesce updates.
         self._render_timer_fps: int = 0  # 0 = not yet detected; set by _start_render_strategy
         self._render_timer_metrics: Optional[_RenderTimerMetrics] = None
         
@@ -528,7 +528,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Return target FPS matching the display refresh rate.
         
         Policy: cap to display refresh rate, never divide it down.
-        No adaptive ladders, no vsync — pure timer at display Hz.
+        No adaptive ladders; target the display refresh rate with the render timer.
         
         Priority order:
         1. Already-cached value on this compositor (survives settings dialog)
@@ -588,7 +588,7 @@ class GLCompositorWidget(QOpenGLWidget):
         """Start the render strategy to drive repaints during transitions.
 
         Uses adaptive timer for optimal performance with state management.
-        VSync is completely disabled for maximum performance.
+        Paint delivery is validated by GL PAINT metrics rather than assumed.
         """
         display_hz = self._get_display_refresh_rate()
         target_fps = self._calculate_target_fps(display_hz)
@@ -621,7 +621,7 @@ class GLCompositorWidget(QOpenGLWidget):
     def _start_adaptive_timer_render(self, target_fps: int, display_hz: int) -> None:
         """Start adaptive timer-based rendering (primary method).
         
-        This is the ONLY rendering method - VSync is completely disabled.
+        This is the primary rendering method.
         Timer uses adaptive state machine for optimal performance.
         """
         if self._render_strategy_manager is None:
@@ -648,6 +648,7 @@ class GLCompositorWidget(QOpenGLWidget):
         _mark_widget_update_consumed(self)
         if self._render_strategy_manager is not None:
             self._render_strategy_manager.pause()
+            self._finalize_render_timer_metrics(outcome="paused")
             logger.debug("[GL COMPOSITOR] Render strategy paused")
     
     def _stop_render_strategy(self) -> None:
@@ -683,8 +684,8 @@ class GLCompositorWidget(QOpenGLWidget):
     def _on_render_tick(self) -> None:
         """Called by render strategy to trigger a repaint.
         
-        Note: This is now primarily called by the RenderStrategyManager's internal
-        timer or VSync thread. The actual progress interpolation happens in paintGL
+        Note: This is called by the RenderStrategyManager's internal timer.
+        The actual progress interpolation happens in paintGL
         using the FrameState.
         """
         self._record_render_timer_tick()

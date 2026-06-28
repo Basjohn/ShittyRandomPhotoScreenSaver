@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -62,6 +62,9 @@ No shadow frameworks or parallel ownership paths.
 ## 5. UI/UX Safety
 - Do not remove custom styling to hide runtime issues.
 - Fix startup/focus/visibility bugs at root cause.
+- UI pressure is not a performance fix. Do not try to solve cadence, transition FPS, missed paints, widget starvation, or visualizer latency by queueing extra UI-thread work, repaint/update retries, rescue timers, or broader widget refreshes. If a render/update delivery seam looks stuck, first prove ownership/timing/cache/upload root cause with `--perf` bars; any proposed retry path must have a regression bar proving it does not increase UI-thread churn.
+- If `GL RENDER` timer cadence is healthy while same-screen `GL PAINT` cadence is bad, treat it as paint/event-loop delivery starvation. Add paired render/paint evidence and timeline correlation before changing cadence mechanics; do not add repaint retries or update requeues.
+- High-refresh helper/timer threads must not busy-spin in Python for precision. A timer that holds the GIL can make its own `GL RENDER` metrics look healthy while starving Qt/Python paint delivery, visualizer ticks, and widget timers. Prefer deadline waits that sleep/yield and prove the behavior with `--perf` parser bars.
 - Respect staged startup contracts for dependent overlay widgets.
 - If startup or a display-recreation path cannot show the first image immediately, use a bounded immediate retry seam before falling back to the long rotation timer. Do not leave recreated/cold startup displays blank just because a transient load was already in progress.
 - Deferred GL warmup must not disturb a compositor that is already visibly presenting a seeded base frame. Prefer a hidden/shared offscreen warmup context; only non-live surfaces may fall back to direct compositor-context warmup.

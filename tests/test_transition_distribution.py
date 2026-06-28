@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import threading
 from collections import Counter
 from types import SimpleNamespace
 
@@ -167,3 +168,76 @@ def test_rotation_timer_does_not_prepare_random_choice_twice() -> None:
     ScreensaverEngine._on_rotation_timer(engine)
 
     assert calls == {"show": 1, "prepare": 0}
+
+
+def test_show_next_image_does_not_prepare_random_choice_without_runtime_targets() -> None:
+    calls = {"prepare": 0}
+
+    engine = SimpleNamespace(
+        image_queue=None,
+        display_manager=None,
+        _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
+    )
+
+    assert ScreensaverEngine._show_next_image(engine) is False
+    assert calls["prepare"] == 0
+
+
+def test_show_next_image_does_not_prepare_random_choice_for_empty_queue_result() -> None:
+    calls = {"prepare": 0, "load": 0, "pending": []}
+    lock = threading.Lock()
+
+    class _Queue:
+        def next(self):
+            return None
+
+    display_manager = SimpleNamespace(
+        set_transition_work_pending=lambda value: calls["pending"].append(value),
+        show_error=lambda _message: None,
+    )
+    engine = SimpleNamespace(
+        image_queue=_Queue(),
+        display_manager=display_manager,
+        _loading_lock=lock,
+        _loading_in_progress=False,
+        _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
+        _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
+        thread_manager=None,
+        _current_image=None,
+    )
+
+    assert ScreensaverEngine._show_next_image(engine) is False
+    assert calls["prepare"] == 0
+    assert calls["load"] == 0
+    assert calls["pending"] == [True, False]
+
+
+def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() -> None:
+    calls = {"prepare": 0, "load": 0, "pending": []}
+    lock = threading.Lock()
+    image_meta = {"path": "accepted-image.jpg"}
+
+    class _Queue:
+        def next(self):
+            return image_meta
+
+    display_manager = SimpleNamespace(
+        set_transition_work_pending=lambda value: calls["pending"].append(value),
+        show_error=lambda _message: None,
+    )
+    engine = SimpleNamespace(
+        image_queue=_Queue(),
+        display_manager=display_manager,
+        _loading_lock=lock,
+        _loading_in_progress=False,
+        _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
+        _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
+        thread_manager=None,
+        _current_image=None,
+    )
+
+    assert ScreensaverEngine._show_next_image(engine) is True
+    assert calls["prepare"] == 1
+    assert calls["load"] == 1
+    assert calls["pending"] == [True]
+    assert engine._current_image is image_meta

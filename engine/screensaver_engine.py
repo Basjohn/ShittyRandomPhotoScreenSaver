@@ -840,11 +840,6 @@ class ScreensaverEngine(QObject):
 
     def _show_next_image(self) -> bool:
         """Load and display next image from queue."""
-        # If random transitions are enabled, prepare a new non-repeating choice for this change
-        try:
-            self._prepare_random_transition_if_needed()
-        except Exception as e:
-            logger.debug("[TRANSITION] Failed to prepare random transition: %s", e)
         if not self.image_queue or not self.display_manager:
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
@@ -881,6 +876,13 @@ class ScreensaverEngine(QObject):
                 return False
             
             self._current_image = image_meta
+
+            # Random transition selection belongs to accepted image batches, not
+            # startup/display probes that may never reach display handoff.
+            try:
+                self._prepare_random_transition_if_needed()
+            except Exception as e:
+                logger.debug("[TRANSITION] Failed to prepare random transition: %s", e)
             
             # ARCHITECTURAL FIX: Use async image processing to avoid UI thread blocking
             # This moves heavy image scaling/cropping to background threads

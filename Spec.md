@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -183,6 +183,7 @@ Active ids:
 - Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime. Deferred transition warmup should use a hidden/quiescent shared GL context when possible so the live compositor surface is not perturbed after the first image appears; only non-live surfaces may fall back to direct compositor-context warmup. That hidden deferred path should cover both remaining transition-program compilation and representative transition-resource warmup where safe, so first use does not pay avoidable visible-surface prep cost. Transition correctness must not depend on that deferred startup warmup succeeding: first-use transition startup must ensure/bind the needed compositor program in a real current GL context before animation begins. Spotify visualizer GL startup should compile the resolved startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining mode programs incrementally afterward.
 - Multi-display GL transition pacing uses two shared seams: a small display-level image handoff stagger plus compositor-side desync at transition start. Compositor-side desync must remain effectively imperceptible and shared across compositor transition families, not only crossfade.
 - Single-display runtime must bypass compositor-side desync entirely. Request acceptance, deferred/desync wait, and actual transition runtime are separate telemetry concerns; transition duration metrics should begin at the real compositor handoff, not at the earlier request timestamp.
+- GL transition duration/completion remains owned by `AnimationManager`, but visible shader progress is refreshed from paint-time `FrameState` interpolation before shader dispatch. High-refresh visual smoothness must be judged from `GL PAINT` / render-timer cadence, not only the lower-frequency `GL ANIM` progress-sample callback cadence. If render-timer cadence is healthy while same-screen `GL PAINT` cadence collapses, the failure is paint/event-loop delivery starvation until proven otherwise; do not solve it by queueing more UI work.
 - Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
 - Cold/recreated display startup must also keep first-image recovery explicit. If the first immediate `_show_next_image()` call fails, the engine should perform a bounded immediate retry sequence rather than relying only on the long rotation timer.
 
