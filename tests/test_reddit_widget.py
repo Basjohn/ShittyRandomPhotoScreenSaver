@@ -13,7 +13,37 @@ import pytest
 from PySide6.QtCore import QPoint, QRect
 
 from core.reddit_post_provider import RedditProviderResult
+from widgets import reddit_widget as reddit_module
 from widgets.reddit_widget import RedditWidget
+
+
+class _FakeRecurringTimer:
+    def __init__(self, interval_ms: int) -> None:
+        self._interval_ms = int(interval_ms)
+        self._active = True
+
+    def stop(self) -> None:
+        self._active = False
+
+    def isActive(self) -> bool:  # noqa: N802 - Qt-style test double
+        return self._active
+
+    def interval(self) -> int:
+        return self._interval_ms
+
+    def thread(self):  # pragma: no cover - defensive compatibility with timer handle cleanup
+        from PySide6.QtCore import QThread
+
+        return QThread.currentThread()
+
+
+class _FakeThreadManager:
+    def __init__(self) -> None:
+        self.recurring_calls: list[tuple[int, str | None]] = []
+
+    def schedule_recurring(self, interval_ms, callback, *args, description=None, **kwargs):
+        self.recurring_calls.append((int(interval_ms), description))
+        return _FakeRecurringTimer(int(interval_ms))
 
 
 @pytest.mark.qt
@@ -464,6 +494,66 @@ def test_reddit_activate_skips_startup_fetch_when_recent_startup_attempt_exists(
         assert calls == ["timer"]
     finally:
         widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_periodic_refresh_uses_shared_15_minute_cadence_without_network(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    fake_tm = _FakeThreadManager()
+    widget.set_thread_manager(fake_tm)
+    monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
+
+    try:
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        widget._schedule_timer()  # type: ignore[attr-defined]
+
+        assert fake_tm.recurring_calls == [(15 * 60 * 1000, "RedditWidget refresh")]
+        assert widget._update_timer_start_timer is None  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit2_periodic_refresh_staggers_initial_phase_not_repeat_cadence(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    fake_tm = _FakeThreadManager()
+    widget.set_thread_manager(fake_tm)
+    monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
+
+    try:
+        widget._cache_key = "reddit2"  # type: ignore[attr-defined]
+        widget._schedule_timer()  # type: ignore[attr-defined]
+
+        assert fake_tm.recurring_calls == []
+        starter = widget._update_timer_start_timer  # type: ignore[attr-defined]
+        assert starter is not None
+        assert starter.isActive() is True
+        assert starter.interval() == int(7.5 * 60 * 1000)
+
+        widget._start_recurring_update_timer()  # type: ignore[attr-defined]
+
+        assert fake_tm.recurring_calls == [(15 * 60 * 1000, "RedditWidget refresh")]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_delayed_periodic_refresh_start_is_cancelled_on_cleanup(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    widget.set_thread_manager(_FakeThreadManager())
+    monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
+    widget._cache_key = "reddit2"  # type: ignore[attr-defined]
+
+    widget._schedule_timer()  # type: ignore[attr-defined]
+    assert widget._update_timer_start_timer is not None  # type: ignore[attr-defined]
+    assert widget._update_timer_start_timer.isActive() is True  # type: ignore[attr-defined]
+
+    widget.cleanup()
+
+    assert widget._update_timer_start_timer is None  # type: ignore[attr-defined]
 
 
 @pytest.mark.qt

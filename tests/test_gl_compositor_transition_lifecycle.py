@@ -188,6 +188,49 @@ def test_transition_start_ensures_program_ready_on_first_use(qt_app, monkeypatch
 
 
 @pytest.mark.qt_no_exception_capture
+def test_stop_rendering_invalidates_late_lazy_animation_callback(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    callbacks: list[object] = []
+    cancelled: list[str] = []
+    timer_starts: list[str] = []
+    update_calls: list[float] = []
+
+    class _AnimationManager:
+        def animate_custom(self, **kwargs):
+            callbacks.append(kwargs["update_callback"])
+            return "anim-late"
+
+        def cancel_animation(self, animation_id):
+            cancelled.append(animation_id)
+            return True
+
+    monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda _label: True)
+    monkeypatch.setattr(comp, "_begin_paint_metrics", lambda _label: None)
+    monkeypatch.setattr(comp, "_begin_animation_metrics", lambda *_args: object())
+    monkeypatch.setattr(comp, "_wrap_animation_update", lambda cb, _metrics: cb)
+    monkeypatch.setattr(comp, "_start_render_timer", lambda: timer_starts.append("start"))
+
+    anim_id = comp._start_transition_animation(
+        duration_ms=200,
+        easing=EasingCurve.LINEAR,
+        animation_manager=_AnimationManager(),
+        update_callback=lambda progress: update_calls.append(progress),
+        on_complete=lambda: None,
+        transition_label="wipe",
+    )
+
+    assert anim_id == "anim-late"
+    comp.stop_rendering(reason="test-late-callback")
+
+    assert cancelled == ["anim-late"]
+    assert callbacks
+    callbacks[0](0.5)
+
+    assert timer_starts == []
+    assert update_calls == []
+
+
+@pytest.mark.qt_no_exception_capture
 def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
     parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
     anim_mgr = AnimationManager(fps=60)
@@ -227,6 +270,50 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
     assert "wipe:deferred:" in anim_id
     assert scheduled == [75]
     assert started == []
+    assert start_calls == []
+
+    anim_mgr.cancel_all()
+    anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_deferred_desync_start_is_suppressed_after_compositor_stop(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    anim_mgr = AnimationManager(fps=60)
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    scheduled: list[object] = []
+    start_calls: list[int] = []
+    monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
+        lambda _delay, callback: scheduled.append(callback),
+    )
+    monkeypatch.setattr(comp, "_clear_all_transitions", lambda: None)
+    monkeypatch.setattr(comp, "_prepare_wipe_textures", lambda: True)
+    monkeypatch.setattr(comp, "_pre_upload_textures", lambda _prep: None)
+    monkeypatch.setattr(
+        comp,
+        "_start_transition_animation",
+        lambda duration_ms, *args, **kwargs: start_calls.append(duration_ms) or "anim-late",
+    )
+
+    token = comp.start_wipe(
+        old_pm,
+        new_pm,
+        direction=WipeDirection.LEFT_TO_RIGHT,
+        duration_ms=120,
+        easing=EasingCurve.LINEAR,
+        animation_manager=anim_mgr,
+        on_finished=None,
+    )
+
+    assert token is not None
+    assert scheduled
+    comp.stop_rendering(reason="test-deferred-stop")
+    scheduled[0]()
+
     assert start_calls == []
 
     anim_mgr.cancel_all()

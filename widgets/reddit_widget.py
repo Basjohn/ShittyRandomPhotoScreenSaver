@@ -106,6 +106,9 @@ class RedditWidget(BaseOverlayWidget):
     
     # Override defaults for reddit widget
     DEFAULT_FONT_SIZE = 18
+    REFRESH_INTERVAL = timedelta(minutes=15)
+    SECONDARY_WIDGET_STAGGER = timedelta(minutes=7, seconds=30)
+    REFRESH_TIMER_JITTER_MS = 2000
 
     def __init__(
         self,
@@ -128,11 +131,12 @@ class RedditWidget(BaseOverlayWidget):
         self._sort: str = "hot"
         self._configured_capacity: int = clamp_list_capacity(10, default=10)
         self._effective_visible_capacity: int = self._configured_capacity
-        self._refresh_interval = timedelta(minutes=5)  # 5 min refresh for fresher data
+        self._refresh_interval = self.REFRESH_INTERVAL
         self._startup_refresh_cooldown = self._refresh_interval
 
         self._update_timer: Optional[QTimer] = None
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
+        self._update_timer_start_timer: Optional[QTimer] = None
 
         # Progressive loading: start with fewer posts, expand over time using cache.
         # Stages follow the shared list-capacity policy: 5 -> 10 -> target.
@@ -299,6 +303,12 @@ class RedditWidget(BaseOverlayWidget):
             qtimer_attr="_update_timer",
             delete_qtimers=True,
         )
+        stop_qtimer_attr(
+            self,
+            "_update_timer_start_timer",
+            delete_qtimers=True,
+            clear_attr=True,
+        )
         self._reset_deferred_runtime_state(delete_qtimers=False)
         
         self._posts.clear()
@@ -391,6 +401,12 @@ class RedditWidget(BaseOverlayWidget):
             qtimer_attr="_update_timer",
             delete_qtimers=True,
         )
+        stop_qtimer_attr(
+            self,
+            "_update_timer_start_timer",
+            delete_qtimers=True,
+            clear_attr=True,
+        )
 
         if self._growth_timer is not None:
             try:
@@ -412,6 +428,12 @@ class RedditWidget(BaseOverlayWidget):
     def cleanup(self) -> None:
         logger.debug("Cleaning up Reddit widget")
         self.stop()
+        stop_qtimer_attr(
+            self,
+            "_update_timer_start_timer",
+            delete_qtimers=True,
+            clear_attr=True,
+        )
         try:
             if self._hover_timer is not None:
                 self._hover_timer.stop()
@@ -725,29 +747,73 @@ class RedditWidget(BaseOverlayWidget):
         if self._update_timer_handle is not None:
             # Timer already running; nothing to do.
             return
+        start_timer = self._update_timer_start_timer
+        try:
+            if start_timer is not None and start_timer.isActive():
+                return
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect delayed refresh timer", exc_info=True)
 
-        # Desync: Offset by widget index to stagger multiple Reddit widgets
-        # reddit (index 0): +0s, reddit2 (index 1): +150s (2.5min), etc.
+        cadence_ms = self._refresh_interval_ms()
+        phase_delay_ms, jitter_ms = self._refresh_phase_delay_ms()
+        logger.info(
+            "[CACHE][REDDIT] Periodic refresh timer armed cache_key=%s cadence_s=%.1f phase_delay_s=%.1f jitter_ms=%+d",
+            self._cache_key,
+            cadence_ms / 1000.0,
+            phase_delay_ms / 1000.0,
+            jitter_ms,
+        )
+        if phase_delay_ms <= 0:
+            self._start_recurring_update_timer()
+            return
+
+        ensure_single_shot_timer(
+            self,
+            attr_name="_update_timer_start_timer",
+            delay_ms=phase_delay_ms,
+            timeout_callback=self._start_recurring_update_timer,
+            resource_name="reddit periodic refresh starter",
+        )
+
+    def _refresh_interval_ms(self) -> int:
+        return max(1, int(self._refresh_interval.total_seconds() * 1000))
+
+    def _refresh_phase_delay_ms(self) -> tuple[int, int]:
         widget_index = 1 if self._cache_key == "reddit2" else 0
-        offset_ms = widget_index * 150000  # 2.5 minutes between widgets
-        
-        # Add random jitter (±2 seconds) to prevent correlated request spikes
-        jitter_ms = random.randint(-2000, 2000)
-        
-        base_interval_ms = int(self._refresh_interval.total_seconds() * 1000)
-        interval_ms = base_interval_ms + offset_ms + jitter_ms
-        
-        if is_perf_metrics_enabled():
-            logger.debug("[PERF] RedditWidget (%s): timer interval %d ms (offset: +%d ms, jitter: %+d ms)",
-                        self._cache_key, interval_ms, offset_ms, jitter_ms)
-        
-        handle = create_overlay_timer(self, interval_ms, self._fetch_feed, description="RedditWidget refresh")
+        base_delay_ms = int(self.SECONDARY_WIDGET_STAGGER.total_seconds() * 1000) * widget_index
+        jitter_ms = random.randint(-self.REFRESH_TIMER_JITTER_MS, self.REFRESH_TIMER_JITTER_MS)
+        return max(0, base_delay_ms + jitter_ms), jitter_ms
+
+    def _start_recurring_update_timer(self) -> None:
+        if not shiboken_isValid(self) or self._shutdown_event.is_set():
+            return
+        if not automatic_service_updates_enabled():
+            return
+        if self._update_timer_handle is not None:
+            return
+
+        interval_ms = self._refresh_interval_ms()
+        handle = create_overlay_timer(
+            self,
+            interval_ms,
+            self._on_periodic_refresh_timer,
+            description="RedditWidget refresh",
+        )
         self._update_timer_handle = handle
         try:
             self._update_timer = getattr(handle, "_timer", None)
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
             self._update_timer = None
+        logger.info(
+            "[CACHE][REDDIT] Periodic refresh timer running cache_key=%s cadence_s=%.1f",
+            self._cache_key,
+            interval_ms / 1000.0,
+        )
+
+    def _on_periodic_refresh_timer(self) -> None:
+        logger.info("[CACHE][REDDIT] Periodic refresh fired cache_key=%s", self._cache_key)
+        self._fetch_feed()
 
     def _fetch_feed(self, *, defer_for_transition: bool = True) -> bool:
         """Request subreddit listing via ThreadManager or synchronously.

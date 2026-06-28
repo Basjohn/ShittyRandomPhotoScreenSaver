@@ -366,6 +366,48 @@ def on_context_always_on_top_toggled(widget, on_top: bool) -> None:
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+def _resolve_visualizer_for_context_mode_switch(widget):
+    """Return the visualizer instance the invoking context menu should control."""
+
+    local_vis = getattr(widget, "spotify_visualizer_widget", None)
+    if local_vis is not None and hasattr(local_vis, "switch_to_mode"):
+        return local_vis, "local"
+
+    display_widgets = []
+    try:
+        getter = getattr(widget, "get_all_instances", None)
+        if callable(getter):
+            display_widgets = list(getter() or [])
+    except Exception:
+        logger.debug("[CONTEXT_MENU] Failed to enumerate displays from widget", exc_info=True)
+        display_widgets = []
+
+    if not display_widgets:
+        try:
+            from rendering.multi_monitor_coordinator import get_coordinator
+
+            display_widgets = list(get_coordinator().get_all_instances() or [])
+        except Exception:
+            logger.debug("[CONTEXT_MENU] Failed to enumerate displays from coordinator", exc_info=True)
+            display_widgets = []
+
+    candidates = []
+    seen_ids = set()
+    for display in display_widgets:
+        vis = getattr(display, "spotify_visualizer_widget", None)
+        if vis is None or not hasattr(vis, "switch_to_mode"):
+            continue
+        marker = id(vis)
+        if marker in seen_ids:
+            continue
+        seen_ids.add(marker)
+        candidates.append(vis)
+
+    if len(candidates) == 1:
+        return candidates[0], "sole_global"
+    return None, "none" if not candidates else "ambiguous"
+
+
 def on_context_visualizer_selected(widget, mode_id: str) -> None:
     """Handle visualizer mode selection from context menu.
 
@@ -373,12 +415,12 @@ def on_context_visualizer_selected(widget, mode_id: str) -> None:
     the same crossfade transition path as double-click / cycle_mode.
     """
     try:
-        vis = getattr(widget, "spotify_visualizer_widget", None)
-        if vis is not None and hasattr(vis, "switch_to_mode"):
+        vis, source = _resolve_visualizer_for_context_mode_switch(widget)
+        if vis is not None:
             vis.switch_to_mode(mode_id)
-            logger.info("Context menu: visualizer mode switched to %s", mode_id)
+            logger.info("Context menu: visualizer mode switched to %s (target=%s)", mode_id, source)
         else:
-            logger.debug("[CONTEXT_MENU] No visualizer widget available for mode switch")
+            logger.debug("[CONTEXT_MENU] No unambiguous visualizer widget available for mode switch")
     except Exception:
         logger.debug("Failed to switch visualizer mode from context menu", exc_info=True)
 

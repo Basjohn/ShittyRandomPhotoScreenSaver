@@ -227,6 +227,8 @@ class GLCompositorWidget(QOpenGLWidget):
         # keep the current animation id so the caller can cancel if needed.
         self._animation_manager: Optional[AnimationManager] = None
         self._current_anim_id: Optional[str] = None
+        self._transition_animation_generation: int = 0
+        self._render_shutdown_requested: bool = False
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
         self._current_easing: EasingCurve = EasingCurve.QUAD_IN_OUT
         self._current_anim_metrics: Optional[_AnimationRunMetrics] = None
@@ -410,6 +412,9 @@ class GLCompositorWidget(QOpenGLWidget):
                 logger.info("[PERF][GL COMPOSITOR] stop_rendering reason=%s state=%s", reason, self.describe_state())
             except Exception as exc:
                 logger.debug("[GL COMPOSITOR] describe_state logging failed: %s", exc)
+        self._render_shutdown_requested = True
+        self._transition_animation_generation += 1
+        self._cancel_current_animation()
         try:
             self._stop_frame_pacing()
         except Exception as exc:
@@ -811,6 +816,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self._animation_manager = animation_manager
         self._current_easing = easing
         self._cancel_current_animation()
+        self._render_shutdown_requested = False
+        self._transition_animation_generation += 1
+        animation_generation = self._transition_animation_generation
         if transition_label:
             self._ensure_transition_program_ready(transition_label)
         duration_sec = max(0.001, duration_ms / 1000.0)
@@ -825,6 +833,11 @@ class GLCompositorWidget(QOpenGLWidget):
         
         # Wrap callback to initialize metrics on first call (lazy init)
         def lazy_init_callback(progress: float) -> None:
+            if (
+                self._render_shutdown_requested
+                or animation_generation != self._transition_animation_generation
+            ):
+                return
             if not initialized[0]:
                 initialized[0] = True
                 # Initialize metrics FIRST before starting timer
@@ -1515,6 +1528,9 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def cleanup(self) -> None:
         """Clean up GL resources and transition to DESTROYED state."""
+        self._render_shutdown_requested = True
+        self._transition_animation_generation += 1
+        self._cancel_current_animation()
         # Stop render strategy first to prevent timer callbacks during cleanup
         self._stop_render_strategy()
         

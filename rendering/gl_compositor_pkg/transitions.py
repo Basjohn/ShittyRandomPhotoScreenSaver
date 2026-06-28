@@ -56,8 +56,19 @@ def _start_with_desync(
             on_started(compensated_duration)
         return starter(compensated_duration)
 
+    scheduled_generation = getattr(widget, "_transition_animation_generation", 0)
+
     def deferred_start() -> None:
         try:
+            if (
+                getattr(widget, "_render_shutdown_requested", False)
+                or scheduled_generation != getattr(widget, "_transition_animation_generation", 0)
+            ):
+                logger.debug(
+                    "[GL COMPOSITOR] Suppressed stale deferred %s start after compositor lifecycle changed",
+                    transition_label,
+                )
+                return
             if on_started is not None:
                 on_started(compensated_duration)
             starter(compensated_duration)

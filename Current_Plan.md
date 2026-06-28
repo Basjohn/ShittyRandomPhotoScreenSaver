@@ -51,11 +51,13 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Add parser timeline markers for settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow texture uploads, cache fallbacks, shader fallbacks, and pending-paint rescues
     - [x] Add passive adaptive-timer observability for stale pending paint updates with `no_requeue=True`; do not add any repaint/update retry path
     - [x] Split paint-time transition progress sync into its own `GL PAINT` section metric so future logs can prove whether interpolation sync is a real hot-path cost
-    - [x] Current evidence: latest `--perf` parser run reports `47` paired paint-delivery starvation windows, `0` pending-paint requeues, `0` shader fallbacks, `0` cache worker fallbacks, `174` visualizer timing warnings, and `0` slow GL texture uploads
+    - [x] Runtime-check the adaptive-timer GIL-spin fix against commit `40562fe`: latest `--perf` runs stay in the improved range with no pending-paint requeues, no shader fallbacks, no cache worker fallbacks, and no high-refresh near-60 paint windows
     - [x] Separate the latest collapse into two log-backed seams: early `GL RENDER` healthy / `GL PAINT` starved windows, and later `GL ANIM` control-callback cadence near `60fps` while paint-time interpolation still delivers higher visual paint cadence
     - [x] Remove the adaptive render timer's Python busy-spin deadline tail so high-refresh timing no longer monopolizes the GIL while Qt paint/event-loop delivery is trying to consume queued updates
-    - [ ] Runtime-check whether removing the adaptive-timer GIL spin reduces paired paint-delivery starvation and visualizer tick spikes without reintroducing first-frame issues, update requeues, or transition fidelity regressions
+    - [x] Fix the exit-stall/orphan-timer seam where a late compositor lazy animation callback or delayed/desynced transition starter could start an adaptive timer after `stop_rendering()` / display teardown had already invalidated that transition
+    - [x] Runtime-check the next `--life` / `--perf` run for no `ThreadManager shutdown timed out` adaptive-timer tasks, no late `Internal C++ object (GLCompositorWidget) already deleted` transition-complete callbacks, and no post-stop adaptive frame signalling
     - [ ] Correlate any remaining paired starvation windows with settings open/close, edit-mode save, display clear/recreate, frame-budget spikes, and visualizer tick spikes using the parser timeline
+    - [ ] Continue the remaining collapse investigation from the latest sharper evidence: Display 0 render cadence remains healthy at `~165Hz` while paint can drift into `~85-118fps`; Display 1 render cadence remains `~60Hz` while `GL ANIM` can fall into a suspicious `~40fps` cadence under some transitions
     - [ ] Root-cause any remaining Qt/GL paint delivery under-delivery while render timers remain at target; inspect update consumption, pending-flag lifecycle, compositor/widget lifecycle churn, display-specific refresh target state, and event-loop stalls
     - [ ] Root-cause settings UI stalls around widget tab hydration (`~2.3s` class stalls in latest logs) without breaking settings persistence, buckets, or scroll persistence
     - [ ] Correlate slow GL texture uploads with image-cache warmup and display rebuild boundaries; prefer cache/prewarm ownership fixes over UI-thread upload retries
@@ -69,8 +71,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Keep the delayed post-transition prefetch resume armed while another display still reports transition work pending, instead of consuming the resume and leaving no producers registered
     - [x] Preserve raw/scaled prefetch registration intent through post-transition cooldown without dispatching new work during the cooldown window
     - [x] Rearm transition-complete prefetch resume until the prefetcher cooldown has actually expired, avoiding the just-before-expiry lost-wakeup shape
-    - [x] Runtime-check the latest `--cache` run: one zero-producer fallback remains at `16:45:43` (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
-    - [ ] Inspect cache promotion, cancellation, and worker wakeup ownership next; do not repeat the already-fixed first-two-only backlog or cooldown lost-wakeup hypotheses unless new evidence matches them
+    - [x] Runtime-check the latest `--cache` run: zero-producer fallback count is now `0`, with preview producer registration and scaled coverage present after transition-complete resumes
+    - [ ] Keep cache promotion, cancellation, and worker wakeup ownership on watch only if future `--cache` logs reintroduce zero-producer fallbacks or slow-upload clusters near collapse windows
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
   - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
@@ -101,11 +103,29 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Runtime-check the next `--geo` run for Display 0 digital-clock stability; if wobble persists, inspect parent/custom replay writers rather than text measurement
   - [ ] Preserve the already-fixed contracts: no clipping, timezone balanced inside the frame, double-click swaps work in CUSTOM runtime, and mode swaps rebuild cleanly around the current rect
 
+- [ ] Improve CUSTOM edit-mode guide lines as real snap/assist affordances
+  - [ ] Add display-center horizontal and vertical guide assists for the adjusted widget's active display
+  - [ ] Add peer-widget center horizontal and vertical guide assists without making hidden/shadow/debug bounds authoritative
+  - [ ] Keep guide visibility tied to the existing touch/threshold behavior so the grid does not become permanent visual noise
+  - [ ] Add bars around the snap/guide resolver so painted guide lines correspond to real candidate assists, not cosmetic-only lines
+
+- [ ] Make context-menu visualizer mode switching display-aware but globally helpful
+  - [x] Prefer the visualizer owned by the display where the context menu was invoked
+  - [x] If the invoking display owns none and exactly one visualizer exists globally, route the mode switch to that sole instance
+  - [x] Refuse to guess when multiple visualizers exist, so the fix cannot reopen duplicate-owner drift
+  - [ ] Runtime-check one sole-global CUSTOM visualizer case from the other display's context menu
+
+- [ ] Restore Reddit's automatic periodic refresh cadence and observability
+  - [x] Verify current code/logs: startup cache loads are visible, but periodic timer arm/fire evidence was too quiet to prove long-run updates
+  - [x] Use a shared `15min` automatic cadence with a `reddit2` initial phase stagger instead of lengthening `reddit2`'s repeat interval forever
+  - [x] Keep startup refresh gating independent from periodic/manual refresh; a skipped startup fetch must still arm the recurring timer
+  - [x] Log periodic timer arm/start/fire through `[CACHE][REDDIT]` so future `--cache` runs prove cadence without manual inference
+  - [ ] Runtime-check a `--cache` run past the first cadence window: expect `reddit` around `15min` and `reddit2` around `22.5min` after startup, subject to jitter/cooldown/transition deferral
+
 ## Watchlist
 
 - Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
 - Oscilloscope needs a later focused audit: current runtime appears to flicker/strobe in brightness and ghosting is not visually obvious even though `--viz` logs still report `ghost2=True ghost3=True`.
-- Visualizer mode-change targeting should eventually prefer the visualizer owned by the display where the user invoked the change, then fall back to the sole existing visualizer only when that display owns none; do not let this reopen duplicate visualizer ownership.
 
 ## Deferred / Not Active
 
@@ -140,8 +160,6 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 #######
 ### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.
 ----
-1. Edit mode guide lines should have a line for horizontal and vertical centering with both other widgets and the entire display the widget being adjusted is on (a simple crosshair of the whole display made up of 2 lines, can be done as our current style showing up only when the widget is touching either or both)
-
-2. Context menu change visualizer mode should change it globally if there is only one visualizer instance across all displays so clicking change on display 0 will change it even if it is one display 1.
+No unintegrated user tasks.
 ----
 ######

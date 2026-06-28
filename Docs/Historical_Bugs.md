@@ -83,6 +83,8 @@ This is the long-term anti-regression record for the project, not an active task
 - **Next direction preserved outside this resolved entry:**
   - continue investigating the actual high-refresh cadence collapse through paint/update delivery, compositor timer ownership, GL texture upload spikes, settings/display rebuild churn, and visualizer tick listener pressure
   - follow-up logs exposed a related timer-thread trap: high-refresh adaptive timing can report healthy `GL RENDER` cadence while a Python busy-spin deadline tail holds the GIL and starves `GL PAINT` / visualizer tick delivery; precision timing must yield/sleep rather than monopolize Python execution
+  - later logs also exposed a compositor lifecycle trap: a transition requested just before settings/exit teardown can still run its delayed/desynced starter or lazy first animation callback after `stop_rendering()`, starting an orphan adaptive timer that survives display ownership and can stall process exit. Compositor teardown must cancel current animations and invalidate late deferred/lazy callbacks before stopping render pacing.
+  - latest validation logs from 2026-06-28 show clean process shutdown again: no `ThreadManager shutdown timed out`, no late `GLCompositorWidget already deleted` callback spam, and adaptive timers stop/clear during display cleanup. The remaining active performance family is now render-healthy paint/control under-delivery, not exit orphaning or pending-paint requeue behavior.
 
 <a id="R-26"></a>
 ### [R-26] 2026-06-18 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn (Resolved)
