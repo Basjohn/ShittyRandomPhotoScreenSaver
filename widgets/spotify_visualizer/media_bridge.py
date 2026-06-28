@@ -204,6 +204,15 @@ def _commit_playback_state(widget: Any, *, state: str, reason: str) -> None:
 
 
 def _schedule_nonplaying_commit(widget: Any, *, state: str) -> None:
+    existing_timer = getattr(widget, "_pending_playback_pause_timer", None)
+    existing_state = getattr(widget, "_pending_playback_pause_state", None)
+    if existing_timer is not None and existing_state == state:
+        try:
+            if existing_timer.isActive():
+                return
+        except Exception:
+            pass
+
     clear_pending_playback_pause(widget)
     widget._pending_playback_pause_state = state
 

@@ -533,7 +533,7 @@ class WidgetManager:
 
         full_widgets = dict(widgets_cfg)
         full_widgets['spotify_visualizer'] = vis_config
-        settings.set('widgets', full_widgets)
+        settings.set('widgets.spotify_visualizer', vis_config)
         self._schedule_visualizer_preset_save()
         # Immediately push the refreshed config to the live widget so mode-specific
         # colors (fill/border) and other visual properties take effect without
@@ -587,7 +587,7 @@ class WidgetManager:
 
         full_widgets = dict(widgets_cfg)
         full_widgets['spotify_visualizer'] = vis_config
-        settings.set('widgets', full_widgets)
+        settings.set('widgets.spotify_visualizer', vis_config)
         self._schedule_visualizer_preset_save()
 
         try:

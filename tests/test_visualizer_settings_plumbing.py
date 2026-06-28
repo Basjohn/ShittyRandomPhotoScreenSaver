@@ -559,6 +559,7 @@ class TestCreatorKwargs:
             rainbow_speed=0.8,
             osc_ghosting_enabled=True,
             osc_ghost_intensity=0.6,
+            osc_ghost_decay=0.73,
             bubble_outline_color=[10, 20, 30, 255],
             bubble_gradient_direction="center_out",
             bubble_specular_direction="bottom_right",
@@ -581,6 +582,7 @@ class TestCreatorKwargs:
         assert captured["rainbow_speed"] == pytest.approx(0.8)
         assert captured["osc_ghosting_enabled"] is True
         assert captured["osc_ghost_intensity"] == pytest.approx(0.6)
+        assert captured["osc_ghost_decay"] == pytest.approx(0.73)
         assert captured["bubble_outline_color"] == [10, 20, 30, 255]
         assert captured["bubble_gradient_direction"] == "center_out"
         assert captured["bubble_specular_direction"] == "bottom_right"
@@ -4380,6 +4382,8 @@ class TestOscilloscopeSettingsBinding:
                 self.osc_ghost_enabled = _Check()
                 self.osc_ghost_intensity = _Slider()
                 self.osc_ghost_intensity_label = _Label()
+                self.osc_ghost_decay = _Slider()
+                self.osc_ghost_decay_label = _Label()
                 self.osc_ghost_line2_enabled = _Check()
                 self.osc_ghost_line3_enabled = _Check()
 
@@ -4422,6 +4426,7 @@ class TestOscilloscopeSettingsBinding:
                 "osc_line3_glow_color": [21, 22, 23, 24],
                 "osc_ghosting_enabled": True,
                 "osc_ghost_intensity": 0.41,
+                "osc_ghost_decay": 0.57,
                 "osc_ghost_line2_enabled": False,
                 "osc_ghost_line3_enabled": True,
             },
@@ -4445,6 +4450,8 @@ class TestOscilloscopeSettingsBinding:
         assert tab.osc_line_count.value == 3
         assert tab.osc_ghost_enabled.checked is True
         assert tab.osc_ghost_intensity.value == 41
+        assert tab.osc_ghost_decay.value == 57
+        assert tab.osc_ghost_decay_label.text == "0.57x"
         assert tab.osc_ghost_line2_enabled.checked is False
         assert tab.osc_ghost_line3_enabled.checked is True
         assert (tab._osc_line_color.red(), tab._osc_line_color.green(), tab._osc_line_color.blue(), tab._osc_line_color.alpha()) == (1, 2, 3, 4)
@@ -4498,6 +4505,7 @@ class TestOscilloscopeSettingsBinding:
             osc_line_count = _Slider(3)
             osc_ghost_enabled = _Check(True)
             osc_ghost_intensity = _Slider(52)
+            osc_ghost_decay = _Slider(61)
             osc_ghost_line2_enabled = _Check(False)
             osc_ghost_line3_enabled = _Check(True)
             _osc_line_color = QColor(1, 2, 3, 4)
@@ -4529,6 +4537,7 @@ class TestOscilloscopeSettingsBinding:
         assert payload["osc_vertical_shift"] == 27
         assert payload["osc_ghosting_enabled"] is True
         assert payload["osc_ghost_intensity"] == pytest.approx(0.52)
+        assert payload["osc_ghost_decay"] == pytest.approx(0.61)
         assert payload["osc_ghost_line2_enabled"] is False
         assert payload["osc_ghost_line3_enabled"] is True
         assert payload["osc_line3_glow_color"] == [21, 22, 23, 24]

@@ -52,6 +52,29 @@ def test_widget_manager_cycle_visualizer_preset_updates_settings(settings_manage
     assert int(updated_vis.get("preset_spectrum", -1)) == 1
 
 
+def test_widget_manager_cycle_visualizer_preset_does_not_refresh_media(settings_manager):
+    wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
+
+    widgets_cfg = settings_manager.get("widgets", {}) or {}
+    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
+    spotify_cfg["mode"] = "spectrum"
+    spotify_cfg["preset_spectrum"] = 0
+    widgets_cfg = dict(widgets_cfg)
+    widgets_cfg["spotify_visualizer"] = spotify_cfg
+    settings_manager.set("widgets", widgets_cfg)
+
+    wm._attach_settings_manager(settings_manager)
+    wm._refresh_media_config = MagicMock()
+    wm._refresh_reddit_configs = MagicMock()
+    wm._refresh_spotify_visualizer_config = MagicMock()
+
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
+
+    wm._refresh_spotify_visualizer_config.assert_called()
+    wm._refresh_media_config.assert_not_called()
+    wm._refresh_reddit_configs.assert_not_called()
+
+
 def test_widget_manager_cycle_visualizer_preset_wraps_backward(settings_manager):
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)

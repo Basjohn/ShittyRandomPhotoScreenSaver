@@ -6,6 +6,7 @@ builds HTML metadata, handles artwork decoding, and manages visibility.
 """
 from __future__ import annotations
 
+from dataclasses import replace
 import time
 from typing import Optional, TYPE_CHECKING
 
@@ -20,6 +21,63 @@ if TYPE_CHECKING:
     from widgets.media_widget import MediaWidget
 
 logger = get_logger(__name__)
+
+
+def _norm_metadata_text(value: Optional[str]) -> str:
+    return (value or "").strip().lower()
+
+
+def _coalesce_partial_same_track_metadata(
+    widget: "MediaWidget",
+    info: Optional[MediaTrackInfo],
+    prev_info: Optional[MediaTrackInfo],
+) -> Optional[MediaTrackInfo]:
+    """Preserve known same-track visible metadata when a poll returns a partial snapshot.
+
+    GSMTC can briefly report a title/state/artwork snapshot without artist text
+    during unrelated UI churn. That snapshot is not authoritative enough to
+    erase already-visible artist metadata for the same track.
+    """
+    if info is None:
+        return None
+    if (info.artist or "").strip():
+        return info
+
+    title_key = _norm_metadata_text(info.title)
+    if not title_key:
+        return info
+
+    candidates: list[Optional[MediaTrackInfo]] = [prev_info]
+    try:
+        candidates.append(widget.get_retained_display_info())
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+    try:
+        candidates.append(type(widget)._get_shared_valid_info())
+    except Exception as e:
+        logger.debug("[MEDIA_WIDGET] Exception suppressed: %s", e)
+
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if _norm_metadata_text(candidate.title) != title_key:
+            continue
+        artist = (candidate.artist or "").strip()
+        if not artist:
+            continue
+        try:
+            return replace(
+                info,
+                artist=candidate.artist,
+                album=info.album or candidate.album,
+                album_artist=info.album_artist or candidate.album_artist,
+                artwork=info.artwork if info.artwork is not None else candidate.artwork,
+            )
+        except Exception as e:
+            logger.debug("[MEDIA_WIDGET] Failed to coalesce partial metadata snapshot: %s", e)
+            return info
+
+    return info
 
 
 def _compute_metadata_layout_budget(widget: "MediaWidget", *, has_artwork: bool = False) -> dict[str, int]:
@@ -213,6 +271,7 @@ def update_display(widget: "MediaWidget", info: Optional[MediaTrackInfo]) -> Non
 
     # Cache last track snapshot for diagnostics/interaction
     prev_info = widget._last_info
+    info = _coalesce_partial_same_track_metadata(widget, info, prev_info)
     widget._last_info = info
 
     # Update shared cache when we have valid info

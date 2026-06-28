@@ -575,6 +575,14 @@ class _SpotifyBeatEngine(QObject):
         if not self._is_spotify_playing:
             self._update_idle_waveform(now_ts)
             self._prime_idle_bars(now_ts)
+            try:
+                # Drain one warm-grace frame without accepting it as visual
+                # waveform authority; otherwise paused oscilloscope can render
+                # stale live PCM until the capture stream dries up.
+                self._audio_buffer.consume_latest()
+            except Exception as e:
+                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+            return self._latest_bars
         frame = self._audio_buffer.consume_latest()
         if frame is not None:
             frame_activation = getattr(frame, "activation_id", None)

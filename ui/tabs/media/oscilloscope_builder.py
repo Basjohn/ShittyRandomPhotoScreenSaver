@@ -255,6 +255,25 @@ def build_oscilloscope_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None
     tab.osc_ghost_intensity_label = QLabel(f"{osc_gi_val}%")
     osc_ghost_row.addWidget(tab.osc_ghost_intensity_label)
 
+    ghost_decay_widget, osc_ghost_decay_row = _aligned_row_widget(behavior_bucket, "Ghost Decay:")
+    tab._osc_ghost_widgets.append(ghost_decay_widget)
+    tab.osc_ghost_decay = NoWheelSlider(Qt.Orientation.Horizontal)
+    tab.osc_ghost_decay.setMinimum(10)
+    tab.osc_ghost_decay.setMaximum(100)
+    osc_gd_val = int(tab._default_float('spotify_visualizer', 'osc_ghost_decay', 0.4) * 100)
+    tab.osc_ghost_decay.setValue(max(10, min(100, osc_gd_val)))
+    tab.osc_ghost_decay.setTickPosition(QSlider.TickPosition.TicksBelow)
+    tab.osc_ghost_decay.setTickInterval(10)
+    tab.osc_ghost_decay.setToolTip("How long the oscilloscope ghost trail persists. Higher = longer trailing outline.")
+    bind_setting_signal(
+        tab,
+        tab.osc_ghost_decay.valueChanged,
+        updater=lambda v: tab.osc_ghost_decay_label.setText(f"{v / 100.0:.2f}x"),
+    )
+    osc_ghost_decay_row.addWidget(tab.osc_ghost_decay)
+    tab.osc_ghost_decay_label = QLabel(f"{tab.osc_ghost_decay.value() / 100.0:.2f}x")
+    osc_ghost_decay_row.addWidget(tab.osc_ghost_decay_label)
+
     def _update_osc_ghost_vis(_s=None):
         visible = tab.osc_ghost_enabled.isChecked()
         for widget in tab._osc_ghost_widgets:

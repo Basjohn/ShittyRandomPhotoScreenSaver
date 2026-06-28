@@ -39,6 +39,7 @@ from widgets.spotify_visualizer.overlay_mask import (
 from widgets.spotify_visualizer.overlay_diagnostics import (
     maybe_log_blob_diagnostics,
     maybe_log_glow_diagnostics,
+    maybe_log_oscilloscope_diagnostics,
     maybe_log_sine_idle_state,
 )
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
@@ -51,6 +52,13 @@ from widgets.spotify_visualizer.overlay_uniforms import (
 from widgets.spotify_visualizer.overlay_render_dispatch import (
     dispatch_mode_uniforms,
     resolve_mode_program,
+)
+from widgets.spotify_visualizer.oscilloscope_contract import (
+    advance_ghost_ring,
+    blend_waveform,
+    condition_live_waveform,
+    resolve_transient_sensitivity_modulation,
+    resolve_waveform_blend_alpha,
 )
 from widgets.spotify_visualizer.overlay_frame_shell import (
     clear_overlay_backbuffer,
@@ -324,6 +332,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._sine_peak_hold_remaining: float = 0.0
         self._glow_diag_last_ts: float = 0.0
         self._glow_diag_last_sig: tuple | None = None
+        self._osc_diag_last_ts: float = 0.0
+        self._osc_diag_last_sig: tuple | None = None
+        self._osc_last_waveform_delta: float = 0.0
+        self._osc_last_waveform_blend_alpha: float = 1.0
 
         self._blob_stage_progress_raw: tuple[float, float, float] = (-1.0, -1.0, -1.0)
         self._blob_stage_progress_filtered: tuple[float, float, float] = (-1.0, -1.0, -1.0)
@@ -610,6 +622,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         spectrum_glow_color: QColor | None = None,
         osc_ghosting_enabled: bool = False,
         osc_ghost_intensity: float = 0.4,
+        osc_ghost_decay: float = 0.4,
         spectrum_ghosting_enabled: bool = True,
         spectrum_ghost_alpha: float = 0.4,
         spectrum_ghost_decay: float = 0.4,
@@ -722,6 +735,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         ``SpotifyVisualizerWidget``.
         """
 
+        was_playing = bool(getattr(self, "_playing", False))
         if not apply_state_handoff(
             self,
             visible=visible,
@@ -734,6 +748,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             border_width_px=border_width_px,
         ):
             return
+        osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
+        osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
 
         try:
             self._sine_density = float(sine_density)
@@ -996,33 +1012,55 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 overall_energy=float(pocket_overall),
             )
         self._last_time_ts = now_ts
+        self._line_speed = max(0.01, min(1.0, float(line_speed)))
+        self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
+        osc_decay = max(0.1, min(1.0, float(osc_ghost_decay)))
+        self._ghost_delay_frames = max(2, min(18, int(round(2 + osc_decay * 16))))
 
         # Store waveform data (line modes) with temporal smoothing via line_speed
         if waveform is not None:
-            # Push current waveform into ghost ring buffer before updating
-            if self._waveform and self._osc_ghost_alpha > 0.001:
-                ring = self._ghost_waveform_ring
-                delay = self._ghost_delay_frames
-                if len(ring) < delay:
-                    ring.append(list(self._waveform))
+            if osc_entering_idle or osc_entering_live:
+                previous_waveform = list(self._waveform)
+                self._waveform = []
+                if osc_entering_idle and previous_waveform and self._osc_ghost_alpha > 0.001:
+                    # A pause is a content-state boundary, not a mode reset.
+                    # Keep one delayed live outline so the first idle frame
+                    # crossfades visually instead of flashing through empty GL
+                    # state, while the body accepts idle data immediately below.
+                    self._prev_waveform = previous_waveform
+                    self._ghost_waveform_ring = [previous_waveform]
+                    self._ghost_ring_idx = 0
                 else:
-                    ring[self._ghost_ring_idx % delay] = list(self._waveform)
-                # Read the oldest entry as the ghost waveform
-                oldest_idx = (self._ghost_ring_idx + 1) % max(1, len(ring))
-                self._prev_waveform = ring[oldest_idx] if len(ring) > 0 else []
-                self._ghost_ring_idx = (self._ghost_ring_idx + 1) % max(1, delay)
-            new_wf = list(waveform)
+                    self._prev_waveform = []
+                    self._ghost_waveform_ring = []
+                    self._ghost_ring_idx = 0
+                self._line_kick_event_envelope = 0.0
+                self._line_snare_event_envelope = 0.0
+                self._line_kick_event_strength = 0.0
+                self._line_snare_event_strength = 0.0
+            if self._waveform and self._osc_ghost_alpha > 0.001:
+                self._prev_waveform, self._ghost_ring_idx = advance_ghost_ring(
+                    self._ghost_waveform_ring,
+                    self._ghost_ring_idx,
+                    self._waveform,
+                    self._ghost_delay_frames,
+                )
+            new_wf = (
+                condition_live_waveform(self._waveform, waveform)
+                if self._vis_mode == "oscilloscope" and bool(playing)
+                else list(waveform)
+            )
             speed = self._line_speed
-            if speed < 0.99 and len(self._waveform) == len(new_wf) and len(new_wf) > 0:
-                # Blend: low speed = slow change, high speed = instant update
-                # alpha = speed^2 makes low values feel genuinely slow
-                alpha = speed * speed
-                self._waveform = [
-                    old * (1.0 - alpha) + new * alpha
-                    for old, new in zip(self._waveform, new_wf)
-                ]
+            old_wf = list(self._waveform)
+            self._osc_last_waveform_blend_alpha = resolve_waveform_blend_alpha(speed)
+            self._waveform = blend_waveform(self._waveform, new_wf, speed)
+            if old_wf and len(old_wf) == len(self._waveform):
+                self._osc_last_waveform_delta = max(
+                    abs(float(new) - float(old))
+                    for old, new in zip(old_wf, self._waveform)
+                )
             else:
-                self._waveform = new_wf
+                self._osc_last_waveform_delta = max((abs(float(v)) for v in self._waveform), default=0.0)
             if waveform_count is None:
                 resolved_waveform_count = len(self._waveform)
             else:
@@ -1227,10 +1265,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_shape_reaction_nodes = blob_shape_reaction_nodes
         if blob_shape_energy_nodes is not None:
             self._blob_shape_energy_nodes = blob_shape_energy_nodes
-        self._line_speed = max(0.01, min(1.0, float(line_speed)))
         self._line_dim = bool(line_dim)
         self._line_offset_bias = max(0.0, min(1.0, float(line_offset_bias)))
         self._osc_vertical_shift = max(-50, min(200, int(osc_vertical_shift)))
+        if self._vis_mode == "oscilloscope":
+            _osc_sens_mod, _osc_drive = resolve_transient_sensitivity_modulation(
+                base_sensitivity=self._line_sensitivity,
+                smoothed_bass=self._line_smoothed_bass,
+                kick_event=self._line_kick_event_strength,
+                snare_event=self._line_snare_event_strength,
+                width_mix=self._osc_transient_width_mix,
+            )
+            self._osc_last_transient_width_drive = _osc_drive
+            self._osc_last_sensitivity_mod = _osc_sens_mod
         self._sine_wave_travel = max(0, min(2, int(sine_wave_travel)))
         self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
         self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
@@ -1267,14 +1314,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if spectrum_glow_color is not None:
             self._spectrum_glow_color = QColor(spectrum_glow_color)
 
-        # Oscilloscope ghost trail
-        self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
-
         # Sine Wave Heartbeat
         self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
         self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
 
         maybe_log_glow_diagnostics(self, logger)
+        maybe_log_oscilloscope_diagnostics(self, logger)
 
         # Bubble settings
         self._bubble_count = max(0, min(110, int(bubble_count)))

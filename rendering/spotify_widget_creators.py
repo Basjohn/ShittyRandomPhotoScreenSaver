@@ -428,6 +428,7 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         spectrum_ghost_decay=model.spectrum_ghost_decay,
         osc_ghosting_enabled=model.osc_ghosting_enabled,
         osc_ghost_intensity=model.osc_ghost_intensity,
+        osc_ghost_decay=model.osc_ghost_decay,
         blob_ghosting_enabled=model.blob_ghosting_enabled,
         blob_ghost_alpha=model.blob_ghost_alpha,
         blob_ghost_decay=model.blob_ghost_decay,

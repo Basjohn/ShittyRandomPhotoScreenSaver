@@ -3124,6 +3124,7 @@ def test_bubble_dispatch_uses_bubble_specific_engine_feed(qt_app, qtbot, monkeyp
     [
         VisualizerMode.BUBBLE,
         VisualizerMode.SINE_WAVE,
+        VisualizerMode.OSCILLOSCOPE,
         VisualizerMode.DEVCURVE,
     ],
 )
@@ -3156,6 +3157,7 @@ def test_paused_idle_reveal_modes_do_not_block_on_fresh_engine_wait(qt_app, qtbo
     [
         VisualizerMode.BUBBLE,
         VisualizerMode.SINE_WAVE,
+        VisualizerMode.OSCILLOSCOPE,
         VisualizerMode.DEVCURVE,
     ],
 )
@@ -3472,6 +3474,7 @@ def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeyp
         osc_line_count=3,
         osc_ghosting_enabled=True,
         osc_ghost_intensity=0.62,
+        osc_ghost_decay=0.71,
         osc_ghost_line2_enabled=True,
         osc_ghost_line3_enabled=False,
     )
@@ -3486,6 +3489,7 @@ def test_runtime_push_carries_osc_secondary_ghost_toggles(qt_app, qtbot, monkeyp
     assert frame["vis_mode"] == "oscilloscope"
     assert frame["osc_ghosting_enabled"] is True
     assert frame["osc_ghost_intensity"] == pytest.approx(0.62)
+    assert frame["osc_ghost_decay"] == pytest.approx(0.71)
     assert frame["osc_ghost_line2_enabled"] is True
     assert frame["osc_ghost_line3_enabled"] is False
 
@@ -9559,7 +9563,7 @@ def test_spotify_visualizer_watchdog_does_not_force_reveal_when_startup_begins_p
 
 
 @pytest.mark.qt
-def test_oscilloscope_watchdog_still_waits_for_play_when_startup_begins_paused(
+def test_oscilloscope_paused_startup_uses_idle_waveform_reveal_like_bubble(
     qt_app,
     qtbot,
     monkeypatch,
@@ -9586,12 +9590,15 @@ def test_oscilloscope_watchdog_still_waits_for_play_when_startup_begins_paused(
     vis.begin_spotify_secondary_stage()
     qt_app.processEvents()
 
-    assert vis._startup_require_playing_before_reveal is True
+    assert vis._startup_require_playing_before_reveal is False
     vis._startup_reveal_not_before_ts = 0.0
-    vis._finish_staged_startup_reveal(reason="startup_watchdog")
+    vis._startup_idle_reveal_requires_authoritative_media = False
+    vis._startup_has_authoritative_media_update = False
 
-    assert vis._startup_reveal_pending is True
-    assert fade_calls == []
+    tick_pipeline.consume_engine_bars(vis, time.time())
+
+    assert vis._startup_reveal_pending is False
+    assert fade_calls == [1500]
 
     vis.stop()
 
@@ -9820,6 +9827,32 @@ def test_spotify_visualizer_quick_playback_wobble_does_not_commit_pause(qt_app):
         assert vis._spotify_playing is True
         assert vis._pending_playback_pause_timer is None
         assert engine_states == []
+    finally:
+        vis.deleteLater()
+
+
+@pytest.mark.qt
+def test_spotify_visualizer_repeated_paused_updates_do_not_extend_pause_confirmation(qt_app):
+    """Repeated provider-paused snapshots should not keep pushing idle entry away."""
+    vis = SpotifyVisualizerWidget(parent=None, bar_count=10)
+    engine_states = []
+    try:
+        vis._engine = SimpleNamespace(set_playback_state=lambda playing: engine_states.append(bool(playing)))
+        vis._spotify_playing = True
+
+        vis.handle_media_update({"state": "paused"})
+
+        first_timer = vis._pending_playback_pause_timer
+        assert first_timer is not None
+
+        vis.handle_media_update({"state": "paused"})
+        vis.handle_media_update({"state": "paused"})
+
+        assert vis._pending_playback_pause_timer is first_timer
+        first_timer.timeout.emit()
+
+        assert vis._spotify_playing is False
+        assert engine_states == [False]
     finally:
         vis.deleteLater()
 

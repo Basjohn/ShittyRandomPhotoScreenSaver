@@ -212,16 +212,17 @@ vec4 eval_line(
         float sigma = glowSigmaBase;
         if (u_reactive_glow == 1) {
             float react = clamp(u_glow_reactivity, 0.0, 2.0);
-            // Reactivity now has its own scalar; intensity remains the master
-            // glow strength control.
-            sigma *= (0.85 + band_energy * (1.35 * react));
+            // Reactivity should primarily widen/shape the glow. If alpha also
+            // surges too hard, Oscilloscope reads as brightness strobe instead
+            // of waveform motion.
+            sigma *= (0.94 + band_energy * (0.55 * react));
         }
         if (sigma > 0.0) {
             glow_alpha = exp(-(dist_px * dist_px) / (2.0 * sigma * sigma));
             glow_alpha *= clamp(u_glow_intensity, 0.0, 2.0);
             if (u_reactive_glow == 1) {
                 float react = clamp(u_glow_reactivity, 0.0, 2.0);
-                glow_alpha *= (0.80 + band_energy * (0.70 * react));
+                glow_alpha *= (0.96 + band_energy * (0.10 * react));
             }
         }
     }
@@ -666,8 +667,9 @@ void main() {
                        lines_rgb, lines_a, glow_accum);
     }
 
-    vec3 final_rgb = lines_rgb + ghost_rgb * (1.0 - lines_a);
-    float final_a = lines_a + ghost_a * (1.0 - lines_a);
+    float ghost_visibility = 1.0 - lines_a * 0.35;
+    vec3 final_rgb = lines_rgb + ghost_rgb * ghost_visibility;
+    float final_a = lines_a + ghost_a * ghost_visibility;
 
     if (final_a <= 0.001) {
         discard;

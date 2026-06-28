@@ -115,7 +115,7 @@ def sync_active_mode_legacy_ghost_bridge(widget: Any, mode: VisualizerMode) -> N
     elif mode_key == "oscilloscope":
         widget._ghosting_enabled = bool(widget._osc_ghosting_enabled)
         widget._ghost_alpha = float(widget._osc_ghost_intensity)
-        widget._ghost_decay_rate = float(getattr(widget, "_peak_decay_per_sec", 0.4))
+        widget._ghost_decay_rate = float(getattr(widget, "_osc_ghost_decay", 0.4))
 
 
 def build_technical_cache(widget: Any, model: SpotifyVisualizerSettings) -> Dict[str, Dict[str, Any]]:

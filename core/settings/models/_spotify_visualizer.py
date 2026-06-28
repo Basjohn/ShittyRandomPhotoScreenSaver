@@ -167,6 +167,14 @@ _OSC_BLOB_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_line_offset_bias": float,
     "osc_vertical_shift": int,
     "osc_growth": float,
+    "osc_ghosting_enabled": bool,
+    "osc_ghost_intensity": float,
+    "osc_ghost_decay": float,
+    "osc_ghost_line2_enabled": bool,
+    "osc_ghost_line3_enabled": bool,
+    "osc_ghost_line4_enabled": bool,
+    "osc_ghost_line5_enabled": bool,
+    "osc_ghost_line6_enabled": bool,
     "blob_reactive_deformation": float,
     "blob_constant_wobble": float,
     "blob_reactive_wobble": float,
@@ -256,6 +264,7 @@ _SINE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "sine_width_reaction": float,
     "osc_ghosting_enabled": bool,
     "osc_ghost_intensity": float,
+    "osc_ghost_decay": float,
     "osc_ghost_line2_enabled": bool,
     "osc_ghost_line3_enabled": bool,
     "osc_ghost_line4_enabled": bool,
@@ -486,6 +495,7 @@ _SINE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "sine_width_reaction": (0.0, float),
     "osc_ghosting_enabled": (False, bool),
     "osc_ghost_intensity": (0.4, float),
+    "osc_ghost_decay": (0.4, float),
     "osc_ghost_line2_enabled": (True, bool),
     "osc_ghost_line3_enabled": (True, bool),
     "osc_ghost_line4_enabled": (True, bool),
@@ -1340,6 +1350,7 @@ class SpotifyVisualizerSettings:
     rainbow_speed: float = 0.5
     osc_ghosting_enabled: bool = False
     osc_ghost_intensity: float = 0.4
+    osc_ghost_decay: float = 0.4
     osc_ghost_line2_enabled: bool = True
     osc_ghost_line3_enabled: bool = True
     osc_ghost_line4_enabled: bool = True

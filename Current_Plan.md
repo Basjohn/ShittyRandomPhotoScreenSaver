@@ -25,13 +25,30 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Conduct the Oscilloscope visual/reactivity audit in [audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md)
   - [x] Complete the first end-to-end code/log audit without changing renderer/audio behavior
   - [x] Classify current evidence: latest `--viz` window shows clean first-frame handoff but user-visible strobe/weak ghost concerns while ghosting/reactive glow are enabled
-  - [ ] Add an Oscilloscope waveform-response oracle before tuning runtime behavior
-  - [ ] Add a ghost-stability oracle for early-fill and steady-state trail delay
-  - [ ] Add a transient-width strobe oracle so repeated kick/snare peeks cannot masquerade as healthy waveform motion
-  - [ ] Add a reactive-glow brightness oracle so glow does not dominate visible movement when waveform warping should be primary
-  - [ ] Add bounded `--viz` / `--viz-diag` diagnostics for `osc_speed`, resolved waveform alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive
-  - [ ] If the bars fail as expected, fix in this order: line-speed mapping, ghost ring delay/fill, transient width authority, then shader glow composition or presets
+  - [x] Add an Oscilloscope waveform-response oracle before tuning runtime behavior
+  - [x] Add a ghost-stability oracle for early-fill and steady-state trail delay
+  - [x] Add a transient-width strobe oracle so repeated kick/snare peeks cannot masquerade as healthy waveform motion
+  - [x] Add a reactive-glow brightness oracle so glow does not dominate visible movement when waveform warping should be primary
+  - [x] Add bounded `--viz` / `--viz-diag` diagnostics for `osc_speed`, resolved waveform alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive
+  - [x] Fix the first three proven mode-owned seams: line-speed mapping, ghost ring delay/fill, and transient width authority
+  - [x] Reduce Oscilloscope shader reactive-glow alpha pumping so reactivity reads more as size/shape than brightness strobe
+  - [x] Restore paused startup idle reveal parity with Bubble/Sine so Oscilloscope does not wait for live playback before showing idle energy
+  - [x] Add and satisfy a live-to-idle bar proving stale live waveform/ghost/transient state is cleared before accepting the idle waveform
+  - [x] Pull back the over-hot low-speed response and transient-width accent after runtime showed Preset 2 strobing even with timid settings
+  - [x] Add live waveform conditioning so raw playback PCM is spatially softened, gain-bounded, and phase/sign-aligned before visual blending
+  - [x] Add idle-to-live and live-to-idle bars so Oscilloscope does not blend stale carriers across playback boundaries
+  - [x] Fix repeated paused media snapshots extending the pause confirmation window; one pending paused/stopped debounce owns the countdown
+  - [x] Fix paused warm-capture waveform poisoning; after non-playing is confirmed, warm frames may be drained but cannot overwrite the shared idle waveform seed
+  - [ ] Runtime-check Oscilloscope Preset 2: idle should appear immediately, live-to-idle should not twitch until it "breaks free", and audio should read as waveform deformation/warp rather than brightness strobe
+  - [ ] Decide whether curated Oscilloscope preset retuning is still needed only after the corrected display contract is runtime-validated
   - [ ] Keep `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` locked before and after any shared seam work
+
+- [ ] Investigate transient media metadata vanish/reappear from latest runtime logs
+  - [x] Initial log scan found repeated media widget recreation/first-track snapshots and normal play/pause feedback, but no direct metadata-clear stack
+  - [x] Inspect media display-update snapshot retention and display-recreate handoff before editing; do not add a cosmetic metadata fallback without identifying the clearing owner
+  - [x] Add a narrow bar for same-track partial snapshots that temporarily omit artist metadata during visualizer/preset churn
+  - [x] Keep incoming playback/control state authoritative while coalescing missing same-track artist/artwork from the last retained snapshot
+  - [ ] Runtime-check middle-click visualizer preset cycling: artist metadata should no longer disappear, and play/pause should not be needed to restore it
 
 - [ ] Execute the project-wide runtime health audit in [audits/ArchitectureAudit/Project_Health_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/ArchitectureAudit/Project_Health_Audit.md)
   - [ ] Establish the visualizer reactivity lock before any shared visualizer/perf/lifecycle work

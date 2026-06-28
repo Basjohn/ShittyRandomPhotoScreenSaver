@@ -625,6 +625,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_ghosting_enabled = bool(kwargs['osc_ghosting_enabled'])
     if 'osc_ghost_intensity' in kwargs:
         widget._osc_ghost_intensity = max(0.0, min(1.0, float(kwargs['osc_ghost_intensity'])))
+    if 'osc_ghost_decay' in kwargs:
+        widget._osc_ghost_decay = max(0.1, min(1.0, float(kwargs['osc_ghost_decay'])))
 
     # --- Spectrum ghost ----------------------------------------------------
     if 'spectrum_ghosting_enabled' in kwargs:
@@ -866,6 +868,7 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['spectrum_ghost_decay'] = getattr(widget, '_spectrum_ghost_decay', 0.4)
     extra['osc_ghosting_enabled'] = getattr(widget, '_osc_ghosting_enabled', False)
     extra['osc_ghost_intensity'] = getattr(widget, '_osc_ghost_intensity', 0.4)
+    extra['osc_ghost_decay'] = getattr(widget, '_osc_ghost_decay', 0.4)
     extra['osc_ghost_line2_enabled'] = getattr(widget, '_osc_ghost_line2_enabled', True)
     extra['osc_ghost_line3_enabled'] = getattr(widget, '_osc_ghost_line3_enabled', True)
     extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)

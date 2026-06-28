@@ -161,6 +161,21 @@ class TestVisualizerPlaybackGating:
         beat_engine._audio_worker.stop.assert_called_once()
         assert isinstance(result, list)
         assert max(result) > 0.0
+
+    def test_paused_warm_audio_frame_does_not_overwrite_idle_waveform(self, beat_engine):
+        """Warm capture frames after pause must not poison the idle waveform."""
+        beat_engine.set_playback_state(False)
+        mock_frame = Mock()
+        mock_frame.samples = [1.0] * 300
+        beat_engine._audio_buffer.consume_latest = Mock(return_value=mock_frame)
+
+        result = beat_engine.tick()
+        waveform = beat_engine.get_waveform()
+
+        assert isinstance(result, list)
+        beat_engine._audio_buffer.consume_latest.assert_called_once()
+        assert max(abs(value) for value in waveform) < 0.08
+        assert max(result) < 0.05
     
     def test_performance_impact_simulation(self, beat_engine):
         """Test that CPU usage is reduced when not playing."""

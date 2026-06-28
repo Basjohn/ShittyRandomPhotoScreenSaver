@@ -53,7 +53,7 @@ def _mode_requires_fresh_waveform(mode_str: str) -> bool:
 
 def _mode_allows_idle_reveal_key(mode_str: str) -> bool:
     """Return True when a mode may reveal or animate while paused."""
-    return str(mode_str or "").lower() in {"bubble", "sine_wave", "devcurve"}
+    return str(mode_str or "").lower() in {"bubble", "sine_wave", "oscilloscope", "devcurve"}
 
 
 def _mode_requires_authoritative_first_source(mode_str: str) -> bool:

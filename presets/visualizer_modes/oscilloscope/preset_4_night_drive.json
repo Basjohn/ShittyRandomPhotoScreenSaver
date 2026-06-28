@@ -9,6 +9,7 @@
         "mode": "oscilloscope",
         "monitor": "ALL",
         "osc_ghost_intensity": 0.42,
+        "osc_ghost_decay": 0.5,
         "osc_ghost_line2_enabled": true,
         "osc_ghost_line3_enabled": true,
         "osc_ghost_line4_enabled": true,

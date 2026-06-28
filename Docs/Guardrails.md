@@ -58,6 +58,7 @@ No shadow frameworks or parallel ownership paths.
 - `rendering/transition_registry.py` is the canonical source of truth for ordinary transition identity, legacy alias handling, cycle/random participation, hardware gating, and startup shader warmup metadata. Do not add new handwritten transition-name lists to the tab, context menu, engine, factory, or compositor when the registry can own the same truth.
 - `widgets/spotify_visualizer/card_geometry.py` is the canonical source of truth for Spotify visualizer outer card geometry. Keep mode/preset-owned preferred height, blob-width reduction, and media-relative placement there; keep painted-card stencil math in `widgets/spotify_visualizer/overlay_mask.py` / `overlay_frame_shell.py` rather than blending the two contracts together.
 - `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` currently have accepted runtime reactivity. Before touching shared visualizer/audio/activation/render/transition seams, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`, and rerun it after the change. Treat stale Bubble oracle expectations as re-baseline work, not as permission to change Bubble feel.
+- When editing or fixing specific visualizer mode related problems keep work mode isolated unless specifically told, do not allow or introduce bleed.
 
 ## 5. UI/UX Safety
 - Do not remove custom styling to hide runtime issues.

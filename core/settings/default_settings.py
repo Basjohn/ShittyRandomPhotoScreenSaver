@@ -599,6 +599,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 5
                                     'mode': 'bubble',
                                     'monitor': 'ALL',
                                     'osc_ghost_intensity': 0.4,
+                                    'osc_ghost_decay': 0.4,
                                     'osc_ghosting_enabled': True,
                                     'osc_glow_color': [255, 255, 255, 255],
                                     'osc_glow_enabled': True,

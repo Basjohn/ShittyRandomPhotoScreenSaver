@@ -54,6 +54,7 @@ class TestWidgetGhostAttrs:
         "oscilloscope": {
             "_osc_ghosting_enabled": False,
             "_osc_ghost_intensity": 0.4,
+            "_osc_ghost_decay": 0.4,
             "_osc_ghost_line2_enabled": True,
             "_osc_ghost_line3_enabled": True,
         },
@@ -89,7 +90,7 @@ class TestConfigApplierGhost:
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
         "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_decay", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_apply_vis_mode_kwargs_handles_all_ghost_keys(self):
@@ -184,7 +185,7 @@ class TestOverlaySetStateGhostParams:
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
         "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_decay", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_set_state_signature_has_all_ghost_params(self):
@@ -1333,7 +1334,7 @@ class TestCreatorGhostKwargs:
         "sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay",
         "sine_ghost_line2_enabled", "sine_ghost_line3_enabled",
         "bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay",
-        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
+        "osc_ghosting_enabled", "osc_ghost_intensity", "osc_ghost_decay", "osc_ghost_line2_enabled", "osc_ghost_line3_enabled",
     ]
 
     def test_all_ghost_kwargs_passed_from_model(self):

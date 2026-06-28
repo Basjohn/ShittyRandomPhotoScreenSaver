@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from widgets.spotify_visualizer.oscilloscope_contract import resolve_transient_sensitivity_modulation
 from widgets.spotify_visualizer.renderers.gl_helpers import set1f as _set1f, set1i as _set1i, set_color4 as _set_color4
 
 
@@ -66,14 +67,22 @@ def upload_uniforms(gl, u: dict, s) -> bool:
     # Shared line/glow uniforms
     _upload_shared_line_glow(gl, u, s)
 
-    # Oscilloscope transient width mix: modulate sensitivity by bass transient
+    # Oscilloscope transient width mix: bounded display accent only.
     _otw_mix = getattr(s, '_osc_transient_width_mix', 0.35)
     if _otw_mix > 0.001:
-        kick_evt = getattr(s, '_line_kick_event_strength', 0.0)
-        snare_evt = getattr(s, '_line_snare_event_strength', 0.0)
-        beat_drive = max(getattr(s, '_line_smoothed_bass', 0.0), kick_evt * 0.95 + snare_evt * 0.35)
-        _osc_sens_mod = s._line_sensitivity * (1.0 + beat_drive * _otw_mix)
+        _osc_sens_mod, _osc_drive = resolve_transient_sensitivity_modulation(
+            base_sensitivity=s._line_sensitivity,
+            smoothed_bass=getattr(s, '_line_smoothed_bass', 0.0),
+            kick_event=getattr(s, '_line_kick_event_strength', 0.0),
+            snare_event=getattr(s, '_line_snare_event_strength', 0.0),
+            width_mix=_otw_mix,
+        )
+        setattr(s, '_osc_last_transient_width_drive', _osc_drive)
+        setattr(s, '_osc_last_sensitivity_mod', _osc_sens_mod)
         _set1f(gl, u, "u_sensitivity", _osc_sens_mod)
+    else:
+        setattr(s, '_osc_last_transient_width_drive', 0.0)
+        setattr(s, '_osc_last_sensitivity_mod', s._line_sensitivity)
 
     # Energy bands (CPU-smoothed for anti-flicker)
     eb = s._energy_bands

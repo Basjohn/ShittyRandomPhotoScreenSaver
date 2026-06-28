@@ -77,6 +77,51 @@ def maybe_log_glow_diagnostics(overlay: Any, logger: logging.Logger) -> None:
     overlay._glow_diag_last_sig = diag_sig
 
 
+def maybe_log_oscilloscope_diagnostics(overlay: Any, logger: logging.Logger) -> None:
+    if not (
+        is_viz_diagnostics_enabled()
+        and logger.isEnabledFor(logging.DEBUG)
+        and overlay._vis_mode == "oscilloscope"
+    ):
+        return
+    now_diag = time.time()
+    sig = (
+        round(float(getattr(overlay, "_line_speed", 0.0)), 3),
+        round(float(getattr(overlay, "_osc_last_waveform_blend_alpha", 0.0)), 3),
+        int(len(getattr(overlay, "_ghost_waveform_ring", []) or [])),
+        int(getattr(overlay, "_ghost_delay_frames", 0)),
+        round(float(getattr(overlay, "_osc_ghost_alpha", 0.0)), 3),
+        round(float(getattr(overlay, "_osc_transient_width_mix", 0.0)), 3),
+    )
+    if (
+        (now_diag - getattr(overlay, "_osc_diag_last_ts", 0.0)) < 1.5
+        and sig == getattr(overlay, "_osc_diag_last_sig", None)
+    ):
+        return
+    logger.debug(
+        (
+            "[SPOTIFY_VIS][OSC] speed=%.3f alpha=%.3f waveform_delta=%.3f "
+            "ghost_alpha=%.3f ghost_ring=%d/%d transient_mix=%.3f "
+            "transient_drive=%.3f sensitivity=%.3f bass=%.3f mid=%.3f high=%.3f overall=%.3f"
+        ),
+        float(getattr(overlay, "_line_speed", 0.0)),
+        float(getattr(overlay, "_osc_last_waveform_blend_alpha", 0.0)),
+        float(getattr(overlay, "_osc_last_waveform_delta", 0.0)),
+        float(getattr(overlay, "_osc_ghost_alpha", 0.0)),
+        int(len(getattr(overlay, "_ghost_waveform_ring", []) or [])),
+        int(getattr(overlay, "_ghost_delay_frames", 0)),
+        float(getattr(overlay, "_osc_transient_width_mix", 0.0)),
+        float(getattr(overlay, "_osc_last_transient_width_drive", 0.0)),
+        float(getattr(overlay, "_osc_last_sensitivity_mod", 0.0)),
+        float(getattr(overlay, "_line_smoothed_bass", 0.0)),
+        float(getattr(overlay, "_line_smoothed_mid", 0.0)),
+        float(getattr(overlay, "_line_smoothed_high", 0.0)),
+        float(getattr(getattr(overlay, "_energy_bands", None), "overall", 0.0) or 0.0),
+    )
+    overlay._osc_diag_last_ts = now_diag
+    overlay._osc_diag_last_sig = sig
+
+
 def maybe_log_sine_idle_state(overlay: Any, logger: logging.Logger, *, dt_seconds: float) -> None:
     if not (
         is_viz_diagnostics_enabled()

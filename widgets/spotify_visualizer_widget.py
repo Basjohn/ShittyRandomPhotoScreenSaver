@@ -283,6 +283,7 @@ class SpotifyVisualizerWidget(QWidget):
         # Oscilloscope ghost trail
         self._osc_ghosting_enabled: bool = False
         self._osc_ghost_intensity: float = 0.4
+        self._osc_ghost_decay: float = 0.4
         self._osc_ghost_line2_enabled: bool = True
         self._osc_ghost_line3_enabled: bool = True
         self._osc_ghost_line4_enabled: bool = True

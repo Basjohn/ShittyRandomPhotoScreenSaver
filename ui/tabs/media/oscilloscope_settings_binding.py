@@ -121,6 +121,10 @@ def load_oscilloscope_mode_settings(
         osc_ghost_intensity = int(tab._config_float("spotify_visualizer", config, "osc_ghost_intensity", 0.4) * 100)
         tab.osc_ghost_intensity.setValue(max(5, min(100, osc_ghost_intensity)))
         tab.osc_ghost_intensity_label.setText(f"{osc_ghost_intensity}%")
+    if hasattr(tab, "osc_ghost_decay"):
+        osc_ghost_decay = int(round(tab._config_float("spotify_visualizer", config, "osc_ghost_decay", 0.4) * 100))
+        tab.osc_ghost_decay.setValue(max(10, min(100, osc_ghost_decay)))
+        tab.osc_ghost_decay_label.setText(f"{osc_ghost_decay / 100.0:.2f}x")
     if hasattr(tab, "osc_ghost_line2_enabled"):
         tab.osc_ghost_line2_enabled.setChecked(
             tab._config_bool("spotify_visualizer", config, "osc_ghost_line2_enabled", True)
@@ -170,6 +174,7 @@ def collect_oscilloscope_mode_settings(
         "osc_vertical_shift": tab.osc_vertical_shift.value() if hasattr(tab, "osc_vertical_shift") else 0,
         "osc_ghosting_enabled": tab.osc_ghost_enabled.isChecked() if hasattr(tab, "osc_ghost_enabled") else False,
         "osc_ghost_intensity": (tab.osc_ghost_intensity.value() if hasattr(tab, "osc_ghost_intensity") else 40) / 100.0,
+        "osc_ghost_decay": (tab.osc_ghost_decay.value() if hasattr(tab, "osc_ghost_decay") else 40) / 100.0,
         "osc_ghost_line2_enabled": tab.osc_ghost_line2_enabled.isChecked() if hasattr(tab, "osc_ghost_line2_enabled") else True,
         "osc_ghost_line3_enabled": tab.osc_ghost_line3_enabled.isChecked() if hasattr(tab, "osc_ghost_line3_enabled") else True,
         "osc_ghost_line4_enabled": tab.osc_ghost_line4_enabled.isChecked() if hasattr(tab, "osc_ghost_line4_enabled") else True,

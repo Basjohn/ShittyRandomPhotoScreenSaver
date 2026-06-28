@@ -279,6 +279,47 @@ def test_update_display_album_only_change_does_not_force_metadata_refit(monkeypa
     assert captured["metadata_changed"] is False
 
 
+def test_update_display_same_track_partial_snapshot_preserves_artist(monkeypatch):
+    widget = _StubMediaWidget()
+    previous = MediaTrackInfo(
+        title="Modest Mountains",
+        artist="Field Division",
+        album="Reverie State",
+        state=MediaPlaybackState.PLAYING,
+        artwork=b"art",
+    )
+    partial = MediaTrackInfo(
+        title="Modest Mountains",
+        artist="",
+        album="",
+        state=MediaPlaybackState.PAUSED,
+        can_play_pause=True,
+        artwork=None,
+    )
+    widget._last_info = previous
+    widget._last_track_identity = None
+    widget._last_metadata_identity = widget._compute_metadata_identity(previous)
+
+    captured = {}
+    monkeypatch.setattr(display_update.Shiboken, "isValid", lambda _widget: True)
+    monkeypatch.setattr(
+        display_update,
+        "_build_and_apply_metadata",
+        lambda _widget, info, prev_info, *, metadata_changed: captured.update(
+            {"info": info, "prev": prev_info, "metadata_changed": metadata_changed}
+        ),
+    )
+
+    display_update.update_display(widget, partial)
+
+    assert captured["info"].artist == "Field Division"
+    assert captured["info"].state is MediaPlaybackState.PAUSED
+    assert captured["info"].can_play_pause is True
+    assert captured["info"].artwork == b"art"
+    assert widget._last_info.artist == "Field Division"
+    assert widget._retained_info.artist == "Field Division"
+
+
 def test_build_and_apply_metadata_reuses_existing_layout_for_same_track_identity():
     widget = _StubMediaWidget()
     widget._metadata_paint = {
