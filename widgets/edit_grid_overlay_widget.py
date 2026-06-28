@@ -131,6 +131,16 @@ class EditGridOverlayWidget(QWidget):
         if self._static_grid_cache is not None and not self._static_grid_cache.isNull():
             painter.drawPixmap(0, 0, self._static_grid_cache)
 
+        guide_pen = QPen(QColor(255, 244, 196, 245), 2.0)
+        for x, _kind in self._active_vertical_guides:
+            painter.setPen(guide_pen)
+            clamped_x = max(0, min(int(x), width - 1))
+            painter.drawLine(clamped_x, 0, clamped_x, height)
+        for y, _kind in self._active_horizontal_guides:
+            painter.setPen(guide_pen)
+            clamped_y = max(0, min(int(y), height - 1))
+            painter.drawLine(0, clamped_y, width, clamped_y)
+
         assist_pen = QPen(QColor(180, 110, 255, 235), 3.0)
         for x, _kind in self._active_vertical_assists:
             painter.setPen(assist_pen)

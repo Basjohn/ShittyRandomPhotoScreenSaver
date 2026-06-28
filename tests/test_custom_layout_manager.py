@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication, QWidget
 
 from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
-from rendering.custom_layout_contract import get_screen_signature
+from rendering.custom_layout_contract import get_screen_signature, resolve_snap_local_rect_for_edit
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.edit_shell_widget import EditShellWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
@@ -1754,7 +1754,7 @@ def test_custom_layout_manager_volume_resize_rect_uses_payload_dimensions(qtbot)
 def test_custom_layout_manager_volume_scale_payload_biases_shrink_more_aggressively(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
-    display = _DisplayStub(settings_stub)
+    display = _DisplayStub(settings_stub, screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)))
     qtbot.addWidget(display)
 
     manager = CustomLayoutManager(display)
@@ -2070,6 +2070,123 @@ def test_custom_layout_manager_live_drag_guides_without_forcing_snap(qtbot):
     assert resolved == proposal
     assert clock_state.shell.current_global_rect() == clock_state.current_global_rect
     assert clock_state.shell._active_vertical_guides
+
+
+def test_custom_layout_display_center_guides_are_real_snap_candidates(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub, screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)))
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    proposal = QRect(
+        309,
+        40,
+        clock_state.current_global_rect.width(),
+        clock_state.current_global_rect.height(),
+    )
+
+    live_resolved = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=False,
+    )
+
+    assert live_resolved == proposal
+    assert clock_state.shell._active_vertical_guides[0][1] == "display_center"
+    assert manager._grid_overlay._active_vertical_guides[0][1] == "display_center"
+
+    committed = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=True,
+    )
+
+    assert committed.x() == 310
+    assert committed.center().x() in (399, 400)
+
+
+def test_custom_layout_peer_center_guides_are_real_snap_candidates(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    weather = _EditableTestWidget(display, font_size=18)
+    weather.setGeometry(300, 60, 220, 80)
+    display.clock_widget = clock
+    display.weather_widget = weather
+    qtbot.addWidget(clock)
+    qtbot.addWidget(weather)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    weather_state = manager._shell_states["weather"]
+    peer_center = int(
+        round(
+            (
+                float(weather_state.current_global_rect.x())
+                + float(weather_state.current_global_rect.x() + weather_state.current_global_rect.width())
+            )
+            / 2.0
+        )
+    )
+    target_x = peer_center - int(round(float(clock_state.current_global_rect.width()) / 2.0))
+    proposal = QRect(
+        target_x,
+        weather_state.current_global_rect.y() + weather_state.current_global_rect.height() + 16,
+        clock_state.current_global_rect.width(),
+        clock_state.current_global_rect.height(),
+    )
+
+    live_resolved = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=False,
+    )
+
+    assert live_resolved == proposal
+    assert clock_state.shell._active_vertical_guides[0][1] == "peer_center"
+    assert manager._grid_overlay._active_vertical_guides[0][1] == "peer_center"
+
+    committed = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=True,
+    )
+
+    assert committed.x() == target_x
+    assert committed.center().x() in (peer_center - 1, peer_center)
+
+
+def test_custom_layout_snap_resolution_includes_peer_center_assists():
+    resolution = resolve_snap_local_rect_for_edit(
+        QRect(318, 160, 180, 80),
+        QSize(800, 600),
+        peer_rects=(QRect(300, 60, 220, 80),),
+        threshold_px=8,
+    )
+
+    assert resolution.vertical_guides[0].kind == "peer_center"
+    assert resolution.vertical_guides[0].position == 410
 
 
 def test_custom_layout_manager_cross_display_transfer_updates_monitor_and_reloads(qtbot, monkeypatch):

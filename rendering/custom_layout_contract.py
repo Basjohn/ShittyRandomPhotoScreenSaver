@@ -477,6 +477,8 @@ def _snap_axis_position(
         (0, 1, "edge", 0),
         (max_position, 1, "edge", boundary_span),
     ]
+    display_center = int(round(float(boundary_span) / 2.0))
+    candidates.append((display_center - int(round(float(span) / 2.0)), 1, "display_center", display_center))
 
     step = max(1, int(CUSTOM_LAYOUT_GRID_STEP_PX))
     nearest_grid = int(round(current / step) * step)
@@ -506,6 +508,8 @@ def _snap_axis_position(
                 (peer_start - span, 1, "peer", peer_start),
             }
         )
+        peer_center = int(round((float(peer_start) + float(peer_end)) / 2.0))
+        candidates.append((peer_center - int(round(float(span) / 2.0)), 1, "peer_center", peer_center))
         if gutter:
             candidates.extend(
                 {
@@ -561,22 +565,28 @@ def _collect_peer_assists_for_axis(
 
     assist_map: dict[int, SnapGuide] = {}
     for peer_start, peer_end in peer_spans:
-        for guide_position in (int(peer_start), int(peer_end)):
+        peer_center = int(round((float(peer_start) + float(peer_end)) / 2.0))
+        for guide_position, kind in (
+            (int(peer_start), "peer"),
+            (int(peer_end), "peer"),
+            (peer_center, "peer_center"),
+        ):
             distance = min(
                 abs(snapped_start - guide_position),
                 abs(snapped_end - guide_position),
+                abs(int(round((float(snapped_start) + float(snapped_end)) / 2.0)) - guide_position),
             )
             if distance > threshold:
                 continue
             if (
                 primary_guide is not None
-                and primary_guide.kind == "peer"
+                and primary_guide.kind == kind
                 and primary_guide.position == guide_position
             ):
                 continue
             guide = SnapGuide(
                 position=max(0, min(guide_position, max_guide_position)),
-                kind="peer",
+                kind=kind,
                 distance=int(distance),
             )
             prior = assist_map.get(guide.position)

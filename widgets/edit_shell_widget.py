@@ -565,6 +565,12 @@ class EditShellWidget(QWidget):
             if 0 <= local_y < self.height():
                 _draw_horizontal_guide(local_y, assist_pen, primary_vertical_local)
 
+        primary_pen = QPen(QColor(255, 244, 196, 245), 2.0)
+        if primary_vertical_local is not None:
+            _draw_vertical_guide(primary_vertical_local, primary_pen, primary_horizontal_local)
+        if primary_horizontal_local is not None:
+            _draw_horizontal_guide(primary_horizontal_local, primary_pen, primary_vertical_local)
+
         if self._transfer_blocked:
             overlay_pen = QPen(QColor(255, 179, 71, 245), 3)
         else:

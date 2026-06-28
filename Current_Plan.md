@@ -120,7 +120,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Use a shared `15min` automatic cadence with a `reddit2` initial phase stagger instead of lengthening `reddit2`'s repeat interval forever
   - [x] Keep startup refresh gating independent from periodic/manual refresh; a skipped startup fetch must still arm the recurring timer
   - [x] Log periodic timer arm/start/fire through `[CACHE][REDDIT]` so future `--cache` runs prove cadence without manual inference
-  - [ ] Runtime-check a `--cache` run past the first cadence window: expect `reddit` around `15min` and `reddit2` around `22.5min` after startup, subject to jitter/cooldown/transition deferral
+  - [ ] Await compiled-build validation instead of blocking on a long Codex log parse: in a normal long run, expect `[CACHE][REDDIT] Periodic refresh fired` for `reddit` around `15min` and `reddit2` around `22.5min` after startup, subject to jitter/cooldown/transition deferral
 
 ## Watchlist
 
