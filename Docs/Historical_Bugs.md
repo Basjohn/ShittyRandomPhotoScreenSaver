@@ -8,29 +8,30 @@ This is the long-term anti-regression record for the project, not an active task
 ## Quick Navigation (Numbered IDs)
 
 ### Open Issues
-1. [U-09 — 2026-06-13 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Unresolved)](#U-09)
-2. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
-3. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-4. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
+1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
+2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
+3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
+4. [U-10 — 2026-06-28 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Unresolved)](#U-10)
 
 ### Recent Resolutions
-1. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-2. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-3. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-4. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-5. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-6. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-7. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-8. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-9. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-10. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-11. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-12. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-13. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-14. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-15. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-16. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-17. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [U-09 — 2026-06-13 / 2026-06-28 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Closed To Watchlist)](#U-09)
+2. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+3. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+4. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+5. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+6. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+7. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+8. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+9. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+10. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+11. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+12. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+13. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+14. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+15. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+16. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+17. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+18. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -53,6 +54,30 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="U-10"></a>
+### [U-10] 2026-06-28 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Unresolved)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [ ] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Current unresolved state:** Oscilloscope can look like brightness flicker/strobe instead of a waveform warping with music, and can feel out of tune with the audio source. The first audit pass points to Oscilloscope-owned presentation contracts, not shared audio or first-frame activation, but no code fix has landed yet.
+- **Evidence to preserve:**
+  - `.tmp/perf_collapse_evidence_20260628_164113/screensaver_spotify_vis.log`, around `16:35:07..16:35:13`, shows a clean Oscilloscope first-frame handoff: fresh waveform generation, overlay reset, and matching overlay generation/activation after first push.
+  - The same window shows Oscilloscope running with ghosting/reactive glow enabled (`ghost2=True ghost3=True`) while later logs in the window show strong bass/transient evidence, so weak/strobing visuals are unlikely to be explained by "no audio arrived" alone.
+  - Curated Oscilloscope presets combine low `osc_speed` (`0.18..0.33`), high line amplitude, ghosting, reactive glow, and transient width mix.
+- **Leading hypotheses:**
+  1. `widgets/spotify_bars_gl_overlay.py` squares `osc_speed` before waveform interpolation, so common preset speeds become extremely low blend alphas and can make the visible waveform lag the song.
+  2. The Oscilloscope ghost ring trails an already-smoothed waveform, compounding lag and possibly weakening ghost clarity.
+  3. `widgets/spotify_visualizer/renderers/oscilloscope.py` uses repeated kick/snare event peeks to modulate `u_sensitivity`, which can read as width/brightness strobe rather than coherent waveform motion.
+  4. `widgets/spotify_visualizer/shaders/oscilloscope.frag` makes reactive glow alter both sigma and alpha, so glow can visually flash faster than the low-speed waveform changes.
+- **Required next direction:**
+  - add Oscilloscope-specific waveform response, ghost stability, transient-width strobe, and reactive-glow brightness oracles before runtime tuning
+  - add bounded `--viz` / `--viz-diag` diagnostics for speed alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive
+  - keep fixes mode-owned unless an oracle proves shared waveform extraction is wrong
+  - do not remove glow, ghosting, multi-line rendering, or current-good mode behavior as a fake fix
 
 <a id="R-27"></a>
 ### [R-27] 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)
@@ -130,14 +155,14 @@ This is the long-term anti-regression record for the project, not an active task
   - for sleep/wake churn, fallback is a self-heal seam, not a race-to-restore seam; one cautious delayed recheck is safer than birthing a second owner while the requested display is still returning
 
 <a id="U-09"></a>
-### [U-09] 2026-06-13 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Unresolved)
+### [U-09] 2026-06-13 / 2026-06-28 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Closed To Watchlist)
 
 - [ ] COMPLETELY FUCKED
 - [x] PARTIAL
 - [ ] AWAITING VALIDATION
-- [ ] SOLVED
+- [x] SOLVED
 
-- **Current unresolved state:** the worst top-left and missing-visualizer symptoms now have a validated recovery/containment path, but the visualizer can still require loud save-route repair during ordinary CUSTOM edit saves. Treat the remaining open seam as upstream geometry-authority drift, not as a cleanly solved family.
+- **Closed/watchlist state:** the latest preserved geometry evidence in `.tmp/perf_collapse_evidence_20260628_164113` shows clean visualizer CUSTOM edit/save/replay cycles with no save-route repair fallback, no duplicate-owner fallback, no requested-monitor fallback, and stable `replay_final` geometry after ordinary edits. Keep this family as historical/watchlist evidence, not active plan work.
 - **Observed failure pattern:**
   - the user did not edit preset card sizes or any non-uniform width contract
   - `rendering.custom_layout_manager` can still log a correct `replay_final` rect while runtime visually disagrees
@@ -168,17 +193,17 @@ This is the long-term anti-regression record for the project, not an active task
   3. Startup create, settings refresh, secondary-stage activation, preferred-height application, or generic overlay helpers may still mutate geometry after committed CUSTOM authority should have won.
   4. Save-time monitor authority can drift from the shell's actual global rect owner, causing later strict startup replay to reject an otherwise valid saved visualizer rect.
   5. Existing automation still proves local replay truths better than end-to-end runtime shape truth.
-- **Latest containment state after 2026-06-27 validation:**
+- **Validated containment and closure state:**
   - `rendering.custom_layout_manager` now repairs `spotify_visualizer` CUSTOM save ownership from the shell's actual global rect before persisting monitor/bucket authority, with a loud warning when this poisoned route is corrected
   - the edit-mode media recovery button now uses an exact saved visualizer rect when available, otherwise a centered visualizer-aspect rescue rect; a single foreign saved visualizer rect is used only as a recovery size/aspect hint, not as normal startup replay authority
   - bars cover the stale-route save shape and the foreign-saved recovery shape in `tests/test_custom_layout_manager.py`
   - the 2026-06-27 long `--geo` run validated the recovery behavior: the visualizer survived edit saves, replayed a valid corrected rect after save-route repair, and the recovery button behaved as an editable rescue path rather than removing the visualizer from all displays
   - the same run still emitted `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...` at `16:48:38` and `16:50:09`, so normal edit-mode saves can still enter the repair path
-- **Correct next direction:**
-  - keep the current recovery path as a validated user escape hatch, not as proof the root cause is gone
-  - eliminate the upstream reason save-route repair still fires during ordinary edit-mode saves
-  - strengthen the bar so route-repair-needed saves and replay-green/runtime-wrong cases fail decisively
-  - remove unauthorized post-replay geometry writers only when direct evidence identifies them
+  - the 2026-06-28 preserved `--geo` run superseded the open 2026-06-27 save-route concern for now: visualizer replay/save cycles stayed healthy and did not require route repair
+- **Reopen criteria:**
+  - ordinary visualizer CUSTOM edit saves emit `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...`
+  - `[SPOTIFY_VIS][FALLBACK]` duplicate-owner or requested-monitor participation fallback appears during a normal healthy multi-display run
+  - logs show replay-green/runtime-wrong geometry, unauthorized width/aspect drift, top-left/square deformation, or recovery becoming the primary correctness path again
 
 <a id="R-25"></a>
 ### [R-25] 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)

@@ -83,7 +83,7 @@ python -m pytest `
 ```
 - Notes:
   - Bubble oracle failures that only reflect stale expected values are re-baseline work, not permission to change Bubble feel.
-  - `Oscilloscope` remains a watchlist mode; do not block unrelated health work on Osc behavior unless the task explicitly targets it.
+  - `Oscilloscope` is normally watchlist-only for unrelated health work, but when the task explicitly targets it, add Oscilloscope-owned waveform/ghost/glow oracles before tuning the renderer.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
 ### Visualizer distribution harness

@@ -10,7 +10,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Prune validated work aggressively. This is not a changelog.
 - Prefer automation bars over repeated runtime-verification asks.
 - Do not close visual/runtime bugs from polite unit doubles alone.
-- Before touching shared visualizer/audio/activation/render/transition seams, protect the current-good modes with the visualizer reactivity lock in `Docs/Harness_Index.md`: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must match their current accepted bars or the change stops. `Oscilloscope` remains a watchlist mode, not a priority target.
+- Before touching shared visualizer/audio/activation/render/transition seams, protect the current-good modes with the visualizer reactivity lock in `Docs/Harness_Index.md`: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must match their current accepted bars or the change stops. `Oscilloscope` is currently a targeted audit mode and must stay isolated until an Oscilloscope-specific oracle proves a shared seam is wrong.
 - For visualizer geometry, treat these as separate seams until proven otherwise:
   - saved/custom rect authority
   - live widget rect authority
@@ -21,6 +21,17 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Recovery paths are allowed only after the root-cause map and the stronger bars exist.
 
 ## Active Tasks
+
+- [ ] Conduct the Oscilloscope visual/reactivity audit in [audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md)
+  - [x] Complete the first end-to-end code/log audit without changing renderer/audio behavior
+  - [x] Classify current evidence: latest `--viz` window shows clean first-frame handoff but user-visible strobe/weak ghost concerns while ghosting/reactive glow are enabled
+  - [ ] Add an Oscilloscope waveform-response oracle before tuning runtime behavior
+  - [ ] Add a ghost-stability oracle for early-fill and steady-state trail delay
+  - [ ] Add a transient-width strobe oracle so repeated kick/snare peeks cannot masquerade as healthy waveform motion
+  - [ ] Add a reactive-glow brightness oracle so glow does not dominate visible movement when waveform warping should be primary
+  - [ ] Add bounded `--viz` / `--viz-diag` diagnostics for `osc_speed`, resolved waveform alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive
+  - [ ] If the bars fail as expected, fix in this order: line-speed mapping, ghost ring delay/fill, transient width authority, then shader glow composition or presets
+  - [ ] Keep `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` locked before and after any shared seam work
 
 - [ ] Execute the project-wide runtime health audit in [audits/ArchitectureAudit/Project_Health_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/ArchitectureAudit/Project_Health_Audit.md)
   - [ ] Establish the visualizer reactivity lock before any shared visualizer/perf/lifecycle work
@@ -98,14 +109,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
 - Visualizer CUSTOM geometry route repair is closed to watchlist after `.tmp/perf_collapse_evidence_20260628_164113`: no `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...` or duplicate-owner fallback appeared in the inspected ordinary edit/save/replay cycles.
-- Oscilloscope needs a later focused audit: `.tmp/perf_collapse_evidence_20260628_164113` shows brief preset cycling around `16:35:00-16:35:07`, repeated mode/preset reset/first-frame primer activity, and `ghost2=True ghost3=True` despite user-visible strobe/weak ghost concerns.
+- Oscilloscope is active audit work rather than watchlist work. Keep the watchlist state only after the targeted oracle/diagnostic pass lands and either validates a fix or proves no current runtime failure.
 
 ## Deferred / Not Active
 
-- [ ] Oscilloscope visual audit (deferred until transition perf and clock wobble are stable)
-  - [ ] Capture current Oscilloscope behavior under `--viz --perf` and confirm whether the brightness flicker is shader state, glow/reactivity, alpha/ghost layer, or activation reset churn
-  - [ ] Add a visual/runtime-shaped oracle before changing Oscilloscope rendering so current-good modes stay isolated
-  - [ ] Restore ghost visibility only through mode-owned rendering contracts; do not touch shared visualizer audio/floor/tick behavior for this audit
 - [ ] Feeds widget family (deferred architecture track)
   - [ ] Keep Reddit as its own branded widget and shared runtime owner; do not replace it with Feeds or duplicate its paint/cache/refresh/click machinery.
   - [ ] Extract reusable list-feed seams from Reddit without changing Reddit UX first: feed item model, shared service-backed refresh/cooldown/startup-skip/cache-authority policy, progressive visible-count growth, manual refresh, and URL-open routing.
@@ -129,6 +136,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Historical geometry audit: `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` when geometry/runtime replay issues reopen
 - Bubble preset/runtime audit: `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` as historical authored-setting reference
 - Bubble historical audit reference: `audits/BubbleAudit/Bubble_End_To_End_Audit.md`
+- Oscilloscope visual/reactivity audit: `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md`
 
 #######
 ### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.
