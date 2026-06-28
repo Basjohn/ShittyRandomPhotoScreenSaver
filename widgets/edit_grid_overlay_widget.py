@@ -82,7 +82,6 @@ class EditGridOverlayWidget(QWidget):
         major_step = self._grid_step_px * 4
         minor_pen = QPen(QColor(255, 255, 255, 28), 1)
         major_pen = QPen(QColor(255, 255, 255, 58), 1)
-        gutter_pen = QPen(QColor(255, 232, 184, 76), 1)
 
         for x in range(0, width, self._grid_step_px):
             painter.setPen(major_pen if (x % major_step) == 0 else minor_pen)
@@ -90,21 +89,6 @@ class EditGridOverlayWidget(QWidget):
         for y in range(0, height, self._grid_step_px):
             painter.setPen(major_pen if (y % major_step) == 0 else minor_pen)
             painter.drawLine(0, y, width, y)
-
-        if self._gutter_px > 0:
-            painter.setPen(gutter_pen)
-            x_positions = {
-                self._gutter_px,
-                max(0, width - self._gutter_px - 1),
-            }
-            y_positions = {
-                self._gutter_px,
-                max(0, height - self._gutter_px - 1),
-            }
-            for x in sorted(x_positions):
-                painter.drawLine(x, 0, x, height)
-            for y in sorted(y_positions):
-                painter.drawLine(0, y, width, y)
         painter.end()
         return pixmap
 
@@ -131,7 +115,7 @@ class EditGridOverlayWidget(QWidget):
         if self._static_grid_cache is not None and not self._static_grid_cache.isNull():
             painter.drawPixmap(0, 0, self._static_grid_cache)
 
-        guide_pen = QPen(QColor(255, 244, 196, 245), 2.0)
+        guide_pen = QPen(QColor(180, 110, 255, 235), 3.0)
         for x, _kind in self._active_vertical_guides:
             painter.setPen(guide_pen)
             clamped_x = max(0, min(int(x), width - 1))

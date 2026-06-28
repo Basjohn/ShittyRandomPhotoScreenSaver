@@ -19,8 +19,8 @@ Living map of the current SRPSS codebase.
 | `audits/BubbleAudit/Bubble_End_To_End_Audit.md` | Historical Bubble audit reference for the transition-time perf collapse and loud small-lane recovery work that informed the current tighter runtime-shaped Bubble oracles |
 | `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` | Document-only audit of Bubble runtime-touching preset settings, with Deep Sea Preset 1 hypotheses and authored experiment order before more Bubble code tuning |
 | `audits/BubbleAudit/README.md` | Small entrypoint that points at the Bubble audit reference |
-| `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Active geometry audit with risks, order of work, and start-to-finish checklist for the reopened visualizer CUSTOM/runtime shape family |
-| `audits/GeoAudit/README.md` | Small entrypoint that points at the active geometry audit |
+| `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Historical/watchlist geometry audit for the visualizer CUSTOM/runtime shape family; reopen only when fresh `--geo` evidence shows route repair, fallback, duplicate owner, impossible shape, or runtime replay drift |
+| `audits/GeoAudit/README.md` | Small entrypoint for the visualizer geometry audit/watchlist |
 | `Docs/Regression_Notes.md` | Smaller resolved regression notes and follow-up hardening items |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |
 | `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |

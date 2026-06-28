@@ -34,6 +34,7 @@ from rendering.custom_layout_contract import (
     resolve_snap_local_rect_for_edit,
     set_screen_layout_entry,
     should_transfer_rect_to_screen,
+    SnapGuide,
     write_custom_layout_map,
 )
 from rendering.widget_descriptors import (
@@ -832,6 +833,16 @@ class CustomLayoutManager:
                 return str(index + 1)
         return "ALL"
 
+    def _current_monitor_value_for_state_screen(self, state: _ShellState, screen: Any) -> str:
+        if not widget_writes_custom_monitor_key(state.descriptor.widget_id):
+            return state.current_monitor_value
+        if (
+            state.descriptor.widget_id != "spotify_visualizer"
+            and self._monitor_value_is_all(state.source_monitor_value)
+        ):
+            return state.current_monitor_value
+        return self._monitor_value_for_screen(screen)
+
     def cancel_session(self) -> bool:
         if not self._active:
             return False
@@ -1178,7 +1189,10 @@ class CustomLayoutManager:
 
         global_top_left = self._display.mapToGlobal(local_rect.topLeft())
         global_rect = QRect(global_top_left, shell_local_rect.size())
-        current_monitor_value = self._read_monitor_value_for_widget(descriptor)
+        source_monitor_value = self._read_monitor_value_for_widget(descriptor)
+        current_monitor_value = source_monitor_value
+        if descriptor.widget_id == "spotify_visualizer":
+            current_monitor_value = self._monitor_value_for_screen(screen)
         has_qol_envelope = shell_local_rect.size() != local_rect.size()
         shell = EditShellWidget(
             widget_id=descriptor.widget_id,
@@ -1223,7 +1237,7 @@ class CustomLayoutManager:
             was_visible=bool(getattr(widget, "isVisible", lambda: False)()),
             source_screen=screen,
             source_screen_signature=screen_signature,
-            source_monitor_value=current_monitor_value,
+            source_monitor_value=source_monitor_value,
             current_screen=screen,
             current_screen_signature=screen_signature,
             current_monitor_value=current_monitor_value,
@@ -1846,7 +1860,8 @@ class CustomLayoutManager:
             local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
-        self._update_grid_guides(state, target_screen, snap_resolution)
+        state.current_monitor_value = self._current_monitor_value_for_state_screen(state, target_screen)
+        self._update_grid_guides(state, target_screen, snap_resolution, active_local_rect=local_rect)
         return QRect(
             geom.x() + local_rect.x(),
             geom.y() + local_rect.y(),
@@ -1854,13 +1869,62 @@ class CustomLayoutManager:
             local_rect.height(),
         )
 
-    def _update_grid_guides(self, state: _ShellState, target_screen: Any, snap_resolution) -> None:
+    def _update_grid_guides(
+        self,
+        state: _ShellState,
+        target_screen: Any,
+        snap_resolution,
+        *,
+        active_local_rect: QRect,
+    ) -> None:
         vertical_assists = snap_resolution.vertical_assists
         horizontal_assists = snap_resolution.horizontal_assists
+        geom = target_screen.geometry()
+        center_x = int(round(float(geom.width()) / 2.0))
+        center_y = int(round(float(geom.height()) / 2.0))
+        center_vertical = (
+            SnapGuide(center_x, "display_center", 0)
+            if active_local_rect.left() <= center_x <= active_local_rect.right()
+            else None
+        )
+        center_horizontal = (
+            SnapGuide(center_y, "display_center", 0)
+            if active_local_rect.top() <= center_y <= active_local_rect.bottom()
+            else None
+        )
+        primary_visual_kinds = {"display_center", "peer", "peer_center"}
+        shell_vertical_guides = tuple(
+            guide for guide in snap_resolution.vertical_guides if guide.kind in primary_visual_kinds
+        )
+        shell_horizontal_guides = tuple(
+            guide for guide in snap_resolution.horizontal_guides if guide.kind in primary_visual_kinds
+        )
+        if not shell_vertical_guides and vertical_assists:
+            shell_vertical_guides = (vertical_assists[0],)
+        if not shell_horizontal_guides and horizontal_assists:
+            shell_horizontal_guides = (horizontal_assists[0],)
+        if center_vertical is not None:
+            shell_vertical_guides = (center_vertical,)
+        if center_horizontal is not None:
+            shell_horizontal_guides = (center_horizontal,)
+        overlay_vertical_guides = tuple(
+            guide for guide in shell_vertical_guides if guide.kind in {"display_center", "peer", "peer_center"}
+        )
+        overlay_horizontal_guides = tuple(
+            guide for guide in shell_horizontal_guides if guide.kind in {"display_center", "peer", "peer_center"}
+        )
+        overlay_vertical_guide_keys = {(guide.position, guide.kind) for guide in overlay_vertical_guides}
+        overlay_horizontal_guide_keys = {(guide.position, guide.kind) for guide in overlay_horizontal_guides}
+        overlay_vertical_assists = tuple(
+            guide for guide in vertical_assists if (guide.position, guide.kind) not in overlay_vertical_guide_keys
+        )
+        overlay_horizontal_assists = tuple(
+            guide for guide in horizontal_assists if (guide.position, guide.kind) not in overlay_horizontal_guide_keys
+        )
 
         state.shell.set_alignment_guides(
-            vertical=[(guide.position, guide.kind) for guide in snap_resolution.vertical_guides],
-            horizontal=[(guide.position, guide.kind) for guide in snap_resolution.horizontal_guides],
+            vertical=[(guide.position, guide.kind) for guide in shell_vertical_guides],
+            horizontal=[(guide.position, guide.kind) for guide in shell_horizontal_guides],
             vertical_assists=[(guide.position, guide.kind) for guide in vertical_assists],
             horizontal_assists=[(guide.position, guide.kind) for guide in horizontal_assists],
         )
@@ -1870,10 +1934,10 @@ class CustomLayoutManager:
                 continue
             if getattr(manager, "_screen", None) is target_screen:
                 overlay.set_active_guides(
-                    vertical=[(guide.position, guide.kind) for guide in snap_resolution.vertical_guides],
-                    horizontal=[(guide.position, guide.kind) for guide in snap_resolution.horizontal_guides],
-                    vertical_assists=[(guide.position, guide.kind) for guide in vertical_assists],
-                    horizontal_assists=[(guide.position, guide.kind) for guide in horizontal_assists],
+                    vertical=[(guide.position, guide.kind) for guide in overlay_vertical_guides],
+                    horizontal=[(guide.position, guide.kind) for guide in overlay_horizontal_guides],
+                    vertical_assists=[(guide.position, guide.kind) for guide in overlay_vertical_assists],
+                    horizontal_assists=[(guide.position, guide.kind) for guide in overlay_horizontal_assists],
                 )
             else:
                 overlay.set_active_guides(vertical=(), horizontal=(), vertical_assists=(), horizontal_assists=())
@@ -2077,7 +2141,8 @@ class CustomLayoutManager:
             local_rect = snap_resolution.rect
         state.current_screen = target_screen
         state.current_screen_signature = target_signature
-        self._update_grid_guides(state, target_screen, snap_resolution)
+        state.current_monitor_value = self._current_monitor_value_for_state_screen(state, target_screen)
+        self._update_grid_guides(state, target_screen, snap_resolution, active_local_rect=local_rect)
         return QRect(
             geom.x() + local_rect.x(),
             geom.y() + local_rect.y(),

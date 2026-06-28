@@ -1202,6 +1202,8 @@ def test_custom_layout_manager_media_shell_reset_visualizer_uses_foreign_saved_a
     }
     display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
     display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    display_a.setGeometry(screen_a.geometry())
+    display_b.setGeometry(screen_b.geometry())
     qtbot.addWidget(display_a)
     qtbot.addWidget(display_b)
     display_a.show()
@@ -2088,9 +2090,84 @@ def test_custom_layout_display_center_guides_are_real_snap_candidates(qtbot):
     assert manager.start_session() is True
 
     clock_state = manager._shell_states["clock"]
+    width = clock_state.current_global_rect.width()
+    height = clock_state.current_global_rect.height()
+    proposal = QRect(
+        400 - width + 1,
+        300 - height + 1,
+        width,
+        height,
+    )
+
+    live_resolved = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=False,
+    )
+
+    assert live_resolved == proposal
+    assert clock_state.shell._active_vertical_guides[0][1] == "display_center"
+    assert clock_state.shell._active_horizontal_guides[0][1] == "display_center"
+    assert manager._grid_overlay._active_vertical_guides[0][1] == "display_center"
+    assert manager._grid_overlay._active_horizontal_guides[0][1] == "display_center"
+
+
+def test_custom_layout_display_center_still_snaps_when_centered(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub, screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)))
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
     proposal = QRect(
         309,
-        40,
+        259,
+        clock_state.current_global_rect.width(),
+        clock_state.current_global_rect.height(),
+    )
+
+    committed = manager._resolve_shell_geometry_for_widget_id(
+        "clock",
+        proposal,
+        cursor_global=proposal.center(),
+        snap_to_grid=True,
+    )
+
+    assert committed.x() == 310
+    assert committed.y() == 260
+    assert committed.center().x() in (399, 400)
+    assert committed.center().y() in (299, 300)
+
+
+def test_custom_layout_overlay_does_not_draw_edge_grid_or_gutter_primary_guides(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    display = _DisplayStub(settings_stub, screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)))
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+
+    clock_state = manager._shell_states["clock"]
+    proposal = QRect(
+        2,
+        2,
         clock_state.current_global_rect.width(),
         clock_state.current_global_rect.height(),
     )
@@ -2103,18 +2180,10 @@ def test_custom_layout_display_center_guides_are_real_snap_candidates(qtbot):
     )
 
     assert live_resolved == proposal
-    assert clock_state.shell._active_vertical_guides[0][1] == "display_center"
-    assert manager._grid_overlay._active_vertical_guides[0][1] == "display_center"
-
-    committed = manager._resolve_shell_geometry_for_widget_id(
-        "clock",
-        proposal,
-        cursor_global=proposal.center(),
-        snap_to_grid=True,
-    )
-
-    assert committed.x() == 310
-    assert committed.center().x() in (399, 400)
+    assert not manager._grid_overlay._active_vertical_guides
+    assert not manager._grid_overlay._active_horizontal_guides
+    assert not clock_state.shell._active_vertical_guides
+    assert not clock_state.shell._active_horizontal_guides
 
 
 def test_custom_layout_peer_center_guides_are_real_snap_candidates(qtbot):
@@ -2165,6 +2234,8 @@ def test_custom_layout_peer_center_guides_are_real_snap_candidates(qtbot):
     assert live_resolved == proposal
     assert clock_state.shell._active_vertical_guides[0][1] == "peer_center"
     assert manager._grid_overlay._active_vertical_guides[0][1] == "peer_center"
+    active_peer = manager._grid_overlay._active_vertical_guides[0]
+    assert active_peer not in manager._grid_overlay._active_vertical_assists
 
     committed = manager._resolve_shell_geometry_for_widget_id(
         "clock",
@@ -2251,6 +2322,7 @@ def test_custom_layout_manager_blocks_all_widget_cross_display_transfer(qtbot, m
     screen0 = _FakeScreen("screen0", QRect(0, 0, 800, 600))
     screen1 = _FakeScreen("screen1", QRect(800, 0, 800, 600))
     display1 = _DisplayStub(settings_stub, screen=screen1, screen_index=1)
+    display1.setGeometry(screen1.geometry())
     qtbot.addWidget(display1)
     display1.show()
 
@@ -3564,8 +3636,11 @@ def test_custom_layout_manager_repairs_visualizer_monitor_from_rect_owner_on_sav
 
     assert manager_a.start_session() is True
     state = manager_a._shell_states["spotify_visualizer"]
-    assert state.current_monitor_value == "2"
+    assert state.current_monitor_value == "1"
     assert state.current_screen is screen_a
+    state.current_monitor_value = "2"
+    state.current_screen = screen_b
+    state.current_screen_signature = get_screen_signature(screen_b)
 
     assert manager_a.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -3574,6 +3649,50 @@ def test_custom_layout_manager_repairs_visualizer_monitor_from_rect_owner_on_sav
     displays = widgets_map["custom_layout"]["displays"]
     assert "spotify_visualizer" in displays[get_screen_signature(screen_a)]
     assert "spotify_visualizer" not in displays.get(get_screen_signature(screen_b), {})
+
+
+def test_custom_layout_manager_initializes_visualizer_current_route_from_shell_display(qtbot, monkeypatch):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "media": {"position": "Bottom Left", "monitor": "2"},
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"},
+    }
+    screen_a = _FakeScreen("Display-A", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("Display-B", QRect(800, 0, 800, 600))
+    display_a = _DisplayStub(settings_stub, screen=screen_a, screen_index=0)
+    display_b = _DisplayStub(settings_stub, screen=screen_b, screen_index=1)
+    display_a.setGeometry(screen_a.geometry())
+    display_b.setGeometry(screen_b.geometry())
+    qtbot.addWidget(display_a)
+    qtbot.addWidget(display_b)
+    display_a.show()
+    display_b.show()
+
+    visualizer = _VisualizerLikeTestWidget(display_b)
+    visualizer.setGeometry(24, 160, 420, 280)
+    display_b.spotify_visualizer_widget = visualizer
+    qtbot.addWidget(visualizer)
+
+    manager_b = CustomLayoutManager(display_b)
+    _attach_manager(display_b, manager_b)
+
+    class _CoordinatorStub:
+        def get_all_instances(self):
+            return [display_a, display_b]
+
+    monkeypatch.setattr("rendering.custom_layout_manager.get_coordinator", lambda: _CoordinatorStub())
+
+    assert manager_b.start_session() is True
+    state = manager_b._shell_states["spotify_visualizer"]
+
+    assert state.source_monitor_value == "1"
+    assert state.current_monitor_value == "2"
+    assert state.current_screen is screen_b
+
+    assert manager_b.save_session() is True
+    widgets_map = settings_stub.get_widgets_map()
+    assert widgets_map["spotify_visualizer"]["monitor"] == "2"
 
 
 def test_custom_layout_manager_promotes_visualizer_from_all_follow_media_to_numbered_custom_slot(qtbot):
@@ -3596,7 +3715,8 @@ def test_custom_layout_manager_promotes_visualizer_from_all_follow_media_to_numb
     assert manager.start_session() is True
 
     state = manager._shell_states["spotify_visualizer"]
-    assert state.current_monitor_value == "ALL"
+    assert state.source_monitor_value == "ALL"
+    assert state.current_monitor_value == "1"
 
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
