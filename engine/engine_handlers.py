@@ -177,7 +177,17 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             )
             exec_start = time.perf_counter()
             logger.info("Entering settings dialog exec (%.1f ms since request)", (exec_start - request_start) * 1000)
-            _ = dialog.exec()
+            try:
+                _ = dialog.exec()
+            finally:
+                try:
+                    animations.cleanup()
+                except Exception:
+                    logger.debug("Settings dialog AnimationManager cleanup failed", exc_info=True)
+                try:
+                    dialog.deleteLater()
+                except Exception:
+                    logger.debug("Settings dialog deleteLater failed", exc_info=True)
             exec_duration = (time.perf_counter() - exec_start) * 1000
 
             # After dialog closes, fully reset displays and restart

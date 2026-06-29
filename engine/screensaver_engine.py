@@ -296,13 +296,15 @@ class ScreensaverEngine(QObject):
             if not self._build_image_queue():
                 logger.error("Failed to build image queue")
                 return False
-            # Initialize cache + prefetcher after queue is ready
+            # Initialize cache + prefetcher after queue is ready. Display-sized
+            # scaled warmup is scheduled after display creation below.
             self._initialize_cache_prefetcher()
             
             # Initialize display manager
             if not self._initialize_display():
                 logger.error("Failed to initialize display")
                 return False
+            self._schedule_prefetch()
             
             # Setup rotation timer
             self._setup_rotation_timer()
@@ -611,7 +613,6 @@ class ScreensaverEngine(QObject):
             if self.thread_manager:
                 self._prefetcher = ImagePrefetcher(self.thread_manager, self._image_cache, max_concurrent=max_conc)
             logger.info(f"Image prefetcher initialized (ahead={self._prefetch_ahead}, max_concurrent={max_conc})")
-            self._schedule_prefetch()
         except Exception as e:
             logger.debug(f"Prefetcher init failed: {e}")
 

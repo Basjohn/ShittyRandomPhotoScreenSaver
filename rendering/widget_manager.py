@@ -128,6 +128,7 @@ class WidgetManager:
         )
         self._expected_overlays: set[str] = set()
         self._spotify_secondary_fade_starters: list[Callable[[], None]] = []
+        self._spotify_secondary_registration_generation: int = 0
         self._spotify_overlay_prewarm_attempted: bool = False
         self._spotify_overlay_prewarmed: bool = False
 
@@ -1895,6 +1896,7 @@ class WidgetManager:
         self._detach_settings_manager()
         self._pending_spotify_visibility_sync = False
         self._spotify_secondary_fade_starters = []
+        self._spotify_secondary_registration_generation += 1
         self._pending_raise = False
 
         if self._raise_timer is not None:
@@ -2146,6 +2148,7 @@ class WidgetManager:
             self._fade_coordinator.reset(clear_participants=True)
         self._expected_overlays = set()
         self._spotify_secondary_fade_starters = []
+        self._spotify_secondary_registration_generation += 1
         self._spotify_overlay_prewarm_attempted = False
         self._spotify_overlay_prewarmed = False
         self._mirror_parent_overlay_state()
@@ -2305,6 +2308,10 @@ class WidgetManager:
             except Exception as inner:
                 logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", inner)
 
+    def register_spotify_secondary_stage_widget(self, widget: Optional[QWidget]) -> None:
+        """Register a Spotify dependent widget through the manager-owned startup seam."""
+        self._register_spotify_secondary_fade(widget)
+
     def _queue_spotify_visibility_sync(self, media_widget: Optional[MediaWidget]) -> None:
         if not media_widget or self._pending_spotify_visibility_sync:
             return
@@ -2367,18 +2374,36 @@ class WidgetManager:
     def _register_spotify_secondary_fade(self, widget: Optional[QWidget]) -> None:
         if widget is None:
             return
+        generation = self._spotify_secondary_registration_generation
+        manager_id = id(self)
         try:
             setattr(widget, "_spotify_secondary_stage_registered", True)
+            setattr(widget, "_spotify_secondary_stage_generation", generation)
+            setattr(widget, "_spotify_secondary_stage_manager_id", manager_id)
         except Exception:
             logger.debug("[WIDGET_MANAGER] Failed to mark widget as secondary-stage registered", exc_info=True)
 
         anchor = getattr(widget, "_anchor_media", None)
         max_deferrals = 20
 
-        def _run_sync() -> None:
+        def _is_registration_current() -> bool:
             try:
                 widget.objectName()
             except RuntimeError:
+                return False
+            try:
+                return (
+                    bool(getattr(widget, "_spotify_secondary_stage_registered", False))
+                    and getattr(widget, "_spotify_secondary_stage_generation", None) == generation
+                    and getattr(widget, "_spotify_secondary_stage_manager_id", None) == manager_id
+                    and generation == self._spotify_secondary_registration_generation
+                )
+            except Exception as exc:
+                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", exc)
+                return False
+
+        def _run_sync() -> None:
+            if not _is_registration_current():
                 return
             try:
                 begin_secondary = getattr(widget, "begin_spotify_secondary_stage", None)
@@ -2393,9 +2418,16 @@ class WidgetManager:
 
         def _starter(attempt: int = 0) -> None:
             # Guard: widget may have been destroyed during settings restart
-            try:
-                widget.objectName()
-            except RuntimeError:
+            if not _is_registration_current():
+                if is_perf_metrics_enabled():
+                    logger.warning(
+                        "[SPOTIFY_VIS][STARTUP] Skipping stale secondary-stage starter "
+                        "widget=%s generation=%s current_generation=%s screen=%s",
+                        type(widget).__name__,
+                        generation,
+                        self._spotify_secondary_registration_generation,
+                        getattr(self._parent, "screen_index", "?"),
+                    )
                 return
             try:
                 anchor_visible = True

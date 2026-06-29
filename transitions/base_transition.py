@@ -448,6 +448,10 @@ class BaseTransition(QObject, metaclass=QABCMeta):
             except Exception as e:
                 logger.debug("[TRANSITION] Exception suppressed: %s", e)
         try:
+            setattr(am, "_srpss_owner", f"display:{getattr(widget, 'screen_index', '?')}")
+        except Exception as e:
+            logger.debug("[TRANSITION] Exception suppressed: %s", e)
+        try:
             if hasattr(widget, "_on_animation_manager_ready"):
                 widget._on_animation_manager_ready(am)
         except Exception as e:

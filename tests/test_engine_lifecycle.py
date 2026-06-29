@@ -15,9 +15,88 @@ Key scenarios tested:
 import pytest
 import threading
 from unittest.mock import patch
+from PySide6.QtWidgets import QApplication
 
 # Import the engine and state enum
 from engine.screensaver_engine import ScreensaverEngine, EngineState
+
+
+def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart(monkeypatch):
+    from engine import engine_handlers
+
+    app = QApplication.instance() or QApplication([])
+    events = []
+
+    class _Animations:
+        def __init__(self, resource_manager=None):
+            events.append(("animations_init", resource_manager))
+
+        def cleanup(self):
+            events.append(("animations_cleanup", None))
+
+    class _Dialog:
+        def __init__(self, _settings, _animations):
+            events.append(("dialog_init", None))
+
+        def exec(self):
+            events.append(("dialog_exec", None))
+            return 0
+
+        def deleteLater(self):
+            events.append(("dialog_delete", None))
+
+    class _DisplayManager:
+        displays = []
+
+        def cleanup(self):
+            events.append(("display_cleanup", None))
+
+    class _Coordinator:
+        def set_settings_dialog_active(self, value):
+            events.append(("settings_active", bool(value)))
+
+        def cleanup(self):
+            events.append(("coordinator_cleanup", None))
+
+    class _Engine:
+        def __init__(self):
+            self.display_manager = _DisplayManager()
+            self.settings_manager = object()
+            self.resource_manager = object()
+            self._display_initialized = True
+
+        def stop(self, exit_app=False):
+            events.append(("engine_stop", exit_app))
+
+        def _initialize_display(self):
+            events.append(("initialize_display", None))
+            return True
+
+        def _setup_rotation_timer(self):
+            events.append(("setup_rotation_timer", None))
+
+        def start(self):
+            events.append(("engine_start", None))
+            return True
+
+    monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
+    monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
+    monkeypatch.setattr(
+        engine_handlers.DisplayWidget,
+        "suppress_pointer_input_globally",
+        staticmethod(lambda *_args, **_kwargs: events.append(("suppress_pointer", None))),
+    )
+    monkeypatch.setattr(
+        "rendering.multi_monitor_coordinator.get_coordinator",
+        lambda: _Coordinator(),
+    )
+
+    engine_handlers.on_settings_requested(_Engine())
+
+    assert ("animations_cleanup", None) in events
+    assert events.index(("animations_cleanup", None)) < events.index(("initialize_display", None))
+    assert ("dialog_delete", None) in events
+    assert app is not None
 
 
 class TestEngineState:
@@ -89,6 +168,26 @@ class TestEngineState:
             # Initialized in RUNNING
             engine._state = EngineState.RUNNING
             assert engine._initialized == True
+
+    def test_initialize_schedules_prefetch_after_display_targets_exist(self, monkeypatch):
+        """First scaled prefetch must run after displays expose target sizes."""
+        engine = ScreensaverEngine()
+        calls = []
+
+        monkeypatch.setattr(engine, "_initialize_core_systems", lambda: True)
+        monkeypatch.setattr(engine, "_load_settings", lambda: True)
+        monkeypatch.setattr(engine, "_initialize_sources", lambda: True)
+        monkeypatch.setattr(engine, "_build_image_queue", lambda: True)
+        monkeypatch.setattr(engine, "_initialize_cache_prefetcher", lambda: calls.append("cache") or None)
+        monkeypatch.setattr(engine, "_initialize_display", lambda: calls.append("display") or True)
+        monkeypatch.setattr(engine, "_schedule_prefetch", lambda: calls.append("prefetch"))
+        monkeypatch.setattr(engine, "_setup_rotation_timer", lambda: None)
+        monkeypatch.setattr(engine, "_subscribe_to_events", lambda: None)
+        monkeypatch.setattr(engine, "_start_rss_background_refresh_if_needed", lambda: None)
+        monkeypatch.setattr(engine, "_start_workers", lambda: None)
+
+        assert engine.initialize() is True
+        assert calls == ["cache", "display", "prefetch"]
 
 
 class TestShuttingDownProperty:

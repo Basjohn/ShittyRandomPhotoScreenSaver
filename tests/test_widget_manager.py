@@ -556,6 +556,70 @@ class TestStartupCoordination:
         assert widget.begin_calls == 1
         assert widget.sync_calls == 0
 
+    def test_stale_spotify_secondary_reveal_does_not_hot_start_after_runtime_pause(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+
+        class _Widget:
+            def __init__(self):
+                self.begin_calls = 0
+                self._spotify_secondary_stage_registered = False
+                self._anchor_media = None
+
+            def objectName(self):
+                return "spotify_visualizer"
+
+            def begin_spotify_secondary_stage(self):
+                self.begin_calls += 1
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        widget = _Widget()
+
+        starters = []
+        monkeypatch.setattr(manager, "register_spotify_secondary_fade", lambda starter: starters.append(starter))
+
+        manager._register_spotify_secondary_fade(widget)
+        assert widget._spotify_secondary_stage_registered is True
+        assert len(starters) == 1
+
+        manager.prepare_for_runtime_pause()
+        starters[0]()
+
+        assert widget.begin_calls == 0
+        assert manager._spotify_secondary_fade_starters == []
+
+    def test_fresh_spotify_secondary_registration_works_after_generation_reset(self, monkeypatch):
+        from rendering.widget_manager import WidgetManager
+
+        class _Widget:
+            def __init__(self):
+                self.begin_calls = 0
+                self._spotify_secondary_stage_registered = False
+                self._anchor_media = None
+
+            def objectName(self):
+                return "spotify_visualizer"
+
+            def begin_spotify_secondary_stage(self):
+                self.begin_calls += 1
+
+        parent = MagicMock()
+        manager = WidgetManager(parent)
+        widget = _Widget()
+
+        starters = []
+        monkeypatch.setattr(manager, "register_spotify_secondary_fade", lambda starter: starters.append(starter))
+
+        manager._register_spotify_secondary_fade(widget)
+        manager.reset_fade_coordination()
+        manager._register_spotify_secondary_fade(widget)
+
+        assert len(starters) == 2
+        starters[0]()
+        assert widget.begin_calls == 0
+        starters[1]()
+        assert widget.begin_calls == 1
+
     def test_overlay_fade_request_tracks_pending_until_compositor_ready(self):
         from rendering.widget_manager import WidgetManager
 

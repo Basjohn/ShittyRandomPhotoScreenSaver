@@ -577,6 +577,25 @@ class DisplayWidget(QWidget):
             except Exception as exc:
                 logger.debug("[DISPLAY_WIDGET] GL compositor stop failed: %s", exc)
 
+        anim_manager = getattr(self, "_animation_manager", None)
+        if anim_manager is not None:
+            try:
+                vis = getattr(self, "spotify_visualizer_widget", None)
+                if vis is not None and getattr(vis, "_animation_manager", None) is anim_manager:
+                    detach = getattr(vis, "detach_from_animation_manager", None)
+                    if callable(detach):
+                        detach()
+            except Exception as exc:
+                logger.debug("[DISPLAY_WIDGET] Visualizer animation detach failed: %s", exc)
+            try:
+                if hasattr(anim_manager, "cleanup"):
+                    anim_manager.cleanup()
+                elif hasattr(anim_manager, "cancel_all"):
+                    anim_manager.cancel_all()
+            except Exception as exc:
+                logger.debug("[DISPLAY_WIDGET] Animation manager cleanup failed: %s", exc)
+            self._animation_manager = None
+
     def describe_runtime_state(self) -> dict:
         """Lightweight snapshot used during shutdown instrumentation."""
         try:

@@ -80,6 +80,11 @@ class Animation(QObject):
         self.last_update_time = self.start_time
         self.elapsed = 0.0
         self.delay_elapsed = 0.0
+        if self.frame_state is not None:
+            self.frame_state.begin_timeline(
+                start_time=self.start_time + max(0.0, self.delay),
+                easing=self.easing,
+            )
         
         self.started.emit()
         logger.debug(f"Animation started: {self.animation_id} (duration={self.duration}s)")
@@ -790,14 +795,17 @@ class AnimationManager(QObject):
                     logger.info(
                         "[PERF] [ANIM] AnimationManager metrics: duration=%.1fms, "
                         "frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-                        "active_count=%d, fps_target=%d",
+                        "active_count=%d, listeners=%d, fps_target=%d, manager_id=%s, owner=%s",
                         duration_ms,
                         self._profile_frame_count,
                         avg_fps,
                         min_dt_ms,
                         max_dt_ms,
                         self.get_active_count(),
+                        len(self._tick_listeners),
                         self.fps,
+                        id(self),
+                        getattr(self, "_srpss_owner", "<unknown>"),
                     )
         except Exception as e:
             logger.debug("[ANIM] Metrics logging failed: %s", e, exc_info=True)

@@ -113,6 +113,36 @@ def test_crossfade_duration():
     assert transition.get_duration() == 1000
 
 
+def test_transition_animation_managers_stay_display_local(qapp):
+    """Mixed-refresh displays must not retarget each other's transition manager."""
+    transition = _DummyTransition()
+    fast_widget = QWidget()
+    slow_widget = QWidget()
+    try:
+        fast_widget._target_fps = 165
+        slow_widget._target_fps = 60
+
+        fast_manager = transition._get_animation_manager(fast_widget)
+        slow_manager = transition._get_animation_manager(slow_widget)
+
+        assert fast_manager is not slow_manager
+        assert fast_manager.fps == 165
+        assert slow_manager.fps == 60
+        assert getattr(fast_manager, "_srpss_owner") == "display:?"
+        assert getattr(slow_manager, "_srpss_owner") == "display:?"
+
+        slow_widget._target_fps = 40
+        assert transition._get_animation_manager(slow_widget) is slow_manager
+        assert slow_manager.fps == 40
+        assert fast_manager.fps == 165
+    finally:
+        for widget in (fast_widget, slow_widget):
+            manager = getattr(widget, "_animation_manager", None)
+            if manager is not None:
+                manager.cleanup()
+            widget.deleteLater()
+
+
 def test_crossfade_start_no_compositor(qapp, test_widget, test_pixmap, test_pixmap2):
     """GL compositor transition completes immediately when no compositor is attached."""
     transition = GLCompositorCrossfadeTransition(duration_ms=200)

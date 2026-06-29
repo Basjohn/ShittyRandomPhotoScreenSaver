@@ -64,7 +64,7 @@ python tools/media_key_reality_harness.py --profile-mode mirrored --scenario foc
 ## Visualizer / Distribution / Presets
 
 ### Current-good visualizer reactivity lock
-- Purpose: protect the currently accepted behavior of `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` before touching shared visualizer/audio/activation/render/transition seams.
+- Purpose: protect the currently accepted behavior of `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` before touching shared visualizer/audio/activation/render/transition seams.
 - Use when:
   - editing visualizer tick/render/audio feed plumbing
   - changing mode activation/reset/first-frame behavior
@@ -79,11 +79,12 @@ python -m pytest `
   tests/test_spotify_visualizer_widget.py::test_runtime_cycle_all_modes_and_settle_devcurve_matches_settings_refresh `
   tests/test_transient_per_mode_integration.py::TestSineOscTransientWidthMix::test_sine_width_reaction_modulated `
   tests/test_devcurve_runtime.py::test_devcurve_active_amplitude_exceeds_idle_amplitude `
+  tests/test_oscilloscope_display_contract.py `
   -q --tb=short
 ```
 - Notes:
   - Bubble oracle failures that only reflect stale expected values are re-baseline work, not permission to change Bubble feel.
-  - `Oscilloscope` is normally watchlist-only for unrelated health work, but when the task explicitly targets it, add Oscilloscope-owned waveform/ghost/glow oracles before tuning the renderer.
+  - `Oscilloscope` is now part of the accepted lock after its mode-owned waveform/ghost/glow pass; keep future changes mode-owned unless a shared seam is proven.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
 ### Visualizer distribution harness

@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-04-23
+Last updated: 2026-06-29
 
 This is the top-level orientation for SRPSS documentation.
 
@@ -29,6 +29,7 @@ SRPSS is a Windows screensaver/media runtime with:
 - Settings and schema: `core/settings/`.
 - Widgets and overlays: `widgets/`, `rendering/widget_manager.py`.
 - Visualizer system: `widgets/spotify_visualizer*`, `core/settings/visualizer_*`.
+- Visualizer preset repair/audit tooling: `tools/visualizer_preset_repair.py`.
 - Source ingestion: `sources/rss/`.
 
 ## How to Navigate

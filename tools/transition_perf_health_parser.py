@@ -37,6 +37,12 @@ _SLOW_TEXTURE_UPLOAD_RE = re.compile(
 _PENDING_PAINT_REQUEUE_RE = re.compile(r"\[PERF\] \[GL RENDER\] Pending paint update exceeded coalescing window")
 _PENDING_PAINT_STALL_RE = re.compile(r"\[PERF\] \[GL RENDER\] Paint update still pending without delivery")
 _CACHE_FALLBACK_RE = re.compile(r"\[CACHE\] \[FALLBACK\] Worker fallback .*?(?P<payload>display=.*)")
+_VISUALIZER_CUSTOM_SUPPRESSION_RE = re.compile(
+    r"\[SPOTIFY_VIS\]\[FALLBACK\] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
+)
+_VISUALIZER_CUSTOM_BUCKET_REPAIR_RE = re.compile(
+    r"\[SPOTIFY_VIS\]\[FALLBACK\] Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect"
+)
 _PREFETCH_STATE_RE = re.compile(
     r"prefetch_state=raw_inflight:(?P<raw_inflight>\d+),"
     r"raw_pending:(?P<raw_pending>\d+),"
@@ -55,6 +61,8 @@ class MetricWindow:
     screen: int | None = None
     dt_max_ms: float | None = None
     active_count: int | None = None
+    listener_count: int | None = None
+    duration_ms: float | None = None
     line: str = ""
 
     @property
@@ -144,6 +152,8 @@ class PerfHealthReport:
     timer_gaps: list[TimerGap] = field(default_factory=list)
     visualizer_timing_warnings: list[VisualizerTimingWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
+    visualizer_custom_suppressions: list[str] = field(default_factory=list)
+    visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
 
     @property
@@ -251,7 +261,12 @@ class PerfHealthReport:
             window
             for window in self.windows
             if window.source == "animation_manager"
-            and (window.active_count is None or window.active_count > 0)
+            and (
+                window.active_count is None
+                or window.active_count > 0
+                or (window.duration_ms is not None and window.duration_ms >= 1000.0)
+                or (window.listener_count is not None and window.listener_count > 0)
+            )
             and (window.target_fps or 0) >= 55
             and window.avg_fps < max(50.0, (window.target_fps or 0) * 0.72)
         ]
@@ -395,6 +410,16 @@ class PerfHealthReport:
             messages.append(
                 f"slow GL texture uploads present: {len(self.slow_texture_uploads)}"
             )
+        if self.visualizer_custom_suppressions:
+            messages.append(
+                "spotify visualizer CUSTOM creation suppressions present: "
+                f"{len(self.visualizer_custom_suppressions)}"
+            )
+        if self.visualizer_custom_bucket_repairs:
+            messages.append(
+                "spotify visualizer CUSTOM rect bucket repairs present: "
+                f"{len(self.visualizer_custom_bucket_repairs)}"
+            )
         return messages
 
 
@@ -432,6 +457,8 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
     screen = _parse_int(parts.get("screen"))
     dt_max_ms = _parse_float(parts.get("dt_max"))
     active_count = _parse_int(parts.get("active_count"))
+    listener_count = _parse_int(parts.get("listeners"))
+    duration_ms = _parse_float(parts.get("duration"))
     return MetricWindow(
         timestamp=_timestamp_from_line(line),
         source=source,
@@ -441,6 +468,8 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
         screen=screen,
         dt_max_ms=dt_max_ms,
         active_count=active_count,
+        listener_count=listener_count,
+        duration_ms=duration_ms,
         line=line,
     )
 
@@ -604,6 +633,30 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             )
             continue
 
+        if _VISUALIZER_CUSTOM_SUPPRESSION_RE.search(line):
+            report.visualizer_custom_suppressions.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "visualizer_custom_suppression",
+                    "no exact local custom rect",
+                    line,
+                )
+            )
+            continue
+
+        if _VISUALIZER_CUSTOM_BUCKET_REPAIR_RE.search(line):
+            report.visualizer_custom_bucket_repairs.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "visualizer_custom_bucket_repair",
+                    "single foreign rect promoted",
+                    line,
+                )
+            )
+            continue
+
         cache_fallback = _cache_fallback_from_line(line)
         if cache_fallback is not None:
             report.cache_fallbacks.append(cache_fallback)
@@ -707,6 +760,8 @@ def main() -> int:
     print(f"Timer gaps: {len(report.timer_gaps)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
+    print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
+    print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
 
     _print_samples(
@@ -746,6 +801,8 @@ def main() -> int:
     )
     _print_samples("Slow GL texture uploads", report.slow_texture_uploads, args.max_samples)
     _print_samples("Zero-producer cache fallbacks", report.zero_producer_cache_fallbacks, args.max_samples)
+    _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
+    _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)
     _print_samples("Shader fallbacks", report.shader_fallbacks, args.max_samples)
     _print_samples("Pending paint requeues", report.pending_paint_requeues, args.max_samples)
     _print_samples("Pending paint stalls", report.pending_paint_stalls, args.max_samples)

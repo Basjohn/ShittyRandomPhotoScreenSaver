@@ -22,12 +22,14 @@ from rendering.widget_descriptors import (
     restore_widget_family_to_authored_layout,
 )
 from rendering.custom_layout_contract import (
+    canonicalize_screen_layout_bucket,
     denormalize_local_rect,
     deserialize_custom_layout_entry,
     get_custom_layout_restore_entry,
     get_screen_layout_entries_for_screen,
     load_custom_layout_restore_map,
     load_custom_layout_map,
+    write_custom_layout_map,
 )
 from rendering.spotify_display_participation import resolve_visualizer_spawn_display
 from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
@@ -160,6 +162,111 @@ def _has_exact_visualizer_custom_rect_for_startup(
             "[SPOTIFY_VIS][FALLBACK] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
         )
         return False
+    return True
+
+
+def _repair_single_foreign_visualizer_custom_rect_for_startup(
+    mgr: "WidgetManager",
+    widgets_config: Mapping[str, object] | None,
+    *,
+    screen_index: int,
+    effective_monitor_sel: object,
+) -> bool:
+    """Move one stale visualizer CUSTOM rect onto its routed live display.
+
+    This is deliberately narrower than the edit-mode recovery button.  It only
+    repairs a settings/startup replay when the visualizer is already routed to
+    this concrete monitor and there is exactly one saved visualizer rect in the
+    custom-layout map.  Ambiguous or cross-monitor cases stay suppressed so the
+    old wrong-display/duplicate-owner class cannot return.
+    """
+
+    if not isinstance(widgets_config, dict):
+        return False
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+        return False
+
+    try:
+        requested_screen_index = int(str(effective_monitor_sel).strip()) - 1
+    except Exception:
+        return False
+    if requested_screen_index != int(screen_index):
+        return False
+    try:
+        parent_screen_index = int(getattr(getattr(mgr, "_parent", None), "screen_index"))
+    except Exception:
+        parent_screen_index = int(screen_index)
+    if parent_screen_index != requested_screen_index:
+        return False
+
+    screen = _resolve_parent_screen(getattr(mgr, "_parent", None))
+    if screen is None:
+        return False
+
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    _matched_signature, screen_entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
+    exact_entry = deserialize_custom_layout_entry(
+        "spotify_visualizer",
+        screen_entries.get("spotify_visualizer"),
+    )
+    if exact_entry is not None:
+        return True
+
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, dict):
+        return False
+
+    candidates: list[tuple[str, object]] = []
+    for saved_signature, layouts in displays.items():
+        if not isinstance(layouts, Mapping):
+            continue
+        entry = deserialize_custom_layout_entry(
+            "spotify_visualizer",
+            layouts.get("spotify_visualizer"),
+        )
+        if entry is not None:
+            candidates.append((str(saved_signature), entry))
+
+    if len(candidates) != 1:
+        return False
+
+    source_signature, entry = candidates[0]
+    target_signature = canonicalize_screen_layout_bucket(custom_layout_map, screen)
+    if not target_signature:
+        return False
+
+    target_layouts = displays.setdefault(target_signature, {})
+    if not isinstance(target_layouts, dict):
+        target_layouts = {}
+        displays[target_signature] = target_layouts
+    target_layouts["spotify_visualizer"] = entry.to_mapping()
+
+    if source_signature != target_signature:
+        source_layouts = displays.get(source_signature, {})
+        if isinstance(source_layouts, dict):
+            source_layouts.pop("spotify_visualizer", None)
+            if not source_layouts:
+                displays.pop(source_signature, None)
+
+    write_custom_layout_map(widgets_config, custom_layout_map)
+    logger.warning(
+        "[SPOTIFY_VIS][FALLBACK] Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect "
+        "source_bucket=%s target_bucket=%s monitor=%s",
+        source_signature,
+        target_signature,
+        effective_monitor_sel,
+    )
+
+    settings_manager = getattr(mgr, "_settings_manager", None)
+    if settings_manager is not None:
+        try:
+            settings_manager.set_widgets_map(widgets_config, emit_change=False)
+            settings_manager.save()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to persist repaired CUSTOM visualizer rect bucket",
+                exc_info=True,
+            )
     return True
 
 
@@ -791,11 +898,18 @@ def create_spotify_visualizer_widget(
     if not (spotify_vis_enabled and show_on_this and anchor_media_widget is not None):
         return None
 
-    if custom_routing_active and not _has_exact_visualizer_custom_rect_for_startup(
-        mgr,
-        widgets_config if isinstance(widgets_config, Mapping) else None,
-    ):
-        return None
+    if custom_routing_active:
+        _repair_single_foreign_visualizer_custom_rect_for_startup(
+            mgr,
+            widgets_config if isinstance(widgets_config, Mapping) else None,
+            screen_index=screen_index,
+            effective_monitor_sel=effective_monitor_sel,
+        )
+        if not _has_exact_visualizer_custom_rect_for_startup(
+            mgr,
+            widgets_config if isinstance(widgets_config, Mapping) else None,
+        ):
+            return None
 
     try:
         try:

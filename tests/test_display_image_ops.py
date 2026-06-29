@@ -517,3 +517,104 @@ def test_failed_transition_start_restores_widget_stack(qt_app, monkeypatch):
     assert any(idx > calls.index("transition_cleanup") for idx in raise_indices)
     assert max(raise_indices) < calls.index("ensure_stack:display")
     assert widget.current_image_path == "next.png"
+
+
+def test_set_processed_image_keeps_animation_manager_owned_until_controller_stop(qt_app, monkeypatch):
+    calls: list[str] = []
+
+    class _FakeSignal:
+        def emit(self, *_args):
+            calls.append("emit")
+
+    class _FakeAnimationManager:
+        def cancel_all(self):
+            calls.append("cancel_all")
+
+    class _FakeTransitionController:
+        def __init__(self, widget, manager):
+            self._widget = widget
+            self._manager = manager
+
+        def stop_current(self):
+            assert self._widget._animation_manager is self._manager
+            calls.append("controller_stop")
+            self._manager.cancel_all()
+
+    class _FakeCompositor:
+        def setGeometry(self, *_args):
+            calls.append("comp_geom")
+
+        def set_base_pixmap(self, *_args):
+            calls.append("comp_base")
+
+        def show(self):
+            calls.append("comp_show")
+
+        def raise_(self):
+            calls.append("comp_raise")
+
+        def warm_shader_textures(self, *_args):
+            calls.append("comp_warm")
+
+    monkeypatch.setattr(display_image_ops, "GLCompositorWidget", _FakeCompositor)
+
+    old_pixmap = QPixmap(8, 8)
+    old_pixmap.fill()
+    new_pixmap = QPixmap(8, 8)
+    new_pixmap.fill()
+
+    class _FakeWidget:
+        def __init__(self):
+            self._transition_skip_count = 0
+            self.settings_manager = object()
+            self._has_rendered_first_frame = True
+            self._transitions_enabled = False
+            self._animation_manager = _FakeAnimationManager()
+            self._transition_controller = _FakeTransitionController(self, self._animation_manager)
+            self._overlay_timeouts = {}
+            self._pre_raise_log_emitted = False
+            self._base_fallback_paint_logged = False
+            self._device_pixel_ratio = 1.0
+            self._updates_blocked_until_seed = False
+            self._image_presenter = None
+            self._gl_compositor = _FakeCompositor()
+            self._current_transition = None
+            self.current_pixmap = old_pixmap
+            self.previous_pixmap = None
+            self.current_image_path = None
+            self.image_displayed = _FakeSignal()
+            self._widget_manager = None
+            self._spotify_bars_overlay = None
+            self._ctrl_cursor_hint = None
+
+        def has_running_transition(self):
+            return False
+
+        def set_transition_work_pending(self, value):
+            calls.append(f"pending:{value}")
+
+        def _ensure_gl_compositor(self):
+            calls.append("ensure_comp")
+
+        def width(self):
+            return 8
+
+        def height(self):
+            return 8
+
+        def _cancel_transition_watchdog(self):
+            calls.append("cancel_watchdog")
+
+        def _ensure_overlay_stack(self, stage):
+            calls.append(f"ensure_stack:{stage}")
+
+        def update(self):
+            calls.append("update")
+
+    widget = _FakeWidget()
+
+    display_image_ops.set_processed_image(widget, new_pixmap, new_pixmap, "next.png")
+
+    assert "controller_stop" in calls
+    assert "cancel_all" in calls
+    assert widget._animation_manager is not None

@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -10,7 +10,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Prune validated work aggressively. This is not a changelog.
 - Prefer automation bars over repeated runtime-verification asks.
 - Do not close visual/runtime bugs from polite unit doubles alone.
-- Before touching shared visualizer/audio/activation/render/transition seams, protect the current-good modes with the visualizer reactivity lock in `Docs/Harness_Index.md`: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must match their current accepted bars or the change stops. `Oscilloscope` is currently a targeted audit mode and must stay isolated until an Oscilloscope-specific oracle proves a shared seam is wrong.
+- Before touching shared visualizer/audio/activation/render/transition seams, protect the current-good modes with the visualizer reactivity lock in `Docs/Harness_Index.md`: `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and the now-accepted `Oscilloscope` path must match their current accepted bars or the change stops.
 - For visualizer geometry, treat these as separate seams until proven otherwise:
   - saved/custom rect authority
   - live widget rect authority
@@ -22,37 +22,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-- [ ] Conduct the Oscilloscope visual/reactivity audit in [audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md)
-  - [x] Complete the first end-to-end code/log audit without changing renderer/audio behavior
-  - [x] Classify current evidence: latest `--viz` window shows clean first-frame handoff but user-visible strobe/weak ghost concerns while ghosting/reactive glow are enabled
-  - [x] Add an Oscilloscope waveform-response oracle before tuning runtime behavior
-  - [x] Add a ghost-stability oracle for early-fill and steady-state trail delay
-  - [x] Add a transient-width strobe oracle so repeated kick/snare peeks cannot masquerade as healthy waveform motion
-  - [x] Add a reactive-glow brightness oracle so glow does not dominate visible movement when waveform warping should be primary
-  - [x] Add bounded `--viz` / `--viz-diag` diagnostics for `osc_speed`, resolved waveform alpha, waveform delta, ghost ring depth, transient width mix, sensitivity modulation, and glow drive
-  - [x] Fix the first three proven mode-owned seams: line-speed mapping, ghost ring delay/fill, and transient width authority
-  - [x] Reduce Oscilloscope shader reactive-glow alpha pumping so reactivity reads more as size/shape than brightness strobe
-  - [x] Restore paused startup idle reveal parity with Bubble/Sine so Oscilloscope does not wait for live playback before showing idle energy
-  - [x] Add and satisfy a live-to-idle bar proving stale live waveform/ghost/transient state is cleared before accepting the idle waveform
-  - [x] Pull back the over-hot low-speed response and transient-width accent after runtime showed Preset 2 strobing even with timid settings
-  - [x] Add live waveform conditioning so raw playback PCM is spatially softened, gain-bounded, and phase/sign-aligned before visual blending
-  - [x] Add idle-to-live and live-to-idle bars so Oscilloscope does not blend stale carriers across playback boundaries
-  - [x] Fix repeated paused media snapshots extending the pause confirmation window; one pending paused/stopped debounce owns the countdown
-  - [x] Fix paused warm-capture waveform poisoning; after non-playing is confirmed, warm frames may be drained but cannot overwrite the shared idle waveform seed
-  - [ ] Runtime-check Oscilloscope Preset 2: idle should appear immediately, live-to-idle should not twitch until it "breaks free", and audio should read as waveform deformation/warp rather than brightness strobe
-  - [ ] Decide whether curated Oscilloscope preset retuning is still needed only after the corrected display contract is runtime-validated
-  - [ ] Keep `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` locked before and after any shared seam work
-
-- [ ] Investigate transient media metadata vanish/reappear from latest runtime logs
-  - [x] Initial log scan found repeated media widget recreation/first-track snapshots and normal play/pause feedback, but no direct metadata-clear stack
-  - [x] Inspect media display-update snapshot retention and display-recreate handoff before editing; do not add a cosmetic metadata fallback without identifying the clearing owner
-  - [x] Add a narrow bar for same-track partial snapshots that temporarily omit artist metadata during visualizer/preset churn
-  - [x] Keep incoming playback/control state authoritative while coalescing missing same-track artist/artwork from the last retained snapshot
-  - [ ] Runtime-check middle-click visualizer preset cycling: artist metadata should no longer disappear, and play/pause should not be needed to restore it
-
 - [ ] Execute the project-wide runtime health audit in [audits/ArchitectureAudit/Project_Health_Audit.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/audits/ArchitectureAudit/Project_Health_Audit.md)
-  - [ ] Establish the visualizer reactivity lock before any shared visualizer/perf/lifecycle work
-    - [ ] Keep `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` green against the focused lock commands in [Docs/Harness_Index.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/Docs/Harness_Index.md)
+  - [x] Establish the visualizer reactivity lock before any shared visualizer/perf/lifecycle work
+    - [x] Keep `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` green against the focused lock commands in [Docs/Harness_Index.md](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/Docs/Harness_Index.md)
     - [ ] Treat stale Bubble oracle failures as oracle re-baseline work only; do not touch Bubble feel/reactivity unless fresh runtime evidence contradicts the accepted current behavior
     - [ ] Re-run the same lock after any change touching visualizer audio feeds, activation reset, overlay payloads, transition handoff, or shared tick/render plumbing
   - [ ] Audit widget lifecycle ownership and add parity bars before any broad activation-path migration
@@ -79,35 +51,64 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
     - [x] Add parser timeline markers for settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow texture uploads, cache fallbacks, shader fallbacks, and pending-paint rescues
     - [x] Add passive adaptive-timer observability for stale pending paint updates with `no_requeue=True`; do not add any repaint/update retry path
     - [x] Split paint-time transition progress sync into its own `GL PAINT` section metric so future logs can prove whether interpolation sync is a real hot-path cost
-    - [x] Runtime-check the adaptive-timer GIL-spin fix against commit `40562fe`: latest `--perf` runs stay in the improved range with no pending-paint requeues, no shader fallbacks, and no high-refresh near-60 paint windows
+    - [x] Runtime-check the adaptive-timer GIL-spin fix against commit `40562fe`: post-fix logs recovered the broad regression and removed pending-paint requeues/shader fallbacks, but newer preserved evidence still shows rarer high-refresh near-60 / divisor-like collapse that remains active below
     - [x] Separate the latest collapse into two log-backed seams: early `GL RENDER` healthy / `GL PAINT` starved windows, and later `GL ANIM` control-callback cadence near `60fps` while paint-time interpolation still delivers higher visual paint cadence
     - [x] Remove the adaptive render timer's Python busy-spin deadline tail so high-refresh timing no longer monopolizes the GIL while Qt paint/event-loop delivery is trying to consume queued updates
     - [x] Fix the exit-stall/orphan-timer seam where a late compositor lazy animation callback or delayed/desynced transition starter could start an adaptive timer after `stop_rendering()` / display teardown had already invalidated that transition
     - [x] Runtime-check the next `--life` / `--perf` run for no `ThreadManager shutdown timed out` adaptive-timer tasks, no late `Internal C++ object (GLCompositorWidget) already deleted` transition-complete callbacks, and no post-stop adaptive frame signalling
-    - [ ] Correlate any remaining paired starvation windows with settings open/close, edit-mode save, display clear/recreate, frame-budget spikes, and visualizer tick spikes using the parser timeline
-    - [ ] Continue the remaining collapse investigation from `.tmp/perf_collapse_evidence_20260628_164113`: Display 0 render cadence remains healthy at `~165Hz` while paint can drift into `~91-117fps` and `GL ANIM` can fall near `61-62fps`; Display 1 render cadence remains `~60Hz` while `GL ANIM` can fall into a suspicious `~39fps` cadence under some transitions
+    - [ ] Correlate any remaining paired starvation windows with settings open/close, edit-mode save, display clear/recreate, frame-budget spikes, visualizer tick spikes, media timer gaps, and AnimationManager cadence using the parser timeline
+    - [ ] Continue the remaining collapse investigation from `.tmp/perf_collapse_evidence_20260628_164113`: latest preserved subfolder `20260629_143536_root_cause_latest` shows Display 0 render cadence remains healthy at `~165Hz` while paint under-delivers and `GL ANIM` can fall near `50-64fps`; Display 1 render cadence remains `~60Hz` while `GL ANIM` can fall into a suspicious `~35-40fps` cadence under some transitions
     - [ ] Root-cause any remaining Qt/GL paint delivery under-delivery while render timers remain at target; inspect update consumption, pending-flag lifecycle, compositor/widget lifecycle churn, display-specific refresh target state, and event-loop stalls
+    - [ ] Classify `GL ANIM` cadence separately from visible paint cadence before changing timers: prove whether near-60 Display 0 / near-40 Display 1 animation metrics are only AnimationManager control-callback cadence, a shared-manager leak, or a real contributor to paint starvation
+    - [x] Add a display-local AnimationManager bar proving mixed-refresh transition widgets do not retarget each other's transition managers
+    - [x] Strengthen the perf parser so long completed `AnimationManager` under-target runs stay red even when `active_count=0`; short idle post-completion samples remain allowed
+    - [x] Add passive `AnimationManager` listener-count logging so the next `--perf` run can prove whether visualizer tick listeners are attached during suspicious `GL ANIM` cadence collapse
+    - [x] Fix the settings-dialog local animation/timer ownership leak: dialog-owned `AnimationManager` is cleaned before runtime restart, and delayed background tab hydration cancels at close instead of waking during runtime
+    - [x] Fix the display-local transition `AnimationManager` ownership break: image handoff no longer nulls the manager before `TransitionController.stop_current()` can cancel it, display shutdown explicitly releases the manager, and `--perf` summaries now include manager id/owner for future leakage vs delivery-starvation classification
+    - [x] Add bars proving image handoff preserves manager ownership through controller stop and mixed-refresh transition managers remain display-local
+    - [x] Root-cause the visible-progress coupling: `FrameState` paint interpolation was still sample-stream-tethered, so a low-cadence `AnimationManager` callback stream could cap shader-visible progress even when the render timer was healthy
+    - [x] Move `FrameState` paint reads to an elapsed-time/easing timeline while leaving `AnimationManager` as the completion/callback owner; this avoids repaint retries and keeps first-frame/delay behavior explicit
+    - [x] Add a `FrameState` bar proving paint-time progress outruns stale samples without advancing before an authored delay
+    - [ ] Runtime-check the next `--perf --life --set` run for no settings-dialog `AnimationManager` tail, no post-settings hidden-tab hydration work, no repeated manager ids from stale display ownership after cleanup, and whether the suspicious Display 0 near-60 / Display 1 near-40 visible collapse still appears after the `FrameState` timeline fix
+    - [ ] If fresh logs still show collapse, classify each `GL ANIM` window as `listeners=0` event-loop/manager delivery starvation, `listeners>0` tick-listener pressure, or display-local manager lifecycle churn before changing any runtime cadence code
     - [ ] Root-cause settings UI stalls around widget tab hydration (`~2.3s` class stalls in latest logs) without breaking settings persistence, buckets, or scroll persistence
     - [ ] Correlate slow GL texture uploads with image-cache warmup and display rebuild boundaries; prefer cache/prewarm ownership fixes over UI-thread upload retries
     - [ ] Inspect visualizer tick-listener cadence separately from Bubble worker cost; Bubble compute is low in the latest collapse logs and must not be retuned for this perf task
     - [ ] Search for duplicate hidden visualizer owners, duplicate beat engines, extra worker loops, stale overlays, or uncollected visualizer resources before optimizing render paths
-    - [ ] Treat current-good visualizer modes as locked: `Spectrum`, `Sine Waves`, `Bubble`, and `Dev Curve` must keep accepted behavior before and after any shared render/tick changes
+    - [ ] Treat current-good visualizer modes as locked: `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` must keep accepted behavior before and after any shared render/tick changes
     - [ ] Keep FPS work off the UI thread; root-cause cache/worker/timer ownership instead of adding synchronous decode, scaling, render retries, repaint loops, or update rescue timers
+  - [ ] Close the reopened settings-return visualizer CUSTOM suppression seam
+    - [x] Preserve the fresh evidence under `.tmp/perf_collapse_evidence_20260628_164113/20260629_0417_settings_return_collapse`
+    - [x] Preserve the latest collapse/return evidence under `.tmp/perf_collapse_evidence_20260628_164113/20260629_143536_root_cause_latest`
+    - [x] Classify the failure: settings return suppressed CUSTOM visualizer creation because the route pointed at monitor `2` but the only saved visualizer rect lived under a stale/foreign display bucket
+    - [x] Add a narrow startup repair for exactly one stale visualizer rect when the requested concrete monitor is active and matches the current display
+    - [x] Keep absent/ambiguous/wrong-monitor foreign rects rejected so duplicate-owner and wrong-display geometry bugs cannot return
+    - [x] Add parser timeline markers for CUSTOM visualizer creation suppression and single-foreign-bucket repair
+    - [x] Fix the root staged-startup registration split: visualizer self-registration now goes through the manager-owned secondary-stage wrapper, and runtime-pause/fade-reset invalidates stale registered generations so old starters cannot strand or hot-start the visualizer
+    - [x] Add bars proving stale secondary-stage starters do not hot-start after runtime pause and stale visualizer registration re-registers with the live manager generation
+    - [ ] Runtime-check next `--geo --perf --set --life` run: no normal settings return should suppress or strand the visualizer; at most one loud bucket repair may appear, and after it saves the exact bucket the warning should not repeat
   - [ ] Reduce image-cache/prescale fallback pressure without moving work onto the UI thread
     - [x] Runtime-validate the bounded raw-prefetch backlog: latest `--cache` logs show full preview coverage (`active=2 pending=3`, scaled `request_count=5 prepared=5`) instead of the old first-two-only skip.
     - [x] Add a parser/bar that fails the still-active fallback path where transition images miss the preview window entirely (`raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`)
     - [x] Keep the delayed post-transition prefetch resume armed while another display still reports transition work pending, instead of consuming the resume and leaving no producers registered
     - [x] Preserve raw/scaled prefetch registration intent through post-transition cooldown without dispatching new work during the cooldown window
     - [x] Rearm transition-complete prefetch resume until the prefetcher cooldown has actually expired, avoiding the just-before-expiry lost-wakeup shape
-    - [ ] Investigate fresh zero-producer fallback evidence preserved at `.tmp/perf_collapse_evidence_20260628_164113`: Display 1 hit two `scaled_miss raw_missing` fallbacks with `raw_inflight:0,raw_pending:0,scaled_inflight:0,scaled_pending:0`
-    - [ ] Prove cache promotion, cancellation, and worker wakeup ownership survive transition/display-rebuild windows before closing the cache fallback track
+    - [x] Root-cause the latest zero-producer fallback family to first scaled prefetch scheduling before display target sizes exist; first prefetch scheduling now runs after display creation, not during cache-prefetcher construction
+    - [x] Add a lifecycle bar proving engine initialization orders cache construction, display creation, then first prefetch scheduling
+    - [ ] Runtime-check the next `--cache` run for no startup/early `scaled_miss raw_missing` fallback with all producer counts at zero
+    - [ ] If fresh logs still show zero-producer fallbacks after startup ordering, inspect cache promotion, cancellation, and worker wakeup ownership before closing the cache fallback track
     - [ ] Keep fallback logs loud through `--cache`; do not hide fallback usage by downgrading or moving warnings out of operator-visible logs
     - [ ] Prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths
   - [ ] Split the visualizer suite into trustworthy gates before using it as a project health bar
     - [ ] Re-baseline Bubble oracle values against current accepted runtime feel only; do not touch Bubble reactivity or visuals for this task
+    - [x] Run the focused current-good visualizer lock and keep it green before shared perf/cache/lifecycle edits
+    - [x] Classify the broad visualizer suite separately: current-good lock is trusted, while stale Bubble expectations, old Sine UI doubles, exact-bucket settings tests, and obsolete doc-reference tests are re-baseline/test-debt work
+    - [x] Fix the real broad-suite hard exception where `BubbleSimulation.tick(None, ...)` left pulse variables uninitialized
+    - [x] Repair stale visualizer doc-reference bars so retired visualizer docs are not required as current truth
     - [x] Fix non-Bubble/test-fixture drift separately from Bubble, including Oscilloscope runtime push and tick-pipeline unit doubles
     - [x] Keep mode-switch overlay reuse contract covered: preserved overlay must be reset/hidden/blanked and target-mode reset before fresh-frame reveal
-    - [ ] Re-run and classify the remaining full visualizer suite failures so stale Bubble expectations do not mask real non-Bubble regressions
+    - [x] Close Oscilloscope-specific bars for waveform response, ghost stability, idle/live boundaries, transient-width strobe, and media metadata preservation
+    - [ ] Continue classifying remaining broad visualizer failures as stale tests vs real production bugs; do not change current-good runtime behavior from broad-suite proxy failures alone
 
 - [ ] Make context-menu visualizer mode switching display-aware but globally helpful
   - [x] Prefer the visualizer owned by the display where the context menu was invoked
@@ -125,8 +126,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 ## Watchlist
 
 - Non-`Custom` authored stacking is currently default-on for new users, but still needs future `--geo` re-audit against real authored layouts so the planner does not quietly regress while enabled.
-- Visualizer CUSTOM geometry route repair is closed to watchlist after `.tmp/perf_collapse_evidence_20260628_164113`: no `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...` or duplicate-owner fallback appeared in the inspected ordinary edit/save/replay cycles.
-- Oscilloscope is active audit work rather than watchlist work. Keep the watchlist state only after the targeted oracle/diagnostic pass lands and either validates a fix or proves no current runtime failure.
+- Visualizer CUSTOM geometry route repair is watchlist except for the active settings-return stale-bucket seam above. Ordinary edit/save/replay geometry remains healthy unless fresh logs show `[CUSTOM_LAYOUT][FALLBACK] Repaired spotify_visualizer CUSTOM save route...`, duplicate-owner fallback, requested-monitor fallback, replay-green/runtime-wrong geometry, or repeated bucket repair after the first save.
+- Oscilloscope visual/reactivity is closed to watchlist after the 2026-06-29 runtime pass: idle starts, pause no longer needs to "break free", playback reads as waveform deformation rather than brightness strobe, and visualizer preset cycling no longer wipes media metadata. Reopen only with fresh `--viz` / runtime evidence and keep fixes mode-owned unless a shared seam is proven.
+- Media metadata preservation during live visualizer preset churn is closed to watchlist; if it reopens, the first suspect is partial same-track playback snapshots during visualizer-only settings writes, not a broad media refresh fallback.
 
 ## Deferred / Not Active
 
@@ -139,7 +141,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Keep likely friendly Feeds source candidates narrow and explicit: official publisher RSS/Atom feeds, project/blog feeds, public NASA/APOD-style feeds, Bing-style image/news feeds, Flickr public feeds, and other feed-native sources that do not require HTML scraping or session automation.
   - [ ] Add settings/runtime bars before activating Feeds work: feed-url validation stays off the UI thread, empty/error replacements do not blank valid cached content, per-spawn caches stay isolated, and manual refresh/cooldown/startup-skip behavior matches the intended user contract.
 - Dynamic Volume Floor follow-up stays deferred.
-- Startup update-policy observability and image-cache/prescale perf stay deferred behind the current widget/runtime priorities.
+- Startup update-policy observability stays deferred behind the current widget/runtime priorities.
 - Secure-desktop long-runtime exit reliability stays deferred.
 
 ## Documentation Rule

@@ -8,6 +8,8 @@ Intended for ad-hoc use after a `--perf` run has produced `screensaver_perf.log`
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Dict, Tuple
@@ -115,7 +117,14 @@ def _collect_spotify_samples(lines: List[str]) -> SpotifySummary:
 
 
 def _collect_slide_samples(lines: List[str]) -> List[Tuple[str, PerfSample]]:
-    from scripts.slide_metrics_parser import _parse_slide_metrics_line  # type: ignore[import]
+    slide_parser_path = Path(__file__).with_name("slide_metrics_parser.py")
+    spec = importlib.util.spec_from_file_location("_srpss_slide_metrics_parser", slide_parser_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load slide metrics parser from {slide_parser_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _parse_slide_metrics_line = module._parse_slide_metrics_line
 
     result: List[Tuple[str, PerfSample]] = []
     for raw in lines:

@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from threading import Lock
 from typing import Optional
 
+from core.animation.easing import ease
+from core.animation.types import EasingCurve
 from core.logging.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,7 +52,29 @@ class FrameState:
     duration: float = 1.0
     started: bool = False
     completed: bool = False
-    
+    _timeline_start: Optional[float] = None
+    _timeline_easing: EasingCurve = EasingCurve.LINEAR
+
+    def begin_timeline(
+        self,
+        *,
+        start_time: Optional[float] = None,
+        easing: EasingCurve = EasingCurve.LINEAR,
+    ) -> None:
+        """Begin a paint-authoritative elapsed-time timeline.
+
+        AnimationManager remains responsible for callbacks and completion, but
+        high-refresh paint reads should not be capped by the callback cadence.
+        The timeline lets paint derive eased progress from wall-clock elapsed
+        time whenever a transition owns a FrameState.
+        """
+        with self._lock:
+            self._timeline_start = time.time() if start_time is None else float(start_time)
+            self._timeline_easing = easing
+            if self._curr is None:
+                self._curr = FrameSample(timestamp=self._timeline_start, progress=0.0)
+            self.started = True
+
     def push(self, progress: float) -> None:
         """Push a new progress sample (called from animation thread)."""
         now = time.time()
@@ -74,6 +98,8 @@ class FrameState:
         with self._lock:
             self._prev = None
             self._curr = None
+            self._timeline_start = None
+            self._timeline_easing = EasingCurve.LINEAR
             self.started = False
             self.completed = False
 
@@ -92,6 +118,8 @@ class FrameState:
         }
         if curr is not None:
             desc["age_ms"] = round((time.time() - curr.timestamp) * 1000.0, 2)
+        if self._timeline_start is not None:
+            desc["timeline_age_ms"] = round((time.time() - self._timeline_start) * 1000.0, 2)
         return desc
     
     def get_interpolated_progress(self, render_time: Optional[float] = None) -> float:
@@ -112,6 +140,14 @@ class FrameState:
         with self._lock:
             if self.completed:
                 return 1.0
+
+            timeline_start = self._timeline_start
+            timeline_easing = self._timeline_easing
+            duration = self.duration
+
+            if timeline_start is not None and duration > 0.0:
+                raw = max(0.0, min(1.0, (render_time - timeline_start) / duration))
+                return max(0.0, min(1.0, ease(raw, timeline_easing)))
             
             if self._curr is None:
                 return 0.0

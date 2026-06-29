@@ -365,6 +365,7 @@ class BubbleSimulation:
         # Energy — accept both object (EnergyBands) and dict snapshots
         if energy_bands is None:
             bass = mid = high = overall = 0.0
+            pulse_bass = pulse_mid = pulse_high = pulse_overall = 0.0
         elif isinstance(energy_bands, dict):
             bass = max(0.0, float(energy_bands.get('bass', 0.0) or 0.0))
             mid = max(0.0, float(energy_bands.get('mid', 0.0) or 0.0))

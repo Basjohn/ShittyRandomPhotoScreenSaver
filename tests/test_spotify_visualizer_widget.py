@@ -9272,6 +9272,48 @@ def test_spotify_visualizer_self_registers_secondary_stage_when_parent_supports_
 
 
 @pytest.mark.qt
+def test_spotify_visualizer_re_registers_stale_secondary_stage_with_widget_manager(qt_app, qtbot):
+    from widgets.spotify_visualizer.startup_staging import ensure_spotify_secondary_stage_registration
+
+    class _Manager:
+        def __init__(self) -> None:
+            self._spotify_secondary_registration_generation = 7
+            self.widgets: list[SpotifyVisualizerWidget] = []
+
+        def register_spotify_secondary_stage_widget(self, widget) -> None:
+            self.widgets.append(widget)
+            widget._spotify_secondary_stage_registered = True
+            widget._spotify_secondary_stage_generation = self._spotify_secondary_registration_generation
+            widget._spotify_secondary_stage_manager_id = id(self)
+
+    class _Parent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self._widget_manager = _Manager()
+            self.direct_calls = 0
+
+        def register_spotify_secondary_fade(self, _starter) -> None:
+            self.direct_calls += 1
+
+    parent = _Parent()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    vis = SpotifyVisualizerWidget(parent=parent, bar_count=12)
+    vis._spotify_secondary_stage_registered = True
+    vis._spotify_secondary_stage_generation = 1
+    vis._spotify_secondary_stage_manager_id = 12345
+
+    ensure_spotify_secondary_stage_registration(vis)
+
+    assert parent._widget_manager.widgets == [vis]
+    assert vis._spotify_secondary_stage_registered is True
+    assert vis._spotify_secondary_stage_generation == 7
+    assert vis._spotify_secondary_stage_manager_id == id(parent._widget_manager)
+    assert parent.direct_calls == 0
+
+
+@pytest.mark.qt
 def test_spotify_visualizer_first_fresh_frame_finishes_staged_reveal(qt_app, qtbot, monkeypatch):
     parent = QWidget()
     qtbot.addWidget(parent)

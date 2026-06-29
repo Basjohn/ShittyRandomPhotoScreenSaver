@@ -236,6 +236,22 @@ def test_perf_health_allows_idle_animation_manager_under_target_window():
     assert report.anomalies == []
 
 
+def test_perf_health_flags_long_completed_animation_manager_run_under_target():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - core.animation.animator - INFO - [PERF] [ANIM] "
+            "AnimationManager metrics: duration=9174.0ms, frames=366, avg_fps=40.0, "
+            "dt_min=7.32ms, dt_max=40.95ms, active_count=0, listeners=1, fps_target=60"
+        ]
+    )
+
+    assert len(report.animation_manager_under_target) == 1
+    window = report.animation_manager_under_target[0]
+    assert window.duration_ms == 9174.0
+    assert window.listener_count == 1
+    assert "animation manager" in report.anomalies[0]
+
+
 def test_perf_health_flags_media_widget_timer_starvation_gap():
     report = parse_perf_health_lines(
         [
@@ -322,6 +338,33 @@ def test_perf_health_flags_pending_paint_stalls_without_requeue():
     assert len(report.pending_paint_stalls) == 1
     assert report.timeline_markers[0].kind == "pending_paint_stall"
     assert report.anomalies == ["paint update delivery stalls observed without requeue: 1"]
+
+
+def test_perf_health_flags_visualizer_custom_creation_suppression():
+    report = parse_perf_health_lines(
+        [
+            "04:14:59 - rendering.spotify_widget_creators - WARNING - "
+            "[SPOTIFY_VIS][FALLBACK] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
+        ]
+    )
+
+    assert len(report.visualizer_custom_suppressions) == 1
+    assert report.timeline_markers[0].kind == "visualizer_custom_suppression"
+    assert report.anomalies == ["spotify visualizer CUSTOM creation suppressions present: 1"]
+
+
+def test_perf_health_flags_visualizer_custom_bucket_repair_as_watch_marker():
+    report = parse_perf_health_lines(
+        [
+            "04:14:59 - rendering.spotify_widget_creators - WARNING - "
+            "[SPOTIFY_VIS][FALLBACK] Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect "
+            "source_bucket=screen:stale target_bucket=screen:live monitor=2"
+        ]
+    )
+
+    assert len(report.visualizer_custom_bucket_repairs) == 1
+    assert report.timeline_markers[0].kind == "visualizer_custom_bucket_repair"
+    assert report.anomalies == ["spotify visualizer CUSTOM rect bucket repairs present: 1"]
 
 
 def test_perf_health_collects_timeline_markers_for_collapse_correlation():

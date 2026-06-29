@@ -190,7 +190,6 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     # Use the pre-processed pixmap directly - no UI thread blocking
     new_pixmap = processed_pixmap
     
-    widget._animation_manager = None
     widget._overlay_timeouts: dict[str, float] = {}
     widget._pre_raise_log_emitted = False
     widget._base_fallback_paint_logged = False

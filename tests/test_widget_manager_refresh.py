@@ -1233,6 +1233,7 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requ
     monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
     monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", lambda *args, **kwargs: None)
     mgr = SimpleNamespace(_parent=source_display)
 
     with caplog.at_level(logging.WARNING):
@@ -1266,7 +1267,7 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_requ
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
-def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_active_target_signature_changes(monkeypatch, caplog):
+def test_reconcile_remote_custom_visualizer_repairs_single_foreign_rect_when_active_target_signature_changes(monkeypatch, caplog):
     import logging
 
     from PySide6.QtCore import QRect
@@ -1381,25 +1382,27 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_acti
     monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
     monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda _widgets: None)
+    monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", lambda *args, **kwargs: None)
 
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:stale-signature": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
+                        "size_payload": {"width": 420, "height": 280},
+                        "resize_mode": "visualizer_rect",
+                    }
+                }
+            },
+        },
+    }
     with caplog.at_level(logging.WARNING):
         widget_setup_all._reconcile_remote_custom_visualizer(
             SimpleNamespace(_parent=source_display),
-            {
-                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
-                "custom_layout": {
-                    "version": 1,
-                    "displays": {
-                        "screen:stale-signature": {
-                            "spotify_visualizer": {
-                                "rect": {"x": 0.108, "y": 0.287, "width": 0.219, "height": 0.259},
-                                "size_payload": {"width": 420, "height": 280},
-                                "resize_mode": "visualizer_rect",
-                            }
-                        }
-                    },
-                },
-            },
+            widgets_config,
             shadows_config={},
             screen_index=0,
             thread_manager=None,
@@ -1407,10 +1410,94 @@ def test_reconcile_remote_custom_visualizer_rejects_foreign_saved_rect_when_acti
         )
 
     vis = target_display.spotify_visualizer_widget
-    assert vis is None
-    assert "foreign-bucket geometry priming rejected" in caplog.text
-    assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
+    assert vis is not None
+    assert vis.geometry() == QRect(207, 310, 420, 280)
+    displays = widgets_config["custom_layout"]["displays"]
+    assert "screen:stale-signature" not in displays
+    assert any("spotify_visualizer" in layouts for layouts in displays.values())
+    assert "Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect" in caplog.text
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
+
+
+def test_visualizer_custom_foreign_bucket_repair_rejects_ambiguous_rects(monkeypatch, caplog):
+    import logging
+
+    from rendering import spotify_widget_creators as creators
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:old-a": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                },
+                "screen:old-b": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.4, "y": 0.3, "width": 0.2, "height": 0.1},
+                    }
+                },
+            },
+        },
+    }
+    monkeypatch.setattr(creators, "_resolve_parent_screen", lambda _parent: object())
+    monkeypatch.setattr(
+        creators,
+        "get_screen_layout_entries_for_screen",
+        lambda custom_layout_map, _screen: ("screen:live", custom_layout_map["displays"].get("screen:live", {})),
+    )
+    monkeypatch.setattr(
+        creators,
+        "canonicalize_screen_layout_bucket",
+        lambda custom_layout_map, _screen: custom_layout_map["displays"].setdefault("screen:live", {}) and "screen:live",
+    )
+    mgr = SimpleNamespace(_parent=SimpleNamespace(screen_index=1), _settings_manager=None)
+
+    with caplog.at_level(logging.WARNING):
+        repaired = creators._repair_single_foreign_visualizer_custom_rect_for_startup(
+            mgr,
+            widgets_config,
+            screen_index=1,
+            effective_monitor_sel="2",
+        )
+
+    assert repaired is False
+    assert "screen:old-a" in widgets_config["custom_layout"]["displays"]
+    assert "screen:old-b" in widgets_config["custom_layout"]["displays"]
+    assert "screen:live" not in widgets_config["custom_layout"]["displays"]
+    assert "Repaired spotify_visualizer CUSTOM rect bucket" not in caplog.text
+
+
+def test_visualizer_custom_foreign_bucket_repair_rejects_parent_monitor_mismatch(monkeypatch):
+    from rendering import spotify_widget_creators as creators
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:old": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                },
+            },
+        },
+    }
+    monkeypatch.setattr(creators, "_resolve_parent_screen", lambda _parent: object())
+    mgr = SimpleNamespace(_parent=SimpleNamespace(screen_index=0), _settings_manager=None)
+
+    repaired = creators._repair_single_foreign_visualizer_custom_rect_for_startup(
+        mgr,
+        widgets_config,
+        screen_index=1,
+        effective_monitor_sel="2",
+    )
+
+    assert repaired is False
+    assert "screen:old" in widgets_config["custom_layout"]["displays"]
 
 
 def test_display_setup_does_not_run_second_lifecycle_initialize_pass():

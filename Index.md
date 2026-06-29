@@ -21,7 +21,7 @@ Living map of the current SRPSS codebase.
 | `audits/BubbleAudit/README.md` | Small entrypoint that points at the Bubble audit reference |
 | `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Historical/watchlist geometry audit for the visualizer CUSTOM/runtime shape family; reopen only when fresh `--geo` evidence shows route repair, fallback, duplicate owner, impossible shape, or runtime replay drift |
 | `audits/GeoAudit/README.md` | Small entrypoint for the visualizer geometry audit/watchlist |
-| `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md` | Active Oscilloscope visual/reactivity audit for strobe/flicker, weak ghosting, laggy waveform response, transient width authority, and shader glow contracts |
+| `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md` | Historical/watchlist Oscilloscope visual/reactivity audit for the resolved strobe/flicker, ghosting, waveform response, transient width authority, and shader glow contract drift |
 | `audits/OscilloscopeAudit/README.md` | Small entrypoint for the Oscilloscope audit |
 | `Docs/Regression_Notes.md` | Smaller resolved regression notes and follow-up hardening items |
 | `Docs/Defaults_Guide.md` | Defaults and reset contracts |

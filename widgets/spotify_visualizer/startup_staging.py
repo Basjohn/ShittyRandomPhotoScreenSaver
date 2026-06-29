@@ -38,10 +38,35 @@ def cancel_pending_startup_reveal(widget: Any) -> None:
 
 def ensure_spotify_secondary_stage_registration(widget: Any) -> None:
     """Self-register with the parent's secondary-stage fade system."""
+    parent = widget.parent()
+    manager = getattr(parent, "_widget_manager", None) if parent is not None else None
     if widget._spotify_secondary_stage_registered:
+        if manager is None:
+            return
+        try:
+            if (
+                getattr(widget, "_spotify_secondary_stage_manager_id", None) == id(manager)
+                and getattr(widget, "_spotify_secondary_stage_generation", None)
+                == getattr(manager, "_spotify_secondary_registration_generation", None)
+            ):
+                return
+        except Exception as exc:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", exc)
+        widget._spotify_secondary_stage_registered = False
+
+    register_widget = (
+        getattr(manager, "register_spotify_secondary_stage_widget", None)
+        if manager is not None
+        else None
+    )
+    if callable(register_widget):
+        try:
+            register_widget(widget)
+            logger.debug("[SPOTIFY_VIS] Self-registered Spotify secondary startup stage via WidgetManager")
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to self-register Spotify secondary stage", exc_info=True)
         return
 
-    parent = widget.parent()
     register = getattr(parent, "register_spotify_secondary_fade", None) if parent is not None else None
     if not callable(register):
         return

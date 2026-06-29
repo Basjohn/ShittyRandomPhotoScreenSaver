@@ -476,6 +476,7 @@ class SettingsDialog(QDialog):
         self._background_hydration_started = False
         self._background_hydration_delay_ms = 1500
         self._background_hydration_step_delay_ms = 150
+        self._closing = False
         self._acrylic_applied = False
         cache = get_settings_dialog_cache()
         stored_scroll = self._settings.get('ui.last_tab_scroll', {})
@@ -824,24 +825,29 @@ class SettingsDialog(QDialog):
             self._start_background_tab_hydration()
 
     def _start_background_tab_hydration(self) -> None:
-        if self._background_hydration_started or not self._background_tab_queue:
+        if self._closing or self._background_hydration_started or not self._background_tab_queue:
             return
         self._background_hydration_started = True
         hydration_start = time.perf_counter()
 
         def _run():
+            if self._closing:
+                return
             self._log_perf_event("SettingsDialog.background_hydration_delay", hydration_start)
             self._schedule_next_background_build()
 
         QTimer.singleShot(self._background_hydration_delay_ms, _run)
 
     def _schedule_next_background_build(self) -> None:
-        if self._background_build_scheduled or not self._background_tab_queue:
+        if self._closing or self._background_build_scheduled or not self._background_tab_queue:
             return
         self._background_build_scheduled = True
 
         def _run():
             self._background_build_scheduled = False
+            if self._closing:
+                self._background_tab_queue.clear()
+                return
             if not self._background_tab_queue:
                 return
             index = self._background_tab_queue.pop(0)
@@ -1123,11 +1129,15 @@ class SettingsDialog(QDialog):
             self._suppress_scroll_capture = False
 
     def closeEvent(self, event):
+        self._closing = True
+        self._background_tab_queue.clear()
+        self._background_build_scheduled = False
         # Check if user has configured any image sources
         if not self._has_image_sources():
             if not self.isVisible():
                 event.accept()
                 return
+            self._closing = False
             event.ignore()
             self._show_no_sources_popup()
             return

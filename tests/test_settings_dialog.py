@@ -244,6 +244,18 @@ def test_settings_dialog_background_hydration_defers_until_show_and_uses_delays(
     assert "QTimer.singleShot(0, _run)" not in schedule_source
 
 
+def test_settings_dialog_close_cancels_background_hydration_work():
+    """Settings-close must not leave hidden tab hydration queued into runtime."""
+    close_source = inspect.getsource(SettingsDialog.closeEvent)
+    start_source = inspect.getsource(SettingsDialog._start_background_tab_hydration)
+    schedule_source = inspect.getsource(SettingsDialog._schedule_next_background_build)
+
+    assert "self._closing = True" in close_source
+    assert "self._background_tab_queue.clear()" in close_source
+    assert "if self._closing" in start_source
+    assert "if self._closing" in schedule_source
+
+
 def test_settings_dialog_restores_persisted_top_level_tab(qapp, settings_manager, animation_manager):
     """Persisted top-level tab selection should remain authoritative."""
     settings_manager.set('ui.last_tab_index', 3)
