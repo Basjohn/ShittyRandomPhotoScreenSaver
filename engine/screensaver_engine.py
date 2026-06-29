@@ -351,7 +351,10 @@ class ScreensaverEngine(QObject):
             logger.debug("ThreadManager initialized")
 
             # Animation manager
-            self.animation_manager = AnimationManager(resource_manager=self.resource_manager)
+            self.animation_manager = AnimationManager(
+                resource_manager=self.resource_manager,
+                owner="engine:app_shared",
+            )
             AnimationManager.set_app_shared(self.animation_manager)
             logger.debug("AnimationManager initialized")
             

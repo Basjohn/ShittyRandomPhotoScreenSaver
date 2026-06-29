@@ -241,7 +241,8 @@ def test_perf_health_flags_long_completed_animation_manager_run_under_target():
         [
             "17:40:01 - core.animation.animator - INFO - [PERF] [ANIM] "
             "AnimationManager metrics: duration=9174.0ms, frames=366, avg_fps=40.0, "
-            "dt_min=7.32ms, dt_max=40.95ms, active_count=0, listeners=1, fps_target=60"
+            "dt_min=7.32ms, dt_max=40.95ms, active_count=0, listeners=1, "
+            "max_active=1, max_listeners=1, fps_target=60, owner=display:1"
         ]
     )
 
@@ -249,7 +250,40 @@ def test_perf_health_flags_long_completed_animation_manager_run_under_target():
     window = report.animation_manager_under_target[0]
     assert window.duration_ms == 9174.0
     assert window.listener_count == 1
+    assert window.max_active_count == 1
+    assert window.max_listener_count == 1
+    assert window.owner == "display:1"
+    assert report.idle_animation_manager_under_target == []
     assert "animation manager" in report.anomalies[0]
+
+
+def test_perf_health_flags_under_target_animation_manager_without_owner():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - core.animation.animator - INFO - [PERF] [ANIM] "
+            "AnimationManager metrics: duration=9174.0ms, frames=366, avg_fps=40.0, "
+            "dt_min=7.32ms, dt_max=40.95ms, active_count=0, listeners=1, fps_target=60"
+        ]
+    )
+
+    assert len(report.animation_manager_under_target) == 1
+    assert len(report.animation_manager_under_target_unknown_owner) == 1
+    assert any("lack concrete owner" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_flags_idle_animation_manager_under_target_when_peak_counts_are_zero():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - core.animation.animator - INFO - [PERF] [ANIM] "
+            "AnimationManager metrics: duration=3200.0ms, frames=96, avg_fps=30.0, "
+            "dt_min=16.00ms, dt_max=70.00ms, active_count=0, listeners=0, "
+            "max_active=0, max_listeners=0, fps_target=60, owner=display:1"
+        ]
+    )
+
+    assert len(report.animation_manager_under_target) == 1
+    assert len(report.idle_animation_manager_under_target) == 1
+    assert any("no active work" in anomaly for anomaly in report.anomalies)
 
 
 def test_perf_health_flags_media_widget_timer_starvation_gap():

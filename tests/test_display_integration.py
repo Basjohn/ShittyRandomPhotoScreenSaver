@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import inspect
+import textwrap
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -497,6 +498,7 @@ class TestDisplayManagerSync:
     ):
         created_screen_indices: list[int] = []
         show_seen_constructed_counts: list[int] = []
+        scheduled_delays: list[int] = []
 
         class _FakeSignal:
             def connect(self, *args, **kwargs):
@@ -519,6 +521,12 @@ class TestDisplayManagerSync:
             def show_on_screen(self):
                 show_seen_constructed_counts.append(len(created_screen_indices))
 
+            def shutdown_render_pipeline(self, reason="unspecified"):
+                return None
+
+            def clear(self):
+                return None
+
             def close(self):
                 return None
 
@@ -535,22 +543,98 @@ class TestDisplayManagerSync:
             def geometry(self):
                 return SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
 
+        class _ImmediateThreadManager:
+            def single_shot(self, delay_ms, callback, *args, **kwargs):
+                scheduled_delays.append(delay_ms)
+                callback(*args, **kwargs)
+
         monkeypatch.setattr("engine.display_manager.DisplayWidget", _FakeDisplayWidget)
         monkeypatch.setattr(
             "engine.display_manager.QGuiApplication.screens",
             lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
         )
 
-        manager = DisplayManager()
+        manager = DisplayManager(thread_manager=_ImmediateThreadManager())
         created = manager.initialize_displays()
 
         assert created == 2
         assert created_screen_indices == [0, 1]
+        assert scheduled_delays == [100]
         assert show_seen_constructed_counts == [2, 2], (
             "All allowed DisplayWidget instances must already exist before the first "
             "show/widget-setup pass runs, so visualizer display participation can see "
             "pending requested monitors instead of falling back too early."
         )
+
+    def test_initialize_displays_suppresses_stale_staggered_show_after_cleanup(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        callbacks: list[Callable[[], None]] = []
+        shown: list[int] = []
+
+        class _FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class _FakeDisplayWidget:
+            def __init__(self, screen_index=0, **kwargs):
+                self.screen_index = screen_index
+                self.exit_requested = _FakeSignal()
+                self.image_displayed = _FakeSignal()
+                self.transition_completed = _FakeSignal()
+                self.previous_requested = _FakeSignal()
+                self.next_requested = _FakeSignal()
+                self.cycle_transition_requested = _FakeSignal()
+                self.settings_requested = _FakeSignal()
+                self.custom_layout_reload_requested = _FakeSignal()
+                self.dimming_changed = _FakeSignal()
+
+            def show_on_screen(self):
+                shown.append(self.screen_index)
+
+            def shutdown_render_pipeline(self, reason="unspecified"):
+                return None
+
+            def clear(self):
+                return None
+
+            def close(self):
+                return None
+
+            def deleteLater(self):
+                return None
+
+        class _FakeScreen:
+            def __init__(self, index: int):
+                self._index = index
+
+            def name(self):
+                return f"Screen {self._index}"
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
+
+        class _CapturingThreadManager:
+            def single_shot(self, delay_ms, callback, *args, **kwargs):
+                callbacks.append(lambda: callback(*args, **kwargs))
+
+        monkeypatch.setattr("engine.display_manager.DisplayWidget", _FakeDisplayWidget)
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
+        )
+
+        manager = DisplayManager(thread_manager=_CapturingThreadManager())
+        assert manager.initialize_displays() == 2
+        assert shown == [0]
+        assert len(callbacks) == 1
+
+        manager.cleanup()
+        callbacks[0]()
+
+        assert shown == [0], "stale delayed display show must not run after cleanup/restart"
 
 
 # ---------------------------------------------------------------------------
@@ -1284,6 +1368,24 @@ class TestRegressionGuards:
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                     if node.func.attr == "processEvents":
                         pytest.fail(f"processEvents() found in {module.__name__}")
+
+    def test_display_startup_and_settings_request_do_not_process_events(self):
+        import engine.engine_handlers as engine_handlers
+
+        targets = (
+            DisplayManager.initialize_displays,
+            engine_handlers.on_settings_requested,
+        )
+        for target in targets:
+            source = textwrap.dedent(inspect.getsource(target))
+            tree = ast.parse(source)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+                    if node.func.attr == "processEvents":
+                        pytest.fail(
+                            f"Found processEvents() call in {target.__qualname__}; "
+                            "display/settings rebuild paths must not pump arbitrary UI work."
+                        )
 
     def test_showfullscreen_not_deferred(self, qt_app, thread_manager):
         widget = DisplayWidget(0, DisplayMode.FILL, None, thread_manager=thread_manager)

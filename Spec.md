@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -16,6 +16,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - `WidgetManager` owns overlay widget lifecycle, staged startup coordination, and the narrow runtime-pause quiesce seam used before display teardown/settings entry.
 - Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches. Spotify-dependent setup remains intentionally explicit and phased in this order: media-owned dependents, local visualizer, remote Custom visualizer reconcile, then final startup.
 - During display setup/rebuild, `rendering/widget_setup_all.py` is the sole lifecycle-start authority for factory-created widgets. `rendering/display_setup.py` and follow-on display glue must not immediately run a second initialize pass over the same created set.
+- Multi-display startup/rebuild must register the full allowed display set before the first display runs widget setup. Expensive show/GL startup may still be staggered, but that stagger must be owned by a timer/thread-manager seam with stale-generation suppression, not by `processEvents()` loops, sleeps, or other UI-thread pumping.
 - Runtime diagnostics are CLI-first and family-scoped. `--perf`, `--viz`, `--geo`, `--set`, `--life`, and `--cache` are the primary operator surface for high-volume diagnostics. Dedicated sidecar families should keep `WARNING`/`ERROR`/`CRITICAL` visible in general logs while moving routine INFO/DEBUG family noise into the family log.
 - Startup logging should advertise the available specific sidecars and the ones active for the current run so tracing can begin in the right file without diving into verbose logs first.
 - Fallbacks are an explicit failure signal, not a success path. Prefer clean success or explicit clean failure over substitute behavior; any runtime fallback that changes ownership, geometry source, display target, or recovery path must log loudly at `WARNING` or higher through the relevant existing diagnostics family.
@@ -26,6 +27,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Settings read/write/migration uses `SettingsManager`.
 - Shared timeline/tick-driven runtime animations route through `AnimationManager`. Small widget-local effect animations may remain local when they are explicitly owned and cleaned up by the widget.
 - Engine-owned `AnimationManager` is also the app-shared fallback manager for runtime leaf/widget animation paths that do not need their own display-scoped transition manager.
+- `AnimationManager` diagnostics must carry enough passive ownership context to avoid false root-cause claims: owner labels, manager identity, current active/listener counts, and peak active/listener counts are part of the performance evidence contract. A final `active_count=0` snapshot alone does not prove idle churn if the interval contained active transition work.
 - Cross-module publish/subscribe events use `EventSystem`.
 - Worker process orchestration uses `ProcessSupervisor`.
 - `ProcessSupervisor` owns correlated worker-response waiting/buffering for shared response queues. Runtime callers must not reach into raw worker response queues directly, and the dormant callback-listener facade is not part of the live contract.

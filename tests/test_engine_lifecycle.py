@@ -28,8 +28,8 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     events = []
 
     class _Animations:
-        def __init__(self, resource_manager=None):
-            events.append(("animations_init", resource_manager))
+        def __init__(self, resource_manager=None, owner="<unknown>"):
+            events.append(("animations_init", resource_manager, owner))
 
         def cleanup(self):
             events.append(("animations_cleanup", None))

@@ -112,12 +112,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             active_manager = CustomLayoutManager.active_manager()
             if active_manager is not None:
                 active_manager.cancel_session()
-            app = QApplication.instance()
-            if app is not None:
-                try:
-                    app.processEvents()
-                except Exception:
-                    logger.debug("Failed to process events after CUSTOM session cancel", exc_info=True)
     except Exception:
         logger.debug("Failed to cancel CUSTOM edit session before settings", exc_info=True)
 
@@ -165,7 +159,10 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
 
     try:
         if app:
-            animations = AnimationManager(resource_manager=engine.resource_manager)
+            animations = AnimationManager(
+                resource_manager=engine.resource_manager,
+                owner="settings:dialog",
+            )
             dialog_init_start = time.perf_counter()
             dialog = SettingsDialog(engine.settings_manager, animations)
             init_ms = (time.perf_counter() - dialog_init_start) * 1000

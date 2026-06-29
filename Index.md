@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 Living map of the current SRPSS codebase.
 
@@ -51,7 +51,7 @@ Living map of the current SRPSS codebase.
 | ThreadManager | `core/threading/manager.py` |
 | ResourceManager | `core/resources/manager.py` |
 | SettingsManager | `core/settings/settings_manager.py` |
-| AnimationManager | `core/animation/animator.py` |
+| AnimationManager | `core/animation/animator.py` — shared/app-scoped animation owner plus display/settings owner-tagged perf telemetry |
 | EventSystem | `core/events/event_system.py` |
 | ProcessSupervisor | `core/process/supervisor.py` |
 
@@ -77,7 +77,9 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Frame budget / GC controller | `core/performance/frame_budget.py` | Frame pacing and GC budget helpers for render/runtime hot paths |
 | Widget perf profiler | `core/performance/widget_profiler.py` | Widget paint/timer metrics sampling and perf log emission |
-| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/cache log bar for paired render-healthy/paint-starved cadence collapse, stable-divisor FPS locks, visualizer timing warnings, slow GL uploads, fallback loudness, and timeline correlation |
+| Transition frame state | `core/animation/frame_interpolator.py` | Paint-authoritative elapsed-time/easing state for transitions so visible shader progress is not tethered to stale `AnimationManager` callback samples |
+| Animation perf diagnostics | `core/animation/animator.py` | Owner-tagged `AnimationManager` metrics with active/listener peak counts so completed transition cadence, listener pressure, and idle timer churn are separable |
+| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/cache log bar for paired render-healthy/paint-starved cadence collapse, stable-divisor FPS locks, `GL ANIM` vs `GL PAINT` separation, owner/peak-count animation-manager evidence, visualizer timing warnings, slow GL uploads, fallback loudness, and timeline correlation |
 
 ## Visualizer System
 
@@ -119,7 +121,7 @@ Living map of the current SRPSS codebase.
 
 | Module | File | Role |
 |---|---|---|
-| Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display |
+| Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display; participates in active-display startup/rebuild ownership instead of guessing from raw OS screen state |
 | Transition registry | `rendering/transition_registry.py` | Canonical transition identity, legacy alias canonicalization, UI ordering, cycle/random-pool participation, hardware gating, compositor program routing, and startup shader warmup metadata |
 | GL compositor paint/metrics | `rendering/gl_compositor_pkg/paint.py` / `rendering/gl_compositor_pkg/compositor_metrics.py` | Paint-time shader dispatch, loud shader-fallback reporting, visual transition progress sync from `FrameState`, and `GL PAINT` / render-timer metrics that distinguish visible cadence from `AnimationManager` progress-sample cadence |
 | Widget lifecycle | `rendering/widget_manager.py` | Overlay widget lifecycle/fades/sync, including canonical visualizer refresh payload handoff, startup-equivalent fade-coordinator re-prime on CUSTOM rebuild, full authored-stacking shutdown whenever any widget family is currently in `Custom`, shared authored-position stacking offsets/geometry diagnostics for non-`Custom` overlays only when the global opt-in is enabled, shadow-free visible-footprint measurement plus fixed follow-media media+visualizer lane occupancy for authored stacking, live media refresh reapplication of authored typography/artwork inputs even while CUSTOM resize is active, and the narrow runtime-pause quiesce hook used before display teardown/settings entry |
@@ -128,6 +130,7 @@ Living map of the current SRPSS codebase.
 | Widget descriptor registry | `rendering/widget_descriptors.py` | Canonical factory-backed widget family metadata plus WidgetsTab section, runtime-capability, service-runtime-contract, and stack-preview/settings-composition registry: stable widget ids, live widget attr names, factory routing, startup-stage intent, inheritance kwargs, config injection such as Gmail shadow plumbing, settings-section order/label/builder/load/save ownership, descriptor-owned load/save orchestration helpers including single-section loader/saver accessors, descriptor-owned lazy-bootstrap/section-id/default-selection policy for WidgetsTab, descriptor-owned lazy/programmatic inter-section dependency metadata, descriptor-owned save-result application for standard persisted keys, descriptor-owned signal-block membership and target collection for standard sections, descriptor-owned default-init metadata for standard widget settings attrs, service-backed/anchor-dependent capability flags, live-refresh handler ownership, descriptor-owned service-widget lifecycle contract participation, canonical widget position-option/layout-edit capability metadata, first-phase CUSTOM resize-mode ownership, descriptor-owned CUSTOM size-lock metadata for WidgetsTab, explicit visualizer follow-media-vs-Custom routing resolution, shared authored-layout restore mutation ownership, canonical application-default position-reset helpers, descriptor-owned preview field reads for WidgetsTab stack/status composition, and environment-aware cached active descriptor/index views so dev-gated families do not drift stale across tests/runtime |
 | Defaults section helpers | `ui/tabs/widgets_tab_defaults.py` | Descriptor-owned builder/load/save helpers for shared widget defaults such as shadow toggles, authored-stacking opt-in, and card-border-width persistence |
 | Widget setup orchestration | `rendering/widget_setup_all.py` | Shared descriptor-driven creation/reuse/expected-overlay flow for factory-backed widgets plus an explicit Spotify setup plan: media-owned dependents, local visualizer, remote Custom visualizer reconcile with cautious delayed fallback recheck for runtime-known sleeping displays, then final startup with delayed verify/confirm custom-rect stabilization instead of blind next-turn reapply |
+| Display startup orchestration | `engine/display_manager.py` | Registers the full allowed display set before first show, preserves staggered GL/compositor startup through `ThreadManager.single_shot(...)`, and suppresses stale delayed shows after cleanup/rebuild |
 | Visualizer creators | `rendering/spotify_widget_creators.py` | Spotify visualizer/volume widget construction, including creator-time WidgetManager attachment, exact-bucket committed CUSTOM rect priming before startup activation, and fail-closed rejection of foreign-bucket CUSTOM visualizer rectangles |
 | CUSTOM layout contract | `rendering/custom_layout_contract.py` | Display-local normalized rect persistence helpers, authored-route restore metadata, canonical display-signature resolution plus narrow legacy MC bucket ingestion, snapping, clamp rules, and cross-display target-screen resolution for CUSTOM edit mode |
 | CUSTOM layout session manager | `rendering/custom_layout_manager.py` | Global CUSTOM edit-session orchestration across active compositor-backed displays, shell lifecycle, save/cancel/reset commit flow, Media-shell Reset Visualizer edit-rect recovery without immediate save/reload, numbered-monitor transfer authority, runtime layout reapply/reload hooks, explicit post-payload committed-rect reassertion for resizable CUSTOM families, and explicit settings-entry/session teardown ownership |

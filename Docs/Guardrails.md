@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -27,6 +27,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Worker-process callers should consume supervisor-owned correlated response helpers or polling surfaces, not raw response queues. Do not keep a second queue-drain contract in engine/rendering code, and do not reintroduce the dormant callback-listener facade as if it were a live runtime path.
 - Leaf/runtime helper code should prefer the app-shared `ThreadManager` / `ResourceManager` seam rather than constructing ad hoc manager instances.
 - Leaf/runtime animation helpers should prefer the app-shared `AnimationManager` seam rather than constructing ad hoc managers when they only need ordinary shared-timeline animation ownership.
+- Animation cadence diagnostics must preserve owner and peak-count context. Do not classify an `AnimationManager` window as idle churn from a final `active_count=0` / `listeners=0` sample if the log interval lacks `max_active` and `max_listeners` evidence.
 - If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
 - Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
 - Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
@@ -66,6 +67,7 @@ No shadow frameworks or parallel ownership paths.
 - UI pressure is not a performance fix. Do not try to solve cadence, transition FPS, missed paints, widget starvation, or visualizer latency by queueing extra UI-thread work, repaint/update retries, rescue timers, or broader widget refreshes. If a render/update delivery seam looks stuck, first prove ownership/timing/cache/upload root cause with `--perf` bars; any proposed retry path must have a regression bar proving it does not increase UI-thread churn.
 - If `GL RENDER` timer cadence is healthy while same-screen `GL PAINT` cadence is bad, treat it as paint/event-loop delivery starvation. Add paired render/paint evidence and timeline correlation before changing cadence mechanics; do not add repaint retries or update requeues.
 - High-refresh helper/timer threads must not busy-spin in Python for precision. A timer that holds the GIL can make its own `GL RENDER` metrics look healthy while starving Qt/Python paint delivery, visualizer ticks, and widget timers. Prefer deadline waits that sleep/yield and prove the behavior with `--perf` parser bars.
+- Do not emulate startup/rebuild delays by looping `QCoreApplication.processEvents()` or sleeping on the UI thread. If display startup needs stagger to avoid GL/compositor load spikes, preserve the stagger through an owned timer/thread-manager seam with stale-generation suppression, not arbitrary UI pumping.
 - Respect staged startup contracts for dependent overlay widgets.
 - If startup or a display-recreation path cannot show the first image immediately, use a bounded immediate retry seam before falling back to the long rotation timer. Do not leave recreated/cold startup displays blank just because a transient load was already in progress.
 - Deferred GL warmup must not disturb a compositor that is already visibly presenting a seeded base frame. Prefer a hidden/shared offscreen warmup context; only non-live surfaces may fall back to direct compositor-context warmup.

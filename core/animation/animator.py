@@ -325,11 +325,20 @@ class AnimationManager(QObject):
         with cls._app_shared_lock:
             manager = cls._app_shared_manager
             if manager is None or getattr(manager, "_shutdown", False):
-                manager = cls(fps=fps, resource_manager=resource_manager)
+                manager = cls(
+                    fps=fps,
+                    resource_manager=resource_manager,
+                    owner="engine:app_shared",
+                )
                 cls._app_shared_manager = manager
             return manager
     
-    def __init__(self, fps: int = 60, resource_manager: Optional["ResourceManager"] = None):
+    def __init__(
+        self,
+        fps: int = 60,
+        resource_manager: Optional["ResourceManager"] = None,
+        owner: str = "<unknown>",
+    ):
         """
         Initialize animation manager.
         
@@ -338,6 +347,7 @@ class AnimationManager(QObject):
         """
         super().__init__()
         self._shutdown = False
+        self._srpss_owner = owner
         
         self.fps = fps
         self.frame_time = 1.0 / fps
@@ -357,6 +367,8 @@ class AnimationManager(QObject):
         self._profile_frame_count: int = 0
         self._profile_min_dt: float = 0.0
         self._profile_max_dt: float = 0.0
+        self._profile_max_active_count: int = 0
+        self._profile_max_listener_count: int = 0
         
         # Update timer
         self._timer = QTimer()
@@ -411,6 +423,8 @@ class AnimationManager(QObject):
             self._profile_frame_count = 0
             self._profile_min_dt = 0.0
             self._profile_max_dt = 0.0
+            self._profile_max_active_count = len(self._animations)
+            self._profile_max_listener_count = len(self._tick_listeners)
 
             self._timer.start()
             logger.debug("AnimationManager started")
@@ -741,6 +755,12 @@ class AnimationManager(QObject):
         # Profiling: track timing characteristics without altering behaviour.
         if self._profile_start_ts is None:
             self._profile_start_ts = current_time
+        active_count = len(self._animations)
+        listener_count = len(self._tick_listeners)
+        if active_count > self._profile_max_active_count:
+            self._profile_max_active_count = active_count
+        if listener_count > self._profile_max_listener_count:
+            self._profile_max_listener_count = listener_count
         if delta_time > 0.0:
             if self._profile_min_dt == 0.0 or delta_time < self._profile_min_dt:
                 self._profile_min_dt = delta_time
@@ -795,7 +815,8 @@ class AnimationManager(QObject):
                     logger.info(
                         "[PERF] [ANIM] AnimationManager metrics: duration=%.1fms, "
                         "frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-                        "active_count=%d, listeners=%d, fps_target=%d, manager_id=%s, owner=%s",
+                        "active_count=%d, listeners=%d, max_active=%d, max_listeners=%d, "
+                        "fps_target=%d, manager_id=%s, owner=%s",
                         duration_ms,
                         self._profile_frame_count,
                         avg_fps,
@@ -803,6 +824,8 @@ class AnimationManager(QObject):
                         max_dt_ms,
                         self.get_active_count(),
                         len(self._tick_listeners),
+                        self._profile_max_active_count,
+                        self._profile_max_listener_count,
                         self.fps,
                         id(self),
                         getattr(self, "_srpss_owner", "<unknown>"),
@@ -815,3 +838,5 @@ class AnimationManager(QObject):
             self._profile_frame_count = 0
             self._profile_min_dt = 0.0
             self._profile_max_dt = 0.0
+            self._profile_max_active_count = 0
+            self._profile_max_listener_count = 0

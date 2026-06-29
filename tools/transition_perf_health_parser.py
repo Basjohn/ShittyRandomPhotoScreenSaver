@@ -62,7 +62,10 @@ class MetricWindow:
     dt_max_ms: float | None = None
     active_count: int | None = None
     listener_count: int | None = None
+    max_active_count: int | None = None
+    max_listener_count: int | None = None
     duration_ms: float | None = None
+    owner: str | None = None
     line: str = ""
 
     @property
@@ -264,11 +267,32 @@ class PerfHealthReport:
             and (
                 window.active_count is None
                 or window.active_count > 0
+                or (window.max_active_count is not None and window.max_active_count > 0)
                 or (window.duration_ms is not None and window.duration_ms >= 1000.0)
                 or (window.listener_count is not None and window.listener_count > 0)
+                or (window.max_listener_count is not None and window.max_listener_count > 0)
             )
             and (window.target_fps or 0) >= 55
             and window.avg_fps < max(50.0, (window.target_fps or 0) * 0.72)
+        ]
+
+    @property
+    def animation_manager_under_target_unknown_owner(self) -> list[MetricWindow]:
+        return [
+            window
+            for window in self.animation_manager_under_target
+            if window.owner in {None, "", "<unknown>"}
+        ]
+
+    @property
+    def idle_animation_manager_under_target(self) -> list[MetricWindow]:
+        return [
+            window
+            for window in self.animation_manager_under_target
+            if window.active_count == 0
+            and window.listener_count == 0
+            and window.max_active_count == 0
+            and window.max_listener_count == 0
         ]
 
     @property
@@ -380,6 +404,16 @@ class PerfHealthReport:
             messages.append(
                 f"animation manager windows delivered far under target: {len(self.animation_manager_under_target)}"
             )
+        if self.animation_manager_under_target_unknown_owner:
+            messages.append(
+                "animation manager under-target windows lack concrete owner: "
+                f"{len(self.animation_manager_under_target_unknown_owner)}"
+            )
+        if self.idle_animation_manager_under_target:
+            messages.append(
+                "animation manager timer ran under target with no active work: "
+                f"{len(self.idle_animation_manager_under_target)}"
+            )
         if self.shader_fallbacks:
             messages.append(f"shader fallbacks present: {len(self.shader_fallbacks)}")
         if self.pending_paint_requeues:
@@ -458,7 +492,10 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
     dt_max_ms = _parse_float(parts.get("dt_max"))
     active_count = _parse_int(parts.get("active_count"))
     listener_count = _parse_int(parts.get("listeners"))
+    max_active_count = _parse_int(parts.get("max_active"))
+    max_listener_count = _parse_int(parts.get("max_listeners"))
     duration_ms = _parse_float(parts.get("duration"))
+    owner = parts.get("owner")
     return MetricWindow(
         timestamp=_timestamp_from_line(line),
         source=source,
@@ -469,7 +506,10 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
         dt_max_ms=dt_max_ms,
         active_count=active_count,
         listener_count=listener_count,
+        max_active_count=max_active_count,
+        max_listener_count=max_listener_count,
         duration_ms=duration_ms,
+        owner=owner,
         line=line,
     )
 

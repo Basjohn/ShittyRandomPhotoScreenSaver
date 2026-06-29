@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-06-20
+Last updated: 2026-06-29
 
 Short contract index for SRPSS.
 
@@ -25,7 +25,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Threading / async task ownership | `core/threading/manager.py` | `engine/*`, widget runtime helpers | One authoritative task submission/cancel/shutdown seam. |
 | Qt resource lifecycle | `core/resources/manager.py` | widgets, rendering, displays | One authoritative GUI/resource cleanup seam. |
 | Settings read/write/migration | `core/settings/settings_manager.py` | `core/settings/defaults.py`, `core/settings/default_settings.py`, `core/settings/json_store.py` | One persistence API and one schema-normalization path. |
-| Shared runtime animation ownership | `core/animation/animator.py` | widget fade helpers, render timing | Shared timeline/tick animation without shadow managers. |
+| Shared runtime animation ownership | `core/animation/animator.py` | widget fade helpers, render timing, perf parser | Shared timeline/tick animation without shadow managers; perf output must identify owner and peak active/listener counts. |
 | Event publish/subscribe | `core/events/event_system.py` | engine, runtime glue | One cross-module signaling seam. |
 | Worker process orchestration | `core/process/supervisor.py` | image pipeline, helper bridges | One worker lifecycle and response-correlation seam. |
 
@@ -56,12 +56,21 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Contract Family | Canonical Owner | Related Files | Goal |
 |---|---|---|---|
 | Fullscreen display presenter | `rendering/display_widget.py` | `engine/display_manager.py`, GL init helpers | One screen-owned runtime presenter. |
-| Display setup / startup glue | `rendering/display_setup.py` | `rendering/widget_setup_all.py`, `rendering/display_gl_init.py` | One display bootstrap flow. |
+| Display startup / rebuild orchestration | `engine/display_manager.py` | `rendering/display_setup.py`, `rendering/widget_setup_all.py` | Register the full active display set before first show, preserve staggered GL startup through owned scheduling, and suppress stale delayed shows after cleanup. |
+| Display setup / startup glue | `rendering/display_setup.py` | `rendering/widget_setup_all.py`, `rendering/display_gl_init.py` | One display bootstrap flow after display ownership is established. |
 | Overlay widget lifecycle / fade sync / runtime pause prep | `rendering/widget_manager.py` | `rendering/widget_setup_all.py`, `rendering/widget_stacking.py` | One overlay lifecycle and reveal coordination seam. |
 | Authored stacking planner | `rendering/widget_stacking.py` | `rendering/widget_manager.py`, settings preview composition | One non-`Custom` stacking calculation seam. |
 | Centralized overlay positioning | `rendering/widget_positioner.py` | overlay widgets | One anchor/margin positioning contract. |
 | Centralized input routing | `rendering/input_handler.py` | media, Reddit/Gmail click handlers | One keyboard/mouse/URL routing seam. |
 | Renderer backend selection / surface init | `rendering/backends/__init__.py`, `rendering/display_gl_init.py` | `rendering/display_widget.py` | One backend selection + render-surface contract with visible fallback reporting. |
+
+## Performance And Cadence Contracts
+
+| Contract Family | Canonical Owner | Related Files | Goal |
+|---|---|---|---|
+| Transition paint progress authority | `core/animation/frame_interpolator.py` | `rendering/gl_compositor_pkg/paint.py`, transition controllers | Paint reads use elapsed-time/easing state so visible shader progress is not capped by stale `AnimationManager` callback samples. |
+| Transition/display perf health bar | `tools/transition_perf_health_parser.py` | `core/animation/animator.py`, compositor metrics, sidecar logs | Keep paired render/paint starvation, `GL ANIM` vs `GL PAINT`, fallback usage, texture uploads, visualizer latency, and owner/peak-count animation evidence loud. |
+| No UI-pressure cadence fixes | `Docs/Guardrails.md` | adaptive timers, display rebuild, settings entry | Do not fix missed paints or low FPS by queueing extra UI work; prove ownership/timing/cache/upload root cause first. |
 
 ## CUSTOM Layout Contracts
 

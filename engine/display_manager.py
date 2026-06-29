@@ -77,6 +77,7 @@ class DisplayManager(QObject):
         self.displays: List[DisplayWidget] = []
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         self._deferred_reddit_urls: list[str] = []
+        self._display_startup_generation = 0
         
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
@@ -202,6 +203,8 @@ class DisplayManager(QObject):
         
         # Clear existing displays
         self.cleanup()
+        self._display_startup_generation += 1
+        startup_generation = self._display_startup_generation
 
         # Resolve which screens should actually create DisplayWidgets
         allowed_indices = self._get_allowed_screen_indices(screen_count)
@@ -222,16 +225,49 @@ class DisplayManager(QObject):
                     i,
                 )
 
-        # Preserve staggered show behavior so GL/compositor startup still spreads
-        # heavy work across the UI thread.
-        stagger_ms = 100  # 100ms between display shows (increased from 50ms)
+        # Preserve staggered show behavior without processEvents() re-entry.
+        # Display registration happens before this loop, so visualizer owner
+        # selection sees the full active set while the expensive show/GL startup
+        # work is still spread across UI turns. The generation guard prevents a
+        # delayed show from firing after settings/edit cleanup has replaced the
+        # display set.
+        stagger_ms = 100
         for idx, display in enumerate(pending_displays):
-            if idx > 0 and stagger_ms > 0:
-                from PySide6.QtCore import QCoreApplication
-                deadline = time.perf_counter() + stagger_ms / 1000.0
-                while time.perf_counter() < deadline:
-                    QCoreApplication.processEvents()
-            self._show_display_widget(display)
+            delay_ms = idx * stagger_ms
+            if delay_ms <= 0:
+                self._show_display_widget(display)
+                continue
+
+            def _show_if_current(
+                disp: DisplayWidget = display,
+                generation: int = startup_generation,
+            ) -> None:
+                if generation != self._display_startup_generation:
+                    logger.debug(
+                        "[DISPLAY] Suppressed stale staggered show for screen %s",
+                        getattr(disp, "screen_index", "?"),
+                    )
+                    return
+                if disp not in self.displays:
+                    logger.debug(
+                        "[DISPLAY] Suppressed staggered show for removed screen %s",
+                        getattr(disp, "screen_index", "?"),
+                    )
+                    return
+                self._show_display_widget(disp)
+
+            try:
+                from core.threading.manager import ThreadManager
+
+                scheduler = self._thread_manager or ThreadManager
+                scheduler.single_shot(delay_ms, _show_if_current)
+            except Exception:
+                logger.warning(
+                    "[DISPLAY][FALLBACK] Stagger scheduler unavailable; showing screen %s immediately",
+                    getattr(display, "screen_index", "?"),
+                    exc_info=True,
+                )
+                self._show_display_widget(display)
         
         logger.info("Created %d display widgets" % len(self.displays))
         return len(self.displays)
@@ -672,6 +708,7 @@ class DisplayManager(QObject):
     
     def cleanup(self) -> None:
         """Clean up all display widgets."""
+        self._display_startup_generation += 1
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 

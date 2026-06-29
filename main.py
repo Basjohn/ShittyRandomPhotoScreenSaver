@@ -490,7 +490,7 @@ def run_config(app: QApplication) -> int:
     settings = SettingsManager()
     
     # Create animation manager
-    animations = AnimationManager()
+    animations = AnimationManager(owner="settings:config")
     
     # Create and show settings dialog
     try:
