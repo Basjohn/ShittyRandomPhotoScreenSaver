@@ -28,6 +28,9 @@ _SPOTIFY_SEVERE_LATENCY_RE = re.compile(r"\[!!!!\]\[SPOTIFY_VIS\]\[LATENCY\] lag
 _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=(?P<dt_ms>[0-9.]+)")
 _FRAME_BUDGET_SPIKE_RE = re.compile(r"\[PERF\] \[FRAME\] (?P<detail>.*)")
 _SETTINGS_PERF_RE = re.compile(r"\[PERF\]\[SETTINGS\](?P<detail>.*)")
+_SETTINGS_DURATION_RE = re.compile(
+    r"(?P<name>.+?)\s+(?:in|took)\s+(?P<duration_ms>[0-9.]+)\s*ms"
+)
 _DISPLAY_PERF_RE = re.compile(r"\[PERF\]\[DISPLAY\](?P<detail>.*)")
 _GEO_SAVE_RE = re.compile(r"\[GEO_AUDIT\].*phase=save_scene")
 _SLOW_TEXTURE_UPLOAD_RE = re.compile(
@@ -124,6 +127,13 @@ class TextureUploadWarning:
 
 
 @dataclass(frozen=True)
+class SettingsStall:
+    name: str
+    duration_ms: float
+    line: str = ""
+
+
+@dataclass(frozen=True)
 class PaintDeliveryStarvation:
     render: MetricWindow
     paint: MetricWindow
@@ -155,6 +165,7 @@ class PerfHealthReport:
     timer_gaps: list[TimerGap] = field(default_factory=list)
     visualizer_timing_warnings: list[VisualizerTimingWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
+    settings_stalls: list[SettingsStall] = field(default_factory=list)
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
@@ -345,6 +356,14 @@ class PerfHealthReport:
         ]
 
     @property
+    def significant_settings_stalls(self) -> list[SettingsStall]:
+        return [
+            stall
+            for stall in self.settings_stalls
+            if stall.duration_ms >= 1000.0
+        ]
+
+    @property
     def anomalies(self) -> list[str]:
         messages: list[str] = []
         if self.paint_delivery_starvation_windows:
@@ -443,6 +462,11 @@ class PerfHealthReport:
         if self.slow_texture_uploads:
             messages.append(
                 f"slow GL texture uploads present: {len(self.slow_texture_uploads)}"
+            )
+        if self.significant_settings_stalls:
+            messages.append(
+                "settings UI stalls above 1s present: "
+                f"{len(self.significant_settings_stalls)}"
             )
         if self.visualizer_custom_suppressions:
             messages.append(
@@ -721,9 +745,19 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
 
         settings_perf = _SETTINGS_PERF_RE.search(line)
         if settings_perf:
-            report.timeline_markers.append(
-                TimelineMarker(timestamp, "settings_stall", settings_perf.group("detail").strip(), line)
-            )
+            detail = settings_perf.group("detail").strip()
+            duration_match = _SETTINGS_DURATION_RE.search(detail)
+            if duration_match:
+                duration_ms = _parse_float(duration_match.group("duration_ms"))
+                if duration_ms is not None:
+                    report.settings_stalls.append(
+                        SettingsStall(
+                            name=duration_match.group("name").strip(),
+                            duration_ms=duration_ms,
+                            line=line,
+                        )
+                    )
+            report.timeline_markers.append(TimelineMarker(timestamp, "settings_stall", detail, line))
             continue
 
         display_perf = _DISPLAY_PERF_RE.search(line)
@@ -800,6 +834,7 @@ def main() -> int:
     print(f"Timer gaps: {len(report.timer_gaps)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
+    print(f"Settings stalls: {len(report.settings_stalls)}")
     print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
     print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
@@ -840,6 +875,7 @@ def main() -> int:
         args.max_samples,
     )
     _print_samples("Slow GL texture uploads", report.slow_texture_uploads, args.max_samples)
+    _print_samples("Significant settings stalls", report.significant_settings_stalls, args.max_samples)
     _print_samples("Zero-producer cache fallbacks", report.zero_producer_cache_fallbacks, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)

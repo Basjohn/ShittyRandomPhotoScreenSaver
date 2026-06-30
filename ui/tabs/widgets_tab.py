@@ -840,7 +840,8 @@ class WidgetsTab(QWidget):
             )
 
             if is_perf_metrics_enabled():
-                self._perf_log(f"lazy_build_subtab_{subtab_id}", build_start)
+                section_id = self._widget_section_descriptors[subtab_id].section_id
+                self._perf_log(f"lazy_build_subtab_{subtab_id}:{section_id}", build_start)
 
             self._load_widget_sections_by_id(
                 self._widget_section_descriptors[subtab_id].section_id,

@@ -318,6 +318,22 @@ def test_perf_health_flags_spotify_visualizer_latency_and_tick_spikes():
     assert "spotify visualizer timing warnings" in report.anomalies[0]
 
 
+def test_perf_health_flags_significant_settings_stalls():
+    report = parse_perf_health_lines(
+        [
+            "2026-06-30 01:54:56 - ui.tabs.widgets_tab - INFO - "
+            "[PERF][SETTINGS][WidgetsTab] lazy_build_subtab_3 in 1368.1 ms",
+            "2026-06-30 01:54:57 - ui.settings_dialog - INFO - "
+            "[PERF][SETTINGS] SettingsDialog._setup_ui in 2444.0 ms",
+        ]
+    )
+
+    assert len(report.settings_stalls) == 2
+    assert len(report.significant_settings_stalls) == 2
+    assert report.significant_settings_stalls[0].name == "[WidgetsTab] lazy_build_subtab_3"
+    assert any("settings UI stalls" in anomaly for anomaly in report.anomalies)
+
+
 def test_perf_health_flags_severe_spotify_visualizer_latency_as_own_anomaly():
     report = parse_perf_health_lines(
         [

@@ -5,6 +5,7 @@ Contains UI building, settings loading/saving for Media widget and the Beat Visu
 """
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
@@ -16,7 +17,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
-from core.logging.logger import get_logger
+from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.settings.visualizer_mode_registry import is_mode_active
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
@@ -78,6 +80,19 @@ if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
 
 logger = get_logger(__name__)
+
+
+def _run_visualizer_settings_step(label: str, func) -> None:
+    """Run one visualizer settings UI step with optional settings-side timing."""
+    if not is_perf_metrics_enabled():
+        func()
+        return
+    start = time.perf_counter()
+    try:
+        func()
+    finally:
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        logger.info("[PERF][SETTINGS][VisualizersTab] %s in %.1f ms", label, elapsed_ms)
 
 
 def _finalize_bucket_body(toggle, body: QWidget) -> None:
@@ -683,15 +698,19 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     from ui.tabs.media.bubble_builder import build_bubble_ui
     from ui.tabs.media.devcurve_builder import build_devcurve_ui
 
-    build_spectrum_ui(tab, _svctl)
-    build_oscilloscope_ui(tab, _svctl)
-    build_blob_ui(tab, _svctl)
-    build_sine_wave_ui(tab, _svctl)
-    build_bubble_ui(tab, _svctl)
-    build_devcurve_ui(tab, _svctl)
+    _run_visualizer_settings_step("build_spectrum_ui", lambda: build_spectrum_ui(tab, _svctl))
+    _run_visualizer_settings_step("build_oscilloscope_ui", lambda: build_oscilloscope_ui(tab, _svctl))
+    if is_mode_active("blob"):
+        _run_visualizer_settings_step("build_blob_ui", lambda: build_blob_ui(tab, _svctl))
+    else:
+        logger.debug("[VISUALIZER_SETTINGS] Skipping gated Blob UI build")
+    _run_visualizer_settings_step("build_sine_wave_ui", lambda: build_sine_wave_ui(tab, _svctl))
+    _run_visualizer_settings_step("build_bubble_ui", lambda: build_bubble_ui(tab, _svctl))
+    _run_visualizer_settings_step("build_devcurve_ui", lambda: build_devcurve_ui(tab, _svctl))
 
     # Append growth sliders that were originally added after sine section
-    build_blob_growth(tab)
+    if is_mode_active("blob"):
+        _run_visualizer_settings_step("build_blob_growth", lambda: build_blob_growth(tab))
 
     spotify_vis_layout.addWidget(tab._vis_controls_container)
     tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
@@ -862,46 +881,65 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     # Visualizer mode combobox
     load_visualizer_mode_selection(tab, spotify_vis_config)
 
-    load_oscilloscope_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
-        load_extra_color_bindings=_load_osc_multi_line_color_bindings,
-        update_multi_line_visibility=_update_osc_multi_line_visibility,
+    _run_visualizer_settings_step(
+        "load_oscilloscope_mode_settings",
+        lambda: load_oscilloscope_mode_settings(
+            tab,
+            spotify_vis_config,
+            sync_color_button=_apply_color_to_button,
+            load_extra_color_bindings=_load_osc_multi_line_color_bindings,
+            update_multi_line_visibility=_update_osc_multi_line_visibility,
+        ),
     )
-    load_spectrum_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
-        update_ghost_visibility=_update_ghost_visibility,
+    _run_visualizer_settings_step(
+        "load_spectrum_mode_settings",
+        lambda: load_spectrum_mode_settings(
+            tab,
+            spotify_vis_config,
+            sync_color_button=_apply_color_to_button,
+            update_ghost_visibility=_update_ghost_visibility,
+        ),
     )
 
-    load_sine_wave_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
-        update_multi_line_visibility=_update_sine_multi_line_visibility,
+    _run_visualizer_settings_step(
+        "load_sine_wave_mode_settings",
+        lambda: load_sine_wave_mode_settings(
+            tab,
+            spotify_vis_config,
+            sync_color_button=_apply_color_to_button,
+            update_multi_line_visibility=_update_sine_multi_line_visibility,
+        ),
     )
 
     # Update per-mode section visibility
     tab._update_vis_mode_sections()
 
-    load_blob_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
-    )
+    if is_mode_active("blob"):
+        _run_visualizer_settings_step(
+            "load_blob_mode_settings",
+            lambda: load_blob_mode_settings(
+                tab,
+                spotify_vis_config,
+                sync_color_button=_apply_color_to_button,
+            ),
+        )
 
     load_visualizer_rainbow_state(tab, spotify_vis_config)
-    load_bubble_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
+    _run_visualizer_settings_step(
+        "load_bubble_mode_settings",
+        lambda: load_bubble_mode_settings(
+            tab,
+            spotify_vis_config,
+            sync_color_button=_apply_color_to_button,
+        ),
     )
-    load_devcurve_mode_settings(
-        tab,
-        spotify_vis_config,
-        sync_color_button=_apply_color_to_button,
+    _run_visualizer_settings_step(
+        "load_devcurve_mode_settings",
+        lambda: load_devcurve_mode_settings(
+            tab,
+            spotify_vis_config,
+            sync_color_button=_apply_color_to_button,
+        ),
     )
 
     load_visualizer_preset_indices(tab, spotify_vis_config)

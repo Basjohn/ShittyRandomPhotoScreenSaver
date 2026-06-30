@@ -6,6 +6,7 @@ import sys
 import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 from PySide6.QtCore import Qt
+import ui.settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
@@ -216,6 +217,72 @@ def test_settings_dialog_show_does_not_schedule_shell_shadow_refresh():
     """showEvent should not trigger shell-shadow refresh churn."""
     source = inspect.getsource(SettingsDialog.showEvent)
     assert "_schedule_shell_shadow_refresh()" not in source
+
+
+def test_settings_dialog_background_hydration_delay_respects_closing(
+    qapp,
+    settings_manager,
+    animation_manager,
+    monkeypatch,
+):
+    """Delayed settings hydration must not wake hidden tab work after close."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    callbacks = []
+    scheduled_builds = []
+    try:
+        monkeypatch.setattr(
+            settings_dialog_module.QTimer,
+            "singleShot",
+            staticmethod(lambda _delay, callback: callbacks.append(callback)),
+        )
+        monkeypatch.setattr(
+            dialog,
+            "_schedule_next_background_build",
+            lambda: scheduled_builds.append(True),
+        )
+        dialog._background_tab_queue = [1]
+
+        dialog._start_background_tab_hydration()
+        assert len(callbacks) == 1
+
+        dialog._closing = True
+        callbacks[0]()
+
+        assert scheduled_builds == []
+    finally:
+        dialog.deleteLater()
+
+
+def test_settings_dialog_scheduled_background_build_respects_closing(
+    qapp,
+    settings_manager,
+    animation_manager,
+    monkeypatch,
+):
+    """Queued hidden-tab builds should clear instead of constructing after close."""
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    callbacks = []
+    built = []
+    try:
+        monkeypatch.setattr(
+            settings_dialog_module.QTimer,
+            "singleShot",
+            staticmethod(lambda _delay, callback: callbacks.append(callback)),
+        )
+        monkeypatch.setattr(dialog, "_ensure_tab_built", lambda index: built.append(index))
+        dialog._background_tab_queue = [1]
+
+        dialog._schedule_next_background_build()
+        assert len(callbacks) == 1
+
+        dialog._closing = True
+        callbacks[0]()
+
+        assert built == []
+        assert dialog._background_tab_queue == []
+        assert dialog._background_build_scheduled is False
+    finally:
+        dialog.deleteLater()
 
 
 def test_settings_dialog_move_does_not_schedule_shell_shadow_refresh():

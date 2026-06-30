@@ -973,8 +973,9 @@ def load_widget_sections(
             continue
         loader(owner, widgets_config)
         marker = getattr(owner, "_mark_widget_section_hydrated", None)
-        if callable(marker):
-            marker(descriptor.section_id)
+        section_id = getattr(descriptor, "section_id", None)
+        if callable(marker) and section_id:
+            marker(section_id)
 
 
 def load_widget_section(

@@ -4,6 +4,7 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 `widgets` settings structure (clock + weather) and that defaults and
 roundtrips behave as expected.
 """
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -36,6 +37,19 @@ def _find_toggle(container, text: str) -> QToolButton | None:
         if toggle.text() == text:
             return toggle
     return None
+
+
+@contextmanager
+def _blob_gate(enabled: bool):
+    from core.dev_gates import force_gate, is_blob_enabled
+
+    prior_blob_gate = is_blob_enabled()
+    force_gate(blob=enabled)
+    try:
+        yield
+    finally:
+        force_gate(blob=prior_blob_gate)
+
 
 @pytest.fixture
 def widgets_tab(qt_app, settings_manager):
@@ -1212,6 +1226,18 @@ def test_visualizer_mode_builders_keep_preset_scaffold_wiring(qt_app, settings_m
         tab.deleteLater()
 
 
+def test_visualizer_settings_do_not_build_gated_blob_ui(qt_app, settings_manager):
+    with _blob_gate(False):
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._load_settings()
+            assert not hasattr(tab, "_blob_settings_container")
+            assert not hasattr(tab, "_blob_preset_slider")
+            assert tab.vis_mode_combo.findData("blob") < 0
+        finally:
+            tab.deleteLater()
+
+
 def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_manager):
     widgets_cfg = settings_manager.get("widgets", {}) or {}
     widgets_cfg["spotify_visualizer"] = {
@@ -1223,8 +1249,9 @@ def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_m
     try:
         tab._load_settings()
         assert tab._sine_preset_slider.preset_index() == 0
-        assert tab._blob_preset_slider.preset_index() == 0
         assert tab._bubble_preset_slider.preset_index() == 0
+        if hasattr(tab, "_blob_preset_slider"):
+            assert tab._blob_preset_slider.preset_index() == 0
     finally:
         tab.deleteLater()
 
@@ -1600,29 +1627,30 @@ def test_bubble_center_out_reverse_round_trips_through_widgets_tab(qt_app, setti
 
 
 def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
-    tab = WidgetsTab(settings_manager)
-    try:
-        normal_layout = tab._blob_normal.layout()
-        normal_titles = []
-        for idx in range(normal_layout.count()):
-            widget = normal_layout.itemAt(idx).widget()
-            if widget is not None:
-                title = widget.property("bucketTitle")
-                if title:
-                    normal_titles.append(title)
-        assert normal_titles == ["Body", "Appearance", "Shaper", "Layout", "Glow"]
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            normal_layout = tab._blob_normal.layout()
+            normal_titles = []
+            for idx in range(normal_layout.count()):
+                widget = normal_layout.itemAt(idx).widget()
+                if widget is not None:
+                    title = widget.property("bucketTitle")
+                    if title:
+                        normal_titles.append(title)
+            assert normal_titles == ["Body", "Appearance", "Shaper", "Layout", "Glow"]
 
-        adv_layout = tab._blob_advanced.layout()
-        adv_titles = []
-        for idx in range(adv_layout.count()):
-            widget = adv_layout.itemAt(idx).widget()
-            if widget is not None:
-                title = widget.property("bucketTitle")
-                if title:
-                    adv_titles.append(title)
-        assert adv_titles == ["Motion", "Ghost"]
-    finally:
-        tab.deleteLater()
+            adv_layout = tab._blob_advanced.layout()
+            adv_titles = []
+            for idx in range(adv_layout.count()):
+                widget = adv_layout.itemAt(idx).widget()
+                if widget is not None:
+                    title = widget.property("bucketTitle")
+                    if title:
+                        adv_titles.append(title)
+            assert adv_titles == ["Motion", "Ghost"]
+        finally:
+            tab.deleteLater()
 
 
 def test_spectrum_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
@@ -1666,69 +1694,70 @@ def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_
     qt_app,
     settings_manager,
 ):
-    tab = WidgetsTab(settings_manager)
-    try:
-        tab._blob_adv_toggle.setChecked(True)
-        qt_app.processEvents()
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab._blob_adv_toggle.setChecked(True)
+            qt_app.processEvents()
 
-        assert tab._blob_shape_reactivity_row.isHidden() is False
-        assert tab._blob_idle_edge_motion_row.isHidden() is False
-        assert tab._blob_audio_edge_motion_row.isHidden() is False
-        assert tab._blob_stretch_row.isHidden() is False
+            assert tab._blob_shape_reactivity_row.isHidden() is False
+            assert tab._blob_idle_edge_motion_row.isHidden() is False
+            assert tab._blob_audio_edge_motion_row.isHidden() is False
+            assert tab._blob_stretch_row.isHidden() is False
 
-        tab.blob_shaper_enabled.setChecked(True)
-        qt_app.processEvents()
+            tab.blob_shaper_enabled.setChecked(True)
+            qt_app.processEvents()
 
-        assert tab._blob_shape_reactivity_row.isHidden() is True
-        assert tab._blob_idle_edge_motion_row.isHidden() is True
-        assert tab._blob_audio_edge_motion_row.isHidden() is True
-        assert tab._blob_stretch_row.isHidden() is True
-        assert tab._blob_shape_reactivity_row.isEnabled() is False
-        assert tab._blob_idle_edge_motion_row.isEnabled() is False
-        assert tab._blob_audio_edge_motion_row.isEnabled() is False
-        assert tab._blob_stretch_row.isEnabled() is False
-        assert tab._blob_shaper_idle_motion_row.isHidden() is False
-        assert tab._blob_shaper_audio_motion_row.isHidden() is False
+            assert tab._blob_shape_reactivity_row.isHidden() is True
+            assert tab._blob_idle_edge_motion_row.isHidden() is True
+            assert tab._blob_audio_edge_motion_row.isHidden() is True
+            assert tab._blob_stretch_row.isHidden() is True
+            assert tab._blob_shape_reactivity_row.isEnabled() is False
+            assert tab._blob_idle_edge_motion_row.isEnabled() is False
+            assert tab._blob_audio_edge_motion_row.isEnabled() is False
+            assert tab._blob_stretch_row.isEnabled() is False
+            assert tab._blob_shaper_idle_motion_row.isHidden() is False
+            assert tab._blob_shaper_audio_motion_row.isHidden() is False
 
-        tab.blob_shaper_enabled.setChecked(False)
-        qt_app.processEvents()
+            tab.blob_shaper_enabled.setChecked(False)
+            qt_app.processEvents()
 
-        assert tab._blob_shape_reactivity_row.isHidden() is False
-        assert tab._blob_idle_edge_motion_row.isHidden() is False
-        assert tab._blob_audio_edge_motion_row.isHidden() is False
-        assert tab._blob_stretch_row.isHidden() is False
-        assert tab._blob_shape_reactivity_row.isEnabled() is True
-        assert tab._blob_idle_edge_motion_row.isEnabled() is True
-        assert tab._blob_audio_edge_motion_row.isEnabled() is True
-        assert tab._blob_stretch_row.isEnabled() is True
+            assert tab._blob_shape_reactivity_row.isHidden() is False
+            assert tab._blob_idle_edge_motion_row.isHidden() is False
+            assert tab._blob_audio_edge_motion_row.isHidden() is False
+            assert tab._blob_stretch_row.isHidden() is False
+            assert tab._blob_shape_reactivity_row.isEnabled() is True
+            assert tab._blob_idle_edge_motion_row.isEnabled() is True
+            assert tab._blob_audio_edge_motion_row.isEnabled() is True
+            assert tab._blob_stretch_row.isEnabled() is True
 
-        tab.blob_reactive_glow.setChecked(False)
-        qt_app.processEvents()
+            tab.blob_reactive_glow.setChecked(False)
+            qt_app.processEvents()
 
-        for row in (
-            tab._blob_glow_color_row,
-            tab._blob_glow_intensity_row,
-            tab._blob_glow_reactivity_row,
-            tab._blob_glow_drive_row,
-            tab._blob_glow_max_size_row,
-        ):
-            assert row.isHidden() is True
-            assert row.isEnabled() is False
+            for row in (
+                tab._blob_glow_color_row,
+                tab._blob_glow_intensity_row,
+                tab._blob_glow_reactivity_row,
+                tab._blob_glow_drive_row,
+                tab._blob_glow_max_size_row,
+            ):
+                assert row.isHidden() is True
+                assert row.isEnabled() is False
 
-        tab.blob_reactive_glow.setChecked(True)
-        qt_app.processEvents()
+            tab.blob_reactive_glow.setChecked(True)
+            qt_app.processEvents()
 
-        for row in (
-            tab._blob_glow_color_row,
-            tab._blob_glow_intensity_row,
-            tab._blob_glow_reactivity_row,
-            tab._blob_glow_drive_row,
-            tab._blob_glow_max_size_row,
-        ):
-            assert row.isHidden() is False
-            assert row.isEnabled() is True
-    finally:
-        tab.deleteLater()
+            for row in (
+                tab._blob_glow_color_row,
+                tab._blob_glow_intensity_row,
+                tab._blob_glow_reactivity_row,
+                tab._blob_glow_drive_row,
+                tab._blob_glow_max_size_row,
+            ):
+                assert row.isHidden() is False
+                assert row.isEnabled() is True
+        finally:
+            tab.deleteLater()
 
 
 def test_widgets_tab_curated_preset_apply_ignores_stale_custom_runtime_values(qt_app, settings_manager):
@@ -1776,66 +1805,68 @@ def test_blob_builder_keeps_shared_shaped_controls_visible_when_shaper_is_enable
     qt_app,
     settings_manager,
 ):
-    tab = WidgetsTab(settings_manager)
-    try:
-        tab.blob_shaper_enabled.setChecked(True)
-        qt_app.processEvents()
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab.blob_shaper_enabled.setChecked(True)
+            qt_app.processEvents()
 
-        assert tab._blob_reactive_glow_row.isHidden() is False
-        assert tab._blob_glow_color_row.isHidden() is False
-        assert tab._blob_glow_intensity_row.isHidden() is False
-        assert tab._blob_glow_reactivity_row.isHidden() is False
-        assert tab._blob_glow_drive_row.isHidden() is False
-        assert tab._blob_glow_max_size_row.isHidden() is False
-        assert tab._blob_shaper_idle_motion_row.isHidden() is False
-        assert tab._blob_shaper_audio_motion_row.isHidden() is False
-        assert tab._blob_pulse_row.isHidden() is False
-        assert tab._blob_pulse_release_row.isHidden() is False
-        assert tab._blob_topology_row.isHidden() is False
-        assert tab._blob_ring_thickness_row.isHidden() is True
+            assert tab._blob_reactive_glow_row.isHidden() is False
+            assert tab._blob_glow_color_row.isHidden() is False
+            assert tab._blob_glow_intensity_row.isHidden() is False
+            assert tab._blob_glow_reactivity_row.isHidden() is False
+            assert tab._blob_glow_drive_row.isHidden() is False
+            assert tab._blob_glow_max_size_row.isHidden() is False
+            assert tab._blob_shaper_idle_motion_row.isHidden() is False
+            assert tab._blob_shaper_audio_motion_row.isHidden() is False
+            assert tab._blob_pulse_row.isHidden() is False
+            assert tab._blob_pulse_release_row.isHidden() is False
+            assert tab._blob_topology_row.isHidden() is False
+            assert tab._blob_ring_thickness_row.isHidden() is True
 
-        tab.blob_topology_combo.setCurrentIndex(1)
-        qt_app.processEvents()
-        assert tab._blob_ring_thickness_row.isHidden() is False
+            tab.blob_topology_combo.setCurrentIndex(1)
+            qt_app.processEvents()
+            assert tab._blob_ring_thickness_row.isHidden() is False
 
-        tab.blob_topology_combo.setCurrentIndex(0)
-        qt_app.processEvents()
-        assert tab._blob_ring_thickness_row.isHidden() is True
-        assert tab._blob_shape_reactivity_row.isHidden() is True
-        assert tab._blob_idle_edge_motion_row.isHidden() is True
-        assert tab._blob_audio_edge_motion_row.isHidden() is True
-        assert tab._blob_stretch_row.isHidden() is True
-    finally:
-        tab.deleteLater()
+            tab.blob_topology_combo.setCurrentIndex(0)
+            qt_app.processEvents()
+            assert tab._blob_ring_thickness_row.isHidden() is True
+            assert tab._blob_shape_reactivity_row.isHidden() is True
+            assert tab._blob_idle_edge_motion_row.isHidden() is True
+            assert tab._blob_audio_edge_motion_row.isHidden() is True
+            assert tab._blob_stretch_row.isHidden() is True
+        finally:
+            tab.deleteLater()
 
 
 def test_blob_builder_gates_inward_liquid_detail_rows_from_enable_toggle(
     qt_app,
     settings_manager,
 ):
-    tab = WidgetsTab(settings_manager)
-    try:
-        assert tab._blob_inward_liquid_enabled_row.isHidden() is False
-        assert tab._blob_inward_liquid_color_row.isHidden() is True
-        assert tab._blob_inward_liquid_reactivity_row.isHidden() is True
-        assert tab._blob_inward_liquid_max_size_row.isHidden() is True
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            assert tab._blob_inward_liquid_enabled_row.isHidden() is False
+            assert tab._blob_inward_liquid_color_row.isHidden() is True
+            assert tab._blob_inward_liquid_reactivity_row.isHidden() is True
+            assert tab._blob_inward_liquid_max_size_row.isHidden() is True
 
-        tab.blob_inward_liquid_enabled.setChecked(True)
-        qt_app.processEvents()
+            tab.blob_inward_liquid_enabled.setChecked(True)
+            qt_app.processEvents()
 
-        assert tab._blob_inward_liquid_color_row.isHidden() is False
-        assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
-        assert tab._blob_inward_liquid_max_size_row.isHidden() is False
+            assert tab._blob_inward_liquid_color_row.isHidden() is False
+            assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
+            assert tab._blob_inward_liquid_max_size_row.isHidden() is False
 
-        tab.blob_shaper_enabled.setChecked(True)
-        qt_app.processEvents()
+            tab.blob_shaper_enabled.setChecked(True)
+            qt_app.processEvents()
 
-        assert tab._blob_inward_liquid_enabled_row.isHidden() is False
-        assert tab._blob_inward_liquid_color_row.isHidden() is False
-        assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
-        assert tab._blob_inward_liquid_max_size_row.isHidden() is False
-    finally:
-        tab.deleteLater()
+            assert tab._blob_inward_liquid_enabled_row.isHidden() is False
+            assert tab._blob_inward_liquid_color_row.isHidden() is False
+            assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
+            assert tab._blob_inward_liquid_max_size_row.isHidden() is False
+        finally:
+            tab.deleteLater()
 
 def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
@@ -1930,7 +1961,7 @@ def test_move_to_custom_spectrum_flushes_custom_state_before_followup_edit(qt_ap
         tab.deleteLater()
 
 
-def test_build_current_spotify_visualizer_config_uses_descriptor_owned_media_saver(
+def test_build_current_spotify_visualizer_config_uses_descriptor_owned_visualizers_saver(
     qt_app,
     settings_manager,
     monkeypatch,
@@ -1948,17 +1979,14 @@ def test_build_current_spotify_visualizer_config_uses_descriptor_owned_media_sav
             captured["owner"] = owner
             captured["section_id"] = section_id
             captured["descriptors"] = descriptors
-            return (
-                {"enabled": True},
-                {"mode": "bubble", "bubble_growth": 3.2},
-            )
+            return {"mode": "bubble", "bubble_growth": 3.2}
 
         monkeypatch.setattr("ui.tabs.widgets_tab.collect_widget_section_save_result", _fake_collect)
 
         result = tab._build_current_spotify_visualizer_config(base_config)
 
         assert captured["owner"] is tab
-        assert captured["section_id"] == "media"
+        assert captured["section_id"] == "visualizers"
         assert captured["descriptors"] == tab._widget_section_descriptors
         assert result["mode"] == "bubble"
         assert result["bubble_growth"] == pytest.approx(3.2)
@@ -1967,7 +1995,7 @@ def test_build_current_spotify_visualizer_config_uses_descriptor_owned_media_sav
         tab.deleteLater()
 
 
-def test_visualizer_preset_change_uses_descriptor_owned_media_loader(
+def test_visualizer_preset_change_uses_descriptor_owned_visualizers_loader(
     qt_app,
     settings_manager,
     monkeypatch,
@@ -2012,7 +2040,7 @@ def test_visualizer_preset_change_uses_descriptor_owned_media_loader(
 
         assert len(calls) == 1
         assert calls[0]["owner"] is tab
-        assert calls[0]["section_id"] == "media"
+        assert calls[0]["section_id"] == "visualizers"
         assert calls[0]["descriptors"] == tab._widget_section_descriptors
         assert calls[0]["widgets_config"]["spotify_visualizer"]["mode"] == mode
         assert calls[0]["widgets_config"]["spotify_visualizer"]["preset_bubble"] == 0
@@ -2027,8 +2055,8 @@ def test_save_settings_now_normalizes_sparse_visualizer_payload(qt_app, settings
 
         tab._load_settings()
 
-        def _fake_save_media_settings(_tab):
-            return {}, {
+        def _fake_save_visualizer_settings(_tab):
+            return {
                 "enabled": True,
                 "mode": "spectrum",
                 "preset_spectrum": 0,
@@ -2036,7 +2064,7 @@ def test_save_settings_now_normalizes_sparse_visualizer_payload(qt_app, settings
                 "spectrum_glow_color": [255, 255, 255, 235],
             }
 
-        monkeypatch.setattr(media_module, "save_media_settings", _fake_save_media_settings)
+        monkeypatch.setattr(media_module, "save_visualizer_settings", _fake_save_visualizer_settings)
 
         tab._save_settings_now()
 
@@ -2062,8 +2090,8 @@ def test_build_visualizer_preset_payload_normalizes_mode_snapshot(qt_app, settin
         widgets_cfg["spotify_visualizer"] = {
             "mode": mode,
             "preset_bubble": custom_index,
-            "manual_floor": 0.28,
-            "input_gain": 0.81,
+            "bubble_manual_floor": 0.28,
+            "bubble_input_gain": 0.81,
             "bubble_growth": 3.4,
             "bubble_rainbow_enabled": True,
             "bubble_rainbow_speed": 0.62,
@@ -2137,35 +2165,37 @@ def test_build_visualizer_preset_payload_strips_retired_compat_keys_for_all_mode
     mode_key,
     mode_value,
 ):
-    tab = WidgetsTab(settings_manager)
-    try:
-        slider = getattr(tab, slider_attr)
-        custom_index = slider.custom_index()
-        prefix = MODE_KEY_PREFIXES[mode][0]
-        widgets_cfg = settings_manager.get("widgets", {}) or {}
-        widgets_cfg["spotify_visualizer"] = {
-            "mode": mode,
-            f"preset_{mode}": custom_index,
-            f"{prefix}energy_boost": 1.33,
-            f"{prefix}use_raw_energy": True,
-            mode_key: mode_value,
-        }
-        settings_manager.set("widgets", widgets_cfg)
+    context = _blob_gate(True) if mode == "blob" else _blob_gate(False)
+    with context:
+        tab = WidgetsTab(settings_manager)
+        try:
+            slider = getattr(tab, slider_attr)
+            custom_index = slider.custom_index()
+            prefix = MODE_KEY_PREFIXES[mode][0]
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            widgets_cfg["spotify_visualizer"] = {
+                "mode": mode,
+                f"preset_{mode}": custom_index,
+                f"{prefix}energy_boost": 1.33,
+                f"{prefix}use_raw_energy": True,
+                mode_key: mode_value,
+            }
+            settings_manager.set("widgets", widgets_cfg)
 
-        tab._load_settings()
-        payload = tab.build_visualizer_preset_payload(mode)
+            tab._load_settings()
+            payload = tab.build_visualizer_preset_payload(mode)
 
-        assert payload
-        snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        assert f"{prefix}energy_boost" not in snapshot
-        assert f"{prefix}use_raw_energy" not in snapshot
-        assert "ghosting_enabled" not in snapshot
-        assert "ghost_alpha" not in snapshot
-        assert "ghost_decay" not in snapshot
-        assert "osc_sensitivity" not in snapshot
-        assert snapshot[mode_key] == pytest.approx(mode_value)
-    finally:
-        tab.deleteLater()
+            assert payload
+            snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+            assert f"{prefix}energy_boost" not in snapshot
+            assert f"{prefix}use_raw_energy" not in snapshot
+            assert "ghosting_enabled" not in snapshot
+            assert "ghost_alpha" not in snapshot
+            assert "ghost_decay" not in snapshot
+            assert "osc_sensitivity" not in snapshot
+            assert snapshot[mode_key] == pytest.approx(mode_value)
+        finally:
+            tab.deleteLater()
 
 
 def test_build_current_widgets_config_uses_live_visualizer_builder(qt_app, settings_manager):
@@ -2293,7 +2323,10 @@ def test_widget_bucket_toggles_default_closed(qt_app, settings_manager):
             (tab._clock_controls_container, "Time Content"),
             (tab._weather_controls_container, "Location & Layout"),
             (tab._media_controls_container, "Provider & Layout"),
-            (tab._reddit_controls_container, "Feed & Interaction"),
+            (tab._reddit_controls_container, "Reddit 1"),
+            (tab._reddit_controls_container, "Link Behavior"),
+            (tab._reddit_controls_container, "Shared Layout & Typography"),
+            (tab._reddit_controls_container, "Shared Appearance"),
         )
         for container, text in checks:
             toggle = _find_toggle(container, text)

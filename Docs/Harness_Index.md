@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -10,6 +10,24 @@ Compact reference for recurring SRPSS investigation harnesses and probes.
 - For visual, timing-sensitive, or focus-sensitive bugs, harness success is evidence, not final sign-off.
 
 ## Settings / Windowing
+
+### WidgetsTab lazy-section and settings-lifetime slice
+- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, visualizer-section persistence, dev-gated Blob UI construction, and stale settings-slider QObject lifetime handling.
+- Use when:
+  - editing `ui/tabs/widgets_tab.py`
+  - editing `ui/tabs/widgets_tab_media.py`
+  - changing WidgetsTab descriptor load/save/build routing
+  - changing settings slider/highlight helpers in `ui/tabs/shared_styles.py`
+- Typical command:
+```powershell
+python -m pytest `
+  tests/test_widgets_tab.py `
+  tests/test_settings_dialog.py::test_settings_dialog_widgets_tab_accessor_keeps_visualizers_restore_hydrated `
+  tests/test_settings_dialog.py::test_settings_dialog_builds_widgets_tab_in_lazy_mode `
+  tests/test_settings_dialog.py::test_settings_dialog_exposes_widgets_tab_via_lazy_accessor `
+  tests/test_settings_shared_styles.py `
+  -q
+```
 
 ### Settings dialog flicker / transient ghost windows
 - Purpose: reproduce and isolate constructor-time flicker, ghost HWNDs, and transient helper windows.
@@ -146,7 +164,7 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8 --timeline
 python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
 ```
-- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
+- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.
 - For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.
 

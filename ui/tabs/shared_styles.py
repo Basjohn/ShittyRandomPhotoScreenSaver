@@ -6,6 +6,13 @@ don't duplicate them.
 import weakref
 from typing import Callable
 
+try:
+    import shiboken6
+
+    Shiboken = shiboken6.Shiboken
+except Exception:  # pragma: no cover - PySide test/import fallback
+    Shiboken = None  # type: ignore[assignment]
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
@@ -63,6 +70,19 @@ SWATCH_LABEL_HEIGHT = 34
 LABEL_WIDTH = 140
 
 _last_moved_slider: weakref.ref | None = None
+
+
+def _is_live_qobject(obj) -> bool:
+    """Return whether a PySide wrapper still owns a live C++ QObject."""
+
+    if obj is None:
+        return False
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(obj))
+    except RuntimeError:
+        return False
 
 
 FORM_LABEL_STYLE = (
@@ -294,19 +314,34 @@ class NoWheelSlider(QSlider):
         self.setProperty("lastMoved", False)
         self.sliderPressed.connect(self._mark_last_moved)
         self.valueChanged.connect(self._mark_last_moved)
+        self.destroyed.connect(self._clear_last_moved_ref)
+
+    def _clear_last_moved_ref(self, *_args) -> None:
+        global _last_moved_slider
+        if _last_moved_slider is not None and _last_moved_slider() is self:
+            _last_moved_slider = None
+
+    @staticmethod
+    def _set_last_moved_state(slider: "NoWheelSlider", value: bool) -> None:
+        if not _is_live_qobject(slider):
+            return
+        slider.setProperty("lastMoved", value)
+        slider.style().unpolish(slider)
+        slider.style().polish(slider)
 
     def _mark_last_moved(self, *_args) -> None:
         global _last_moved_slider
+        if not _is_live_qobject(self):
+            _last_moved_slider = None
+            return
         prev = _last_moved_slider() if _last_moved_slider is not None else None
         if prev is self:
             return
-        if prev is not None:
-            prev.setProperty("lastMoved", False)
-            prev.style().unpolish(prev)
-            prev.style().polish(prev)
-        self.setProperty("lastMoved", True)
-        self.style().unpolish(self)
-        self.style().polish(self)
+        if prev is not None and _is_live_qobject(prev):
+            self._set_last_moved_state(prev, False)
+        elif prev is not None:
+            _last_moved_slider = None
+        self._set_last_moved_state(self, True)
         _last_moved_slider = weakref.ref(self)
 
     def wheelEvent(self, event):  # type: ignore[override]
