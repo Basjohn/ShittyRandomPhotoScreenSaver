@@ -7,7 +7,6 @@ Features gorgeous UI with:
 - Resizable window
 """
 import sys
-import builtins
 import time
 import os
 from typing import Dict, Optional, Any
@@ -18,11 +17,17 @@ from PySide6.QtWidgets import (
     QFileDialog, QMenu, QScrollArea,
 )
 from PySide6.QtCore import Qt, QPoint, QRect, QRectF, Signal, QUrl, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPainterPath, QDesktopServices
 
-from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
+from core.settings.visualizer_preset_transfer import (
+    export_visualizer_presets_zip,
+    import_visualizer_preset_json_files,
+    import_visualizer_presets_archive,
+    import_visualizer_presets_folder,
+)
 from core.animation import AnimationManager
 from ui.tabs import SourcesTab, TransitionsTab, WidgetsTab, DisplayTab, AccessibilityTab
 from ui.styled_popup import StyledPopup
@@ -1284,97 +1289,186 @@ class SettingsDialog(QDialog):
                 "Failed to reset settings to defaults.\nSee log for details.",
             )
 
-    def _resolve_shipped_visualizer_source_root(self) -> tuple[Path | None, str]:
-        """Return the frozen-build source tree for shipped curated presets."""
-        if not (bool(getattr(sys, "frozen", False)) or bool(getattr(builtins, "__compiled__", False))):
-            return None, "script"
-
-        from core.settings.visualizer_presets import (
-            get_packaged_visualizer_presets_dir,
-            get_visualizer_presets_dir,
-        )
-
-        packaged_root = get_packaged_visualizer_presets_dir()
-        if packaged_root.exists():
-            return packaged_root, "packaged"
-
-        target_root = get_visualizer_presets_dir()
-        return target_root, "frozen_fallback"
-
-    def _replace_visualizer_presets_from_shipped(self) -> int:
-        """Replace shipped curated preset files in the active frozen-build tree."""
-        from core.settings.visualizer_presets import get_visualizer_presets_dir, reload_presets
-        from core.visualizer_preset_manifest import (
-            mirror_curated_visualizer_preset_tree,
-        )
-
-        source_root, source_kind = self._resolve_shipped_visualizer_source_root()
-        if source_root is None:
-            return -1
-
-        target_root = get_visualizer_presets_dir()
-        mirrored_entries = mirror_curated_visualizer_preset_tree(source_root, target_root)
-
-        reload_presets()
-        logger.info(
-            "[SETTINGS] Replaced shipped visualizer presets from %s into %s (%d file(s))",
-            source_kind,
-            target_root,
-            len(mirrored_entries),
-        )
-        return len(mirrored_entries)
-
-    def _on_replace_visualizers_clicked(self) -> None:
-        """Replace shipped curated visualizer presets in frozen builds only."""
-        confirmed = StyledPopup.question(
-            self,
-            "Replace Visualizers",
-            "Replace the shipped curated visualizer presets with the packaged set?\n\n"
-            "This is intended for frozen SCR/MC builds. Script mode will not rewrite the repo tree.",
-            yes_text="Replace",
-            no_text="Cancel",
-        )
-        if not confirmed:
-            return
-
+    def _on_export_visualizers_clicked(self) -> None:
+        """Export the active curated visualizer presets to a zip archive."""
         try:
-            written = self._replace_visualizer_presets_from_shipped()
-            if written < 0:
-                StyledPopup.show_success(
+            try:
+                base_dir = Path.home() / "Documents"
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                base_dir = Path.cwd()
+            if not base_dir.exists():
+                base_dir = Path.cwd()
+
+            default_path = str(base_dir / "SRPSS_Visualizer_Presets.zip")
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Visualizer Presets",
+                default_path,
+                "Visualizer Preset Archive (*.zip);;All Files (*)",
+            )
+            if not file_path:
+                return
+
+            path = Path(file_path)
+            if path.suffix.lower() != ".zip":
+                path = path.with_suffix(".zip")
+
+            result = export_visualizer_presets_zip(path)
+            StyledPopup.show_success(
+                self,
+                "Export Complete",
+                f"Exported {result.files} visualizer preset file(s) to:\n{path.name}",
+            )
+        except Exception as exc:
+            logger.exception("Failed to export visualizer presets: %s", exc)
+            StyledPopup.show_error(
+                self,
+                "Export Failed",
+                "Failed to export visualizer presets.\nSee log for details.",
+            )
+
+    def _show_import_visualizers_menu(self) -> None:
+        """Show visualizer import choices for archives/files or whole folders."""
+        menu = QMenu(self)
+        menu.setStyleSheet(self._more_options_menu_stylesheet())
+
+        files_action = menu.addAction("Import Zip Or JSON Files...")
+        files_action.triggered.connect(self._on_import_visualizer_files_clicked)
+
+        folder_action = menu.addAction("Import Presets Folder...")
+        folder_action.triggered.connect(self._on_import_visualizer_folder_clicked)
+
+        btn = self.import_visualizers_btn
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    def _on_import_visualizer_files_clicked(self) -> None:
+        """Import a visualizer preset zip archive or loose JSON preset files."""
+        try:
+            try:
+                base_dir = Path.home() / "Documents"
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                base_dir = Path.cwd()
+            if not base_dir.exists():
+                base_dir = Path.cwd()
+
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Import Visualizer Presets",
+                str(base_dir),
+                "Visualizer Presets (*.zip *.json);;All Files (*)",
+            )
+            if not file_paths:
+                return
+
+            paths = [Path(p) for p in file_paths]
+            zip_paths = [p for p in paths if p.suffix.lower() == ".zip"]
+            json_paths = [p for p in paths if p.suffix.lower() == ".json"]
+
+            if len(zip_paths) == 1 and len(paths) == 1:
+                result = import_visualizer_presets_archive(zip_paths[0])
+            elif json_paths and len(json_paths) == len(paths):
+                result = import_visualizer_preset_json_files(json_paths)
+            else:
+                StyledPopup.show_error(
                     self,
-                    "Script Mode Safety",
-                    "Visualizer replacement is disabled in script mode.\n"
-                    "The repository preset tree was not modified.",
+                    "Import Failed",
+                    "Select one .zip archive or one or more .json preset files.",
                 )
                 return
 
-            try:
-                tab = self._get_tab_instance('widgets')
-                if tab and hasattr(tab, '_load_settings'):
-                    tab._load_settings()
-            except Exception:
-                logger.debug("Failed to reload widgets tab after visualizer reset", exc_info=True)
-
-            try:
-                notice = getattr(self, "reset_notice_label", None)
-                if notice is not None:
-                    notice.setText(f"Replaced shipped visualizer presets ({written} files)!")
-                    notice.setVisible(True)
-                    QTimer.singleShot(2000, lambda: notice.setVisible(False))
-            except Exception:
-                logger.debug("Failed to show visualizer reset notice label", exc_info=True)
+            self._refresh_visualizer_import_state()
+            StyledPopup.show_success(
+                self,
+                "Import Complete",
+                f"Imported {result.files} visualizer preset file(s).",
+            )
         except Exception as exc:
-            logger.exception("Failed to replace shipped visualizer presets: %s", exc)
+            logger.exception("Failed to import visualizer presets: %s", exc)
             StyledPopup.show_error(
                 self,
-                "Error",
-                "Failed to replace the shipped visualizer presets.\nSee log for details.",
+                "Import Failed",
+                "Failed to import visualizer presets.\nSee log for details.",
             )
+
+    def _on_import_visualizer_folder_clicked(self) -> None:
+        """Import a whole visualizer preset folder as the active curated tree."""
+        try:
+            try:
+                base_dir = Path.home() / "Documents"
+            except Exception as e:
+                logger.debug("[SETTINGS] Exception suppressed: %s", e)
+                base_dir = Path.cwd()
+            if not base_dir.exists():
+                base_dir = Path.cwd()
+
+            folder_path = QFileDialog.getExistingDirectory(
+                self,
+                "Import Visualizer Presets Folder",
+                str(base_dir),
+            )
+            if not folder_path:
+                return
+
+            result = import_visualizer_presets_folder(folder_path)
+            self._refresh_visualizer_import_state()
+            StyledPopup.show_success(
+                self,
+                "Import Complete",
+                f"Imported {result.files} visualizer preset file(s).",
+            )
+        except Exception as exc:
+            logger.exception("Failed to import visualizer preset folder: %s", exc)
+            StyledPopup.show_error(
+                self,
+                "Import Failed",
+                "Failed to import the visualizer preset folder.\nSee log for details.",
+            )
+
+    def _refresh_visualizer_import_state(self) -> None:
+        try:
+            tab = self._get_tab_instance('widgets')
+            if tab and hasattr(tab, '_load_settings'):
+                tab._load_settings()
+        except Exception:
+            logger.debug("Failed to reload widgets tab after visualizer import", exc_info=True)
+
+        try:
+            notice = getattr(self, "reset_notice_label", None)
+            if notice is not None:
+                notice.setText("Visualizer presets imported!")
+                notice.setVisible(True)
+                QTimer.singleShot(2000, lambda: notice.setVisible(False))
+        except Exception:
+            logger.debug("Failed to show visualizer import notice label", exc_info=True)
     
     def _show_more_options_menu(self) -> None:
         """Show the more options context menu."""
         menu = QMenu(self)
-        menu.setStyleSheet("""
+        menu.setStyleSheet(self._more_options_menu_stylesheet())
+        
+        # Open logs folder
+        logs_action = menu.addAction("Open Logs Folder")
+        logs_action.triggered.connect(self._open_logs_folder)
+        
+        # Open settings folder
+        settings_action = menu.addAction("Open Settings Folder")
+        settings_action.triggered.connect(self._open_settings_folder)
+        
+        menu.addSeparator()
+        
+        # GitHub link
+        github_action = menu.addAction("GitHub Repository")
+        github_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/Basjohn/ShittyRandomPhotoScreenSaver")))
+        
+        # Show menu below the button
+        btn = self.more_options_btn
+        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+
+    @staticmethod
+    def _more_options_menu_stylesheet() -> str:
+        return """
             QMenu {
                 background-color: rgba(25, 25, 30, 240);
                 border: 1px solid rgba(80, 80, 90, 180);
@@ -1397,30 +1491,12 @@ class SettingsDialog(QDialog):
                 background-color: rgba(80, 80, 90, 120);
                 margin: 3px 8px;
             }
-        """)
-        
-        # Open logs folder
-        logs_action = menu.addAction("📁  Open Logs Folder")
-        logs_action.triggered.connect(self._open_logs_folder)
-        
-        # Open settings folder
-        settings_action = menu.addAction("⚙  Open Settings Folder")
-        settings_action.triggered.connect(self._open_settings_folder)
-        
-        menu.addSeparator()
-        
-        # GitHub link
-        github_action = menu.addAction("🔗  GitHub Repository")
-        github_action.triggered.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/Basjohn/ShittyRandomPhotoScreenSaver")))
-        
-        # Show menu below the button
-        btn = self.more_options_btn
-        menu.exec(btn.mapToGlobal(btn.rect().bottomLeft()))
+        """
     
     def _open_logs_folder(self) -> None:
         """Open the logs folder in file explorer."""
         try:
-            logs_path = Path.cwd() / "logs"
+            logs_path = get_log_dir()
             if not logs_path.exists():
                 logs_path.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_path)))
@@ -1430,11 +1506,9 @@ class SettingsDialog(QDialog):
     def _open_settings_folder(self) -> None:
         """Open the settings folder in file explorer."""
         try:
-            # Get the actual JSON settings path from SettingsManager
-            settings_path = Path(self._settings._settings.fileName()).parent
+            settings_path = self._settings.get_settings_dir()
             if not settings_path.exists():
-                # Fallback to current directory
-                settings_path = Path.cwd()
+                settings_path.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(settings_path)))
         except Exception:
             logger.debug("Failed to open settings folder", exc_info=True)

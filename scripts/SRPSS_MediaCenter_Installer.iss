@@ -44,7 +44,7 @@ Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-inst
 [Files]
 ; Copy everything inside the Nuitka onedir output into {app}
 Source: "..\release\main_mc.dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
-; Keep one packaged copy inside the MC install so "Replace Visualizers" can
+; Keep one packaged copy inside the MC install so visualizer imports can
 ; still restore from bundled assets even though runtime loading now uses the
 ; shared ProgramData tree.
 Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion

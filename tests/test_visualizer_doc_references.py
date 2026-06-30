@@ -42,3 +42,10 @@ def test_project_overview_uses_current_visualizer_preset_tooling():
     overview_text = (ROOT / "Docs" / "00_PROJECT_OVERVIEW.md").read_text(encoding="utf-8")
     assert "tools/visualizer_preset_repair.py" in overview_text
     assert "tools/rebuild_visualizer_presets.py" not in overview_text
+
+
+def test_deleted_qtimer_policy_is_not_referenced_by_active_docs():
+    assert not (ROOT / "Docs" / "QTIMER_POLICY.md").exists()
+    for relative in ("Index.md", "Spec.md", "Docs/00_PROJECT_OVERVIEW.md", "Docs/10_WIDGET_GUIDELINES.md"):
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "QTIMER_POLICY" not in text

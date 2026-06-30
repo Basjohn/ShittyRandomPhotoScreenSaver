@@ -1,6 +1,6 @@
 # Project Overview
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 This is the top-level orientation for SRPSS documentation.
 
@@ -17,6 +17,7 @@ SRPSS is a Windows screensaver/media runtime with:
 - `Current_Plan.md`: active work only.
 - `Docs/Historical_Bugs.md`: dated bug narratives and lessons.
 - `Docs/Visualizer_Change_Checklist.md`: required change sweep for visualizer settings.
+- `Docs/Transition_Change_Checklist.md`: required change sweep for transition registry/runtime work.
 
 ## Core Engineering Principles
 - Centralized manager ownership for threading/resource/settings/animation.
@@ -29,11 +30,12 @@ SRPSS is a Windows screensaver/media runtime with:
 - Settings and schema: `core/settings/`.
 - Widgets and overlays: `widgets/`, `rendering/widget_manager.py`.
 - Visualizer system: `widgets/spotify_visualizer*`, `core/settings/visualizer_*`.
+- Visualizer preset import/export: `core/settings/visualizer_preset_transfer.py`.
 - Visualizer preset repair/audit tooling: `tools/visualizer_preset_repair.py`.
 - Source ingestion: `sources/rss/`.
 
 ## How to Navigate
 1. Read `Spec.md` for current contract.
 2. Use `Index.md` to locate ownership boundaries.
-3. Use focused docs under `Docs/` for defaults, test policy, and visualizer specifics.
+3. Use focused docs under `Docs/` for defaults, test policy, visualizer specifics, transition changes, and shared UI style.
 4. Use `Docs/Historical_Bugs.md` before reworking fragile areas.

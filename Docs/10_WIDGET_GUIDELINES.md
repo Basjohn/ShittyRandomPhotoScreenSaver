@@ -1,6 +1,6 @@
 # Widget Creation Guide
 
-Last updated: 2026-06-28
+Last updated: 2026-06-30
 
 Canonical A-to-Z guide for adding or deeply refactoring a non-visualizer widget in SRPSS.
 
@@ -186,6 +186,7 @@ If the widget does not participate in `Custom`, do not half-implement it acciden
 - If the widget uses a typed settings model, keep `from_settings()`, `from_mapping()`, and `to_dict()` symmetric.
 - If the widget is intentionally using a flat-dict exception, document that rather than silently cloning a second pattern.
 - Use `core/settings/storage_paths.py` for persistent files or caches. Do not invent home-dir or temp-dir storage paths when a canonical app-data seam already exists.
+- Use public `SettingsManager` path accessors when UI code needs the active settings file or folder.
 - Verify that a root/section write does not leave stale dotted-key cache values behind.
 
 ### J. Add `WidgetsTab` integration without growing dialog-open cost

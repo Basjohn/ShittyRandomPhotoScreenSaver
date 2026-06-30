@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -41,6 +41,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Canonical persistence file: `%APPDATA%/SRPSS/settings_v2.json` (MC: `%APPDATA%/SRPSS_MC/settings_v2.json`).
 - Structured roots: `widgets`, `transitions`, `ui`.
 - Dotted-key API remains available via `SettingsManager`.
+- UI and helper code that need the active settings file or directory must use public `SettingsManager` path accessors rather than reaching into the backing store.
 - Root `widgets` writes, widgets-map replacement helpers, and SST widget imports must all converge on the same widgets-map normalization/schema contract. Do not let `set("widgets", ...)`, `set_widgets_map(...)`, or import flows drift into different visualizer-schema or default-merge behavior.
 
 ### 4.2 Legacy global preset retirement
@@ -94,6 +95,7 @@ Active ids:
 - Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
 - Settings-model field-spec source of truth: `core/settings/models/_spotify_visualizer.py`; grouped build specs, serializer specs, defaults, and ordered build/serialize section merges must be updated together so `from_settings()`, `from_mapping()`, and `to_dict()` remain one contract instead of drifting per entry point
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
+- Curated preset import/export transfer: `core/settings/visualizer_preset_transfer.py`; zip/folder imports replace the active curated tree, while loose JSON imports are parsed, canonicalized, and written to the inferred mode/slot.
 - Runtime config application: `widgets/spotify_visualizer/config_applier.py`
 - GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
 - Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`

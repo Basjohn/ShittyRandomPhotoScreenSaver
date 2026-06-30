@@ -1,40 +1,37 @@
 # Custom Style Implementation
 
-Last updated: 2026-05-22
+Last updated: 2026-06-30
 
-Guidance for SRPSS custom UI styling.
+Guidance for SRPSS settings-dialog and runtime UI styling.
 
 ## 1. Goals
-- Keep the settings/dialog UI visually consistent and intentionally styled.
-- Centralize style definitions to avoid per-widget/per-tab drift.
-- Avoid style changes that hide runtime bugs instead of fixing root causes.
+- Preserve SRPSS's deliberate custom chrome and dark settings language.
+- Keep shared style decisions in shared modules instead of scattering large local QSS blocks.
+- Fix focus, startup, visibility, and flicker bugs at their owner instead of removing styling to hide symptoms.
 
-## 2. Source of Truth
-- Shared styles live in the UI shared style modules and theme QSS.
-- Reusable custom controls should be implemented once and reused.
-- Avoid duplicating large style blocks in individual tabs/widgets.
-- Styled confirmation and affordance surfaces should use the shared styled-popup/chrome path instead of inventing one-off dialog visuals in tabs.
+## 2. Current Sources Of Truth
+- Dialog chrome and shared settings styling: `ui/settings_dialog.py`, `ui/settings_theme.py`, `ui/tabs/shared_styles.py`.
+- Styled confirmations and action feedback: `ui/styled_popup.py`.
+- Reusable custom controls: `ui/widgets/` and existing tab helper modules.
+- Runtime overlay card/shadow behavior: shared widget/base paint paths, not ad hoc Qt effect churn.
 
-## 3. Styling Contracts
-- Use shared combo/slider/spinbox/input styling constants where available.
-- Preserve established typography, spacing, and card/chrome language.
-- Maintain cross-tab alignment consistency in settings rows.
-- Temporary UX affordances, such as CUSTOM lock notices or edit-shell controls, should look intentionally part of the same SRPSS UI family rather than default Qt widgets dropped into the surface.
+## 3. Styling Rules
+- Prefer shared style helpers for buttons, inputs, combo boxes, sliders, buckets, warnings, and popup chrome.
+- Keep spacing, typography, border weight, and card language aligned across tabs.
+- Do not create popup views, show hidden sections, or force focus changes during constructors just to apply style.
+- Action warnings and confirmations should use the shared popup/chrome path.
+- Temporary edit-mode controls should read as part of SRPSS but stay visually subordinate to the widget content.
 
-## 4. Technical Safety
-- Keep styling changes compatible with frameless/acrylic dialog behavior.
-- Validate style changes against startup/show behavior to avoid transient ghost/flicker regressions.
-- Do not remove custom shell styling as a workaround for runtime launch issues.
-- Avoid style changes that force constructor-time show/hide churn, popup creation, or focus side effects just to “make it look right”.
+## 4. Safety Rules
+- Do not remove shadows, fades, acrylic/framed chrome, or custom controls as a workaround for runtime bugs.
+- Avoid broad `setVisible(...)`, `setUpdatesEnabled(...)`, focus-policy recursion, or popup construction during settings load.
+- If a styling change affects show/hide behavior, validate it against settings-open, tab-switch, and startup/focus paths.
+- Keep live runtime shadows on painter-owned paths unless a future architecture change deliberately says otherwise.
 
 ## 5. Change Process
-When modifying UI styling:
-1. update shared style source,
-2. confirm affected tabs/widgets adopt it consistently,
-3. run relevant UI/settings tests,
-4. validate runtime behavior for show/focus/startup correctness.
-
-## 6. SRPSS-Specific Current Rules
-- Settings warnings that trigger actions, such as `Disable Custom Mode To Change!`, should be styled as part of the normal dialog language and use the shared popup path for confirmation.
-- Edit-mode shell controls should remain visually subordinate to widget content but still read as deliberate affordances; avoid introducing a second design language for runtime edit controls.
-- If a new widget family needs special chrome, prefer extending shared style helpers or shared base-widget paint behavior before adding local QSS fragments.
+When changing shared styling:
+- update the shared style source first,
+- migrate local duplicates only where the behavior is the same,
+- keep widget/tab-specific exceptions small and named,
+- run relevant settings/UI tests,
+- and keep runtime/manual validation open for flicker, focus, multi-window, or overlay behavior.

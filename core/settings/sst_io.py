@@ -37,10 +37,9 @@ def export_to_sst(mgr: "SettingsManager", path: str) -> bool:
     """Export a human-readable SST snapshot of all settings to *path*.
 
     The snapshot is a JSON document with a simple nested structure that
-    mirrors the canonical settings schema documented in Docs/SPEC.md.
-    QSettings remains the runtime store; this is purely a convenience
-    layer for humans (and tests) to inspect or move configurations
-    between machines.
+    mirrors the canonical settings schema. The runtime store is
+    ``JsonSettingsStore``; SST is a transport layer for moving settings
+    between profiles or machines.
     """
     try:
         with mgr._lock:
@@ -111,7 +110,7 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
         sst_version = loaded.get('settings_version')
         sst_application = loaded.get('application')
 
-    current_version = 1
+    current_version = 2
     if isinstance(sst_version, int):
         if sst_version > current_version:
             logger.warning(

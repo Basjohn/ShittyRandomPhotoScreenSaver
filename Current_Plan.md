@@ -51,11 +51,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ### 4. Reddit Periodic Cadence
 
-- [x] Root-cause the latest stale-cache shape: settings/runtime rebuilds recreated Reddit widgets and restarted instance-local 15-minute timers before they could fire; `reddit` had refreshed at startup while `reddit2` stayed stale because the shared startup-attempt gate correctly prevented a second immediate startup fetch.
-- [x] Replace instance-local first-tick authority with a per-cache-key due-time scheduler: startup fetches mark the next attempt `15min` out, stale skipped widgets get their authored stagger, and rebuilds reattach to the preserved due horizon instead of restarting it.
-- [x] Add Reddit bars for stale primary due firing, stale secondary stagger, and preserved due surviving widget rebuild.
-- [ ] Runtime-check a compiled/long run for the new log shape: `Periodic refresh timer armed ... due_delay_s=... due_reason=...`, then `[CACHE][REDDIT] Periodic refresh fired` without requiring app restart or manual refresh.
-- [ ] Keep Reddit provider/API/network behavior separate from this cadence fix; if fetches fire but return blocked/empty results, reopen the provider track without changing the scheduler.
+- [x] Root-cause the stale-cache shape: settings/runtime rebuilds recreated Reddit widgets and restarted instance-local first ticks; additionally, the shared startup-attempt gate could suppress a stale secondary cache instead of pacing it behind the first stale startup attempt.
+- [x] Replace instance-local first-tick authority with a per-cache-key due-time scheduler: fresh caches skip startup network, stale primary caches fire, stale secondary caches are queued behind the first startup attempt, and rebuilds reattach to the preserved due horizon instead of restarting it.
+- [x] Add Reddit bars for fresh-cache startup skip, stale primary due firing, stale secondary periodic stagger, stale secondary startup pacing, and preserved due surviving widget rebuild.
+- [ ] Runtime-check a compiled/long run for the new log shape: fresh caches log `Startup refresh skipped (cache_fresh, ...)`; stale paired caches log one immediate startup/periodic attempt plus `Startup stale refresh paced ... delay_s=...`; both cache keys later log `[CACHE][REDDIT] Periodic refresh fired`.
+- [ ] Treat any Reddit `403`, `429`, or blocked cooldown during normal automatic cadence as a pacing/provider failure to investigate, not an accepted outcome.
+- [ ] Keep Reddit provider/API/network behavior separate from scheduler cadence; if fetches fire on schedule but return blocked/empty results, reopen the provider track without weakening the pacing contract.
 
 ### 5. Runtime Health Audit Follow-Through
 

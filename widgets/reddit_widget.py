@@ -108,8 +108,10 @@ class RedditWidget(BaseOverlayWidget):
     DEFAULT_FONT_SIZE = 18
     REFRESH_INTERVAL = timedelta(minutes=15)
     SECONDARY_WIDGET_STAGGER = timedelta(minutes=7, seconds=30)
+    STARTUP_STALE_PACE = timedelta(seconds=30)
     REFRESH_TIMER_JITTER_MS = 2000
     _periodic_due_by_cache_key: Dict[str, float] = {}
+    _periodic_due_reason_by_cache_key: Dict[str, str] = {}
 
     def __init__(
         self,
@@ -804,7 +806,8 @@ class RedditWidget(BaseOverlayWidget):
         cache_key = str(self._cache_key or "reddit")
         due_mono = self._periodic_due_by_cache_key.get(cache_key)
         if due_mono is not None:
-            return max(0, int((due_mono - now_mono) * 1000)), "preserved_due"
+            due_reason = self._periodic_due_reason_by_cache_key.get(cache_key, "preserved_due")
+            return max(0, int((due_mono - now_mono) * 1000)), due_reason
 
         cache_timestamp = self._get_cache_timestamp()
         if cache_timestamp is not None:
@@ -812,17 +815,31 @@ class RedditWidget(BaseOverlayWidget):
             if cache_age_ms < cadence_ms:
                 delay_ms = max(0, cadence_ms - cache_age_ms)
                 self._periodic_due_by_cache_key[cache_key] = now_mono + (delay_ms / 1000.0)
+                self._periodic_due_reason_by_cache_key[cache_key] = "cache_fresh_due"
                 return delay_ms, "cache_fresh_due"
 
         delay_ms = max(0, int(phase_delay_ms))
         self._periodic_due_by_cache_key[cache_key] = now_mono + (delay_ms / 1000.0)
+        self._periodic_due_reason_by_cache_key[cache_key] = "cache_stale_staggered_due"
         return delay_ms, "cache_stale_staggered_due"
+
+    def _set_periodic_due_delay_ms(self, delay_ms: int, *, reason: str) -> bool:
+        cache_key = str(self._cache_key or "reddit")
+        now_mono = time.monotonic()
+        new_due_mono = now_mono + (max(0, int(delay_ms)) / 1000.0)
+        old_due_mono = self._periodic_due_by_cache_key.get(cache_key)
+        if old_due_mono is None or new_due_mono < old_due_mono:
+            self._periodic_due_by_cache_key[cache_key] = new_due_mono
+            self._periodic_due_reason_by_cache_key[cache_key] = reason
+            return True
+        return False
 
     def _mark_periodic_attempt_now(self) -> None:
         cache_key = str(self._cache_key or "reddit")
         self._periodic_due_by_cache_key[cache_key] = time.monotonic() + (
             self._refresh_interval_ms() / 1000.0
         )
+        self._periodic_due_reason_by_cache_key[cache_key] = "post_attempt_due"
 
     def _on_periodic_due_timer(self) -> None:
         self._update_timer_start_timer = None
@@ -2183,6 +2200,17 @@ class RedditWidget(BaseOverlayWidget):
         if not automatic_service_updates_enabled():
             return StartupRefreshDecision(False, "automatic_updates_disabled", None)
 
+        cache_age = None
+        try:
+            cache_timestamp = self._get_cache_timestamp()
+            if cache_timestamp is not None:
+                cache_age = datetime.now() - cache_timestamp
+                if cache_age < self._refresh_interval:
+                    return StartupRefreshDecision(False, "cache_fresh", cache_age)
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect cache age for startup logging", exc_info=True)
+            return StartupRefreshDecision(True, "cache_timestamp_error", None)
+
         try:
             from core.reddit_rate_limiter import RedditRateLimiter
 
@@ -2200,18 +2228,12 @@ class RedditWidget(BaseOverlayWidget):
             if attempt_timestamp is not None:
                 attempt_age = datetime.now() - attempt_timestamp
                 if attempt_age < self._startup_refresh_cooldown:
-                    return StartupRefreshDecision(False, "startup_attempt_cooldown", attempt_age)
+                    return StartupRefreshDecision(False, "startup_attempt_paced_due", attempt_age)
         except Exception:
             logger.debug("[REDDIT] Failed to evaluate startup-attempt cooldown", exc_info=True)
 
-        cache_age = None
-        try:
-            cache_timestamp = self._get_cache_timestamp()
-            if cache_timestamp is not None:
-                cache_age = datetime.now() - cache_timestamp
-        except Exception:
-            logger.debug("[REDDIT] Failed to inspect cache age for startup logging", exc_info=True)
-        return StartupRefreshDecision(True, "updates_enabled_reuse_cache", cache_age)
+        reason = "missing_cache_timestamp" if cache_age is None else "cache_stale"
+        return StartupRefreshDecision(True, reason, cache_age)
 
     def _touch_service_gate_timestamp_now(self) -> None:
         """Refresh the shared Reddit startup gate after a blocked response."""
@@ -2266,6 +2288,32 @@ class RedditWidget(BaseOverlayWidget):
             self._touch_startup_attempt_timestamp_now()
             self._mark_periodic_attempt_now()
             self._fetch_feed()
+            self._schedule_timer()
+            return
+
+        if decision.reason == "startup_attempt_paced_due":
+            attempt_age_s = decision.age.total_seconds() if decision.age is not None else 0.0
+            delay_ms = max(
+                0,
+                int((self.STARTUP_STALE_PACE.total_seconds() - attempt_age_s) * 1000.0),
+            )
+            due_shortened = self._set_periodic_due_delay_ms(
+                delay_ms,
+                reason="startup_stale_paced_due",
+            )
+            if due_shortened:
+                stop_qtimer_attr(
+                    self,
+                    "_update_timer_start_timer",
+                    delete_qtimers=True,
+                    clear_attr=True,
+                )
+            logger.info(
+                "[CACHE][REDDIT] Startup stale refresh paced cache_key=%s delay_s=%.1f (recent_attempt_age_s=%.1f)",
+                self._cache_key,
+                delay_ms / 1000.0,
+                attempt_age_s,
+            )
             self._schedule_timer()
             return
 

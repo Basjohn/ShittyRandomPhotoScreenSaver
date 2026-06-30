@@ -1,10 +1,10 @@
 # Visualizer Reference
 
-Last updated: 2026-06-11
+Last updated: 2026-06-30
 
-Architecture and contract reference for the visualizer subsystem.
+Focused architecture reference for the Spotify visualizer subsystem.
 
-## 1. Mode Registry Contract
+## 1. Mode Identity
 Source of truth: `core/settings/visualizer_mode_registry.py`.
 
 | Internal ID | User Label | Status |
@@ -16,82 +16,57 @@ Source of truth: `core/settings/visualizer_mode_registry.py`.
 | `blob` | Blob | dev-gated (`-devblob`) |
 | `devcurve` | Spline Curve | active |
 
-`--devcurve` remains a compatibility no-op alias.
+`devcurve` remains the internal id for Spline Curve. `--devcurve` remains accepted as a compatibility no-op.
 
-## 2. Runtime Pipeline
-- settings/model normalization and resolved activation payload selection,
-- widget/runtime config application,
-- audio capture and analysis,
-- mode-aware runtime shaping,
-- overlay state transport,
-- renderer/shader uniform upload,
-- outer card geometry resolution.
+## 2. Settings And Activation
+- Settings-model source of truth: `core/settings/models/_spotify_visualizer.py`.
+- Mapping normalization: `core/settings/visualizer_settings_snapshot.py`.
+- Legacy/technical normalization: `core/settings/visualizer_settings_contract.py`.
+- Preset index fallback/lookup: `core/settings/visualizer_preset_indices.py`.
+- Runtime activation payload: `core/settings/visualizer_presets.resolve_visualizer_activation_payload()`.
 
-Key ownership split:
-- `widgets/spotify_visualizer_widget.py` owns coordinator/lifecycle behavior.
-- `widgets/spotify_visualizer/card_geometry.py` owns outer-card size/placement policy.
-- `widgets/spotify_bars_gl_overlay.py` and the extracted overlay helpers own GL transport/render-state application.
-- `WidgetManager` owns committed CUSTOM geometry reapply.
+Runtime and saved settings use mode-owned keys. Legacy global visualizer keys may be accepted as import/migration inputs, but normalized payloads should not re-emit them.
 
-## 3. Shared Settings Contracts
-- mapping normalization: `visualizer_settings_snapshot.py`
-- technical normalization / legacy migration contract: `visualizer_settings_contract.py`
-- preset-index fallback: `visualizer_preset_indices.py`
+## 3. Presets
+- Active curated tree: `core/settings/visualizer_presets.get_visualizer_presets_dir()`.
+- Packaged/bundled tree: `get_packaged_visualizer_presets_dir()`.
+- Manifest helpers: `core/visualizer_preset_manifest.py`.
+- Import/export helpers: `core/settings/visualizer_preset_transfer.py`.
+- Repair/audit/reindex tool: `tools/visualizer_preset_repair.py`.
 
-Technical persistence rule:
-- runtime and canonical saved settings use per-mode technical keys only;
-- curated/custom presets may vary technical payload inside a mode;
-- shared/global technical keys are accepted only as legacy migration inputs and must not survive normalized payloads.
+Curated presets are mode folders containing JSON payloads. Folder/zip imports replace the curated tree; loose JSON imports are parsed, canonicalized, and written into the inferred mode/slot.
 
-Routing rule:
-- Outside `Custom`, visualizer routing is exact `Follow Media` parity.
-- In `Custom`, the visualizer owns its own numbered-display `position` / `monitor`.
-- `Custom + ALL` is not a valid steady-state routing outcome and must not be treated as a normal persisted result.
+## 4. Runtime Pipeline
+- `widgets/spotify_visualizer_widget.py`: coordinator/lifecycle.
+- `widgets/spotify_visualizer/activation_runtime.py`: activation replay.
+- `widgets/spotify_visualizer/config_applier.py`: settings/model to runtime kwargs.
+- `widgets/spotify_visualizer/technical_config.py`: per-mode technical cache/application.
+- `widgets/spotify_visualizer/runtime_config.py`: engine/thread/process/audio-block coordination.
+- `widgets/spotify_bars_gl_overlay.py` plus overlay helpers: GL state transport and render envelope.
+- Mode renderers/shaders: renderer-owned math and uniforms.
 
-## 4. Preset Contracts
-- authored source: `presets/visualizer_modes/`.
-- curated load/apply logic: `core/settings/visualizer_presets.py`.
-- repair/audit/reindex: `tools/visualizer_preset_repair.py`.
+Visualizer tick cadence has one steady-state owner: the dedicated recurring timer.
 
-Reindex contract:
-- update filename slot numbering,
-- update `preset_index`,
-- preserve friendly names and non-index payload content.
+## 5. CUSTOM Geometry
+- Outside `Custom`, visualizer display routing follows Media.
+- In `Custom`, the visualizer may own its own display/monitor route while visibility still follows Media availability.
+- `Custom + ALL` is not a valid steady-state routing result.
+- Outer-card geometry policy lives in `widgets/spotify_visualizer/card_geometry.py`.
+- Committed CUSTOM rect replay lives in shared CUSTOM/runtime ownership and must not be recalculated from mode/preset height policy.
+- Stencil clipping lives in `overlay_mask.py` / `overlay_frame_shell.py` and should stay separate from outer-card placement.
 
-## 5. Startup and Visibility Contracts
-- Startup timing policy is centralized.
-- Secondary-stage visualizer-dependent widgets must wait for valid anchor visibility/geometry.
-- Avoid pre-position reveal artifacts.
-- In `Custom`, visualizer visibility still follows Media even when display ownership is independent.
-- Committed CUSTOM geometry must reapply through shared runtime seams, not through widget-local ad hoc resize overrides.
-
-## 6. CUSTOM Geometry Contract
-- The visualizer participates in the same global CUSTOM edit session as the other supported widget families.
-- The edit shell uses the composited card-plus-overlay view rather than only the bare QWidget shell or the whole display.
-- Saved CUSTOM state has two distinct pieces:
-  - the committed outer rect, which is the authoritative runtime replay result;
-  - the visualizer scale payload, which may still inform edit-time QoL envelopes or authored baseline math.
-- Runtime CUSTOM replay must not re-derive the committed rect from live mode/preset height policy.
-- Live mode/preset card metrics still own authored placement and edit-preview envelope sizing, but committed CUSTOM replay stays owned by the shared runtime reapply path.
-
-## 7. Diagnostics
+## 6. Diagnostics And Validation
 - Use `--viz` for ordinary visualizer diagnostics.
-- `--viz-diagnostics` and `--viz-diag` remain accepted aliases, but `--viz` is the preferred operator flag.
-- For transport bugs, verify:
-  - model normalization,
-  - config-applier kwargs,
-  - overlay `set_state` storage,
-  - renderer uniform upload.
-- For CUSTOM-routing bugs, verify:
-  - effective position/monitor routing resolution,
-  - visualizer create-time media-anchor resolution across displays,
-  - committed custom-layout payload,
-  - final runtime geometry authority.
+- `--viz-diagnostics` and `--viz-diag` remain compatibility aliases.
+- Use `--geo` for CUSTOM route/geometry questions.
+- Use `--perf` when visualizer work may affect frame or tick cadence.
+- For shared visualizer/runtime changes, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`.
 
-## 8. Regression Hotspots
-- settings serialization omissions,
-- runtime bridge key omissions,
-- overlay parameter accepted-but-not-stored cases,
-- schema drift between defaults, presets, and repair tooling,
-- split-authority geometry bugs between widget-local preferred sizing and manager-owned CUSTOM geometry,
-- create-time cross-display anchor resolution when visualizer and Media are on different displays.
+## 7. Common Drift Risks
+- settings/model/default omissions,
+- preset parser/import/export divergence,
+- runtime kwargs accepted but not applied,
+- overlay state stored but not rendered,
+- mode-owned caches surviving activation boundaries,
+- CUSTOM committed rects being overwritten by widget-local sizing,
+- and generic helper tests passing while authored curated preset behavior regresses.

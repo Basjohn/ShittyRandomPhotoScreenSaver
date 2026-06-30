@@ -586,6 +586,14 @@ class SettingsManager(QObject):
         """Return the application profile name for this manager."""
         return getattr(self, "_application", "Screensaver")
 
+    def get_storage_path(self) -> Path:
+        """Return the active JSON settings file path."""
+        return self._storage_path
+
+    def get_settings_dir(self) -> Path:
+        """Return the directory containing the active settings profile."""
+        return self._storage_path.parent
+
     def get_organization_name(self) -> str:
         """Return the organization name for this manager."""
         return getattr(self, "_organization", "ShittyRandomPhotoScreenSaver")

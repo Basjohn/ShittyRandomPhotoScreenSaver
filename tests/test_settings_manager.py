@@ -327,6 +327,39 @@ class TestSettingsManagerCacheInvalidation:
             == SettingsManager._VISUALIZER_SCHEMA_VERSION
         )
 
+    def test_export_to_sst_does_not_include_external_gmail_secret_files(self, tmp_path: Path) -> None:
+        manager = _make_manager(tmp_path)
+        settings_dir = manager.get_settings_dir()
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        (settings_dir / "client_secrets.json").write_text(
+            json.dumps({"installed": {"client_secret": "fake_client_secret_do_not_export"}}),
+            encoding="utf-8",
+        )
+        (settings_dir / "gmail_imap_creds.enc").write_bytes(b"fake_imap_password_do_not_export")
+        (settings_dir / "gmail_token.enc").write_bytes(b"fake_oauth_token_do_not_export")
+        manager.set(
+            "widgets",
+            {
+                "gmail": {
+                    "enabled": True,
+                    "filter_label": "INBOX",
+                    "sound_file_path": "resources/tutuogg.ogg",
+                }
+            },
+        )
+
+        export_path = tmp_path / "settings_export.sst"
+
+        assert manager.export_to_sst(str(export_path)) is True
+
+        exported = export_path.read_text(encoding="utf-8")
+        assert "fake_client_secret_do_not_export" not in exported
+        assert "fake_imap_password_do_not_export" not in exported
+        assert "fake_oauth_token_do_not_export" not in exported
+        assert "client_secrets.json" not in exported
+        assert "gmail_imap_creds.enc" not in exported
+        assert "gmail_token.enc" not in exported
+
     def test_preview_import_from_sst_replace_mode_reports_removed_sections(
         self,
         tmp_path: Path,

@@ -1,60 +1,54 @@
 # Defaults Guide
 
-Last updated: 2026-05-22
+Last updated: 2026-06-30
 
-Canonical guidance for defaults, reset behavior, and safe default changes.
+Canonical guidance for defaults, reset behavior, snapshots, and import safety.
 
-## 1. Source of Truth
-- Canonical defaults are defined in `core/settings/default_settings.py`.
-- `core/settings/defaults.py` provides normalized defaults and preserve-on-reset rules.
-- Generated snapshot artifacts are derived outputs, not independent sources of truth.
+## 1. Sources Of Truth
+- Canonical defaults: `core/settings/default_settings.py`.
+- Defaults API, normalization, and preserve-on-reset rules: `core/settings/defaults.py`.
+- Generated parity artifacts: `core/settings/defaults_snapshot.py`, `defaults_snapshot.json`, and `defaults_generated.py`.
+- Persistent settings store: `JsonSettingsStore` through `SettingsManager`.
 
-## 2. Settings Structure
-Defaults are organized under structured roots such as:
-- `display`
-- `input`
-- `queue`
-- `sources`
-- `timing`
-- `transitions`
-- `widgets`
-- `ui`
+Generated artifacts are derived outputs. Regenerate them with the project tool instead of hand-editing them.
 
-Key runtime reality:
-- Standard and MC builds use separate persisted profiles through the storage-path contract.
-- The `widgets` root is the canonical persistence surface for widget families, CUSTOM layout payloads, authored-layout restore routes, and visualizer/media routing state.
+## 2. Storage Shape
+- Standard profile settings file: `%APPDATA%/SRPSS/settings_v2.json`.
+- MC profile settings file: `%APPDATA%/SRPSS_MC/settings_v2.json`.
+- Storage-path ownership: `core/settings/json_store.py` and `core/settings/storage_paths.py`.
+- Structured roots include `widgets`, `transitions`, and `ui`; older flat/dotted keys remain accepted through `SettingsManager` APIs where needed.
 
-## 3. Reset/Preservation Contract
-- Reset logic preserves explicitly whitelisted user-specific keys (defined in `core/settings/defaults.py`).
-- Do not implement parallel preserve lists in other modules.
-- Settings-dialog mutations and runtime mutations should use the same canonical widgets-map helpers when changing `widgets`, even if one caller intentionally suppresses live change emission.
+Use public `SettingsManager` accessors for active settings paths. Do not reach into the backing store from UI code.
 
-## 4. Legacy Key Policy
-- Retired global preset keys (`preset`, `custom_preset_backup`) are not part of modern defaults.
-- Import/migration paths should tolerate old files but not re-emit retired schema keys.
+## 3. Reset And Import Preservation
+- Preserve-on-reset keys live in `core/settings/defaults.py`.
+- Reset/import flows must reuse the shared preservation and normalization contracts.
+- SST import/export is a transport layer over the current JSON settings architecture.
+- Root `widgets` writes, widgets-map helpers, and SST imports must share visualizer normalization/schema behavior.
 
-Additional current migration rules:
-- Persisted visualizer payloads are version-gated through the settings schema model and should not rely on perpetual legacy normalization.
-- Invalid visualizer `Custom + ALL` routing is not a valid steady-state and must be corrected or suppressed rather than preserved as a normal default-like case.
+## 4. Legacy Policy
+- Retired global preset keys such as `preset` and `custom_preset_backup` are migration inputs only.
+- Modern defaults and exports must not emit retired schema keys.
+- Persisted visualizer schema migration should be version-gated and converge to current payloads rather than rerunning old normalization forever.
 
 ## 5. Safe Default Change Workflow
-When changing a default:
-1. update canonical defaults,
-2. update model/load/save plumbing where applicable,
-3. update normalization/contract helpers if impacted,
-4. update affected UI load/save behavior,
-5. add/update tests for fresh + existing settings behavior,
-6. refresh related docs.
+When changing a user-facing default:
+- update `core/settings/default_settings.py`,
+- update typed models or normalization helpers where applicable,
+- update UI load/save behavior,
+- regenerate defaults snapshot artifacts,
+- run defaults parity tests,
+- add migration/import coverage if existing user settings are affected,
+- and refresh `Spec.md`, `Index.md`, or focused docs only when live contracts changed.
 
-## 6. Visualizer Default Changes
-For visualizer defaults, also update:
-- mode registry/contract assumptions,
-- preset repair/audit expectations,
-- curated preset payloads if schema/content requires it,
-- visualizer-focused tests and docs.
+## 6. Visualizer Defaults
+Visualizer default changes also need:
+- mode-registry and `_spotify_visualizer.py` grouped field-spec review,
+- curated preset expectations reviewed where authored payloads rely on old values,
+- visualizer preset repair/import/export coverage when schema shape changes,
+- and runtime-shaped validation when the change affects visible mode behavior.
 
-## 7. Widget Defaults vs CUSTOM Contracts
-- Base widget defaults remain canonical even when a widget family is using `Custom`.
-- CUSTOM move/resize is an overlay contract on top of authored defaults; it does not replace the authored defaults model.
-- If a saved settings control becomes derived/no-op while a widget family is in `Custom`, lock that control in the UI rather than inventing a second hidden defaults surface.
-- Authored-layout restore must route through the shared authored-route restore helper, not through ad hoc per-dialog or per-runtime reset logic.
+## 7. CUSTOM And Widget Defaults
+- Authored defaults remain the fallback even when a widget uses `Custom`.
+- Committed CUSTOM geometry overlays authored defaults; it is not a replacement defaults surface.
+- If a settings control becomes derived or locked under `Custom`, lock it in UI rather than inventing a hidden alternate default.

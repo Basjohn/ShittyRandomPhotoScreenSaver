@@ -1,7 +1,7 @@
 """Tests for settings dialog."""
 import inspect
 import json
-import sys
+from pathlib import Path
 
 import pytest
 from PySide6.QtWidgets import QApplication, QWidget
@@ -10,7 +10,6 @@ import ui.settings_dialog as settings_dialog_module
 from ui.settings_dialog import SettingsDialog, CustomTitleBar, TabButton, ResetDefaultsDialog
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
-from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
 
 
 @pytest.fixture
@@ -408,14 +407,16 @@ def test_settings_dialog_tab_button_clicks(qapp, settings_manager, animation_man
     assert dialog.widgets_tab_btn.isChecked() is True
 
 
-def test_about_tab_uses_replace_visualizers_button(qapp, settings_manager, animation_manager):
-    """About tab should expose the shipped-preset replacement action, not reset."""
+def test_about_tab_uses_visualizer_import_export_buttons(qapp, settings_manager, animation_manager):
+    """About tab should expose visualizer import/export actions."""
     dialog = SettingsDialog(settings_manager, animation_manager)
     dialog._switch_tab(dialog._tab_index_for_key("about"))
 
-    assert hasattr(dialog, "replace_visualizers_btn")
-    assert dialog.replace_visualizers_btn.text() == "Replace Visualizers"
-    assert dialog.reset_visualizers_btn is dialog.replace_visualizers_btn
+    assert hasattr(dialog, "export_visualizers_btn")
+    assert hasattr(dialog, "import_visualizers_btn")
+    assert dialog.export_visualizers_btn.text() == "Export Visualizers"
+    assert dialog.import_visualizers_btn.text() == "Import Visualizers"
+    assert not hasattr(dialog, "replace_visualizers_btn")
 
 
 def test_settings_dialog_does_not_expose_legacy_presets_tab(
@@ -428,79 +429,61 @@ def test_settings_dialog_does_not_expose_legacy_presets_tab(
     assert dialog._tab_index_for_key("presets") == -1
 
 
-def test_replace_visualizers_source_root_is_script_safe(qapp, settings_manager, animation_manager):
-    """Script-mode tests must never point the replacement flow at the repo tree."""
-    dialog = SettingsDialog(settings_manager, animation_manager)
-
-    root, source_kind = dialog._resolve_shipped_visualizer_source_root()
-    assert root is None
-    assert source_kind == "script"
-
-
-def test_replace_visualizers_source_root_prefers_packaged_tree_in_frozen_build(
+def test_open_logs_folder_uses_resolved_log_dir(
     qapp, settings_manager, animation_manager, tmp_path, monkeypatch
 ):
     dialog = SettingsDialog(settings_manager, animation_manager)
-    packaged_root = tmp_path / "packaged" / "visualizer_modes"
-    active_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
-    packaged_root.mkdir(parents=True)
-    active_root.mkdir(parents=True)
+    opened = []
+    log_dir = tmp_path / "runtime_logs"
 
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr("builtins.__compiled__", False, raising=False)
+    monkeypatch.setattr(settings_dialog_module, "get_log_dir", lambda: log_dir)
     monkeypatch.setattr(
-        "core.settings.visualizer_presets.get_packaged_visualizer_presets_dir",
-        lambda mode=None: packaged_root if mode is None else packaged_root / str(mode),
-    )
-    monkeypatch.setattr(
-        "core.settings.visualizer_presets.get_visualizer_presets_dir",
-        lambda mode=None: active_root if mode is None else active_root / str(mode),
+        settings_dialog_module.QDesktopServices,
+        "openUrl",
+        lambda url: opened.append(url) or True,
     )
 
-    root, source_kind = dialog._resolve_shipped_visualizer_source_root()
+    dialog._open_logs_folder()
 
-    assert root == packaged_root
-    assert source_kind == "packaged"
+    assert opened
+    assert Path(opened[-1].toLocalFile()).resolve() == log_dir.resolve()
+    assert log_dir.exists()
 
 
-def test_replace_visualizers_refreshes_target_manifest_with_reconciled_entries(
+def test_open_settings_folder_uses_public_settings_dir(
+    qapp, settings_manager, animation_manager, monkeypatch
+):
+    dialog = SettingsDialog(settings_manager, animation_manager)
+    opened = []
+
+    monkeypatch.setattr(
+        settings_dialog_module.QDesktopServices,
+        "openUrl",
+        lambda url: opened.append(url) or True,
+    )
+
+    dialog._open_settings_folder()
+
+    assert opened
+    assert Path(opened[-1].toLocalFile()).resolve() == settings_manager.get_settings_dir().resolve()
+
+
+def test_import_settings_reload_all_tabs_after_success(
     qapp, settings_manager, animation_manager, tmp_path, monkeypatch
 ):
     dialog = SettingsDialog(settings_manager, animation_manager)
-    source_root = tmp_path / "source" / "visualizer_modes"
-    target_root = tmp_path / "target" / "visualizer_modes"
-    source_mode = source_root / "blob"
-    source_mode.mkdir(parents=True)
-    (source_mode / "preset_1_alpha.json").write_text(
-        json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0}),
-        encoding="utf-8",
-    )
-    (source_mode / "preset_2_beta.json").write_text(
-        json.dumps({"name": "Preset 2 (Beta)", "preset_index": 1}),
-        encoding="utf-8",
-    )
-    (source_root.parent / "visualizer_modes_manifest.json").write_text(
-        '{"managed_curated_files":["blob/preset_1_alpha.json"]}',
-        encoding="utf-8",
-    )
+    snapshot = tmp_path / "settings.sst"
+    snapshot.write_text(json.dumps({"snapshot": {"ui": {"theme": "dark"}}}), encoding="utf-8")
+    reloaded = []
 
     monkeypatch.setattr(
-        dialog,
-        "_resolve_shipped_visualizer_source_root",
-        lambda: (source_root, "programdata"),
+        settings_dialog_module.QFileDialog,
+        "getOpenFileName",
+        lambda *args, **kwargs: (str(snapshot), ""),
     )
-    monkeypatch.setattr(
-        "core.settings.visualizer_presets.get_visualizer_presets_dir",
-        lambda mode=None: target_root if mode is None else target_root / str(mode),
-    )
-    monkeypatch.setattr("core.settings.visualizer_presets.reload_presets", lambda mode=None: None)
+    monkeypatch.setattr(dialog, "_reload_all_tab_settings", lambda: reloaded.append(True))
+    monkeypatch.setattr(settings_dialog_module.StyledPopup, "show_success", lambda *args, **kwargs: None)
 
-    written = dialog._replace_visualizer_presets_from_shipped()
+    dialog._on_import_settings_clicked()
 
-    assert written == 2
-    assert (target_root / "blob" / "preset_1_alpha.json").exists()
-    assert (target_root / "blob" / "preset_2_beta.json").exists()
-    assert load_curated_visualizer_preset_manifest(target_root) == {
-        "blob/preset_1_alpha.json",
-        "blob/preset_2_beta.json",
-    }
+    assert reloaded == [True]

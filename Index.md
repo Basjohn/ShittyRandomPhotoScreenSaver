@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-06-29
+Last updated: 2026-06-30
 
 Living map of the current SRPSS codebase.
 
@@ -23,19 +23,19 @@ Living map of the current SRPSS codebase.
 | `audits/GeoAudit/README.md` | Small entrypoint for the visualizer geometry audit/watchlist |
 | `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md` | Historical/watchlist Oscilloscope visual/reactivity audit for the resolved strobe/flicker, ghosting, waveform response, transient width authority, and shader glow contract drift |
 | `audits/OscilloscopeAudit/README.md` | Small entrypoint for the Oscilloscope audit |
-| `Docs/Regression_Notes.md` | Smaller resolved regression notes and follow-up hardening items |
-| `Docs/Defaults_Guide.md` | Defaults and reset contracts |
-| `Docs/Documentation_Maintenance.md` | Lightweight drift-check routine for canonical docs |
+| `Docs/Regression_Notes.md` | Lightweight resolved regression notes that do not need full historical narratives |
+| `Docs/Defaults_Guide.md` | Defaults, reset, SST transport, and generated snapshot contracts |
+| `Docs/Documentation_Maintenance.md` | Drift-check routine for canonical docs and active navigation |
 | `Docs/TestSuite.md` | Test strategy and execution guidance |
 | `Docs/Logging_Guide.md` | CLI-first logging flags, sidecar files, and correlation workflow |
 | `Docs/Harness_Index.md` | Compact reference for recurring investigation harnesses and probes, including the focused current-good visualizer reactivity lock |
 | `Docs/MEDIAKEYDEBUG.md` | Focus/media-key investigation notes and U-05 harness evidence |
 | `Docs/00_PROJECT_OVERVIEW.md` | High-level orientation to the documentation set and main runtime areas |
-| `Docs/Custom_Style_Implementation.md` | Styling/reference guardrails for shared settings-dialog and UI chrome work |
+| `Docs/Custom_Style_Implementation.md` | Shared settings-dialog/runtime UI styling and flicker/focus safety guardrails |
 | `Docs/10_WIDGET_GUIDELINES.md` | Canonical A-to-Z widget creation guide: ownership, descriptors, settings, runtime integration, `Custom`, logging, and regression-bar expectations |
-| `Docs/Visualizer_Reference.md` | Visualizer architecture and contracts |
-| `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer changes |
-| `Docs/Transition_Change_Checklist.md` | Required sweep for adding or changing transitions |
+| `Docs/Visualizer_Reference.md` | Focused visualizer identity, settings, preset, runtime, and CUSTOM geometry reference |
+| `Docs/Visualizer_Change_Checklist.md` | Required sweep for visualizer settings, presets, runtime, and renderer changes |
+| `Docs/Transition_Change_Checklist.md` | Required sweep for transition registry, runtime, warmup, and UI changes |
 
 ## Entry Points
 
@@ -87,6 +87,7 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, canonical default-mode fallback, and key-prefix ownership |
 | Preset manager | `core/settings/visualizer_presets.py` | Curated/custom loading, canonical activation payload resolution, and preset apply |
+| Preset import/export | `core/settings/visualizer_preset_transfer.py` | Zip/folder curated-tree replacement and loose JSON preset import/export transfer contract |
 | Preset repair tool | `tools/visualizer_preset_repair.py` | Audit/repair/reindex curated preset payloads |
 | Bubble parity harness | `tools/bubble_parity_harness.py` | Historical comparison harness for Bubble curated presets against `9d4925e` / `510520e`, used when Deep Sea regressions are too severe for present-day proxy bars to be trusted |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist, and active CUSTOM geometry now rejects foreign outer-rect writes once committed rect authority exists |

@@ -222,13 +222,19 @@ def build_about_tab(dialog: "SettingsDialog") -> QWidget:
     dialog.reset_defaults_btn.clicked.connect(dialog._on_reset_to_defaults_clicked)
     button_row.addWidget(dialog.reset_defaults_btn)
 
-    dialog.replace_visualizers_btn = QPushButton("Replace Visualizers")
-    dialog.replace_visualizers_btn.setObjectName("resetVisualizersButton")
-    dialog.replace_visualizers_btn.setFixedHeight(24)
-    dialog.replace_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
-    dialog.replace_visualizers_btn.clicked.connect(dialog._on_replace_visualizers_clicked)
-    dialog.reset_visualizers_btn = dialog.replace_visualizers_btn
-    button_row.addWidget(dialog.replace_visualizers_btn)
+    dialog.export_visualizers_btn = QPushButton("Export Visualizers")
+    dialog.export_visualizers_btn.setObjectName("exportVisualizersButton")
+    dialog.export_visualizers_btn.setFixedHeight(24)
+    dialog.export_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.export_visualizers_btn.clicked.connect(dialog._on_export_visualizers_clicked)
+    button_row.addWidget(dialog.export_visualizers_btn)
+
+    dialog.import_visualizers_btn = QPushButton("Import Visualizers")
+    dialog.import_visualizers_btn.setObjectName("importVisualizersButton")
+    dialog.import_visualizers_btn.setFixedHeight(24)
+    dialog.import_visualizers_btn.setStyleSheet("font-size: 11px; padding: 4px 10px;")
+    dialog.import_visualizers_btn.clicked.connect(dialog._show_import_visualizers_menu)
+    button_row.addWidget(dialog.import_visualizers_btn)
 
     button_row.addStretch()
 

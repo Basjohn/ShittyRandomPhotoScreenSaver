@@ -58,18 +58,18 @@ This is the long-term anti-regression record for the project, not an active task
 ## Recent Entries
 
 <a id="R-29"></a>
-### [R-29] 2026-06-30 — Reddit Periodic Refresh Due Reset On Settings/Runtime Rebuild (Resolved In Code, Runtime Validation Pending)
+### [R-29] 2026-06-30 — Reddit Periodic Refresh Due Reset And Startup Secondary Suppression (Resolved In Code, Runtime Validation Pending)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
 - [x] AWAITING VALIDATION
 - [ ] SOLVED
 
-- **Observed failure pattern:** long runtime/settings-heavy sessions could show Reddit cache timestamps staying hours old even though the intended automatic update cadence is gentle (`15min`, with `reddit2` staggered). Latest logs showed `reddit_posts.json` updated at startup while `reddit2_posts.json` remained stale from hours earlier.
-- **Root cause:** Reddit's shared startup-attempt gate correctly prevented two immediate startup fetches, but the periodic timer was tied to each transient widget instance. Settings/runtime rebuilds repeatedly recreated Reddit widgets and armed a fresh first tick, so the `15min` horizon could be pushed forward indefinitely before a periodic callback fired.
-- **Fix:** `RedditWidget` now keeps a per-cache-key due-time horizon. Startup fetches mark the next attempt `15min` out, stale startup-skipped widgets get their staggered due attempt, and rebuilt widgets reattach to the preserved due timestamp instead of restarting the full cadence.
-- **Bars:** `tests/test_reddit_widget.py` now covers stale primary due firing, stale secondary staggered due, and preserved due surviving widget rebuild.
-- **Runtime validation target:** future `--cache` logs should show `Periodic refresh timer armed ... due_delay_s=... due_reason=...`, then `[CACHE][REDDIT] Periodic refresh fired` without requiring restart/manual refresh. Provider/API blocks are a separate track if the scheduler fires but fetches fail.
+- **Observed failure pattern:** long runtime/settings-heavy sessions could show Reddit cache timestamps staying hours old even though the intended automatic update cadence is gentle (`15min`, with `reddit2` staggered). Later `main_mc` evidence showed `reddit` firing while `reddit2` was left waiting on a preserved long due despite also being stale.
+- **Root cause:** Reddit's periodic timer was tied to each transient widget instance, so settings/runtime rebuilds could keep pushing first ticks forward. The first code fix preserved due timestamps, but still treated a recent shared startup attempt as a broad stale-secondary suppression instead of a short paced queue behind the first stale startup request.
+- **Fix:** `RedditWidget` now keeps a per-cache-key due-time horizon with reason logging. Fresh caches skip startup network. Stale caches are eligible; the first stale cache may fire immediately, while a second stale startup candidate is queued behind it with a short paced due instead of waiting for the normal stagger/full cadence. Rebuilt widgets reattach to the preserved due timestamp and shorten it if a stricter paced startup due is required.
+- **Bars:** `tests/test_reddit_widget.py` covers fresh-cache startup skip, stale primary due firing, stale secondary periodic stagger, stale secondary startup pacing, and preserved due surviving widget rebuild.
+- **Runtime validation target:** future `--cache` logs should show fresh caches skipping with `cache_fresh`, stale paired startup caches producing `Startup stale refresh paced ... delay_s=...`, and both `reddit`/`reddit2` eventually logging `[CACHE][REDDIT] Periodic refresh fired`. Provider/API blocks are a separate track if the scheduler fires but fetches fail.
 
 <a id="R-28"></a>
 ### [R-28] 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)

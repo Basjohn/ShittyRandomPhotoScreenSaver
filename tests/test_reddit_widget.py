@@ -17,6 +17,11 @@ from widgets import reddit_widget as reddit_module
 from widgets.reddit_widget import RedditWidget
 
 
+def _clear_reddit_due_state() -> None:
+    RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+    RedditWidget._periodic_due_reason_by_cache_key.clear()  # type: ignore[attr-defined]
+
+
 class _FakeRecurringTimer:
     def __init__(self, interval_ms: int) -> None:
         self._interval_ms = int(interval_ms)
@@ -447,7 +452,7 @@ def test_reddit_startup_refresh_uses_shared_service_gate_before_rate_limiter(qt_
 
 
 @pytest.mark.qt
-def test_reddit_startup_refresh_skips_when_recent_startup_attempt_exists(qt_app, qtbot, tmp_path):  # noqa: ARG001
+def test_reddit_startup_refresh_skips_when_cache_is_fresh(qt_app, qtbot, tmp_path):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     cache_path = tmp_path / "reddit_cache.json"
@@ -459,11 +464,37 @@ def test_reddit_startup_refresh_skips_when_recent_startup_attempt_exists(qt_app,
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
         widget._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
 
+        decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
+
+        assert decision.run is False
+        assert decision.reason == "cache_fresh"
+        assert decision.age is not None
+        assert decision.age < timedelta(minutes=1)
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_startup_refresh_paces_stale_cache_when_recent_attempt_exists(qt_app, qtbot, tmp_path):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_cache.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    attempt_path = tmp_path / "reddit_attempt.touch"
+    try:
+        cache_path.write_text("[]", encoding="utf-8")
+        old_ts = time.time() - (2 * 3600)
+        import os
+        os.utime(cache_path, (old_ts, old_ts))
+        widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
+        widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        widget._get_startup_attempt_file_path = lambda: Path(attempt_path)  # type: ignore[method-assign]
+
         widget._touch_startup_attempt_timestamp_now()  # type: ignore[attr-defined]
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
         assert decision.run is False
-        assert decision.reason == "startup_attempt_cooldown"
+        assert decision.reason == "startup_attempt_paced_due"
         assert decision.age is not None
         assert decision.age < timedelta(minutes=1)
     finally:
@@ -505,7 +536,7 @@ def test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset
     monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
 
     try:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         widget._cache_key = "reddit"  # type: ignore[attr-defined]
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
         calls = []
@@ -519,7 +550,7 @@ def test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset
         assert starter is not None
         assert 899_000 <= starter.interval() <= 900_000
     finally:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -532,7 +563,7 @@ def test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence(qt_app, 
     monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
 
     try:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         widget._cache_key = "reddit2"  # type: ignore[attr-defined]
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
         widget._schedule_timer()  # type: ignore[attr-defined]
@@ -543,7 +574,7 @@ def test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence(qt_app, 
         assert starter.isActive() is True
         assert starter.interval() == int(7.5 * 60 * 1000)
     finally:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -553,7 +584,7 @@ def test_reddit_periodic_due_survives_widget_rebuild(qt_app, qtbot, monkeypatch)
     qtbot.addWidget(widget)
     widget.set_thread_manager(_FakeThreadManager())
     try:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         due_mono = time.monotonic() + 123.0
         RedditWidget._periodic_due_by_cache_key["reddit2"] = due_mono  # type: ignore[attr-defined]
         widget._cache_key = "reddit2"  # type: ignore[attr-defined]
@@ -566,7 +597,7 @@ def test_reddit_periodic_due_survives_widget_rebuild(qt_app, qtbot, monkeypatch)
         assert starter is not None
         assert 121_000 <= starter.interval() <= 123_000
     finally:
-        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -588,7 +619,7 @@ def test_reddit_delayed_periodic_refresh_start_is_cancelled_on_cleanup(qt_app, q
 
 
 @pytest.mark.qt
-def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+def test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
     attempt_path = tmp_path / "reddit_attempt.touch"
     gate_path = tmp_path / "reddit_gate.touch"
     cache_path_1 = tmp_path / "reddit_posts.json"
@@ -600,10 +631,19 @@ def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app,
     qtbot.addWidget(widget2)
 
     try:
+        _clear_reddit_due_state()
+        monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
         widget1.set_thread_manager(object())
         widget2.set_thread_manager(object())
         widget1._cache_key = "reddit"  # type: ignore[attr-defined]
         widget2._cache_key = "reddit2"  # type: ignore[attr-defined]
+
+        old_ts = time.time() - (2 * 3600)
+        cache_path_1.write_text("[]", encoding="utf-8")
+        cache_path_2.write_text("[]", encoding="utf-8")
+        import os
+        os.utime(cache_path_1, (old_ts, old_ts))
+        os.utime(cache_path_2, (old_ts, old_ts))
 
         widget1._get_cache_file_path = lambda: Path(cache_path_1)  # type: ignore[method-assign]
         widget2._get_cache_file_path = lambda: Path(cache_path_2)  # type: ignore[method-assign]
@@ -617,7 +657,6 @@ def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app,
         monkeypatch.setattr(widget1, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget2, "_load_cached_posts", lambda: [])
         monkeypatch.setattr(widget1, "_schedule_timer", lambda: calls1.append("timer"))
-        monkeypatch.setattr(widget2, "_schedule_timer", lambda: calls2.append("timer"))
         monkeypatch.setattr(widget1, "_fetch_feed", lambda **kwargs: calls1.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
         monkeypatch.setattr(widget2, "_fetch_feed", lambda **kwargs: calls2.append(("fetch", kwargs)) or True)  # type: ignore[method-assign]
 
@@ -625,9 +664,14 @@ def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app,
         widget2._activate_impl()
 
         assert calls1 == [("fetch", {}), "timer"]
-        assert calls2 == ["timer"]
-        assert widget2._get_startup_refresh_decision().reason == "startup_attempt_cooldown"  # type: ignore[attr-defined]
+        assert calls2 == []
+        assert widget2._get_startup_refresh_decision().reason == "startup_attempt_paced_due"  # type: ignore[attr-defined]
+        starter = widget2._update_timer_start_timer  # type: ignore[attr-defined]
+        assert starter is not None
+        assert starter.isActive() is True
+        assert 29_000 <= starter.interval() <= 30_000
     finally:
+        _clear_reddit_due_state()
         widget1.cleanup()
         widget2.cleanup()
 
@@ -773,7 +817,7 @@ def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: 
 
 
 @pytest.mark.qt
-def test_reddit_activate_runs_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_activate_skips_startup_fetch_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     try:
@@ -788,7 +832,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_fresh(qt_app, qtbot, m
 
         widget._activate_impl()
 
-        assert calls == [("fetch", {}), "timer"]
+        assert calls == ["timer"]
     finally:
         widget.cleanup()
 
@@ -832,6 +876,7 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
         ]
         calls = []
         monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(cached_posts))
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(days=3))
         monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_get_startup_attempt_timestamp", lambda: None)
         monkeypatch.setattr(widget, "_schedule_timer", lambda: calls.append("timer"))
