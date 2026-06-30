@@ -1419,6 +1419,59 @@ def test_reconcile_remote_custom_visualizer_repairs_single_foreign_rect_when_act
     assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
 
 
+def test_visualizer_custom_route_recovers_from_single_live_foreign_rect_instead_of_moving_it(monkeypatch, caplog):
+    import logging
+
+    from rendering import spotify_widget_creators as creators
+
+    class _Display:
+        def __init__(self, screen_index, signature):
+            self.screen_index = screen_index
+            self._screen = SimpleNamespace(signature=signature)
+            self._exiting = False
+
+    display_0 = _Display(0, "screen:display-0")
+    display_1 = _Display(1, "screen:display-1")
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [display_0, display_1]
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:display-1": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                }
+            },
+        },
+    }
+    monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(creators, "_resolve_parent_screen", lambda parent: getattr(parent, "_screen", parent))
+    monkeypatch.setattr(
+        creators,
+        "resolve_screen_layout_signature",
+        lambda _custom_layout_map, screen: getattr(screen, "signature", None),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        recovered = creators._recover_visualizer_custom_monitor_from_single_live_saved_rect(
+            SimpleNamespace(_settings_manager=None),
+            widgets_config,
+            effective_monitor_sel="1",
+        )
+
+    assert recovered == "2"
+    assert widgets_config["spotify_visualizer"]["monitor"] == "2"
+    assert "screen:display-1" in widgets_config["custom_layout"]["displays"]
+    assert "screen:display-0" not in widgets_config["custom_layout"]["displays"]
+    assert "Recovered spotify_visualizer CUSTOM route from sole live saved rect" in caplog.text
+
+
 def test_visualizer_custom_foreign_bucket_repair_rejects_ambiguous_rects(monkeypatch, caplog):
     import logging
 
@@ -1498,6 +1551,51 @@ def test_visualizer_custom_foreign_bucket_repair_rejects_parent_monitor_mismatch
 
     assert repaired is False
     assert "screen:old" in widgets_config["custom_layout"]["displays"]
+
+
+def test_visualizer_custom_foreign_bucket_repair_refuses_active_source_bucket(monkeypatch, caplog):
+    import logging
+
+    from rendering import spotify_widget_creators as creators
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "1"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:display-1": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                },
+            },
+        },
+    }
+    monkeypatch.setattr(creators, "_resolve_parent_screen", lambda _parent: object())
+    monkeypatch.setattr(
+        creators,
+        "get_screen_layout_entries_for_screen",
+        lambda custom_layout_map, _screen: ("screen:display-0", custom_layout_map["displays"].get("screen:display-0", {})),
+    )
+    monkeypatch.setattr(
+        creators,
+        "_live_visualizer_bucket_monitor_map",
+        lambda _custom_layout_map: {"screen:display-1": "2"},
+    )
+    mgr = SimpleNamespace(_parent=SimpleNamespace(screen_index=0), _settings_manager=None)
+
+    with caplog.at_level(logging.WARNING):
+        repaired = creators._repair_single_foreign_visualizer_custom_rect_for_startup(
+            mgr,
+            widgets_config,
+            screen_index=0,
+            effective_monitor_sel="1",
+        )
+
+    assert repaired is False
+    assert "screen:display-1" in widgets_config["custom_layout"]["displays"]
+    assert "screen:display-0" not in widgets_config["custom_layout"]["displays"]
+    assert "Refused spotify_visualizer CUSTOM rect bucket repair" in caplog.text
 
 
 def test_display_setup_does_not_run_second_lifecycle_initialize_pass():

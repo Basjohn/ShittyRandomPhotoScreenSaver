@@ -49,16 +49,28 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] If fresh `--set` evidence still shows Visualizers section stalls, use the new per-mode timing to decide whether mode-panel lazy construction is worth the complexity; current logs still show explicit Visualizers builds at about `1.1-1.38s`, while later settings opens not visiting Visualizers are much cheaper at about `325-334ms`.
 - [ ] Add or extend a harness only when it can fail on measurable churn, stale background hydration, or deleted-wrapper callbacks.
 
-### 4. Reddit Periodic Cadence
+### 4. Reddit Candidate Cache And Refresh Cadence
 
-- [x] Root-cause the stale-cache shape: settings/runtime rebuilds recreated Reddit widgets and restarted instance-local first ticks; additionally, the shared startup-attempt gate could suppress a stale secondary cache instead of pacing it behind the first stale startup attempt.
-- [x] Replace instance-local first-tick authority with a per-cache-key due-time scheduler: fresh caches skip startup network, stale primary caches fire, stale secondary caches are queued behind the first startup attempt, and rebuilds reattach to the preserved due horizon instead of restarting it.
-- [x] Add Reddit bars for fresh-cache startup skip, stale primary due firing, stale secondary periodic stagger, stale secondary startup pacing, and preserved due surviving widget rebuild.
-- [ ] Runtime-check a compiled/long run for the new log shape: fresh caches log `Startup refresh skipped (cache_fresh, ...)`; stale paired caches log one immediate startup/periodic attempt plus `Startup stale refresh paced ... delay_s=...`; both cache keys later log `[CACHE][REDDIT] Periodic refresh fired`.
-- [ ] Treat any Reddit `403`, `429`, or blocked cooldown during normal automatic cadence as a pacing/provider failure to investigate, not an accepted outcome.
-- [ ] Keep Reddit provider/API/network behavior separate from scheduler cadence; if fetches fire on schedule but return blocked/empty results, reopen the provider track without weakening the pacing contract.
+- [x] Preserve the latest Reddit/visualizer/perf evidence at `.tmp/reddit_visualizer_route_perf_evidence_20260630_120708`.
+- [x] Retire the old timed cache-growth reveal: Reddit now fetches/caches the fixed `25`-post candidate window and immediately displays the configured visible count from that candidate pool.
+- [x] Keep automatic refresh conservative and reliable: per-cache-key periodic due survives widget rebuilds, stale startup caches pace behind the shared startup gate, and ordinary automatic cadence remains roughly `15min` per Reddit widget.
+- [x] Make the manual refresh spiral useful without turning it into hammering: manual refresh uses a shorter `3min` gate for fresh-cache, periodic-due, and blocked-cooldown skip decisions, while automatic refresh still respects the full sparse cadence.
+- [x] Prevent blocked fetches from lying about cache freshness: `403`/`429` updates only the Reddit service gate, not the content JSON timestamp.
+- [x] Add a designed HTML provider fallback: selected provider remains authoritative first, but failed/empty provider results try `www.reddit.com/r/<subreddit>/` and then `old.reddit.com/r/<subreddit>/` through the same stable persona and request-slot seams before the fetch is considered failed.
+- [x] Add/refresh Reddit bars for retired growth, candidate-window fetch/display split, preserved per-cache-key due, blocked cooldown scheduling, manual `3min` retry windows, manual blocked-cooldown bypass after the short window, HTML provider parsing/fallback, and padded hour/day age labels.
+- [ ] Runtime-watch the next `--cache` run: both `reddit` and `reddit2` should either log a real periodic/startup fetch when stale or a clear skip reason; manual spiral skips should report the shorter window, not a full `15min` wait.
+- [ ] Treat any future `403`/`429` after RSS/HTML fallback as a pacing/provider failure to investigate; the cooldown gate is a loud safety net, not a success state.
 
-### 5. Runtime Health Audit Follow-Through
+### 5. Visualizer CUSTOM Route Authority
+
+- [x] Root-cause the latest wrong-display/top-left family as stale scalar route authority racing committed CUSTOM rect authority during settings/runtime recreate.
+- [x] Recover a missing/stale CUSTOM visualizer monitor from a sole live saved visualizer rect before owner selection, rather than moving that rect to the stale requested monitor.
+- [x] Refuse startup bucket repair when the sole saved visualizer rect belongs to another active display; allow only stale inactive signature repair for same-monitor display-signature drift.
+- [x] Add route/rect bars for live-foreign refusal, stale-signature repair, and Custom+ALL route recovery from exact saved layout evidence.
+- [ ] Runtime-watch next `--geo` / `--life`: no settings-exit visualizer destruction, no wrong-display recreate, and no bucket repair moving a rect away from an active display.
+- [ ] If recovery still fires, treat the loud fallback as evidence of an upstream route/save owner bug and root-cause why scalar route and committed rect diverged.
+
+### 6. Runtime Health Audit Follow-Through
 
 - [ ] Continue executing the project-wide runtime health audit in `audits/ArchitectureAudit/Project_Health_Audit.md`, but keep `Current_Plan.md` limited to active next steps.
 - [ ] Keep compositor/transition fallbacks clean: success must name the real shader/deferred path; failure must be loud, not a silent substitute.
@@ -79,7 +91,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Keep Reddit as its own branded widget and shared runtime owner; do not replace it with Feeds.
   - [ ] Extract reusable list-feed seams from Reddit without changing Reddit UX first.
   - [ ] Design Feeds as an additional widget family with isolated per-spawn source/cache/settings contracts.
-  - [ ] Prefer official/feed-native sources and avoid HTML scraping/session automation.
+  - [ ] Prefer official/feed-native sources and avoid HTML scraping/session automation by default; Reddit HTML is the explicit paced exception because Reddit's structured public endpoints are fragile.
 - Dynamic Volume Floor follow-up stays deferred.
 - Startup update-policy observability stays deferred behind current runtime-health priorities.
 - Secure-desktop long-runtime exit reliability stays deferred.

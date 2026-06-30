@@ -45,7 +45,6 @@ from core.reddit_post_provider import (
 from core.settings.widget_capacity_policy import (
     LIST_WIDGET_MAX_CAPACITY,
     LIST_WIDGET_MIN_CAPACITY,
-    build_progressive_capacity_stages,
     clamp_list_capacity,
 )
 from core.threading.manager import ThreadManager
@@ -107,11 +106,13 @@ class RedditWidget(BaseOverlayWidget):
     # Override defaults for reddit widget
     DEFAULT_FONT_SIZE = 18
     REFRESH_INTERVAL = timedelta(minutes=15)
+    MANUAL_REFRESH_INTERVAL = timedelta(minutes=3)
     SECONDARY_WIDGET_STAGGER = timedelta(minutes=7, seconds=30)
     STARTUP_STALE_PACE = timedelta(seconds=30)
     REFRESH_TIMER_JITTER_MS = 2000
     _periodic_due_by_cache_key: Dict[str, float] = {}
     _periodic_due_reason_by_cache_key: Dict[str, str] = {}
+    _manual_due_by_cache_key: Dict[str, float] = {}
 
     def __init__(
         self,
@@ -141,17 +142,10 @@ class RedditWidget(BaseOverlayWidget):
         self._update_timer_handle: Optional[OverlayTimerHandle] = None
         self._update_timer_start_timer: Optional[QTimer] = None
 
-        # Progressive loading: start with fewer posts, expand over time using cache.
-        # Stages follow the shared list-capacity policy: 5 -> 10 -> target.
-        # Growth is time-based, fetches just refresh the cache
-        self._progressive_stage: int = 0  # Always start at stage 0
-        self._progressive_stages: List[int] = build_progressive_capacity_stages(self._configured_capacity)
-        self._all_fetched_posts: List[RedditPost] = []  # Store all posts for progressive reveal
-        
-        # Time-based stage advancement (growth timer)
-        # Match refresh interval: show 5 immediately, 10 at +2min, target at +4min
-        self._growth_timer: Optional[QTimer] = None
-        self._growth_stage_delays_minutes: List[int] = [0, 2, 4]  # Stage 0: immediate, Stage 1: +2min, Stage 2: +4min
+        # Cache a full candidate window while rendering only the configured
+        # visible count. The old timed growth reveal is retired; with a 25-post
+        # candidate fetch it added delay without protecting Reddit.
+        self._all_fetched_posts: List[RedditPost] = []
 
         # Cached posts and click hit-rects
         self._posts: List[RedditPost] = []
@@ -257,41 +251,16 @@ class RedditWidget(BaseOverlayWidget):
         if not self._ensure_thread_manager("RedditWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
         
-        # Setup progressive loading stages based on target limit
-        self._setup_progressive_stages()
-        
-        # Load cached posts and determine appropriate starting stage
         cached_posts = self._load_cached_posts()
         if cached_posts:
-            logger.info("[REDDIT] Loaded %d cached posts (cache_key=%s)", 
-                       len(cached_posts), self._cache_key)
+            logger.info(
+                "[REDDIT] Loaded %d cached candidate posts (cache_key=%s, visible_limit=%d)",
+                len(cached_posts),
+                self._cache_key,
+                self._configured_capacity,
+            )
             self._all_fetched_posts = cached_posts
-            
-            # Determine starting stage based on available cached posts
-            num_cached = len(cached_posts)
-            stage1_limit = self._progressive_stages[1] if len(self._progressive_stages) > 1 else 10
-            if num_cached >= self._configured_capacity and len(self._progressive_stages) > 2:
-                self._progressive_stage = 2
-                logger.info("[REDDIT] Starting at stage 2 (%d posts) - sufficient cache available", 
-                           self._configured_capacity)
-            elif num_cached >= stage1_limit and len(self._progressive_stages) > 1:
-                self._progressive_stage = 1
-                logger.info("[REDDIT] Starting at stage 1 (%d posts) - sufficient cache available", 
-                           stage1_limit)
-            else:
-                self._progressive_stage = 0
-                logger.info(
-                    "[REDDIT] Starting at stage 0 (%d posts) - cache has %d posts",
-                    self._progressive_stages[0],
-                    num_cached,
-                )
-            
-            # Display initial stage from cache
-            self._display_progressive_posts(fade=False)
-            
-            # Start growth timer if not at final stage
-            if self._progressive_stage < len(self._progressive_stages) - 1:
-                self._start_growth_timer()
+            self._display_configured_posts(fade=False)
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
 
@@ -347,46 +316,16 @@ class RedditWidget(BaseOverlayWidget):
         # CRITICAL: Hide widget immediately - it will be shown by fade sync
         self.hide()
         
-        # Setup progressive loading stages based on target limit
-        self._setup_progressive_stages()
-        
-        # Load cached posts and determine appropriate starting stage
         cached_posts = self._load_cached_posts()
         if cached_posts:
-            logger.info("[REDDIT] Loaded %d cached posts (cache_key=%s)", 
-                       len(cached_posts), self._cache_key)
-            # Store ALL cached posts to enable growth from cache over time
+            logger.info(
+                "[REDDIT] Loaded %d cached candidate posts (cache_key=%s, visible_limit=%d)",
+                len(cached_posts),
+                self._cache_key,
+                self._configured_capacity,
+            )
             self._all_fetched_posts = cached_posts
-            
-            # Determine starting stage based on available cached posts
-            # Stage 0 = minimum posts, Stage 1 = progressive_stages[1], Stage 2 = target posts
-            num_cached = len(cached_posts)
-            stage1_limit = self._progressive_stages[1] if len(self._progressive_stages) > 1 else 10
-            if num_cached >= self._configured_capacity and len(self._progressive_stages) > 2:
-                # Have enough for final stage (target posts)
-                self._progressive_stage = 2
-                logger.info("[REDDIT] Starting at stage 2 (%d posts) - sufficient cache available", 
-                           self._configured_capacity)
-            elif num_cached >= stage1_limit and len(self._progressive_stages) > 1:
-                # Have enough for stage 1 (progressive_stages[1] posts)
-                self._progressive_stage = 1
-                logger.info("[REDDIT] Starting at stage 1 (%d posts) - sufficient cache available", 
-                           stage1_limit)
-            else:
-                # Start at stage 0 (minimum posts)
-                self._progressive_stage = 0
-                logger.info(
-                    "[REDDIT] Starting at stage 0 (%d posts) - cache has %d posts",
-                    self._progressive_stages[0],
-                    num_cached,
-                )
-            
-            # Display initial stage from cache
-            self._display_progressive_posts(fade=False)
-            
-            # Start growth timer if not at final stage
-            if self._progressive_stage < len(self._progressive_stages) - 1:
-                self._start_growth_timer()
+            self._display_configured_posts(fade=False)
         else:
             logger.info("[REDDIT] No cached posts found for %s (cache_key=%s)", self._subreddit, self._cache_key)
 
@@ -411,13 +350,6 @@ class RedditWidget(BaseOverlayWidget):
             clear_attr=True,
         )
 
-        if self._growth_timer is not None:
-            try:
-                self._growth_timer.stop()
-                self._growth_timer.deleteLater()
-            except Exception as e:
-                logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._growth_timer = None
         self._reset_deferred_runtime_state(delete_qtimers=False)
 
         self._enabled = False
@@ -539,10 +471,11 @@ class RedditWidget(BaseOverlayWidget):
             return
         self._configured_capacity = next_capacity
         self._effective_visible_capacity = next_capacity
-        self._setup_progressive_stages()
         self._update_card_height_from_limit()
-        if self._enabled and self._posts:
-            # Trim existing posts to the new visible limit
+        if self._enabled and self._all_fetched_posts:
+            self._display_configured_posts(fade=False)
+            self.update()
+        elif self._enabled and self._posts:
             self._posts = self._posts[: self._configured_capacity]
             self._effective_visible_capacity = len(self._posts) or self._configured_capacity
             self._invalidate_paint_cache()
@@ -581,55 +514,27 @@ class RedditWidget(BaseOverlayWidget):
         self._header_logo_margin = self._header_logo_size
 
     # ------------------------------------------------------------------
-    # Progressive Loading
+    # Candidate cache display
     # ------------------------------------------------------------------
 
-    def _setup_progressive_stages(self) -> None:
-        """Setup progressive loading stages based on target limit.
-        
-        Progressive loading allows widgets to display partial data immediately
-        while respecting rate limits. Stages: 5 -> 10 -> target (if > 10).
-        """
-        self._progressive_stages = build_progressive_capacity_stages(self._configured_capacity)
-        self._progressive_stage = 0
-        logger.debug("[REDDIT] Progressive stages setup: %s (target=%d)", 
-                    self._progressive_stages, self._configured_capacity)
+    def _display_configured_posts(self, fade: bool = False) -> None:
+        """Display the configured visible count from the cached candidate window."""
 
-    def _get_stage_for_post_count(self, post_count: int) -> int:
-        """Get the appropriate stage index for a given post count."""
-        for i, stage_limit in enumerate(self._progressive_stages):
-            if post_count <= stage_limit:
-                return i
-        return len(self._progressive_stages) - 1
-
-    def _get_current_stage_limit(self) -> int:
-        """Get the post limit for the current progressive stage."""
-        if self._progressive_stage < len(self._progressive_stages):
-            return self._progressive_stages[self._progressive_stage]
-        return self._configured_capacity
-
-    def _display_progressive_posts(self, fade: bool = False) -> None:
-        """Display posts up to current progressive stage limit.
-        
-        Args:
-            fade: If True, fade in the widget after size change (for stage transitions)
-        """
-        stage_limit = self._get_current_stage_limit()
-        posts_to_show = self._all_fetched_posts[:stage_limit]
-        
+        visible_limit = max(LIST_WIDGET_MIN_CAPACITY, self._configured_capacity)
+        posts_to_show = self._all_fetched_posts[:visible_limit]
         if not posts_to_show:
             return
-        
-        # Update posts and trigger fade sync or fade animation
-        self._effective_visible_capacity = max(
-            LIST_WIDGET_MIN_CAPACITY,
-            min(stage_limit, self._configured_capacity),
-        )
+
+        self._effective_visible_capacity = min(visible_limit, LIST_WIDGET_MAX_CAPACITY)
         self._update_posts_internal(posts_to_show, fade=fade)
-        
-        logger.debug("[REDDIT] Progressive display: stage=%d, showing %d/%d posts (target=%d, fade=%s)",
-                    self._progressive_stage, len(posts_to_show), 
-                    len(self._all_fetched_posts), self._configured_capacity, fade)
+
+        logger.debug(
+            "[REDDIT] Candidate display: showing %d/%d cached posts (visible_limit=%d, fade=%s)",
+            len(posts_to_show),
+            len(self._all_fetched_posts),
+            self._configured_capacity,
+            fade,
+        )
 
     def _prepare_posts_for_display(self, posts: List[RedditPost]) -> None:
         """Prepare posts data without showing widget (for startup with cached data)."""
@@ -647,12 +552,11 @@ class RedditWidget(BaseOverlayWidget):
         except Exception as e:
             logger.debug("[REDDIT] Exception suppressed: %s", e)
         
-        stage_limit = self._get_current_stage_limit()
         self._effective_visible_capacity = max(
             LIST_WIDGET_MIN_CAPACITY,
-            min(stage_limit, self._configured_capacity),
+            min(self._configured_capacity, LIST_WIDGET_MAX_CAPACITY),
         )
-        self._posts = posts[:stage_limit]
+        self._posts = posts[: self._effective_visible_capacity]
         self._row_hit_rects.clear()
         self._invalidate_paint_cache()
         
@@ -684,63 +588,6 @@ class RedditWidget(BaseOverlayWidget):
                 _starter()
         else:
             _starter()
-
-    def _advance_progressive_stage(self) -> bool:
-        """Advance to next progressive stage if possible.
-        
-        Returns True if advanced, False if already at final stage.
-        """
-        if self._progressive_stage >= len(self._progressive_stages) - 1:
-            return False
-        
-        self._progressive_stage += 1
-        # Fade in when advancing stages to avoid flash
-        self._display_progressive_posts(fade=True)
-        return True
-
-    def _start_growth_timer(self) -> None:
-        """Start timer for time-based stage advancement.
-        
-        Growth schedule:
-        - Stage 1 (10 posts): After 5 minutes
-        - Stage 2 (target posts): After 10 minutes
-        """
-        if self._growth_timer is not None:
-            return
-        
-        # Don't schedule if already at final stage or no room to grow
-        if self._progressive_stage >= len(self._progressive_stages) - 1:
-            logger.debug("[REDDIT] Already at final stage %d, no growth timer needed", 
-                        self._progressive_stage)
-            return
-        
-        next_stage = self._progressive_stage + 1
-        delay_minutes = self._growth_stage_delays_minutes[next_stage]
-        delay_ms = delay_minutes * 60 * 1000
-        
-        logger.info("[REDDIT] Growth timer: advancing to stage %d in %d minutes", 
-                   next_stage, delay_minutes)
-        
-        def _grow() -> None:
-            if not shiboken_isValid(self) or not self._enabled:
-                return
-            
-            if self._advance_progressive_stage():
-                # Schedule next growth if not at final stage
-                if self._progressive_stage < len(self._progressive_stages) - 1:
-                    self._growth_timer = None  # Clear so next call works
-                    self._start_growth_timer()
-                else:
-                    logger.info("[REDDIT] Reached final stage %d", self._progressive_stage)
-                    self._growth_timer = None
-            else:
-                self._growth_timer = None
-        
-        self._growth_timer = QTimer(self)
-        self._growth_timer.setSingleShot(True)
-        self._growth_timer.timeout.connect(_grow)
-        self._register_resource(self._growth_timer, "progressive growth timer")
-        self._growth_timer.start(delay_ms)
 
     # ------------------------------------------------------------------
     # Networking
@@ -809,6 +656,12 @@ class RedditWidget(BaseOverlayWidget):
             due_reason = self._periodic_due_reason_by_cache_key.get(cache_key, "preserved_due")
             return max(0, int((due_mono - now_mono) * 1000)), due_reason
 
+        blocked_delay_ms = self._blocked_gate_remaining_delay_ms(phase_delay_ms=phase_delay_ms)
+        if blocked_delay_ms is not None:
+            self._periodic_due_by_cache_key[cache_key] = now_mono + (blocked_delay_ms / 1000.0)
+            self._periodic_due_reason_by_cache_key[cache_key] = "blocked_cooldown_due"
+            return blocked_delay_ms, "blocked_cooldown_due"
+
         cache_timestamp = self._get_cache_timestamp()
         if cache_timestamp is not None:
             cache_age_ms = int(max(0.0, (datetime.now() - cache_timestamp).total_seconds() * 1000.0))
@@ -822,6 +675,24 @@ class RedditWidget(BaseOverlayWidget):
         self._periodic_due_by_cache_key[cache_key] = now_mono + (delay_ms / 1000.0)
         self._periodic_due_reason_by_cache_key[cache_key] = "cache_stale_staggered_due"
         return delay_ms, "cache_stale_staggered_due"
+
+    def _blocked_gate_remaining_delay_ms(self, *, phase_delay_ms: int = 0) -> Optional[int]:
+        """Return persisted blocked-cooldown delay, including widget phase, when active."""
+
+        try:
+            from core.reddit_rate_limiter import RedditRateLimiter
+
+            gate_timestamp = self._get_service_gate_timestamp()
+            if gate_timestamp is None:
+                return None
+            gate_age_s = max(0.0, (datetime.now() - gate_timestamp).total_seconds())
+            remaining_s = RedditRateLimiter.BLOCK_COOLDOWN_SECONDS - gate_age_s
+            if remaining_s <= 0:
+                return None
+            return max(0, int((remaining_s * 1000.0) + max(0, int(phase_delay_ms))))
+        except Exception:
+            logger.debug("[REDDIT] Failed to evaluate blocked gate periodic delay", exc_info=True)
+            return None
 
     def _set_periodic_due_delay_ms(self, delay_ms: int, *, reason: str) -> bool:
         cache_key = str(self._cache_key or "reddit")
@@ -841,6 +712,13 @@ class RedditWidget(BaseOverlayWidget):
         )
         self._periodic_due_reason_by_cache_key[cache_key] = "post_attempt_due"
 
+    def _mark_manual_attempt_now(self) -> None:
+        cache_key = str(self._cache_key or "reddit")
+        self._manual_due_by_cache_key[cache_key] = (
+            time.monotonic() + self.MANUAL_REFRESH_INTERVAL.total_seconds()
+        )
+        self._mark_periodic_attempt_now()
+
     def _on_periodic_due_timer(self) -> None:
         self._update_timer_start_timer = None
         self._on_periodic_refresh_timer()
@@ -857,7 +735,7 @@ class RedditWidget(BaseOverlayWidget):
         self._mark_periodic_attempt_now()
         self._fetch_feed()
 
-    def _fetch_feed(self, *, defer_for_transition: bool = True) -> bool:
+    def _fetch_feed(self, *, defer_for_transition: bool = True, mark_manual_attempt: bool = False) -> bool:
         """Request subreddit listing via ThreadManager or synchronously.
 
         Failures are silent from the user's perspective: the widget
@@ -874,11 +752,35 @@ class RedditWidget(BaseOverlayWidget):
 
             blocked_wait = RedditRateLimiter.get_blocked_cooldown_remaining()
             if blocked_wait > 0:
-                logger.warning(
-                    "[RATE_LIMIT] Reddit widget skipping fetch during blocked cooldown (remaining=%.1fs)",
-                    blocked_wait,
-                )
-                return True
+                if mark_manual_attempt:
+                    gate_timestamp = self._get_service_gate_timestamp()
+                    manual_remaining = blocked_wait
+                    if gate_timestamp is not None:
+                        gate_age_s = max(0.0, (datetime.now() - gate_timestamp).total_seconds())
+                        manual_remaining = self.MANUAL_REFRESH_INTERVAL.total_seconds() - gate_age_s
+                    if manual_remaining <= 0:
+                        logger.warning(
+                            "[RATE_LIMIT] Reddit manual refresh bypassing automatic blocked cooldown after manual window "
+                            "(cache_key=%s automatic_remaining=%.1fs manual_window=%.1fs)",
+                            self._cache_key,
+                            blocked_wait,
+                            self.MANUAL_REFRESH_INTERVAL.total_seconds(),
+                        )
+                    else:
+                        logger.warning(
+                            "[RATE_LIMIT] Reddit widget skipping manual fetch during manual blocked cooldown "
+                            "(cache_key=%s remaining=%.1fs automatic_remaining=%.1fs)",
+                            self._cache_key,
+                            manual_remaining,
+                            blocked_wait,
+                        )
+                        return True
+                else:
+                    logger.warning(
+                        "[RATE_LIMIT] Reddit widget skipping fetch during blocked cooldown (remaining=%.1fs)",
+                        blocked_wait,
+                    )
+                    return True
         except ImportError:
             logger.debug("[REDDIT] RedditRateLimiter not available")
         if not begin_fetch_guard(
@@ -887,8 +789,11 @@ class RedditWidget(BaseOverlayWidget):
             busy_message="[REDDIT] Fetch already in progress, skipping",
         ):
             return False
+        if mark_manual_attempt:
+            self._mark_manual_attempt_now()
 
         tm = self._thread_manager
+        fetch_limit = LIST_WIDGET_MAX_CAPACITY
 
         def _do_fetch(subreddit: str, sort: str, limit: int) -> RedditProviderResult:
             request = RedditFetchRequest(
@@ -928,7 +833,7 @@ class RedditWidget(BaseOverlayWidget):
                     _do_fetch,
                     self._subreddit,
                     self._sort,
-                    self._configured_capacity,
+                    fetch_limit,
                     callback=_on_result,
                 )
                 return True
@@ -937,7 +842,7 @@ class RedditWidget(BaseOverlayWidget):
 
         # Fallback: synchronous fetch on UI thread (rare, but bounded by timeout)
         try:
-            payload = _do_fetch(self._subreddit, self._sort, self._configured_capacity)
+            payload = _do_fetch(self._subreddit, self._sort, fetch_limit)
             if isinstance(payload, RedditProviderResult) and payload.skip_reason:
                 self._on_fetch_skipped(payload.skip_reason)
                 return True
@@ -959,16 +864,108 @@ class RedditWidget(BaseOverlayWidget):
         logger.info("[REDDIT] Fetch skipped without changing visible content (reason=%s)", reason)
 
     def _trigger_manual_refresh(self) -> bool:
+        skip_reason = self._manual_refresh_skip_reason()
+        if skip_reason is not None:
+            reason, remaining_s = skip_reason
+            level = logger.warning if reason == "blocked_cooldown" else logger.info
+            level(
+                "[CACHE][REDDIT] Manual refresh skipped cache_key=%s reason=%s remaining_s=%.1f",
+                self._cache_key,
+                reason,
+                remaining_s,
+            )
+            return True
         return trigger_manual_refresh(
             self,
             defer_refresh=self._defer_refresh_if_transition,
-            fetch_callback=self._fetch_feed,
+            fetch_callback=lambda **kwargs: self._fetch_feed(mark_manual_attempt=True, **kwargs),
             logger=logger,
             busy_message="[REDDIT] Manual refresh ignored; fetch already in progress",
             failure_message="[REDDIT] Manual refresh failed",
             start_feedback=self._start_refresh_spinner,
             stop_feedback=self._stop_refresh_spinner,
         )
+
+    def _manual_refresh_skip_reason(self) -> Optional[tuple[str, float]]:
+        """Return why manual refresh should not issue a Reddit request yet."""
+
+        blocked_delay_ms = self._blocked_gate_remaining_delay_ms(phase_delay_ms=0)
+        if blocked_delay_ms is not None and blocked_delay_ms > 0:
+            remaining_s = blocked_delay_ms / 1000.0
+            try:
+                from core.reddit_rate_limiter import RedditRateLimiter
+
+                gate_timestamp = self._get_service_gate_timestamp()
+                if gate_timestamp is not None:
+                    gate_age_s = max(0.0, (datetime.now() - gate_timestamp).total_seconds())
+                    manual_remaining_s = self.MANUAL_REFRESH_INTERVAL.total_seconds() - gate_age_s
+                    remaining_s = min(remaining_s, max(0.0, manual_remaining_s))
+                    if remaining_s <= 0:
+                        blocked_delay_ms = None
+                # Touch the import so tests that monkeypatch the class still
+                # exercise the same import path as periodic blocked cooldown.
+                _ = RedditRateLimiter
+            except Exception:
+                logger.debug("[REDDIT] Failed to evaluate manual blocked cooldown", exc_info=True)
+            if blocked_delay_ms is not None and remaining_s > 0:
+                return "blocked_cooldown", remaining_s
+
+        try:
+            cache_timestamp = self._get_cache_timestamp()
+            if cache_timestamp is not None:
+                cache_age_s = max(0.0, (datetime.now() - cache_timestamp).total_seconds())
+                remaining_s = self.MANUAL_REFRESH_INTERVAL.total_seconds() - cache_age_s
+                if remaining_s > 0:
+                    return "cache_fresh", remaining_s
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect cache timestamp for manual refresh cadence", exc_info=True)
+
+        try:
+            manual_due_mono = self._manual_due_by_cache_key.get(str(self._cache_key or "reddit"))
+            if manual_due_mono is not None:
+                manual_remaining_s = manual_due_mono - time.monotonic()
+                if manual_remaining_s > 0:
+                    return "manual_attempt_due", manual_remaining_s
+                self._manual_due_by_cache_key.pop(str(self._cache_key or "reddit"), None)
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect manual due for manual refresh cadence", exc_info=True)
+
+        try:
+            cache_key = str(self._cache_key or "reddit")
+            due_mono = self._periodic_due_by_cache_key.get(cache_key)
+            if due_mono is not None:
+                remaining_s = due_mono - time.monotonic()
+                if remaining_s > 0:
+                    due_reason = self._periodic_due_reason_by_cache_key.get(
+                        cache_key,
+                        "periodic_due_pending",
+                    )
+                    if due_reason in {"post_attempt_due", "manual_attempt_due"}:
+                        attempt_age_s = self._refresh_interval.total_seconds() - remaining_s
+                        manual_remaining_s = self.MANUAL_REFRESH_INTERVAL.total_seconds() - attempt_age_s
+                        if manual_remaining_s > 0:
+                            return due_reason, manual_remaining_s
+                        return None
+                    if due_reason == "cache_fresh_due":
+                        try:
+                            cache_timestamp = self._get_cache_timestamp()
+                            if cache_timestamp is not None:
+                                cache_age_s = max(0.0, (datetime.now() - cache_timestamp).total_seconds())
+                                manual_remaining_s = self.MANUAL_REFRESH_INTERVAL.total_seconds() - cache_age_s
+                                if manual_remaining_s > 0:
+                                    return due_reason, manual_remaining_s
+                                return None
+                        except Exception:
+                            logger.debug("[REDDIT] Failed to inspect cache timestamp for manual due", exc_info=True)
+                    if due_reason == "blocked_cooldown_due":
+                        return None
+                    return (
+                        due_reason,
+                        remaining_s,
+                    )
+        except Exception:
+            logger.debug("[REDDIT] Failed to inspect periodic due for manual refresh cadence", exc_info=True)
+        return None
 
     def _parent_transition_running(self) -> bool:
         return parent_transition_running(self)
@@ -1137,12 +1134,11 @@ class RedditWidget(BaseOverlayWidget):
                 )
             )
         
-        # Store all fetched posts for progressive loading
+        # Store the full fetched candidate window while rendering only the
+        # configured visible count.
         self._all_fetched_posts = posts
         
         # Save the full fetched post window for next startup.
-        # This enables staged growth from cache even if configured capacity
-        # increases later without changing Reddit request frequency.
         self._save_cached_posts(posts)
 
         if not posts:
@@ -1166,19 +1162,16 @@ class RedditWidget(BaseOverlayWidget):
                 logger.debug("[REDDIT] No new posts fetched, keeping existing display")
             return
 
-        # Start growth timer if not running (for fresh start with no prior cache)
-        # Stage advancement is time-based, not fetch-based
-        if self._growth_timer is None and self._progressive_stage < len(self._progressive_stages) - 1:
-            self._start_growth_timer()
-        
-        # Refresh display at current stage (no stage change on fetch)
-        self._display_progressive_posts(fade=False)
-        
-        logger.debug("[REDDIT] Cache refreshed with %d posts, current stage %d/%d", 
-                    len(posts), self._progressive_stage, len(self._progressive_stages) - 1)
+        self._display_configured_posts(fade=False)
+
+        logger.debug(
+            "[REDDIT] Cache refreshed with %d candidate posts, showing up to %d",
+            len(posts),
+            self._configured_capacity,
+        )
 
     def _update_posts_internal(self, posts: List[RedditPost], fade: bool = False) -> None:
-        """Internal method to update displayed posts (used by progressive loading).
+        """Internal method to update displayed posts from the visible slice.
         
         Args:
             posts: Posts to display
@@ -1275,7 +1268,12 @@ class RedditWidget(BaseOverlayWidget):
                 RedditRateLimiter.record_blocked_response(reason=error)
             except Exception:
                 logger.debug("[REDDIT] Failed to record blocked-response cooldown", exc_info=True)
-            self._touch_cache_timestamp_now()
+            self._touch_service_gate_timestamp_now()
+            logger.warning(
+                "[CACHE][REDDIT][RATE_LIMIT] Blocked fetch left content cache timestamp unchanged; "
+                "service cooldown gate refreshed cache_key=%s",
+                self._cache_key,
+            )
 
         # If we have never displayed valid data, remain hidden; otherwise
         # keep showing the last successful sample.
@@ -1885,9 +1883,9 @@ class RedditWidget(BaseOverlayWidget):
         if hours < 1:
             return f"{minutes}M AGO"
         if days < 1:
-            return f"{hours}HR AGO"
+            return f"{hours:02d}HR AGO"
         if days < 7:
-            return f"{days}D AGO"
+            return f"{days:02d}D AGO"
         weeks = days // 7
         if weeks < 52:
             return f"{weeks}W AGO"
@@ -2219,7 +2217,7 @@ class RedditWidget(BaseOverlayWidget):
                 gate_age = datetime.now() - gate_timestamp
                 blocked_window = timedelta(seconds=RedditRateLimiter.BLOCK_COOLDOWN_SECONDS)
                 if gate_age < blocked_window:
-                    return StartupRefreshDecision(False, "blocked_cooldown_cache_fresh", gate_age)
+                    return StartupRefreshDecision(False, "blocked_cooldown_cache_stale", gate_age)
         except Exception:
             logger.debug("[REDDIT] Failed to evaluate shared startup gate", exc_info=True)
 
@@ -2324,29 +2322,6 @@ class RedditWidget(BaseOverlayWidget):
         )
         self._schedule_timer()
 
-    def _touch_cache_timestamp_now(self) -> None:
-        """Refresh the cache timestamp so startup policy backs off after a block."""
-
-        cache_path = self._get_cache_file_path()
-        try:
-            if not cache_path.exists():
-                cached_posts = list(self._all_fetched_posts or self._posts)
-                if cached_posts:
-                    self._save_cached_posts(cached_posts)
-                else:
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    cache_path.write_text("[]", encoding="utf-8")
-            now = time.time()
-            cache_path.touch()
-            try:
-                import os
-                os.utime(cache_path, (now, now))
-            except Exception:
-                logger.debug("[REDDIT] Failed to force cache timestamp via utime", exc_info=True)
-        except Exception:
-            logger.debug("[REDDIT] Failed to touch cache timestamp", exc_info=True)
-        self._touch_service_gate_timestamp_now()
-    
     def _save_cached_posts(self, posts: List[RedditPost]) -> None:
         """Save posts to cache for next startup."""
         try:

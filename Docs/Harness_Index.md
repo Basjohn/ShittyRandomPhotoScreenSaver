@@ -52,20 +52,27 @@ python tools/reddit_helper_task_harness.py --action smoke-test --task-name SRPSS
 ```
 - See also: `Docs/Historical_Bugs.md` entry `R-02`.
 
-### Reddit widget automatic refresh cadence
-- Purpose: protect Reddit widget cache/update cadence so settings/runtime rebuilds cannot keep resetting the first periodic refresh into the future, and so paired stale startup caches are paced instead of suppressed.
+### Reddit widget automatic refresh cadence and provider fallback
+- Purpose: protect Reddit widget cache/update cadence so settings/runtime rebuilds cannot keep resetting the first periodic refresh into the future, paired stale startup caches are paced instead of suppressed, manual refresh uses its shorter sparse gate, provider fallback stays intentional, and the retired cache-growth reveal does not return.
 - Use when:
   - editing `widgets/reddit_widget.py`
   - editing shared service-widget timer/startup refresh policy
   - investigating stale Reddit cache timestamps or missing `[CACHE][REDDIT] Periodic refresh fired` logs
+  - investigating manual refresh spiral lockouts or candidate-window/display-count behavior
+  - editing Reddit provider selection, RSS/Public JSON/PullPush behavior, or the designed standard/old Reddit HTML fallback
 - Typical command:
 ```powershell
 python -m pytest `
+  tests/test_reddit_progressive_loading.py `
+  tests/test_reddit_post_provider.py `
+  tests/test_reddit_provider_settings.py `
   tests/test_reddit_widget.py::test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset `
   tests/test_reddit_widget.py::test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence `
   tests/test_reddit_widget.py::test_reddit_periodic_due_survives_widget_rebuild `
   tests/test_reddit_widget.py::test_reddit_startup_refresh_skips_when_cache_is_fresh `
   tests/test_reddit_widget.py::test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1 `
+  tests/test_reddit_widget.py::test_reddit_manual_fetch_bypasses_automatic_blocked_cooldown_after_manual_window `
+  tests/test_reddit_widget.py::test_reddit_fetch_caches_candidate_window_but_displays_configured_count `
   -q
 ```
 - See also: `Docs/Historical_Bugs.md` entry `R-29`.

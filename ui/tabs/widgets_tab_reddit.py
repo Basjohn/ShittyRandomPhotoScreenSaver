@@ -182,11 +182,12 @@ def build_reddit_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     provider_row = _aligned_row(reddit1_layout, "Provider:")
     tab.reddit_provider_combo = StyledComboBox()
     tab.reddit_provider_combo.addItem("Reddit RSS (Live)", "rss")
+    tab.reddit_provider_combo.addItem("Reddit HTML (Direct)", "html")
     tab.reddit_provider_combo.addItem("PullPush (Hosted)", "pullpush")
     tab.reddit_provider_combo.addItem("Reddit Public JSON", "public_json")
     tab.reddit_provider_combo.setMinimumWidth(180)
     tab.reddit_provider_combo.setToolTip(
-        "Shared post source for Reddit 1 and Reddit 2. Reddit RSS is the default live provider."
+        "Shared post source for Reddit 1 and Reddit 2. Reddit RSS is the default live provider; HTML is also used as the designed first fallback when the selected source fails."
     )
     default_provider = tab._default_str('reddit', 'provider', 'rss').strip().lower() or 'rss'
     default_provider_idx = tab.reddit_provider_combo.findData(default_provider)

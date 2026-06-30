@@ -5,8 +5,10 @@ from datetime import datetime, timezone
 import pytest
 
 from core.reddit_post_provider import (
+    FallbackRedditPostProvider,
     PullPushProvider,
     RedditFetchRequest,
+    RedditHtmlProvider,
     RedditRssProvider,
     build_reddit_post_provider,
     normalize_reddit_provider_id,
@@ -31,13 +33,23 @@ def test_normalize_reddit_provider_defaults_to_rss() -> None:
     assert normalize_reddit_provider_id(None) == "rss"
     assert normalize_reddit_provider_id("unknown") == "rss"
     assert normalize_reddit_provider_id("rss") == "rss"
+    assert normalize_reddit_provider_id("html") == "html"
     assert normalize_reddit_provider_id("public_json") == "public_json"
 
 
 def test_build_reddit_post_provider_uses_configured_provider() -> None:
-    assert type(build_reddit_post_provider("rss")).__name__ == "RedditRssProvider"
-    assert type(build_reddit_post_provider("pullpush")).__name__ == "PullPushProvider"
-    assert type(build_reddit_post_provider("public_json")).__name__ == "RedditPublicJsonProvider"
+    rss_provider = build_reddit_post_provider("rss")
+    pullpush_provider = build_reddit_post_provider("pullpush")
+    json_provider = build_reddit_post_provider("public_json")
+    html_provider = build_reddit_post_provider("html")
+
+    assert type(rss_provider).__name__ == "FallbackRedditPostProvider"
+    assert type(getattr(rss_provider, "primary")).__name__ == "RedditRssProvider"
+    assert type(pullpush_provider).__name__ == "FallbackRedditPostProvider"
+    assert type(getattr(pullpush_provider, "primary")).__name__ == "PullPushProvider"
+    assert type(json_provider).__name__ == "FallbackRedditPostProvider"
+    assert type(getattr(json_provider, "primary")).__name__ == "RedditPublicJsonProvider"
+    assert type(html_provider).__name__ == "RedditHtmlProvider"
 
 
 def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -81,6 +93,137 @@ def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None
             "url": "https://www.reddit.com/r/SubredditDrama/comments/abc/fresh_post/",
             "score": 0,
             "created_utc": float(datetime(2026, 6, 19, 18, 39, 20, tzinfo=timezone.utc).timestamp()),
+        }
+    ]
+
+
+def test_html_provider_maps_standard_reddit_shreddit_posts(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    html_payload = b"""
+<html><body>
+  <shreddit-post
+    post-title="Standard &amp; fresh"
+    permalink="/r/python/comments/std123/standard_fresh/"
+    score="1.2k"
+    created-timestamp="2026-06-30T10:11:12+00:00">
+  </shreddit-post>
+</body></html>
+"""
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append({"url": url, "headers": dict(headers or {}), "timeout": timeout})
+        return _StubResponse(content=html_payload)
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = RedditHtmlProvider()
+    result = provider.fetch_posts(
+        RedditFetchRequest(
+            subreddit="python",
+            sort="hot",
+            limit=25,
+            cache_key="reddit",
+            shutdown_event=None,
+        )
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["url"] == "https://www.reddit.com/r/python/"
+    assert "text/html" in calls[0]["headers"]["Accept"]
+    assert result.skip_reason is None
+    assert result.posts == [
+        {
+            "title": "Standard & fresh",
+            "url": "https://www.reddit.com/r/python/comments/std123/standard_fresh/",
+            "score": 1200,
+            "created_utc": float(datetime(2026, 6, 30, 10, 11, 12, tzinfo=timezone.utc).timestamp()),
+        }
+    ]
+
+
+def test_html_provider_falls_from_standard_to_old_reddit(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    old_payload = b"""
+<html><body>
+  <div class="thing id-t3_old123" data-permalink="/r/python/comments/old123/old_fresh/" data-score="42" data-timestamp="1710000200000">
+    <p class="title">
+      <a class="title may-blank" href="/r/python/comments/old123/old_fresh/">Old fresh</a>
+    </p>
+  </div>
+</body></html>
+"""
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        if "www.reddit.com" in url:
+            return _StubResponse(content=b"<html><body>No posts here</body></html>")
+        return _StubResponse(content=old_payload)
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = RedditHtmlProvider()
+    result = provider.fetch_posts(
+        RedditFetchRequest(
+            subreddit="python",
+            sort="hot",
+            limit=25,
+            cache_key="reddit",
+            shutdown_event=None,
+        )
+    )
+
+    assert calls == ["https://www.reddit.com/r/python/", "https://old.reddit.com/r/python/"]
+    assert result.posts == [
+        {
+            "title": "Old fresh",
+            "url": "https://old.reddit.com/r/python/comments/old123/old_fresh/",
+            "score": 42,
+            "created_utc": 1710000200.0,
+        }
+    ]
+
+
+def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    html_payload = b"""
+<html><body>
+  <shreddit-post post-title="Fallback post" permalink="/r/python/comments/fb/fallback_post/" created-timestamp="1710000200"></shreddit-post>
+</body></html>
+"""
+
+    class FailingPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RuntimeError("rss down")
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        return _StubResponse(content=html_payload)
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = FallbackRedditPostProvider(FailingPrimary())
+    result = provider.fetch_posts(
+        RedditFetchRequest(
+            subreddit="python",
+            sort="hot",
+            limit=25,
+            cache_key="reddit",
+            shutdown_event=None,
+        )
+    )
+
+    assert calls == ["https://www.reddit.com/r/python/"]
+    assert result.posts == [
+        {
+            "title": "Fallback post",
+            "url": "https://www.reddit.com/r/python/comments/fb/fallback_post/",
+            "score": 0,
+            "created_utc": 1710000200.0,
         }
     ]
 

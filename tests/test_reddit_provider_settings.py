@@ -29,6 +29,20 @@ def test_reddit_widget_settings_round_trip_provider() -> None:
     assert payload["widgets.reddit.provider"] == "public_json"
 
 
+def test_reddit_widget_settings_round_trip_html_provider() -> None:
+    settings = RedditWidgetSettings.from_mapping(
+        {
+            "provider": "html",
+            "subreddit": "python",
+            "limit": 7,
+        }
+    )
+
+    assert settings.provider == "html"
+    payload = settings.to_dict()
+    assert payload["widgets.reddit.provider"] == "html"
+
+
 def test_reddit2_inherits_family_provider_from_factory() -> None:
     app = QApplication.instance() or QApplication([])
     parent = QWidget()

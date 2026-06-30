@@ -2263,10 +2263,11 @@ class TestCreateTimeRefreshParity:
                 media_widget=FakeMediaWidget(),
             )
 
-        assert vis is None
-        assert "foreign-bucket geometry priming rejected" in caplog.text
-        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
-        assert "[SPOTIFY_VIS][FALLBACK]" in caplog.text
+        assert vis is not None
+        assert "Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect" in caplog.text
+        assert "foreign-bucket geometry priming rejected" not in caplog.text
+        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" not in caplog.text
+        assert "spotify_visualizer" in widgets_config["custom_layout"]["displays"].get("geom:0_0_1920x1080", {})
 
     def test_create_spotify_visualizer_widget_applies_curated_contract_on_startup(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
@@ -2618,9 +2619,15 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
 
+        class FakeScreen:
+            def geometry(self):
+                from PySide6.QtCore import QRect
+
+                return QRect(0, 0, 1920, 1080)
+
         class FakeManager:
             def __init__(self):
-                self._parent = SimpleNamespace(_screen=object(), screen_index=1)
+                self._parent = SimpleNamespace(_screen=FakeScreen(), screen_index=1)
                 self._widgets = {}
                 self._settings_manager = SimpleNamespace(
                     saved_widgets=None,

@@ -27,6 +27,7 @@ from rendering.custom_layout_contract import (
     deserialize_custom_layout_entry,
     get_custom_layout_restore_entry,
     get_screen_layout_entries_for_screen,
+    resolve_screen_layout_signature,
     load_custom_layout_restore_map,
     load_custom_layout_map,
     write_custom_layout_map,
@@ -165,6 +166,110 @@ def _has_exact_visualizer_custom_rect_for_startup(
     return True
 
 
+def _live_visualizer_bucket_monitor_map(custom_layout_map: Mapping[str, object] | None) -> dict[str, str]:
+    """Map saved visualizer layout buckets that match active displays to monitor numbers."""
+
+    result: dict[str, str] = {}
+    try:
+        displays = get_coordinator().get_all_instances()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to inspect live displays for CUSTOM bucket ownership", exc_info=True)
+        return result
+
+    for display in displays or []:
+        if getattr(display, "_exiting", False):
+            continue
+        screen = _resolve_parent_screen(display)
+        if screen is None:
+            continue
+        matched_signature = resolve_screen_layout_signature(
+            custom_layout_map if isinstance(custom_layout_map, Mapping) else {},
+            screen,
+        )
+        if not matched_signature:
+            continue
+        try:
+            monitor = str(int(getattr(display, "screen_index")) + 1)
+        except Exception:
+            continue
+        result[str(matched_signature)] = monitor
+    return result
+
+
+def _recover_visualizer_custom_monitor_from_single_live_saved_rect(
+    mgr: "WidgetManager",
+    widgets_config: Mapping[str, object] | None,
+    *,
+    effective_monitor_sel: object,
+) -> str | None:
+    """Recover a stale CUSTOM monitor route from the sole live saved rect.
+
+    If a saved visualizer rect belongs to another currently participating
+    display, the saved rect is stronger evidence than the scalar monitor route.
+    Moving that rect to the stale route recreates the wrong-display/top-left
+    family, so this helper corrects the route instead.
+    """
+
+    if not isinstance(widgets_config, dict):
+        return None
+    if not is_custom_position_selected_for_widget("spotify_visualizer", widgets_config):
+        return None
+
+    custom_layout_map = load_custom_layout_map(widgets_config)
+    displays = custom_layout_map.get("displays", {})
+    if not isinstance(displays, Mapping):
+        return None
+
+    candidates: list[str] = []
+    for saved_signature, layouts in displays.items():
+        if not isinstance(layouts, Mapping):
+            continue
+        entry = deserialize_custom_layout_entry(
+            "spotify_visualizer",
+            layouts.get("spotify_visualizer"),
+        )
+        if entry is not None:
+            candidates.append(str(saved_signature))
+    if len(candidates) != 1:
+        return None
+
+    source_signature = candidates[0]
+    live_monitor_by_signature = _live_visualizer_bucket_monitor_map(custom_layout_map)
+    source_monitor = live_monitor_by_signature.get(source_signature)
+    if not source_monitor:
+        return None
+    if source_monitor == str(effective_monitor_sel):
+        return None
+
+    visualizer_section = widgets_config.get("spotify_visualizer", {})
+    if not isinstance(visualizer_section, dict):
+        visualizer_section = {}
+        widgets_config["spotify_visualizer"] = visualizer_section
+    old_monitor = visualizer_section.get("monitor", effective_monitor_sel)
+    visualizer_section["position"] = "Custom"
+    visualizer_section["monitor"] = source_monitor
+
+    logger.warning(
+        "[SPOTIFY_VIS][FALLBACK] Recovered spotify_visualizer CUSTOM route from sole live saved rect "
+        "source_bucket=%s old_monitor=%s new_monitor=%s",
+        source_signature,
+        old_monitor,
+        source_monitor,
+    )
+
+    settings_manager = getattr(mgr, "_settings_manager", None)
+    if settings_manager is not None:
+        try:
+            settings_manager.set_widgets_map(widgets_config, emit_change=False)
+            settings_manager.save()
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to persist recovered CUSTOM visualizer route",
+                exc_info=True,
+            )
+    return source_monitor
+
+
 def _repair_single_foreign_visualizer_custom_rect_for_startup(
     mgr: "WidgetManager",
     widgets_config: Mapping[str, object] | None,
@@ -231,6 +336,18 @@ def _repair_single_foreign_visualizer_custom_rect_for_startup(
         return False
 
     source_signature, entry = candidates[0]
+    live_monitor_by_signature = _live_visualizer_bucket_monitor_map(custom_layout_map)
+    source_live_monitor = live_monitor_by_signature.get(source_signature)
+    if source_live_monitor is not None and source_live_monitor != str(effective_monitor_sel):
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Refused spotify_visualizer CUSTOM rect bucket repair because "
+            "the sole foreign rect belongs to active monitor=%s while route requested monitor=%s "
+            "source_bucket=%s",
+            source_live_monitor,
+            effective_monitor_sel,
+            source_signature,
+        )
+        return False
     target_signature = canonicalize_screen_layout_bucket(custom_layout_map, screen)
     if not target_signature:
         return False
@@ -819,6 +936,15 @@ def create_spotify_visualizer_widget(
                             "[SPOTIFY_VIS] Failed to persist recovered CUSTOM visualizer monitor route",
                             exc_info=True,
                         )
+
+    if custom_routing_active and str(effective_monitor_sel or "ALL").strip().upper() != "ALL":
+        recovered_monitor = _recover_visualizer_custom_monitor_from_single_live_saved_rect(
+            mgr,
+            widgets_config if isinstance(widgets_config, Mapping) else None,
+            effective_monitor_sel=effective_monitor_sel,
+        )
+        if recovered_monitor is not None:
+            effective_monitor_sel = recovered_monitor
 
     if custom_routing_active and str(effective_monitor_sel or "ALL").strip().upper() == "ALL":
         if not _has_valid_visualizer_authored_restore_route(

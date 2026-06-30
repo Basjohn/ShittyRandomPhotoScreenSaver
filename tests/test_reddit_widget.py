@@ -13,6 +13,7 @@ import pytest
 from PySide6.QtCore import QPoint, QRect
 
 from core.reddit_post_provider import RedditProviderResult
+from core.settings.widget_capacity_policy import LIST_WIDGET_MAX_CAPACITY
 from widgets import reddit_widget as reddit_module
 from widgets.reddit_widget import RedditWidget
 
@@ -20,6 +21,7 @@ from widgets.reddit_widget import RedditWidget
 def _clear_reddit_due_state() -> None:
     RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
     RedditWidget._periodic_due_reason_by_cache_key.clear()  # type: ignore[attr-defined]
+    RedditWidget._manual_due_by_cache_key.clear()  # type: ignore[attr-defined]
 
 
 class _FakeRecurringTimer:
@@ -107,9 +109,11 @@ def test_reddit_format_age_variants():
     # Minutes under an hour.
     assert widget._format_age(now - 15 * 60, now) == "15M AGO"  # type: ignore[attr-defined]
     # Hours under a day.
-    assert widget._format_age(now - 2 * 3600, now) == "2HR AGO"  # type: ignore[attr-defined]
+    assert widget._format_age(now - 1 * 3600, now) == "01HR AGO"  # type: ignore[attr-defined]
+    assert widget._format_age(now - 2 * 3600, now) == "02HR AGO"  # type: ignore[attr-defined]
     # Days under a week.
-    assert widget._format_age(now - 3 * 86400, now) == "3D AGO"  # type: ignore[attr-defined]
+    assert widget._format_age(now - 1 * 86400, now) == "01D AGO"  # type: ignore[attr-defined]
+    assert widget._format_age(now - 3 * 86400, now) == "03D AGO"  # type: ignore[attr-defined]
     # Weeks under a year.
     assert widget._format_age(now - 3 * 7 * 86400, now) == "3W AGO"  # type: ignore[attr-defined]
     # Years.
@@ -322,8 +326,9 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
 
 @pytest.mark.qt
-def test_reddit_403_error_touches_cache_timestamp_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
+def test_reddit_403_error_keeps_cache_timestamp_truthful_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
     from core.reddit_rate_limiter import RedditRateLimiter
+    import os
 
     widget = RedditWidget()
     qtbot.addWidget(widget)
@@ -331,12 +336,16 @@ def test_reddit_403_error_touches_cache_timestamp_and_starts_block_cooldown(qt_a
     gate_path = tmp_path / "reddit_gate.touch"
     try:
         RedditRateLimiter.reset()
+        cache_path.write_text("[]", encoding="utf-8")
+        old_ts = time.time() - (2 * 3600)
+        os.utime(cache_path, (old_ts, old_ts))
         widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
         widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
 
         widget._on_fetch_error("403 Client Error: Blocked for url: https://www.reddit.com/r/Games/hot.json?limit=25")  # type: ignore[attr-defined]
 
         assert cache_path.exists()
+        assert cache_path.stat().st_mtime == pytest.approx(old_ts, abs=1.0)
         assert gate_path.exists()
         assert RedditRateLimiter.get_blocked_cooldown_remaining() > 0
     finally:
@@ -344,7 +353,7 @@ def test_reddit_403_error_touches_cache_timestamp_and_starts_block_cooldown(qt_a
 
 
 @pytest.mark.qt
-def test_reddit_429_error_touches_cache_timestamp_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
+def test_reddit_429_error_does_not_create_false_fresh_cache_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
     from core.reddit_rate_limiter import RedditRateLimiter
 
     widget = RedditWidget()
@@ -358,7 +367,7 @@ def test_reddit_429_error_touches_cache_timestamp_and_starts_block_cooldown(qt_a
 
         widget._on_fetch_error("429 Client Error: Too Many Requests for url: https://www.reddit.com/r/SubredditDrama/.rss")  # type: ignore[attr-defined]
 
-        assert cache_path.exists()
+        assert not cache_path.exists()
         assert gate_path.exists()
         assert RedditRateLimiter.get_blocked_cooldown_remaining() > 0
     finally:
@@ -378,6 +387,75 @@ def test_reddit_fetch_skips_network_while_blocked_cooldown_is_active(qt_app, qtb
         monkeypatch.setattr("core.reddit_post_provider.requests.get", lambda *args, **kwargs: calls.append("get"))
 
         assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+        assert calls == []
+    finally:
+        widget.cleanup()
+        RedditRateLimiter.reset()
+
+
+@pytest.mark.qt
+def test_reddit_manual_fetch_bypasses_automatic_blocked_cooldown_after_manual_window(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+
+    class StubProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            calls.append(request)
+            return RedditProviderResult(
+                posts=[
+                    {
+                        "title": "Manual after gate",
+                        "url": "https://example.com/manual",
+                        "score": 7,
+                        "created_utc": time.time(),
+                    }
+                ],
+                skip_reason=None,
+            )
+
+    try:
+        monkeypatch.setattr(
+            RedditRateLimiter,
+            "get_blocked_cooldown_remaining",
+            staticmethod(lambda: 20 * 60.0),
+        )
+        widget.set_post_provider(StubProvider())
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._subreddit = "wallpapers"  # type: ignore[attr-defined]
+        widget._fetch_in_progress = False  # type: ignore[attr-defined]
+        widget._get_service_gate_timestamp = lambda: datetime.now() - timedelta(minutes=8)  # type: ignore[method-assign]
+
+        assert widget._fetch_feed(defer_for_transition=False, mark_manual_attempt=True) is True  # type: ignore[attr-defined]
+
+        assert len(calls) == 1
+        assert len(widget._posts) == 1  # type: ignore[attr-defined]
+        assert widget._posts[0].title == "Manual after gate"  # type: ignore[attr-defined]
+    finally:
+        widget.cleanup()
+        RedditRateLimiter.reset()
+
+
+@pytest.mark.qt
+def test_reddit_manual_fetch_still_respects_short_blocked_cooldown_window(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from core.reddit_rate_limiter import RedditRateLimiter
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls: list[str] = []
+    try:
+        monkeypatch.setattr(
+            RedditRateLimiter,
+            "get_blocked_cooldown_remaining",
+            staticmethod(lambda: 20 * 60.0),
+        )
+        monkeypatch.setattr("core.reddit_post_provider.requests.get", lambda *args, **kwargs: calls.append("get"))
+        widget._get_service_gate_timestamp = lambda: datetime.now() - timedelta(minutes=2)  # type: ignore[method-assign]
+
+        assert widget._fetch_feed(defer_for_transition=False, mark_manual_attempt=True) is True  # type: ignore[attr-defined]
+
         assert calls == []
     finally:
         widget.cleanup()
@@ -444,10 +522,41 @@ def test_reddit_startup_refresh_uses_shared_service_gate_before_rate_limiter(qt_
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
         assert decision.run is False
-        assert decision.reason == "blocked_cooldown_cache_fresh"
+        assert decision.reason == "blocked_cooldown_cache_stale"
         assert decision.age is not None
         assert decision.age < timedelta(minutes=1)
     finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_periodic_refresh_waits_for_persisted_blocked_gate(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+    import os
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_cache.json"
+    gate_path = tmp_path / "reddit_gate.touch"
+    try:
+        _clear_reddit_due_state()
+        monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
+        widget._get_service_gate_file_path = lambda: Path(gate_path)  # type: ignore[method-assign]
+        cache_path.write_text("[]", encoding="utf-8")
+        old_ts = time.time() - (2 * 3600)
+        os.utime(cache_path, (old_ts, old_ts))
+        widget._touch_service_gate_timestamp_now()  # type: ignore[attr-defined]
+
+        delay_ms, reason = widget._refresh_due_delay_ms(  # type: ignore[attr-defined]
+            phase_delay_ms=0,
+            cadence_ms=widget._refresh_interval_ms(),  # type: ignore[attr-defined]
+        )
+
+        assert reason == "blocked_cooldown_due"
+        assert delay_ms >= (29 * 60 * 1000)
+    finally:
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -539,6 +648,7 @@ def test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset
         _clear_reddit_due_state()
         widget._cache_key = "reddit"  # type: ignore[attr-defined]
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         calls = []
         monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(kwargs) or True)  # type: ignore[method-assign]
 
@@ -566,6 +676,7 @@ def test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence(qt_app, 
         _clear_reddit_due_state()
         widget._cache_key = "reddit2"  # type: ignore[attr-defined]
         monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
         widget._schedule_timer()  # type: ignore[attr-defined]
 
         assert fake_tm.recurring_calls == []
@@ -782,6 +893,7 @@ def test_reddit_manual_refresh_defers_during_parent_transition(qt_app, qtbot):  
     calls = []
     try:
         widget._enabled = True  # type: ignore[attr-defined]
+        widget._manual_refresh_skip_reason = lambda: None  # type: ignore[method-assign]
         widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
 
         assert widget._trigger_manual_refresh() is True  # type: ignore[attr-defined]
@@ -792,7 +904,7 @@ def test_reddit_manual_refresh_defers_during_parent_transition(qt_app, qtbot):  
         widget._flush_deferred_refresh()  # type: ignore[attr-defined]
 
         assert widget._pending_refresh_after_transition is False  # type: ignore[attr-defined]
-        assert calls == [{}]
+        assert calls == [{"mark_manual_attempt": True}]
     finally:
         widget.cleanup()
         parent.deleteLater()
@@ -804,6 +916,7 @@ def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: 
     qtbot.addWidget(widget)
     try:
         widget._enabled = True  # type: ignore[attr-defined]
+        widget._manual_refresh_skip_reason = lambda: None  # type: ignore[method-assign]
         widget._fetch_in_progress = True  # type: ignore[attr-defined]
         calls = []
         widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
@@ -813,6 +926,122 @@ def test_reddit_manual_refresh_ignores_duplicate_fetch(qt_app, qtbot):  # noqa: 
         assert started is True
         assert calls == []
     finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_skips_when_cache_is_fresh(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now())
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == []
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_allows_cache_older_than_manual_window(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        _clear_reddit_due_state()
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(minutes=8))
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == [{"mark_manual_attempt": True}]
+    finally:
+        _clear_reddit_due_state()
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_skips_when_due_horizon_is_pending(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        _clear_reddit_due_state()
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        elapsed_since_attempt_s = 60
+        remaining_periodic_s = widget._refresh_interval.total_seconds() - elapsed_since_attempt_s  # type: ignore[attr-defined]
+        RedditWidget._periodic_due_by_cache_key["reddit"] = time.monotonic() + remaining_periodic_s  # type: ignore[attr-defined]
+        RedditWidget._periodic_due_reason_by_cache_key["reddit"] = "post_attempt_due"  # type: ignore[attr-defined]
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == []
+    finally:
+        _clear_reddit_due_state()
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_allows_old_periodic_attempt_due(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        _clear_reddit_due_state()
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: None)
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        elapsed_since_attempt_s = 8 * 60
+        remaining_periodic_s = widget._refresh_interval.total_seconds() - elapsed_since_attempt_s  # type: ignore[attr-defined]
+        RedditWidget._periodic_due_by_cache_key["reddit"] = time.monotonic() + remaining_periodic_s  # type: ignore[attr-defined]
+        RedditWidget._periodic_due_reason_by_cache_key["reddit"] = "post_attempt_due"  # type: ignore[attr-defined]
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == [{"mark_manual_attempt": True}]
+    finally:
+        _clear_reddit_due_state()
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_manual_refresh_uses_shorter_blocked_cooldown_than_automatic(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    calls = []
+    try:
+        _clear_reddit_due_state()
+        widget._enabled = True  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_service_gate_timestamp", lambda: datetime.now() - timedelta(minutes=8))
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        widget._fetch_feed = lambda **kwargs: calls.append(kwargs) or True  # type: ignore[method-assign]
+
+        started = widget._trigger_manual_refresh()  # type: ignore[attr-defined]
+
+        assert started is True
+        assert calls == [{"mark_manual_attempt": True}]
+    finally:
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -987,6 +1216,7 @@ def test_reddit_fetch_uses_injected_post_provider(qt_app, qtbot):  # noqa: ARG00
 
         assert len(calls) == 1
         assert calls[0].subreddit == "wallpapers"
+        assert calls[0].limit == LIST_WIDGET_MAX_CAPACITY
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Injected post"  # type: ignore[attr-defined]
     finally:
@@ -1035,6 +1265,32 @@ def test_reddit_fetch_writes_cache_file_from_provider_result(qt_app, qtbot, tmp_
                 "created_utc": 1710001111.0,
             }
         ]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_fetch_caches_candidate_window_but_displays_configured_count(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        widget._configured_capacity = 5  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: None)
+        posts_data = [
+            {
+                "title": f"Candidate {i:02d}",
+                "url": f"https://example.com/{i}",
+                "score": i,
+                "created_utc": time.time() - i,
+            }
+            for i in range(LIST_WIDGET_MAX_CAPACITY)
+        ]
+
+        widget._on_feed_fetched(posts_data)  # type: ignore[attr-defined]
+
+        assert len(widget._all_fetched_posts) == LIST_WIDGET_MAX_CAPACITY  # type: ignore[attr-defined]
+        assert len(widget._posts) == 5  # type: ignore[attr-defined]
+        assert not hasattr(widget, "_progressive_stage")
     finally:
         widget.cleanup()
 
