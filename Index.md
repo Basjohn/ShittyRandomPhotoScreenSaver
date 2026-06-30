@@ -51,7 +51,7 @@ Living map of the current SRPSS codebase.
 | ThreadManager | `core/threading/manager.py` |
 | ResourceManager | `core/resources/manager.py` |
 | SettingsManager | `core/settings/settings_manager.py` |
-| AnimationManager | `core/animation/animator.py` — shared/app-scoped animation owner plus display/settings owner-tagged perf telemetry |
+| AnimationManager | `core/animation/animator.py` — shared/app-scoped animation owner plus display/settings owner-tagged perf telemetry; transition managers own transition callbacks/completion, not visualizer tick work |
 | EventSystem | `core/events/event_system.py` |
 | ProcessSupervisor | `core/process/supervisor.py` |
 
@@ -176,7 +176,7 @@ Living map of the current SRPSS codebase.
 | Shadow tuning | `core/settings/shadow_tuning.py` | Canonical `shadowtuning.json` defaults for card, text, header, control, icon, and Spotify volume-slider painted shadows |
 | Volume slider | `widgets/spotify_volume_widget.py` | Spotify volume overlay with local canonical flush-timer reset ownership, provider retargeting, deferred Core Audio writes, low-frequency mixer-session resync hooks, painted-frame/track shadow rendering, and intentionally media-owned CUSTOM move/resize participation through an authored slider scale contract |
 | Edit grid overlay | `widgets/edit_grid_overlay_widget.py` | Temporary per-display low-opacity grid overlay shown only during active CUSTOM edit sessions, above the compositor and below the temporary shells |
-| Visualizer parity | `widgets/spotify_visualizer_widget.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering, supports Custom-only independent display routing while keeping exact Follow Media parity outside Custom, and now treats the committed CUSTOM rect as the visualizer's active outer-geometry authority |
+| Visualizer parity | `widgets/spotify_visualizer_widget.py` / `widgets/spotify_visualizer/tick_helpers.py` | Uses the shared painted-shadow contract for the visualizer card without changing GL/audio/bar rendering, supports Custom-only independent display routing while keeping exact Follow Media parity outside Custom, treats the committed CUSTOM rect as the visualizer's active outer-geometry authority, and keeps visualizer ticks on the owned recurring timer rather than transition `AnimationManager` listeners |
 | Analog clock geometry | `widgets/clock_widget.py` | Shared analogue face/card/numeral layout metrics, authored optical Roman-numeral placement map, framed outer-ring breathing-room contract, below-face timezone spacing contract, and CUSTOM runtime full-rect swap ownership between digital and analogue |
 
 ## Source Ingestion

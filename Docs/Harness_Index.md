@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -148,6 +148,7 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log -
 ```
 - Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.
+- For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.
 
 ## Maintenance
 - If a harness becomes part of a real recurring workflow, add it here and link the relevant bug/history doc.

@@ -46,7 +46,14 @@ def _parent_transition_running(widget: Any) -> bool:
 
 
 def attach_to_animation_manager(widget: Any, animation_manager: Any) -> None:
-    """Attach a new AnimationManager without enabling transition ticks yet."""
+    """Remember the transition AnimationManager without subscribing to it.
+
+    Visualizer ticks must not run inside the transition animation manager.  The
+    logs showed that doing full visualizer work as an animation tick listener
+    can collapse transition callback cadence (notably the 60Hz display into a
+    stable ~40Hz lane).  The visualizer keeps its own steady tick source so the
+    transition manager remains responsible for transition timing only.
+    """
     if widget._animation_manager is not None and widget._anim_listener_id is not None:
         disable_animation_tick_listener(widget)
     widget._animation_manager = animation_manager
@@ -55,7 +62,11 @@ def attach_to_animation_manager(widget: Any, animation_manager: Any) -> None:
 
 
 def enable_animation_tick_listener(widget: Any) -> None:
-    """Attach transition-scoped AnimationManager ticking."""
+    """Legacy helper kept inert unless a future caller explicitly opts in.
+
+    Normal runtime must not call this from transition handoff; visualizer ticks
+    stay on the dedicated recurring timer.
+    """
     if widget._animation_manager is None or widget._anim_listener_id is not None:
         return
 
@@ -79,7 +90,7 @@ def enable_animation_tick_listener(widget: Any) -> None:
 
 
 def disable_animation_tick_listener(widget: Any) -> None:
-    """Detach transition-scoped AnimationManager ticking."""
+    """Detach any legacy AnimationManager tick listener."""
     am = widget._animation_manager
     listener_id = widget._anim_listener_id
     if am is not None and listener_id is not None and hasattr(am, "remove_tick_listener"):
@@ -171,32 +182,17 @@ def update_timer_interval(widget: Any, max_fps: float) -> None:
 
 
 def pause_timer_during_transition(widget: Any, is_transition_active: bool) -> None:
-    """Pause dedicated timer during transitions to avoid contention.
-
-    PERFORMANCE FIX: When AnimationManager is active during transitions,
-    it provides tick callbacks. Running BOTH the dedicated timer AND
-    AnimationManager causes timer contention and 50-100ms dt spikes.
-
-    Pause the dedicated timer during transitions, resume when idle.
-    """
+    """Keep the visualizer on its own tick source during transitions."""
     timer = widget._bars_timer
     if timer is None:
+        ensure_tick_source(widget)
         return
 
     try:
-        if is_transition_active and widget._using_animation_ticks:
-            # Transition active with AnimationManager - pause dedicated timer
-            if timer.isActive():
-                timer.stop()
-        elif is_transition_active and getattr(widget, "_animation_manager", None) is not None:
-            enable_animation_tick_listener(widget)
-            if getattr(widget, "_using_animation_ticks", False) and timer.isActive():
-                timer.stop()
-        else:
+        if getattr(widget, "_using_animation_ticks", False):
             disable_animation_tick_listener(widget)
-            # No transition or no AnimationManager - ensure timer is running
-            if not timer.isActive() and widget._enabled:
-                timer.start()
+        if not timer.isActive() and widget._enabled:
+            timer.start()
     except Exception as e:
         logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 

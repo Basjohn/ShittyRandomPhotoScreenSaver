@@ -1149,7 +1149,7 @@ def on_tick(widget: Any) -> None:
         widget._request_latency_probe("transition_end")
     widget._last_transition_running = is_transition_active
 
-    # PERFORMANCE: Pause dedicated timer during transitions when AnimationManager is active
+    # PERF: Keep visualizer work off the transition AnimationManager.
     widget._pause_timer_during_transition(is_transition_active)
 
     max_fps = widget._resolve_max_fps(transition_ctx)

@@ -29,6 +29,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _aspect_fill_source_rect(source_width: int, source_height: int, target_width: int, target_height: int) -> QRect:
+    """Return the centered source crop needed to fill the target without distortion."""
+
+    if source_width <= 0 or source_height <= 0 or target_width <= 0 or target_height <= 0:
+        return QRect()
+
+    source_ratio = float(source_width) / float(source_height)
+    target_ratio = float(target_width) / float(target_height)
+
+    if math.isclose(source_ratio, target_ratio, rel_tol=0.0005, abs_tol=0.0005):
+        return QRect(0, 0, source_width, source_height)
+
+    if source_ratio > target_ratio:
+        crop_width = max(1, min(source_width, int(round(source_height * target_ratio))))
+        crop_x = max(0, int(round((source_width - crop_width) / 2.0)))
+        return QRect(crop_x, 0, crop_width, source_height)
+
+    crop_height = max(1, min(source_height, int(round(source_width / target_ratio))))
+    crop_y = max(0, int(round((source_height - crop_height) / 2.0)))
+    return QRect(0, crop_y, source_width, crop_height)
+
+
 def _blockspin_spin_from_progress(p: float) -> float:
     """Convert linear progress to spin amount with ease-in-out."""
     if p <= 0.0:
@@ -272,6 +294,10 @@ class GLTransitionRenderer:
         """Render base image when no transition is active."""
         if pixmap is not None and not pixmap.isNull():
             painter.setOpacity(1.0)
-            painter.drawPixmap(target, pixmap)
+            source = _aspect_fill_source_rect(pixmap.width(), pixmap.height(), target.width(), target.height())
+            if source.isValid():
+                painter.drawPixmap(target, pixmap, source)
+            else:
+                painter.drawPixmap(target, pixmap)
         else:
             painter.fillRect(target, Qt.GlobalColor.black)

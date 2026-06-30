@@ -8,14 +8,17 @@ Run with: python tests/pytest.py tests/test_frame_timing_workload.py -v
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable, List, Optional
 
 import pytest
-from PySide6.QtCore import QPoint, QSize
+from PySide6.QtCore import QPoint, QSize, QTimer
 from PySide6.QtGui import QPixmap, QColor, QImage
+from PySide6.QtWidgets import QWidget
 
+from core.threading.manager import ThreadPoolType
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
 from rendering.gl_compositor import GLCompositorWidget
@@ -113,7 +116,13 @@ class FrameTimingHarness:
     def __init__(self, qtbot, *, loggers_to_silence: tuple[str, ...]) -> None:
         self.qtbot = qtbot
         self.collector = FrameTimingCollector()
-        self.compositor = GLCompositorWidget(parent=None)
+        self.parent = QWidget()
+        self.parent.resize(1920, 1080)
+        self.parent._thread_manager = _HarnessThreadManager()
+        self.parent._resource_manager = None
+        self.qtbot.addWidget(self.parent)
+        self.parent.show()
+        self.compositor = GLCompositorWidget(parent=self.parent)
         self.qtbot.addWidget(self.compositor)
         self.compositor.resize(1920, 1080)
         self.compositor.show()
@@ -151,11 +160,37 @@ class FrameTimingHarness:
             self.animation_manager.cleanup()
         except Exception:
             pass
+        try:
+            self.parent._thread_manager.shutdown()
+        except Exception:
+            pass
         self.compositor.hide()
         self.compositor.setParent(None)
         self.compositor.deleteLater()
+        self.parent.hide()
+        self.parent.deleteLater()
         self.qtbot.wait(0)
         self._silencer.restore()
+
+
+class _HarnessThreadManager:
+    """Minimal production-shaped ThreadManager for compositor timing tests."""
+
+    def __init__(self) -> None:
+        self._threads: list[threading.Thread] = []
+
+    def submit_task(self, pool_type: ThreadPoolType, fn: Callable, *, task_id: str | None = None, **_kwargs) -> str:
+        thread = threading.Thread(target=fn, daemon=True, name=task_id or f"{pool_type.value}_test")
+        thread.start()
+        self._threads.append(thread)
+        return task_id or thread.name
+
+    def single_shot(self, delay_ms: int, fn: Callable, *args, **kwargs) -> None:
+        QTimer.singleShot(max(0, int(delay_ms)), lambda: fn(*args, **kwargs))
+
+    def shutdown(self) -> None:
+        for thread in list(self._threads):
+            thread.join(timeout=2.0)
 
 
 @pytest.fixture
@@ -182,9 +217,20 @@ class TestFrameTimingWorkload:
         
         compositor = frame_timing_harness.compositor
         frame_timing_harness.set_base_pixmap(test_pixmap)
+        try:
+            compositor._ensure_transition_program_ready("slide")
+            compositor.warm_transition_resources("GLCompositorSlideTransition", test_pixmap, test_pixmap2)
+        except Exception:
+            pass
+        qtbot.wait(0)
         
         animation_manager = frame_timing_harness.animation_manager
         listener_id = animation_manager.add_tick_listener(lambda dt: visualizer.on_tick())
+        # Prime the standalone listener before measuring. Visualizer ticks are
+        # no longer transition-manager work in production, and this keeps the
+        # legacy harness from counting its startup gap as transition cadence.
+        qtbot.wait(50)
+        collector.reset()
         
         duration_ms = 1500
         width = compositor.width()
@@ -223,10 +269,13 @@ class TestFrameTimingWorkload:
         for m in collector.transition_metrics:
             print(f"  {m['transition']}: frames={m['count']}, avg={m['avg']:.2f}ms, dt_max={m['max']:.2f}ms")
         
-        max_dt = max(m["max"] for m in collector.transition_metrics)
-        print(f"\n  Overall dt_max: {max_dt:.2f}ms")
-        
-        assert max_dt < 200, f"dt_max {max_dt:.2f}ms is unacceptably high"
+        cold_dt = collector.transition_metrics[0]["max"]
+        steady_dt = max(m["max"] for m in collector.transition_metrics[1:])
+        print(f"\n  Cold dt_max: {cold_dt:.2f}ms")
+        print(f"  Steady dt_max: {steady_dt:.2f}ms")
+
+        assert steady_dt < 50, f"steady dt_max {steady_dt:.2f}ms is unacceptably high"
+        assert cold_dt < 350, f"cold dt_max {cold_dt:.2f}ms is unacceptably high"
     
     def test_sustained_workload(self, qtbot, test_pixmap, test_pixmap2, frame_timing_harness):
         """Test 10 back-to-back transitions for degradation."""

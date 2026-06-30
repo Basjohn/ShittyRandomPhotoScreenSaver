@@ -4535,7 +4535,7 @@ def test_reactive_first_frame_uses_hidden_primer_when_source_generation_missing(
 
 
 @pytest.mark.qt
-def test_animation_manager_listener_is_transition_scoped_and_resumes_timer_after_transition(qt_app, qtbot, monkeypatch):
+def test_visualizer_does_not_subscribe_to_transition_animation_manager(qt_app, qtbot, monkeypatch):
     class _FakeAnimationManager:
         def __init__(self):
             self.listener = None
@@ -4583,9 +4583,6 @@ def test_animation_manager_listener_is_transition_scoped_and_resumes_timer_after
     timer = _Timer()
     widget._bars_timer = timer
 
-    ticks: list[str] = []
-    monkeypatch.setattr(widget, "_on_tick", lambda: ticks.append("tick"))
-
     manager = _FakeAnimationManager()
     widget.attach_to_animation_manager(manager)
 
@@ -4593,21 +4590,23 @@ def test_animation_manager_listener_is_transition_scoped_and_resumes_timer_after
     assert manager.listener is None
 
     tick_helpers.pause_timer_during_transition(widget, True)
-    assert widget._using_animation_ticks is True
-    assert manager.listener is not None
-    assert timer.stop_calls == 1
-    assert timer.isActive() is False
+    assert widget._using_animation_ticks is False
+    assert manager.listener is None
+    assert timer.stop_calls == 0
+    assert timer.isActive() is True
 
     parent.running = True
-    manager.listener(0.016)
-    assert ticks == ["tick"]
+    tick_helpers.pause_timer_during_transition(widget, True)
+    assert widget._using_animation_ticks is False
+    assert manager.listener is None
+    assert timer.isActive() is True
 
     parent.running = False
-    manager.listener(0.016)
+    tick_helpers.pause_timer_during_transition(widget, False)
 
     assert widget._using_animation_ticks is False
-    assert manager.removed == 77
-    assert timer.start_calls == 1
+    assert manager.removed is None
+    assert timer.start_calls == 0
     assert timer.isActive() is True
 
     widget.detach_from_animation_manager()

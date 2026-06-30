@@ -223,8 +223,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self._paint_slow_threshold_ms: float = 24.0
         self._paint_warning_last_ts: float = 0.0
 
-        # Animation plumbing: compositor does not own AnimationManager, but we
-        # keep the current animation id so the caller can cancel if needed.
+        # Animation plumbing: compositor transitions are paint-time timeline
+        # driven.  Keep the current token so stale scheduled completions can be
+        # invalidated without depending on a per-frame UI QTimer.
         self._animation_manager: Optional[AnimationManager] = None
         self._current_anim_id: Optional[str] = None
         self._transition_animation_generation: int = 0
@@ -790,6 +791,7 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def _cancel_current_animation(self) -> None:
         """Cancel any previous animation on this compositor."""
+        self._transition_animation_generation += 1
         if self._current_anim_id and self._animation_manager:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
@@ -823,53 +825,67 @@ class GLCompositorWidget(QOpenGLWidget):
             self._ensure_transition_program_ready(transition_label)
         duration_sec = max(0.001, duration_ms / 1000.0)
         
-        # Create frame state but defer render strategy start
+        # Create frame state and wake paint immediately.  Paint cadence and
+        # shader-visible progress are elapsed-time authoritative; completion is
+        # a single generation-guarded handoff instead of thousands of UI timer
+        # callbacks that can collapse after settings churn.
         self._frame_state = FrameState(duration=duration_sec)
-        
-        # Defer metrics initialization - will be initialized on first frame update
-        # Use list to allow mutation in closure (avoid dict overhead on every frame)
-        initialized = [False]
-        profiled_callback = [None]
-        
-        # Wrap callback to initialize metrics on first call (lazy init)
-        def lazy_init_callback(progress: float) -> None:
+        self._frame_state.begin_timeline(easing=easing)
+        self._begin_paint_metrics(transition_label or "transition")
+        self._current_anim_metrics = None
+        self._start_render_timer()
+
+        def _complete_if_current() -> None:
             if (
                 self._render_shutdown_requested
                 or animation_generation != self._transition_animation_generation
             ):
                 return
-            if not initialized[0]:
-                initialized[0] = True
-                # Initialize metrics FIRST before starting timer
-                # to avoid race where timer triggers callback before we're ready
-                self._begin_paint_metrics(transition_label or "transition")
-                metrics = self._begin_animation_metrics(
-                    transition_label or "transition",
-                    duration_ms,
-                    animation_manager,
-                )
-                # Wrap the original callback with metrics
-                profiled_callback[0] = self._wrap_animation_update(update_callback, metrics)
-                # Start render strategy AFTER callback is ready
-                self._start_render_timer()
-                # Call it for this first frame
-                profiled_callback[0](progress)
+            try:
+                update_callback(1.0)
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Final transition progress update failed", exc_info=True)
+            on_complete()
+
+        anim_id = f"{transition_label or 'transition'}:timeline:{id(self)}:{animation_generation}"
+        try:
+            parent = self.parent()
+            thread_manager = getattr(parent, "_thread_manager", None) if parent is not None else None
+            if thread_manager is not None and hasattr(thread_manager, "single_shot"):
+                thread_manager.single_shot(int(duration_ms), _complete_if_current)
             else:
-                # Use cached profiled callback (direct list access, no dict lookup)
-                # Safety check in case initialization failed
-                if profiled_callback[0] is not None:
-                    profiled_callback[0](progress)
-                else:
-                    # Fallback to original callback if profiled not ready
-                    update_callback(progress)
-        
-        anim_id = animation_manager.animate_custom(
-            duration=duration_sec,
-            easing=easing,
-            update_callback=lazy_init_callback,
-            on_complete=on_complete,
-            frame_state=self._frame_state,
-        )
+                from core.threading.manager import ThreadManager
+
+                ThreadManager.single_shot(int(duration_ms), _complete_if_current)
+        except Exception:
+            logger.error(
+                "[GL COMPOSITOR][FALLBACK] Timeline completion scheduler failed; "
+                "falling back to transition AnimationManager for %s",
+                transition_label or "transition",
+                exc_info=True,
+            )
+            metrics = self._begin_animation_metrics(
+                transition_label or "transition",
+                duration_ms,
+                animation_manager,
+            )
+            profiled_callback = self._wrap_animation_update(update_callback, metrics)
+
+            def guarded_update_callback(progress: float) -> None:
+                if (
+                    self._render_shutdown_requested
+                    or animation_generation != self._transition_animation_generation
+                ):
+                    return
+                profiled_callback(progress)
+
+            anim_id = animation_manager.animate_custom(
+                duration=duration_sec,
+                easing=easing,
+                update_callback=guarded_update_callback,
+                on_complete=on_complete,
+                frame_state=self._frame_state,
+            )
         self._current_anim_id = anim_id
         return anim_id
 

@@ -69,6 +69,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Contract Family | Canonical Owner | Related Files | Goal |
 |---|---|---|---|
 | Transition paint progress authority | `core/animation/frame_interpolator.py` | `rendering/gl_compositor_pkg/paint.py`, transition controllers | Paint reads use elapsed-time/easing state so visible shader progress is not capped by stale `AnimationManager` callback samples. |
+| Transition start / render wake authority | `rendering/gl_compositor.py` | `core/animation/animator.py`, compositor metrics | Render strategy and transition metrics begin at transition start, not from the first animation callback. |
 | Transition/display perf health bar | `tools/transition_perf_health_parser.py` | `core/animation/animator.py`, compositor metrics, sidecar logs | Keep paired render/paint starvation, `GL ANIM` vs `GL PAINT`, fallback usage, texture uploads, visualizer latency, and owner/peak-count animation evidence loud. |
 | No UI-pressure cadence fixes | `Docs/Guardrails.md` | adaptive timers, display rebuild, settings entry | Do not fix missed paints or low FPS by queueing extra UI work; prove ownership/timing/cache/upload root cause first. |
 
@@ -87,6 +88,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Contract Family | Canonical Owner | Related Files | Goal |
 |---|---|---|---|
 | Runtime coordinator | `widgets/spotify_visualizer_widget.py` | activation/config/runtime helpers | One owner for mode activation, render lifecycle, and runtime state handoff. |
+| Visualizer tick cadence | `widgets/spotify_visualizer/tick_helpers.py` | `core/animation/animator.py`, transition controllers | Dedicated recurring timer owns visualizer ticks; transition `AnimationManager` instances must not run visualizer `_on_tick()` listeners. |
 | Activation / mode switch runtime contract | `widgets/spotify_visualizer/activation_runtime.py` | `mode_transition.py`, preset manager | One resolved-activation path for startup, settings refresh, and hot switches. |
 | Technical config caching / replay | `widgets/spotify_visualizer/technical_config.py`, `runtime_config.py` | beat engine, widget runtime | One authoritative runtime technical-config replay seam. |
 | Shared beat/audio engine | `widgets/spotify_visualizer/beat_engine.py` | bubble feed, capture lifecycle, idle seed | One capture/floor/reactivity engine shared across modes. |

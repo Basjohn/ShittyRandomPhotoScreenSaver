@@ -7,6 +7,7 @@ All functions accept the compositor widget instance as the first parameter.
 
 from __future__ import annotations
 
+import weakref
 from typing import Optional, Callable, TYPE_CHECKING
 
 from PySide6.QtCore import QPoint, QTimer
@@ -40,6 +41,11 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+try:
+    from shiboken6 import Shiboken
+except Exception:  # pragma: no cover - shiboken may be unavailable in some test contexts
+    Shiboken = None
+
 
 def _start_with_desync(
     widget,
@@ -56,13 +62,26 @@ def _start_with_desync(
             on_started(compensated_duration)
         return starter(compensated_duration)
 
+    widget_ref = weakref.ref(widget)
     scheduled_generation = getattr(widget, "_transition_animation_generation", 0)
 
     def deferred_start() -> None:
+        target = widget_ref()
+        if target is None:
+            logger.debug("[GL COMPOSITOR] Suppressed deferred %s start after compositor wrapper was collected", transition_label)
+            return
+        if Shiboken is not None:
+            try:
+                if not Shiboken.isValid(target):
+                    logger.debug("[GL COMPOSITOR] Suppressed deferred %s start after compositor was deleted", transition_label)
+                    return
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to validate deferred %s compositor", transition_label, exc_info=True)
+                return
         try:
             if (
-                getattr(widget, "_render_shutdown_requested", False)
-                or scheduled_generation != getattr(widget, "_transition_animation_generation", 0)
+                getattr(target, "_render_shutdown_requested", False)
+                or scheduled_generation != getattr(target, "_transition_animation_generation", 0)
             ):
                 logger.debug(
                     "[GL COMPOSITOR] Suppressed stale deferred %s start after compositor lifecycle changed",
@@ -79,7 +98,20 @@ def _start_with_desync(
                 exc_info=True,
             )
 
-    QTimer.singleShot(delay_ms, deferred_start)
+    try:
+        parent = widget.parent()
+        scheduler = getattr(parent, "_thread_manager", None) if parent is not None else None
+        if scheduler is not None and hasattr(scheduler, "single_shot"):
+            scheduler.single_shot(delay_ms, deferred_start)
+        else:
+            QTimer.singleShot(delay_ms, deferred_start)
+    except Exception:
+        logger.warning(
+            "[GL COMPOSITOR][FALLBACK] Deferred %s start scheduler failed; using Qt singleShot",
+            transition_label,
+            exc_info=True,
+        )
+        QTimer.singleShot(delay_ms, deferred_start)
     return f"{transition_label}:deferred:{id(widget)}"
 
 

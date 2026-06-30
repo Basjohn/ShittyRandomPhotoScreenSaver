@@ -32,18 +32,18 @@ win_diag_logger = logging.getLogger("win_diag")
 
 
 _TRANSITION_PROGRESS_ATTRS = (
-    "_blockspin",
-    "_blockflip",
-    "_raindrops",
-    "_warp",
-    "_diffuse",
-    "_blinds",
-    "_crumble",
-    "_particle",
-    "_burn",
-    "_crossfade",
-    "_slide",
-    "_wipe",
+    ("_blockspin", "blockspin"),
+    ("_blockflip", "blockflip"),
+    ("_raindrops", "raindrops"),
+    ("_warp", "warp"),
+    ("_diffuse", "diffuse"),
+    ("_blinds", "blinds"),
+    ("_crumble", "crumble"),
+    ("_particle", "particle"),
+    ("_burn", "burn"),
+    ("_crossfade", "crossfade"),
+    ("_slide", "slide"),
+    ("_wipe", "wipe"),
 )
 
 
@@ -68,11 +68,14 @@ def _sync_transition_progress_from_frame_state(widget) -> None:
         logger.debug("[GL COMPOSITOR] FrameState interpolation failed", exc_info=True)
         return
     progress = max(0.0, min(1.0, progress))
-    for attr in _TRANSITION_PROGRESS_ATTRS:
+    profiler = getattr(widget, "_profiler", None)
+    for attr, profiler_name in _TRANSITION_PROGRESS_ATTRS:
         state = getattr(widget, attr, None)
         if state is not None and hasattr(state, "progress"):
             try:
                 state.progress = progress
+                if profiler is not None and profiler_name:
+                    profiler.tick(profiler_name)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
 

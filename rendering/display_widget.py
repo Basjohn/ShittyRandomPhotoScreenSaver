@@ -867,6 +867,26 @@ class DisplayWidget(QWidget):
         processed to for this display. Used by async image processing pipelines.
         """
         logical_size = self.size()
+        screen = getattr(self, "_screen", None)
+        if screen is not None:
+            try:
+                screen_geom = screen.geometry()
+                screen_size = screen_geom.size()
+                # Before show_on_screen() has applied fullscreen geometry, Qt
+                # widgets can still report the default 640x480. Do not let the
+                # image cache warm/consume a tiny variant for a real display.
+                if (
+                    logical_size.width() <= 640
+                    and logical_size.height() <= 480
+                    and (
+                        screen_size.width() > logical_size.width()
+                        or screen_size.height() > logical_size.height()
+                    )
+                ):
+                    logical_size = QSize(screen_size.width(), max(1, screen_size.height() - 1))
+                    self._device_pixel_ratio = screen.devicePixelRatio()
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Failed to resolve screen target size: %s", e)
         return QSize(
             int(logical_size.width() * self._device_pixel_ratio),
             int(logical_size.height() * self._device_pixel_ratio)
