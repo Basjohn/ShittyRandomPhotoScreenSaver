@@ -52,6 +52,23 @@ python tools/reddit_helper_task_harness.py --action smoke-test --task-name SRPSS
 ```
 - See also: `Docs/Historical_Bugs.md` entry `R-02`.
 
+### Reddit widget automatic refresh cadence
+- Purpose: protect Reddit widget cache/update cadence so settings/runtime rebuilds cannot keep resetting the first periodic refresh into the future.
+- Use when:
+  - editing `widgets/reddit_widget.py`
+  - editing shared service-widget timer/startup refresh policy
+  - investigating stale Reddit cache timestamps or missing `[CACHE][REDDIT] Periodic refresh fired` logs
+- Typical command:
+```powershell
+python -m pytest `
+  tests/test_reddit_widget.py::test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset `
+  tests/test_reddit_widget.py::test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence `
+  tests/test_reddit_widget.py::test_reddit_periodic_due_survives_widget_rebuild `
+  tests/test_reddit_widget.py::test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1 `
+  -q
+```
+- See also: `Docs/Historical_Bugs.md` entry `R-29`.
+
 ## Media Keys / MC Focus
 
 ### Media-key scenario matrix

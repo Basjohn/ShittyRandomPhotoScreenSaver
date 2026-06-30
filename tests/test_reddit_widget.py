@@ -497,7 +497,7 @@ def test_reddit_activate_skips_startup_fetch_when_recent_startup_attempt_exists(
 
 
 @pytest.mark.qt
-def test_reddit_periodic_refresh_uses_shared_15_minute_cadence_without_network(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     fake_tm = _FakeThreadManager()
@@ -505,17 +505,26 @@ def test_reddit_periodic_refresh_uses_shared_15_minute_cadence_without_network(q
     monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
 
     try:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
         widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
+        calls = []
+        monkeypatch.setattr(widget, "_fetch_feed", lambda **kwargs: calls.append(kwargs) or True)  # type: ignore[method-assign]
+
         widget._schedule_timer()  # type: ignore[attr-defined]
 
-        assert fake_tm.recurring_calls == [(15 * 60 * 1000, "RedditWidget refresh")]
-        assert widget._update_timer_start_timer is None  # type: ignore[attr-defined]
+        assert calls == [{}]
+        assert fake_tm.recurring_calls == []
+        starter = widget._update_timer_start_timer  # type: ignore[attr-defined]
+        assert starter is not None
+        assert 899_000 <= starter.interval() <= 900_000
     finally:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
         widget.cleanup()
 
 
 @pytest.mark.qt
-def test_reddit2_periodic_refresh_staggers_initial_phase_not_repeat_cadence(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+def test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     fake_tm = _FakeThreadManager()
@@ -523,7 +532,9 @@ def test_reddit2_periodic_refresh_staggers_initial_phase_not_repeat_cadence(qt_a
     monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
 
     try:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
         widget._cache_key = "reddit2"  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=2))
         widget._schedule_timer()  # type: ignore[attr-defined]
 
         assert fake_tm.recurring_calls == []
@@ -531,11 +542,31 @@ def test_reddit2_periodic_refresh_staggers_initial_phase_not_repeat_cadence(qt_a
         assert starter is not None
         assert starter.isActive() is True
         assert starter.interval() == int(7.5 * 60 * 1000)
-
-        widget._start_recurring_update_timer()  # type: ignore[attr-defined]
-
-        assert fake_tm.recurring_calls == [(15 * 60 * 1000, "RedditWidget refresh")]
     finally:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_periodic_due_survives_widget_rebuild(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    widget.set_thread_manager(_FakeThreadManager())
+    try:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
+        due_mono = time.monotonic() + 123.0
+        RedditWidget._periodic_due_by_cache_key["reddit2"] = due_mono  # type: ignore[attr-defined]
+        widget._cache_key = "reddit2"  # type: ignore[attr-defined]
+        monkeypatch.setattr(reddit_module.random, "randint", lambda _low, _high: 0)
+        monkeypatch.setattr(widget, "_get_cache_timestamp", lambda: datetime.now() - timedelta(hours=8))
+
+        widget._schedule_timer()  # type: ignore[attr-defined]
+
+        starter = widget._update_timer_start_timer  # type: ignore[attr-defined]
+        assert starter is not None
+        assert 121_000 <= starter.interval() <= 123_000
+    finally:
+        RedditWidget._periodic_due_by_cache_key.clear()  # type: ignore[attr-defined]
         widget.cleanup()
 
 
@@ -593,7 +624,7 @@ def test_reddit2_startup_refresh_shares_recent_attempt_gate_with_reddit1(qt_app,
         widget1._activate_impl()
         widget2._activate_impl()
 
-        assert calls1 == ["timer", ("fetch", {})]
+        assert calls1 == [("fetch", {}), "timer"]
         assert calls2 == ["timer"]
         assert widget2._get_startup_refresh_decision().reason == "startup_attempt_cooldown"  # type: ignore[attr-defined]
     finally:
@@ -757,7 +788,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_fresh(qt_app, qtbot, m
 
         widget._activate_impl()
 
-        assert calls == ["timer", ("fetch", {})]
+        assert calls == [("fetch", {}), "timer"]
     finally:
         widget.cleanup()
 
@@ -778,7 +809,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_old(qt_app, qtbot, mon
 
         widget._activate_impl()
 
-        assert calls == ["timer", ("fetch", {})]
+        assert calls == [("fetch", {}), "timer"]
     finally:
         widget.cleanup()
 
@@ -810,7 +841,7 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
 
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Cached post"  # type: ignore[attr-defined]
-        assert calls == ["timer", ("fetch", {})]
+        assert calls == [("fetch", {}), "timer"]
     finally:
         widget.cleanup()
 

@@ -28,8 +28,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - [x] Preserve latest honest-paint evidence at `.tmp/perf_settings_evidence_20260630_020535`.
 - [x] Keep PERF HUD / parser paint-authoritative: `GL PAINT` is the visible cadence signal; `GL RENDER` and `GL ANIM` are supporting diagnostics.
-- [x] Classify current evidence without over-closing it: latest logs show healthy `GL RENDER` near target while `GL PAINT` under-delivers, including one near-60 high-refresh window and one Display 1 under-target window.
-- [ ] Keep rare `60/40` collapse deferred/watchlist until more post-compositor-rewrite evidence accumulates; do not close it, but do not let it swallow concrete abnormalities.
+- [x] Classify current evidence without over-closing it: latest logs show healthy `GL RENDER` near target while `GL PAINT` under-delivers, with Display 0 Raindrops visible paint around `82-89fps` against a `165Hz` target and no high-refresh near-60 collapse in this run.
+- [ ] Keep rare `60/40` collapse deferred/watchlist until more post-compositor-rewrite evidence accumulates; do not close it, but treat the current run as paint-starvation evidence rather than the exact old collapse signature.
 - [ ] Strengthen the perf parser only where it can prove a wrong behavior: healthy render timer plus poor paint delivery, stable-divisor paint cadence, settings/edit/display lifecycle correlation, and fallback reliance.
 - [x] Promote settings UI stalls above 1s to first-class parser anomalies so `--perf` captures settings/build cost instead of burying it in timeline output.
 - [ ] Investigate paint-delivery under-target from root seams only: `QOpenGLWidget.update()` consumption, pending-flag lifecycle, compositor/display rebuild boundaries, texture/cache upload timing, settings UI event-loop stalls, and visualizer tick payload.
@@ -46,16 +46,23 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Align WidgetsTab tests with current descriptor ownership: visualizer save/load routes through `visualizers`, while dev-gated Blob UI tests opt into the Blob gate deliberately.
 - [ ] Audit any settings-time event storms or long-running dialog work that can continue into runtime; fixes must preserve persistence, buckets, scroll position, and lazy-build contracts.
 - [ ] Keep WidgetsTab builders/loaders cheap and UI-focused. Backend/cache/auth probes must stay deferred or explicit.
-- [ ] If fresh `--set` evidence still shows Visualizers section stalls, use the new per-mode timing to decide whether mode-panel lazy construction is worth the complexity; do not bypass preset persistence, bucket state, or scroll-state contracts.
+- [ ] If fresh `--set` evidence still shows Visualizers section stalls, use the new per-mode timing to decide whether mode-panel lazy construction is worth the complexity; current logs still show explicit Visualizers builds at about `1.1-1.38s`, while later settings opens not visiting Visualizers are much cheaper at about `325-334ms`.
 - [ ] Add or extend a harness only when it can fail on measurable churn, stale background hydration, or deleted-wrapper callbacks.
 
-### 4. Runtime Health Audit Follow-Through
+### 4. Reddit Periodic Cadence
+
+- [x] Root-cause the latest stale-cache shape: settings/runtime rebuilds recreated Reddit widgets and restarted instance-local 15-minute timers before they could fire; `reddit` had refreshed at startup while `reddit2` stayed stale because the shared startup-attempt gate correctly prevented a second immediate startup fetch.
+- [x] Replace instance-local first-tick authority with a per-cache-key due-time scheduler: startup fetches mark the next attempt `15min` out, stale skipped widgets get their authored stagger, and rebuilds reattach to the preserved due horizon instead of restarting it.
+- [x] Add Reddit bars for stale primary due firing, stale secondary stagger, and preserved due surviving widget rebuild.
+- [ ] Runtime-check a compiled/long run for the new log shape: `Periodic refresh timer armed ... due_delay_s=... due_reason=...`, then `[CACHE][REDDIT] Periodic refresh fired` without requiring app restart or manual refresh.
+- [ ] Keep Reddit provider/API/network behavior separate from this cadence fix; if fetches fire but return blocked/empty results, reopen the provider track without changing the scheduler.
+
+### 5. Runtime Health Audit Follow-Through
 
 - [ ] Continue executing the project-wide runtime health audit in `audits/ArchitectureAudit/Project_Health_Audit.md`, but keep `Current_Plan.md` limited to active next steps.
 - [ ] Keep compositor/transition fallbacks clean: success must name the real shader/deferred path; failure must be loud, not a silent substitute.
 - [ ] Keep cache/prescale fallback pressure loud through `--cache`; prefer worker/cache ownership fixes over UI-thread decode, scaling, or synchronous retry paths.
 - [ ] Keep context-menu visualizer mode switching watchlisted until one sole-global CUSTOM visualizer case from the other display is runtime-checked.
-- [ ] Keep Reddit periodic cadence awaiting compiled-build validation: expect `[CACHE][REDDIT] Periodic refresh fired` for `reddit` around `15min` and `reddit2` around `22.5min`, subject to jitter/cooldown/transition deferral.
 
 ## Watchlist
 

@@ -59,7 +59,7 @@ from widgets.shadow_utils import (
     header_shadows_enabled,
     text_shadows_enabled,
 )
-from widgets.overlay_timers import create_overlay_timer, OverlayTimerHandle
+from widgets.overlay_timers import OverlayTimerHandle
 from widgets.reddit_components import (  # noqa: F401 (re-exports for tests/external)
     RedditPosition,
     RedditPost,
@@ -109,6 +109,7 @@ class RedditWidget(BaseOverlayWidget):
     REFRESH_INTERVAL = timedelta(minutes=15)
     SECONDARY_WIDGET_STAGGER = timedelta(minutes=7, seconds=30)
     REFRESH_TIMER_JITTER_MS = 2000
+    _periodic_due_by_cache_key: Dict[str, float] = {}
 
     def __init__(
         self,
@@ -756,23 +757,29 @@ class RedditWidget(BaseOverlayWidget):
 
         cadence_ms = self._refresh_interval_ms()
         phase_delay_ms, jitter_ms = self._refresh_phase_delay_ms()
+        delay_ms, due_reason = self._refresh_due_delay_ms(
+            phase_delay_ms=phase_delay_ms,
+            cadence_ms=cadence_ms,
+        )
         logger.info(
-            "[CACHE][REDDIT] Periodic refresh timer armed cache_key=%s cadence_s=%.1f phase_delay_s=%.1f jitter_ms=%+d",
+            "[CACHE][REDDIT] Periodic refresh timer armed cache_key=%s cadence_s=%.1f phase_delay_s=%.1f jitter_ms=%+d due_delay_s=%.1f due_reason=%s",
             self._cache_key,
             cadence_ms / 1000.0,
             phase_delay_ms / 1000.0,
             jitter_ms,
+            delay_ms / 1000.0,
+            due_reason,
         )
-        if phase_delay_ms <= 0:
-            self._start_recurring_update_timer()
+        if delay_ms <= 0:
+            self._on_periodic_due_timer()
             return
 
         ensure_single_shot_timer(
             self,
             attr_name="_update_timer_start_timer",
-            delay_ms=phase_delay_ms,
-            timeout_callback=self._start_recurring_update_timer,
-            resource_name="reddit periodic refresh starter",
+            delay_ms=delay_ms,
+            timeout_callback=self._on_periodic_due_timer,
+            resource_name="reddit periodic refresh due timer",
         )
 
     def _refresh_interval_ms(self) -> int:
@@ -784,35 +791,53 @@ class RedditWidget(BaseOverlayWidget):
         jitter_ms = random.randint(-self.REFRESH_TIMER_JITTER_MS, self.REFRESH_TIMER_JITTER_MS)
         return max(0, base_delay_ms + jitter_ms), jitter_ms
 
-    def _start_recurring_update_timer(self) -> None:
-        if not shiboken_isValid(self) or self._shutdown_event.is_set():
-            return
-        if not automatic_service_updates_enabled():
-            return
-        if self._update_timer_handle is not None:
-            return
+    def _refresh_due_delay_ms(self, *, phase_delay_ms: int, cadence_ms: int) -> tuple[int, str]:
+        """Return the delay until the next periodic attempt.
 
-        interval_ms = self._refresh_interval_ms()
-        handle = create_overlay_timer(
-            self,
-            interval_ms,
-            self._on_periodic_refresh_timer,
-            description="RedditWidget refresh",
+        The due timestamp is keyed by Reddit widget identity rather than by the
+        transient widget instance. Settings/runtime rebuilds can therefore
+        reattach to the same refresh horizon instead of restarting a full
+        15-minute timer every time the widget is recreated.
+        """
+
+        now_mono = time.monotonic()
+        cache_key = str(self._cache_key or "reddit")
+        due_mono = self._periodic_due_by_cache_key.get(cache_key)
+        if due_mono is not None:
+            return max(0, int((due_mono - now_mono) * 1000)), "preserved_due"
+
+        cache_timestamp = self._get_cache_timestamp()
+        if cache_timestamp is not None:
+            cache_age_ms = int(max(0.0, (datetime.now() - cache_timestamp).total_seconds() * 1000.0))
+            if cache_age_ms < cadence_ms:
+                delay_ms = max(0, cadence_ms - cache_age_ms)
+                self._periodic_due_by_cache_key[cache_key] = now_mono + (delay_ms / 1000.0)
+                return delay_ms, "cache_fresh_due"
+
+        delay_ms = max(0, int(phase_delay_ms))
+        self._periodic_due_by_cache_key[cache_key] = now_mono + (delay_ms / 1000.0)
+        return delay_ms, "cache_stale_staggered_due"
+
+    def _mark_periodic_attempt_now(self) -> None:
+        cache_key = str(self._cache_key or "reddit")
+        self._periodic_due_by_cache_key[cache_key] = time.monotonic() + (
+            self._refresh_interval_ms() / 1000.0
         )
-        self._update_timer_handle = handle
-        try:
-            self._update_timer = getattr(handle, "_timer", None)
-        except Exception as e:
-            logger.debug("[REDDIT] Exception suppressed: %s", e)
-            self._update_timer = None
-        logger.info(
-            "[CACHE][REDDIT] Periodic refresh timer running cache_key=%s cadence_s=%.1f",
-            self._cache_key,
-            interval_ms / 1000.0,
-        )
+
+    def _on_periodic_due_timer(self) -> None:
+        self._update_timer_start_timer = None
+        self._on_periodic_refresh_timer()
+        self._schedule_timer()
+
+    def _start_recurring_update_timer(self) -> None:
+        # Compatibility seam for older tests/external callers. Reddit now uses
+        # due-time single shots so settings rebuilds cannot keep resetting the
+        # first periodic refresh into the future.
+        self._on_periodic_due_timer()
 
     def _on_periodic_refresh_timer(self) -> None:
         logger.info("[CACHE][REDDIT] Periodic refresh fired cache_key=%s", self._cache_key)
+        self._mark_periodic_attempt_now()
         self._fetch_feed()
 
     def _fetch_feed(self, *, defer_for_transition: bool = True) -> bool:
@@ -2231,7 +2256,6 @@ class RedditWidget(BaseOverlayWidget):
             logger.info("[REDDIT] Automatic updates disabled via --noupdates; manual refresh only")
             return
 
-        self._schedule_timer()
         decision = self._get_startup_refresh_decision()
         if decision.run:
             logger.info(
@@ -2240,7 +2264,9 @@ class RedditWidget(BaseOverlayWidget):
                 f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
             )
             self._touch_startup_attempt_timestamp_now()
+            self._mark_periodic_attempt_now()
             self._fetch_feed()
+            self._schedule_timer()
             return
 
         logger.info(
@@ -2248,6 +2274,7 @@ class RedditWidget(BaseOverlayWidget):
             decision.reason,
             f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
         )
+        self._schedule_timer()
 
     def _touch_cache_timestamp_now(self) -> None:
         """Refresh the cache timestamp so startup policy backs off after a block."""
