@@ -328,7 +328,7 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
 
 @pytest.mark.qt
-def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app, qtbot):  # noqa: ARG001
+def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app, qtbot, monkeypatch):  # noqa: ARG001
     from core.reddit_post_provider import RedditHtmlProvider
     from widgets.reddit_components import RedditPost
 
@@ -359,6 +359,7 @@ def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app
             ),
         ]
         widget._all_fetched_posts = existing  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: [])
 
         merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
             incoming,
@@ -372,6 +373,115 @@ def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app
             "Fresh sparse fallback 2",
         ]
         assert "Cached post 23" not in {post.title for post in merged}
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_sparse_html_fallback_uses_persisted_cache_when_runtime_cache_is_empty(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    from core.reddit_post_provider import RedditHtmlProvider
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        persisted = [
+            RedditPost(
+                title=f"Persisted cached post {idx}",
+                url=f"https://old.reddit.com/r/Games/comments/persisted{idx}/persisted_cached_post_{idx}/",
+                score=idx,
+                created_utc=1_700_000_000.0 - idx,
+            )
+            for idx in range(LIST_WIDGET_MAX_CAPACITY)
+        ]
+        incoming = [
+            RedditPost(
+                title="Fresh sparse fallback",
+                url="https://old.reddit.com/r/Games/comments/fresh/fresh_sparse_fallback/",
+                score=100,
+                created_utc=1_700_000_500.0,
+            )
+        ]
+        widget._all_fetched_posts = []  # type: ignore[attr-defined]
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(persisted))
+
+        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
+            incoming,
+            source_id=RedditHtmlProvider.SOURCE_OLD,
+            attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+        )
+
+        assert len(merged) == LIST_WIDGET_MAX_CAPACITY
+        assert merged[0].title == "Fresh sparse fallback"
+        assert "Persisted cached post 24" not in {post.title for post in merged}
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_deferred_sparse_html_preserves_source_metadata_for_cache_merge(qt_app, qtbot, monkeypatch):  # noqa: ARG001
+    import widgets.service_widget_runtime as service_runtime
+    from core.reddit_post_provider import RedditHtmlProvider
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        persisted = [
+            RedditPost(
+                title=f"Persisted cached post {idx}",
+                url=f"https://old.reddit.com/r/Games/comments/persisted{idx}/persisted_cached_post_{idx}/",
+                score=idx,
+                created_utc=1_700_000_000.0 - idx,
+            )
+            for idx in range(LIST_WIDGET_MAX_CAPACITY)
+        ]
+        incoming = [
+            {
+                "title": "Fresh sparse fallback",
+                "url": "https://old.reddit.com/r/Games/comments/fresh/fresh_sparse_fallback/",
+                "score": 100,
+                "created_utc": 1_700_000_500.0,
+            }
+        ]
+        saved: list[list[RedditPost]] = []
+        transition_busy = {"value": True}
+
+        monkeypatch.setattr(
+            service_runtime,
+            "parent_transition_running",
+            lambda _widget: transition_busy["value"],
+        )
+        monkeypatch.setattr(
+            reddit_module,
+            "parent_transition_running",
+            lambda _widget: transition_busy["value"],
+        )
+        monkeypatch.setattr(widget, "_load_cached_posts", lambda: list(persisted))
+        monkeypatch.setattr(widget, "_save_cached_posts", lambda posts: saved.append(list(posts)))
+        monkeypatch.setattr(widget, "_display_configured_posts", lambda *args, **kwargs: None)
+        monkeypatch.setattr(widget, "_mark_periodic_terminal_now", lambda *args, **kwargs: None)
+        monkeypatch.setattr(widget, "_schedule_deferred_refresh", lambda: None)
+
+        widget._on_feed_fetched(  # type: ignore[attr-defined]
+            incoming,
+            source_id=RedditHtmlProvider.SOURCE_OLD,
+            attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+        )
+
+        assert widget._deferred_posts_data == incoming  # type: ignore[attr-defined]
+        assert widget._deferred_posts_source_id == RedditHtmlProvider.SOURCE_OLD  # type: ignore[attr-defined]
+        assert widget._deferred_posts_attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD)  # type: ignore[attr-defined]
+        assert saved == []
+
+        transition_busy["value"] = False
+        widget._flush_deferred_refresh()  # type: ignore[attr-defined]
+
+        assert len(saved) == 1
+        assert len(saved[0]) == LIST_WIDGET_MAX_CAPACITY
+        assert saved[0][0].title == "Fresh sparse fallback"
+        assert widget._deferred_posts_source_id is None  # type: ignore[attr-defined]
+        assert widget._deferred_posts_attempted_sources == ()  # type: ignore[attr-defined]
     finally:
         widget.cleanup()
 

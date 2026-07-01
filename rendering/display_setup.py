@@ -214,16 +214,20 @@ def show_on_screen(widget) -> None:
     if widget._is_mc_build and focusable:
         try:
             from rendering.display_input import _restore_mc_input_focus
-            from PySide6.QtCore import QTimer
 
-            QTimer.singleShot(
-                0,
-                lambda w=widget: _restore_mc_input_focus(
+            def _restore_focus(w=widget) -> None:
+                _restore_mc_input_focus(
                     w,
                     "startup_show_on_screen",
                     focus_reason=Qt.FocusReason.ActiveWindowFocusReason,
-                ),
-            )
+                )
+
+            if widget._thread_manager is not None and hasattr(widget._thread_manager, "single_shot"):
+                widget._thread_manager.single_shot(0, _restore_focus)
+            else:
+                logger.warning(
+                    "[DISPLAY_WIDGET][FALLBACK] MC startup focus reclaim skipped: ThreadManager unavailable"
+                )
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to schedule MC startup focus reclaim", exc_info=True)
 

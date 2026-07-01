@@ -14,7 +14,7 @@ from typing import Optional, TYPE_CHECKING
 
 import weakref
 
-from PySide6.QtCore import QTimer, QRect
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QPixmap
 
 try:
@@ -102,11 +102,11 @@ def _complete_startup_first_frame_ready(widget, image_path: str, token: int) -> 
 
 
 def _schedule_startup_first_frame_ready(widget, image_path: str) -> None:
-    """Defer startup readiness until the first frame crosses a paint boundary.
+    """Defer startup readiness through the app ThreadManager handoff.
 
-    On startup we previously emitted `image_displayed` immediately after
-    `update()`, which only queues a repaint. Under a busier host environment
-    that let overlay fade coordination outrun the actual first frame.
+    This deliberately avoids QTimer lifecycle nudges and forced repaint().
+    The caller already queues the normal widget update; this seam only delays
+    readiness publication so deleted/stale widgets cannot win the startup race.
     """
     token = int(getattr(widget, "_pending_startup_frame_token", 0)) + 1
     setattr(widget, "_pending_startup_frame_token", token)
@@ -121,36 +121,26 @@ def _schedule_startup_first_frame_ready(widget, image_path: str) -> None:
             token,
         )
 
-    def _flush_presentation() -> None:
+    def _complete_when_current() -> None:
         if int(getattr(widget, "_pending_startup_frame_token", 0)) != token:
             return
+        _complete_startup_first_frame_ready(widget, image_path, token)
 
-        comp = getattr(widget, "_gl_compositor", None)
+    thread_manager = getattr(widget, "_thread_manager", None)
+    if thread_manager is not None and hasattr(thread_manager, "single_shot"):
         try:
-            if isinstance(comp, GLCompositorWidget) and comp.isVisible():
-                comp.update()
-                comp.repaint()
-                if is_verbose_logging():
-                    logger.debug(
-                        "[STARTUP] Flushed first-frame via GL compositor on screen=%s token=%s",
-                        getattr(widget, "screen_index", "?"),
-                        token,
-                    )
-            else:
-                widget.update()
-                widget.repaint()
-                if is_verbose_logging():
-                    logger.debug(
-                        "[STARTUP] Flushed first-frame via base widget paint on screen=%s token=%s",
-                        getattr(widget, "screen_index", "?"),
-                        token,
-                    )
+            thread_manager.single_shot(0, _complete_when_current)
+            return
         except Exception:
-            logger.debug("[STARTUP] First-frame presentation flush failed", exc_info=True)
-
-        QTimer.singleShot(0, lambda: _complete_startup_first_frame_ready(widget, image_path, token))
-
-    QTimer.singleShot(0, _flush_presentation)
+            logger.warning(
+                "[STARTUP][FALLBACK] ThreadManager first-frame readiness handoff failed; completing inline",
+                exc_info=True,
+            )
+    else:
+        logger.warning(
+            "[STARTUP][FALLBACK] ThreadManager unavailable for first-frame readiness; completing inline"
+        )
+    _complete_when_current()
 
 
 def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPixmap, 

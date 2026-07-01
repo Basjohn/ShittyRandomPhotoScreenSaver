@@ -181,6 +181,8 @@ class RedditWidget(BaseOverlayWidget):
         self._deferred_refresh_timer: Optional[QTimer] = None
         self._pending_refresh_after_transition: bool = False
         self._deferred_posts_data: Optional[List[Dict[str, Any]]] = None
+        self._deferred_posts_source_id: Optional[str] = None
+        self._deferred_posts_attempted_sources: tuple[str, ...] = ()
         self._deferred_fetch_error: Optional[str] = None
 
         # Hover state and tooltip management
@@ -402,6 +404,8 @@ class RedditWidget(BaseOverlayWidget):
             state_attrs=(
                 ("_pending_refresh_after_transition", False),
                 ("_deferred_posts_data", None),
+                ("_deferred_posts_source_id", None),
+                ("_deferred_posts_attempted_sources", ()),
                 ("_deferred_fetch_error", None),
                 ("_fetch_in_progress", False),
             ),
@@ -1044,20 +1048,37 @@ class RedditWidget(BaseOverlayWidget):
             return
         if self._deferred_posts_data is not None:
             posts_data = self._deferred_posts_data
+            source_id = self._deferred_posts_source_id
+            attempted_sources = self._deferred_posts_attempted_sources
             self._deferred_posts_data = None
-            self._on_feed_fetched(posts_data, defer_for_transition=False)
+            self._deferred_posts_source_id = None
+            self._deferred_posts_attempted_sources = ()
+            self._on_feed_fetched(
+                posts_data,
+                defer_for_transition=False,
+                source_id=source_id,
+                attempted_sources=attempted_sources,
+            )
             return
         if self._deferred_fetch_error is not None:
             error = self._deferred_fetch_error
             self._deferred_fetch_error = None
+            self._deferred_posts_source_id = None
+            self._deferred_posts_attempted_sources = ()
             self._on_fetch_error(error, defer_for_transition=False)
             return
         if self._pending_refresh_after_transition:
             self._pending_refresh_after_transition = False
             self._trigger_manual_refresh()
 
-    def _defer_feed_apply_if_transition(self, posts_data: List[Dict[str, Any]]) -> bool:
-        return defer_value_if_transition(
+    def _defer_feed_apply_if_transition(
+        self,
+        posts_data: List[Dict[str, Any]],
+        *,
+        source_id: str | None,
+        attempted_sources: tuple[str, ...],
+    ) -> bool:
+        deferred = defer_value_if_transition(
             self,
             attr_name="_deferred_posts_data",
             value=list(posts_data),
@@ -1066,8 +1087,14 @@ class RedditWidget(BaseOverlayWidget):
             logger=logger,
             log_message="[REDDIT] Deferred fetched posts apply until active transition finishes",
         )
+        if deferred:
+            self._deferred_posts_source_id = source_id
+            self._deferred_posts_attempted_sources = tuple(attempted_sources)
+        return deferred
 
     def _defer_fetch_error_if_transition(self, error: str) -> bool:
+        self._deferred_posts_source_id = None
+        self._deferred_posts_attempted_sources = ()
         return defer_value_if_transition(
             self,
             attr_name="_deferred_fetch_error",
@@ -1133,7 +1160,11 @@ class RedditWidget(BaseOverlayWidget):
             return
         end_fetch_guard(self)
         self._stop_refresh_spinner()
-        if defer_for_transition and self._defer_feed_apply_if_transition(posts_data):
+        if defer_for_transition and self._defer_feed_apply_if_transition(
+            posts_data,
+            source_id=source_id,
+            attempted_sources=attempted_sources,
+        ):
             return
         
         if not posts_data:
@@ -1262,7 +1293,9 @@ class RedditWidget(BaseOverlayWidget):
         if not html_source or len(posts) >= LIST_WIDGET_MAX_CAPACITY:
             return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
 
-        cached_posts = list(self._all_fetched_posts) or self._load_cached_posts()
+        current_posts = list(self._all_fetched_posts)
+        persisted_posts = self._load_cached_posts()
+        cached_posts = self._dedupe_candidate_posts([*current_posts, *persisted_posts])
         if len(cached_posts) <= len(posts):
             return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
 

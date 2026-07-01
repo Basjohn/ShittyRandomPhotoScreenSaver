@@ -157,6 +157,9 @@ class ScreensaverEngine(QObject):
         self._display_initialized: bool = False  # Still needed for display-specific init
         self._rotation_timer: Optional[QTimer] = None
         self._current_image: Optional[ImageMetadata] = None
+        self._pending_monitor_replay_image: Optional[ImageMetadata] = None
+        self._display_initializing: bool = False
+        self._pending_displays_ready_generation: Optional[int] = None
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
         # Per-display image history for multi-monitor "previous" support.
@@ -634,6 +637,8 @@ class ScreensaverEngine(QObject):
         """Initialize display manager."""
         try:
             logger.info("Initializing display...")
+            self._display_initializing = True
+            self._pending_displays_ready_generation = None
             
             # Get display settings
             display_mode_str = self.settings_manager.get('display.mode', 'fill')
@@ -660,6 +665,8 @@ class ScreensaverEngine(QObject):
             self.display_manager.cycle_transition_requested.connect(self._on_cycle_transition)
             self.display_manager.settings_requested.connect(self._on_settings_requested)
             self.display_manager.custom_layout_reload_requested.connect(self._on_custom_layout_reload_requested)
+            self.display_manager.monitors_changed.connect(self._on_monitors_changed)
+            self.display_manager.displays_ready.connect(self._on_displays_ready)
             
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
@@ -673,14 +680,37 @@ class ScreensaverEngine(QObject):
             # Set flag on success
             if display_count > 0:
                 self._display_initialized = True
+                self._display_initializing = False
+                pending_ready_generation = self._pending_displays_ready_generation
+                self._pending_displays_ready_generation = None
+                if pending_ready_generation is not None:
+                    self._on_displays_ready(pending_ready_generation)
                 return True
             
+            self._display_initializing = False
+            self._pending_displays_ready_generation = None
             return False
         
         except Exception as e:
             logger.exception(f"Display initialization failed: {e}")
             self._display_initialized = False
+            self._display_initializing = False
+            self._pending_displays_ready_generation = None
             return False
+
+    def _on_displays_ready(self, generation: int) -> None:
+        """Replay the current image only after the rebuilt display generation is ready."""
+
+        if getattr(self, "_display_initializing", False):
+            self._pending_displays_ready_generation = generation
+            return
+
+        image = self._pending_monitor_replay_image
+        if image is None:
+            return
+        self._pending_monitor_replay_image = None
+        logger.info("[DISPLAY] Display generation ready; replaying current image generation=%s", generation)
+        self._load_and_display_image(image)
     
     def _setup_rotation_timer(self) -> None:
         """Setup timer for image rotation."""
@@ -712,10 +742,6 @@ class ScreensaverEngine(QObject):
         
         # Subscribe to settings changes
         self.event_system.subscribe('settings.changed', self._on_settings_changed)
-        
-        # Subscribe to monitor changes
-        if self.display_manager:
-            self.display_manager.monitors_changed.connect(self._on_monitors_changed)
         
         logger.debug("Event subscriptions configured")
     
@@ -1242,11 +1268,9 @@ class ScreensaverEngine(QObject):
             except Exception:
                 logger.debug("Failed to disconnect old display manager monitor detection", exc_info=True)
             old_display_manager.cleanup()
-            self._initialize_display()
-            
-            # Redisplay current image
-            if self._current_image:
-                self._load_and_display_image(self._current_image)
+            self._pending_monitor_replay_image = self._current_image
+            if not self._initialize_display():
+                self._pending_monitor_replay_image = None
     
     def _update_rotation_interval(self) -> None:
         """Update rotation timer interval from settings."""

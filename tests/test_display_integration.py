@@ -659,7 +659,11 @@ class TestDisplayManagerSync:
             lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
         )
 
-        manager = DisplayManager()
+        class _ImmediateThreadManager:
+            def single_shot(self, _delay_ms, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+        manager = DisplayManager(thread_manager=_ImmediateThreadManager())
         manager.screen_count = 1
         manager.displays = [object()]
         manager.monitors_changed.connect(lambda count: emitted.append(count))
@@ -698,7 +702,11 @@ class TestDisplayManagerSync:
             lambda _self=None: [_RemainingScreen()],
         )
 
-        manager = DisplayManager()
+        class _ImmediateThreadManager:
+            def single_shot(self, _delay_ms, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+        manager = DisplayManager(thread_manager=_ImmediateThreadManager())
         manager.screen_count = 2
         manager.displays = [object(), object()]
         manager.monitors_changed.connect(lambda count: emitted.append(count))
@@ -716,6 +724,164 @@ class TestDisplayManagerSync:
             "trim display widgets inside the detecting manager."
         )
 
+    def test_screen_signature_change_signals_rebuild_even_when_count_is_unchanged(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        emitted: list[int] = []
+
+        class _FakeScreen:
+            def __init__(self, name: str, width: int, height: int):
+                self._name = name
+                self._width = width
+                self._height = height
+
+            def name(self):
+                return self._name
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: self._width, height=lambda: self._height)
+
+        class _ImmediateThreadManager:
+            def single_shot(self, _delay_ms, callback, *args, **kwargs):
+                callback(*args, **kwargs)
+
+        screens = [_FakeScreen("LG TV", 2560, 1440)]
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: list(screens),
+        )
+
+        manager = DisplayManager(thread_manager=_ImmediateThreadManager())
+        manager.monitors_changed.connect(lambda count: emitted.append(count))
+
+        screens[:] = [_FakeScreen("MSI G321Q", 1707, 960)]
+        manager._on_screen_added(_FakeScreen("MSI G321Q", 1707, 960))
+
+        assert emitted == [1], (
+            "Windows display wake can replace the active QScreen signature while "
+            "the raw count stays unchanged; count-only gates leave the engine "
+            "stuck on the old display set."
+        )
+
+    def test_pending_monitor_reconcile_is_ignored_after_manager_disconnect(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        emitted: list[int] = []
+        callbacks: list[Callable[[], None]] = []
+
+        class _FakeScreen:
+            def __init__(self, name: str, width: int, height: int):
+                self._name = name
+                self._width = width
+                self._height = height
+
+            def name(self):
+                return self._name
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: self._width, height=lambda: self._height)
+
+        class _CapturingThreadManager:
+            def single_shot(self, _delay_ms, callback, *args, **kwargs):
+                callbacks.append(lambda: callback(*args, **kwargs))
+
+        screens = [_FakeScreen("Initial", 1920, 1080)]
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: list(screens),
+        )
+
+        manager = DisplayManager(thread_manager=_CapturingThreadManager())
+        manager.monitors_changed.connect(lambda count: emitted.append(count))
+
+        screens[:] = [_FakeScreen("Replacement", 2560, 1440)]
+        manager._on_screen_added(_FakeScreen("Replacement", 2560, 1440))
+        assert len(callbacks) == 1
+
+        manager.disconnect_monitor_detection()
+        callbacks[0]()
+
+        assert emitted == [], "old managers must not emit delayed zombie monitor rebuilds after replacement"
+
+    def test_initialize_displays_waits_for_staggered_display_ready_before_signal(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        callbacks: list[Callable[[], None]] = []
+        ready_generations: list[int] = []
+
+        class _FakeScreen:
+            def __init__(self, name: str):
+                self._name = name
+
+            def name(self):
+                return self._name
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
+
+        class _CapturingThreadManager:
+            def single_shot(self, _delay_ms, callback, *args, **kwargs):
+                callbacks.append(lambda: callback(*args, **kwargs))
+
+        class _FakeDisplay:
+            def __init__(self, screen_index: int):
+                self.screen_index = screen_index
+                self.shown = False
+                self._render_surface = object()
+                self._gl_compositor = object()
+
+            def show_on_screen(self):
+                self.shown = True
+
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: [_FakeScreen("Display 0"), _FakeScreen("Display 1")],
+        )
+
+        manager = DisplayManager(thread_manager=_CapturingThreadManager())
+        created: list[_FakeDisplay] = []
+
+        def _create(screen_index: int, *, show_immediately: bool = True):
+            display = _FakeDisplay(screen_index)
+            created.append(display)
+            manager.displays.append(display)  # type: ignore[arg-type]
+            if show_immediately:
+                manager._show_display_widget(display)  # type: ignore[arg-type]
+            return display
+
+        monkeypatch.setattr(manager, "_create_display_for_screen", _create)
+        manager.displays_ready.connect(lambda generation: ready_generations.append(generation))
+
+        assert manager.initialize_displays() == 2
+        assert [display.shown for display in created] == [True, False]
+        assert ready_generations == []
+
+        assert len(callbacks) == 1
+        callbacks[0]()
+
+        assert [display.shown for display in created] == [True, True]
+        assert ready_generations == [manager._display_startup_generation]
+
+    def test_display_manager_does_not_use_qtimer_singleshot_fallbacks(self):
+        source = Path("engine/display_manager.py").read_text(encoding="utf-8")
+
+        assert "QTimer.singleShot" not in source
+        assert "from PySide6.QtCore import QObject, Signal, QUrl, QTimer" not in source
+
+    def test_display_startup_first_frame_uses_no_qtimer_or_forced_repaint(self):
+        image_ops = Path("rendering/display_image_ops.py").read_text(encoding="utf-8")
+        setup = Path("rendering/display_setup.py").read_text(encoding="utf-8")
+
+        assert "QTimer.singleShot" not in image_ops
+        assert ".repaint(" not in image_ops
+        assert "QTimer.singleShot" not in setup
+
     def test_engine_monitor_change_detaches_old_manager_before_rebuild(self):
         calls: list[str] = []
 
@@ -729,8 +895,11 @@ class TestDisplayManagerSync:
         engine = SimpleNamespace(
             display_manager=_FakeDisplayManager(),
             _current_image="current-image",
-            _initialize_display=lambda: calls.append("initialize"),
+            _initialize_display=lambda: calls.append("initialize") or True,
             _load_and_display_image=lambda image: calls.append(f"redisplay:{image}"),
+            _display_initializing=False,
+            _pending_displays_ready_generation=None,
+            _pending_monitor_replay_image=None,
         )
 
         ScreensaverEngine._on_monitors_changed(engine, 2)
@@ -739,8 +908,91 @@ class TestDisplayManagerSync:
             "disconnect",
             "cleanup",
             "initialize",
+        ]
+        assert engine._pending_monitor_replay_image == "current-image"
+
+        ScreensaverEngine._on_displays_ready(engine, 12)
+
+        assert calls == [
+            "disconnect",
+            "cleanup",
+            "initialize",
             "redisplay:current-image",
         ]
+        assert engine._pending_monitor_replay_image is None
+
+    def test_initialize_display_rewires_monitor_signal_after_rebuild(self, monkeypatch):
+        created_managers: list[object] = []
+
+        class _FakeSignal:
+            def __init__(self):
+                self.connected: list[Callable[..., object]] = []
+
+            def connect(self, callback):
+                self.connected.append(callback)
+
+        class _FakeDisplayManager:
+            def __init__(self, **_kwargs):
+                self.exit_requested = _FakeSignal()
+                self.transition_completed = _FakeSignal()
+                self.previous_requested = _FakeSignal()
+                self.next_requested = _FakeSignal()
+                self.cycle_transition_requested = _FakeSignal()
+                self.settings_requested = _FakeSignal()
+                self.custom_layout_reload_requested = _FakeSignal()
+                self.monitors_changed = _FakeSignal()
+                self.displays_ready = _FakeSignal()
+                created_managers.append(self)
+
+            def initialize_displays(self):
+                return 2
+
+        class _Settings:
+            def get(self, _key, default=None):
+                return default
+
+        class _EventSystem:
+            def __init__(self):
+                self.subscriptions: list[tuple[str, Callable[..., object]]] = []
+
+            def subscribe(self, name, callback):
+                self.subscriptions.append((name, callback))
+
+        monitor_handler = Mock()
+        settings_handler = Mock()
+        monkeypatch.setattr("engine.screensaver_engine.DisplayManager", _FakeDisplayManager)
+
+        engine = SimpleNamespace(
+            settings_manager=_Settings(),
+            resource_manager=None,
+            thread_manager=None,
+            display_manager=None,
+            _process_supervisor=None,
+            _display_initialized=False,
+            event_system=_EventSystem(),
+            _on_exit_requested=Mock(),
+            _on_display_transition_completed=Mock(),
+            _on_previous_requested=Mock(),
+            _on_next_requested=Mock(),
+            _on_cycle_transition=Mock(),
+            _on_settings_requested=Mock(),
+            _on_custom_layout_reload_requested=Mock(),
+            _on_monitors_changed=monitor_handler,
+            _on_displays_ready=Mock(),
+            _on_settings_changed=settings_handler,
+        )
+
+        assert ScreensaverEngine._initialize_display(engine) is True
+        assert created_managers[0].monitors_changed.connected == [monitor_handler]
+        assert created_managers[0].displays_ready.connected == [engine._on_displays_ready]
+
+        ScreensaverEngine._subscribe_to_events(engine)
+        assert engine.event_system.subscriptions == [("settings.changed", settings_handler)]
+        assert created_managers[0].monitors_changed.connected == [monitor_handler]
+
+        assert ScreensaverEngine._initialize_display(engine) is True
+        assert created_managers[1].monitors_changed.connected == [monitor_handler]
+        assert created_managers[1].displays_ready.connected == [engine._on_displays_ready]
 
 
 # ---------------------------------------------------------------------------

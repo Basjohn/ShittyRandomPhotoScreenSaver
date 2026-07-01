@@ -1472,6 +1472,57 @@ def test_visualizer_custom_route_recovers_from_single_live_foreign_rect_instead_
     assert "Recovered spotify_visualizer CUSTOM route from sole live saved rect" in caplog.text
 
 
+def test_visualizer_custom_route_recovery_refuses_reduced_topology_monitor_rewrite(monkeypatch, caplog):
+    import logging
+
+    from rendering import spotify_widget_creators as creators
+
+    class _Display:
+        def __init__(self, screen_index, signature):
+            self.screen_index = screen_index
+            self._screen = SimpleNamespace(signature=signature)
+            self._exiting = False
+
+    display_0 = _Display(0, "screen:display-0")
+
+    class _Coordinator:
+        def get_all_instances(self):
+            return [display_0]
+
+    widgets_config = {
+        "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2"},
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                "screen:display-0": {
+                    "spotify_visualizer": {
+                        "rect": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    }
+                }
+            },
+        },
+    }
+    monkeypatch.setattr(creators, "get_coordinator", lambda: _Coordinator())
+    monkeypatch.setattr(creators, "_resolve_parent_screen", lambda parent: getattr(parent, "_screen", parent))
+    monkeypatch.setattr(
+        creators,
+        "resolve_screen_layout_signature",
+        lambda _custom_layout_map, screen: getattr(screen, "signature", None),
+    )
+
+    with caplog.at_level(logging.WARNING):
+        recovered = creators._recover_visualizer_custom_monitor_from_single_live_saved_rect(
+            SimpleNamespace(_settings_manager=None),
+            widgets_config,
+            effective_monitor_sel="2",
+        )
+
+    assert recovered is None
+    assert widgets_config["spotify_visualizer"]["monitor"] == "2"
+    assert "Refused spotify_visualizer CUSTOM route recovery during reduced topology" in caplog.text
+    assert "Recovered spotify_visualizer CUSTOM route from sole live saved rect" not in caplog.text
+
+
 def test_visualizer_custom_foreign_bucket_repair_rejects_ambiguous_rects(monkeypatch, caplog):
     import logging
 

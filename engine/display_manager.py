@@ -17,6 +17,7 @@ from utils.lockfree.spsc_queue import SPSCQueue
 
 logger = get_logger(__name__)
 REDDIT_FLUSH_LOGGING = True  # Set to False to silence deferred Reddit flush diagnostics once stable.
+MONITOR_RECONCILE_DELAY_MS = 250
 
 try:  # Windows-only bridge for ProgramData queue
     from core.windows import reddit_helper_bridge
@@ -42,6 +43,7 @@ class DisplayManager(QObject):
     
     exit_requested = Signal()
     monitors_changed = Signal(int)  # new monitor count
+    displays_ready = Signal(int)  # startup generation ready for image replay
     transition_completed = Signal(int)  # screen index
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
@@ -78,6 +80,9 @@ class DisplayManager(QObject):
         self.current_images: Dict[int, str] = {}  # screen_index -> image_path
         self._deferred_reddit_urls: list[str] = []
         self._display_startup_generation = 0
+        self._display_startup_ready_expected: Set[int] = set()
+        self._display_startup_ready_seen: Set[int] = set()
+        self._display_startup_ready_emitted_generation: int = -1
         
         # Phase 3: Multi-display synchronization (lock-free)
         self._transition_ready_queue: Optional[SPSCQueue] = None
@@ -85,6 +90,8 @@ class DisplayManager(QObject):
         self._transition_work_pending = False
         self._monitor_detection_app = None
         self._monitor_detection_connected = False
+        self._monitor_reconcile_pending = False
+        self._screen_signature: tuple[tuple[object, ...], ...] = ()
         
         # Monitor hotplug detection
         self.screen_count = 0
@@ -103,7 +110,8 @@ class DisplayManager(QObject):
             self._monitor_detection_connected = True
             
             # Store initial screen count
-            self.screen_count = len(app.screens())
+            self._screen_signature = self._current_screen_signature()
+            self.screen_count = len(self._screen_signature)
             logger.info("Monitor detection enabled (%d screens)" % self.screen_count)
 
     def disconnect_monitor_detection(self) -> None:
@@ -121,6 +129,118 @@ class DisplayManager(QObject):
             logger.debug("[DISPLAY_MANAGER] screenRemoved disconnect skipped", exc_info=True)
         self._monitor_detection_connected = False
         self._monitor_detection_app = None
+
+    @staticmethod
+    def _call_screen_attr(obj: object, name: str, default: object = None) -> object:
+        try:
+            attr = getattr(obj, name)
+        except Exception:
+            return default
+        try:
+            return attr() if callable(attr) else attr
+        except Exception:
+            return default
+
+    def _screen_signature_part(self, index: int, screen: QScreen) -> tuple[object, ...]:
+        geometry = self._call_screen_attr(screen, "geometry")
+        available = self._call_screen_attr(screen, "availableGeometry")
+
+        def _geom_part(rect: object) -> tuple[int, int, int, int]:
+            if rect is None:
+                return (0, 0, 0, 0)
+            return (
+                int(self._call_screen_attr(rect, "x", 0) or 0),
+                int(self._call_screen_attr(rect, "y", 0) or 0),
+                int(self._call_screen_attr(rect, "width", 0) or 0),
+                int(self._call_screen_attr(rect, "height", 0) or 0),
+            )
+
+        dpr = self._call_screen_attr(screen, "devicePixelRatio", 1.0)
+        try:
+            dpr = round(float(dpr), 3)
+        except Exception:
+            dpr = 1.0
+        return (
+            index,
+            str(self._call_screen_attr(screen, "name", "")),
+            str(self._call_screen_attr(screen, "manufacturer", "")),
+            str(self._call_screen_attr(screen, "model", "")),
+            str(self._call_screen_attr(screen, "serialNumber", "")),
+            _geom_part(geometry),
+            _geom_part(available),
+            dpr,
+        )
+
+    def _current_screen_signature(self) -> tuple[tuple[object, ...], ...]:
+        try:
+            screens = QGuiApplication.screens()
+        except Exception:
+            logger.debug("[DISPLAY_MANAGER] Failed to read screen signature", exc_info=True)
+            return ()
+        return tuple(self._screen_signature_part(index, screen) for index, screen in enumerate(screens))
+
+    def _schedule_monitor_reconcile(self, reason: str) -> None:
+        """Coalesce Qt screen churn into one settled topology reconcile.
+
+        Windows display wake can emit screenAdded/screenRemoved while
+        QGuiApplication.screens() still reports a stale count.  Rechecking a
+        short moment later by full screen signature avoids both missed rebuilds
+        and per-event rebuild storms.
+        """
+
+        if not self._monitor_detection_connected:
+            return
+        if self._monitor_reconcile_pending:
+            logger.debug("[DISPLAY_MANAGER] Monitor reconcile already pending reason=%s", reason)
+            return
+        self._monitor_reconcile_pending = True
+
+        def _run() -> None:
+            self._monitor_reconcile_pending = False
+            self._reconcile_monitor_topology(reason)
+
+        if self._thread_manager is None or not hasattr(self._thread_manager, "single_shot"):
+            self._monitor_reconcile_pending = False
+            logger.warning(
+                "[DISPLAY_MANAGER][FALLBACK] Monitor topology reconcile skipped: "
+                "ThreadManager single_shot unavailable"
+            )
+            return
+
+        try:
+            self._thread_manager.single_shot(MONITOR_RECONCILE_DELAY_MS, _run)
+        except Exception:
+            self._monitor_reconcile_pending = False
+            logger.warning(
+                "[DISPLAY_MANAGER][FALLBACK] Monitor topology reconcile scheduling failed; "
+                "ThreadManager single_shot rejected the request",
+                exc_info=True,
+            )
+
+    def _reconcile_monitor_topology(self, reason: str) -> None:
+        if not self._monitor_detection_connected:
+            logger.debug("[DISPLAY_MANAGER] Ignoring monitor reconcile after manager disconnect reason=%s", reason)
+            return
+
+        old_count = self.screen_count
+        old_signature = self._screen_signature
+        new_signature = self._current_screen_signature()
+        new_count = len(new_signature)
+        if new_count == old_count and new_signature == old_signature:
+            logger.debug("[DISPLAY_MANAGER] Monitor reconcile no-op reason=%s count=%d", reason, new_count)
+            return
+
+        self.screen_count = new_count
+        self._screen_signature = new_signature
+        logger.info(
+            "[DISPLAY_MANAGER] Monitor topology reconciled reason=%s old_count=%d new_count=%d old_signature=%s new_signature=%s",
+            reason,
+            old_count,
+            new_count,
+            old_signature,
+            new_signature,
+        )
+        self.monitors_changed.emit(new_count)
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
         """Resolve which screen indices should create DisplayWidgets.
@@ -177,22 +297,12 @@ class DisplayManager(QObject):
     def _on_screen_added(self, screen: QScreen) -> None:
         """Handle screen added event."""
         logger.info("Screen added: %s (%dx%d)" % (screen.name(), screen.geometry().width(), screen.geometry().height()))
-        
-        new_count = len(QGuiApplication.screens())
-        
-        if new_count > self.screen_count:
-            self.screen_count = new_count
-            self.monitors_changed.emit(new_count)
+        self._schedule_monitor_reconcile("screenAdded")
     
     def _on_screen_removed(self, screen: QScreen) -> None:
         """Handle screen removed event."""
         logger.info("Screen removed: %s" % screen.name())
-        
-        new_count = len(QGuiApplication.screens())
-        
-        if new_count < self.screen_count:
-            self.screen_count = new_count
-            self.monitors_changed.emit(new_count)
+        self._schedule_monitor_reconcile("screenRemoved")
     
     def initialize_displays(self) -> int:
         """
@@ -230,6 +340,10 @@ class DisplayManager(QObject):
                     i,
                 )
 
+        self._display_startup_ready_expected = {id(display) for display in pending_displays}
+        self._display_startup_ready_seen = set()
+        self._display_startup_ready_emitted_generation = -1
+
         # Preserve staggered show behavior without processEvents() re-entry.
         # Display registration happens before this loop, so visualizer owner
         # selection sees the full active set while the expensive show/GL startup
@@ -240,7 +354,7 @@ class DisplayManager(QObject):
         for idx, display in enumerate(pending_displays):
             delay_ms = idx * stagger_ms
             if delay_ms <= 0:
-                self._show_display_widget(display)
+                self._show_display_widget(display, startup_generation=startup_generation)
                 continue
 
             def _show_if_current(
@@ -259,7 +373,7 @@ class DisplayManager(QObject):
                         getattr(disp, "screen_index", "?"),
                     )
                     return
-                self._show_display_widget(disp)
+                self._show_display_widget(disp, startup_generation=generation)
 
             try:
                 from core.threading.manager import ThreadManager
@@ -272,7 +386,7 @@ class DisplayManager(QObject):
                     getattr(display, "screen_index", "?"),
                     exc_info=True,
                 )
-                self._show_display_widget(display)
+                self._show_display_widget(display, startup_generation=startup_generation)
         
         logger.info("Created %d display widgets" % len(self.displays))
         return len(self.displays)
@@ -327,10 +441,12 @@ class DisplayManager(QObject):
             logger.error("Failed to create display for screen %d: %s" % (screen_index, e), exc_info=True)
             return None
 
-    def _show_display_widget(self, display: DisplayWidget) -> bool:
+    def _show_display_widget(self, display: DisplayWidget, *, startup_generation: int | None = None) -> bool:
         """Show a previously-instantiated display widget."""
         try:
             display.show_on_screen()
+            if startup_generation is not None:
+                self._mark_display_startup_ready(display, startup_generation)
             return True
         except Exception as e:
             screen_index = getattr(display, "screen_index", "?")
@@ -353,7 +469,59 @@ class DisplayManager(QObject):
                 display.deleteLater()
             except Exception:
                 logger.debug("[DISPLAY_MANAGER] Failed to delete display after show failure", exc_info=True)
+            if startup_generation is not None and startup_generation == self._display_startup_generation:
+                self._display_startup_ready_expected.discard(id(display))
+                self._emit_display_startup_ready_if_complete(startup_generation)
             return False
+
+    def _mark_display_startup_ready(self, display: DisplayWidget, generation: int) -> None:
+        """Record that one display finished generation-scoped startup setup."""
+
+        if generation != self._display_startup_generation:
+            logger.debug(
+                "[DISPLAY] Ignoring stale startup-ready signal screen=%s generation=%s current=%s",
+                getattr(display, "screen_index", "?"),
+                generation,
+                self._display_startup_generation,
+            )
+            return
+        if display not in self.displays:
+            logger.debug(
+                "[DISPLAY] Ignoring startup-ready for removed display screen=%s generation=%s",
+                getattr(display, "screen_index", "?"),
+                generation,
+            )
+            return
+
+        key = id(display)
+        self._display_startup_ready_seen.add(key)
+        expected = self._display_startup_ready_expected
+        surface_ready = getattr(display, "_render_surface", None) is not None
+        compositor_ready = getattr(display, "_gl_compositor", None) is not None
+        logger.info(
+            "[DISPLAY] Startup display ready screen=%s generation=%s surface_ready=%s compositor_ready=%s ready=%d/%d",
+            getattr(display, "screen_index", "?"),
+            generation,
+            surface_ready,
+            compositor_ready,
+            len(self._display_startup_ready_seen.intersection(expected)),
+            len(expected),
+        )
+
+        self._emit_display_startup_ready_if_complete(generation)
+
+    def _emit_display_startup_ready_if_complete(self, generation: int) -> None:
+        expected = self._display_startup_ready_expected
+        if not expected:
+            return
+        if self._display_startup_ready_emitted_generation == generation:
+            return
+        if not expected.issubset(self._display_startup_ready_seen):
+            return
+
+        self._display_startup_ready_emitted_generation = generation
+        logger.info("[DISPLAY] Startup generation ready for image replay generation=%s", generation)
+        self.displays_ready.emit(generation)
 
     def _cleanup_excess_displays(self) -> None:
         """Clean up displays for screens that no longer exist."""
@@ -714,6 +882,9 @@ class DisplayManager(QObject):
     def cleanup(self) -> None:
         """Clean up all display widgets."""
         self._display_startup_generation += 1
+        self._display_startup_ready_expected = set()
+        self._display_startup_ready_seen = set()
+        self._display_startup_ready_emitted_generation = -1
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 
@@ -844,18 +1015,26 @@ class DisplayManager(QObject):
                     if opened:
                         logger.info("[REDDIT] MC flush opened: %s", url)
                         try:
-                            from PySide6.QtCore import QTimer
                             from core.windows.browser_window_routing import try_bring_browser_window_to_front
-                            QTimer.singleShot(
-                                800,
-                                lambda target=url: try_bring_browser_window_to_front(
-                                    target,
-                                    preferred_display_index=0,
-                                    fallback_keywords=("reddit",),
-                                ),
-                            )
+                            if self._thread_manager is None or not hasattr(self._thread_manager, "single_shot"):
+                                logger.warning(
+                                    "[REDDIT][FALLBACK] MC flush foreground preference skipped: "
+                                    "ThreadManager single_shot unavailable"
+                                )
+                            else:
+                                self._thread_manager.single_shot(
+                                    800,
+                                    lambda target=url: try_bring_browser_window_to_front(
+                                        target,
+                                        preferred_display_index=0,
+                                        fallback_keywords=("reddit",),
+                                    ),
+                                )
                         except Exception:
-                            logger.debug("[REDDIT] MC flush foreground preference setup failed", exc_info=True)
+                            logger.warning(
+                                "[REDDIT][FALLBACK] MC flush foreground preference setup failed",
+                                exc_info=True,
+                            )
                     else:
                         logger.warning("[REDDIT] MC flush rejected: %s", url)
                 except Exception:

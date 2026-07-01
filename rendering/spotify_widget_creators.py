@@ -196,6 +196,26 @@ def _live_visualizer_bucket_monitor_map(custom_layout_map: Mapping[str, object] 
     return result
 
 
+def _live_visualizer_display_monitor_count() -> int:
+    """Return the current participating display count visible to widget setup."""
+
+    try:
+        displays = get_coordinator().get_all_instances()
+    except Exception:
+        logger.debug("[SPOTIFY_VIS] Failed to inspect live display count", exc_info=True)
+        return 0
+
+    monitors: set[int] = set()
+    for display in displays or []:
+        if getattr(display, "_exiting", False):
+            continue
+        try:
+            monitors.add(int(getattr(display, "screen_index")) + 1)
+        except Exception:
+            continue
+    return len(monitors)
+
+
 def _recover_visualizer_custom_monitor_from_single_live_saved_rect(
     mgr: "WidgetManager",
     widgets_config: Mapping[str, object] | None,
@@ -246,6 +266,29 @@ def _recover_visualizer_custom_monitor_from_single_live_saved_rect(
         visualizer_section = {}
         widgets_config["spotify_visualizer"] = visualizer_section
     old_monitor = visualizer_section.get("monitor", effective_monitor_sel)
+    try:
+        old_monitor_int = int(str(old_monitor).strip())
+        source_monitor_int = int(str(source_monitor).strip())
+    except Exception:
+        old_monitor_int = None
+        source_monitor_int = None
+    live_monitor_count = _live_visualizer_display_monitor_count()
+    if (
+        old_monitor_int is not None
+        and source_monitor_int is not None
+        and old_monitor_int > 0
+        and old_monitor_int != source_monitor_int
+        and old_monitor_int > live_monitor_count
+    ):
+        logger.warning(
+            "[SPOTIFY_VIS][FALLBACK] Refused spotify_visualizer CUSTOM route recovery during reduced topology "
+            "source_bucket=%s old_monitor=%s candidate_monitor=%s live_monitor_count=%d",
+            source_signature,
+            old_monitor,
+            source_monitor,
+            live_monitor_count,
+        )
+        return None
     visualizer_section["position"] = "Custom"
     visualizer_section["monitor"] = source_monitor
 

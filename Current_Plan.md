@@ -32,8 +32,16 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Fix monitor hotplug ownership so `DisplayManager` only detects/emits `monitors_changed`; `ScreensaverEngine` owns cleanup, rebuild, and current-image redisplay.
 - [x] Detach the old display manager from `screenAdded` / `screenRemoved` before replacing it during a monitor-change rebuild.
 - [x] Add bars proving screen add/remove cannot both emit engine rebuild and mutate display widgets locally, and that engine monitor-change rebuild detaches/cleans/reinitializes/redisplays in order.
-- [ ] Runtime-check one display off/on cycle: no long-lived black base frame, no widget-only display waiting for the next transition, and no duplicate/orphan display widgets.
-- [ ] If black base frame still appears, inspect compositor/base-frame replay after render-surface establishment before adding any timer, repaint, or broad refresh.
+- [x] Replace count-only hotplug gates with coalesced screen-signature reconciliation so same-count display wake/topology swaps still rebuild after the Qt/Windows event burst settles.
+- [x] Add a disconnected-manager guard so pending monitor reconciles from replaced display managers cannot emit zombie rebuilds.
+- [x] Wire `monitors_changed` in the `DisplayManager` creation/rebuild lifecycle so replacement managers still notify `ScreensaverEngine`; keep `_subscribe_to_events()` from adding duplicate monitor rebuild subscriptions.
+- [x] Remove `QTimer.singleShot` fallback paths from display lifecycle code; monitor reconcile and related foreground nudges now use `ThreadManager.single_shot` or fail loudly.
+- [x] Fence creator-time visualizer CUSTOM route recovery during reduced live topology so an explicit monitor route is not rewritten to the sole temporary display.
+- [x] Add a generation-scoped display startup readiness barrier: current-image replay after monitor rebuild waits until every current-generation display has completed show/setup, and stale delayed shows cannot satisfy a newer generation.
+- [x] Replace first-frame readiness `QTimer.singleShot(0)` plus forced `repaint()` with a ThreadManager-owned handoff; keep normal paint scheduling only.
+- [x] Add bars for staggered display readiness, stale monitor rebuild replay ordering, and no display startup `QTimer.singleShot` / forced repaint paths.
+- [ ] Runtime-check one display off/on cycle: no long-lived black base frame, no widget-only display waiting for the next transition, no duplicate/orphan display widgets, and no placeholder screen grab becoming visible truth.
+- [ ] If black base frame still appears, inspect render-surface/compositor/base-frame readiness logs before adding any timer, repaint, or broad refresh.
 
 ### 3. Settings UI Cost And Churn
 
@@ -51,9 +59,11 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Consolidate automatic/manual startup cadence around terminal refresh chains: due horizons move only after success through a source or after all sources fail.
 - [x] Keep both widgets eligible when stale: `reddit` may fire immediately, `reddit2` uses a `30s` stagger, and settings/edit rebuilds preserve per-cache-key due state.
 - [x] Use bounded source chains: session/configured source first, then `old.reddit.com/r/<subreddit>/`, then `www.reddit.com/r/<subreddit>/`.
-- [x] Prevent false freshness and sparse fallback cache collapse: failed/empty chains do not rewrite content timestamps, and sparse HTML rescue merges newer dated posts into an existing healthier candidate window.
-- [x] Runtime-validate the 2026-07-01 display-cycle run: both widgets fired near due cadence, sparse `html_old` rescue merged instead of replacing, and failed/empty chains did not freshen the cache timestamp.
-- [ ] Runtime-watch one more long compiled run for no repeated sparse-HTML primary preference after a partial rescue and no failed/empty chain freshening the content timestamp.
+- [x] Prevent false freshness: failed/empty chains do not rewrite content timestamps.
+- [x] Preserve provider metadata through transition-deferred refresh application so sparse HTML remains classified as sparse after the transition clears.
+- [x] Harden sparse HTML merge against persisted-cache loss: `html_old` / `html_www` partial windows merge newer dated rows into the richer runtime or persisted candidate window instead of replacing it.
+- [x] Add bars for persisted-cache sparse merge and transition-deferred sparse metadata preservation.
+- [ ] Runtime-watch one long compiled run for both widgets firing near due cadence, no repeated sparse-HTML primary preference after a partial rescue, and no failed/empty chain freshening the content timestamp.
 - [ ] Treat any future `403`/`429` after the bounded source chain as a pacing/provider failure to investigate; the cooldown gate is a loud safety net, not a success state.
 
 ### 5. Runtime Health Audit Follow-Through
