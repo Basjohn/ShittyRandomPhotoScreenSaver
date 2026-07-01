@@ -328,6 +328,91 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
 
 @pytest.mark.qt
+def test_reddit_sparse_html_fallback_merges_into_existing_candidate_cache(qt_app, qtbot):  # noqa: ARG001
+    from core.reddit_post_provider import RedditHtmlProvider
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        existing = [
+            RedditPost(
+                title=f"Cached post {idx}",
+                url=f"https://old.reddit.com/r/Games/comments/cached{idx}/cached_post_{idx}/",
+                score=idx,
+                created_utc=1_700_000_000.0 - idx,
+            )
+            for idx in range(24)
+        ]
+        incoming = [
+            RedditPost(
+                title="Fresh sparse fallback 1",
+                url="https://old.reddit.com/r/Games/comments/fresh1/fresh_sparse_fallback_1/",
+                score=100,
+                created_utc=1_700_000_500.0,
+            ),
+            RedditPost(
+                title="Fresh sparse fallback 2",
+                url="https://old.reddit.com/r/Games/comments/fresh2/fresh_sparse_fallback_2/",
+                score=90,
+                created_utc=1_700_000_400.0,
+            ),
+        ]
+        widget._all_fetched_posts = existing  # type: ignore[attr-defined]
+
+        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
+            incoming,
+            source_id=RedditHtmlProvider.SOURCE_OLD,
+            attempted_sources=("rss", RedditHtmlProvider.SOURCE_OLD),
+        )
+
+        assert len(merged) == LIST_WIDGET_MAX_CAPACITY
+        assert [post.title for post in merged[:2]] == [
+            "Fresh sparse fallback 1",
+            "Fresh sparse fallback 2",
+        ]
+        assert "Cached post 23" not in {post.title for post in merged}
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_sparse_primary_result_stays_authoritative(qt_app, qtbot):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    try:
+        widget._all_fetched_posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title=f"Cached post {idx}",
+                url=f"https://example.com/cached{idx}",
+                score=idx,
+                created_utc=1_700_000_000.0 - idx,
+            )
+            for idx in range(24)
+        ]
+        incoming = [
+            RedditPost(
+                title="Sparse RSS but authoritative",
+                url="https://example.com/rss-one",
+                score=1,
+                created_utc=1_700_000_500.0,
+            )
+        ]
+
+        merged = widget._merge_sparse_fallback_posts(  # type: ignore[attr-defined]
+            incoming,
+            source_id="rss",
+            attempted_sources=("rss",),
+        )
+
+        assert merged == incoming
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
 def test_reddit_403_error_keeps_cache_timestamp_truthful_and_starts_block_cooldown(qt_app, qtbot, tmp_path):  # noqa: ARG001
     from core.reddit_rate_limiter import RedditRateLimiter
     import os

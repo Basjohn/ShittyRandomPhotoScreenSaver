@@ -1236,7 +1236,12 @@ class ScreensaverEngine(QObject):
         
         # Reinitialize displays
         if self.display_manager:
-            self.display_manager.cleanup()
+            old_display_manager = self.display_manager
+            try:
+                old_display_manager.disconnect_monitor_detection()
+            except Exception:
+                logger.debug("Failed to disconnect old display manager monitor detection", exc_info=True)
+            old_display_manager.cleanup()
             self._initialize_display()
             
             # Redisplay current image

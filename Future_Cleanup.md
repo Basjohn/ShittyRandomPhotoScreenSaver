@@ -1,6 +1,13 @@
 # Future Cleanup
 
-Last updated: 2026-06-22
+Last updated: 2026-07-01
+
+## Priority Guidance
+
+- Promote only when the item blocks active runtime-health work or has fresh log evidence.
+- The two remaining `processEvents()` seams are the highest-value cleanup candidate, but only after targeted bars prove exit/browser routing and transition synchronization do not regress.
+- Stale exported settings examples are documentation hygiene, not runtime risk; batch with a defaults/doc refresh rather than interrupting active lifecycle/perf work.
+- Compatibility-shell cleanup should remain low priority unless it causes import/runtime ambiguity.
 
 Low-priority cleanup items discovered during unrelated work. These are not active tasks unless promoted into `Current_Plan.md`.
 

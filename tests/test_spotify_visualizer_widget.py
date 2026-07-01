@@ -613,6 +613,37 @@ def test_latency_logging_warns_once_current_activation_is_ready(monkeypatch):
     assert calls == [("warning", "[SPOTIFY_VIS][LATENCY] lag_ms=100.0 mode=bubble transition_phase=0 pending=<none>")]
 
 
+def test_latency_logging_suppresses_paused_idle_stale_audio_noise(monkeypatch):
+    engine = SimpleNamespace(
+        _last_audio_ts=5.0,
+        _last_smooth_ts=5.0,
+        get_generation_id=lambda: 8,
+        get_latest_generation_with_frame=lambda: 8,
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _spotify_playing=False,
+        _latency_audio_ready=True,
+        _latency_activation_started_ts=1.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="spectrum",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
+
+    tick_pipeline.log_audio_latency_metrics(widget, engine, now_ts=3605.0, force_reason=None)
+
+    assert calls == []
+
+
 def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
     engine = SimpleNamespace(
         _last_audio_ts=5.0,

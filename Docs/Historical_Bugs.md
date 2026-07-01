@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-06-30
+Last updated: 2026-07-01
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -13,27 +13,28 @@ This is the long-term anti-regression record for the project, not an active task
 3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
-1. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-2. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-3. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-4. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-5. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-6. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-7. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-8. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-9. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-10. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-11. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-12. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-13. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-14. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-15. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-16. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-17. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-18. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-19. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-20. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-21. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+2. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+3. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+4. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+5. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+6. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+7. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+8. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+9. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+10. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+11. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+12. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+13. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+14. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+15. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+16. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+17. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+18. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+19. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+20. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+21. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+22. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
@@ -57,20 +58,36 @@ This is the long-term anti-regression record for the project, not an active task
 
 ## Recent Entries
 
+<a id="R-30"></a>
+### [R-30] 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** a run reached `ShittyRandomPhotoScreenSaver Exiting (code=0)`, but the terminal never returned to the command prompt until Python was manually killed.
+- **Evidence:** the same exit window logged `Cancelling 2 active tasks before shutdown`, then `ThreadManager shutdown timed out after 5.0s with 1 active tasks: ['adaptive_timer_1952220335120']`, followed by `Pool compute has 2 pending tasks during shutdown`. That timer was started at `10:09:34`, while later settings/display rebuilds had already started newer adaptive timers, making it an orphaned earlier display-generation task.
+- **Root cause:** adaptive timer stop ownership was not a real loop-completion handshake. `AdaptiveRenderStrategyManager.stop()` forced `exit_immediate`, and `AdaptiveTimerStrategy.stop()` cleared local task ownership without waiting for `_timer_loop()` to exit. A second ThreadManager race could also register a very fast task as active after it had already completed.
+- **Fix:** adaptive timers now own a loop-stopped event that is cleared on start, set from `_timer_loop()` in a `finally` block, and awaited briefly during stop before ownership is dropped. Render-strategy manager stop no longer forces the old immediate-drop path. `ThreadManager.submit_task()` now registers active-task truth before submitting to the executor and unregisters if submit fails.
+- **Bars:** `tests/test_adaptive_timer.py` proves render-strategy stop waits for loop completion and leaves no mock timer thread alive. `tests/test_thread_manager.py` uses a synchronous executor to prove instant task completion cannot leave stale active-task bookkeeping.
+- **Runtime validation target:** the next exit should show no `ThreadManager shutdown timed out`, no pending `adaptive_timer_*` task at shutdown, and no `[PERF][ADAPTIVE_TIMER][FALLBACK] Stop timed out before loop acknowledged shutdown...` warning. If that fallback fires, the next root cause is whichever display/compositor cleanup path still blocks the timer loop from acknowledging stop.
+
 <a id="R-29"></a>
 ### [R-29] 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)
 - [ ] PARTIAL
 - [x] AWAITING VALIDATION
 - [ ] SOLVED
 
-- **Observed failure pattern:** long runtime/settings-heavy sessions could show Reddit cache timestamps staying hours old even though the intended automatic update cadence is gentle. Later logs showed another false-success path: a provider/fallback failure could preserve or display stale content while cache timestamps and due horizons still made the run look fresh.
-- **Root cause:** refresh truth was split across transient widget timers, shared startup-attempt files, manual gates, provider fallback, and blocked-cooldown paths. Several paths marked the next `15min` due before a provider chain reached a terminal result, and one empty/filter-empty path saved the cache before proving authoritative posts survived.
+- **Observed failure pattern:** long runtime/settings-heavy sessions could show Reddit cache timestamps staying hours old even though the intended automatic update cadence is gentle. Later logs showed another false-success path: a provider/fallback failure could preserve or display stale content while cache timestamps and due horizons still made the run look fresh. Overnight display-wake evidence on 2026-07-01 showed a related edge: both displays returning correctly reattached stale Reddit widgets and fired refresh chains, but `reddit2` RSS hit `429`, `old.reddit.com` returned only a sparse listing, and that partial HTML fallback could overwrite or over-authorize a healthier existing cache.
+- **Root cause:** refresh truth was split across transient widget timers, shared startup-attempt files, manual gates, provider fallback, and blocked-cooldown paths. Several paths marked the next `15min` due before a provider chain reached a terminal result, and one empty/filter-empty path saved the cache before proving authoritative posts survived. The HTML fallback path also treated non-empty sparse fallback rows as fully authoritative cache replacement instead of degraded partial truth.
 - **Fix:** Reddit refresh is now a terminal chain contract. Per-cache-key due state survives rebuilds, `reddit` and `reddit2` both remain eligible when stale, `reddit2` uses a `30s` startup/phase stagger, and the next `15min` due is written only after success through a source or after all chain sources fail.
 - **Fix extension:** manual refresh uses a separate `3min` gate and can deliberately bypass the longer blocked gate after that window, but it no longer pushes automatic due state unless the chain reaches a terminal outcome.
-- **Fix extension:** the provider chain is deterministic and bounded: session/configured source first, then `old.reddit.com/r/<subreddit>/`, then `www.reddit.com/r/<subreddit>/`. A successful `old`/`www` source is promoted as that widget's session primary so the next refresh does not keep taxing a known-failing source first.
+- **Fix extension:** the provider chain is deterministic and bounded: session/configured source first, then `old.reddit.com/r/<subreddit>/`, then `www.reddit.com/r/<subreddit>/`. A substantial successful `old`/`www` listing is promoted as that widget's session primary so the next refresh does not keep taxing a known-failing source first; sparse HTML rescue results may merge/cache but do not become session primary.
 - **Fix extension:** empty listings, filter-empty rows, provider failures, blocked responses, and visible fallback display do not rewrite the Reddit content JSON or mtime. PullPush/public JSON remain selectable configured providers, not automatic rescue fallbacks that can silently freshen archival-looking content.
-- **Bars:** `tests/test_reddit_widget.py` covers fresh-cache startup skip, stale primary due firing without immediate rearm, stale secondary `30s` stagger, preserved due surviving widget rebuild, terminal-only due advancement, blocked/error cache mtime truth, manual `3min` gates, fixed candidate-window fetch/display split, empty-result no-freshness, and padded age labels. `tests/test_reddit_post_provider.py` covers old/www HTML parsing, selected-provider-to-old-to-www fallback, session source promotion, bounded chains, and source metadata. `tests/test_reddit_progressive_loading.py` guards the retired growth seam.
-- **Runtime validation target:** future `--cache` logs should show each stale widget chain logging source started/succeeded/failed plus terminal outcome, `old`/`www` success promoting for the session, no settings/edit rebuild rearming the due horizon, and no failed/empty chain freshening the content timestamp. Provider blocks remain actionable if the scheduler fires correctly but all sources are rejected.
+- **Fix extension:** sparse HTML fallback listings merge newer dated rows into the existing candidate cache when a richer cache already exists, preserving the 25-post candidate window instead of replacing it with a 2-3 post fallback. Sparse RSS/primary provider results remain authoritative because the configured source is not being used as degraded rescue data.
+- **Bars:** `tests/test_reddit_widget.py` covers fresh-cache startup skip, stale primary due firing without immediate rearm, stale secondary `30s` stagger, preserved due surviving widget rebuild, terminal-only due advancement, blocked/error cache mtime truth, manual `3min` gates, fixed candidate-window fetch/display split, empty-result no-freshness, sparse HTML fallback merge, sparse primary authority, and padded age labels. `tests/test_reddit_post_provider.py` covers old/www HTML parsing, selected-provider-to-old-to-www fallback, substantial session source promotion, sparse HTML non-promotion, bounded chains, and source metadata. `tests/test_reddit_progressive_loading.py` guards the retired growth seam.
+- **Runtime validation target:** future `--cache` logs should show each stale widget chain logging source started/succeeded/failed plus terminal outcome, substantial `old`/`www` success promoting for the session, sparse HTML fallback logging `Sparse fallback merged` and `Session source not promoted`, no settings/edit rebuild rearming the due horizon, and no failed/empty chain freshening the content timestamp. Provider blocks remain actionable if the scheduler fires correctly but all sources are rejected.
 
 <a id="R-28"></a>
 ### [R-28] 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)
@@ -157,7 +174,7 @@ This is the long-term anti-regression record for the project, not an active task
   - continue investigating the actual high-refresh cadence collapse through paint/update delivery, compositor timer ownership, GL texture upload spikes, settings/display rebuild churn, and visualizer tick listener pressure
   - follow-up logs exposed a related timer-thread trap: high-refresh adaptive timing can report healthy `GL RENDER` cadence while a Python busy-spin deadline tail holds the GIL and starves `GL PAINT` / visualizer tick delivery; precision timing must yield/sleep rather than monopolize Python execution
   - later logs also exposed a compositor lifecycle trap: a transition requested just before settings/exit teardown can still run its delayed/desynced starter or lazy first animation callback after `stop_rendering()`, starting an orphan adaptive timer that survives display ownership and can stall process exit. Compositor teardown must cancel current animations and invalidate late deferred/lazy callbacks before stopping render pacing.
-  - latest validation logs from 2026-06-28 show clean process shutdown again: no `ThreadManager shutdown timed out`, no late `GLCompositorWidget already deleted` callback spam, and adaptive timers stop/clear during display cleanup. The remaining active performance family is now render-healthy paint/control under-delivery, not exit orphaning or pending-paint requeue behavior.
+  - superseded 2026-07-01 lifecycle evidence reopened the exit side of this family: the app logged `code=0` but an older adaptive timer survived in `ThreadManager` until shutdown timed out. See `R-30` for the targeted timer-loop ownership fix; the remaining performance family is still render-healthy paint/control under-delivery, not permission to reintroduce pending-paint requeues.
   - 2026-06-29 evidence preserved under `.tmp/perf_collapse_evidence_20260628_164113/20260629_143536_root_cause_latest` shows the collapse without shader fallbacks, pending-paint requeues, or visualizer CUSTOM suppression. A concrete root seam found in that pass was settings-owned UI work outliving the dialog: the dialog-local `AnimationManager` and delayed background hydration must be cleaned/cancelled before runtime restart so settings return does not leave stale UI timers competing with compositor/paint delivery.
   - the same pass found a display-local transition ownership break: `set_processed_image()` cleared `widget._animation_manager` before asking `TransitionController.stop_current()` to cancel the current transition, so interruption/cleanup could lose the only manager reference. Image handoff now preserves the manager through controller stop, display shutdown releases it at the lifecycle boundary, and `AnimationManager` perf summaries include manager id/owner so fresh logs can distinguish stale manager churn from true event-loop delivery starvation.
   - a further root seam was visible progress authority: `FrameState` still extrapolated from the latest `AnimationManager` progress samples, so a high-refresh compositor could keep rendering while shader-visible transition progress remained tethered to a lower-cadence callback stream. `FrameState` now owns an elapsed-time/easing timeline for paint reads while `AnimationManager` remains the completion/callback owner; the regression bar proves paint-time progress can outrun stale samples without adding repaint retries or advancing before authored delay.

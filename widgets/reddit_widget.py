@@ -1190,10 +1190,6 @@ class RedditWidget(BaseOverlayWidget):
                 )
             )
         
-        # Store the full fetched candidate window while rendering only the
-        # configured visible count.
-        self._all_fetched_posts = posts
-
         if not posts:
             logger.warning(
                 "[CACHE][REDDIT] Provider rows produced no authoritative posts after filtering "
@@ -1221,6 +1217,12 @@ class RedditWidget(BaseOverlayWidget):
             self._mark_periodic_terminal_now(reason="all_sources_failed")
             return
 
+        posts = self._merge_sparse_fallback_posts(posts, source_id=source_id, attempted_sources=attempted_sources)
+
+        # Store the full fetched candidate window while rendering only the
+        # configured visible count.
+        self._all_fetched_posts = posts
+
         # Save only authoritative non-empty windows. Empty/error/fallback
         # display states must never freshen the content-cache timestamp.
         self._save_cached_posts(posts)
@@ -1236,6 +1238,87 @@ class RedditWidget(BaseOverlayWidget):
             len(posts),
             self._configured_capacity,
         )
+
+    def _merge_sparse_fallback_posts(
+        self,
+        posts: List[RedditPost],
+        *,
+        source_id: str | None,
+        attempted_sources: tuple[str, ...],
+    ) -> List[RedditPost]:
+        """Merge partial HTML fallback listings into the existing candidate window.
+
+        A sparse HTML scrape can be useful when RSS is blocked, but it is not
+        authoritative enough to replace a healthy cache outright. Newer dated
+        posts are allowed to enter at the top while older cached posts keep the
+        widget populated up to the normal 25-post candidate limit.
+        """
+
+        source = str(source_id or "")
+        attempts = {str(item) for item in attempted_sources}
+        html_source = source in {"html_old", "html_www"} or bool(
+            attempts.intersection({"html_old", "html_www"})
+        )
+        if not html_source or len(posts) >= LIST_WIDGET_MAX_CAPACITY:
+            return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
+
+        cached_posts = list(self._all_fetched_posts) or self._load_cached_posts()
+        if len(cached_posts) <= len(posts):
+            return self._sort_candidate_posts(posts)[:LIST_WIDGET_MAX_CAPACITY]
+
+        merged = self._dedupe_candidate_posts([*posts, *cached_posts])
+        merged = self._sort_candidate_posts(merged)[:LIST_WIDGET_MAX_CAPACITY]
+        logger.warning(
+            "[CACHE][REDDIT] Sparse fallback merged cache_key=%s source=%s attempted=%s incoming=%d existing=%d merged=%d",
+            self._cache_key,
+            source_id or "<unknown>",
+            ",".join(attempted_sources) or "<unknown>",
+            len(posts),
+            len(cached_posts),
+            len(merged),
+        )
+        return merged
+
+    @staticmethod
+    def _candidate_identity(post: RedditPost) -> str:
+        url = str(getattr(post, "url", "") or "").strip().lower()
+        if url:
+            url = url.split("#", 1)[0].split("?", 1)[0].rstrip("/")
+            if url:
+                return f"url:{url}"
+        title = str(getattr(post, "title", "") or "").strip().casefold()
+        return f"title:{title}"
+
+    @classmethod
+    def _dedupe_candidate_posts(cls, posts: List[RedditPost]) -> List[RedditPost]:
+        deduped: Dict[str, RedditPost] = {}
+        for post in posts:
+            key = cls._candidate_identity(post)
+            if not key or key == "title:":
+                continue
+            existing = deduped.get(key)
+            if existing is None:
+                deduped[key] = post
+                continue
+            incoming_ts = float(getattr(post, "created_utc", 0.0) or 0.0)
+            existing_ts = float(getattr(existing, "created_utc", 0.0) or 0.0)
+            if incoming_ts >= existing_ts:
+                deduped[key] = post
+        return list(deduped.values())
+
+    @staticmethod
+    def _sort_candidate_posts(posts: List[RedditPost]) -> List[RedditPost]:
+        try:
+            return sorted(
+                posts,
+                key=lambda post: (
+                    1 if float(getattr(post, "created_utc", 0.0) or 0.0) <= 0.0 else 0,
+                    -float(getattr(post, "created_utc", 0.0) or 0.0),
+                ),
+            )
+        except Exception as e:
+            logger.debug("[REDDIT] Exception suppressed: %s", e)
+            return list(posts)
 
     def _update_posts_internal(self, posts: List[RedditPost], fade: bool = False) -> None:
         """Internal method to update displayed posts from the visible slice.

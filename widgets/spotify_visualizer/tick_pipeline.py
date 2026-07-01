@@ -1068,6 +1068,8 @@ def log_audio_latency_metrics(
         return
 
     force_logging = bool(force_reason)
+    if not force_logging and not bool(getattr(widget, "_spotify_playing", True)):
+        return
     ready = _ensure_latency_logging_ready(widget, engine, last_audio_ts=last_audio_ts)
     if not ready and not force_logging:
         return

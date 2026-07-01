@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-06-29
+Last updated: 2026-07-01
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -30,6 +30,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - Animation cadence diagnostics must preserve owner and peak-count context. Do not classify an `AnimationManager` window as idle churn from a final `active_count=0` / `listeners=0` sample if the log interval lacks `max_active` and `max_listeners` evidence.
 - If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
 - Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
+- High-frequency render/timer workers must acknowledge stop before display cleanup drops ownership. Do not use "immediate" cleanup paths that merely clear local handles while the worker loop can still be alive in `ThreadManager`.
 - Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
 - During display/widget startup, do not keep two lifecycle-start authorities alive. If `widget_setup_all` already initializes/activates the created widgets, display glue must not immediately run another initialize pass over the same set.
 

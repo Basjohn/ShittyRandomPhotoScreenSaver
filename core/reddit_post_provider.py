@@ -747,7 +747,12 @@ class FallbackRedditPostProvider:
                     )
                 if result.posts:
                     success_source = result.source_id or source_id
-                    self._promote_session_source(request.cache_key, success_source)
+                    self._promote_session_source(
+                        request.cache_key,
+                        success_source,
+                        post_count=len(result.posts),
+                        requested_limit=request.limit,
+                    )
                     logger.warning(
                         "[CACHE][REDDIT] Provider source succeeded cache_key=%s source=%s posts=%d attempted=%s",
                         request.cache_key,
@@ -807,8 +812,27 @@ class FallbackRedditPostProvider:
             return self.primary.fetch_posts(request)
         raise RuntimeError(f"unsupported reddit source {source_id}")
 
-    def _promote_session_source(self, cache_key: str, source_id: str) -> None:
+    def _promote_session_source(
+        self,
+        cache_key: str,
+        source_id: str,
+        *,
+        post_count: int,
+        requested_limit: int,
+    ) -> None:
         if source_id in {REDDIT_SOURCE_HTML_OLD, REDDIT_SOURCE_HTML_WWW, self.provider_id}:
+            if source_id in {REDDIT_SOURCE_HTML_OLD, REDDIT_SOURCE_HTML_WWW}:
+                promotion_floor = max(8, int(clamp_list_capacity(requested_limit) * 0.6))
+                if post_count < promotion_floor:
+                    logger.warning(
+                        "[CACHE][REDDIT] Session source not promoted cache_key=%s source=%s "
+                        "reason=sparse_html_success posts=%d threshold=%d",
+                        str(cache_key or "reddit"),
+                        source_id,
+                        post_count,
+                        promotion_floor,
+                    )
+                    return
             normalized_key = str(cache_key or "reddit")
             previous = _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.get(normalized_key)
             if previous != source_id:

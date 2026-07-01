@@ -41,11 +41,15 @@ class _MockThreadManager:
         t = threading.Thread(target=fn, daemon=True, name=task_id or "mock_tm")
         t.start()
         self._threads.append(t)
+        return task_id or "mock_tm"
 
     def shutdown(self):
         for t in self._threads:
             t.join(timeout=2)
         self._threads.clear()
+
+    def active_thread_count(self):
+        return sum(1 for t in self._threads if t.is_alive())
 
 
 class _MockParent:
@@ -227,6 +231,21 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         self.timer.stop()
         self.assertFalse(self.timer.is_active())
         self.assertIsNone(self.timer._task_future)
+        self.assertTrue(self.timer._loop_stopped_event.is_set())
+        self.assertEqual(self.compositor._parent._thread_manager.active_thread_count(), 0)
+
+    def test_render_strategy_manager_stop_waits_for_timer_loop(self):
+        """Display cleanup must not drop timer ownership before the loop exits."""
+        manager = AdaptiveRenderStrategyManager(self.compositor)
+        self.assertTrue(manager.start())
+        timer = manager._timer
+        self.assertIsNotNone(timer)
+
+        manager.stop()
+
+        self.assertIsNone(manager._timer)
+        self.assertTrue(timer._loop_stopped_event.is_set())
+        self.assertEqual(self.compositor._parent._thread_manager.active_thread_count(), 0)
 
     def test_safe_widget_update_skips_deleted_qt_owner(self):
         """Queued frame updates should no-op if the Qt widget has already died."""

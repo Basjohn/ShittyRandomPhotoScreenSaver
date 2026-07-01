@@ -12,6 +12,7 @@ Tests the centralized threading functionality including:
 import threading
 import time
 import pytest
+from concurrent.futures import Future
 from core.threading import manager as manager_module
 from core.threading.manager import (
     _classify_large_timer_gap_warning,
@@ -178,6 +179,32 @@ class TestTaskResult:
 
 class TestThreadManagerSubmit:
     """Task submission tests."""
+
+    def test_fast_executor_completion_does_not_leave_stale_active_task(self):
+        """A task that completes inside submit() must not become active afterward."""
+
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                try:
+                    future.set_result(fn())
+                except Exception as exc:
+                    future.set_exception(exc)
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            task_id = manager.submit_task(ThreadPoolType.COMPUTE, lambda: "done", task_id="instant_task")
+            assert task_id == "instant_task"
+            assert "instant_task" not in manager.get_active_tasks()
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
 
     def test_submit_io_task(self):
         """Test submitting task to IO pool."""

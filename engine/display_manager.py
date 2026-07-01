@@ -83,6 +83,8 @@ class DisplayManager(QObject):
         self._transition_ready_queue: Optional[SPSCQueue] = None
         self._sync_enabled = False
         self._transition_work_pending = False
+        self._monitor_detection_app = None
+        self._monitor_detection_connected = False
         
         # Monitor hotplug detection
         self.screen_count = 0
@@ -97,10 +99,28 @@ class DisplayManager(QObject):
             # Connect to screen change signals
             app.screenAdded.connect(self._on_screen_added)
             app.screenRemoved.connect(self._on_screen_removed)
+            self._monitor_detection_app = app
+            self._monitor_detection_connected = True
             
             # Store initial screen count
             self.screen_count = len(app.screens())
             logger.info("Monitor detection enabled (%d screens)" % self.screen_count)
+
+    def disconnect_monitor_detection(self) -> None:
+        """Detach this manager from application monitor signals before replacement."""
+        app = self._monitor_detection_app
+        if app is None or not self._monitor_detection_connected:
+            return
+        try:
+            app.screenAdded.disconnect(self._on_screen_added)
+        except Exception:
+            logger.debug("[DISPLAY_MANAGER] screenAdded disconnect skipped", exc_info=True)
+        try:
+            app.screenRemoved.disconnect(self._on_screen_removed)
+        except Exception:
+            logger.debug("[DISPLAY_MANAGER] screenRemoved disconnect skipped", exc_info=True)
+        self._monitor_detection_connected = False
+        self._monitor_detection_app = None
 
     def _get_allowed_screen_indices(self, screen_count: int) -> set[int]:
         """Resolve which screen indices should create DisplayWidgets.
@@ -163,18 +183,6 @@ class DisplayManager(QObject):
         if new_count > self.screen_count:
             self.screen_count = new_count
             self.monitors_changed.emit(new_count)
-            
-            # Create new display for added screen
-            if self.displays:  # Only if already initialized
-                screen_index = new_count - 1
-                allowed = self._get_allowed_screen_indices(new_count)
-                if screen_index in allowed:
-                    self._create_display_for_screen(screen_index)
-                else:
-                    logger.info(
-                        "[DISPLAY] Skipping display for screen %d due to show_on_monitors",
-                        screen_index,
-                    )
     
     def _on_screen_removed(self, screen: QScreen) -> None:
         """Handle screen removed event."""
@@ -185,9 +193,6 @@ class DisplayManager(QObject):
         if new_count < self.screen_count:
             self.screen_count = new_count
             self.monitors_changed.emit(new_count)
-            
-            # Clean up excess displays
-            self._cleanup_excess_displays()
     
     def initialize_displays(self) -> int:
         """

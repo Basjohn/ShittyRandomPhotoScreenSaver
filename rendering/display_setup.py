@@ -16,6 +16,11 @@ from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
 try:
+    from shiboken6 import Shiboken
+except Exception:  # pragma: no cover - shiboken can be absent in headless tooling
+    Shiboken = None
+
+try:
     from OpenGL import GL  # type: ignore[import]
 except ImportError:
     GL = None
@@ -39,6 +44,22 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+def _qt_object_is_valid(obj: object | None) -> bool:
+    """Return False for Qt wrappers whose C++ object has already been deleted."""
+
+    if obj is None:
+        return False
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(obj))
+    except TypeError:
+        # Plain Python test doubles are not shiboken objects.
+        return True
+    except RuntimeError:
+        return False
 
 
 def show_on_screen(widget) -> None:
@@ -266,7 +287,11 @@ def prewarm_context_menu(widget) -> None:
 def handle_screen_change(widget, screen) -> None:
     """Apply geometry, DPI, and overlay updates for the active screen."""
 
-    if screen is None:
+    if not _qt_object_is_valid(widget):
+        logger.warning("[SCREEN] Ignoring screen change for deleted display widget")
+        return
+    if not _qt_object_is_valid(screen):
+        logger.warning("[SCREEN] Ignoring screen change for deleted or missing screen")
         return
 
     widget._screen = screen

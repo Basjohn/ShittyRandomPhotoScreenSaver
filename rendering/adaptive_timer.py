@@ -317,6 +317,7 @@ class AdaptiveTimerStrategy:
         self._task_future = None
         self._task_id: Optional[str] = None
         self._thread_manager: Optional[ThreadManager] = None
+        self._loop_stopped_event = threading.Event()
         
         # Resource management
         self._resource_manager: Optional[ResourceManager] = None
@@ -363,6 +364,7 @@ class AdaptiveTimerStrategy:
         try:
             self._stop_event.clear()
             self._wake_event.clear()
+            self._loop_stopped_event.clear()
             self._frame_queue.clear()
             
             # Start in IDLE state, thread will wait for wake
@@ -427,28 +429,25 @@ class AdaptiveTimerStrategy:
                 logger.debug("[ADAPTIVE_TIMER] Resumed from %s", current.name)
     
     def stop(self) -> None:
-        """Stop timer permanently (app exit).
-        
-        If exit_immediate is set in config, skip wait and tear down instantly.
-        """
+        """Stop timer permanently and wait briefly for the loop to acknowledge it."""
         # Signal stop
+        task_id = self._task_id
         self._stop_event.set()
         self._wake_event.set()
-        
-        # Fast-path: don't wait for thread if exit_immediate
-        if self._config.exit_immediate:
-            if is_perf_metrics_enabled():
-                logger.info("[PERF][ADAPTIVE_TIMER] fast_stop id=%s", self._task_id)
-            self._task_future = None
-            self._task_id = None
-            return
-        
-        # Normal wait with timeout
+
         if self._task_future is not None:
-            # Wait for timer loop thread to exit via stop_event
+            # Wait for the loop's finally block, not for the already-set stop event.
             try:
-                max_wait = max(1.0, 2 * self._config.min_frame_time_ms / 1000.0)
-                self._stop_event.wait(timeout=max_wait)
+                base_wait = 4 * self._config.min_frame_time_ms / 1000.0
+                max_wait = 0.0 if self._config.exit_immediate else max(0.05, min(0.25, base_wait))
+                stopped = self._loop_stopped_event.wait(timeout=max_wait)
+                if not stopped:
+                    logger.warning(
+                        "[PERF][ADAPTIVE_TIMER][FALLBACK] Stop timed out before loop acknowledged shutdown "
+                        "task=%s timeout=%.3fs",
+                        task_id,
+                        max_wait,
+                    )
             except Exception:
                 pass
             self._task_future = None
@@ -486,76 +485,79 @@ class AdaptiveTimerStrategy:
         next_tick_deadline: Optional[float] = None
         
         logger.debug("[ADAPTIVE_TIMER] Loop started (target=%.2fms)", target_interval * 1000)
-        
-        while not self._stop_event.is_set():
-            state = self._state.load()
-            
-            if state == TimerState.IDLE:
-                next_tick_deadline = None
-                # Deep sleep - but use short timeout to check stop_event frequently
-                # Use 1 second chunks to allow quick shutdown response
-                if self._wake_event.wait(timeout=1.0):
-                    self._wake_event.clear()
-                # Continue loop to check state
-                continue
-            
-            elif state == TimerState.PAUSED:
-                next_tick_deadline = None
-                # Check if should go idle
-                elapsed = time.monotonic() - self._transition_ended_at
-                if elapsed > self._config.idle_timeout_sec:
-                    # Transition to IDLE
-                    old_state = self._state.compare_and_swap(TimerState.PAUSED, TimerState.IDLE)
-                    if old_state == TimerState.PAUSED:
-                        self._metrics.record_state_change(TimerState.PAUSED)
-                        logger.debug("[ADAPTIVE_TIMER] Auto-idle after %.1fs", elapsed)
-                    continue
-                
-                # Brief sleep before rechecking
-                time.sleep(0.001)
-                continue
-            
-            elif state == TimerState.RUNNING:
-                # Full-precision timing
-                try:
-                    if next_tick_deadline is None:
-                        next_tick_deadline = time.perf_counter() + target_interval
+        try:
+            while not self._stop_event.is_set():
+                state = self._state.load()
 
-                    # Check for immediate frame requests
-                    has_request = False
-                    while True:
-                        ok, _ = self._frame_queue.try_pop()
-                        if not ok:
-                            break
-                        has_request = True
-                    
-                    if has_request:
-                        self._signal_frame()
+                if state == TimerState.IDLE:
+                    next_tick_deadline = None
+                    # Deep sleep - but use short timeout to check stop_event frequently
+                    # Use 1 second chunks to allow quick shutdown response
+                    if self._wake_event.wait(timeout=1.0):
+                        self._wake_event.clear()
+                    # Continue loop to check state
+                    continue
+
+                elif state == TimerState.PAUSED:
+                    next_tick_deadline = None
+                    # Check if should go idle
+                    elapsed = time.monotonic() - self._transition_ended_at
+                    if elapsed > self._config.idle_timeout_sec:
+                        # Transition to IDLE
+                        old_state = self._state.compare_and_swap(TimerState.PAUSED, TimerState.IDLE)
+                        if old_state == TimerState.PAUSED:
+                            self._metrics.record_state_change(TimerState.PAUSED)
+                            logger.debug("[ADAPTIVE_TIMER] Auto-idle after %.1fs", elapsed)
                         continue
-                    
-                    # Precise timing anchored to the carried deadline so callback
-                    # overhead does not accumulate into long-run drift.
-                    _wait_until_deadline_without_gil_spin(
-                        next_tick_deadline,
-                        self._stop_event,
-                        self._state,
-                    )
-                    
-                    # Only signal if still running
-                    if (not self._stop_event.is_set() and 
-                        self._state.load() == TimerState.RUNNING):
-                        self._signal_frame()
-                        next_tick_deadline = _normalize_next_deadline(
-                            next_tick_deadline + target_interval,
-                            time.perf_counter(),
-                            target_interval,
+
+                    # Brief sleep before rechecking
+                    time.sleep(0.001)
+                    continue
+
+                elif state == TimerState.RUNNING:
+                    # Full-precision timing
+                    try:
+                        if next_tick_deadline is None:
+                            next_tick_deadline = time.perf_counter() + target_interval
+
+                        # Check for immediate frame requests
+                        has_request = False
+                        while True:
+                            ok, _ = self._frame_queue.try_pop()
+                            if not ok:
+                                break
+                            has_request = True
+
+                        if has_request:
+                            self._signal_frame()
+                            continue
+
+                        # Precise timing anchored to the carried deadline so callback
+                        # overhead does not accumulate into long-run drift.
+                        _wait_until_deadline_without_gil_spin(
+                            next_tick_deadline,
+                            self._stop_event,
+                            self._state,
                         )
                         
-                except Exception as e:
-                    logger.error("[ADAPTIVE_TIMER] Loop error: %s", e)
-                    break
-        
-        logger.debug("[ADAPTIVE_TIMER] Loop stopped")
+                        # Only signal if still running
+                        if (
+                            not self._stop_event.is_set()
+                            and self._state.load() == TimerState.RUNNING
+                        ):
+                            self._signal_frame()
+                            next_tick_deadline = _normalize_next_deadline(
+                                next_tick_deadline + target_interval,
+                                time.perf_counter(),
+                                target_interval,
+                            )
+
+                    except Exception as e:
+                        logger.error("[ADAPTIVE_TIMER] Loop error: %s", e)
+                        break
+        finally:
+            self._loop_stopped_event.set()
+            logger.debug("[ADAPTIVE_TIMER] Loop stopped")
     
     def _signal_frame(self) -> None:
         """Signal UI thread to render."""
@@ -675,8 +677,6 @@ class AdaptiveRenderStrategyManager:
         """Stop timer permanently."""
         with self._lock:
             if self._timer is not None:
-                # Enable exit fast-path before stopping
-                self._timer._config.exit_immediate = True
                 self._timer.stop()
                 self._timer = None
         if is_perf_metrics_enabled():

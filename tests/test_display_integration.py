@@ -636,6 +636,112 @@ class TestDisplayManagerSync:
 
         assert shown == [0], "stale delayed display show must not run after cleanup/restart"
 
+    def test_screen_added_only_signals_engine_rebuild_without_local_display_create(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        emitted: list[int] = []
+        created: list[int] = []
+
+        class _FakeScreen:
+            def __init__(self, index: int):
+                self._index = index
+
+            def name(self):
+                return f"Screen {self._index}"
+
+            def geometry(self):
+                return SimpleNamespace(width=lambda: 1920, height=lambda: 1080)
+
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: [_FakeScreen(0), _FakeScreen(1)],
+        )
+
+        manager = DisplayManager()
+        manager.screen_count = 1
+        manager.displays = [object()]
+        manager.monitors_changed.connect(lambda count: emitted.append(count))
+        monkeypatch.setattr(
+            manager,
+            "_create_display_for_screen",
+            lambda screen_index, **_kwargs: created.append(screen_index),
+        )
+
+        manager._on_screen_added(_FakeScreen(1))
+
+        assert emitted == [2]
+        assert created == [], (
+            "DisplayManager must not both emit monitors_changed and create a "
+            "display locally; ScreensaverEngine owns the full rebuild/reimage path."
+        )
+
+    def test_screen_removed_only_signals_engine_rebuild_without_local_cleanup(
+        self,
+        qt_app,
+        monkeypatch,
+    ):
+        emitted: list[int] = []
+        local_cleanups: list[bool] = []
+
+        class _FakeScreen:
+            def name(self):
+                return "Removed Screen"
+
+        class _RemainingScreen:
+            def name(self):
+                return "Remaining Screen"
+
+        monkeypatch.setattr(
+            "engine.display_manager.QGuiApplication.screens",
+            lambda _self=None: [_RemainingScreen()],
+        )
+
+        manager = DisplayManager()
+        manager.screen_count = 2
+        manager.displays = [object(), object()]
+        manager.monitors_changed.connect(lambda count: emitted.append(count))
+        monkeypatch.setattr(
+            manager,
+            "_cleanup_excess_displays",
+            lambda: local_cleanups.append(True),
+        )
+
+        manager._on_screen_removed(_FakeScreen())
+
+        assert emitted == [1]
+        assert local_cleanups == [], (
+            "Screen removal should route through the engine rebuild path, not "
+            "trim display widgets inside the detecting manager."
+        )
+
+    def test_engine_monitor_change_detaches_old_manager_before_rebuild(self):
+        calls: list[str] = []
+
+        class _FakeDisplayManager:
+            def disconnect_monitor_detection(self):
+                calls.append("disconnect")
+
+            def cleanup(self):
+                calls.append("cleanup")
+
+        engine = SimpleNamespace(
+            display_manager=_FakeDisplayManager(),
+            _current_image="current-image",
+            _initialize_display=lambda: calls.append("initialize"),
+            _load_and_display_image=lambda image: calls.append(f"redisplay:{image}"),
+        )
+
+        ScreensaverEngine._on_monitors_changed(engine, 2)
+
+        assert calls == [
+            "disconnect",
+            "cleanup",
+            "initialize",
+            "redisplay:current-image",
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Spotify widget lifecycle integration

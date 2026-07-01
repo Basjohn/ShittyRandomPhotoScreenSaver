@@ -286,9 +286,58 @@ def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.
 
 def test_composite_provider_promotes_successful_html_source_for_session(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
+    old_payload = (
+        "<html><body>"
+        + "".join(
+            f'<shreddit-post post-title="Old wins {idx}" '
+            f'permalink="/r/python/comments/old{idx}/old_wins_{idx}/" '
+            f'created-timestamp="{1710000200 + idx}"></shreddit-post>'
+            for idx in range(15)
+        )
+        + "</body></html>"
+    ).encode("utf-8")
+
+    class FailingPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            calls.append("rss")
+            raise RuntimeError("rss down")
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        return _StubResponse(content=old_payload)
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = FallbackRedditPostProvider(FailingPrimary())
+    request = RedditFetchRequest(
+        subreddit="python",
+        sort="hot",
+        limit=25,
+        cache_key="reddit",
+        shutdown_event=None,
+    )
+
+    first = provider.fetch_posts(request)
+    second = provider.fetch_posts(request)
+
+    assert first.source_id == RedditHtmlProvider.SOURCE_OLD
+    assert second.source_id == RedditHtmlProvider.SOURCE_OLD
+    assert calls == [
+        "rss",
+        "https://old.reddit.com/r/python/",
+        "https://old.reddit.com/r/python/",
+    ]
+
+
+def test_composite_provider_does_not_promote_sparse_html_rescue(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
     old_payload = b"""
 <html><body>
-  <shreddit-post post-title="Old wins" permalink="/r/python/comments/old/old_wins/" created-timestamp="1710000200"></shreddit-post>
+  <shreddit-post post-title="Sparse old rescue" permalink="/r/python/comments/old/sparse_old_rescue/" created-timestamp="1710000200"></shreddit-post>
+  <shreddit-post post-title="Sparse old rescue 2" permalink="/r/python/comments/old2/sparse_old_rescue_2/" created-timestamp="1710000201"></shreddit-post>
 </body></html>
 """
 
@@ -323,6 +372,7 @@ def test_composite_provider_promotes_successful_html_source_for_session(monkeypa
     assert calls == [
         "rss",
         "https://old.reddit.com/r/python/",
+        "rss",
         "https://old.reddit.com/r/python/",
     ]
 

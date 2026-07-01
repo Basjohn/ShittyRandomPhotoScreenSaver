@@ -482,10 +482,15 @@ class ThreadManager:
             
             return task_result
         
-        # Submit to executor
-        future = executor.submit(wrapped_func)
-        task.future = future
+        # Active-task bookkeeping is authoritative at submit time. Register before
+        # the executor can run a fast task and unregister itself.
         self._register_active_task(task)
+        try:
+            future = executor.submit(wrapped_func)
+        except Exception:
+            self._unregister_active_task(task.task_id)
+            raise
+        task.future = future
         
         # Register with resource manager
         if self._resource_manager:
