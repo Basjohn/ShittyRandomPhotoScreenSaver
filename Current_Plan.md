@@ -18,9 +18,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 ### 1. Paint-Delivery Performance Recovery
 
 - [x] Keep PERF HUD / parser paint-authoritative: `GL PAINT` is the visible cadence signal; `GL RENDER` and `GL ANIM` are supporting diagnostics.
-- [x] Preserve compact evidence bundles for the old and current collapse families, including `.tmp/perf_settings_evidence_20260630_020535` and `.tmp/reddit_display_cycle_evidence_20260701_1118`.
+- [x] Preserve compact evidence bundles for the old and current collapse families, including `.tmp/perf_settings_evidence_20260630_020535`, `.tmp/reddit_display_cycle_evidence_20260701_1118`, and `.tmp/perf_reddit_wake_evidence_20260701_1846`.
+- [x] Trim old repeated perf evidence: `.tmp/perf_collapse_evidence_20260628_164113` now keeps representative baseline plus the user-extensive and settings-return 60/40 collapse snapshots, with a README explaining what was removed.
 - [x] Reassess after the lifecycle exit fix: latest logs show clean shutdown, no pending-paint requeues, no shader fallbacks, no slow GL uploads, and no 60Hz under-target display.
-- [ ] Chase the remaining fresh evidence: Display 0 can still show healthy `GL RENDER` around `165Hz` while `GL PAINT` under-delivers in Raindrops windows; this is still paint/event-loop delivery, not permission to add UI pressure.
+- [ ] Chase the remaining fresh evidence: Display 0 can still show healthy `GL RENDER` around `165Hz` while `GL PAINT` under-delivers in Raindrops windows, including the 2026-07-01 `18:46` run where paint lives around the `80fps` range and later near `69-74fps`; this is still paint/event-loop delivery, not permission to add UI pressure.
 - [ ] Strengthen `tools/transition_perf_health_parser.py` only where it proves wrong behavior: healthy render timer plus bad paint delivery, stable-divisor cadence, settings/edit/display lifecycle correlation, and fallback reliance.
 - [ ] Investigate paint under-delivery from root seams only: `QOpenGLWidget.update()` consumption, pending-flag lifecycle, compositor/display rebuild boundaries, texture/cache upload timing, settings UI event-loop stalls, and visualizer tick payload.
 - [ ] Do not alter visual fidelity, transition identity, first-frame/last-frame behavior, or visualizer reactivity to gain FPS.
@@ -40,8 +41,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Add a generation-scoped display startup readiness barrier: current-image replay after monitor rebuild waits until every current-generation display has completed show/setup, and stale delayed shows cannot satisfy a newer generation.
 - [x] Replace first-frame readiness `QTimer.singleShot(0)` plus forced `repaint()` with a ThreadManager-owned handoff; keep normal paint scheduling only.
 - [x] Add bars for staggered display readiness, stale monitor rebuild replay ordering, and no display startup `QTimer.singleShot` / forced repaint paths.
-- [ ] Runtime-check one display off/on cycle: no long-lived black base frame, no widget-only display waiting for the next transition, no duplicate/orphan display widgets, and no placeholder screen grab becoming visible truth.
-- [ ] If black base frame still appears, inspect render-surface/compositor/base-frame readiness logs before adding any timer, repaint, or broad refresh.
+- [x] Runtime-check display off/on recovery: latest logs show recovery is acceptable and no duplicate/orphan display widgets or long-lived placeholder truth persisted.
+- [ ] If black base frame reappears, inspect render-surface/compositor/base-frame readiness logs before adding any timer, repaint, or broad refresh.
 
 ### 3. Settings UI Cost And Churn
 
@@ -63,6 +64,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Preserve provider metadata through transition-deferred refresh application so sparse HTML remains classified as sparse after the transition clears.
 - [x] Harden sparse HTML merge against persisted-cache loss: `html_old` / `html_www` partial windows merge newer dated rows into the richer runtime or persisted candidate window instead of replacing it.
 - [x] Add bars for persisted-cache sparse merge and transition-deferred sparse metadata preservation.
+- [x] Prevent invalid Reddit timestamps from rendering as epoch-age labels such as `56Y AGO`; invalid/zero `created_utc` now displays no age instead of a fake ancient age.
 - [ ] Runtime-watch one long compiled run for both widgets firing near due cadence, no repeated sparse-HTML primary preference after a partial rescue, and no failed/empty chain freshening the content timestamp.
 - [ ] Treat any future `403`/`429` after the bounded source chain as a pacing/provider failure to investigate; the cooldown gate is a loud safety net, not a success state.
 

@@ -97,12 +97,14 @@ def test_reddit_filters_daily_weekly_question_threads(qt_app, qtbot):  # noqa: A
     assert "question thread" not in remaining.title.lower()
 
 
-def test_reddit_format_age_variants():
+@pytest.mark.qt
+def test_reddit_format_age_variants(qt_app, qtbot):  # noqa: ARG001
     """_format_age should map seconds to human-readable buckets."""
 
     widget = RedditWidget()
+    qtbot.addWidget(widget)
 
-    now = 1_000_000.0
+    now = 1_800_000_000.0
 
     # Sub‑minute rounds up to 1M AGO.
     assert widget._format_age(now - 10, now) == "1M AGO"  # type: ignore[attr-defined]
@@ -118,6 +120,8 @@ def test_reddit_format_age_variants():
     assert widget._format_age(now - 3 * 7 * 86400, now) == "3W AGO"  # type: ignore[attr-defined]
     # Years.
     assert widget._format_age(now - 2 * 365 * 86400, now) == "2Y AGO"  # type: ignore[attr-defined]
+    # Invalid provider timestamps are unknown, not epoch-aged Reddit posts.
+    assert widget._format_age(0.0, now) == ""  # type: ignore[attr-defined]
 
 
 @pytest.mark.qt

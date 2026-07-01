@@ -2055,7 +2055,7 @@ class RedditWidget(BaseOverlayWidget):
         }
 
     def _format_age(self, created_utc: float, now_ts: Optional[float] = None) -> str:
-        if created_utc <= 0 and now_ts is None:
+        if created_utc <= 0:
             return ""
         if now_ts is None:
             now_ts = time.time()
