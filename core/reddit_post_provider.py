@@ -36,6 +36,9 @@ _VALID_PROVIDER_IDS = {
     REDDIT_PROVIDER_PUBLIC_JSON,
     REDDIT_PROVIDER_HTML,
 }
+REDDIT_SOURCE_HTML_OLD = "html_old"
+REDDIT_SOURCE_HTML_WWW = "html_www"
+_SESSION_PRIMARY_SOURCE_BY_CACHE_KEY: dict[str, str] = {}
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ class RedditFetchRequest:
     limit: int
     cache_key: str
     shutdown_event: Optional[Event] = None
+    bypass_blocked_cooldown: bool = False
 
 
 @dataclass(frozen=True)
@@ -55,14 +59,36 @@ class RedditProviderResult:
 
     posts: list[dict[str, Any]] | None = None
     skip_reason: str | None = None
+    source_id: str | None = None
+    attempted_sources: tuple[str, ...] = ()
 
     @classmethod
-    def with_posts(cls, posts: list[dict[str, Any]]) -> "RedditProviderResult":
-        return cls(posts=list(posts), skip_reason=None)
+    def with_posts(
+        cls,
+        posts: list[dict[str, Any]],
+        *,
+        source_id: str | None = None,
+        attempted_sources: tuple[str, ...] = (),
+    ) -> "RedditProviderResult":
+        return cls(
+            posts=list(posts),
+            skip_reason=None,
+            source_id=source_id,
+            attempted_sources=tuple(attempted_sources),
+        )
 
     @classmethod
-    def skipped(cls, reason: str) -> "RedditProviderResult":
-        return cls(posts=None, skip_reason=str(reason or "skipped"))
+    def skipped(
+        cls,
+        reason: str,
+        *,
+        attempted_sources: tuple[str, ...] = (),
+    ) -> "RedditProviderResult":
+        return cls(
+            posts=None,
+            skip_reason=str(reason or "skipped"),
+            attempted_sources=tuple(attempted_sources),
+        )
 
 
 class RedditPostProvider(Protocol):
@@ -95,7 +121,11 @@ def normalize_reddit_provider_id(raw: object) -> str:
     return REDDIT_PROVIDER_RSS
 
 
-def _acquire_widget_reddit_request_slot(request: RedditFetchRequest) -> str:
+def _acquire_widget_reddit_request_slot(
+    request: RedditFetchRequest,
+    *,
+    chain_source: bool = False,
+) -> str:
     """Acquire a shared Reddit-family request slot for widget fetches."""
 
     from core.reddit_rate_limiter import (
@@ -111,7 +141,9 @@ def _acquire_widget_reddit_request_slot(request: RedditFetchRequest) -> str:
             priority=RateLimitPriority.HIGH,
             namespace="widget",
             shutdown_event=request.shutdown_event,
-            skip_if_blocked=True,
+            skip_if_blocked=not request.bypass_blocked_cooldown,
+            min_interval_override=1.0 if chain_source else None,
+            ignore_blocked_cooldown=request.bypass_blocked_cooldown,
         )
     finally:
         if reserved_quota:
@@ -262,7 +294,7 @@ class RedditRssProvider:
             request.subreddit,
             len(posts),
         )
-        return RedditProviderResult.with_posts(posts)
+        return RedditProviderResult.with_posts(posts, source_id=self.provider_id)
 
     def _parse_feed(self, payload: bytes) -> list[dict[str, Any]]:
         root = ET.fromstring(payload)
@@ -316,7 +348,7 @@ class PullPushProvider:
             request.subreddit,
             len(posts),
         )
-        return RedditProviderResult.with_posts(posts)
+        return RedditProviderResult.with_posts(posts, source_id=self.provider_id)
 
     def _fetch_rows(self, subreddit: str, *, size: int) -> list[dict[str, Any]]:
         params = {
@@ -471,7 +503,7 @@ class RedditPublicJsonProvider:
                 }
             )
 
-        return RedditProviderResult.with_posts(posts)
+        return RedditProviderResult.with_posts(posts, source_id=self.provider_id)
 
 
 class _RedditHtmlPostParser(HTMLParser):
@@ -621,60 +653,62 @@ class RedditHtmlProvider:
     """Subreddit listing provider using Reddit's ordinary HTML pages."""
 
     provider_id = REDDIT_PROVIDER_HTML
+    SOURCE_OLD = REDDIT_SOURCE_HTML_OLD
+    SOURCE_WWW = REDDIT_SOURCE_HTML_WWW
 
     def __init__(self, *, record_blocked: bool = True) -> None:
         self._record_blocked = bool(record_blocked)
 
     def fetch_posts(self, request: RedditFetchRequest) -> RedditProviderResult:
-        slot_state = _acquire_widget_reddit_request_slot(request)
-        if slot_state == "shutdown":
-            return RedditProviderResult.skipped("shutdown")
-        if slot_state == "blocked":
-            logger.warning("[RATE_LIMIT] Reddit HTML widget skipping fetch after blocked cooldown re-check")
-            return RedditProviderResult.skipped("blocked_cooldown")
+        return self.fetch_source(request, self.SOURCE_OLD)
 
-        errors: list[Exception] = []
-        for base_url, label in (
-            (f"https://www.reddit.com/r/{request.subreddit}/", "www"),
-            (f"https://old.reddit.com/r/{request.subreddit}/", "old"),
-        ):
-            url = base_url
-            headers = _build_reddit_request_headers(
-                f"{request.cache_key}:{request.subreddit}:html:{label}",
-                accept="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    def fetch_source(self, request: RedditFetchRequest, source_id: str) -> RedditProviderResult:
+        source_id = self.SOURCE_WWW if str(source_id) == self.SOURCE_WWW else self.SOURCE_OLD
+        label = "www" if source_id == self.SOURCE_WWW else "old"
+        base_url = (
+            f"https://www.reddit.com/r/{request.subreddit}/"
+            if source_id == self.SOURCE_WWW
+            else f"https://old.reddit.com/r/{request.subreddit}/"
+        )
+        slot_state = _acquire_widget_reddit_request_slot(request, chain_source=True)
+        if slot_state == "shutdown":
+            return RedditProviderResult.skipped("shutdown", attempted_sources=(source_id,))
+        if slot_state == "blocked":
+            logger.warning(
+                "[RATE_LIMIT] Reddit HTML widget skipping fetch after blocked cooldown re-check "
+                "cache_key=%s source=%s",
+                request.cache_key,
+                label,
             )
-            try:
-                logger.debug("[REDDIT] Fetching HTML feed: subreddit=%s source=%s", request.subreddit, label)
-                resp = requests.get(url, headers=headers, timeout=10)
-                _raise_for_reddit_http_status(
-                    resp,
-                    provider_id=f"{self.provider_id}:{label}",
-                    subreddit=request.subreddit,
-                    url=url,
-                    record_blocked=self._record_blocked,
-                )
-                resp.raise_for_status()
-                posts = self._parse_html(resp.content, request.subreddit, base_url=url)
-                if posts:
-                    logger.warning(
-                        "[CACHE][REDDIT] Designed HTML provider succeeded cache_key=%s source=%s posts=%d",
-                        request.cache_key,
-                        label,
-                        len(posts),
-                    )
-                    return RedditProviderResult.with_posts(posts[: max(1, clamp_list_capacity(request.limit))])
-                errors.append(RuntimeError(f"html:{label}: empty listing"))
-            except Exception as exc:
-                errors.append(exc)
-                logger.warning(
-                    "[CACHE][REDDIT] HTML provider source failed cache_key=%s source=%s error=%s",
-                    request.cache_key,
-                    label,
-                    exc,
-                )
-        if errors:
-            raise RuntimeError("; ".join(str(error) for error in errors))
-        return RedditProviderResult.with_posts([])
+            return RedditProviderResult.skipped("blocked_cooldown", attempted_sources=(source_id,))
+
+        headers = _build_reddit_request_headers(
+            f"{request.cache_key}:{request.subreddit}:html:{label}",
+            accept="text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        )
+        resp = requests.get(base_url, headers=headers, timeout=10)
+        _raise_for_reddit_http_status(
+            resp,
+            provider_id=f"{self.provider_id}:{label}",
+            subreddit=request.subreddit,
+            url=base_url,
+            record_blocked=self._record_blocked,
+        )
+        resp.raise_for_status()
+        posts = self._parse_html(resp.content, request.subreddit, base_url=base_url)
+        if posts:
+            logger.warning(
+                "[CACHE][REDDIT] Designed HTML provider succeeded cache_key=%s source=%s posts=%d",
+                request.cache_key,
+                label,
+                len(posts),
+            )
+            return RedditProviderResult.with_posts(
+                posts[: max(1, clamp_list_capacity(request.limit))],
+                source_id=source_id,
+                attempted_sources=(source_id,),
+            )
+        raise RuntimeError(f"html:{label}: empty listing")
 
     def _parse_html(self, payload: bytes | str, subreddit: str, *, base_url: str) -> list[dict[str, Any]]:
         text = payload.decode("utf-8", errors="replace") if isinstance(payload, bytes) else str(payload or "")
@@ -693,46 +727,98 @@ class FallbackRedditPostProvider:
         self.provider_id = getattr(primary, "provider_id", REDDIT_PROVIDER_RSS)
 
     def fetch_posts(self, request: RedditFetchRequest) -> RedditProviderResult:
-        primary_error: Exception | None = None
-        try:
-            result = self.primary.fetch_posts(request)
-            if result.skip_reason:
-                return result
-            if result.posts:
-                return result
-            primary_error = RuntimeError("primary provider returned no posts")
-            logger.warning(
-                "[CACHE][REDDIT] Primary provider returned no posts; trying designed HTML fallback "
-                "cache_key=%s provider=%s",
-                request.cache_key,
-                getattr(self.primary, "provider_id", "<unknown>"),
-            )
-        except Exception as exc:
-            primary_error = exc
-            logger.warning(
-                "[CACHE][REDDIT] Primary provider failed; trying designed HTML fallback "
-                "cache_key=%s provider=%s error=%s",
-                request.cache_key,
-                getattr(self.primary, "provider_id", "<unknown>"),
-                exc,
-            )
+        attempted_sources: list[str] = []
+        errors: list[Exception] = []
 
-        try:
-            html_result = self.html_provider.fetch_posts(request)
-            if html_result.skip_reason:
-                return html_result
-            if html_result.posts:
-                return html_result
-            raise RuntimeError("html fallback returned no posts")
-        except Exception as html_error:
-            status_error = primary_error if isinstance(primary_error, RedditProviderHttpError) else html_error
-            if isinstance(status_error, RedditProviderHttpError) and status_error.status_code in {403, 429}:
-                _record_reddit_blocked_response(
-                    f"composite:{status_error.provider_id}:{request.subreddit}:{status_error.status_code}"
+        for source_id in self._source_order(request):
+            attempted_sources.append(source_id)
+            try:
+                logger.warning(
+                    "[CACHE][REDDIT] Provider source started cache_key=%s source=%s",
+                    request.cache_key,
+                    source_id,
                 )
-            if primary_error is not None:
-                raise RuntimeError(f"{primary_error}; html fallback failed: {html_error}") from html_error
-            raise
+                result = self._fetch_source(request, source_id)
+                combined_attempts = tuple(attempted_sources)
+                if result.skip_reason:
+                    return RedditProviderResult.skipped(
+                        result.skip_reason,
+                        attempted_sources=combined_attempts,
+                    )
+                if result.posts:
+                    success_source = result.source_id or source_id
+                    self._promote_session_source(request.cache_key, success_source)
+                    logger.warning(
+                        "[CACHE][REDDIT] Provider source succeeded cache_key=%s source=%s posts=%d attempted=%s",
+                        request.cache_key,
+                        success_source,
+                        len(result.posts),
+                        ",".join(combined_attempts),
+                    )
+                    return RedditProviderResult.with_posts(
+                        result.posts,
+                        source_id=success_source,
+                        attempted_sources=combined_attempts,
+                    )
+                raise RuntimeError(f"{source_id} returned no posts")
+            except Exception as exc:
+                errors.append(exc)
+                logger.warning(
+                    "[CACHE][REDDIT] Provider source failed cache_key=%s source=%s error=%s",
+                    request.cache_key,
+                    source_id,
+                    exc,
+                )
+
+        for error in errors:
+            if isinstance(error, RedditProviderHttpError) and error.status_code in {403, 429}:
+                _record_reddit_blocked_response(
+                    f"chain:{error.provider_id}:{request.subreddit}:{error.status_code}"
+                )
+                break
+        if errors:
+            raise RuntimeError("; ".join(str(error) for error in errors))
+        raise RuntimeError("reddit provider chain had no sources")
+
+    def _source_order(self, request: RedditFetchRequest) -> tuple[str, ...]:
+        configured_source = str(self.provider_id or REDDIT_PROVIDER_RSS)
+        promoted_source = _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.get(str(request.cache_key or "reddit"))
+        ordered: list[str] = []
+
+        def _append(source: str) -> None:
+            if source and source not in ordered:
+                ordered.append(source)
+
+        if promoted_source:
+            _append(promoted_source)
+        elif configured_source == REDDIT_PROVIDER_HTML:
+            _append(REDDIT_SOURCE_HTML_OLD)
+        else:
+            _append(configured_source)
+
+        _append(REDDIT_SOURCE_HTML_OLD)
+        _append(REDDIT_SOURCE_HTML_WWW)
+        return tuple(ordered[:3])
+
+    def _fetch_source(self, request: RedditFetchRequest, source_id: str) -> RedditProviderResult:
+        if source_id in {REDDIT_SOURCE_HTML_OLD, REDDIT_SOURCE_HTML_WWW}:
+            return self.html_provider.fetch_source(request, source_id)
+        if source_id == self.provider_id:
+            return self.primary.fetch_posts(request)
+        raise RuntimeError(f"unsupported reddit source {source_id}")
+
+    def _promote_session_source(self, cache_key: str, source_id: str) -> None:
+        if source_id in {REDDIT_SOURCE_HTML_OLD, REDDIT_SOURCE_HTML_WWW, self.provider_id}:
+            normalized_key = str(cache_key or "reddit")
+            previous = _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.get(normalized_key)
+            if previous != source_id:
+                _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY[normalized_key] = source_id
+                logger.warning(
+                    "[CACHE][REDDIT] Session source promoted cache_key=%s source=%s previous=%s",
+                    normalized_key,
+                    source_id,
+                    previous or "<none>",
+                )
 
 
 def build_reddit_post_provider(provider: object | None = None) -> RedditPostProvider:
@@ -740,7 +826,7 @@ def build_reddit_post_provider(provider: object | None = None) -> RedditPostProv
 
     provider_id = normalize_reddit_provider_id(provider)
     if provider_id == REDDIT_PROVIDER_HTML:
-        return RedditHtmlProvider()
+        return FallbackRedditPostProvider(RedditHtmlProvider(record_blocked=False))
     if provider_id == REDDIT_PROVIDER_RSS:
         return FallbackRedditPostProvider(RedditRssProvider(record_blocked=False))
     if provider_id == REDDIT_PROVIDER_PUBLIC_JSON:

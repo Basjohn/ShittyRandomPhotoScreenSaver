@@ -53,13 +53,14 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - [x] Preserve the latest Reddit/visualizer/perf evidence at `.tmp/reddit_visualizer_route_perf_evidence_20260630_120708`.
 - [x] Retire the old timed cache-growth reveal: Reddit now fetches/caches the fixed `25`-post candidate window and immediately displays the configured visible count from that candidate pool.
-- [x] Keep automatic refresh conservative and reliable: per-cache-key periodic due survives widget rebuilds, stale startup caches pace behind the shared startup gate, and ordinary automatic cadence remains roughly `15min` per Reddit widget.
-- [x] Make the manual refresh spiral useful without turning it into hammering: manual refresh uses a shorter `3min` gate for fresh-cache, periodic-due, and blocked-cooldown skip decisions, while automatic refresh still respects the full sparse cadence.
-- [x] Prevent blocked fetches from lying about cache freshness: `403`/`429` updates only the Reddit service gate, not the content JSON timestamp.
-- [x] Add a designed HTML provider fallback: selected provider remains authoritative first, but failed/empty provider results try `www.reddit.com/r/<subreddit>/` and then `old.reddit.com/r/<subreddit>/` through the same stable persona and request-slot seams before the fetch is considered failed.
-- [x] Add/refresh Reddit bars for retired growth, candidate-window fetch/display split, preserved per-cache-key due, blocked cooldown scheduling, manual `3min` retry windows, manual blocked-cooldown bypass after the short window, HTML provider parsing/fallback, and padded hour/day age labels.
-- [ ] Runtime-watch the next `--cache` run: both `reddit` and `reddit2` should either log a real periodic/startup fetch when stale or a clear skip reason; manual spiral skips should report the shorter window, not a full `15min` wait.
-- [ ] Treat any future `403`/`429` after RSS/HTML fallback as a pacing/provider failure to investigate; the cooldown gate is a loud safety net, not a success state.
+- [x] Consolidate automatic/manual startup cadence around terminal refresh chains: due horizons move only after success through a source or after all sources fail, not when a timer merely fires or a fetch is only attempted.
+- [x] Keep both widgets eligible when stale: `reddit` may fire immediately, `reddit2` uses a small `30s` stagger, and settings/edit rebuilds reattach to existing per-cache-key due state instead of restarting it.
+- [x] Make manual refresh useful without hammering: the spiral uses a `3min` manual gate, can bypass the longer blocked gate after that window, and does not push the automatic `15min` due unless the chain reaches a terminal outcome.
+- [x] Rebuild provider fallback as a bounded source chain: session/configured source first, then `old.reddit.com/r/<subreddit>/`, then `www.reddit.com/r/<subreddit>/`; successful `old`/`www` sources become the per-widget session primary.
+- [x] Prevent false freshness: empty listings, filtered-empty rows, provider failures, blocked responses, and visible fallback display never rewrite the Reddit JSON cache or content timestamp.
+- [x] Add/refresh Reddit bars for retired growth, candidate-window fetch/display split, preserved per-cache-key due, 30s paired startup stagger, terminal-only due advancement, `3min` manual retry windows, old-before-www fallback, session source promotion, bounded provider chains, empty-result cache mtime truth, and padded hour/day age labels.
+- [ ] Runtime-watch the next long `--cache` run: stale `reddit` and `reddit2` should each log a source chain with started/succeeded/failed/terminal outcome, `old`/`www` success should promote for the session, and no failed/empty chain should freshen the content cache timestamp.
+- [ ] Treat any future `403`/`429` after the bounded source chain as a pacing/provider failure to investigate; the cooldown gate is a loud safety net, not a success state.
 
 ### 5. Visualizer CUSTOM Route Authority
 

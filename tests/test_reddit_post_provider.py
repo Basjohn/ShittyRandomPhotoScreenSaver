@@ -12,6 +12,7 @@ from core.reddit_post_provider import (
     RedditRssProvider,
     build_reddit_post_provider,
     normalize_reddit_provider_id,
+    _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY,
 )
 
 
@@ -27,6 +28,13 @@ class _StubResponse:
 
     def json(self) -> dict:
         return self._payload or {}
+
+
+@pytest.fixture(autouse=True)
+def _clear_reddit_session_sources():
+    _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.clear()
+    yield
+    _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY.clear()
 
 
 def test_normalize_reddit_provider_defaults_to_rss() -> None:
@@ -49,7 +57,8 @@ def test_build_reddit_post_provider_uses_configured_provider() -> None:
     assert type(getattr(pullpush_provider, "primary")).__name__ == "PullPushProvider"
     assert type(json_provider).__name__ == "FallbackRedditPostProvider"
     assert type(getattr(json_provider, "primary")).__name__ == "RedditPublicJsonProvider"
-    assert type(html_provider).__name__ == "RedditHtmlProvider"
+    assert type(html_provider).__name__ == "FallbackRedditPostProvider"
+    assert type(getattr(html_provider, "primary")).__name__ == "RedditHtmlProvider"
 
 
 def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -68,7 +77,7 @@ def test_rss_provider_maps_atom_entries(monkeypatch: pytest.MonkeyPatch) -> None
         calls.append({"url": url, "headers": dict(headers or {}), "timeout": timeout})
         return _StubResponse(content=atom_feed)
 
-    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
     monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
 
     provider = RedditRssProvider()
@@ -114,18 +123,19 @@ def test_html_provider_maps_standard_reddit_shreddit_posts(monkeypatch: pytest.M
         calls.append({"url": url, "headers": dict(headers or {}), "timeout": timeout})
         return _StubResponse(content=html_payload)
 
-    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
     monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
 
     provider = RedditHtmlProvider()
-    result = provider.fetch_posts(
+    result = provider.fetch_source(
         RedditFetchRequest(
             subreddit="python",
             sort="hot",
             limit=25,
             cache_key="reddit",
             shutdown_event=None,
-        )
+        ),
+        RedditHtmlProvider.SOURCE_WWW,
     )
 
     assert len(calls) == 1
@@ -142,8 +152,9 @@ def test_html_provider_maps_standard_reddit_shreddit_posts(monkeypatch: pytest.M
     ]
 
 
-def test_html_provider_falls_from_standard_to_old_reddit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_html_provider_maps_old_reddit_listing(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
+    slot_calls = []
     old_payload = b"""
 <html><body>
   <div class="thing id-t3_old123" data-permalink="/r/python/comments/old123/old_fresh/" data-score="42" data-timestamp="1710000200000">
@@ -156,11 +167,13 @@ def test_html_provider_falls_from_standard_to_old_reddit(monkeypatch: pytest.Mon
 
     def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
         calls.append(url)
-        if "www.reddit.com" in url:
-            return _StubResponse(content=b"<html><body>No posts here</body></html>")
         return _StubResponse(content=old_payload)
 
-    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    def _fake_slot(request, **kwargs):  # noqa: ANN001
+        slot_calls.append(request.cache_key)
+        return "acquired"
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", _fake_slot)
     monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
 
     provider = RedditHtmlProvider()
@@ -174,7 +187,8 @@ def test_html_provider_falls_from_standard_to_old_reddit(monkeypatch: pytest.Mon
         )
     )
 
-    assert calls == ["https://www.reddit.com/r/python/", "https://old.reddit.com/r/python/"]
+    assert calls == ["https://old.reddit.com/r/python/"]
+    assert slot_calls == ["reddit"]
     assert result.posts == [
         {
             "title": "Old fresh",
@@ -183,6 +197,48 @@ def test_html_provider_falls_from_standard_to_old_reddit(monkeypatch: pytest.Mon
             "created_utc": 1710000200.0,
         }
     ]
+
+
+def test_composite_provider_tries_old_before_www_after_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    html_payload = b"""
+<html><body>
+  <shreddit-post post-title="WWW fallback" permalink="/r/python/comments/www/www_fallback/" created-timestamp="1710000200"></shreddit-post>
+</body></html>
+"""
+
+    class FailingPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RuntimeError("rss down")
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        if "old.reddit.com" in url:
+            return _StubResponse(content=b"<html><body>No posts here</body></html>")
+        return _StubResponse(content=html_payload)
+
+    monkeypatch.setattr(
+        "core.reddit_post_provider._acquire_widget_reddit_request_slot",
+        lambda request, **kwargs: "acquired",
+    )
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = FallbackRedditPostProvider(FailingPrimary())
+    result = provider.fetch_posts(
+        RedditFetchRequest(
+            subreddit="python",
+            sort="hot",
+            limit=25,
+            cache_key="reddit",
+            shutdown_event=None,
+        )
+    )
+
+    assert calls == ["https://old.reddit.com/r/python/", "https://www.reddit.com/r/python/"]
+    assert result.source_id == RedditHtmlProvider.SOURCE_WWW
+    assert result.attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD, RedditHtmlProvider.SOURCE_WWW)
 
 
 def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,7 +259,7 @@ def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.
         calls.append(url)
         return _StubResponse(content=html_payload)
 
-    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
     monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
 
     provider = FallbackRedditPostProvider(FailingPrimary())
@@ -217,14 +273,57 @@ def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.
         )
     )
 
-    assert calls == ["https://www.reddit.com/r/python/"]
+    assert calls == ["https://old.reddit.com/r/python/"]
     assert result.posts == [
         {
             "title": "Fallback post",
-            "url": "https://www.reddit.com/r/python/comments/fb/fallback_post/",
+            "url": "https://old.reddit.com/r/python/comments/fb/fallback_post/",
             "score": 0,
             "created_utc": 1710000200.0,
         }
+    ]
+
+
+def test_composite_provider_promotes_successful_html_source_for_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    old_payload = b"""
+<html><body>
+  <shreddit-post post-title="Old wins" permalink="/r/python/comments/old/old_wins/" created-timestamp="1710000200"></shreddit-post>
+</body></html>
+"""
+
+    class FailingPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            calls.append("rss")
+            raise RuntimeError("rss down")
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        return _StubResponse(content=old_payload)
+
+    monkeypatch.setattr("core.reddit_post_provider._acquire_widget_reddit_request_slot", lambda request, **kwargs: "acquired")
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = FallbackRedditPostProvider(FailingPrimary())
+    request = RedditFetchRequest(
+        subreddit="python",
+        sort="hot",
+        limit=25,
+        cache_key="reddit",
+        shutdown_event=None,
+    )
+
+    first = provider.fetch_posts(request)
+    second = provider.fetch_posts(request)
+
+    assert first.source_id == RedditHtmlProvider.SOURCE_OLD
+    assert second.source_id == RedditHtmlProvider.SOURCE_OLD
+    assert calls == [
+        "rss",
+        "https://old.reddit.com/r/python/",
+        "https://old.reddit.com/r/python/",
     ]
 
 

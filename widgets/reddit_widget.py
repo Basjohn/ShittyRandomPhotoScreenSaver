@@ -107,7 +107,7 @@ class RedditWidget(BaseOverlayWidget):
     DEFAULT_FONT_SIZE = 18
     REFRESH_INTERVAL = timedelta(minutes=15)
     MANUAL_REFRESH_INTERVAL = timedelta(minutes=3)
-    SECONDARY_WIDGET_STAGGER = timedelta(minutes=7, seconds=30)
+    SECONDARY_WIDGET_STAGGER = timedelta(seconds=30)
     STARTUP_STALE_PACE = timedelta(seconds=30)
     REFRESH_TIMER_JITTER_MS = 2000
     _periodic_due_by_cache_key: Dict[str, float] = {}
@@ -705,24 +705,35 @@ class RedditWidget(BaseOverlayWidget):
             return True
         return False
 
-    def _mark_periodic_attempt_now(self) -> None:
+    def _mark_periodic_terminal_now(self, *, reason: str) -> None:
         cache_key = str(self._cache_key or "reddit")
         self._periodic_due_by_cache_key[cache_key] = time.monotonic() + (
             self._refresh_interval_ms() / 1000.0
         )
-        self._periodic_due_reason_by_cache_key[cache_key] = "post_attempt_due"
+        self._periodic_due_reason_by_cache_key[cache_key] = str(reason or "terminal_due")
+        logger.warning(
+            "[CACHE][REDDIT] Refresh chain terminal cache_key=%s outcome=%s next_due_s=%.1f",
+            cache_key,
+            reason,
+            self._refresh_interval.total_seconds(),
+        )
+        if self._enabled:
+            self._schedule_timer()
 
     def _mark_manual_attempt_now(self) -> None:
         cache_key = str(self._cache_key or "reddit")
         self._manual_due_by_cache_key[cache_key] = (
             time.monotonic() + self.MANUAL_REFRESH_INTERVAL.total_seconds()
         )
-        self._mark_periodic_attempt_now()
+        logger.warning(
+            "[CACHE][REDDIT] Manual refresh gate armed cache_key=%s next_manual_s=%.1f",
+            cache_key,
+            self.MANUAL_REFRESH_INTERVAL.total_seconds(),
+        )
 
     def _on_periodic_due_timer(self) -> None:
         self._update_timer_start_timer = None
         self._on_periodic_refresh_timer()
-        self._schedule_timer()
 
     def _start_recurring_update_timer(self) -> None:
         # Compatibility seam for older tests/external callers. Reddit now uses
@@ -731,9 +742,21 @@ class RedditWidget(BaseOverlayWidget):
         self._on_periodic_due_timer()
 
     def _on_periodic_refresh_timer(self) -> None:
-        logger.info("[CACHE][REDDIT] Periodic refresh fired cache_key=%s", self._cache_key)
-        self._mark_periodic_attempt_now()
-        self._fetch_feed()
+        cache_key = str(self._cache_key or "reddit")
+        due_reason = self._periodic_due_reason_by_cache_key.pop(cache_key, "periodic_due")
+        self._periodic_due_by_cache_key.pop(cache_key, None)
+        logger.warning(
+            "[CACHE][REDDIT] Periodic refresh fired cache_key=%s due_reason=%s",
+            self._cache_key,
+            due_reason,
+        )
+        if not self._fetch_feed():
+            self._set_periodic_due_delay_ms(60_000, reason="no_submit_retry_due")
+            logger.warning(
+                "[CACHE][REDDIT] Periodic refresh did not submit cache_key=%s; retry_due_s=60.0",
+                self._cache_key,
+            )
+            self._schedule_timer()
 
     def _fetch_feed(self, *, defer_for_transition: bool = True, mark_manual_attempt: bool = False) -> bool:
         """Request subreddit listing via ThreadManager or synchronously.
@@ -747,6 +770,7 @@ class RedditWidget(BaseOverlayWidget):
             return False
         if defer_for_transition and self._defer_refresh_if_transition():
             return True
+        bypass_blocked_cooldown = False
         try:
             from core.reddit_rate_limiter import RedditRateLimiter
 
@@ -759,6 +783,7 @@ class RedditWidget(BaseOverlayWidget):
                         gate_age_s = max(0.0, (datetime.now() - gate_timestamp).total_seconds())
                         manual_remaining = self.MANUAL_REFRESH_INTERVAL.total_seconds() - gate_age_s
                     if manual_remaining <= 0:
+                        bypass_blocked_cooldown = True
                         logger.warning(
                             "[RATE_LIMIT] Reddit manual refresh bypassing automatic blocked cooldown after manual window "
                             "(cache_key=%s automatic_remaining=%.1fs manual_window=%.1fs)",
@@ -780,6 +805,12 @@ class RedditWidget(BaseOverlayWidget):
                         "[RATE_LIMIT] Reddit widget skipping fetch during blocked cooldown (remaining=%.1fs)",
                         blocked_wait,
                     )
+                    self._set_periodic_due_delay_ms(
+                        int(blocked_wait * 1000.0),
+                        reason="blocked_cooldown_due",
+                    )
+                    if self._enabled:
+                        self._schedule_timer()
                     return True
         except ImportError:
             logger.debug("[REDDIT] RedditRateLimiter not available")
@@ -802,6 +833,7 @@ class RedditWidget(BaseOverlayWidget):
                 limit=limit,
                 cache_key=self._cache_key,
                 shutdown_event=self._shutdown_event,
+                bypass_blocked_cooldown=bypass_blocked_cooldown,
             )
             return self._post_provider.fetch_posts(request)
 
@@ -814,7 +846,12 @@ class RedditWidget(BaseOverlayWidget):
                         return
                     if isinstance(payload, RedditProviderResult) and isinstance(payload.posts, list):
                         posts_data = payload.posts
-                        ThreadManager.run_on_ui_thread(self._on_feed_fetched, posts_data)
+                        ThreadManager.run_on_ui_thread(
+                            self._on_feed_fetched,
+                            posts_data,
+                            source_id=payload.source_id,
+                            attempted_sources=payload.attempted_sources,
+                        )
                         return
                 else:
                     err = getattr(result, "error", None) or "No Reddit data returned"
@@ -848,13 +885,17 @@ class RedditWidget(BaseOverlayWidget):
                 return True
             posts_data = payload.posts if isinstance(payload, RedditProviderResult) else None
             if isinstance(posts_data, list):
-                self._on_feed_fetched(posts_data)
+                self._on_feed_fetched(
+                    posts_data,
+                    source_id=payload.source_id if isinstance(payload, RedditProviderResult) else None,
+                    attempted_sources=payload.attempted_sources if isinstance(payload, RedditProviderResult) else (),
+                )
                 return True
             self._on_fetch_error("No Reddit data returned")
             return True
         except Exception as exc:
             self._on_fetch_error(str(exc))
-            return False
+            return True
 
     def _on_fetch_skipped(self, reason: str) -> None:
         if not shiboken_isValid(self):
@@ -940,7 +981,7 @@ class RedditWidget(BaseOverlayWidget):
                         cache_key,
                         "periodic_due_pending",
                     )
-                    if due_reason in {"post_attempt_due", "manual_attempt_due"}:
+                    if due_reason in {"post_attempt_due", "manual_attempt_due", "success", "all_sources_failed"}:
                         attempt_age_s = self._refresh_interval.total_seconds() - remaining_s
                         manual_remaining_s = self.MANUAL_REFRESH_INTERVAL.total_seconds() - attempt_age_s
                         if manual_remaining_s > 0:
@@ -1079,7 +1120,14 @@ class RedditWidget(BaseOverlayWidget):
         else:
             self.update()
 
-    def _on_feed_fetched(self, posts_data: List[Dict[str, Any]], *, defer_for_transition: bool = True) -> None:
+    def _on_feed_fetched(
+        self,
+        posts_data: List[Dict[str, Any]],
+        *,
+        defer_for_transition: bool = True,
+        source_id: str | None = None,
+        attempted_sources: tuple[str, ...] = (),
+    ) -> None:
         # Guard against callback arriving after widget destruction
         if not shiboken_isValid(self):
             return
@@ -1089,19 +1137,27 @@ class RedditWidget(BaseOverlayWidget):
             return
         
         if not posts_data:
-            logger.warning("[REDDIT] Empty listing for subreddit %s", self._subreddit)
+            logger.warning(
+                "[CACHE][REDDIT] Empty listing for subreddit %s cache_key=%s source=%s attempted=%s; cache timestamp unchanged",
+                self._subreddit,
+                self._cache_key,
+                source_id or "<unknown>",
+                ",".join(attempted_sources) or "<unknown>",
+            )
             if preserve_visible_fallback(
                 self,
                 content_attr="_posts",
                 logger=logger,
                 log_message="[REDDIT] Empty listing received; keeping cached/displayed content visible",
             ):
+                self._mark_periodic_terminal_now(reason="all_sources_failed")
                 return
             if not self._has_displayed_valid_data:
                 try:
                     self.hide()
                 except Exception as e:
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
+            self._mark_periodic_terminal_now(reason="all_sources_failed")
             return
 
         posts: List[RedditPost] = []
@@ -1137,20 +1193,22 @@ class RedditWidget(BaseOverlayWidget):
         # Store the full fetched candidate window while rendering only the
         # configured visible count.
         self._all_fetched_posts = posts
-        
-        # Save the full fetched post window for next startup.
-        self._save_cached_posts(posts)
 
         if not posts:
-            # Edge case: Rate limited and got 0 posts
-            # If we have cached posts, keep showing them
-            # If not, hide and wait for next fetch attempt
+            logger.warning(
+                "[CACHE][REDDIT] Provider rows produced no authoritative posts after filtering "
+                "cache_key=%s source=%s attempted=%s; cache timestamp unchanged",
+                self._cache_key,
+                source_id or "<unknown>",
+                ",".join(attempted_sources) or "<unknown>",
+            )
             if preserve_visible_fallback(
                 self,
                 content_attr="_posts",
                 logger=logger,
                 log_message="[REDDIT] No authoritative posts remained after filtering; keeping cached/displayed content visible",
             ):
+                self._mark_periodic_terminal_now(reason="all_sources_failed")
                 return
             if not self._has_displayed_valid_data:
                 logger.info("[REDDIT] No posts fetched (likely rate limited), hiding until next attempt")
@@ -1160,12 +1218,21 @@ class RedditWidget(BaseOverlayWidget):
                     logger.debug("[REDDIT] Exception suppressed: %s", e)
             else:
                 logger.debug("[REDDIT] No new posts fetched, keeping existing display")
+            self._mark_periodic_terminal_now(reason="all_sources_failed")
             return
+
+        # Save only authoritative non-empty windows. Empty/error/fallback
+        # display states must never freshen the content-cache timestamp.
+        self._save_cached_posts(posts)
+        self._mark_periodic_terminal_now(reason="success")
 
         self._display_configured_posts(fade=False)
 
-        logger.debug(
-            "[REDDIT] Cache refreshed with %d candidate posts, showing up to %d",
+        logger.warning(
+            "[CACHE][REDDIT] Cache refreshed cache_key=%s source=%s attempted=%s candidates=%d visible_limit=%d",
+            self._cache_key,
+            source_id or "<unknown>",
+            ",".join(attempted_sources) or "<unknown>",
             len(posts),
             self._configured_capacity,
         )
@@ -1274,6 +1341,8 @@ class RedditWidget(BaseOverlayWidget):
                 "service cooldown gate refreshed cache_key=%s",
                 self._cache_key,
             )
+
+        self._mark_periodic_terminal_now(reason="all_sources_failed")
 
         # If we have never displayed valid data, remain hidden; otherwise
         # keep showing the last successful sample.
@@ -2221,15 +2290,6 @@ class RedditWidget(BaseOverlayWidget):
         except Exception:
             logger.debug("[REDDIT] Failed to evaluate shared startup gate", exc_info=True)
 
-        try:
-            attempt_timestamp = self._get_startup_attempt_timestamp()
-            if attempt_timestamp is not None:
-                attempt_age = datetime.now() - attempt_timestamp
-                if attempt_age < self._startup_refresh_cooldown:
-                    return StartupRefreshDecision(False, "startup_attempt_paced_due", attempt_age)
-        except Exception:
-            logger.debug("[REDDIT] Failed to evaluate startup-attempt cooldown", exc_info=True)
-
         reason = "missing_cache_timestamp" if cache_age is None else "cache_stale"
         return StartupRefreshDecision(True, reason, cache_age)
 
@@ -2278,41 +2338,25 @@ class RedditWidget(BaseOverlayWidget):
 
         decision = self._get_startup_refresh_decision()
         if decision.run:
+            startup_delay_ms = (
+                int(self.STARTUP_STALE_PACE.total_seconds() * 1000.0)
+                if str(self._cache_key or "reddit") == "reddit2"
+                else 0
+            )
             logger.info(
-                "[CACHE][REDDIT] Startup refresh allowed (%s%s)",
+                "[CACHE][REDDIT] Startup refresh allowed cache_key=%s delay_s=%.1f (%s%s)",
+                self._cache_key,
+                startup_delay_ms / 1000.0,
                 decision.reason,
                 f", age_s={decision.age.total_seconds():.1f}" if decision.age is not None else "",
             )
-            self._touch_startup_attempt_timestamp_now()
-            self._mark_periodic_attempt_now()
-            self._fetch_feed()
-            self._schedule_timer()
-            return
-
-        if decision.reason == "startup_attempt_paced_due":
-            attempt_age_s = decision.age.total_seconds() if decision.age is not None else 0.0
-            delay_ms = max(
-                0,
-                int((self.STARTUP_STALE_PACE.total_seconds() - attempt_age_s) * 1000.0),
-            )
-            due_shortened = self._set_periodic_due_delay_ms(
-                delay_ms,
-                reason="startup_stale_paced_due",
-            )
-            if due_shortened:
-                stop_qtimer_attr(
-                    self,
-                    "_update_timer_start_timer",
-                    delete_qtimers=True,
-                    clear_attr=True,
-                )
-            logger.info(
-                "[CACHE][REDDIT] Startup stale refresh paced cache_key=%s delay_s=%.1f (recent_attempt_age_s=%.1f)",
-                self._cache_key,
-                delay_ms / 1000.0,
-                attempt_age_s,
-            )
-            self._schedule_timer()
+            if startup_delay_ms <= 0:
+                if not self._fetch_feed():
+                    self._set_periodic_due_delay_ms(60_000, reason="startup_no_submit_retry_due")
+                    self._schedule_timer()
+            else:
+                self._set_periodic_due_delay_ms(startup_delay_ms, reason="startup_stale_paced_due")
+                self._schedule_timer()
             return
 
         logger.info(

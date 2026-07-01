@@ -306,6 +306,7 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
 
     hide_calls = []
     try:
+        _clear_reddit_due_state()
         widget._posts = [  # type: ignore[attr-defined]
             RedditPost(
                 title="Visible post",
@@ -322,6 +323,7 @@ def test_reddit_fetch_error_keeps_displayed_cache_visible(qt_app, qtbot):  # noq
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert hide_calls == []
     finally:
+        _clear_reddit_due_state()
         widget.cleanup()
 
 
@@ -554,7 +556,7 @@ def test_reddit_periodic_refresh_waits_for_persisted_blocked_gate(qt_app, qtbot,
         )
 
         assert reason == "blocked_cooldown_due"
-        assert delay_ms >= (29 * 60 * 1000)
+        assert delay_ms >= (14 * 60 * 1000)
     finally:
         _clear_reddit_due_state()
         widget.cleanup()
@@ -584,7 +586,7 @@ def test_reddit_startup_refresh_skips_when_cache_is_fresh(qt_app, qtbot, tmp_pat
 
 
 @pytest.mark.qt
-def test_reddit_startup_refresh_paces_stale_cache_when_recent_attempt_exists(qt_app, qtbot, tmp_path):  # noqa: ARG001
+def test_reddit_startup_refresh_ignores_legacy_recent_attempt_for_stale_cache(qt_app, qtbot, tmp_path):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     cache_path = tmp_path / "reddit_cache.json"
@@ -602,16 +604,16 @@ def test_reddit_startup_refresh_paces_stale_cache_when_recent_attempt_exists(qt_
         widget._touch_startup_attempt_timestamp_now()  # type: ignore[attr-defined]
         decision = widget._get_startup_refresh_decision()  # type: ignore[attr-defined]
 
-        assert decision.run is False
-        assert decision.reason == "startup_attempt_paced_due"
+        assert decision.run is True
+        assert decision.reason == "cache_stale"
         assert decision.age is not None
-        assert decision.age < timedelta(minutes=1)
+        assert decision.age > timedelta(hours=1)
     finally:
         widget.cleanup()
 
 
 @pytest.mark.qt
-def test_reddit_activate_skips_startup_fetch_when_recent_startup_attempt_exists(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
+def test_reddit_activate_runs_startup_fetch_even_when_legacy_recent_attempt_exists(qt_app, qtbot, monkeypatch, tmp_path):  # noqa: ARG001
     widget = RedditWidget()
     qtbot.addWidget(widget)
     cache_path = tmp_path / "reddit_cache.json"
@@ -631,7 +633,7 @@ def test_reddit_activate_skips_startup_fetch_when_recent_startup_attempt_exists(
 
         widget._activate_impl()
 
-        assert calls == ["timer"]
+        assert calls == [("fetch", {})]
     finally:
         widget.cleanup()
 
@@ -657,8 +659,8 @@ def test_reddit_periodic_refresh_due_fires_stale_primary_without_recurring_reset
         assert calls == [{}]
         assert fake_tm.recurring_calls == []
         starter = widget._update_timer_start_timer  # type: ignore[attr-defined]
-        assert starter is not None
-        assert 899_000 <= starter.interval() <= 900_000
+        assert starter is None
+        assert "reddit" not in RedditWidget._periodic_due_by_cache_key  # type: ignore[attr-defined]
     finally:
         _clear_reddit_due_state()
         widget.cleanup()
@@ -683,7 +685,7 @@ def test_reddit2_periodic_refresh_staggers_stale_due_not_repeat_cadence(qt_app, 
         starter = widget._update_timer_start_timer  # type: ignore[attr-defined]
         assert starter is not None
         assert starter.isActive() is True
-        assert starter.interval() == int(7.5 * 60 * 1000)
+        assert starter.interval() == int(30 * 1000)
     finally:
         _clear_reddit_due_state()
         widget.cleanup()
@@ -774,9 +776,9 @@ def test_reddit2_startup_refresh_paces_second_stale_cache_behind_reddit1(qt_app,
         widget1._activate_impl()
         widget2._activate_impl()
 
-        assert calls1 == [("fetch", {}), "timer"]
+        assert calls1 == [("fetch", {})]
         assert calls2 == []
-        assert widget2._get_startup_refresh_decision().reason == "startup_attempt_paced_due"  # type: ignore[attr-defined]
+        assert widget2._get_startup_refresh_decision().reason == "cache_stale"  # type: ignore[attr-defined]
         starter = widget2._update_timer_start_timer  # type: ignore[attr-defined]
         assert starter is not None
         assert starter.isActive() is True
@@ -1082,7 +1084,7 @@ def test_reddit_activate_runs_startup_fetch_when_cache_is_old(qt_app, qtbot, mon
 
         widget._activate_impl()
 
-        assert calls == [("fetch", {}), "timer"]
+        assert calls == [("fetch", {})]
     finally:
         widget.cleanup()
 
@@ -1115,7 +1117,7 @@ def test_reddit_activate_uses_cached_posts_before_refresh(qt_app, qtbot, monkeyp
 
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Cached post"  # type: ignore[attr-defined]
-        assert calls == [("fetch", {}), "timer"]
+        assert calls == [("fetch", {})]
     finally:
         widget.cleanup()
 
@@ -1319,7 +1321,8 @@ def test_reddit_provider_error_keeps_displayed_cache_visible(qt_app, qtbot):  # 
         widget._thread_manager = None  # type: ignore[attr-defined]
         widget.set_post_provider(FailingProvider())
 
-        assert widget._fetch_feed(defer_for_transition=False) is False  # type: ignore[attr-defined]
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+        assert RedditWidget._periodic_due_reason_by_cache_key[widget._cache_key] == "all_sources_failed"  # type: ignore[attr-defined]
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Visible post"  # type: ignore[attr-defined]
     finally:
@@ -1354,6 +1357,59 @@ def test_reddit_empty_provider_result_keeps_displayed_cache_visible(qt_app, qtbo
         assert len(widget._posts) == 1  # type: ignore[attr-defined]
         assert widget._posts[0].title == "Visible post"  # type: ignore[attr-defined]
     finally:
+        widget.cleanup()
+
+
+@pytest.mark.qt
+def test_reddit_empty_provider_result_does_not_freshen_cache_timestamp(qt_app, qtbot, tmp_path):  # noqa: ARG001
+    from widgets.reddit_components import RedditPost
+    import os
+
+    widget = RedditWidget()
+    qtbot.addWidget(widget)
+    cache_path = tmp_path / "reddit_posts.json"
+
+    class EmptyProvider:
+        def fetch_posts(self, request):  # noqa: ANN001
+            return RedditProviderResult(posts=[], skip_reason=None)
+
+    try:
+        _clear_reddit_due_state()
+        cache_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "title": "Old cached post",
+                        "url": "https://example.com/old",
+                        "score": 1,
+                        "created_utc": time.time() - 3600,
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        old_ts = time.time() - (2 * 3600)
+        os.utime(cache_path, (old_ts, old_ts))
+        widget._posts = [  # type: ignore[attr-defined]
+            RedditPost(
+                title="Visible post",
+                url="https://example.com/post",
+                score=10,
+                created_utc=time.time(),
+            )
+        ]
+        widget._has_displayed_valid_data = True  # type: ignore[attr-defined]
+        widget._thread_manager = None  # type: ignore[attr-defined]
+        widget._cache_key = "reddit"  # type: ignore[attr-defined]
+        widget._get_cache_file_path = lambda: Path(cache_path)  # type: ignore[method-assign]
+        widget.set_post_provider(EmptyProvider())
+
+        assert widget._fetch_feed(defer_for_transition=False) is True  # type: ignore[attr-defined]
+
+        assert cache_path.stat().st_mtime == pytest.approx(old_ts, abs=1.0)
+        assert RedditWidget._periodic_due_reason_by_cache_key["reddit"] == "all_sources_failed"  # type: ignore[attr-defined]
+    finally:
+        _clear_reddit_due_state()
         widget.cleanup()
 
 

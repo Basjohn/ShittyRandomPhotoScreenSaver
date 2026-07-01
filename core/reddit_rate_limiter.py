@@ -164,9 +164,9 @@ class RedditRateLimiter:
     # Minimum delay between consecutive requests (seconds)
     # 8 seconds = 7.5 req/min theoretical max, staying under our 8 req/min limit
     MIN_REQUEST_INTERVAL = 8.0
-    # Public-endpoint blocks should trigger a much harsher backoff so we stop
-    # repeatedly re-probing the same endpoint while cached content is available.
-    BLOCK_COOLDOWN_SECONDS = 30.0 * 60.0
+    # Public-endpoint blocks are terminal chain cooldowns for widgets. Fifteen
+    # minutes is intentionally sparse without making manual recovery useless.
+    BLOCK_COOLDOWN_SECONDS = 15.0 * 60.0
 
     _last_request_time: float = 0.0
     _last_blocked_time: float = 0.0
@@ -192,8 +192,14 @@ class RedditRateLimiter:
         cls,
         now: float,
         priority: RateLimitPriority,
+        *,
+        min_interval_override: float | None = None,
+        ignore_blocked_cooldown: bool = False,
     ) -> tuple[float, float, float, float]:
-        min_interval = 5.0 if priority == RateLimitPriority.HIGH else cls.MIN_REQUEST_INTERVAL
+        if min_interval_override is not None:
+            min_interval = max(0.0, float(min_interval_override))
+        else:
+            min_interval = 5.0 if priority == RateLimitPriority.HIGH else cls.MIN_REQUEST_INTERVAL
 
         time_since_last = now - cls._last_request_time
         if time_since_last < min_interval:
@@ -213,7 +219,7 @@ class RedditRateLimiter:
             window_wait = 0.0
 
         blocked_wait = 0.0
-        if cls._last_blocked_time > 0.0:
+        if not ignore_blocked_cooldown and cls._last_blocked_time > 0.0:
             blocked_wait = max(0.0, cls.BLOCK_COOLDOWN_SECONDS - (now - cls._last_blocked_time))
 
         total_wait = max(interval_wait, window_wait, blocked_wait)
@@ -279,6 +285,8 @@ class RedditRateLimiter:
         namespace: str = "global",
         shutdown_event=None,
         skip_if_blocked: bool = False,
+        min_interval_override: float | None = None,
+        ignore_blocked_cooldown: bool = False,
     ) -> str:
         """Atomically wait for and record a Reddit request slot.
 
@@ -294,6 +302,8 @@ class RedditRateLimiter:
                 total_wait, interval_wait, window_wait, blocked_wait = cls._compute_wait_locked(
                     now,
                     priority,
+                    min_interval_override=min_interval_override,
+                    ignore_blocked_cooldown=ignore_blocked_cooldown,
                 )
                 if skip_if_blocked and blocked_wait > 0.0:
                     logger.warning(
