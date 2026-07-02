@@ -1840,6 +1840,7 @@ class WidgetsTab(QWidget):
                 self._save_settings_now()
             else:
                 self._save_settings()
+            self._update_rainbow_visibility()
             return
 
         if move_to_custom_pending:
@@ -1883,6 +1884,17 @@ class WidgetsTab(QWidget):
                 self._loading = False
 
         self._save_settings()
+        self._update_rainbow_visibility()
+
+    def _active_visualizer_preset_is_custom(self) -> bool:
+        mode = self._get_active_visualizer_mode()
+        slider = self._get_visualizer_preset_slider(mode)
+        if slider is None:
+            return True
+        try:
+            return slider.preset_index() == slider.custom_index()
+        except Exception:
+            return True
 
     def _update_vis_mode_sections(self) -> None:
         """Show/hide per-mode settings containers based on selected visualizer type."""
@@ -1944,19 +1956,23 @@ class WidgetsTab(QWidget):
         """Show/hide rainbow speed slider and apply rainbow text easter egg."""
         try:
             enabled = self.rainbow_enabled.isChecked()
+            custom_visible = self._active_visualizer_preset_is_custom()
+            bucket = getattr(self, '_rainbow_controls_container', None)
+            if bucket is not None:
+                bucket.setVisible(custom_visible)
             container = getattr(self, '_rainbow_speed_container', None)
             if container is not None:
-                container.setVisible(enabled)
+                container.setVisible(custom_visible and enabled)
 
             glow_effect = getattr(self, '_rainbow_glow_effect', None)
             if glow_effect is not None:
-                glow_effect.setEnabled(enabled)
+                glow_effect.setEnabled(custom_visible and enabled)
 
             plain_label = getattr(self, '_rainbow_plain_label', None)
             if plain_label is not None:
                 palette = plain_label.palette()
                 color = QColor("#ffffff")
-                if enabled:
+                if custom_visible and enabled:
                     color = QColor("#f7f7f7")
                 palette.setColor(plain_label.foregroundRole(), color)
                 plain_label.setPalette(palette)

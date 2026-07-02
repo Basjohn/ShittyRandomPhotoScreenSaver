@@ -168,6 +168,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._border_color: QColor = QColor(255, 255, 255, 255)
         self._fade: float = 0.0
         self._playing: bool = False
+        self._perf_set_state_count: int = 0
+        self._perf_paint_count: int = 0
+        self._perf_update_request_count: int = 0
+        self._perf_geometry_change_count: int = 0
+        self._perf_last_log_ts: float = time.monotonic()
+        self._last_update_request_ts: float = 0.0
+        self._update_pending: bool = False
         
         # Active visualization mode
         self._vis_mode: str = coerce_visualizer_mode_id(initial_mode)
@@ -503,6 +510,70 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     def reset_blob_state(self) -> None:
         reset_overlay_blob_state(self)
 
+    def _perf_screen_index(self) -> int | None:
+        parent = self.parent()
+        for attr in ("_screen_index", "screen_index"):
+            value = getattr(parent, attr, None)
+            if value is None:
+                continue
+            try:
+                return int(value)
+            except Exception:
+                return None
+        return None
+
+    def _maybe_log_perf_counters(self, *, reason: str) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        now = time.monotonic()
+        elapsed = now - self._perf_last_log_ts
+        if elapsed < 10.0:
+            return
+        screen = self._perf_screen_index()
+        logger.info(
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=%s screen=%s mode=%s elapsed_ms=%.1f "
+            "set_state=%d paint=%d update_requests=%d geometry_changes=%d visible=%s enabled=%s",
+            reason,
+            screen if screen is not None else "<unknown>",
+            self._vis_mode,
+            elapsed * 1000.0,
+            self._perf_set_state_count,
+            self._perf_paint_count,
+            self._perf_update_request_count,
+            self._perf_geometry_change_count,
+            self.isVisible(),
+            self._enabled,
+        )
+        self._perf_set_state_count = 0
+        self._perf_paint_count = 0
+        self._perf_update_request_count = 0
+        self._perf_geometry_change_count = 0
+        self._perf_last_log_ts = now
+
+    def _owner_target_fps(self) -> int:
+        parent = self.parent()
+        for attr in ("_target_fps", "target_fps"):
+            value = getattr(parent, attr, None)
+            try:
+                fps = int(round(float(value)))
+            except Exception:
+                continue
+            if fps > 0:
+                return max(30, min(240, fps))
+        return 240
+
+    def _request_frame_update(self, *, force: bool = False) -> None:
+        now = time.monotonic()
+        target_fps = self._owner_target_fps()
+        min_interval = 1.0 / float(target_fps)
+        due = (now - self._last_update_request_ts) >= (min_interval * 0.92)
+        if not force and (self._update_pending or not due):
+            return
+        self._update_pending = True
+        self._last_update_request_ts = now
+        self._perf_update_request_count += 1
+        self.update()
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -748,6 +819,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             border_width_px=border_width_px,
         ):
             return
+        self._perf_set_state_count += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
         osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
 
@@ -1635,6 +1707,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if not clamped:
             self.clear_overlay_buffer()
             return
+        geometry_changed = False
         try:
             cur_geom = None
             try:
@@ -1644,11 +1717,14 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 cur_geom = None
             if cur_geom is None or cur_geom != rect:
                 self.setGeometry(rect)
+                self._perf_geometry_change_count += 1
+                geometry_changed = True
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
         _geom_elapsed = (time.time() - _geom_start) * 1000.0
 
         _show_start = time.time()
+        became_visible = False
         try:
             if self._enabled:
                 # PERF: show()/raise_() take 25ms+ each - avoid calling them
@@ -1662,6 +1738,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 if not self.isVisible() and self._fade > 0.0:
                     # Only show once when first becoming visible AND fading in
                     self.show()
+                    became_visible = True
                 # Skip raise_() entirely - it's expensive and unnecessary
                 # The overlay is created on top and stays there
         except Exception:
@@ -1669,8 +1746,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
         _update_start = time.time()
-        self.update()
+        self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
+        self._maybe_log_perf_counters(reason="set_state")
         
         if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
             logger.warning("[PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
@@ -1780,6 +1858,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # GLStateManager now tracks initialization state - no separate flag needed
 
     def paintGL(self) -> None:  # type: ignore[override]
+        self._update_pending = False
+        self._perf_paint_count += 1
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking
@@ -1800,7 +1880,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         render_overlay_frame(self, rect, fade, self._render_with_shader)
 
-        self.update()
+        # set_state() is the repaint authority.  Scheduling from paintGL()
+        # creates a child-GL self-loop that can overdrive the owning display.
+        self._maybe_log_perf_counters(reason="paintGL")
 
     def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
         if not self._painted_frame_shadow_enabled:

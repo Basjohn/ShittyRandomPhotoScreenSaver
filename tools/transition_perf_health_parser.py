@@ -26,6 +26,9 @@ _TIMER_GAP_RE = re.compile(
 _SPOTIFY_LATENCY_RE = re.compile(r"\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>[0-9.]+)")
 _SPOTIFY_SEVERE_LATENCY_RE = re.compile(r"\[!!!!\]\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>[0-9.]+)")
 _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=(?P<dt_ms>[0-9.]+)")
+_SPOTIFY_OVERLAY_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\](?P<detail>.*)")
+_SPOTIFY_VIS_SYNC_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[VIS_SYNC\](?P<detail>.*)")
+_MEDIA_EMIT_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\] emit_media_update(?P<detail>.*)")
 _FRAME_BUDGET_SPIKE_RE = re.compile(r"\[PERF\] \[FRAME\] (?P<detail>.*)")
 _SETTINGS_PERF_RE = re.compile(r"\[PERF\]\[SETTINGS\](?P<detail>.*)")
 _SETTINGS_DURATION_RE = re.compile(
@@ -51,6 +54,10 @@ _VISUALIZER_CUSTOM_SUPPRESSION_RE = re.compile(
 _VISUALIZER_CUSTOM_BUCKET_REPAIR_RE = re.compile(
     r"\[SPOTIFY_VIS\]\[FALLBACK\] Repaired spotify_visualizer CUSTOM rect bucket from single foreign saved rect"
 )
+_SPOTIFY_VIS_CREATED_RE = re.compile(
+    r"\[SPOTIFY_VIS\] Created visualizer widget \(screen=(?P<screen>\d+),.*?monitor=(?P<monitor>[^,\)]+)"
+)
+_MEDIA_CONTROLLER_RE = re.compile(r"\[MEDIA_WIDGET\] Using controller: (?P<controller>\S+)")
 _PREFETCH_STATE_RE = re.compile(
     r"prefetch_state=raw_inflight:(?P<raw_inflight>\d+),"
     r"raw_pending:(?P<raw_pending>\d+),"
@@ -155,6 +162,59 @@ class PaintDeliveryStarvation:
 
 
 @dataclass(frozen=True)
+class SpotifyTopologyEvent:
+    timestamp: str | None
+    kind: str
+    screen: int | None = None
+    monitor: str | None = None
+    detail: str = ""
+    line: str = ""
+
+
+@dataclass(frozen=True)
+class SpotifyTopologyStarvation:
+    starvation: PaintDeliveryStarvation
+    visualizer: SpotifyTopologyEvent
+    media_seen: bool
+
+    @property
+    def line(self) -> str:
+        media = "media_seen" if self.media_seen else "media_unknown"
+        return (
+            f"{self.starvation.line} spotify_visualizer_screen={self.visualizer.screen} "
+            f"monitor={self.visualizer.monitor or '<unknown>'} {media}"
+        )
+
+
+@dataclass(frozen=True)
+class SpotifyOverlayPerfWindow:
+    timestamp: str | None
+    reason: str
+    screen: int | None
+    mode: str
+    elapsed_ms: float
+    set_state_count: int
+    paint_count: int
+    update_request_count: int
+    geometry_change_count: int
+    visible: bool
+    enabled: bool
+    line: str = ""
+
+    @property
+    def elapsed_seconds(self) -> float:
+        return max(self.elapsed_ms / 1000.0, 0.001)
+
+    @property
+    def paint_fps(self) -> float:
+        return self.paint_count / self.elapsed_seconds
+
+    @property
+    def update_request_fps(self) -> float:
+        return self.update_request_count / self.elapsed_seconds
+
+
+@dataclass(frozen=True)
 class TimelineMarker:
     timestamp: str | None
     kind: str
@@ -186,6 +246,8 @@ class PerfHealthReport:
     settings_stalls: list[SettingsStall] = field(default_factory=list)
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
+    spotify_topology_events: list[SpotifyTopologyEvent] = field(default_factory=list)
+    spotify_overlay_perf_windows: list[SpotifyOverlayPerfWindow] = field(default_factory=list)
     startup_first_frame_exposures: list[StartupFirstFrameExposure] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
 
@@ -283,6 +345,85 @@ class PerfHealthReport:
             elif 55 <= paint.target_fps <= 75 and paint_ratio < 0.85:
                 starved.append(PaintDeliveryStarvation(render=render, paint=paint))
         return starved
+
+    @property
+    def cross_display_spotify_paint_starvation(self) -> list[SpotifyTopologyStarvation]:
+        """Paint starvation where the latest visualizer owner is another display.
+
+        This names the Spotify-stack topology without claiming the shader,
+        Bubble worker, or transition identity is the root cause.
+        """
+        visualizers = [
+            event for event in self.spotify_topology_events if event.kind == "visualizer_created"
+        ]
+        media_events = [
+            event for event in self.spotify_topology_events if event.kind == "media_controller"
+        ]
+        correlated: list[SpotifyTopologyStarvation] = []
+        for starvation in self.paint_delivery_starvation_windows:
+            paint_seconds = _timestamp_seconds(starvation.paint.timestamp)
+            latest_vis: SpotifyTopologyEvent | None = None
+            for event in visualizers:
+                if event.screen is None:
+                    continue
+                event_seconds = _timestamp_seconds(event.timestamp)
+                if (
+                    paint_seconds is not None
+                    and event_seconds is not None
+                    and event_seconds > paint_seconds
+                ):
+                    continue
+                latest_vis = event
+            if latest_vis is None or latest_vis.screen == starvation.paint.screen:
+                continue
+            media_seen = False
+            for event in media_events:
+                event_seconds = _timestamp_seconds(event.timestamp)
+                if (
+                    paint_seconds is not None
+                    and event_seconds is not None
+                    and event_seconds > paint_seconds
+                ):
+                    continue
+                media_seen = True
+            correlated.append(
+                SpotifyTopologyStarvation(
+                    starvation=starvation,
+                    visualizer=latest_vis,
+                    media_seen=media_seen,
+                )
+            )
+        return correlated
+
+    def _target_fps_for_screen(self, screen: int | None) -> int:
+        targets = [
+            window.target_fps
+            for window in self.windows
+            if window.screen == screen and window.target_fps
+        ]
+        if not targets:
+            return 60
+        return max(targets)
+
+    @property
+    def spotify_overlay_overpaint_windows(self) -> list[SpotifyOverlayPerfWindow]:
+        """Visualizer child-GL windows that self-drive faster than the owner display.
+
+        A Spotify overlay should be repainted by the visualizer frame handoff,
+        not by a paint-owned recursive update loop.  This bar intentionally
+        looks at the overlay's own passive counters rather than blaming any
+        visualizer mode or transition shader.
+        """
+        overpaint: list[SpotifyOverlayPerfWindow] = []
+        for window in self.spotify_overlay_perf_windows:
+            if not window.visible or not window.enabled:
+                continue
+            target = float(self._target_fps_for_screen(window.screen))
+            paint_limit = max(target * 1.35, target + 25.0)
+            update_limit = max(target * 1.65, target + 45.0)
+            if window.paint_fps > paint_limit or window.update_request_fps > update_limit:
+                overpaint.append(window)
+        return overpaint
 
     @property
     def low_refresh_under_target(self) -> list[MetricWindow]:
@@ -407,6 +548,16 @@ class PerfHealthReport:
             messages.append(
                 "paint delivery starvation with healthy render timer: "
                 f"{len(self.paint_delivery_starvation_windows)}"
+            )
+        if self.cross_display_spotify_paint_starvation:
+            messages.append(
+                "paint starvation correlated with cross-display Spotify visualizer topology: "
+                f"{len(self.cross_display_spotify_paint_starvation)}"
+            )
+        if self.spotify_overlay_overpaint_windows:
+            messages.append(
+                "spotify visualizer overlay overpainted beyond owner display target: "
+                f"{len(self.spotify_overlay_overpaint_windows)}"
             )
         if self.high_target_near_sixty:
             messages.append(
@@ -553,6 +704,10 @@ def _parse_kv_payload(payload: str) -> dict[str, str]:
     return {match.group(1): match.group(2) for match in _KV_RE.finditer(payload)}
 
 
+def _parse_bool(value: str | None) -> bool:
+    return str(value).strip().lower() == "true"
+
+
 def _timestamp_from_line(line: str) -> str | None:
     match = _TIME_RE.search(line)
     return match.group("ts") if match else None
@@ -629,12 +784,66 @@ def _cache_fallback_from_line(line: str) -> CacheFallback | None:
     )
 
 
+def _spotify_overlay_perf_from_line(line: str, detail: str) -> SpotifyOverlayPerfWindow | None:
+    parts = _parse_kv_payload(detail)
+    elapsed_ms = _parse_float(parts.get("elapsed_ms"))
+    if elapsed_ms is None or elapsed_ms <= 0.0:
+        return None
+    return SpotifyOverlayPerfWindow(
+        timestamp=_timestamp_from_line(line),
+        reason=parts.get("reason", "unknown"),
+        screen=_parse_int(parts.get("screen")),
+        mode=parts.get("mode", "unknown"),
+        elapsed_ms=elapsed_ms,
+        set_state_count=_parse_int(parts.get("set_state")) or 0,
+        paint_count=_parse_int(parts.get("paint")) or 0,
+        update_request_count=_parse_int(parts.get("update_requests")) or 0,
+        geometry_change_count=_parse_int(parts.get("geometry_changes")) or 0,
+        visible=_parse_bool(parts.get("visible")),
+        enabled=_parse_bool(parts.get("enabled")),
+        line=line,
+    )
+
+
 def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
     report = PerfHealthReport()
     display_show_by_screen: dict[int, tuple[str | None, str]] = {}
     for raw in lines:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
+
+        spotify_vis_created = _SPOTIFY_VIS_CREATED_RE.search(line)
+        if spotify_vis_created:
+            screen = int(spotify_vis_created.group("screen"))
+            monitor = spotify_vis_created.group("monitor").strip()
+            event = SpotifyTopologyEvent(
+                timestamp=timestamp,
+                kind="visualizer_created",
+                screen=screen,
+                monitor=monitor,
+                detail=f"screen={screen} monitor={monitor}",
+                line=line,
+            )
+            report.spotify_topology_events.append(event)
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "spotify_visualizer_created", event.detail, line)
+            )
+            continue
+
+        media_controller = _MEDIA_CONTROLLER_RE.search(line)
+        if media_controller:
+            controller = media_controller.group("controller")
+            event = SpotifyTopologyEvent(
+                timestamp=timestamp,
+                kind="media_controller",
+                detail=f"controller={controller}",
+                line=line,
+            )
+            report.spotify_topology_events.append(event)
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "media_controller", event.detail, line)
+            )
+            continue
 
         display_show = _DISPLAY_SHOW_RE.search(line)
         if display_show:
@@ -781,6 +990,33 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                 )
             continue
 
+        spotify_overlay_perf = _SPOTIFY_OVERLAY_PERF_RE.search(line)
+        if spotify_overlay_perf:
+            overlay_window = _spotify_overlay_perf_from_line(
+                line,
+                spotify_overlay_perf.group("detail"),
+            )
+            if overlay_window is not None:
+                report.spotify_overlay_perf_windows.append(overlay_window)
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "spotify_overlay_perf", spotify_overlay_perf.group("detail").strip(), line)
+            )
+            continue
+
+        spotify_vis_sync_perf = _SPOTIFY_VIS_SYNC_PERF_RE.search(line)
+        if spotify_vis_sync_perf:
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "spotify_visibility_sync_perf", spotify_vis_sync_perf.group("detail").strip(), line)
+            )
+            continue
+
+        media_emit_perf = _MEDIA_EMIT_PERF_RE.search(line)
+        if media_emit_perf:
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "media_emit_perf", media_emit_perf.group("detail").strip(), line)
+            )
+            continue
+
         texture_upload = _SLOW_TEXTURE_UPLOAD_RE.search(line)
         if texture_upload:
             duration_ms = _parse_float(texture_upload.group("duration_ms"))
@@ -903,6 +1139,20 @@ def parse_perf_health_log(path: Path) -> PerfHealthReport:
     return parse_perf_health_lines(text.splitlines())
 
 
+def parse_perf_health_logs(paths: Iterable[Path]) -> PerfHealthReport:
+    lines: list[str] = []
+    for path in paths:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        lines.extend(text.splitlines())
+    ordered_unique_lines = list(dict.fromkeys(lines))
+    return parse_perf_health_lines(
+        sorted(
+            ordered_unique_lines,
+            key=lambda line: _timestamp_seconds(_timestamp_from_line(line)) or 0.0,
+        )
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Summarize transition/display perf anomalies and cache fallback producer gaps."
@@ -912,6 +1162,13 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("logs") / "screensaver_perf.log",
         help="Path to the perf/cache log file to analyze.",
+    )
+    parser.add_argument(
+        "--extra-log",
+        type=Path,
+        action="append",
+        default=[],
+        help="Additional sidecar log to merge into the timeline, e.g. --viz for Spotify topology.",
     )
     parser.add_argument(
         "--fail-on-anomaly",
@@ -942,13 +1199,18 @@ def _print_samples(title: str, samples: list[object], max_samples: int) -> None:
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
-    log_path: Path = args.log
-    if not log_path.exists() or not log_path.is_file():
-        print(f"Log file not found: {log_path}")
-        return 1
+    log_paths: list[Path] = [args.log, *args.extra_log]
+    for log_path in log_paths:
+        if not log_path.exists() or not log_path.is_file():
+            print(f"Log file not found: {log_path}")
+            return 1
 
-    report = parse_perf_health_log(log_path)
-    print(f"Transition perf health summary for {log_path}")
+    report = parse_perf_health_logs(log_paths)
+    if len(log_paths) == 1:
+        print(f"Transition perf health summary for {log_paths[0]}")
+    else:
+        joined = ", ".join(str(path) for path in log_paths)
+        print(f"Transition perf health summary for {joined}")
     print(f"Metric windows: {len(report.windows)}")
     print(f"Cache worker fallbacks: {len(report.cache_fallbacks)}")
     print(f"Shader fallbacks: {len(report.shader_fallbacks)}")
@@ -963,11 +1225,23 @@ def main() -> int:
     print(f"Startup first-frame exposures: {len(report.startup_first_frame_exposures)}")
     print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
     print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
+    print(f"Spotify topology events: {len(report.spotify_topology_events)}")
+    print(f"Spotify overlay perf windows: {len(report.spotify_overlay_perf_windows)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
 
     _print_samples(
         "Paint delivery starvation windows",
         report.paint_delivery_starvation_windows,
+        args.max_samples,
+    )
+    _print_samples(
+        "Cross-display Spotify topology starvation windows",
+        report.cross_display_spotify_paint_starvation,
+        args.max_samples,
+    )
+    _print_samples(
+        "Spotify visualizer overlay overpaint windows",
+        report.spotify_overlay_overpaint_windows,
         args.max_samples,
     )
     _print_samples("High-refresh near-60 windows", report.high_target_near_sixty, args.max_samples)

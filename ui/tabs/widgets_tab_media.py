@@ -599,6 +599,10 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     _svctl.setSpacing(4)
 
     # --- Taste The Rainbow (per-mode hue shift) ---
+    tab._rainbow_controls_container = QWidget()
+    _rainbow_bucket_layout = QVBoxLayout(tab._rainbow_controls_container)
+    _rainbow_bucket_layout.setContentsMargins(0, 0, 0, 0)
+    _rainbow_bucket_layout.setSpacing(4)
     # Cache dict: stores {mode: (enabled, speed)} so mode switches are instant.
     tab._rainbow_per_mode: dict = {}
     rainbow_row = QHBoxLayout()
@@ -635,7 +639,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab._rainbow_glow_label = None
 
     rainbow_row.addStretch()
-    _svctl.addLayout(rainbow_row)
+    _rainbow_bucket_layout.addLayout(rainbow_row)
 
     # Rainbow speed slider (conditional on checkbox)
     tab._rainbow_speed_container = QWidget()
@@ -659,7 +663,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     )
     speed_content.addWidget(tab.rainbow_speed_slider, 1)
     speed_content.addWidget(tab.rainbow_speed_label)
-    _svctl.addWidget(tab._rainbow_speed_container)
+    _rainbow_bucket_layout.addWidget(tab._rainbow_speed_container)
     tab._rainbow_speed_container.setVisible(False)
 
     # --- Visualizer Type Selector ---
@@ -687,6 +691,7 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     vis_type_content.addStretch()
     vis_type_row.addLayout(vis_type_content, 1)
     _svctl.addLayout(vis_type_row)
+    _svctl.addWidget(tab._rainbow_controls_container)
 
     # ==========================================
     # Per-visualizer settings — delegated to builder modules

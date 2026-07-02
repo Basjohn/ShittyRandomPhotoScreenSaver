@@ -182,15 +182,18 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
   - transition contention is suspected
   - visualizer perf logs need aggregation
   - mixed-refresh transition windows need a fail-fast health check
+  - Spotify visualizer overlay paint/update cadence needs to be checked against the owning display target
   - cache fallback warnings need producer-state classification
   - pending paint/update delivery needs to be distinguished from render timer cadence and queued-dispatch coalescing
 - Transition/cache health commands:
 ```powershell
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8 --timeline
+python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log --max-samples 8
 python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
 ```
-- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
+- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
+- Use `--extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log` when investigating Spotify/media/visualizer topology; the perf sidecar owns render/paint cadence, the viz sidecar owns visualizer creation/display ownership, and the main log carries media/fallback context.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.
 - For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.
 

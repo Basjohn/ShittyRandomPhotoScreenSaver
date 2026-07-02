@@ -1,6 +1,6 @@
 # Future Cleanup
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 ## Priority Guidance
 
@@ -19,3 +19,4 @@ Low-priority cleanup items discovered during unrelated work. These are not activ
 - [ ] Retire or quarantine [rendering/render_strategy.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/render_strategy.py). Current `rg` shows no live imports/callers, but the file still contains an old busy-wait timer loop and a separate update-queue helper; remove it only with a caller grep/bar so dynamic import assumptions do not regress.
 - [ ] Replace or retire the two remaining production `processEvents()` seams that were not part of the active settings/display-rebuild perf fix: the unused synchronized-transition wait loop in [engine/display_manager.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/engine/display_manager.py) and the Reddit exit URL-dismissal safety path in [engine/display_manager.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/engine/display_manager.py). Any removal needs targeted bars because UI pressure is forbidden, but exit/browser routing must not regress.
 - [ ] Classify and migrate remaining direct `QTimer.singleShot` sites. Promote only if adjacent to compositor/display/widget startup, settings runtime restart, first-frame readiness, or visualizer reveal; otherwise keep as UI-local cleanup. Current lower-priority examples include settings scroll/notices/about-image refresh, cursor-halo flush, browser foreground routing, media-layout retry, Gmail auth/status delay, and message-box auto-close helpers.
+- [ ] Investigate `ImagePrefetcher._submit_load.<locals>._on_done` callback `IndexError: pop index out of range` if it recurs. Latest rotated perf run showed it once in `core.threading.manager` after an image load callback; fix the source callback directly rather than adding retries or broad exception masking.

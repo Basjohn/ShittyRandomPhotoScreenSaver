@@ -937,7 +937,10 @@ def create_spotify_visualizer_widget(
         apply_preset_overlay=False,
         resolve_preset_indices=False,
     )
+    visualizers_master_enabled = SettingsManager.to_bool(model.visualizers_enabled, True)
     spotify_vis_enabled = SettingsManager.to_bool(model.enabled, False)
+    if not (visualizers_master_enabled and spotify_vis_enabled):
+        return None
 
     effective_monitor_sel = get_effective_monitor_value_for_widget(
         "spotify_visualizer",
@@ -1064,7 +1067,7 @@ def create_spotify_visualizer_widget(
         media_widget,
     )
 
-    if not (spotify_vis_enabled and show_on_this and anchor_media_widget is not None):
+    if not (show_on_this and anchor_media_widget is not None):
         return None
 
     if custom_routing_active:

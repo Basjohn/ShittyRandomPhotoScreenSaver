@@ -118,6 +118,8 @@ class MediaWidget(BaseOverlayWidget):
         
         # Media provider: "spotify" or "musicbee" — drives GSMTC session filter + branding
         self._provider: str = self._validate_provider(provider)
+        self._perf_media_emit_count: int = 0
+        self._perf_media_last_log_ts: float = time.monotonic()
 
         self._pending_controller_tm: Optional[ThreadManager] = None
         if thread_manager is not None:
@@ -1274,11 +1276,41 @@ class MediaWidget(BaseOverlayWidget):
     def _emit_media_update(self, info: MediaTrackInfo) -> None:
         """Emit the current media metadata/state to interested observers."""
         try:
+            self._perf_media_emit_count += 1
             payload = asdict(info)
             payload["state"] = info.state.value
             self.media_updated.emit(payload)
+            self._maybe_log_media_perf_emit(info)
         except Exception as e:
             logger.debug("[MEDIA_WIDGET] Failed to emit media update: %s", e)
+
+    def _maybe_log_media_perf_emit(self, info: MediaTrackInfo) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        now = time.monotonic()
+        elapsed = now - self._perf_media_last_log_ts
+        if elapsed < 10.0:
+            return
+        parent = self.parent()
+        screen = getattr(parent, "_screen_index", None)
+        try:
+            screen_repr = int(screen) if screen is not None else "<unknown>"
+        except Exception:
+            screen_repr = "<unknown>"
+        state = getattr(info, "state", None)
+        state_value = getattr(state, "value", str(state))
+        logger.info(
+            "[PERF][MEDIA_WIDGET] emit_media_update screen=%s provider=%s state=%s "
+            "elapsed_ms=%.1f emits=%d visible=%s",
+            screen_repr,
+            self._provider,
+            state_value,
+            elapsed * 1000.0,
+            self._perf_media_emit_count,
+            self.isVisible(),
+        )
+        self._perf_media_emit_count = 0
+        self._perf_media_last_log_ts = now
 
     def _update_display(self, info: Optional[MediaTrackInfo]) -> None:
         """Delegates to widgets.media.display_update."""

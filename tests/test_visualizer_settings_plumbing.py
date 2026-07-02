@@ -1162,6 +1162,46 @@ class TestGLOverlayStateContract:
 
 
 class TestCreateTimeRefreshParity:
+    def test_create_spotify_visualizer_widget_honors_visualizers_master_toggle(self, monkeypatch):
+        from rendering import spotify_widget_creators as creators
+
+        class FakeVisualizer:
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("master-disabled visualizer must not be instantiated")
+
+        class FakeSignal:
+            def connect(self, *args, **kwargs):
+                return None
+
+        class FakeMediaWidget:
+            media_updated = FakeSignal()
+
+        class FakeManager:
+            _parent = object()
+
+        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
+
+        widgets_config = {
+            "media": {"monitor": "ALL"},
+            "spotify_visualizer": {
+                "visualizers_enabled": False,
+                "enabled": True,
+                "mode": "spectrum",
+                "monitor": "ALL",
+            },
+        }
+
+        vis = creators.create_spotify_visualizer_widget(
+            FakeManager(),
+            widgets_config,
+            shadows_config={},
+            screen_index=0,
+            thread_manager=None,
+            media_widget=FakeMediaWidget(),
+        )
+
+        assert vis is None
+
     def test_create_spotify_visualizer_widget_reuses_refresh_path(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
         appdata.mkdir(parents=True, exist_ok=True)
@@ -4061,6 +4101,68 @@ class TestVisualizerModeBinding:
         assert payload["spectrum_rainbow_speed"] == pytest.approx(0.20)
         assert payload["oscilloscope_rainbow_enabled"] is False
         assert payload["oscilloscope_rainbow_speed"] == pytest.approx(0.50)
+
+    def test_rainbow_controls_are_hidden_outside_custom_preset(self):
+        from ui.tabs.widgets_tab import WidgetsTab
+
+        class _Check:
+            def __init__(self, checked):
+                self._checked = checked
+
+            def isChecked(self):
+                return self._checked
+
+        class _Container:
+            def __init__(self):
+                self.visible = None
+
+            def setVisible(self, visible):
+                self.visible = bool(visible)
+
+        class _Effect:
+            def __init__(self):
+                self.enabled = None
+
+            def setEnabled(self, enabled):
+                self.enabled = bool(enabled)
+
+        class _Palette:
+            def setColor(self, *_args):
+                pass
+
+        class _Label:
+            def palette(self):
+                return _Palette()
+
+            def foregroundRole(self):
+                return object()
+
+            def setPalette(self, _palette):
+                pass
+
+        class _Tab:
+            def __init__(self, *, custom):
+                self.rainbow_enabled = _Check(True)
+                self._rainbow_controls_container = _Container()
+                self._rainbow_speed_container = _Container()
+                self._rainbow_glow_effect = _Effect()
+                self._rainbow_plain_label = _Label()
+                self._custom = custom
+
+            def _active_visualizer_preset_is_custom(self):
+                return self._custom
+
+        custom_tab = _Tab(custom=True)
+        WidgetsTab._update_rainbow_visibility(custom_tab)
+        assert custom_tab._rainbow_controls_container.visible is True
+        assert custom_tab._rainbow_speed_container.visible is True
+        assert custom_tab._rainbow_glow_effect.enabled is True
+
+        preset_tab = _Tab(custom=False)
+        WidgetsTab._update_rainbow_visibility(preset_tab)
+        assert preset_tab._rainbow_controls_container.visible is False
+        assert preset_tab._rainbow_speed_container.visible is False
+        assert preset_tab._rainbow_glow_effect.enabled is False
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
         from core.dev_gates import force_gate, is_blob_enabled

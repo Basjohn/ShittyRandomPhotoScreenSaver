@@ -147,6 +147,9 @@ class WidgetManager:
         
         # Spotify visibility sync state
         self._pending_spotify_visibility_sync: bool = False
+        self._perf_spotify_sync_request_count: int = 0
+        self._perf_spotify_sync_widget_count: int = 0
+        self._perf_spotify_sync_last_log_ts: float = time.monotonic()
         self._visualizer_preset_save_token: int = 0
         
         logger.debug("[WIDGET_MANAGER] Initialized")
@@ -2344,6 +2347,7 @@ class WidgetManager:
 
         if media_widget is None:
             return
+        self._perf_spotify_sync_request_count += 1
 
         try:
             instances = get_coordinator().get_all_instances()
@@ -2368,8 +2372,35 @@ class WidgetManager:
                     continue
                 try:
                     sync()
+                    self._perf_spotify_sync_widget_count += 1
                 except Exception:
                     logger.debug("[WIDGET_MANAGER] Failed to sync %s with media anchor", attr_name, exc_info=True)
+        self._maybe_log_spotify_sync_perf()
+
+    def _maybe_log_spotify_sync_perf(self) -> None:
+        if not is_perf_metrics_enabled():
+            return
+        now = time.monotonic()
+        elapsed = now - self._perf_spotify_sync_last_log_ts
+        if elapsed < 10.0:
+            return
+        screen = getattr(self._parent, "_screen_index", getattr(self._parent, "screen_index", None))
+        try:
+            screen_repr = int(screen) if screen is not None else "<unknown>"
+        except Exception:
+            screen_repr = "<unknown>"
+        logger.info(
+            "[PERF][SPOTIFY_VIS][VIS_SYNC] manager_screen=%s elapsed_ms=%.1f "
+            "requests=%d widgets_synced=%d pending=%s",
+            screen_repr,
+            elapsed * 1000.0,
+            self._perf_spotify_sync_request_count,
+            self._perf_spotify_sync_widget_count,
+            self._pending_spotify_visibility_sync,
+        )
+        self._perf_spotify_sync_request_count = 0
+        self._perf_spotify_sync_widget_count = 0
+        self._perf_spotify_sync_last_log_ts = now
 
     def _register_spotify_secondary_fade(self, widget: Optional[QWidget]) -> None:
         if widget is None:

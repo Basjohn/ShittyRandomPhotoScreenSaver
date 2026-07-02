@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tools.transition_perf_health_parser import parse_perf_health_lines
+from tools.transition_perf_health_parser import parse_perf_health_lines, parse_perf_health_logs
 
 
 def test_perf_health_flags_high_refresh_window_that_delivers_near_sixty():
@@ -132,6 +132,118 @@ def test_perf_health_flags_paired_paint_delivery_starvation_on_high_refresh_disp
     assert starvation.render.avg_fps == 164.8
     assert starvation.paint.avg_fps == 58.4
     assert "paint delivery starvation" in report.anomalies[0]
+
+
+def test_perf_health_correlates_cross_display_spotify_visualizer_topology():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 14:58:22 - widgets.media_widget - INFO - "
+            "[MEDIA_WIDGET] Using controller: WindowsGlobalMediaController (provider=spotify)",
+            "2026-07-02 14:58:22 - rendering.spotify_widget_creators - INFO - "
+            "[SPOTIFY_VIS] Created visualizer widget (screen=1, bar_count=48, "
+            "monitor=2, custom_routing=True)",
+            "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=0, frames=1153, wakeups=1218, avg_fps=156.0, dt_min=3.01ms, "
+            "dt_max=31.24ms, stalls=0, pending_skips=65, target=165Hz, outcome=paused",
+            "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL PAINT] Raindrops metrics: "
+            "screen=0, frames=865, avg_fps=117.0, dt_min=2.53ms, dt_max=37.40ms, "
+            "dur_min=0.51ms, dur_max=4.73ms, slow_frames=0, target_fps=165, outcome=complete",
+        ]
+    )
+
+    assert len(report.paint_delivery_starvation_windows) == 1
+    assert len(report.cross_display_spotify_paint_starvation) == 1
+    topology = report.cross_display_spotify_paint_starvation[0]
+    assert topology.visualizer.screen == 1
+    assert topology.starvation.paint.screen == 0
+    assert topology.media_seen is True
+    assert any("cross-display Spotify visualizer topology" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_does_not_blame_same_display_spotify_visualizer_topology():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 14:58:22 - rendering.spotify_widget_creators - INFO - "
+            "[SPOTIFY_VIS] Created visualizer widget (screen=0, bar_count=48, "
+            "monitor=1, custom_routing=True)",
+            "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=0, frames=1153, wakeups=1218, avg_fps=156.0, dt_min=3.01ms, "
+            "dt_max=31.24ms, stalls=0, pending_skips=65, target=165Hz, outcome=paused",
+            "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL PAINT] Raindrops metrics: "
+            "screen=0, frames=865, avg_fps=117.0, dt_min=2.53ms, dt_max=37.40ms, "
+            "dur_min=0.51ms, dur_max=4.73ms, slow_frames=0, target_fps=165, outcome=complete",
+        ]
+    )
+
+    assert len(report.paint_delivery_starvation_windows) == 1
+    assert report.cross_display_spotify_paint_starvation == []
+
+
+def test_perf_health_flags_spotify_overlay_overpaint_against_owner_display_target():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 19:19:49 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=600, avg_fps=60.0, dt_min=15.50ms, dt_max=20.00ms, "
+            "stalls=0, target=60Hz, outcome=running",
+            "2026-07-02 19:19:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=paintGL screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=889 paint=2754 update_requests=3643 "
+            "geometry_changes=0 visible=True enabled=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_perf_windows) == 1
+    overpaint = report.spotify_overlay_overpaint_windows[0]
+    assert overpaint.screen == 1
+    assert overpaint.paint_fps > 250.0
+    assert overpaint.update_request_fps > 350.0
+    assert any("overlay overpainted" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_allows_spotify_overlay_near_owner_display_target():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 19:19:49 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=600, avg_fps=60.0, dt_min=15.50ms, dt_max=20.00ms, "
+            "stalls=0, target=60Hz, outcome=running",
+            "2026-07-02 19:19:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=590 paint=598 update_requests=600 "
+            "geometry_changes=0 visible=True enabled=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_perf_windows) == 1
+    assert report.spotify_overlay_overpaint_windows == []
+    assert report.anomalies == []
+
+
+def test_perf_health_merges_perf_and_viz_sidecars_for_spotify_topology(tmp_path):
+    perf_log = tmp_path / "screensaver_perf.log"
+    viz_log = tmp_path / "screensaver_spotify_vis.log"
+    perf_log.write_text(
+        "\n".join(
+            [
+                "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+                "screen=0, frames=1153, wakeups=1218, avg_fps=156.0, dt_min=3.01ms, "
+                "dt_max=31.24ms, stalls=0, pending_skips=65, target=165Hz, outcome=paused",
+                "2026-07-02 14:58:36 - rendering.gl - INFO - [PERF] [GL PAINT] Raindrops metrics: "
+                "screen=0, frames=865, avg_fps=117.0, dt_min=2.53ms, dt_max=37.40ms, "
+                "dur_min=0.51ms, dur_max=4.73ms, slow_frames=0, target_fps=165, outcome=complete",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    viz_log.write_text(
+        "2026-07-02 14:58:22 - rendering.spotify_widget_creators - INFO - "
+        "[SPOTIFY_VIS] Created visualizer widget (screen=1, bar_count=48, "
+        "monitor=2, custom_routing=True)\n",
+        encoding="utf-8",
+    )
+
+    report = parse_perf_health_logs([perf_log, viz_log])
+
+    assert len(report.cross_display_spotify_paint_starvation) == 1
 
 
 def test_perf_health_flags_paired_paint_delivery_starvation_on_sixty_hz_display():
