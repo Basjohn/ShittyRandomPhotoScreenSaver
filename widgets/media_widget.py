@@ -1213,6 +1213,7 @@ class MediaWidget(BaseOverlayWidget):
     def _refresh_async(self) -> None:
         # Desync: Check GSMTC cache first to reduce IO contention
         now = time.time()
+        refresh_started_monotonic = time.monotonic()
         if self._gsmtc_cached_result is not None:
             elapsed_ms = (now - self._gsmtc_cache_ts) * 1000
             if elapsed_ms < self._gsmtc_cache_ms:
@@ -1238,24 +1239,57 @@ class MediaWidget(BaseOverlayWidget):
             logger.debug("[MEDIA_WIDGET] Async refresh started")
 
         def _do_query():
+            worker_started_monotonic = time.monotonic()
             try:
-                return self._controller.get_current_track()
+                return (
+                    self._controller.get_current_track(),
+                    worker_started_monotonic,
+                    time.monotonic(),
+                )
             except Exception:
                 logger.debug("[MEDIA] get_current_track failed", exc_info=True)
                 if is_verbose_logging():
                     logger.debug("[MEDIA] get_current_track failed", exc_info=True)
-                return None
+                return (None, worker_started_monotonic, time.monotonic())
 
         def _handle_result(task_result):
+            callback_received_monotonic = time.monotonic()
+
             def _consume_result() -> None:
                 try:
                     if not Shiboken.isValid(self):
                         return
-                    info = task_result.result if getattr(task_result, "success", False) else None
+                    result_payload = task_result.result if getattr(task_result, "success", False) else None
+                    if isinstance(result_payload, tuple) and len(result_payload) == 3:
+                        info, worker_started, worker_finished = result_payload
+                    else:
+                        info = result_payload
+                        worker_started = refresh_started_monotonic
+                        worker_finished = callback_received_monotonic
                     # Desync: Cache the result for 500ms
                     self._gsmtc_cached_result = info
                     self._gsmtc_cache_ts = time.time()
                     self._update_display(info)
+                    if is_perf_metrics_enabled():
+                        consumed_monotonic = time.monotonic()
+                        worker_ms = max(0.0, (worker_finished - worker_started) * 1000.0)
+                        callback_ms = max(0.0, (callback_received_monotonic - worker_finished) * 1000.0)
+                        ui_delay_ms = max(0.0, (consumed_monotonic - callback_received_monotonic) * 1000.0)
+                        total_ms = max(0.0, (consumed_monotonic - refresh_started_monotonic) * 1000.0)
+                        if total_ms >= 1000.0 or worker_ms >= 1000.0 or ui_delay_ms >= 250.0:
+                            state = getattr(info, "state", None)
+                            state_value = getattr(state, "value", str(state))
+                            logger.warning(
+                                "[PERF][MEDIA_WIDGET][REFRESH] slow async refresh "
+                                "total_ms=%.1f worker_ms=%.1f callback_ms=%.1f "
+                                "ui_delay_ms=%.1f in_flight=%s state=%s",
+                                total_ms,
+                                worker_ms,
+                                callback_ms,
+                                ui_delay_ms,
+                                self._refresh_in_flight,
+                                state_value,
+                            )
                 except Exception as exc:
                     logger.debug("[MEDIA_WIDGET] Exception during async refresh consume: %s", exc)
                 finally:

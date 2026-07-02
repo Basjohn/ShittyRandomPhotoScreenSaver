@@ -218,6 +218,25 @@ def test_perf_health_allows_spotify_overlay_near_owner_display_target():
     assert report.anomalies == []
 
 
+def test_perf_health_allows_restored_smooth_overlay_feed_above_low_refresh_target():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-03 00:00:17 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=438, wakeups=443, avg_fps=59.3, dt_min=12.58ms, "
+            "dt_max=33.81ms, stalls=0, target=60Hz, outcome=paused",
+            "2026-07-03 00:00:13 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=953 paint=946 update_requests=953 "
+            "geometry_changes=0 visible=True enabled=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_perf_windows) == 1
+    assert report.spotify_overlay_overpaint_windows == []
+    assert report.spotify_overlay_under_delivery_windows == []
+    assert report.anomalies == []
+
+
 def test_perf_health_flags_spotify_overlay_under_delivery_despite_healthy_feed():
     report = parse_perf_health_lines(
         [
@@ -482,6 +501,23 @@ def test_perf_health_flags_media_widget_timer_starvation_gap():
     assert "media widget timer gaps" in report.anomalies[0]
 
 
+def test_perf_health_flags_slow_media_widget_async_refresh_with_dominant_phase():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - widgets.media_widget - WARNING - "
+            "[PERF][MEDIA_WIDGET][REFRESH] slow async refresh total_ms=1302.4 "
+            "worker_ms=1040.5 callback_ms=12.0 ui_delay_ms=249.9 in_flight=True state=playing"
+        ]
+    )
+
+    assert len(report.media_refresh_warnings) == 1
+    warning = report.media_refresh_warnings[0]
+    assert warning.total_ms == 1302.4
+    assert warning.dominant_phase == ("worker", 1040.5)
+    assert report.timeline_markers[0].kind == "media_refresh_slow"
+    assert "media widget async refresh slow paths" in report.anomalies[0]
+
+
 def test_perf_health_flags_spotify_visualizer_latency_and_tick_spikes():
     report = parse_perf_health_lines(
         [
@@ -498,6 +534,28 @@ def test_perf_health_flags_spotify_visualizer_latency_and_tick_spikes():
         "tick_spike",
     }
     assert "spotify visualizer timing warnings" in report.anomalies[0]
+
+
+def test_perf_health_collects_spotify_tick_phase_breakdown_without_new_anomaly():
+    report = parse_perf_health_lines(
+        [
+            "17:40:02 - widgets.spotify_visualizer.tick_pipeline - WARNING - "
+            "[PERF] [SPOTIFY_VIS] Tick phase breakdown total_ms=61.20 mode=bubble "
+            "transition_active=True changed=True first_frame=False used_gpu=True "
+            "fresh_state_ms=0.02 validity_ms=0.01 context_ms=0.08 "
+            "engine_consume_ms=1.20 bubble_consume_ms=0.55 bubble_dispatch_ms=0.40 "
+            "devcurve_dispatch_ms=0.01 gpu_push_ms=58.91",
+        ]
+    )
+
+    assert report.anomalies == []
+    assert len(report.visualizer_tick_phase_breakdowns) == 1
+    breakdown = report.visualizer_tick_phase_breakdowns[0]
+    assert breakdown.mode == "bubble"
+    assert breakdown.transition_active is True
+    assert breakdown.used_gpu is True
+    assert breakdown.dominant_phase == ("gpu_push", 58.91)
+    assert report.timeline_markers[0].kind == "spotify_tick_phase_breakdown"
 
 
 def test_perf_health_flags_significant_settings_stalls():
@@ -585,6 +643,19 @@ def test_perf_health_flags_render_pending_skips_from_coalesced_updates():
     assert report.render_timer_pending_skip_windows[0].pending_skip_count == 360
     assert report.render_timer_pending_skip_windows[0].wakeup_count == 900
     assert "render timer wakeups skipped because paint was already pending: 1" in report.anomalies
+
+
+def test_perf_health_allows_low_ratio_render_pending_skips_near_target():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=0, frames=1219, wakeups=1219, avg_fps=157.1, dt_min=6.00ms, dt_max=20.00ms, "
+            "stalls=0, pending_skips=57, target=165Hz, outcome=paused"
+        ]
+    )
+
+    assert report.render_timer_pending_skip_windows == []
+    assert not any("render timer wakeups skipped" in item for item in report.anomalies)
 
 
 def test_perf_health_flags_visualizer_custom_creation_suppression():

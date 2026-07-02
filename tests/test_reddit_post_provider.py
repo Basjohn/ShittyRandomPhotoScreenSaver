@@ -241,6 +241,54 @@ def test_composite_provider_tries_old_before_www_after_primary_failure(monkeypat
     assert result.attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD, RedditHtmlProvider.SOURCE_WWW)
 
 
+def test_composite_provider_continues_when_old_html_only_has_filtered_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    old_payload = b"""
+<html><body>
+  <shreddit-post post-title="Daily Question Thread" permalink="/r/python/comments/old/daily_question_thread/" created-timestamp="1710000100"></shreddit-post>
+</body></html>
+"""
+    www_payload = b"""
+<html><body>
+  <shreddit-post post-title="Current real post" permalink="/r/python/comments/www/current_real_post/" created-timestamp="1710000200"></shreddit-post>
+</body></html>
+"""
+
+    class FailingPrimary:
+        provider_id = "rss"
+
+        def fetch_posts(self, request):  # noqa: ANN001
+            raise RuntimeError("rss down")
+
+    def _fake_get(url, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        if "old.reddit.com" in url:
+            return _StubResponse(content=old_payload)
+        return _StubResponse(content=www_payload)
+
+    monkeypatch.setattr(
+        "core.reddit_post_provider._acquire_widget_reddit_request_slot",
+        lambda request, **kwargs: "acquired",
+    )
+    monkeypatch.setattr("core.reddit_post_provider.requests.get", _fake_get)
+
+    provider = FallbackRedditPostProvider(FailingPrimary())
+    result = provider.fetch_posts(
+        RedditFetchRequest(
+            subreddit="python",
+            sort="hot",
+            limit=25,
+            cache_key="reddit",
+            shutdown_event=None,
+        )
+    )
+
+    assert calls == ["https://old.reddit.com/r/python/", "https://www.reddit.com/r/python/"]
+    assert result.source_id == RedditHtmlProvider.SOURCE_WWW
+    assert result.attempted_sources == ("rss", RedditHtmlProvider.SOURCE_OLD, RedditHtmlProvider.SOURCE_WWW)
+    assert [post["title"] for post in result.posts or []] == ["Current real post"]
+
+
 def test_composite_provider_uses_html_after_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = []
     html_payload = b"""

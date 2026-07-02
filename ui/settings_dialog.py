@@ -1224,19 +1224,9 @@ class SettingsDialog(QDialog):
     def _on_add_default_sources(self) -> None:
         """Add curated RSS feeds as default sources."""
         try:
-            # Use the same curated feeds as the sources tab
-            curated_feeds = [
-                "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
-                "https://www.nasa.gov/feeds/iotd-feed",
-                "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/ArchitecturePorn/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/WaterPorn/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/WQHD_Wallpaper/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/4kwallpaper/top/.json?t=day&limit=25",
-                "https://www.reddit.com/r/AbandonedPorn/top/.json?t=day&limit=25",
-            ]
+            # Use the same curated feed contract as the Sources tab.
+            from sources.rss.constants import DEFAULT_RSS_FEEDS
+            curated_feeds = list(DEFAULT_RSS_FEEDS.values())
             
             self._settings.set('sources.rss_feeds', curated_feeds)
             self._settings.save()

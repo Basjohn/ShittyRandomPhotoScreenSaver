@@ -39,6 +39,7 @@ _VALID_PROVIDER_IDS = {
 REDDIT_SOURCE_HTML_OLD = "html_old"
 REDDIT_SOURCE_HTML_WWW = "html_www"
 _SESSION_PRIMARY_SOURCE_BY_CACHE_KEY: dict[str, str] = {}
+_AUTHORITATIVE_TITLE_FILTER_RE = re.compile(r"\b(daily|weekly|question thread)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -198,6 +199,8 @@ def _normalize_posts_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any
     for row in rows:
         title = str(row.get("title") or "").strip()
         if not title:
+            continue
+        if _AUTHORITATIVE_TITLE_FILTER_RE.search(title):
             continue
 
         url_str = str(row.get("url") or "").strip()

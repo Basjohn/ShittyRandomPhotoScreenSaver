@@ -147,18 +147,14 @@ class TestAddDefaultSourcesLogic:
     
     def test_curated_feeds_list(self):
         """Test that curated feeds list contains expected sources."""
-        curated_feeds = [
-            "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
-            "https://www.nasa.gov/feeds/iotd-feed",
-            "https://www.reddit.com/r/EarthPorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/SpacePorn/top/.json?t=day&limit=25",
-            "https://www.reddit.com/r/CityPorn/top/.json?t=day&limit=25",
-        ]
+        from sources.rss.constants import DEFAULT_RSS_FEEDS
+        curated_feeds = list(DEFAULT_RSS_FEEDS.values())
         
         assert len(curated_feeds) >= 5
         assert any('bing.com' in feed for feed in curated_feeds)
         assert any('nasa.gov' in feed for feed in curated_feeds)
-        assert any('reddit.com' in feed for feed in curated_feeds)
+        assert any('wallhaven.cc' in feed for feed in curated_feeds)
+        assert not any('reddit.com' in feed for feed in curated_feeds)
     
     def test_add_feeds_to_settings(self, isolated_settings):
         """Test adding feeds to settings manager."""

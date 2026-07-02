@@ -76,6 +76,9 @@ class RSSParser:
             return rebuilt, "json", feed_url
 
         lowered_netloc = (netloc or "").lower()
+        if "wallhaven.cc" in lowered_netloc and lowered_path.startswith("/api/"):
+            return rebuilt, "json", feed_url
+
         if "reddit.com" in lowered_netloc and ".rss" in lowered_path:
             json_path = lowered_path.replace(".rss", ".json")
             json_url = urlunparse((scheme, netloc, json_path, "", query, ""))
@@ -141,6 +144,10 @@ class RSSParser:
         # Flickr: {items: [...]}
         if "items" in data:
             return RSSParser._parse_flickr_entries(data.get("items", []), original_url, max_entries)
+
+        # Wallhaven: {data: [{path, url, created_at, uploader, ...}], meta: {...}}
+        if isinstance(data.get("data"), list) and "wallhaven.cc" in urlparse(original_url).netloc.lower():
+            return RSSParser._parse_wallhaven_entries(data.get("data", []), original_url, max_entries)
 
         logger.warning("[RSS_PARSER] Unrecognised JSON structure")
         return []
@@ -260,6 +267,37 @@ class RSSParser:
             ))
 
         logger.info(f"[RSS_PARSER] Reddit JSON: {len(posts)} posts, {len(entries)} with images")
+        return entries
+
+    @staticmethod
+    def _parse_wallhaven_entries(items: list, feed_url: str, limit: int) -> List[ParsedEntry]:
+        entries: List[ParsedEntry] = []
+        for item in items:
+            if len(entries) >= limit:
+                break
+            if not isinstance(item, dict):
+                continue
+
+            image_url = str(item.get("path") or "").strip()
+            if not image_url:
+                continue
+
+            created = RSSParser._parse_iso_datetime(item.get("created_at"))
+            uploader = item.get("uploader") if isinstance(item.get("uploader"), dict) else {}
+            author = str(uploader.get("username") or "").strip()
+            source_url = str(item.get("url") or feed_url)
+            title = f"Wallhaven {item.get('id') or 'Wallpaper'}"
+
+            entries.append(ParsedEntry(
+                image_url=image_url,
+                title=title,
+                description=str(item.get("category") or ""),
+                author=author,
+                created_date=created,
+                source_url=source_url,
+            ))
+
+        logger.info(f"[RSS_PARSER] Wallhaven JSON: {len(items)} items, {len(entries)} with images")
         return entries
 
     # ------------------------------------------------------------------

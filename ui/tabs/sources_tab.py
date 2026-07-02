@@ -90,6 +90,7 @@ class SourcesTab(QWidget):
         super().__init__(parent)
         
         self._settings = settings
+        self._suppress_source_change_signals = False
         self._setup_ui()
         self._load_sources()
         
@@ -374,6 +375,11 @@ class SourcesTab(QWidget):
         
         logger.debug(f"Loaded {len(folders)} folders and {len(rss_feeds)} RSS feeds")
 
+    def _emit_sources_changed(self) -> None:
+        if self._suppress_source_change_signals:
+            return
+        self.sources_changed.emit()
+
     def _load_settings(self) -> None:
         self._load_sources()
 
@@ -395,7 +401,7 @@ class SourcesTab(QWidget):
                 self._settings.save()
                 self.folder_list.addItem(folder)
                 self._update_ratio_control_state()
-                self.sources_changed.emit()
+                self._emit_sources_changed()
                 logger.info(f"Added folder source: {folder}")
             else:
                 QMessageBox.information(self, "Duplicate", "This folder is already added.")
@@ -428,7 +434,7 @@ class SourcesTab(QWidget):
         # Always remove from UI regardless of settings state
         self.folder_list.takeItem(row)
         self._update_ratio_control_state()
-        self.sources_changed.emit()
+        self._emit_sources_changed()
         logger.info(f"Removed folder source: {folder}")
     
     def _add_rss(self) -> None:
@@ -464,7 +470,7 @@ class SourcesTab(QWidget):
             self.rss_list.addItem(url)
             self.rss_input.clear()
             self._update_ratio_control_state()
-            self.sources_changed.emit()
+            self._emit_sources_changed()
             logger.info(f"Added RSS feed: {url}")
         else:
             QMessageBox.information(self, "Duplicate", "This RSS feed is already added.")
@@ -497,7 +503,7 @@ class SourcesTab(QWidget):
         # Always remove from UI regardless of settings state
         self.rss_list.takeItem(row)
         self._update_ratio_control_state()
-        self.sources_changed.emit()
+        self._emit_sources_changed()
         logger.info(f"Removed RSS feed: {url}")
     
     def _remove_all_rss(self) -> None:
@@ -521,7 +527,7 @@ class SourcesTab(QWidget):
             self._settings.save()
             self.rss_list.clear()
             self._update_ratio_control_state()
-            self.sources_changed.emit()
+            self._emit_sources_changed()
             logger.info("Removed all RSS feeds")
     
     def _on_rss_save_toggled(self, state: int) -> None:
@@ -540,7 +546,7 @@ class SourcesTab(QWidget):
         # Save setting
         self._settings.set('sources.rss_save_to_disk', enabled)
         self._settings.save()
-        self.sources_changed.emit()
+        self._emit_sources_changed()
         logger.info(f"RSS save-to-disk {'enabled' if enabled else 'disabled'}")
     
     def _browse_rss_save_dir(self) -> None:
@@ -555,7 +561,7 @@ class SourcesTab(QWidget):
             self.rss_save_dir_input.setText(directory)
             self._settings.set('sources.rss_save_directory', directory)
             self._settings.save()
-            self.sources_changed.emit()
+            self._emit_sources_changed()
             logger.info(f"RSS save directory set to: {directory}")
 
     def _autocorrect_feed_url(self, url: str) -> str:
@@ -653,8 +659,10 @@ class SourcesTab(QWidget):
     def _on_just_make_it_work_clicked(self) -> None:
         """Reset RSS feeds to a curated, known-good set.
 
-        This clears the on-disk RSS cache, wipes the current RSS feed
-        list, and replaces it with the robust default feeds from RSSSource.
+        This replaces the current RSS feed list with robust defaults without
+        deleting cached images.  Cache clearing remains an explicit action via
+        the Clear Cache button; doing it here causes a settings-exit download
+        storm and throws away still-useful wallpaper candidates.
         
         Uses DEFAULT_RSS_FEEDS from sources/rss_source.py:
         - Flickr (7 feeds): No rate limits, diverse content
@@ -665,26 +673,28 @@ class SourcesTab(QWidget):
         NO Reddit feeds (cross-process rate limit issues with MC build).
         Users can manually add Reddit feeds if desired.
         """
-        self._clear_rss_cache()
-
         # Import DEFAULT_RSS_FEEDS from modular RSS package
         from sources.rss.constants import DEFAULT_RSS_FEEDS
         curated_feeds = list(DEFAULT_RSS_FEEDS.values())
 
-        self._settings.set('sources.rss_feeds', curated_feeds)
-        self._settings.save()
+        self._suppress_source_change_signals = True
+        try:
+            self._settings.set('sources.rss_feeds', curated_feeds)
+            self._settings.save()
 
-        self.rss_list.clear()
-        for feed in curated_feeds:
-            self.rss_list.addItem(feed)
+            self.rss_list.clear()
+            for feed in curated_feeds:
+                self.rss_list.addItem(feed)
 
-        self.rss_input.clear()
-        self._update_ratio_control_state()
-        self.sources_changed.emit()
+            self.rss_input.clear()
+            self._update_ratio_control_state()
+        finally:
+            self._suppress_source_change_signals = False
+        self._emit_sources_changed()
 
         # Update suggestion label for this session to reduce confusion.
         self.rss_suggestion_label.setText("<i>YES THESE ACTUALLY ARE SAFE FOR WORK!</i>")
-        logger.info("RSS feeds reset to curated JSON defaults via 'Just Make It Work'.")
+        logger.info("RSS feeds reset to curated JSON defaults via 'Just Make It Work' (cache preserved).")
 
     def _clear_rss_cache(self) -> int:
         """Delete all files from the shared RSS cache directory.
@@ -763,10 +773,17 @@ class SourcesTab(QWidget):
     
     def _save_ratio(self, local_ratio: int) -> None:
         """Save the local ratio setting."""
+        current = self._settings.get('sources.local_ratio', None)
+        try:
+            current = int(current)
+        except (TypeError, ValueError):
+            current = None
+        if current == int(local_ratio):
+            return
         self._settings.set('sources.local_ratio', local_ratio)
         self._settings.save()
         logger.info(f"Usage ratio saved: {local_ratio}% local, {100 - local_ratio}% RSS")
-        self.sources_changed.emit()
+        self._emit_sources_changed()
 
 
 class RssAutocorrectDialog(QDialog):

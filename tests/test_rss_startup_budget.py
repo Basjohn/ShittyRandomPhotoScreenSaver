@@ -42,6 +42,38 @@ def test_rss_parser_parses_flickr_z_timestamps_without_dateutil() -> None:
     assert entries[0].created_date == datetime(2026, 6, 19, 10, 59, 36, tzinfo=timezone.utc)
 
 
+def test_rss_parser_resolves_and_parses_wallhaven_api_json() -> None:
+    feed_url = "https://wallhaven.cc/api/v1/search?categories=110&purity=100"
+    request_url, mode, original_url = RSSParser.resolve_feed_mode(feed_url)
+
+    assert request_url == feed_url
+    assert mode == "json"
+    assert original_url == feed_url
+
+    entries = RSSParser.parse_json(
+        {
+            "data": [
+                {
+                    "id": "abc123",
+                    "path": "https://w.wallhaven.cc/full/ab/wallhaven-abc123.jpg",
+                    "url": "https://wallhaven.cc/w/abc123",
+                    "created_at": "2026-07-03 00:00:00 +0000",
+                    "category": "general",
+                    "uploader": {"username": "artist"},
+                }
+            ]
+        },
+        feed_url,
+        max_entries=5,
+    )
+
+    assert len(entries) == 1
+    assert entries[0].image_url.endswith("wallhaven-abc123.jpg")
+    assert entries[0].title == "Wallhaven abc123"
+    assert entries[0].author == "artist"
+    assert entries[0].source_url == "https://wallhaven.cc/w/abc123"
+
+
 def test_rss_startup_target_uses_real_runtime_caps() -> None:
     engine = SimpleNamespace(
         settings_manager=SimpleNamespace(

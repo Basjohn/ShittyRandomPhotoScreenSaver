@@ -1127,7 +1127,17 @@ def on_tick(widget: Any) -> None:
     interpolates towards it for visual stability.
     """
     _tick_entry_ts = time.time()
+    _tick_phase_start = time.perf_counter()
+    _tick_phase_ms: dict[str, float] = {}
+
+    def _record_tick_phase(name: str) -> None:
+        nonlocal _tick_phase_start
+        now_perf = time.perf_counter()
+        _tick_phase_ms[name] = (now_perf - _tick_phase_start) * 1000.0
+        _tick_phase_start = now_perf
+
     _ensure_fresh_generation_state(widget)
+    _record_tick_phase("fresh_state")
 
     # PERFORMANCE: Fast validity check without nested try/except
     if not Shiboken.isValid(widget):
@@ -1136,6 +1146,7 @@ def on_tick(widget: Any) -> None:
             widget._bars_timer = None
         widget._enabled = False
         return
+    _record_tick_phase("validity")
 
     if not widget._enabled:
         return
@@ -1156,6 +1167,7 @@ def on_tick(widget: Any) -> None:
 
     max_fps = widget._resolve_max_fps(transition_ctx)
     widget._update_timer_interval(max_fps)
+    _record_tick_phase("context")
 
     last = widget._last_update_ts
     dt_since_last = 0.0
@@ -1170,38 +1182,61 @@ def on_tick(widget: Any) -> None:
 
     # Perf metrics accounting
     record_tick_perf(widget, now_ts)
+    _record_tick_phase("perf_accounting")
 
     # Consume bars from engine
     changed, _any_nonzero = consume_engine_bars(widget, now_ts)
+    _record_tick_phase("engine_consume")
     # Let paused mode transitions progress even when fresh-engine wait short-circuits.
     widget._check_mode_teardown_ready(widget._engine, now_ts)
+    _record_tick_phase("teardown_check")
     # If consume returned (False, False) while waiting for fresh engine frame, bail
     if widget._waiting_for_fresh_engine_frame and not changed and not _any_nonzero:
         return
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
+    _record_tick_phase("heartbeat")
 
     consume_pending_bubble = getattr(widget, "_consume_pending_bubble_result", None)
     if getattr(widget, "_vis_mode_str", "") == "bubble" and callable(consume_pending_bubble):
         consume_pending_bubble()
+    _record_tick_phase("bubble_consume")
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return
 
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
+    _record_tick_phase("bubble_dispatch")
 
     # DEVCURVE liquid field solve (UI-thread, cheap: ~32 sources)
     dispatch_devcurve_field(widget, now_ts)
+    _record_tick_phase("devcurve_dispatch")
 
     # GPU frame push
     first_frame = not widget._has_pushed_first_frame
     used_gpu = push_gpu_frame(widget, parent, now_ts, changed, first_frame)
+    _record_tick_phase("gpu_push")
 
     # PERF: Log slow ticks
     _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
     if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
+        phase_payload = " ".join(
+            f"{name}_ms={elapsed_ms:.2f}"
+            for name, elapsed_ms in _tick_phase_ms.items()
+        )
+        logger.warning(
+            "[PERF] [SPOTIFY_VIS] Tick phase breakdown total_ms=%.2f mode=%s "
+            "transition_active=%s changed=%s first_frame=%s used_gpu=%s %s",
+            _tick_elapsed,
+            getattr(widget, "_vis_mode_str", "unknown"),
+            is_transition_active,
+            changed,
+            first_frame,
+            used_gpu,
+            phase_payload,
+        )
 
 

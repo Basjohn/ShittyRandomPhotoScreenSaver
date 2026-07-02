@@ -369,6 +369,7 @@ class AnimationManager(QObject):
         self._profile_max_dt: float = 0.0
         self._profile_max_active_count: int = 0
         self._profile_max_listener_count: int = 0
+        self._profile_animation_labels: set[str] = set()
         
         # Update timer
         self._timer = QTimer()
@@ -425,6 +426,7 @@ class AnimationManager(QObject):
             self._profile_max_dt = 0.0
             self._profile_max_active_count = len(self._animations)
             self._profile_max_listener_count = len(self._tick_listeners)
+            self._profile_animation_labels = set()
 
             self._timer.start()
             logger.debug("AnimationManager started")
@@ -693,8 +695,27 @@ class AnimationManager(QObject):
         # Start update loop if not running
         if not self._timer.isActive():
             self.start()
+        self._remember_profile_animation_label(animator)
         
         self.animation_started.emit(animation_id)
+
+    def _remember_profile_animation_label(self, animator: Animation) -> None:
+        """Record lightweight attribution for `[PERF] [ANIM]` summaries."""
+        if not is_perf_metrics_enabled() or len(self._profile_animation_labels) >= 6:
+            return
+        try:
+            if isinstance(animator, PropertyAnimator):
+                target_name = type(animator.target).__name__
+                label = f"property:{target_name}.{animator.property_name}"
+            elif isinstance(animator, CustomAnimator):
+                callback = animator.update_callback
+                callback_name = getattr(callback, "__qualname__", None) or getattr(callback, "__name__", None)
+                label = f"custom:{callback_name or type(callback).__name__}"
+            else:
+                label = type(animator).__name__
+            self._profile_animation_labels.add(label)
+        except Exception:
+            logger.debug("[ANIM] Failed to capture animation profile label", exc_info=True)
     
     def _on_animation_complete(self, animation_id: str) -> None:
         """Handle animation completion."""
@@ -816,7 +837,7 @@ class AnimationManager(QObject):
                         "[PERF] [ANIM] AnimationManager metrics: duration=%.1fms, "
                         "frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
                         "active_count=%d, listeners=%d, max_active=%d, max_listeners=%d, "
-                        "fps_target=%d, manager_id=%s, owner=%s",
+                        "fps_target=%d, manager_id=%s, owner=%s, active_labels=%s",
                         duration_ms,
                         self._profile_frame_count,
                         avg_fps,
@@ -829,6 +850,7 @@ class AnimationManager(QObject):
                         self.fps,
                         id(self),
                         getattr(self, "_srpss_owner", "<unknown>"),
+                        "|".join(sorted(self._profile_animation_labels)) or "<none>",
                     )
         except Exception as e:
             logger.debug("[ANIM] Metrics logging failed: %s", e, exc_info=True)
@@ -840,3 +862,4 @@ class AnimationManager(QObject):
             self._profile_max_dt = 0.0
             self._profile_max_active_count = 0
             self._profile_max_listener_count = 0
+            self._profile_animation_labels = set()

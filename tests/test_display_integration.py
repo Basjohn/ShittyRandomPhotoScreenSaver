@@ -1516,6 +1516,42 @@ class TestSettingsSignals:
         tab.sources_changed.emit()
         assert handler.called
 
+    def test_just_make_it_work_preserves_cache_and_emits_once(self, qt_app, tmp_path, monkeypatch):
+        settings = SettingsManager(
+            organization="Test",
+            application=f"JustMakeSourcesTest_{uuid.uuid4().hex}",
+            storage_base_dir=tmp_path,
+        )
+        settings.set("sources.rss_feeds", ["https://example.com/old-feed"])
+        tab = SourcesTab(settings)
+        handler = Mock()
+        clear_calls = []
+        tab.sources_changed.connect(handler)
+        monkeypatch.setattr(tab, "_clear_rss_cache", lambda: clear_calls.append(True) or 99)
+
+        tab._on_just_make_it_work_clicked()
+
+        feeds = settings.get("sources.rss_feeds", [])
+        assert clear_calls == []
+        assert handler.call_count == 1
+        assert any("wallhaven.cc" in feed for feed in feeds)
+        assert not any("reddit.com" in feed for feed in feeds)
+
+    def test_ratio_save_does_not_emit_when_value_is_unchanged(self, qt_app, tmp_path):
+        settings = SettingsManager(
+            organization="Test",
+            application=f"RatioNoopSourcesTest_{uuid.uuid4().hex}",
+            storage_base_dir=tmp_path,
+        )
+        settings.set("sources.local_ratio", 50)
+        tab = SourcesTab(settings)
+        handler = Mock()
+        tab.sources_changed.connect(handler)
+
+        tab._save_ratio(50)
+
+        assert not handler.called
+
 
 # ---------------------------------------------------------------------------
 # Clock widget regression tests

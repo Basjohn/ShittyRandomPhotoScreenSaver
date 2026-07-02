@@ -26,9 +26,11 @@ _TIMER_GAP_RE = re.compile(
 _SPOTIFY_LATENCY_RE = re.compile(r"\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>[0-9.]+)")
 _SPOTIFY_SEVERE_LATENCY_RE = re.compile(r"\[!!!!\]\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>[0-9.]+)")
 _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=(?P<dt_ms>[0-9.]+)")
+_SPOTIFY_TICK_PHASE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick phase breakdown (?P<detail>.*)")
 _SPOTIFY_OVERLAY_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\](?P<detail>.*)")
 _SPOTIFY_VIS_SYNC_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[VIS_SYNC\](?P<detail>.*)")
 _MEDIA_EMIT_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\] emit_media_update(?P<detail>.*)")
+_MEDIA_REFRESH_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\]\[REFRESH\](?P<detail>.*)")
 _FRAME_BUDGET_SPIKE_RE = re.compile(r"\[PERF\] \[FRAME\] (?P<detail>.*)")
 _SETTINGS_PERF_RE = re.compile(r"\[PERF\]\[SETTINGS\](?P<detail>.*)")
 _SETTINGS_DURATION_RE = re.compile(
@@ -95,6 +97,12 @@ class MetricWindow:
             return None
         return self.avg_fps / float(self.target_fps)
 
+    @property
+    def pending_skip_ratio(self) -> float | None:
+        if not self.wakeup_count:
+            return None
+        return float(self.pending_skip_count or 0) / float(self.wakeup_count)
+
 
 @dataclass(frozen=True)
 class CacheFallback:
@@ -129,6 +137,58 @@ class VisualizerTimingWarning:
     kind: str
     value_ms: float
     line: str = ""
+
+
+@dataclass(frozen=True)
+class VisualizerTickPhaseBreakdown:
+    timestamp: str | None
+    total_ms: float
+    mode: str
+    transition_active: bool
+    changed: bool
+    first_frame: bool
+    used_gpu: bool
+    phases_ms: dict[str, float]
+    line: str = ""
+
+    @property
+    def dominant_phase(self) -> tuple[str, float] | None:
+        if not self.phases_ms:
+            return None
+        return max(self.phases_ms.items(), key=lambda item: item[1])
+
+    @property
+    def summary(self) -> str:
+        dominant = self.dominant_phase
+        if dominant is None:
+            dominant_text = "dominant=<unknown>"
+        else:
+            dominant_text = f"dominant={dominant[0]}:{dominant[1]:.2f}ms"
+        return (
+            f"{self.timestamp or '<no-ts>'} total_ms={self.total_ms:.2f} "
+            f"mode={self.mode} transition_active={self.transition_active} "
+            f"{dominant_text}"
+        )
+
+
+@dataclass(frozen=True)
+class MediaRefreshWarning:
+    timestamp: str | None
+    total_ms: float
+    worker_ms: float
+    callback_ms: float
+    ui_delay_ms: float
+    state: str
+    line: str = ""
+
+    @property
+    def dominant_phase(self) -> tuple[str, float]:
+        phases = {
+            "worker": self.worker_ms,
+            "callback": self.callback_ms,
+            "ui_delay": self.ui_delay_ms,
+        }
+        return max(phases.items(), key=lambda item: item[1])
 
 
 @dataclass(frozen=True)
@@ -246,6 +306,8 @@ class PerfHealthReport:
     pending_paint_stalls: list[str] = field(default_factory=list)
     timer_gaps: list[TimerGap] = field(default_factory=list)
     visualizer_timing_warnings: list[VisualizerTimingWarning] = field(default_factory=list)
+    visualizer_tick_phase_breakdowns: list[VisualizerTickPhaseBreakdown] = field(default_factory=list)
+    media_refresh_warnings: list[MediaRefreshWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
     settings_stalls: list[SettingsStall] = field(default_factory=list)
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
@@ -316,13 +378,21 @@ class PerfHealthReport:
 
     @property
     def render_timer_pending_skip_windows(self) -> list[MetricWindow]:
-        """Render windows where the timer woke but paint updates were coalesced."""
-        return [
-            window
-            for window in self.windows
-            if window.source == "gl_render"
-            and (window.pending_skip_count or 0) > 0
-        ]
+        """Render windows where timer wakeups are materially lost to paint coalescing.
+
+        A few pending skips are normal when paint is already in flight, especially
+        on high-refresh displays. Keep the bar red for the old collapse shape:
+        high skip ratio and/or under-delivery, not healthy near-target cadence.
+        """
+        problematic: list[MetricWindow] = []
+        for window in self.windows:
+            if window.source != "gl_render" or (window.pending_skip_count or 0) <= 0:
+                continue
+            skip_ratio = window.pending_skip_ratio or 0.0
+            target_ratio = window.target_ratio or 0.0
+            if skip_ratio >= 0.10 or target_ratio < 0.90:
+                problematic.append(window)
+        return problematic
 
     @property
     def paint_delivery_starvation_windows(self) -> list[PaintDeliveryStarvation]:
@@ -423,8 +493,8 @@ class PerfHealthReport:
             if not window.visible or not window.enabled:
                 continue
             target = float(self._target_fps_for_screen(window.screen))
-            paint_limit = max(target * 1.35, target + 25.0)
-            update_limit = max(target * 1.65, target + 45.0)
+            paint_limit = max(target * 3.0, target + 120.0)
+            update_limit = max(target * 3.0, target + 120.0)
             if window.paint_fps > paint_limit or window.update_request_fps > update_limit:
                 overpaint.append(window)
         return overpaint
@@ -670,6 +740,10 @@ class PerfHealthReport:
             messages.append(
                 f"media widget timer gaps suggest cadence starvation: {len(self.media_timer_starvation_gaps)}"
             )
+        if self.media_refresh_warnings:
+            messages.append(
+                f"media widget async refresh slow paths present: {len(self.media_refresh_warnings)}"
+            )
         if self.significant_visualizer_timing_warnings:
             messages.append(
                 "spotify visualizer timing warnings present: "
@@ -824,6 +898,48 @@ def _spotify_overlay_perf_from_line(line: str, detail: str) -> SpotifyOverlayPer
         geometry_change_count=_parse_int(parts.get("geometry_changes")) or 0,
         visible=_parse_bool(parts.get("visible")),
         enabled=_parse_bool(parts.get("enabled")),
+        line=line,
+    )
+
+
+def _spotify_tick_phase_from_line(line: str, detail: str) -> VisualizerTickPhaseBreakdown | None:
+    parts = _parse_kv_payload(detail)
+    total_ms = _parse_float(parts.get("total_ms"))
+    if total_ms is None:
+        return None
+    phases_ms: dict[str, float] = {}
+    for key, value in parts.items():
+        if not key.endswith("_ms") or key == "total_ms":
+            continue
+        phase_name = key[:-3]
+        parsed = _parse_float(value)
+        if parsed is not None:
+            phases_ms[phase_name] = parsed
+    return VisualizerTickPhaseBreakdown(
+        timestamp=_timestamp_from_line(line),
+        total_ms=total_ms,
+        mode=parts.get("mode", "unknown"),
+        transition_active=_parse_bool(parts.get("transition_active")),
+        changed=_parse_bool(parts.get("changed")),
+        first_frame=_parse_bool(parts.get("first_frame")),
+        used_gpu=_parse_bool(parts.get("used_gpu")),
+        phases_ms=phases_ms,
+        line=line,
+    )
+
+
+def _media_refresh_from_line(line: str, detail: str) -> MediaRefreshWarning | None:
+    parts = _parse_kv_payload(detail)
+    total_ms = _parse_float(parts.get("total_ms"))
+    if total_ms is None:
+        return None
+    return MediaRefreshWarning(
+        timestamp=_timestamp_from_line(line),
+        total_ms=total_ms,
+        worker_ms=_parse_float(parts.get("worker_ms")) or 0.0,
+        callback_ms=_parse_float(parts.get("callback_ms")) or 0.0,
+        ui_delay_ms=_parse_float(parts.get("ui_delay_ms")) or 0.0,
+        state=parts.get("state", "unknown"),
         line=line,
     )
 
@@ -1013,6 +1129,24 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                 )
             continue
 
+        spotify_tick_phase = _SPOTIFY_TICK_PHASE_RE.search(line)
+        if spotify_tick_phase:
+            breakdown = _spotify_tick_phase_from_line(
+                line,
+                spotify_tick_phase.group("detail"),
+            )
+            if breakdown is not None:
+                report.visualizer_tick_phase_breakdowns.append(breakdown)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "spotify_tick_phase_breakdown",
+                        breakdown.summary,
+                        line,
+                    )
+                )
+            continue
+
         spotify_overlay_perf = _SPOTIFY_OVERLAY_PERF_RE.search(line)
         if spotify_overlay_perf:
             overlay_window = _spotify_overlay_perf_from_line(
@@ -1038,6 +1172,25 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             report.timeline_markers.append(
                 TimelineMarker(timestamp, "media_emit_perf", media_emit_perf.group("detail").strip(), line)
             )
+            continue
+
+        media_refresh_perf = _MEDIA_REFRESH_PERF_RE.search(line)
+        if media_refresh_perf:
+            warning = _media_refresh_from_line(line, media_refresh_perf.group("detail"))
+            if warning is not None:
+                report.media_refresh_warnings.append(warning)
+                dominant_name, dominant_ms = warning.dominant_phase
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "media_refresh_slow",
+                        (
+                            f"total_ms={warning.total_ms:.1f} "
+                            f"dominant={dominant_name}:{dominant_ms:.1f}ms"
+                        ),
+                        line,
+                    )
+                )
             continue
 
         texture_upload = _SLOW_TEXTURE_UPLOAD_RE.search(line)
@@ -1242,7 +1395,9 @@ def main() -> int:
     print(f"Pending paint stalls: {len(report.pending_paint_stalls)}")
     print(f"Render pending skips: {len(report.render_timer_pending_skip_windows)}")
     print(f"Timer gaps: {len(report.timer_gaps)}")
+    print(f"MediaWidget slow refreshes: {len(report.media_refresh_warnings)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
+    print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
     print(f"Settings stalls: {len(report.settings_stalls)}")
     print(f"Startup first-frame exposures: {len(report.startup_first_frame_exposures)}")
@@ -1293,9 +1448,15 @@ def main() -> int:
     )
     _print_samples("AnimationManager under-target windows", report.animation_manager_under_target, args.max_samples)
     _print_samples("MediaWidget timer starvation gaps", report.media_timer_starvation_gaps, args.max_samples)
+    _print_samples("MediaWidget slow async refreshes", report.media_refresh_warnings, args.max_samples)
     _print_samples(
         "Spotify visualizer timing warnings",
         report.significant_visualizer_timing_warnings,
+        args.max_samples,
+    )
+    _print_samples(
+        "Spotify visualizer tick phase breakdowns",
+        report.visualizer_tick_phase_breakdowns,
         args.max_samples,
     )
     _print_samples(

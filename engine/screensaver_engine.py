@@ -160,6 +160,8 @@ class ScreensaverEngine(QObject):
         self._pending_monitor_replay_image: Optional[ImageMetadata] = None
         self._display_initializing: bool = False
         self._pending_displays_ready_generation: Optional[int] = None
+        self._settings_dialog_active: bool = False
+        self._sources_changed_during_settings: bool = False
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
         # Per-display image history for multi-monitor "previous" support.

@@ -103,6 +103,8 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     """Handle settings request (S key)."""
     logger.info("Settings requested - pausing screensaver and opening config")
     request_start = time.perf_counter()
+    engine._settings_dialog_active = True
+    engine._sources_changed_during_settings = False
 
     try:
         from rendering.custom_layout_manager import CustomLayoutManager
@@ -189,6 +191,8 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
 
             # After dialog closes, fully reset displays and restart
             logger.info("Settings dialog closed, performing full-style restart of screensaver")
+            sources_changed_during_settings = bool(getattr(engine, "_sources_changed_during_settings", False))
+            engine._settings_dialog_active = False
 
             # Tear down any existing display manager stack so we get a fresh
             # set of DisplayWidget instances (clears stale GL/compositor state
@@ -233,8 +237,14 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 return
 
             total_duration = (time.perf_counter() - request_start) * 1000
-            logger.info("Settings lifecycle complete in %.1f ms (dialog exec %.1f ms)", total_duration, exec_duration)
+            logger.info(
+                "Settings lifecycle complete in %.1f ms (dialog exec %.1f ms, sources_changed=%s)",
+                total_duration,
+                exec_duration,
+                sources_changed_during_settings,
+            )
     except Exception as e:
+        engine._settings_dialog_active = False
         logger.exception(f"Failed to open settings dialog: {e}")
         QApplication.quit()
 
@@ -309,6 +319,13 @@ def on_sources_changed(engine: ScreensaverEngine) -> None:
     This was the root cause of the RSS reload bug.
     """
     from engine.screensaver_engine import EngineState
+
+    if getattr(engine, "_settings_dialog_active", False) or engine._is_state(EngineState.STOPPED):
+        engine._sources_changed_during_settings = True
+        logger.info(
+            "Sources changed while settings/runtime restart is active; deferring source rebuild until settings close"
+        )
+        return
 
     logger.info("Sources changed, reinitializing...")
 

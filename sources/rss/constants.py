@@ -14,6 +14,9 @@ DEFAULT_RSS_FEEDS = {
     # Bing - Daily wallpapers, consistently high quality
     "Bing Image of the Day": "https://www.bing.com/HPImageArchive.aspx?format=rss&idx=0&n=8&mkt=en-US",
 
+    # Wallhaven - curated safe-for-work wallpaper search
+    "Wallhaven SFW Wallpapers": "https://wallhaven.cc/api/v1/search?categories=110&purity=100",
+
     # Flickr - No rate limits on public RSS feeds, diverse content
     "Flickr Night Cityscapes": "https://www.flickr.com/services/feeds/photos_public.gne?tags=cityscape,night,longexposure&tagmode=all&format=json&nojsoncallback=1",
     "Flickr Architecture Nights": "https://www.flickr.com/services/feeds/photos_public.gne?tags=architecture,night&tagmode=all&format=json&nojsoncallback=1",
@@ -34,6 +37,7 @@ SOURCE_PRIORITY = {
     "flickr.com": 90,
     "wikimedia.org": 85,
     "nasa.gov": 75,
+    "wallhaven.cc": 72,
     "reddit.com": 10,
 }
 

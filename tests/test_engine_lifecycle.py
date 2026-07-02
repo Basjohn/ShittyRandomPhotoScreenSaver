@@ -99,6 +99,47 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     assert app is not None
 
 
+def test_sources_changed_during_settings_is_deferred(monkeypatch):
+    from engine import engine_handlers
+
+    events = []
+
+    class _Engine:
+        def __init__(self):
+            self._settings_dialog_active = True
+            self._sources_changed_during_settings = False
+            self._image_cache = object()
+            self._prefetcher = object()
+            self.folder_sources = ["old"]
+            self.rss_coordinator = object()
+
+        def _is_state(self, *states):
+            return False
+
+        @property
+        def _running(self):
+            return False
+
+        def _transition_state(self, _state):
+            events.append(("transition", _state))
+
+        def _initialize_sources(self):
+            events.append(("initialize_sources", None))
+            return True
+
+        def _build_image_queue(self):
+            events.append(("build_queue", None))
+            return True
+
+    engine = _Engine()
+
+    engine_handlers.on_sources_changed(engine)
+
+    assert engine._sources_changed_during_settings is True
+    assert engine.folder_sources == ["old"]
+    assert events == []
+
+
 class TestEngineState:
     """Test EngineState enum and state properties."""
     
