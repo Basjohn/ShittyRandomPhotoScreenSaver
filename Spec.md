@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -13,6 +13,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - `main.py` and `main_mc.py` bootstrap runtime variants.
 - `ScreensaverEngine` owns source cycling, transition scheduling, and display lifecycle.
 - `DisplayWidget` is the fullscreen rendering presenter.
+- Fullscreen geometry, taskbar coverage, one-pixel shrink behavior, compositor prewarm visibility, and startup first-frame presentation are fragile user-visible contracts. Do not alter them as part of unrelated performance work; changes require explicit user approval, a document-first audit, and regression evidence for startup flash/flicker, borders, taskbar coverage, and widget rebuild behavior.
 - `WidgetManager` owns overlay widget lifecycle, staged startup coordination, and the narrow runtime-pause quiesce seam used before display teardown/settings entry.
 - Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches. Spotify-dependent setup remains intentionally explicit and phased in this order: media-owned dependents, local visualizer, remote Custom visualizer reconcile, then final startup.
 - During display setup/rebuild, `rendering/widget_setup_all.py` is the sole lifecycle-start authority for factory-created widgets. `rendering/display_setup.py` and follow-on display glue must not immediately run a second initialize pass over the same created set.

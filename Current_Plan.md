@@ -11,6 +11,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Prefer automation bars over repeated runtime-verification asks.
 - Fallbacks must stay loud and routed through the relevant CLI family; a fallback is evidence, not success.
 - UI pressure is barred as a perf fix. Do not add repaint/update requeue loops, rescue timers, or broad UI refreshes to chase FPS.
+- Fullscreen / one-pixel shrink / startup-flash behavior is frozen at last committed behavior unless explicitly greenlit through a document-first audit. Perf work must not touch fullscreen sizing, taskbar coverage, compositor prewarm visibility, first-frame readiness, or startup presentation ordering opportunistically.
 - Before touching shared visualizer/audio/activation/render/transition seams, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`. `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` currently have accepted runtime behavior and must not be retuned from stale broad-suite failures.
 
 ## Active Tasks
@@ -22,14 +23,17 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Latest parse (`2026-07-02 13:26-13:30`) shows no near-60 high-refresh collapse, no stable-divisor windows, no swap-interval warnings, no shader/cache fallbacks, no slow texture uploads, and no pending-paint requeues.
 - [x] Latest remaining evidence is shared paint delivery pressure: five healthy-render / weak-paint windows on Display 0, 20 render pending-skip metric windows, 26 Spotify visualizer tick warnings, and two settings hydration stalls.
 - [x] Reduce paint-path UI pressure without changing fidelity: transition paint dispatch resolves the active transition only, diagnostic section timing is sampled, and PERF HUD image caching now avoids repeated payload/profiler scans inside the refresh window.
-- [ ] If Display 0 remains under target after active-only paint dispatch, inspect event-loop contention, visualizer tick payload/overlay handoff (`set_spotify_visualizer_state` copies/clamps pushed bars every tick before compositor paint), GPU timing attribution, shader/resource warmup, viewport/upload churn, driver-visible waits, and image handoff timing before changing shader visuals or transition duration.
-- [ ] Improve perf attribution for accepted-update-to-paint delivery latency if the next log still shows healthy `GL RENDER` with weak `GL PAINT`; keep it metrics-only and avoid retry/repaint loops.
+- [ ] Root-cause the visualizer-existence / owner-display performance effect. Latest short log (`2026-07-02 14:41-14:42`) starts with Bubble visualizer on Display 0 and stays good (`GL PAINT` screen 0 `148.8fps` on 165Hz, no paint-starvation window), matching the prior post-move `147-151fps` band; this points away from CUSTOM transfer and toward the child `SpotifyBarsGLOverlay` / same-window GL paint topology.
+- [ ] Isolate whether Display 0 improves because the visualizer child GL overlay is present in the Display 0 top-level, because Display 1 no longer owns that self-driving overlay, or because compositor update delivery is accidentally helped by same-window child GL activity.
+- [ ] Inspect visualizer tick payload / overlay handoff (`push_spotify_visualizer_frame`, `SpotifyBarsGLOverlay.set_state`, `SpotifyBarsGLOverlay.paintGL`) for unnecessary per-tick copies, geometry churn, or continuous repaint ownership that can be reduced without changing mode behavior, reactivity, first-frame safety, or adding UI pressure.
+- [ ] Improve perf attribution for accepted-update-to-paint delivery latency only if it separates compositor timer delivery from visualizer child-GL delivery; keep it metrics-only and avoid retry/repaint loops.
 - [ ] Investigate recurring collateral pressure clues if they persist: Spotify visualizer tick spikes during transitions and isolated MediaWidget timer gaps.
-- [ ] Use the next broad multi-transition runtime log to compare transition families. Do not blame any single transition from a run that only exercised that transition.
+- [ ] Use the next broad multi-transition runtime log to compare transition families, but keep the primary hypothesis display/visualizer-topology-wide. Do not blame any single transition from a run that only exercised that transition.
 - [ ] If ThreadManager callback errors recur, use the new traceback/context fields to fix the source callback directly rather than adding defensive broad retries.
 - [ ] Continue raw `QTimer.singleShot` removal only where it is adjacent to compositor/display/widget startup, settings restart, visualizer reveal, or first-frame readiness. Cosmetic/UI-local one-shots belong in `Future_Cleanup.md` unless fresh logs promote them.
 - [ ] Keep the legacy [rendering/render_strategy.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/render_strategy.py) busy-wait timer classified as cleanup/dead-code risk unless a live import/caller appears.
 - [ ] Do not alter visual fidelity, transition identity, first-frame/last-frame behavior, or visualizer reactivity to gain FPS.
+- [ ] Add or improve a perf parser/bar only if it directly separates visualizer-present-on-screen-0, visualizer-present-on-screen-1, and no-visualizer cases without requiring new runtime UI pressure or new runtime controls.
 - [x] Run the focused visualizer lock for the adaptive-timer cadence split; keep this as a recurring guardrail for the next shared render/tick/transition change.
 
 ### 2. Display Wake / Monitor Recreate First-Frame Resilience
@@ -47,7 +51,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Replace first-frame readiness `QTimer.singleShot(0)` plus forced `repaint()` with a ThreadManager-owned handoff; keep normal paint scheduling only.
 - [x] Add bars for staggered display readiness, stale monitor rebuild replay ordering, and no display startup `QTimer.singleShot` / forced repaint paths.
 - [x] Runtime-check display off/on recovery: latest logs show recovery is acceptable and no duplicate/orphan display widgets or long-lived placeholder truth persisted.
-- [ ] Leave the fullscreen/one-pixel/startup-flicker seam at the last committed behavior for now. If Display 1 startup flash or taskbar coverage reopens, make a fresh document-first audit before touching fullscreen geometry, visible compositor prewarm, or readiness ordering again.
+- [ ] Leave the fullscreen/one-pixel/startup-flicker seam at the last committed behavior. If Display 1 startup flash or taskbar coverage reopens, make a fresh document-first audit and get explicit greenlight before touching fullscreen geometry, visible compositor prewarm, or readiness ordering again.
 
 ### 3. Settings UI Cost And Churn
 

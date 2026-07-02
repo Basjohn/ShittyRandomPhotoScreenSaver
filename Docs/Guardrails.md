@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -65,6 +65,7 @@ No shadow frameworks or parallel ownership paths.
 ## 5. UI/UX Safety
 - Do not remove custom styling to hide runtime issues.
 - Fix startup/focus/visibility bugs at root cause.
+- Do not touch the fullscreen / one-pixel shrink / startup flash seam opportunistically. The current fullscreen geometry and startup presentation ordering are fragile, user-visible contracts; changes to fullscreen sizing, taskbar coverage, compositor prewarm visibility, first-frame readiness, or startup flash behavior require explicit user greenlight, a document-first audit, and bars/runtime evidence. If a performance pass introduces flashes, flicker, black borders, taskbar gaps, or rebuild/widget regressions, revert that seam to last committed behavior instead of layering guards.
 - UI pressure is not a performance fix. Do not try to solve cadence, transition FPS, missed paints, widget starvation, or visualizer latency by queueing extra UI-thread work, repaint/update retries, rescue timers, or broader widget refreshes. If a render/update delivery seam looks stuck, first prove ownership/timing/cache/upload root cause with `--perf` bars; any proposed retry path must have a regression bar proving it does not increase UI-thread churn.
 - If `GL RENDER` timer cadence is healthy while same-screen `GL PAINT` cadence is bad, treat it as paint/event-loop delivery starvation. Add paired render/paint evidence and timeline correlation before changing cadence mechanics; do not add repaint retries or update requeues.
 - High-refresh helper/timer threads must not busy-spin in Python for precision. A timer that holds the GIL can make its own `GL RENDER` metrics look healthy while starving Qt/Python paint delivery, visualizer ticks, and widget timers. Prefer deadline waits that sleep/yield and prove the behavior with `--perf` parser bars.
