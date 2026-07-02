@@ -39,6 +39,7 @@ _SLOW_TEXTURE_UPLOAD_RE = re.compile(
 )
 _PENDING_PAINT_REQUEUE_RE = re.compile(r"\[PERF\] \[GL RENDER\] Pending paint update exceeded coalescing window")
 _PENDING_PAINT_STALL_RE = re.compile(r"\[PERF\] \[GL RENDER\] Paint update still pending without delivery")
+_GL_SWAP_INTERVAL_WARNING_RE = re.compile(r"\[PERF\]\[GL COMPOSITOR\]\[WARNING\] GL context may still be swap-interval constrained")
 _CACHE_FALLBACK_RE = re.compile(r"\[CACHE\] \[FALLBACK\] Worker fallback .*?(?P<payload>display=.*)")
 _VISUALIZER_CUSTOM_SUPPRESSION_RE = re.compile(
     r"\[SPOTIFY_VIS\]\[FALLBACK\] Suppressing CUSTOM visualizer creation because no exact local custom rect is available"
@@ -67,6 +68,8 @@ class MetricWindow:
     listener_count: int | None = None
     max_active_count: int | None = None
     max_listener_count: int | None = None
+    pending_skip_count: int | None = None
+    wakeup_count: int | None = None
     duration_ms: float | None = None
     owner: str | None = None
     line: str = ""
@@ -160,6 +163,7 @@ class PerfHealthReport:
     windows: list[MetricWindow] = field(default_factory=list)
     cache_fallbacks: list[CacheFallback] = field(default_factory=list)
     shader_fallbacks: list[str] = field(default_factory=list)
+    gl_swap_interval_warnings: list[str] = field(default_factory=list)
     pending_paint_requeues: list[str] = field(default_factory=list)
     pending_paint_stalls: list[str] = field(default_factory=list)
     timer_gaps: list[TimerGap] = field(default_factory=list)
@@ -227,6 +231,16 @@ class PerfHealthReport:
             if window.source == "gl_paint"
             and window.is_high_refresh
             and window.avg_fps < float(window.target_fps or 0) * 0.70
+        ]
+
+    @property
+    def render_timer_pending_skip_windows(self) -> list[MetricWindow]:
+        """Render windows where the timer woke but paint updates were coalesced."""
+        return [
+            window
+            for window in self.windows
+            if window.source == "gl_render"
+            and (window.pending_skip_count or 0) > 0
         ]
 
     @property
@@ -435,6 +449,11 @@ class PerfHealthReport:
             )
         if self.shader_fallbacks:
             messages.append(f"shader fallbacks present: {len(self.shader_fallbacks)}")
+        if self.gl_swap_interval_warnings:
+            messages.append(
+                "GL contexts may still be swap-interval constrained despite timer-only policy: "
+                f"{len(self.gl_swap_interval_warnings)}"
+            )
         if self.pending_paint_requeues:
             messages.append(
                 "transition paint request coalescing rescues fired: "
@@ -444,6 +463,11 @@ class PerfHealthReport:
             messages.append(
                 "paint update delivery stalls observed without requeue: "
                 f"{len(self.pending_paint_stalls)}"
+            )
+        if self.render_timer_pending_skip_windows:
+            messages.append(
+                "render timer wakeups skipped because paint was already pending: "
+                f"{len(self.render_timer_pending_skip_windows)}"
             )
         if self.media_timer_starvation_gaps:
             messages.append(
@@ -518,6 +542,8 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
     listener_count = _parse_int(parts.get("listeners"))
     max_active_count = _parse_int(parts.get("max_active"))
     max_listener_count = _parse_int(parts.get("max_listeners"))
+    pending_skip_count = _parse_int(parts.get("pending_skips"))
+    wakeup_count = _parse_int(parts.get("wakeups"))
     duration_ms = _parse_float(parts.get("duration"))
     owner = parts.get("owner")
     return MetricWindow(
@@ -532,6 +558,8 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
         listener_count=listener_count,
         max_active_count=max_active_count,
         max_listener_count=max_listener_count,
+        pending_skip_count=pending_skip_count,
+        wakeup_count=wakeup_count,
         duration_ms=duration_ms,
         owner=owner,
         line=line,
@@ -736,6 +764,13 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             )
             continue
 
+        if _GL_SWAP_INTERVAL_WARNING_RE.search(line):
+            report.gl_swap_interval_warnings.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "gl_swap_interval_warning", "swap interval constrained", line)
+            )
+            continue
+
         frame_spike = _FRAME_BUDGET_SPIKE_RE.search(line)
         if frame_spike:
             report.timeline_markers.append(
@@ -829,8 +864,10 @@ def main() -> int:
     print(f"Metric windows: {len(report.windows)}")
     print(f"Cache worker fallbacks: {len(report.cache_fallbacks)}")
     print(f"Shader fallbacks: {len(report.shader_fallbacks)}")
+    print(f"GL swap-interval warnings: {len(report.gl_swap_interval_warnings)}")
     print(f"Pending paint requeues: {len(report.pending_paint_requeues)}")
     print(f"Pending paint stalls: {len(report.pending_paint_stalls)}")
+    print(f"Render pending skips: {len(report.render_timer_pending_skip_windows)}")
     print(f"Timer gaps: {len(report.timer_gaps)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
@@ -880,8 +917,10 @@ def main() -> int:
     _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)
     _print_samples("Shader fallbacks", report.shader_fallbacks, args.max_samples)
+    _print_samples("GL swap-interval warnings", report.gl_swap_interval_warnings, args.max_samples)
     _print_samples("Pending paint requeues", report.pending_paint_requeues, args.max_samples)
     _print_samples("Pending paint stalls", report.pending_paint_stalls, args.max_samples)
+    _print_samples("Render pending skips", report.render_timer_pending_skip_windows, args.max_samples)
     if args.timeline:
         _print_samples("Timeline markers", report.timeline_markers, args.max_samples)
 

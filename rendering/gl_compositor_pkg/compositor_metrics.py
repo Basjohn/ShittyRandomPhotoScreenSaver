@@ -230,11 +230,11 @@ def finalize_paint_metrics(widget, outcome: str = "stopped") -> None:
 # Render timer metrics
 # ------------------------------------------------------------------
 
-def record_render_timer_tick(widget) -> None:
+def record_render_timer_tick(widget, *, accepted_update: bool = True) -> None:
     metrics = widget._render_timer_metrics
     if metrics is None or not is_perf_metrics_enabled():
         return
-    dt = metrics.record_tick()
+    dt = metrics.record_tick(accepted_update=accepted_update)
     if dt is None:
         return
     if metrics.should_log_stall(dt):
@@ -266,14 +266,16 @@ def finalize_render_timer_metrics(widget, outcome: str = "stopped") -> None:
     min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
     max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
     logger.info(
-        "[PERF] [GL RENDER] Timer metrics: screen=%s, frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-        "stalls=%d, target=%dHz, outcome=%s",
+        "[PERF] [GL RENDER] Timer metrics: screen=%s, frames=%d, wakeups=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
+        "stalls=%d, pending_skips=%d, target=%dHz, outcome=%s",
         _get_screen_index(widget),
         metrics.frame_count,
+        metrics.wakeup_count,
         avg_fps,
         min_dt_ms,
         max_dt_ms,
         metrics.stall_count,
+        metrics.pending_skip_count,
         metrics.target_fps,
         outcome,
     )

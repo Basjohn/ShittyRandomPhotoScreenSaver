@@ -48,9 +48,27 @@ def _safe_attr(widget, name: str, default=None):
 
 def _mark_widget_update_pending(widget) -> None:
     now = time.perf_counter()
-    setattr(widget, "_srpss_timer_update_pending", True)
-    setattr(widget, "_srpss_timer_update_pending_since", now)
+    if not bool(_safe_attr(widget, "_srpss_timer_update_pending", False)):
+        setattr(widget, "_srpss_timer_update_pending", True)
+        setattr(widget, "_srpss_timer_update_pending_since", now)
     setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
+    setattr(widget, "_srpss_timer_update_dispatch_pending", True)
+
+
+def _mark_widget_update_dispatched(widget) -> None:
+    if widget is None:
+        return
+    try:
+        setattr(widget, "_srpss_timer_update_dispatch_pending", False)
+    except Exception:
+        pass
+
+
+def _pending_widget_update_age_ms(widget) -> float | None:
+    pending_since = _safe_attr(widget, "_srpss_timer_update_pending_since")
+    if not isinstance(pending_since, (int, float)) or pending_since <= 0.0:
+        return None
+    return (time.perf_counter() - float(pending_since)) * 1000.0
 
 
 def _maybe_log_pending_widget_update(widget) -> None:
@@ -58,10 +76,9 @@ def _maybe_log_pending_widget_update(widget) -> None:
     if not is_perf_metrics_enabled():
         return
     now = time.perf_counter()
-    pending_since = _safe_attr(widget, "_srpss_timer_update_pending_since")
-    if not isinstance(pending_since, (int, float)) or pending_since <= 0.0:
+    age_ms = _pending_widget_update_age_ms(widget)
+    if age_ms is None:
         return
-    age_ms = (now - float(pending_since)) * 1000.0
     if age_ms < _PENDING_UPDATE_LOG_AFTER_MS:
         return
     last_log = _safe_attr(widget, "_srpss_timer_update_pending_last_log", 0.0)
@@ -89,20 +106,27 @@ def _mark_widget_update_consumed(widget) -> None:
         setattr(widget, "_srpss_timer_update_pending", False)
         setattr(widget, "_srpss_timer_update_pending_since", 0.0)
         setattr(widget, "_srpss_timer_update_pending_last_log", 0.0)
+        setattr(widget, "_srpss_timer_update_dispatch_pending", False)
     except Exception:
         pass
 
 
-def _queue_safe_widget_update(widget) -> None:
+def _queue_safe_widget_update(widget) -> bool:
     """Queue a QWidget.update() call that tolerates teardown races."""
     if widget is None:
-        return
+        return False
 
     try:
+        if bool(getattr(widget, "_srpss_timer_update_dispatch_pending", False)):
+            return False
         if bool(getattr(widget, "_srpss_timer_update_pending", False)):
-            _maybe_log_pending_widget_update(widget)
-            return
-        _mark_widget_update_pending(widget)
+            age_ms = _pending_widget_update_age_ms(widget)
+            if age_ms is None or age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
+                _maybe_log_pending_widget_update(widget)
+                return False
+            setattr(widget, "_srpss_timer_update_dispatch_pending", True)
+        else:
+            _mark_widget_update_pending(widget)
     except Exception:
         # If the widget cannot host the flag, fall back to the old behavior.
         pass
@@ -121,6 +145,7 @@ def _queue_safe_widget_update(widget) -> None:
                     _mark_widget_update_consumed(widget)
                     return
             widget.update()
+            _mark_widget_update_dispatched(widget)
         except RuntimeError as exc:
             logger.debug("[ADAPTIVE_TIMER] Suppressed stale widget update: %s", exc)
             _mark_widget_update_consumed(widget)
@@ -132,15 +157,24 @@ def _queue_safe_widget_update(widget) -> None:
         current_thread = QThread.currentThread()
         if owner_thread is not None and current_thread is owner_thread:
             _apply_update()
-            return
+            return True
         if owner_thread is not None:
+            if callable(getattr(widget, "_srpss_apply_timer_update", None)):
+                ok = QMetaObject.invokeMethod(
+                    widget,
+                    "_srpss_apply_timer_update",
+                    Qt.ConnectionType.QueuedConnection,
+                )
+                if bool(ok):
+                    return True
             ok = QMetaObject.invokeMethod(
                 widget,
                 "update",
                 Qt.ConnectionType.QueuedConnection,
             )
             if bool(ok):
-                return
+                _mark_widget_update_dispatched(widget)
+                return True
             global _QT_UPDATE_FALLBACK_WARNED
             if not _QT_UPDATE_FALLBACK_WARNED and is_perf_metrics_enabled():
                 _QT_UPDATE_FALLBACK_WARNED = True
@@ -150,11 +184,12 @@ def _queue_safe_widget_update(widget) -> None:
     except RuntimeError as exc:
         logger.debug("[ADAPTIVE_TIMER] Suppressed queued widget update dispatch: %s", exc)
         _mark_widget_update_consumed(widget)
-        return
+        return False
     except Exception as exc:
         logger.debug("[ADAPTIVE_TIMER] Queued widget update dispatch failed: %s", exc)
 
     ThreadManager.run_on_ui_thread(_apply_update)
+    return True
 
 
 def _normalize_next_deadline(next_deadline: float, now_ts: float, interval_s: float) -> float:
@@ -563,12 +598,12 @@ class AdaptiveTimerStrategy:
         """Signal UI thread to render."""
         if self._compositor is not None:
             try:
-                if hasattr(self._compositor, "_record_render_timer_tick"):
-                    self._compositor._record_render_timer_tick()
                 # Log occasional frame signals for debugging
                 if self._metrics.frame_count % 100 == 0:
                     logger.debug("[ADAPTIVE_TIMER] Signaling frame %d", self._metrics.frame_count)
-                _queue_safe_widget_update(self._compositor)
+                accepted_update = _queue_safe_widget_update(self._compositor)
+                if hasattr(self._compositor, "_record_render_timer_tick"):
+                    self._compositor._record_render_timer_tick(accepted_update=accepted_update)
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)

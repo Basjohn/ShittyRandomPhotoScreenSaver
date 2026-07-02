@@ -8,10 +8,10 @@ to preserve the original interface.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import time
 
-from PySide6.QtCore import QSize, QTimer
+from PySide6.QtCore import QSize
 from PySide6.QtGui import QPixmap, QImage
 
 from core.logging.logger import (
@@ -22,6 +22,7 @@ from core.logging.logger import (
 )
 from core.logging.tags import TAG_WORKER, TAG_PERF, TAG_ASYNC
 from core.constants.timing import TRANSITION_STAGGER_MS
+from core.threading.manager import ThreadManager
 from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
 from rendering.display_modes import DisplayMode
@@ -32,6 +33,35 @@ if TYPE_CHECKING:
     from engine.screensaver_engine import ScreensaverEngine
 
 logger = get_logger(__name__)
+
+
+def _schedule_engine_delay(
+    engine: "ScreensaverEngine",
+    delay_ms: int,
+    func: Callable[[], None],
+    *,
+    reason: str,
+) -> None:
+    """Route image-pipeline delayed UI work through the app ThreadManager seam."""
+    scheduler = getattr(engine, "thread_manager", None)
+    try:
+        if scheduler is not None and hasattr(scheduler, "single_shot"):
+            scheduler.single_shot(max(0, int(delay_ms)), func)
+            return
+        logger.warning(
+            "[CACHE] [FALLBACK] Image pipeline delayed work using app ThreadManager "
+            "reason=%s delay_ms=%d",
+            reason,
+            max(0, int(delay_ms)),
+        )
+        ThreadManager.single_shot(max(0, int(delay_ms)), func)
+    except Exception:
+        logger.exception(
+            "[CACHE] [FALLBACK] Image pipeline delayed work scheduling failed "
+            "reason=%s delay_ms=%d",
+            reason,
+            max(0, int(delay_ms)),
+        )
 
 
 def _cache_trace(message: str, *args: Any, level: int = logging.INFO) -> None:
@@ -974,7 +1004,12 @@ def load_and_display_image_async(
                             d.set_processed_image(pp, op, ip)
                         else:
                             d.set_image(pp, ip)
-                    QTimer.singleShot(delay_ms, _delayed_set)
+                    _schedule_engine_delay(
+                        engine,
+                        delay_ms,
+                        _delayed_set,
+                        reason="transition_display_stagger",
+                    )
                 else:
                     if hasattr(display, 'set_processed_image'):
                         display.set_processed_image(processed_pixmap, original_pixmap, img_path)
@@ -1211,7 +1246,12 @@ def load_and_display_image_async_with_metas(
                             d.set_processed_image(pp, op, ip)
                         else:
                             d.set_image(pp, ip)
-                    QTimer.singleShot(delay_ms, _delayed)
+                    _schedule_engine_delay(
+                        engine,
+                        delay_ms,
+                        _delayed,
+                        reason="previous_image_display_stagger",
+                    )
                 else:
                     if hasattr(display, 'set_processed_image'):
                         display.set_processed_image(proc['pixmap'], proc['original_pixmap'], proc['path'])
@@ -1487,7 +1527,12 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
                     "Transition-delayed prefetch resume rearmed reason=transition_work_pending delay_ms=%d",
                     recheck_delay_ms,
                 )
-                QTimer.singleShot(recheck_delay_ms, _resume_prefetch)
+                _schedule_engine_delay(
+                    engine,
+                    recheck_delay_ms,
+                    _resume_prefetch,
+                    reason="prefetch_resume_transition_pending",
+                )
                 return
 
             in_cooldown = getattr(prefetcher, "is_in_post_transition_delay", None)
@@ -1504,7 +1549,12 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
                     "Transition-delayed prefetch resume rearmed reason=prefetch_cooldown delay_ms=%d",
                     recheck_delay_ms,
                 )
-                QTimer.singleShot(recheck_delay_ms, _resume_prefetch)
+                _schedule_engine_delay(
+                    engine,
+                    recheck_delay_ms,
+                    _resume_prefetch,
+                    reason="prefetch_resume_cooldown",
+                )
                 return
 
             engine._prefetch_resume_scheduled = False
@@ -1514,4 +1564,9 @@ def notify_transition_complete(engine: ScreensaverEngine, screen_index: Optional
         except Exception:
             logger.debug("[PREFETCH] Deferred resume failed", exc_info=True)
 
-    QTimer.singleShot(delay_ms, _resume_prefetch)
+    _schedule_engine_delay(
+        engine,
+        delay_ms,
+        _resume_prefetch,
+        reason="prefetch_resume_initial",
+    )

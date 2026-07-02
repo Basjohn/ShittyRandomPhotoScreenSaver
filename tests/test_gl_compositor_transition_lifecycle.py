@@ -328,8 +328,8 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
     scheduled: list[int] = []
     started: list[int] = []
     monkeypatch.setattr(
-        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
-        lambda delay, callback: scheduled.append(delay),
+        "rendering.gl_compositor_pkg.transitions.ThreadManager.single_shot",
+        staticmethod(lambda delay, callback: scheduled.append(delay)),
     )
 
     start_calls: list[int] = []
@@ -374,8 +374,8 @@ def test_deferred_desync_start_is_suppressed_after_compositor_stop(qt_app, monke
     start_calls: list[int] = []
     monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
     monkeypatch.setattr(
-        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
-        lambda _delay, callback: scheduled.append(callback),
+        "rendering.gl_compositor_pkg.transitions.ThreadManager.single_shot",
+        staticmethod(lambda _delay, callback: scheduled.append(callback)),
     )
     monkeypatch.setattr(comp, "_clear_all_transitions", lambda: None)
     monkeypatch.setattr(comp, "_prepare_wipe_textures", lambda: True)
@@ -418,8 +418,8 @@ def test_deferred_desync_start_is_suppressed_after_compositor_deleted(qt_app, mo
     start_calls: list[int] = []
     monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
     monkeypatch.setattr(
-        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
-        lambda _delay, callback: scheduled.append(callback),
+        "rendering.gl_compositor_pkg.transitions.ThreadManager.single_shot",
+        staticmethod(lambda _delay, callback: scheduled.append(callback)),
     )
     monkeypatch.setattr(
         "rendering.gl_compositor_pkg.transitions.Shiboken",
@@ -467,8 +467,8 @@ def test_raindrops_desync_returns_deferred_token_instead_of_unavailable(qt_app, 
     monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (50, duration_ms + 50))
     scheduled: list[int] = []
     monkeypatch.setattr(
-        "rendering.gl_compositor_pkg.transitions.QTimer.singleShot",
-        lambda delay, callback: scheduled.append(delay),
+        "rendering.gl_compositor_pkg.transitions.ThreadManager.single_shot",
+        staticmethod(lambda delay, callback: scheduled.append(delay)),
     )
 
     anim_id = comp.start_raindrops(

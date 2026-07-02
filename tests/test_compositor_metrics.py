@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from rendering.adaptive_timer import _queue_safe_widget_update
 from rendering.gl_compositor import GLCompositorWidget
 from rendering.gl_compositor_pkg.compositor_metrics import _is_active_transition_paint_window
+from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
 from rendering.gl_compositor_pkg import paint as paint_module
 from rendering.gl_compositor_pkg.paint import _sync_transition_progress_from_frame_state
 
@@ -115,6 +116,28 @@ def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
     finally:
         adaptive_timer.ThreadManager.run_on_ui_thread = original_run
         adaptive_timer.Shiboken = original_shiboken
+
+
+def test_render_timer_metrics_separate_wakeups_from_accepted_updates(monkeypatch):
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.compositor_metrics.is_perf_metrics_enabled",
+        lambda: True,
+    )
+
+    class _Metrics:
+        def __init__(self):
+            self.accepted: list[bool] = []
+
+        def record_tick(self, *, accepted_update=True):
+            self.accepted.append(bool(accepted_update))
+            return None
+
+    widget = SimpleNamespace(_render_timer_metrics=_Metrics())
+
+    record_render_timer_tick(widget, accepted_update=False)
+    record_render_timer_tick(widget, accepted_update=True)
+
+    assert widget._render_timer_metrics.accepted == [False, True]
 
 
 def test_paint_time_progress_sync_updates_active_transition_state():

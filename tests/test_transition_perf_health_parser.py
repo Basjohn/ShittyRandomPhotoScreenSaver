@@ -208,6 +208,19 @@ def test_perf_health_keeps_shader_fallback_loud_in_summary():
     assert report.anomalies == ["shader fallbacks present: 1"]
 
 
+def test_perf_health_flags_swap_interval_constrained_context():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - rendering.gl_compositor_pkg.gl_lifecycle - WARNING - "
+            "[PERF][GL COMPOSITOR][WARNING] GL context may still be swap-interval constrained "
+            "format_interval=1 requested_interval=0 wgl_disable=False wgl_current=1 source=wglSwapIntervalEXT"
+        ]
+    )
+
+    assert len(report.gl_swap_interval_warnings) == 1
+    assert any("swap-interval constrained" in anomaly for anomaly in report.anomalies)
+
+
 def test_perf_health_flags_animation_manager_windows_under_target():
     report = parse_perf_health_lines(
         [
@@ -388,6 +401,21 @@ def test_perf_health_flags_pending_paint_stalls_without_requeue():
     assert len(report.pending_paint_stalls) == 1
     assert report.timeline_markers[0].kind == "pending_paint_stall"
     assert report.anomalies == ["paint update delivery stalls observed without requeue: 1"]
+
+
+def test_perf_health_flags_render_pending_skips_from_coalesced_updates():
+    report = parse_perf_health_lines(
+        [
+            "17:40:01 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=0, frames=540, wakeups=900, avg_fps=82.0, dt_min=6.00ms, dt_max=25.00ms, "
+            "stalls=0, pending_skips=360, target=165Hz, outcome=paused"
+        ]
+    )
+
+    assert len(report.render_timer_pending_skip_windows) == 1
+    assert report.render_timer_pending_skip_windows[0].pending_skip_count == 360
+    assert report.render_timer_pending_skip_windows[0].wakeup_count == 900
+    assert "render timer wakeups skipped because paint was already pending: 1" in report.anomalies
 
 
 def test_perf_health_flags_visualizer_custom_creation_suppression():

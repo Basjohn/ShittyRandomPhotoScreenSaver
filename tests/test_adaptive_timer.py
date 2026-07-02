@@ -307,15 +307,16 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
             self.assertEqual(widget.update_count, 1)
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            self.assertFalse(getattr(widget, "_srpss_timer_update_dispatch_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 1)
+            self.assertEqual(len(queued), 2)
 
             _mark_widget_update_consumed(widget)
             self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 2)
+            self.assertEqual(len(queued), 3)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
@@ -443,15 +444,57 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_signal_frame_records_render_timer_tick_when_supported(self):
-        """Adaptive timer should publish real timer cadence into compositor metrics."""
+    def test_safe_widget_update_allows_fresh_pending_to_keep_target_cadence(self):
+        """Fresh paint-pending state should not self-throttle high-refresh cadence."""
+        class _FrameState:
+            started = True
+            completed = False
+
         class _Widget:
             def __init__(self):
-                self.tick_count = 0
+                self.update_count = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = time.perf_counter()
+                self._render_timer_fps = 165
+                self._frame_state = _FrameState()
+
+            def update(self):
+                self.update_count += 1
+
+        widget = _Widget()
+        queued = []
+
+        from rendering import adaptive_timer
+
+        original_run = adaptive_timer.ThreadManager.run_on_ui_thread
+        original_shiboken = adaptive_timer.Shiboken
+        try:
+            adaptive_timer.ThreadManager.run_on_ui_thread = staticmethod(lambda func, *args, **kwargs: queued.append(func))
+            adaptive_timer.Shiboken = None
+
+            accepted = _queue_safe_widget_update(widget)
+
+            self.assertTrue(accepted)
+            self.assertEqual(len(queued), 1)
+            self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
+            self.assertEqual(widget.update_count, 0)
+        finally:
+            adaptive_timer.ThreadManager.run_on_ui_thread = original_run
+            adaptive_timer.Shiboken = original_shiboken
+
+    def test_signal_frame_records_accepted_render_update_when_supported(self):
+        """Adaptive timer should publish accepted paint submissions into compositor metrics."""
+        class _Widget:
+            def __init__(self):
+                self.accepted_ticks = 0
+                self.skipped_ticks = 0
                 self.update_count = 0
 
-            def _record_render_timer_tick(self):
-                self.tick_count += 1
+            def _record_render_timer_tick(self, *, accepted_update=True):
+                if accepted_update:
+                    self.accepted_ticks += 1
+                else:
+                    self.skipped_ticks += 1
 
             def update(self):
                 self.update_count += 1
@@ -469,11 +512,37 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             timer = AdaptiveTimerStrategy(widget, self.config)
             timer._signal_frame()
 
-            self.assertEqual(widget.tick_count, 1)
+            self.assertEqual(widget.accepted_ticks, 1)
+            self.assertEqual(widget.skipped_ticks, 0)
             self.assertEqual(widget.update_count, 1)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
+
+    def test_signal_frame_records_pending_skip_without_fake_render_tick(self):
+        """Pending coalesced updates must not masquerade as delivered render cadence."""
+        class _Widget:
+            def __init__(self):
+                self.accepted_ticks = 0
+                self.skipped_ticks = 0
+                self._srpss_timer_update_pending = True
+                self._srpss_timer_update_pending_since = time.perf_counter() - 1.0
+
+            def _record_render_timer_tick(self, *, accepted_update=True):
+                if accepted_update:
+                    self.accepted_ticks += 1
+                else:
+                    self.skipped_ticks += 1
+
+            def update(self):
+                raise AssertionError("pending update should suppress another update")
+
+        widget = _Widget()
+        timer = AdaptiveTimerStrategy(widget, self.config)
+        timer._signal_frame()
+
+        self.assertEqual(widget.accepted_ticks, 0)
+        self.assertEqual(widget.skipped_ticks, 1)
 
     def test_safe_widget_update_prefers_qt_queued_invoke_for_qobject_widgets(self):
         """Real QObject-owned compositor widgets should bypass the generic UI invoker hot path."""

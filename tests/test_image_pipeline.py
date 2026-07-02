@@ -17,6 +17,14 @@ from engine.image_pipeline import (
 from rendering.display_modes import DisplayMode
 
 
+class _FakeScheduler:
+    def __init__(self):
+        self.callbacks = []
+
+    def single_shot(self, delay, fn):
+        self.callbacks.append((delay, fn))
+
+
 def _solid_qimage(width: int, height: int, color: QColor) -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32)
     image.fill(color)
@@ -311,9 +319,8 @@ def test_schedule_prefetch_same_image_prioritizes_first_preview_for_all_display_
     assert engine._cache_runtime_stats["scaled_prefetch_requests"] == 4
 
 
-def test_notify_transition_complete_tracks_resume_counts(monkeypatch):
-    callbacks = []
-    monkeypatch.setattr("engine.image_pipeline.QTimer.singleShot", lambda delay, fn: callbacks.append((delay, fn)))
+def test_notify_transition_complete_tracks_resume_counts():
+    scheduler = _FakeScheduler()
 
     class _FakePrefetcher:
         def notify_transition_complete(self):
@@ -327,22 +334,22 @@ def test_notify_transition_complete_tracks_resume_counts(monkeypatch):
         _prefetch_resume_scheduled=False,
         _cache_runtime_stats={},
         image_queue=None,
+        thread_manager=scheduler,
     )
 
     notify_transition_complete(engine, screen_index=1)
 
     assert engine._cache_runtime_stats["prefetch_resume_scheduled"] == 1
-    assert callbacks and callbacks[0][0] == 75
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
 
-    callbacks[0][1]()
+    scheduler.callbacks[0][1]()
 
     assert engine._prefetch_resume_scheduled is False
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
 
 
-def test_notify_transition_complete_rearms_resume_while_other_display_is_pending(monkeypatch):
-    callbacks = []
-    monkeypatch.setattr("engine.image_pipeline.QTimer.singleShot", lambda delay, fn: callbacks.append((delay, fn)))
+def test_notify_transition_complete_rearms_resume_while_other_display_is_pending():
+    scheduler = _FakeScheduler()
 
     pending_state = {"pending": True}
 
@@ -366,29 +373,29 @@ def test_notify_transition_complete_rearms_resume_while_other_display_is_pending
         _cache_runtime_stats={},
         image_queue=None,
         display_manager=_FakeDisplayManager(),
+        thread_manager=scheduler,
     )
 
     notify_transition_complete(engine, screen_index=0)
 
     assert engine._prefetch_resume_scheduled is True
-    assert callbacks and callbacks[0][0] == 75
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
 
-    callbacks.pop(0)[1]()
+    scheduler.callbacks.pop(0)[1]()
 
     assert engine._prefetch_resume_scheduled is True
     assert engine._cache_runtime_stats.get("prefetch_resume_runs", 0) == 0
-    assert callbacks and callbacks[0][0] == 75
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
 
     pending_state["pending"] = False
-    callbacks.pop(0)[1]()
+    scheduler.callbacks.pop(0)[1]()
 
     assert engine._prefetch_resume_scheduled is False
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
 
 
 def test_notify_transition_complete_rearms_until_prefetcher_cooldown_expires(monkeypatch):
-    callbacks = []
-    monkeypatch.setattr("engine.image_pipeline.QTimer.singleShot", lambda delay, fn: callbacks.append((delay, fn)))
+    scheduler = _FakeScheduler()
 
     cooldown_state = {"remaining": 17, "active": True}
     schedule_calls = []
@@ -419,6 +426,7 @@ def test_notify_transition_complete_rearms_until_prefetcher_cooldown_expires(mon
         _cache_runtime_stats={},
         image_queue=None,
         display_manager=_FakeDisplayManager(),
+        thread_manager=scheduler,
     )
 
     monkeypatch.setattr("engine.image_pipeline.schedule_prefetch", lambda eng: schedule_calls.append(eng))
@@ -426,18 +434,25 @@ def test_notify_transition_complete_rearms_until_prefetcher_cooldown_expires(mon
     notify_transition_complete(engine, screen_index=0)
 
     assert engine._prefetch_resume_scheduled is True
-    assert callbacks and callbacks[0][0] == 75
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 75
 
-    callbacks.pop(0)[1]()
+    scheduler.callbacks.pop(0)[1]()
 
     assert engine._prefetch_resume_scheduled is True
     assert engine._cache_runtime_stats.get("prefetch_resume_runs", 0) == 0
-    assert callbacks and callbacks[0][0] == 25
+    assert scheduler.callbacks and scheduler.callbacks[0][0] == 25
     assert schedule_calls == []
 
     cooldown_state["active"] = False
-    callbacks.pop(0)[1]()
+    scheduler.callbacks.pop(0)[1]()
 
     assert engine._prefetch_resume_scheduled is False
     assert engine._cache_runtime_stats["prefetch_resume_runs"] == 1
     assert schedule_calls == [engine]
+
+
+def test_image_pipeline_does_not_use_direct_qtimer_single_shot():
+    import inspect
+    import engine.image_pipeline as image_pipeline
+
+    assert "QTimer.singleShot" not in inspect.getsource(image_pipeline)

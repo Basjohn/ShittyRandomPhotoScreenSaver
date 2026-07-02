@@ -10,10 +10,11 @@ from __future__ import annotations
 import weakref
 from typing import Optional, Callable, TYPE_CHECKING
 
-from PySide6.QtCore import QPoint, QTimer
+from PySide6.QtCore import QPoint
 from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from core.animation import AnimationManager
 from core.animation.easing import EasingCurve
 from transitions.base_transition import WipeDirection, SlideDirection
@@ -104,14 +105,18 @@ def _start_with_desync(
         if scheduler is not None and hasattr(scheduler, "single_shot"):
             scheduler.single_shot(delay_ms, deferred_start)
         else:
-            QTimer.singleShot(delay_ms, deferred_start)
+            logger.warning(
+                "[GL COMPOSITOR][FALLBACK] Deferred %s start using app ThreadManager because display ThreadManager is unavailable",
+                transition_label,
+            )
+            ThreadManager.single_shot(delay_ms, deferred_start)
     except Exception:
         logger.warning(
-            "[GL COMPOSITOR][FALLBACK] Deferred %s start scheduler failed; using Qt singleShot",
+            "[GL COMPOSITOR][FALLBACK] Deferred %s start scheduler failed; using app ThreadManager",
             transition_label,
             exc_info=True,
         )
-        QTimer.singleShot(delay_ms, deferred_start)
+        ThreadManager.single_shot(delay_ms, deferred_start)
     return f"{transition_label}:deferred:{id(widget)}"
 
 

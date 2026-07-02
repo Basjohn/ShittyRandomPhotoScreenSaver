@@ -26,9 +26,10 @@ from rendering.adaptive_timer import (
     AdaptiveRenderStrategyManager,
     AdaptiveTimerConfig,
     _mark_widget_update_consumed,
+    _mark_widget_update_dispatched,
 )
 
-from PySide6.QtCore import Qt, QPoint, QRect
+from PySide6.QtCore import Qt, QPoint, QRect, Slot
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -694,9 +695,11 @@ class GLCompositorWidget(QOpenGLWidget):
         The actual progress interpolation happens in paintGL
         using the FrameState.
         """
-        self._record_render_timer_tick()
         if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:
             self.update()
+            self._record_render_timer_tick(accepted_update=True)
+        else:
+            self._record_render_timer_tick(accepted_update=False)
 
     def set_base_pixmap(self, pixmap: Optional[QPixmap]) -> None:
         """Set the base image when no transition is active.
@@ -913,9 +916,9 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.compositor_metrics import finalize_paint_metrics
         finalize_paint_metrics(self, outcome)
 
-    def _record_render_timer_tick(self) -> None:
+    def _record_render_timer_tick(self, *, accepted_update: bool = True) -> None:
         from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
-        record_render_timer_tick(self)
+        record_render_timer_tick(self, accepted_update=accepted_update)
 
     def _finalize_render_timer_metrics(self, outcome: str = "stopped") -> None:
         from rendering.gl_compositor_pkg.compositor_metrics import finalize_render_timer_metrics
@@ -1869,6 +1872,19 @@ class GLCompositorWidget(QOpenGLWidget):
         """Delegates to rendering.gl_compositor_pkg.paint."""
         from rendering.gl_compositor_pkg.paint import handle_paintGL
         return handle_paintGL(self)
+
+    @Slot()
+    def _srpss_apply_timer_update(self) -> None:
+        """UI-thread handoff for adaptive-timer update requests."""
+        try:
+            self.update()
+            _mark_widget_update_dispatched(self)
+        except RuntimeError as exc:
+            logger.debug("[GL COMPOSITOR] Suppressed stale timer update: %s", exc)
+            _mark_widget_update_consumed(self)
+        except Exception as exc:
+            logger.debug("[GL COMPOSITOR] Timer update dispatch failed: %s", exc)
+            _mark_widget_update_consumed(self)
 
     def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import try_shader_path

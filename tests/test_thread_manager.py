@@ -9,6 +9,7 @@ Tests the centralized threading functionality including:
 - Shutdown behavior
 - UI thread dispatch
 """
+import logging
 import threading
 import time
 import pytest
@@ -272,6 +273,49 @@ class TestThreadManagerSubmit:
         assert callback_results[0].success is True
         assert callback_results[0].result == "task_result"
         manager.shutdown()
+
+    def test_callback_failure_logs_traceback_and_task_context(self, caplog):
+        """Callback failures should identify the source instead of hiding dark errors."""
+
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                try:
+                    future.set_result(fn())
+                except Exception as exc:
+                    future.set_exception(exc)
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        def task_func():
+            return "done"
+
+        def callback(_result: TaskResult):
+            raise IndexError("pop index out of range")
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            with caplog.at_level(logging.ERROR, logger="core.threading.manager"):
+                manager.submit_task(
+                    ThreadPoolType.COMPUTE,
+                    task_func,
+                    task_id="diagnostic_task",
+                    callback=callback,
+                )
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "diagnostic_task" in messages
+        assert "task_func" in messages
+        assert "callback" in messages
+        assert "execution_ms=" in messages
+        assert any(record.exc_info for record in caplog.records)
 
     def test_submit_task_error_handling(self):
         """Test that task errors are captured."""

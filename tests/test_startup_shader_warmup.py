@@ -1,6 +1,10 @@
 """Regression tests for startup shader/program warmup policy."""
 
+import inspect
+
+import rendering.gl_compositor_pkg.gl_lifecycle as gl_lifecycle
 from rendering.gl_compositor_pkg.gl_lifecycle import (
+    _disable_current_context_swap_interval,
     _schedule_deferred_transition_resource_warmup,
     deferred_transition_program_specs,
     ensure_transition_program_ready,
@@ -8,6 +12,34 @@ from rendering.gl_compositor_pkg.gl_lifecycle import (
     _has_live_visible_base_surface,
 )
 from widgets.spotify_bars_gl_overlay import prioritized_visualizer_compile_order
+
+
+def test_gl_lifecycle_deferred_warmup_uses_managed_scheduler() -> None:
+    source = inspect.getsource(gl_lifecycle)
+
+    assert "QTimer.singleShot" not in source
+    assert "ThreadManager.single_shot" in source
+
+
+def test_swap_interval_disable_noops_outside_windows(monkeypatch) -> None:
+    monkeypatch.setattr(gl_lifecycle.sys, "platform", "linux")
+
+    ok, current, source = _disable_current_context_swap_interval()
+
+    assert ok is None
+    assert current is None
+    assert source == "non_windows"
+
+
+def test_swap_interval_disable_reports_missing_wgl_extension(monkeypatch) -> None:
+    monkeypatch.setattr(gl_lifecycle.sys, "platform", "win32")
+    monkeypatch.setattr(gl_lifecycle, "_wgl_proc_address", lambda name: None)
+
+    ok, current, source = _disable_current_context_swap_interval()
+
+    assert ok is None
+    assert current is None
+    assert source == "wglSwapIntervalEXT_unavailable"
 
 
 def test_startup_transition_programs_only_compile_minimal_subset() -> None:
@@ -216,7 +248,7 @@ def test_deferred_transition_resource_warmup_schedules_when_base_ready(monkeypat
 
     scheduled: list[int] = []
     monkeypatch.setattr(
-        "rendering.gl_compositor_pkg.gl_lifecycle.QTimer.singleShot",
+        "rendering.gl_compositor_pkg.gl_lifecycle.ThreadManager.single_shot",
         lambda delay, callback: scheduled.append(delay),
     )
 

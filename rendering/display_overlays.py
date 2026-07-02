@@ -11,9 +11,8 @@ import logging
 import time
 from typing import Callable, TYPE_CHECKING
 
-from PySide6.QtCore import QTimer
-
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from rendering.overlay_startup_policy import get_overlay_startup_fade_policy
 
 if TYPE_CHECKING:
@@ -21,6 +20,12 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+def _schedule_overlay_starter(delay_ms: int, starter: Callable[[], None]) -> None:
+    """Schedule overlay startup work without raw QTimer ownership."""
+
+    ThreadManager.single_shot(max(0, int(delay_ms)), starter)
 
 
 def _startup_policy():
@@ -112,7 +117,7 @@ def start_overlay_fades(widget, force: bool = False) -> None:
 
     for starter in starters:
         try:
-            QTimer.singleShot(warmup_delay_ms, starter)
+            _schedule_overlay_starter(warmup_delay_ms, starter)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
@@ -154,7 +159,7 @@ def run_spotify_secondary_fades(widget, *, base_delay_ms: int) -> None:
             if delay_ms <= 0:
                 starter()
             else:
-                QTimer.singleShot(delay_ms, starter)
+                _schedule_overlay_starter(delay_ms, starter)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:
@@ -192,7 +197,7 @@ def register_spotify_secondary_fade(widget, starter: Callable[[], None]) -> None
                 widget,
                 delay_ms=int(policy.spotify_secondary_direct_delay_ms),
             )
-            QTimer.singleShot(int(policy.spotify_secondary_direct_delay_ms), starter)
+            _schedule_overlay_starter(int(policy.spotify_secondary_direct_delay_ms), starter)
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
             try:

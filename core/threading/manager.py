@@ -18,6 +18,22 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 logger = get_logger(__name__)
 
 
+def _callable_debug_name(func: Callable | None) -> str:
+    """Return a compact callable label for async diagnostics."""
+    if func is None:
+        return "None"
+    try:
+        owner = getattr(func, "__self__", None)
+        name = getattr(func, "__qualname__", None) or getattr(func, "__name__", None)
+        if owner is not None and name:
+            return f"{owner.__class__.__name__}.{name}"
+        if name:
+            return str(name)
+    except Exception:
+        pass
+    return repr(func)
+
+
 def _describe_timer_callable_context(func: Callable) -> dict | None:
     """Best-effort context for recurring-timer gap diagnostics."""
     owner = getattr(func, "__self__", None)
@@ -478,7 +494,16 @@ class ThreadManager:
                 try:
                     callback(task_result)
                 except Exception as e:
-                    logger.error(f"Callback for task {task.task_id} failed: {e}")
+                    logger.exception(
+                        "Callback for task %s failed: %s "
+                        "(pool=%s func=%s callback=%s execution_ms=%.2f)",
+                        task.task_id,
+                        e,
+                        pool_type.value,
+                        _callable_debug_name(task.func),
+                        _callable_debug_name(callback),
+                        execution_time * 1000.0,
+                    )
             
             return task_result
         

@@ -10,11 +10,16 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from PySide6.QtCore import QTimer
-
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
+
+
+def _schedule_startup_stage(delay_ms: int, callback) -> None:
+    """Route startup reveal delays through the app-owned scheduling seam."""
+
+    ThreadManager.single_shot(max(0, int(delay_ms)), callback)
 
 
 def is_anchor_visible(widget: Any) -> bool:
@@ -181,7 +186,7 @@ def schedule_ready_driven_startup_reveal(widget: Any, *, delay_ms: int) -> None:
         finish_staged_startup_reveal(widget, reason="fresh_frame_ready_delay")
 
     try:
-        QTimer.singleShot(max(0, int(delay_ms)), _maybe_reveal)
+        _schedule_startup_stage(delay_ms, _maybe_reveal)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to schedule ready-driven reveal", exc_info=True)
         widget._startup_reveal_ready_token = -1
@@ -215,7 +220,7 @@ def schedule_startup_reveal_watchdog(widget: Any) -> None:
         if delay_ms <= 0:
             _maybe_reveal()
         else:
-            QTimer.singleShot(delay_ms, _maybe_reveal)
+            _schedule_startup_stage(delay_ms, _maybe_reveal)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to schedule startup reveal watchdog", exc_info=True)
         _maybe_reveal()

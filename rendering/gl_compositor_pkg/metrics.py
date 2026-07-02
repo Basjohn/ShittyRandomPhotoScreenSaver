@@ -164,13 +164,20 @@ class _RenderTimerMetrics:
     start_ts: float = field(default_factory=time.time)
     last_tick_ts: Optional[float] = None
     frame_count: int = 0
+    wakeup_count: int = 0
+    pending_skip_count: int = 0
     min_dt: float = 0.0
     max_dt: float = 0.0
     stall_count: int = 0
     last_stall_log_ts: float = 0.0
 
-    def record_tick(self) -> Optional[float]:
-        """Record a render timer tick and return dt seconds when available."""
+    def record_tick(self, *, accepted_update: bool = True) -> Optional[float]:
+        """Record a render wakeup and return accepted-update dt when available."""
+        self.wakeup_count += 1
+        if not accepted_update:
+            self.pending_skip_count += 1
+            return None
+
         now = time.time()
         dt = None
         if self.last_tick_ts is not None:

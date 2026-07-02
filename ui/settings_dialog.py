@@ -22,6 +22,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen, QGuiApplication, QPaint
 from core.logging.logger import get_log_dir, get_logger, is_perf_metrics_enabled
 from core.mc import is_mc_build
 from core.settings.settings_manager import SettingsManager
+from core.threading.manager import ThreadManager
 from core.settings.visualizer_preset_transfer import (
     export_visualizer_presets_zip,
     import_visualizer_preset_json_files,
@@ -841,7 +842,7 @@ class SettingsDialog(QDialog):
             self._log_perf_event("SettingsDialog.background_hydration_delay", hydration_start)
             self._schedule_next_background_build()
 
-        QTimer.singleShot(self._background_hydration_delay_ms, _run)
+        ThreadManager.single_shot(self._background_hydration_delay_ms, _run)
 
     def _schedule_next_background_build(self) -> None:
         if self._closing or self._background_build_scheduled or not self._background_tab_queue:
@@ -859,7 +860,7 @@ class SettingsDialog(QDialog):
             self._ensure_tab_built(index)
             self._schedule_next_background_build()
 
-        QTimer.singleShot(self._background_hydration_step_delay_ms, _run)
+        ThreadManager.single_shot(self._background_hydration_step_delay_ms, _run)
 
     def _style_tab_widget(self, widget: Optional[QWidget]) -> None:
         if widget is None:

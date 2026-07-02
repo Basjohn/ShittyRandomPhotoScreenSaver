@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-01
+Last updated: 2026-07-02
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -19,13 +19,33 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 - [x] Keep PERF HUD / parser paint-authoritative: `GL PAINT` is the visible cadence signal; `GL RENDER` and `GL ANIM` are supporting diagnostics.
 - [x] Preserve compact evidence bundles for the old and current collapse families, including `.tmp/perf_settings_evidence_20260630_020535`, `.tmp/reddit_display_cycle_evidence_20260701_1118`, and `.tmp/perf_reddit_wake_evidence_20260701_1846`.
-- [x] Trim old repeated perf evidence: `.tmp/perf_collapse_evidence_20260628_164113` now keeps representative baseline plus the user-extensive and settings-return 60/40 collapse snapshots, with a README explaining what was removed.
-- [x] Reassess after the lifecycle exit fix: latest logs show clean shutdown, no pending-paint requeues, no shader fallbacks, no slow GL uploads, and no 60Hz under-target display.
-- [ ] Chase the remaining fresh evidence: Display 0 can still show healthy `GL RENDER` around `165Hz` while `GL PAINT` under-delivers in Raindrops windows, including the 2026-07-01 `18:46` run where paint lives around the `80fps` range and later near `69-74fps`; this is still paint/event-loop delivery, not permission to add UI pressure.
-- [ ] Strengthen `tools/transition_perf_health_parser.py` only where it proves wrong behavior: healthy render timer plus bad paint delivery, stable-divisor cadence, settings/edit/display lifecycle correlation, and fallback reliance.
-- [ ] Investigate paint under-delivery from root seams only: `QOpenGLWidget.update()` consumption, pending-flag lifecycle, compositor/display rebuild boundaries, texture/cache upload timing, settings UI event-loop stalls, and visualizer tick payload.
+- [x] Trim old repeated perf evidence: `.tmp/perf_collapse_evidence_20260628_164113` keeps representative baseline plus user-extensive/settings-return collapse snapshots; current evidence lives under `.tmp/perf_reddit_wake_evidence_20260701_1846`.
+- [x] Reassess after lifecycle/display fixes: latest logs show clean shutdown, no pending-paint requeues, no shader fallbacks, no cache worker fallbacks, and no 60Hz under-target display.
+- [x] Make `GL RENDER` metrics honest: render timer logs now separate accepted update submissions from raw timer wakeups and `pending_skips`, so coalesced paints cannot masquerade as healthy visible cadence.
+- [x] Remove the direct `QTimer.singleShot` fallback from compositor desync startup; deferred transition starts now route through the ThreadManager seam and stay loud if the display-local scheduler is missing.
+- [x] Strengthen `tools/transition_perf_health_parser.py` with a render-pending-skip anomaly so future logs name coalesced update pressure separately from paired paint starvation.
+- [x] Reassess the latest long run without scapegoating one transition: the sample only exercised `Raindrops`, but the useful evidence is shared high-refresh update coalescing (`pending_skips`) plus a ThreadManager callback error, not a transition-specific root.
+- [x] Move transition-adjacent image-pipeline delayed work (`set_image` display stagger and post-transition prefetch resume) off raw `QTimer.singleShot` and onto the ThreadManager delay seam.
+- [x] Move adjacent GL startup warmup, Spotify visualizer staged reveal, overlay startup/secondary fades, and settings background-hydration delays off direct `QTimer.singleShot` ownership and onto the managed ThreadManager delay seam.
+- [x] Add a GL warmup bar proving deferred startup transition warmup no longer owns raw `QTimer.singleShot`.
+- [x] Make ThreadManager callback failures traceback-rich and source-rich so future `pop index out of range` / deleted-wrapper callback errors identify the task function, callback, pool, and execution time.
+- [x] Identify the current primary transition-perf root smell: global/widget format requests swap interval `0`, but real compositor contexts logged `interval=1`; this can explain mixed-refresh divisor/half-rate delivery on Display 0.
+- [x] Add best-effort Windows WGL swap-interval disable at compositor context initialization and a parser anomaly for contexts that remain swap-interval constrained.
+- [x] Re-run latest perf parser after the WGL pass: all compositor contexts report `wgl_swap_disable=True` and `wgl_current_interval=0`, so the remaining latest-run failure is not an active swap-interval constraint.
+- [x] Fix the high-refresh self-throttle contract: adaptive timer now separates queued-update dispatch coalescing from paint-delivery pending state, so fresh in-flight paints no longer cause every other `165Hz` deadline to be discarded; stale paint pending still blocks and logs loudly with `no_requeue=True`.
+- [x] Add/adjust adaptive-timer bars proving:
+  - duplicate update dispatches coalesce before reaching UI
+  - fresh paint-pending state can keep target cadence
+  - stale transition pending state cannot requeue or add UI pressure
+  - render metrics distinguish accepted submissions from skipped dispatch/stale-pending deadlines
+- [ ] Runtime-check the next transition run for reduced high-refresh `pending_skips` and Display 0 paint cadence materially above the prior `~85-90fps` half-cadence.
+- [ ] If Display 0 remains under target after pending-skip reduction, inspect GPU timing, shader/resource warmup, viewport/upload churn, driver-visible waits, image handoff timing, and event-loop stalls before changing shader visuals or transition duration.
+- [ ] Use the next broad multi-transition runtime log to compare transition families. Do not blame any single transition from a run that only exercised that transition.
+- [ ] If ThreadManager callback errors recur, use the new traceback/context fields to fix the source callback directly rather than adding defensive broad retries.
+- [ ] Continue raw `QTimer.singleShot` removal only where it is adjacent to compositor/display/widget startup, settings restart, visualizer reveal, or first-frame readiness. Cosmetic/UI-local one-shots belong in `Future_Cleanup.md` unless fresh logs promote them.
+- [ ] Keep the legacy [rendering/render_strategy.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/render_strategy.py) busy-wait timer classified as cleanup/dead-code risk unless a live import/caller appears.
 - [ ] Do not alter visual fidelity, transition identity, first-frame/last-frame behavior, or visualizer reactivity to gain FPS.
-- [ ] Run the focused visualizer lock before and after any shared render/tick/transition change.
+- [x] Run the focused visualizer lock for the adaptive-timer cadence split; keep this as a recurring guardrail for the next shared render/tick/transition change.
 
 ### 2. Display Wake / Monitor Recreate First-Frame Resilience
 
@@ -49,9 +69,10 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [x] Fix the `NoWheelSlider` deleted-wrapper family and add a stale-wrapper regression bar.
 - [x] Add settings-hydration cancellation bars so delayed hidden-tab builds cannot run after settings close and bleed UI work into runtime restart.
 - [x] Add granular `--set` / perf timing for Visualizers section build/load steps and descriptor section ids.
+- [x] Route settings background hydration delays through the ThreadManager seam; remaining `QTimer.singleShot` settings sites are UI-local cleanup unless logs prove runtime impact.
 - [ ] Runtime-check the next `--set` / main log for no `Internal C++ object (NoWheelSlider) already deleted` during settings open/close and slider movement.
 - [ ] Correlate any remaining settings open/close stalls with frame-budget spikes, `AnimationManager` windows, visualizer tick spikes, display clear/recreate, and paint under-delivery using `--set`, `--life`, and `--perf`.
-- [ ] Keep WidgetsTab builders/loaders cheap and UI-focused. Backend/cache/auth probes must stay deferred or explicit.
+- [ ] Keep WidgetsTab builders/loaders cheap and UI-focused. Backend/cache/auth probes must stay deferred or explicit; if restored Widgets->Visualizers remains a measured 1s+ stall, optimize the Visualizers section internals rather than breaking restored-subtab hydration/persistence.
 - [ ] Add or extend a harness only when it can fail on measurable churn, stale background hydration, or deleted-wrapper callbacks.
 
 ### 4. Reddit Candidate Cache And Refresh Cadence

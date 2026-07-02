@@ -7,9 +7,9 @@ All functions accept the compositor widget instance as the first parameter.
 from __future__ import annotations
 
 import ctypes
+import sys
 import time
 from typing import TYPE_CHECKING
-from PySide6.QtCore import QTimer
 from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
 try:
@@ -19,6 +19,7 @@ except ImportError:
 
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.threading.manager import ThreadManager
 from rendering.gl_compositor_pkg.metrics import _GLPipelineState
 from rendering.gl_state_manager import GLContextState
 from rendering.gl_programs.program_cache import get_program_cache, GLProgramCache
@@ -34,6 +35,99 @@ if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
+
+
+try:
+    from shiboken6 import Shiboken
+except Exception:  # pragma: no cover - shiboken may be unavailable in headless tooling
+    Shiboken = None
+
+
+def _qt_object_is_valid(obj: object | None) -> bool:
+    if obj is None:
+        return False
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(obj))
+    except Exception:
+        return True
+
+
+def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> None:
+    """Schedule non-critical GL warmup through the managed delayed-work seam."""
+
+    def _run(w=widget) -> None:
+        if not _qt_object_is_valid(w):
+            logger.warning(
+                "[GL COMPOSITOR][WARNING] Skipped deferred GL warmup for deleted widget callback=%s",
+                getattr(callback, "__name__", repr(callback)),
+            )
+            return
+        callback(w)
+
+    ThreadManager.single_shot(max(0, int(delay_ms)), _run)
+
+
+def _wgl_proc_address(name: str) -> int | None:
+    if sys.platform != "win32":
+        return None
+    try:
+        opengl32 = ctypes.windll.opengl32
+        getter = opengl32.wglGetProcAddress
+        getter.argtypes = [ctypes.c_char_p]
+        getter.restype = ctypes.c_void_p
+        ptr = getter(name.encode("ascii"))
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to resolve WGL proc %s", name, exc_info=True)
+        return None
+
+    try:
+        value = int(ptr or 0)
+    except Exception:
+        value = 0
+    # Per WGL convention these tiny/sentinel values are invalid pointers.
+    if value in {0, 1, 2, 3, -1}:
+        return None
+    return value
+
+
+def _disable_current_context_swap_interval() -> tuple[bool | None, int | None, str]:
+    """Best-effort WGL swap interval disable for the current Windows GL context.
+
+    Qt's requested QSurfaceFormat can report interval=0 globally while the
+    actual QOpenGLWidget context still comes up interval=1. The app's render
+    contract is timer-paced, so we try the driver extension once per context and
+    log the resulting truth loudly enough for perf triage.
+    """
+
+    if sys.platform != "win32":
+        return None, None, "non_windows"
+
+    swap_ptr = _wgl_proc_address("wglSwapIntervalEXT")
+    if swap_ptr is None:
+        return None, None, "wglSwapIntervalEXT_unavailable"
+
+    try:
+        fn_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+        swap_interval = fn_type(ctypes.c_bool, ctypes.c_int)(swap_ptr)
+        ok = bool(swap_interval(0))
+    except Exception:
+        logger.debug("[GL COMPOSITOR] wglSwapIntervalEXT(0) failed", exc_info=True)
+        return False, None, "wglSwapIntervalEXT_call_failed"
+
+    current: int | None = None
+    get_ptr = _wgl_proc_address("wglGetSwapIntervalEXT")
+    if get_ptr is not None:
+        try:
+            fn_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)
+            get_swap_interval = fn_type(ctypes.c_int)(get_ptr)
+            current = int(get_swap_interval())
+        except Exception:
+            logger.debug("[GL COMPOSITOR] wglGetSwapIntervalEXT failed", exc_info=True)
+            current = None
+
+    return ok, current, "wglSwapIntervalEXT"
 
 
 def _transition_program_specs() -> list[tuple[str, str, str]]:
@@ -282,7 +376,7 @@ def _warm_next_transition_program(widget) -> None:
             logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred shader warmup", exc_info=True)
 
     if queue:
-        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
+        _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
     else:
         _schedule_deferred_transition_resource_warmup(widget)
 
@@ -295,7 +389,7 @@ def schedule_deferred_transition_program_warmup(widget) -> None:
         _schedule_deferred_transition_resource_warmup(widget)
         return
     widget._startup_transition_warm_queue = list(remaining)
-    QTimer.singleShot(140, lambda w=widget: _warm_next_transition_program(w))
+    _schedule_deferred_gl_warmup(widget, _warm_next_transition_program)
 
 
 def _schedule_deferred_transition_resource_warmup(widget) -> None:
@@ -329,14 +423,14 @@ def _schedule_deferred_transition_resource_warmup(widget) -> None:
         return
 
     widget._startup_transition_resource_warm_queue = list(remaining)
-    QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
+    _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
 
 
 def _warm_next_transition_resources(widget) -> None:
     if getattr(widget, "_gl_disabled_for_session", False):
         return
     if getattr(widget, "_startup_transition_warm_queue", None):
-        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
+        _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
         return
 
     queue = getattr(widget, "_startup_transition_resource_warm_queue", None)
@@ -397,7 +491,7 @@ def _warm_next_transition_resources(widget) -> None:
             logger.debug("[GL COMPOSITOR] doneCurrent failed after deferred resource warmup", exc_info=True)
 
     if queue:
-        QTimer.singleShot(140, lambda w=widget: _warm_next_transition_resources(w))
+        _schedule_deferred_gl_warmup(widget, _warm_next_transition_resources)
 
 
 def handle_initializeGL(widget) -> None:  # type: ignore[override]
@@ -415,15 +509,47 @@ def handle_initializeGL(widget) -> None:  # type: ignore[override]
 
     try:
         ctx = widget.context()
+        swap_disable_ok: bool | None = None
+        swap_disable_current: int | None = None
+        swap_disable_source = "not_attempted"
         if ctx is not None:
+            swap_disable_ok, swap_disable_current, swap_disable_source = _disable_current_context_swap_interval()
             fmt = ctx.format()
+            requested_interval = 0
+            try:
+                requested_interval = int(getattr(widget, "format")().swapInterval())
+            except Exception:
+                requested_interval = 0
             logger.info(
-                "[GL COMPOSITOR] Context initialized: version=%s.%s, swap=%s, interval=%s",
+                "[GL COMPOSITOR] Context initialized: version=%s.%s, swap=%s, interval=%s, requested_interval=%s, wgl_swap_disable=%s, wgl_current_interval=%s, wgl_source=%s",
                 fmt.majorVersion(),
                 fmt.minorVersion(),
                 fmt.swapBehavior(),
                 fmt.swapInterval(),
+                requested_interval,
+                swap_disable_ok,
+                swap_disable_current,
+                swap_disable_source,
             )
+            try:
+                format_interval = int(fmt.swapInterval())
+                if swap_disable_current is not None:
+                    interval_still_constrained = int(swap_disable_current) != 0
+                else:
+                    interval_still_constrained = swap_disable_ok is not True and format_interval != 0
+                if interval_still_constrained:
+                    logger.warning(
+                        "[PERF][GL COMPOSITOR][WARNING] GL context may still be swap-interval constrained "
+                        "format_interval=%s requested_interval=%s wgl_disable=%s wgl_current=%s source=%s "
+                        "policy=timer_capped_no_vsync",
+                        format_interval,
+                        requested_interval,
+                        swap_disable_ok,
+                        swap_disable_current,
+                        swap_disable_source,
+                    )
+            except Exception:
+                pass
 
         # Log adapter information and detect obvious software GL drivers so
         # shader-backed paths can be disabled proactively. QPainter-based
