@@ -10,8 +10,10 @@ from rendering.gl_compositor_pkg import shader_dispatch
 class _Profiler:
     def __init__(self, metrics):
         self._metrics = metrics
+        self.calls: list[str] = []
 
     def get_metrics(self, name):
+        self.calls.append(name)
         return self._metrics.get(name)
 
 
@@ -74,12 +76,25 @@ def test_render_debug_overlay_image_throttles_rebuilds_within_refresh_window(mon
     monkeypatch.setattr(overlays.time, "monotonic", lambda: clock["now"])
 
     first = overlays.render_debug_overlay_image(widget)
+    first_calls = list(widget._profiler.calls)
     widget._wipe.progress = 0.55
     clock["now"] += overlays._DEBUG_OVERLAY_REFRESH_INTERVAL_S * 0.5
     second = overlays.render_debug_overlay_image(widget)
 
     assert first is not None
     assert second is first
+    assert widget._profiler.calls == first_calls
+
+
+def test_build_debug_overlay_payload_supports_burn_and_missing_attrs():
+    widget = SimpleNamespace(
+        _burn=SimpleNamespace(progress=0.33),
+        _profiler=_Profiler({"burn": (144.0, 5.0, 11.0, None)}),
+    )
+
+    payload = overlays._build_debug_overlay_payload(widget)
+
+    assert payload == ("Burn t=0.33", "144.0 fps  dt_min=5.0ms  dt_max=11.0ms")
 
 
 def test_paint_qpainter_overlays_gl_batches_visualizer_and_debug_overlay(monkeypatch):

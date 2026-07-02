@@ -25,25 +25,25 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 _DEBUG_OVERLAY_REFRESH_INTERVAL_S = 0.12
+_DEBUG_OVERLAY_TRANSITIONS: tuple[tuple[str, str, str], ...] = (
+    ("slide", "_slide", "Slide"),
+    ("wipe", "_wipe", "Wipe"),
+    ("blockspin", "_blockspin", "BlockSpin"),
+    ("warp", "_warp", "Warp"),
+    ("raindrops", "_raindrops", "Ripple"),
+    ("blockflip", "_blockflip", "BlockFlip"),
+    ("diffuse", "_diffuse", "Diffuse"),
+    ("burn", "_burn", "Burn"),
+    ("blinds", "_blinds", "Blinds"),
+    ("crumble", "_crumble", "Crumble"),
+    ("particle", "_particle", "Particle"),
+)
 
 
 def _build_debug_overlay_payload(widget) -> Optional[tuple[str, str]]:
     """Return the PERF HUD lines for the currently active transition."""
-    # Map transition states to their profiler names and display labels
-    transitions = [
-        ("slide", widget._slide, "Slide"),
-        ("wipe", widget._wipe, "Wipe"),
-        ("blockspin", widget._blockspin, "BlockSpin"),
-        ("warp", widget._warp, "Warp"),
-        ("raindrops", widget._raindrops, "Ripple"),
-        ("blockflip", widget._blockflip, "BlockFlip"),
-        ("diffuse", widget._diffuse, "Diffuse"),
-        ("blinds", widget._blinds, "Blinds"),
-        ("crumble", widget._crumble, "Crumble"),
-        ("particle", widget._particle, "Particle"),
-    ]
-
-    for name, state, label in transitions:
+    for name, attr, label in _DEBUG_OVERLAY_TRANSITIONS:
+        state = getattr(widget, attr, None)
         if state is None:
             continue
         metrics = widget._profiler.get_metrics(name)
@@ -201,12 +201,6 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
         return None
-    payload = _build_debug_overlay_payload(widget)
-    if payload is None:
-        widget._debug_overlay_cache_key = None
-        widget._debug_overlay_cache_image = None
-        widget._debug_overlay_cache_built_at = 0.0
-        return None
 
     now = time.monotonic()
     cached_key = getattr(widget, "_debug_overlay_cache_key", None)
@@ -221,6 +215,13 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
         and (now - cached_built_at) < _DEBUG_OVERLAY_REFRESH_INTERVAL_S
     ):
         return cached_image
+
+    payload = _build_debug_overlay_payload(widget)
+    if payload is None:
+        widget._debug_overlay_cache_key = None
+        widget._debug_overlay_cache_image = None
+        widget._debug_overlay_cache_built_at = 0.0
+        return None
 
     cache_key = (size.width(), size.height(), payload)
     if cached_key == cache_key and cached_image is not None:

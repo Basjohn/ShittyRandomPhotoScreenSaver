@@ -31,24 +31,39 @@ logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
 
 
-_TRANSITION_PROGRESS_ATTRS = (
-    ("_blockspin", "blockspin"),
-    ("_blockflip", "blockflip"),
-    ("_raindrops", "raindrops"),
-    ("_warp", "warp"),
-    ("_diffuse", "diffuse"),
-    ("_blinds", "blinds"),
-    ("_crumble", "crumble"),
-    ("_particle", "particle"),
-    ("_burn", "burn"),
-    ("_crossfade", "crossfade"),
-    ("_slide", "slide"),
-    ("_wipe", "wipe"),
+_TRANSITION_SHADER_DESCRIPTORS = (
+    ("blockspin", "_blockspin", "_can_use_blockspin_shader", "_paint_blockspin_shader", "_prepare_blockspin_textures"),
+    ("blockflip", "_blockflip", "_can_use_blockflip_shader", "_paint_blockflip_shader", None),
+    ("raindrops", "_raindrops", "_can_use_raindrops_shader", "_paint_raindrops_shader", None),
+    ("warp", "_warp", "_can_use_warp_shader", "_paint_warp_shader", None),
+    ("diffuse", "_diffuse", "_can_use_diffuse_shader", "_paint_diffuse_shader", None),
+    ("blinds", "_blinds", "_can_use_blinds_shader", "_paint_blinds_shader", None),
+    ("crumble", "_crumble", "_can_use_crumble_shader", "_paint_crumble_shader", None),
+    ("particle", "_particle", "_can_use_particle_shader", "_paint_particle_shader", None),
+    ("burn", "_burn", "_can_use_burn_shader", "_paint_burn_shader", None),
+    ("crossfade", "_crossfade", "_can_use_crossfade_shader", "_paint_crossfade_shader", None),
+    ("slide", "_slide", "_can_use_slide_shader", "_paint_slide_shader", None),
+    ("wipe", "_wipe", "_can_use_wipe_shader", "_paint_wipe_shader", None),
 )
 
 
-def _active_shader_names(shader_paths) -> list[str]:
-    return [name for name, state, *_ in shader_paths if state is not None]
+def _active_transition_descriptors(widget) -> list[tuple]:
+    """Return active transition descriptors without binding every paint method.
+
+    Normal compositor ownership keeps exactly one transition state active.  The
+    list shape is retained so fallback diagnostics can still report impossible
+    multi-active states without reintroducing broad per-frame dispatch work.
+    """
+    active = []
+    for descriptor in _TRANSITION_SHADER_DESCRIPTORS:
+        state = getattr(widget, descriptor[1], None)
+        if state is not None:
+            active.append((descriptor, state))
+    return active
+
+
+def _active_shader_names(active_descriptors) -> list[str]:
+    return [descriptor[0][0] for descriptor in active_descriptors]
 
 
 def _sync_transition_progress_from_frame_state(widget) -> None:
@@ -68,16 +83,20 @@ def _sync_transition_progress_from_frame_state(widget) -> None:
         logger.debug("[GL COMPOSITOR] FrameState interpolation failed", exc_info=True)
         return
     progress = max(0.0, min(1.0, progress))
+    active_descriptors = _active_transition_descriptors(widget)
+    if not active_descriptors:
+        return
     profiler = getattr(widget, "_profiler", None)
-    for attr, profiler_name in _TRANSITION_PROGRESS_ATTRS:
-        state = getattr(widget, attr, None)
-        if state is not None and hasattr(state, "progress"):
-            try:
-                state.progress = progress
-                if profiler is not None and profiler_name:
-                    profiler.tick(profiler_name)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
+    for descriptor, state in active_descriptors:
+        name, attr, *_ = descriptor
+        if not hasattr(state, "progress"):
+            continue
+        try:
+            state.progress = progress
+            if profiler is not None and name:
+                profiler.tick(name)
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
 
 
 def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
@@ -177,12 +196,22 @@ def paintGL_impl(widget) -> None:
     if not widget._gl_state.is_ready():
         return
     
-    # Profile paintGL sections to identify bottlenecks
-    _section_times = {}
-    _last_time = time.perf_counter()
+    # Section timing is diagnostic-only. Sample it so --perf does not add
+    # avoidable Python allocation/timestamp pressure to every high-refresh
+    # paint while paint-duration metrics remain authoritative each frame.
+    _sample_index = int(getattr(widget, "_paint_section_sample_counter", 0) or 0)
+    try:
+        widget._paint_section_sample_counter = _sample_index + 1
+    except Exception:
+        pass
+    _collect_sections = is_perf_metrics_enabled() and (_sample_index % 60 == 0)
+    _section_times = {} if _collect_sections else None
+    _last_time = time.perf_counter() if _collect_sections else 0.0
     
     def _mark_section(name: str):
         nonlocal _last_time
+        if _section_times is None:
+            return
         now = time.perf_counter()
         _section_times[name] = (now - _last_time) * 1000.0
         _last_time = now
@@ -194,41 +223,19 @@ def paintGL_impl(widget) -> None:
 
     # Try shader paths in priority order. On failure, fall back to QPainter.
     _mark_section("pre_shader")
-    shader_paths = [
-        ("blockspin", widget._blockspin, widget._can_use_blockspin_shader,
-         widget._paint_blockspin_shader, widget._prepare_blockspin_textures),
-        ("blockflip", widget._blockflip, widget._can_use_blockflip_shader,
-         widget._paint_blockflip_shader, None),
-        ("raindrops", widget._raindrops, widget._can_use_raindrops_shader,
-         widget._paint_raindrops_shader, None),
-        ("warp", widget._warp, widget._can_use_warp_shader,
-         widget._paint_warp_shader, None),
-        ("diffuse", widget._diffuse, widget._can_use_diffuse_shader,
-         widget._paint_diffuse_shader, None),
-        ("blinds", widget._blinds, widget._can_use_blinds_shader,
-         widget._paint_blinds_shader, None),
-        ("crumble", widget._crumble, widget._can_use_crumble_shader,
-         widget._paint_crumble_shader, None),
-        ("particle", widget._particle, widget._can_use_particle_shader,
-         widget._paint_particle_shader, None),
-        ("burn", widget._burn, widget._can_use_burn_shader,
-         widget._paint_burn_shader, None),
-        ("crossfade", widget._crossfade, widget._can_use_crossfade_shader,
-         widget._paint_crossfade_shader, None),
-        ("slide", widget._slide, widget._can_use_slide_shader,
-         widget._paint_slide_shader, None),
-        ("wipe", widget._wipe, widget._can_use_wipe_shader,
-         widget._paint_wipe_shader, None),
-    ]
-
     # Check if ANY transition state is active (non-None).
     # When idle (between transitions), all states are None — that's normal.
-    active_names = _active_shader_names(shader_paths)
+    active_descriptors = _active_transition_descriptors(widget)
+    active_names = _active_shader_names(active_descriptors)
     any_transition_active = bool(active_names)
 
     shader_success = False
     if any_transition_active:
-        for name, state, can_use_fn, paint_fn, prep_fn in shader_paths:
+        for descriptor, state in active_descriptors:
+            name, _attr, can_use_name, paint_name, prep_name = descriptor
+            can_use_fn = getattr(widget, can_use_name)
+            paint_fn = getattr(widget, paint_name)
+            prep_fn = getattr(widget, prep_name) if prep_name else None
             if widget._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
                 shader_success = True
                 break
@@ -252,7 +259,7 @@ def paintGL_impl(widget) -> None:
             _mark_section("qpainter_base_only")
 
     # Log section times if any section took >10ms
-    if is_perf_metrics_enabled() and _section_times:
+    if _section_times:
         total = sum(_section_times.values())
         if total > 10.0:
             sections_str = ", ".join(f"{k}={v:.1f}ms" for k, v in _section_times.items() if v > 1.0)

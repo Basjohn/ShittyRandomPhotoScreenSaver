@@ -32,6 +32,40 @@ def test_perf_health_allows_high_refresh_window_that_remains_high():
     assert report.anomalies == []
 
 
+def test_perf_health_flags_long_startup_first_frame_exposure():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 13:45:19 - rendering.display_setup - INFO - "
+            "Showing on screen 1: 2560x1440 at (0, 0) DPR=1.0",
+            "2026-07-02 13:45:21 - rendering.display_image_ops - INFO - "
+            "[STARTUP] First frame committed on screen=1 image=C:\\wall\\one.png elapsed_ms=46.00",
+        ]
+    )
+
+    assert len(report.startup_first_frame_exposures) == 1
+    exposure = report.startup_first_frame_exposures[0]
+    assert exposure.screen == 1
+    assert exposure.exposure_ms == 2000.0
+    assert exposure.first_frame_elapsed_ms == 46.0
+    assert len(report.risky_startup_first_frame_exposures) == 1
+    assert any("first-frame exposure" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_allows_fast_startup_first_frame_exposure():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 13:45:21 - rendering.display_setup - INFO - "
+            "Showing on screen 1: 2560x1440 at (0, 0) DPR=1.0",
+            "2026-07-02 13:45:21 - rendering.display_image_ops - INFO - "
+            "[STARTUP] First frame committed on screen=1 image=C:\\wall\\one.png elapsed_ms=46.00",
+        ]
+    )
+
+    assert len(report.startup_first_frame_exposures) == 1
+    assert report.risky_startup_first_frame_exposures == []
+    assert report.anomalies == []
+
+
 def test_perf_health_flags_high_refresh_window_that_is_not_near_sixty_but_far_under_target():
     report = parse_perf_health_lines(
         [

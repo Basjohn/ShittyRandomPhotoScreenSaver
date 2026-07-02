@@ -32,6 +32,10 @@ _SETTINGS_DURATION_RE = re.compile(
     r"(?P<name>.+?)\s+(?:in|took)\s+(?P<duration_ms>[0-9.]+)\s*ms"
 )
 _DISPLAY_PERF_RE = re.compile(r"\[PERF\]\[DISPLAY\](?P<detail>.*)")
+_DISPLAY_SHOW_RE = re.compile(r"Showing on screen (?P<screen>\d+):")
+_STARTUP_FIRST_FRAME_RE = re.compile(
+    r"\[STARTUP\] First frame committed on screen=(?P<screen>\d+).*?elapsed_ms=(?P<elapsed_ms>[0-9.]+|N/A)"
+)
 _GEO_SAVE_RE = re.compile(r"\[GEO_AUDIT\].*phase=save_scene")
 _SLOW_TEXTURE_UPLOAD_RE = re.compile(
     r"\[PERF\] \[GL TEXTURE\] Slow upload: (?P<duration_ms>[0-9.]+)ms "
@@ -158,6 +162,16 @@ class TimelineMarker:
     line: str = ""
 
 
+@dataclass(frozen=True)
+class StartupFirstFrameExposure:
+    screen: int
+    show_timestamp: str | None
+    first_frame_timestamp: str | None
+    exposure_ms: float
+    first_frame_elapsed_ms: float | None
+    line: str = ""
+
+
 @dataclass
 class PerfHealthReport:
     windows: list[MetricWindow] = field(default_factory=list)
@@ -172,6 +186,7 @@ class PerfHealthReport:
     settings_stalls: list[SettingsStall] = field(default_factory=list)
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
+    startup_first_frame_exposures: list[StartupFirstFrameExposure] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
 
     @property
@@ -378,6 +393,14 @@ class PerfHealthReport:
         ]
 
     @property
+    def risky_startup_first_frame_exposures(self) -> list[StartupFirstFrameExposure]:
+        return [
+            exposure
+            for exposure in self.startup_first_frame_exposures
+            if exposure.exposure_ms >= 750.0
+        ]
+
+    @property
     def anomalies(self) -> list[str]:
         messages: list[str] = []
         if self.paint_delivery_starvation_windows:
@@ -492,6 +515,11 @@ class PerfHealthReport:
                 "settings UI stalls above 1s present: "
                 f"{len(self.significant_settings_stalls)}"
             )
+        if self.risky_startup_first_frame_exposures:
+            messages.append(
+                "startup first-frame exposure windows risk visible placeholder flicker: "
+                f"{len(self.risky_startup_first_frame_exposures)}"
+            )
         if self.visualizer_custom_suppressions:
             messages.append(
                 "spotify visualizer CUSTOM creation suppressions present: "
@@ -528,6 +556,20 @@ def _parse_kv_payload(payload: str) -> dict[str, str]:
 def _timestamp_from_line(line: str) -> str | None:
     match = _TIME_RE.search(line)
     return match.group("ts") if match else None
+
+
+def _timestamp_seconds(timestamp: str | None) -> int | None:
+    if not timestamp:
+        return None
+    time_part = timestamp.rsplit(" ", 1)[-1]
+    parts = time_part.split(":")
+    if len(parts) != 3:
+        return None
+    try:
+        hours, minutes, seconds = (int(part) for part in parts)
+    except ValueError:
+        return None
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _metric_window_from_payload(source: str, name: str, payload: str, line: str) -> MetricWindow | None:
@@ -589,9 +631,55 @@ def _cache_fallback_from_line(line: str) -> CacheFallback | None:
 
 def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
     report = PerfHealthReport()
+    display_show_by_screen: dict[int, tuple[str | None, str]] = {}
     for raw in lines:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
+
+        display_show = _DISPLAY_SHOW_RE.search(line)
+        if display_show:
+            screen = int(display_show.group("screen"))
+            display_show_by_screen[screen] = (timestamp, line)
+            report.timeline_markers.append(
+                TimelineMarker(timestamp, "display_show", f"screen={screen}", line)
+            )
+            continue
+
+        startup_first_frame = _STARTUP_FIRST_FRAME_RE.search(line)
+        if startup_first_frame:
+            screen = int(startup_first_frame.group("screen"))
+            show_timestamp, _show_line = display_show_by_screen.get(screen, (None, ""))
+            show_seconds = _timestamp_seconds(show_timestamp)
+            frame_seconds = _timestamp_seconds(timestamp)
+            exposure_ms = 0.0
+            if show_seconds is not None and frame_seconds is not None:
+                delta_seconds = frame_seconds - show_seconds
+                if delta_seconds < 0:
+                    delta_seconds += 24 * 60 * 60
+                exposure_ms = float(delta_seconds * 1000)
+            elapsed_ms = _parse_float(startup_first_frame.group("elapsed_ms"))
+            report.startup_first_frame_exposures.append(
+                StartupFirstFrameExposure(
+                    screen=screen,
+                    show_timestamp=show_timestamp,
+                    first_frame_timestamp=timestamp,
+                    exposure_ms=exposure_ms,
+                    first_frame_elapsed_ms=elapsed_ms,
+                    line=(
+                        f"{timestamp or '<no-ts>'} screen={screen} exposure_ms={exposure_ms:.1f} "
+                        f"first_frame_elapsed_ms={elapsed_ms if elapsed_ms is not None else 'N/A'}"
+                    ),
+                )
+            )
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "startup_first_frame",
+                    f"screen={screen} exposure_ms={exposure_ms:.1f}",
+                    line,
+                )
+            )
+            continue
 
         anim = _GL_ANIM_RE.search(line)
         if anim:
@@ -872,6 +960,7 @@ def main() -> int:
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
     print(f"Settings stalls: {len(report.settings_stalls)}")
+    print(f"Startup first-frame exposures: {len(report.startup_first_frame_exposures)}")
     print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
     print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
@@ -913,6 +1002,11 @@ def main() -> int:
     )
     _print_samples("Slow GL texture uploads", report.slow_texture_uploads, args.max_samples)
     _print_samples("Significant settings stalls", report.significant_settings_stalls, args.max_samples)
+    _print_samples(
+        "Risky startup first-frame exposures",
+        report.risky_startup_first_frame_exposures,
+        args.max_samples,
+    )
     _print_samples("Zero-producer cache fallbacks", report.zero_producer_cache_fallbacks, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)

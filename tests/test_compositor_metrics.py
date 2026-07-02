@@ -195,6 +195,102 @@ def test_paint_time_progress_sync_clamps_progress_and_keeps_inactive_states_unto
     assert inactive.progress == 0.25
 
 
+def test_paint_impl_only_dispatches_active_transition_shader(monkeypatch):
+    calls: list[str] = []
+
+    class _ReadyState:
+        def is_ready(self):
+            return True
+
+    class _Widget:
+        _frame_state = None
+        _gl_state = _ReadyState()
+        _blockspin = None
+        _blockflip = None
+        _raindrops = SimpleNamespace(progress=0.0)
+        _warp = None
+        _diffuse = None
+        _blinds = None
+        _crumble = None
+        _particle = None
+        _burn = None
+        _crossfade = None
+        _slide = None
+        _wipe = None
+
+        def rect(self):
+            return "target"
+
+        def _can_use_raindrops_shader(self):
+            calls.append("can:raindrops")
+            return True
+
+        def _paint_raindrops_shader(self, target):
+            calls.append(f"paint:raindrops:{target}")
+
+        def _try_shader_path(self, name, state, can_use_fn, paint_fn, target, prep_fn=None):
+            calls.append(f"try:{name}")
+            assert state is self._raindrops
+            assert prep_fn is None
+            assert can_use_fn() is True
+            paint_fn(target)
+            return True
+
+    widget = _Widget()
+
+    monkeypatch.setattr(paint_module, "is_perf_metrics_enabled", lambda: False)
+    paint_module.paintGL_impl(widget)
+
+    assert calls == ["try:raindrops", "can:raindrops", "paint:raindrops:target"]
+
+
+def test_paint_impl_does_not_query_inactive_transition_methods(monkeypatch):
+    class _ReadyState:
+        def is_ready(self):
+            return True
+
+    class _Widget:
+        _frame_state = None
+        _gl_state = _ReadyState()
+        _blockspin = None
+        _blockflip = None
+        _raindrops = SimpleNamespace(progress=0.0)
+        _warp = None
+        _diffuse = None
+        _blinds = None
+        _crumble = None
+        _particle = None
+        _burn = None
+        _crossfade = None
+        _slide = None
+        _wipe = None
+
+        def rect(self):
+            return "target"
+
+        def _can_use_raindrops_shader(self):
+            return True
+
+        def _paint_raindrops_shader(self, _target):
+            pass
+
+        def _can_use_warp_shader(self):  # pragma: no cover - should never be touched
+            raise AssertionError("inactive warp capability was queried")
+
+        def _paint_warp_shader(self, _target):  # pragma: no cover - should never be touched
+            raise AssertionError("inactive warp paint was queried")
+
+        def _try_shader_path(self, name, state, can_use_fn, paint_fn, target, prep_fn=None):
+            assert name == "raindrops"
+            assert state is self._raindrops
+            assert can_use_fn() is True
+            paint_fn(target)
+            return True
+
+    monkeypatch.setattr(paint_module, "is_perf_metrics_enabled", lambda: False)
+    paint_module.paintGL_impl(_Widget())
+
+
 def test_pause_render_strategy_clears_stale_pending_update():
     calls: list[str] = []
 
