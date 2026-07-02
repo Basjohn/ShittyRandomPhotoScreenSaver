@@ -206,6 +206,10 @@ class SpotifyOverlayPerfWindow:
         return max(self.elapsed_ms / 1000.0, 0.001)
 
     @property
+    def set_state_fps(self) -> float:
+        return self.set_state_count / self.elapsed_seconds
+
+    @property
     def paint_fps(self) -> float:
         return self.paint_count / self.elapsed_seconds
 
@@ -426,6 +430,20 @@ class PerfHealthReport:
         return overpaint
 
     @property
+    def spotify_overlay_under_delivery_windows(self) -> list[SpotifyOverlayPerfWindow]:
+        """Visualizer overlay windows where the feed is healthy but display cadence is choppy."""
+        under_delivered: list[SpotifyOverlayPerfWindow] = []
+        for window in self.spotify_overlay_perf_windows:
+            if not window.visible or not window.enabled:
+                continue
+            target = float(self._target_fps_for_screen(window.screen))
+            if window.set_state_fps < max(target * 1.05, target + 5.0):
+                continue
+            if window.paint_fps < target * 0.85 or window.update_request_fps < target * 0.85:
+                under_delivered.append(window)
+        return under_delivered
+
+    @property
     def low_refresh_under_target(self) -> list[MetricWindow]:
         return [
             window
@@ -558,6 +576,11 @@ class PerfHealthReport:
             messages.append(
                 "spotify visualizer overlay overpainted beyond owner display target: "
                 f"{len(self.spotify_overlay_overpaint_windows)}"
+            )
+        if self.spotify_overlay_under_delivery_windows:
+            messages.append(
+                "spotify visualizer overlay under-delivered despite healthy feed: "
+                f"{len(self.spotify_overlay_under_delivery_windows)}"
             )
         if self.high_target_near_sixty:
             messages.append(
@@ -1227,6 +1250,7 @@ def main() -> int:
     print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
     print(f"Spotify topology events: {len(report.spotify_topology_events)}")
     print(f"Spotify overlay perf windows: {len(report.spotify_overlay_perf_windows)}")
+    print(f"Spotify overlay under-delivery windows: {len(report.spotify_overlay_under_delivery_windows)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
 
     _print_samples(
@@ -1242,6 +1266,11 @@ def main() -> int:
     _print_samples(
         "Spotify visualizer overlay overpaint windows",
         report.spotify_overlay_overpaint_windows,
+        args.max_samples,
+    )
+    _print_samples(
+        "Spotify visualizer overlay under-delivery windows",
+        report.spotify_overlay_under_delivery_windows,
         args.max_samples,
     )
     _print_samples("High-refresh near-60 windows", report.high_target_near_sixty, args.max_samples)

@@ -173,8 +173,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
         self._perf_last_log_ts: float = time.monotonic()
-        self._last_update_request_ts: float = 0.0
-        self._update_pending: bool = False
         
         # Active visualization mode
         self._vis_mode: str = coerce_visualizer_mode_id(initial_mode)
@@ -550,27 +548,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_geometry_change_count = 0
         self._perf_last_log_ts = now
 
-    def _owner_target_fps(self) -> int:
-        parent = self.parent()
-        for attr in ("_target_fps", "target_fps"):
-            value = getattr(parent, attr, None)
-            try:
-                fps = int(round(float(value)))
-            except Exception:
-                continue
-            if fps > 0:
-                return max(30, min(240, fps))
-        return 240
-
     def _request_frame_update(self, *, force: bool = False) -> None:
-        now = time.monotonic()
-        target_fps = self._owner_target_fps()
-        min_interval = 1.0 / float(target_fps)
-        due = (now - self._last_update_request_ts) >= (min_interval * 0.92)
-        if not force and (self._update_pending or not due):
-            return
-        self._update_pending = True
-        self._last_update_request_ts = now
+        del force
         self._perf_update_request_count += 1
         self.update()
 
@@ -1858,7 +1837,6 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # GLStateManager now tracks initialization state - no separate flag needed
 
     def paintGL(self) -> None:  # type: ignore[override]
-        self._update_pending = False
         self._perf_paint_count += 1
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)

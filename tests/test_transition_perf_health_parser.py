@@ -218,6 +218,29 @@ def test_perf_health_allows_spotify_overlay_near_owner_display_target():
     assert report.anomalies == []
 
 
+def test_perf_health_flags_spotify_overlay_under_delivery_despite_healthy_feed():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-02 20:19:16 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=428, wakeups=431, avg_fps=59.4, dt_min=13.60ms, "
+            "dt_max=33.51ms, stalls=0, pending_skips=3, target=60Hz, outcome=paused",
+            "2026-07-02 20:19:14 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=997 paint=400 update_requests=400 "
+            "geometry_changes=0 visible=True enabled=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_perf_windows) == 1
+    under_delivered = report.spotify_overlay_under_delivery_windows[0]
+    assert under_delivered.screen == 1
+    assert under_delivered.set_state_fps > 90.0
+    assert under_delivered.paint_fps < 45.0
+    assert under_delivered.update_request_fps < 45.0
+    assert report.spotify_overlay_overpaint_windows == []
+    assert any("overlay under-delivered" in anomaly for anomaly in report.anomalies)
+
+
 def test_perf_health_merges_perf_and_viz_sidecars_for_spotify_topology(tmp_path):
     perf_log = tmp_path / "screensaver_perf.log"
     viz_log = tmp_path / "screensaver_spotify_vis.log"
