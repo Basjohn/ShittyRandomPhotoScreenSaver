@@ -36,7 +36,7 @@ The four cards remain:
 | “Genericify the existing OAuth functionality.” | Do **not** generalise Gmail OAuth. The proposed Steam data path is a narrowly scoped Steam credential/API-key integration, not a Gmail-derived authentication framework. Any optional Steam identity/OpenID work is a separate future discovery item, not a prerequisite or a hidden dependency. |
 | One shared layer can own its own worker/timer machinery. | The shared Steam layer may own normalized data, in-flight request coalescing, cache records, and request policy. `ThreadManager`, `ResourceManager`, `SettingsManager`, `EventSystem`, `AnimationManager`, and existing service-widget helpers remain the owners of work, lifecycle, events, timing, and UI deferral. |
 | All cards can simply carry their own “local selection history.” | Semantic selection, cooldowns, dismissals, and rotations are **profile-level family state**, shared across displays. A runtime overlay instance owns only geometry, DPR-specific paint cache, and current applied view state. This prevents duplicate fetches and monitor-by-monitor drift. |
-| A fifth enabled field always creates a second rail. | That remains the preferred authored-card behaviour, but Custom geometry is authoritative. Under a committed Custom rectangle, lower-priority fields must collapse, truncate, or move to a permitted second rail; the widget must never take outer-size authority back. |
+| A fifth enabled field always creates a second rail. | Authored card layout decides whether enabled fields use a first rail, second rail, or compact authored presentation. `Custom` geometry only scales/moves the already-authored card and its elements; it must not decide how many enabled fields are shown, hide lower-priority content, or take outer-size authority back. |
 | Steam Progress can promise a general owned-library update feed. | It ships only after a documented, supported data source is proven against a real test account. No authenticated Store scraping, personalised Calendar dependency, cookies, or undocumented feed may become a fallback. |
 | Abandonment Issues can infer absence from playtime or Recent Games. | It may show a last-played age only when the source provenance says the timestamp is reliable for that app/profile. Unknown is a real state, not a value to estimate. |
 | Offline friends can always be shown desaturated. | Offline avatars are only meaningful in the explicit presentation/filter modes that include them. The default card remains “currently playing / observed game-change” content and does not silently turn unavailable friend data into an offline roster. |
@@ -625,9 +625,9 @@ The user-facing rule stays simple:
 - fields have a curated priority order;
 - disabled fields leave no holes;
 - authored cards may gain a second aligned rail for additional enabled fields;
-- Custom cards reflow within their committed rectangle.
+- Custom cards uniformly scale their authored card/elements within the committed rectangle.
 
-Implement the mechanism as a field budget rather than a rigid “always show eight fields” promise.
+Implement the mechanism as an authored field-layout budget rather than a rigid “always show eight fields” promise. The budget is owned by card settings and authored presentation rules, not by a committed `Custom` rectangle.
 
 For each card, define:
 
@@ -640,17 +640,17 @@ Supporting fields:
     priority
     min-width / min-height contribution
     allowed rail(s)
-    truncate/collapse policy
-    whether it may be omitted under tight Custom geometry
+    authored truncate/ellipsis policy
+    authored visibility rule
 ```
 
 Rules:
 
-- At normal authored geometry, fields 1–4 use a first rail; fields 5–8 use a second aligned rail where space permits.
-- Under narrow or short Custom geometry, the committed rectangle remains authoritative. The layout may shorten text, reduce supporting-field density, hide lower-priority optional fields, or use a compact badge form.
+- Authored field rules decide which enabled fields appear and whether fields 1–4 use a first rail while fields 5–8 use a second aligned rail or another compact authored presentation.
+- Under narrow or short Custom geometry, the committed rectangle remains authoritative as a uniform visual scale/placement contract. The card scales the authored slots and text together; it must not ellipsize more aggressively, reduce visible-field count, hide lower-priority enabled fields, or switch content policy because the Custom rect is smaller.
 - A card must not silently resize itself, alter its saved Custom rectangle, or initiate a second geometry authority because its content is verbose.
 - Under non-Custom authored positions, a preferred content size may change only through the ordinary widget lifecycle/stack planner. It must participate in shared authored stacking rather than privately shoving neighbouring cards.
-- Tiny impossible Custom sizes should show a deliberately compact/ellipsis state, not clip painter output outside the card.
+- Tiny impossible Custom sizes should still use the same authored content contract and scale safely inside the card, not clip painter output outside the card or remove enabled fields.
 - Settings preview uses deterministic mock view models; it never needs Steam data to prove layout.
 
 ### 7.4 Custom-layout rules
@@ -661,7 +661,7 @@ For every Steam card:
 - `Custom` is available only after the shared Custom-layout system has a real committed payload.
 - Live card geometry comes from the committed shared rectangle and must survive settings close, restart, display recreation, monitor transfer, and DPI changes.
 - The card receives committed geometry and updates only internal layout/paint cache.
-- Settings-side size-like controls that would conflict with the committed outer size are disabled via descriptor-owned lock metadata. Supporting-field toggles remain available because they reflow inside the card.
+- Settings-side size-like controls that would conflict with the committed outer size are disabled via descriptor-owned lock metadata. Supporting-field toggles remain authored content controls; Custom may scale their presentation but must not change whether enabled content is shown.
 - The regular “Disable Custom Mode” / authored-layout revert affordance must exist.
 - All monitor/display bounds and cross-display transfer logic remains in the shared Custom-layout contract.
 - There is no separate Steam raw-pixel geometry persistence.
@@ -1115,7 +1115,7 @@ Do not call it “started 12 minutes ago” unless the provider genuinely suppli
 | Mode | Default? | Behaviour |
 |---|---|---|
 | Single Rotating | Yes | One friend/game hero card. Rotation is cache-only and slow; default target is 15 minutes. |
-| Adaptive Grid | No | Internal grid of active friend avatars/game context, packed inside the card’s available rectangle. It has a hard visible cap and degrades gracefully under Custom. |
+| Adaptive Grid | No | Internal grid of active friend avatars/game context, packed inside the authored card layout. It has a hard authored visible cap; Custom scales the presentation without changing that cap. |
 | List | No | Compact rows with avatar, friend, and game. Reuses card field/ellipsis rules, not a new generic list-widget policy. |
 
 Offline avatars are desaturated only in an explicit mode/filter that admits offline/idle context. Default Single Rotating does not show an offline directory.
@@ -1312,7 +1312,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
   - [ ] missing artwork;
   - [ ] unavailable/private status;
   - [ ] first/second optional field rail;
-  - [ ] tight Custom geometry;
+  - [ ] tight Custom geometry with unchanged authored visible-field count;
   - [ ] DPR variants.
 - [ ] Integrate stable paint cache rules.
 - [ ] Add visual/pixmap safety tests.
@@ -1493,7 +1493,7 @@ Required bars:
 - [ ] per friend/game cooldown;
 - [ ] privacy/unavailable/partial state is not offline;
 - [ ] shared library marker only from known app-ID intersection;
-- [ ] Single/Grid/List caps and Custom reflow;
+- [ ] Single/Grid/List authored caps survive Custom scaling;
 - [ ] private selection/favourites excluded from export.
 
 `tests/test_steam_progress_widget.py`
@@ -1524,7 +1524,7 @@ Assert:
 - ring remains circular;
 - art remains clipped;
 - friend avatar overlap remains within card;
-- only allowed secondary fields drop under tight geometry;
+- Custom scaling does not change enabled-field count or authored caps;
 - no geometry mutation on dynamic content.
 
 ### 12.7 Manual runtime matrix

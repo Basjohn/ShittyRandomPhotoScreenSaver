@@ -32,6 +32,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Add shared Steam card painting/layout helpers without provider, asset, or timer ownership.
   - [ ] Define immutable mock card view models and fingerprints for all four cards.
   - [ ] Add deterministic render/layout bars for normal, long-title, missing-artwork, unavailable/private, tight `Custom`, and DPR cases.
+  - [ ] Prove `Custom` rects uniformly scale the authored card/elements and never decide visible-field count, rails, or content availability.
   - [ ] Prove constructors, `paintEvent`, and Settings preview do no Steam provider/cache/asset/credential work.
 
 ## Watchlist

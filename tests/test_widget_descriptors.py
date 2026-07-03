@@ -143,7 +143,7 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
 
     assert media.loader_module == "ui.tabs.widgets_tab_media"
     assert media.loader_name == "load_media_settings"
-    assert media.loader_guard_attrs == ("media_enabled", "vis_enabled_checkbox")
+    assert media.loader_guard_attrs == ("media_enabled",)
     assert gmail.loader_module == "ui.tabs.widgets_tab_gmail"
     assert gmail.loader_name == "load_gmail_settings"
     assert defaults.loader_module == "ui.tabs.widgets_tab_defaults"
@@ -250,12 +250,8 @@ def test_widget_lazy_dependency_indices_capture_media_visualizer_contract():
     descriptors = get_widget_settings_section_descriptors()
     index_map = get_widget_section_index_map(descriptors)
 
-    assert get_widget_lazy_dependency_indices(index_map["media"], descriptors) == (
-        index_map["visualizers"],
-    )
-    assert get_widget_lazy_dependency_indices(index_map["visualizers"], descriptors) == (
-        index_map["media"],
-    )
+    assert get_widget_lazy_dependency_indices(index_map["media"], descriptors) == ()
+    assert get_widget_lazy_dependency_indices(index_map["visualizers"], descriptors) == ()
 
 
 def test_widget_programmatic_dependency_indices_capture_media_visualizer_defaults_contract():
@@ -268,7 +264,6 @@ def test_widget_programmatic_dependency_indices_capture_media_visualizer_default
         index_map["media"],
     )
     assert get_widget_programmatic_dependency_indices(("visualizers",), descriptors) == (
-        index_map["media"],
         index_map["defaults"],
         index_map["visualizers"],
     )

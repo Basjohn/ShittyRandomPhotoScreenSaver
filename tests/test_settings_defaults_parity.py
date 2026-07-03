@@ -143,7 +143,7 @@ class TestDefaultsArtifactParity:
 
         assert canonical_visualizer["enabled"] is True
         assert snapshot_visualizer["mode"] == canonical_visualizer["mode"]
-        assert snapshot_visualizer["mode"] == "spectrum"
+        assert snapshot_visualizer["mode"] == "bubble"
         assert snapshot_visualizer["enabled"] is True
         assert snapshot_visualizer["bubble_gradient_direction"] == canonical_visualizer["bubble_gradient_direction"]
         assert snapshot_visualizer["bubble_gradient_semantics_version"] == canonical_visualizer[
