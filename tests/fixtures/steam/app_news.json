@@ -1,0 +1,18 @@
+{
+  "appnews": {
+    "appid": 730,
+    "newsitems": [
+      {
+        "gid": "fixture-news-1",
+        "title": "Fixture Update",
+        "url": "https://store.steampowered.com/news/app/730/view/fixture",
+        "is_external_url": false,
+        "author": "Steam",
+        "contents": "Short sanitized fixture item.",
+        "feedlabel": "steam_community_announcements",
+        "date": 1700000000
+      }
+    ],
+    "count": 1
+  }
+}

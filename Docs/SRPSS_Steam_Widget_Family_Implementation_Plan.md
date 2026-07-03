@@ -1,6 +1,6 @@
 # SRPSS Steam Widget Family — Architecture-Safe Implementation Plan
 
-**Status:** Revised implementation proposal  
+**Status:** Dev-gated implementation active
 **Date:** 2026-07-03  
 **Scope:** Four independently enabled Steam overlay cards: **Steam Progress**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.  
 **Repository target:** `Basjohn/ShittyRandomPhotoScreenSaver`  
@@ -81,7 +81,7 @@ These are product boundaries, not merely implementation preferences.
 | Shared service mechanics | `widgets/service_widget_runtime.py` | Use transition-aware deferral, fetch guards, manual-refresh flow, spinner suspension, visible-fallback preservation, startup freshness policy, and cleanup helpers where they fit. |
 | Framed-card rendering | `widgets/base_overlay_widget.py` | Use the standard framed-card base and painter-owned shadows. |
 | Service data notification | `core/events/event_system.py` | Publish narrowly scoped, generation/profile-aware data-ready events rather than calling arbitrary widget objects across modules. |
-| Diagnostics | `--perf`, `--cache`, `--set`, `--geo`, `--life` log families | Reuse existing channels. Do not introduce always-on Steam log chatter or environment-variable diagnostics. |
+| Diagnostics | `--perf`, `--cache`, `--set`, `--geo`, `--life`, `--steam` log families | Use `--steam` for Steam-family provider/cache/widget traces. Keep cross-cutting perf/cache/settings/geometry/lifecycle evidence in the existing sidecars. Do not introduce always-on Steam log chatter or environment-variable diagnostics. |
 
 ### 3.2 Classify the family correctly
 
@@ -1231,50 +1231,59 @@ Nothing in the product documentation should move from “conditional” to “av
 
 Each phase ends with a gate. Do not begin a later user-facing card merely because its mock UI looks good.
 
-## Phase 0 — Architecture and source discovery
+## Phase 0A — Local architecture gate and diagnostics
 
-- [ ] Read current `Spec.md`, `Index.md`, `Current_Plan.md`, `Docs/Guardrails.md`, `Docs/Defaults_Guide.md`, `Docs/TestSuite.md`, `Docs/Harness_Index.md`, and relevant Custom-layout traces before edits.
-- [ ] Add this Steam plan and create `Docs/Steam_Data_Feasibility.md`.
-- [ ] Confirm no existing Steam integration in source and document any discovered collision.
-- [ ] Decide exact supported provider endpoints/source contracts through controlled testing.
+- [x] Read current `Spec.md`, `Index.md`, `Current_Plan.md`, `Docs/Guardrails.md`, `Docs/TestSuite.md`, `Docs/Harness_Index.md`, and descriptor/service-widget contracts before edits.
+- [x] Keep this Steam plan aligned with the current descriptor/settings/service-widget architecture.
+- [x] Implement `--devsteam` as the single development visibility gate for all Steam descriptors, settings sections, factories, and runtime card creation.
+- [x] Extend descriptor activation with a central named dev-gate seam so Steam does not use environment-variable activation.
+- [x] Implement `--steam` as the Steam sidecar diagnostics flag, routed to `screensaver_steam.log`.
+- [x] Ensure `--devsteam` and `--steam` are ignored by screensaver mode parsing.
+- [x] Add bars proving Steam sidecar routing, central named-gate behavior, and parser filtering.
+
+**Gate:** Complete. Steam code may now be added behind `--devsteam`, but no Steam UI/provider/card should appear without that flag.
+
+## Phase 0B — Source discovery and evidence gate
+
+- [x] Add `Docs/Steam_Data_Feasibility.md`.
+- [x] Confirm no existing Steam integration in source and document any discovered collision.
+- [x] Decide exact supported provider endpoints/source contracts through official-source evidence and fixture-safe code metadata.
 - [ ] Produce synthetic, sanitized fixtures before real UI coding.
-- [ ] Decide source confidence/no-data matrix.
-- [ ] Confirm Abandonment last-played viability.
-- [ ] Confirm Progress source viability.
-- [ ] Implement CLI Gate for all of steam features using --devsteam .
-- [ ] Implement Steam Logging Sidecar --steam to use for all logging tasks where relevant going forward.
+- [x] Decide source confidence/no-data matrix.
+- [x] Confirm Abandonment last-played viability is not proven; smart Abandonment remains blocked.
+- [x] Confirm Progress source viability is partial only: bounded public app-news/focus-app pulse, not a personalized whole-library feed.
 
 **Gate:** Foundation source contract is explicit. Achievement Pulse may proceed only if library/recent/achievement data is proven. Abandonment and Progress remain blocked if their source gates are incomplete.
 
 ## Phase 1 — Security and storage foundation
 
-- [ ] Add `core/steam/credentials.py`.
-- [ ] Add strict encrypted-storage path using DPAPI with no plaintext fallback.
-- [ ] Use canonical user profile storage path.
-- [ ] Add atomic encrypted credential write/read/delete.
-- [ ] Add key/profile redaction helpers.
-- [ ] Add cache profile key derivation without exposing Steam ID.
-- [ ] Add `.gitignore` entries and secret-leak tests.
-- [ ] Define settings/SST redaction and preserve-on-import behavior.
-- [ ] Add disconnect/cache-clear semantics.
-- [ ] Add UI-safe credential test/save state machine.
+- [x] Add `core/steam/credentials.py`.
+- [x] Add strict encrypted-storage path using DPAPI with no plaintext fallback.
+- [x] Use canonical user profile storage path.
+- [x] Add atomic encrypted credential write/read/delete.
+- [x] Add key/profile redaction helpers.
+- [x] Add cache profile key derivation without exposing Steam ID.
+- [x] Add `.gitignore` entries and secret-leak tests.
+- [x] Define settings/SST redaction and preserve-on-import behavior.
+- [x] Add disconnect/cache-clear semantics.
+- [x] Add UI-safe credential test/save state machine.
 
 **Gate:** A sentinel key cannot be found in settings, defaults, snapshots, cache names, exports, logs, fixtures, or packaged resources. Strict encryption failure leaves no credential file.
 
 ## Phase 2 — Typed backend, cache, and assets
 
-- [ ] Add normalized frozen models/result statuses.
-- [ ] Add backend transport with timeouts, TLS verification, response size limits, redaction, and safe error classification.
-- [ ] Add profile/category/app-id keyed in-flight coalescing.
-- [ ] Add generation cancellation/drop rules.
-- [ ] Add versioned, atomic shared cache.
-- [ ] Add bounded backoff and authoritative-cache update rules.
-- [ ] Add profile-level policy state store for rotation/cooldowns/dismissals.
-- [ ] Add safe asset fetch/validation/index/eviction path.
-- [ ] Publish narrow `EventSystem` data updates.
-- [ ] Add mock backend injection for all card tests.
+- [x] Add normalized frozen models/result statuses.
+- [x] Add backend transport with timeouts, TLS verification, response size limits, redaction, and safe error classification.
+- [x] Add profile/category/app-id keyed in-flight coalescing.
+- [x] Add generation cancellation/drop rules.
+- [x] Add versioned, atomic shared cache.
+- [x] Add bounded backoff and authoritative-cache update rules beyond the current "failed result cannot freshen cache" foundation.
+- [x] Add profile-level policy state store for rotation/cooldowns/dismissals.
+- [x] Add safe asset fetch/validation/index/eviction path.
+- [x] Publish narrow `EventSystem` data updates.
+- [x] Add mock backend injection for all card tests.
 
-**Gate:** Backend can run from fixtures without Qt widgets, cache-first behavior is deterministic, and no invalid/error response overwrites valid cache.
+**Gate:** Complete. Backend can run from fixtures without Qt widgets, cache-first behavior is deterministic, stale-generation results are dropped, active backoff is explicit, and no invalid/error response overwrites valid cache.
 
 ## Phase 3 — Descriptor, factory, defaults, and Steam Settings skeleton
 
@@ -1371,7 +1380,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [ ] Verify non-repository cwd / packaged asset resolution.
 - [ ] Verify DPAPI storage, disconnect, import/export redaction, and cache purge manually.
 - [ ] Run multi-monitor Custom/edit-mode/stacking passes.
-- [ ] Run long idle/perf pass with `--perf --cache --set --geo --life` as relevant.
+- [ ] Run long idle/perf pass with `--devsteam --steam --perf --cache --set --geo --life` as relevant.
 - [ ] Update `Spec.md`, `Index.md`, `Docs/TestSuite.md`, `Docs/Contracts.md`, and this plan only where the implemented contract differs from the proposal.
 - [ ] Add a concise Current Plan entry only when work is actually selected; do not turn Current Plan into a historical changelog.
 
@@ -1543,6 +1552,8 @@ Assert:
 Use existing diagnostic flags rather than always-on logging:
 
 ```text
+--devsteam
+--steam
 --perf
 --cache
 --set

@@ -121,20 +121,22 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --set - Enable settings mutation/import/schema diagnostics
     - --life - Enable widget/worker/engine lifecycle diagnostics
     - --cache - Enable image-cache/prefetch/cache-authority diagnostics
+    - --steam - Enable Steam widget family diagnostics
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
+    - --devsteam - Enable dev-gated Steam widget family while in development
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
-        "--fresh", "-devblob", "--devcurve",
+        "--fresh", "-devblob", "--devcurve", "--devsteam",
     }
     args = [arg for arg in sys.argv if arg not in _filtered]
     
@@ -526,6 +528,7 @@ def main():
     settings_trace_mode = '--set' in sys.argv
     lifecycle_mode = '--life' in sys.argv
     cache_trace_mode = '--cache' in sys.argv
+    steam_trace_mode = '--steam' in sys.argv
     viz_diag_mode = viz_mode or '--viz-diagnostics' in sys.argv or '--viz-diag' in sys.argv
     setup_logging(
         debug=debug_mode,
@@ -537,6 +540,7 @@ def main():
         settings_trace=settings_trace_mode,
         lifecycle=lifecycle_mode,
         cache_trace=cache_trace_mode,
+        steam_trace=steam_trace_mode,
     )
     if fresh_result is not None:
         fresh_log_dir, fresh_deleted = fresh_result

@@ -13,6 +13,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(logger_mod, "_SETTINGS_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_LIFECYCLE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_CACHE_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_STEAM_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VERBOSE", False)
 
     logger_mod.setup_logging(
@@ -24,6 +25,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
         settings_trace=True,
         lifecycle=True,
         cache_trace=True,
+        steam_trace=True,
     )
 
     logging.getLogger("rendering.custom_layout_manager").info("[CUSTOM_LAYOUT] geometry trace")
@@ -32,6 +34,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.getLogger("engine.screensaver").info("[PERF] timing trace")
     logging.getLogger("core.process.supervisor").info("ProcessSupervisor initialized")
     logging.getLogger("engine.image_pipeline").info("[CACHE] cache authority trace")
+    logging.getLogger("core.steam.backend").info("[STEAM] provider trace")
 
     logging.shutdown()
 
@@ -42,6 +45,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert logger_mod.is_settings_logging_enabled() is True
     assert logger_mod.is_lifecycle_logging_enabled() is True
     assert logger_mod.is_cache_logging_enabled() is True
+    assert logger_mod.is_steam_logging_enabled() is True
 
     main_log = (tmp_path / "screensaver.log").read_text(encoding="utf-8")
     assert "[CUSTOM_LAYOUT] geometry trace" not in main_log
@@ -50,6 +54,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[PERF] timing trace" not in main_log
     assert "ProcessSupervisor initialized" not in main_log
     assert "[CACHE] cache authority trace" not in main_log
+    assert "[STEAM] provider trace" not in main_log
     assert "Specific logs available:" in main_log
     assert "Specific logs active:" in main_log
 
@@ -59,6 +64,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[PERF] timing trace" in (tmp_path / "screensaver_perf.log").read_text(encoding="utf-8")
     assert "ProcessSupervisor initialized" in (tmp_path / "screensaver_lifecycle.log").read_text(encoding="utf-8")
     assert "[CACHE] cache authority trace" in (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
+    assert "[STEAM] provider trace" in (tmp_path / "screensaver_steam.log").read_text(encoding="utf-8")
 
 
 def test_dedicated_family_suppress_filter_keeps_warning_in_main_log():
@@ -135,6 +141,7 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     monkeypatch.setattr(logger_mod, "_SETTINGS_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_LIFECYCLE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_CACHE_LOGGING_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_STEAM_LOGGING_ENABLED", False)
     monkeypatch.setenv("SRPSS_PERF_METRICS", "1")
     monkeypatch.setenv("SRPSS_VIZ_LOGGING", "1")
     monkeypatch.setenv("SRPSS_VIZ_DIAGNOSTICS", "1")
@@ -150,3 +157,4 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     assert logger_mod.is_geometry_logging_enabled() is False
     assert logger_mod.is_settings_logging_enabled() is False
     assert logger_mod.is_cache_logging_enabled() is False
+    assert logger_mod.is_steam_logging_enabled() is False

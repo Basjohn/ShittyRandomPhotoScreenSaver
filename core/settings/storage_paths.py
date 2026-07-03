@@ -17,6 +17,10 @@ Directory layout under the application data root::
     ├── state/
     │   └── feed_health.json
     └── logs/
+    └── steam/
+        ├── credentials.bin
+        ├── credential_meta.json
+        └── cache/
 """
 from __future__ import annotations
 
@@ -144,6 +148,32 @@ def get_state_dir(profile: Optional[str] = None) -> Path:
 def get_feed_health_file(profile: Optional[str] = None) -> Path:
     """Return ``<app_data>/state/feed_health.json``."""
     return get_state_dir(profile) / "feed_health.json"
+
+
+def get_steam_dir(profile: Optional[str] = None) -> Path:
+    """Return ``<app_data>/steam/`` for Steam credential/cache state."""
+    d = get_app_data_dir(profile) / "steam"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_steam_credentials_file(profile: Optional[str] = None) -> Path:
+    """Return the encrypted Steam credential payload path."""
+    return get_steam_dir(profile) / "credentials.bin"
+
+
+def get_steam_credential_meta_file(profile: Optional[str] = None) -> Path:
+    """Return the non-secret Steam credential metadata path."""
+    return get_steam_dir(profile) / "credential_meta.json"
+
+
+def get_steam_cache_dir(profile: Optional[str] = None, profile_key: str | None = None) -> Path:
+    """Return the Steam cache root or a hashed account-specific cache folder."""
+    d = get_steam_dir(profile) / "cache"
+    if profile_key:
+        d = d / profile_key
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 # ---------------------------------------------------------------------------

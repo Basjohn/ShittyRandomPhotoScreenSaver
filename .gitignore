@@ -96,6 +96,11 @@ id_ed25519
 **/*.creds
 **/*.enc
 **/*.pickle
+steam_credentials.local.json
+steam_secrets.local.json
+**/steam/credentials.bin
+**/steam/credential_meta.json
+**/steam/cache/
 
 # Git conflict leftovers
 .gitignore~

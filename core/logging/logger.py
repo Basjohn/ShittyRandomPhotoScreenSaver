@@ -62,6 +62,7 @@ _GEOMETRY_LOGGING_ENABLED: bool = False
 _SETTINGS_LOGGING_ENABLED: bool = False
 _LIFECYCLE_LOGGING_ENABLED: bool = False
 _CACHE_LOGGING_ENABLED: bool = False
+_STEAM_LOGGING_ENABLED: bool = False
 # Logging defaults to disabled for frozen builds unless explicitly enabled via
 # the general logging config file next to the executable.
 _LOGGING_DISABLED: bool = _IS_FROZEN
@@ -598,6 +599,30 @@ class CacheLogFilter(logging.Filter):
         return any(token in msg for token in self._MESSAGE_TOKENS)
 
 
+class SteamLogFilter(logging.Filter):
+    """Filter for Steam widget family diagnostics."""
+
+    _NAME_PREFIXES = (
+        "core.steam",
+        "widgets.steam",
+        "ui.tabs.widgets_tab_steam",
+    )
+    _MESSAGE_TOKENS = (
+        "[STEAM]",
+        "[STEAM_WIDGET]",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        name = str(getattr(record, "name", "") or "")
+        if any(name.startswith(prefix) for prefix in self._NAME_PREFIXES):
+            return True
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return any(token in msg for token in self._MESSAGE_TOKENS)
+
+
 class DedicatedFamilySuppressFilter(logging.Filter):
     """Suppress INFO/DEBUG records from a family when its sidecar log is active."""
 
@@ -839,6 +864,7 @@ def setup_logging(
     settings_trace: bool = False,
     lifecycle: bool = False,
     cache_trace: bool = False,
+    steam_trace: bool = False,
 ) -> None:
     """
     Configure application logging with file rotation.
@@ -856,10 +882,11 @@ def setup_logging(
         settings_trace: Enables settings mutation/import/schema sidecar diagnostics.
         lifecycle: Enables widget/worker/engine lifecycle sidecar diagnostics.
         cache_trace: Enables image-cache/prefetch/cache-authority sidecar diagnostics.
+        steam_trace: Enables Steam widget family sidecar diagnostics.
     """
     global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
-    global _CACHE_LOGGING_ENABLED
+    global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
 
     debug_enabled = debug or verbose
@@ -917,6 +944,8 @@ def setup_logging(
         _LIFECYCLE_LOGGING_ENABLED = True
     if cache_trace:
         _CACHE_LOGGING_ENABLED = True
+    if steam_trace:
+        _STEAM_LOGGING_ENABLED = True
 
     logging_disabled = _determine_logging_disabled(exe_path_valid)
     global _LOGGING_DISABLED
@@ -992,6 +1021,7 @@ def setup_logging(
     main_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     main_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
+    main_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
     main_handler.addFilter(WidgetPerfVisibilityFilter())
     
     console_handler = SuppressingStreamHandler(sys.stdout)
@@ -1015,6 +1045,7 @@ def setup_logging(
     console_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
     console_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
+    console_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
     console_handler.addFilter(WidgetPerfVisibilityFilter())
     
     # Configure root logger
@@ -1128,6 +1159,19 @@ def setup_logging(
         cache_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
         cache_handler.addFilter(CacheLogFilter())
         root_logger.addHandler(cache_handler)
+
+    if _STEAM_LOGGING_ENABLED:
+        steam_log_file = log_dir / "screensaver_steam.log"
+        steam_handler = DeduplicatingRotatingFileHandler(
+            steam_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        steam_handler.setFormatter(formatter)
+        steam_handler.setLevel(logging.DEBUG if debug_enabled else logging.INFO)
+        steam_handler.addFilter(SteamLogFilter())
+        root_logger.addHandler(steam_handler)
     
     # Verbose debug log - captures ALL DEBUG/INFO with deduplication.
     # This is the "messy" log for deep debugging when console suppression
@@ -1155,6 +1199,7 @@ def setup_logging(
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(SettingsLogFilter(), is_settings_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(LifecycleLogFilter(), is_lifecycle_logging_enabled))
         verbose_handler.addFilter(DedicatedFamilySuppressFilter(CacheLogFilter(), is_cache_logging_enabled))
+        verbose_handler.addFilter(DedicatedFamilySuppressFilter(SteamLogFilter(), is_steam_logging_enabled))
         root_logger.addHandler(verbose_handler)
 
     # Tame particularly noisy third-party libraries so their DEBUG-level
@@ -1228,7 +1273,7 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
@@ -1237,9 +1282,10 @@ def setup_logging(
         _SETTINGS_LOGGING_ENABLED,
         _LIFECYCLE_LOGGING_ENABLED,
         _CACHE_LOGGING_ENABLED,
+        _STEAM_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log"
+        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
@@ -1254,6 +1300,8 @@ def setup_logging(
         active_specific_logs.append("life=screensaver_lifecycle.log")
     if _CACHE_LOGGING_ENABLED:
         active_specific_logs.append("cache=screensaver_cache.log")
+    if _STEAM_LOGGING_ENABLED:
+        active_specific_logs.append("steam=screensaver_steam.log")
     if active_specific_logs:
         root_logger.info("Specific logs active: %s", ", ".join(active_specific_logs))
     root_logger.info("=" * 60)
@@ -1474,3 +1522,9 @@ def is_cache_logging_enabled() -> bool:
     """Return True when cache/prefetch diagnostics are enabled."""
 
     return _CACHE_LOGGING_ENABLED
+
+
+def is_steam_logging_enabled() -> bool:
+    """Return True when Steam widget family diagnostics are enabled."""
+
+    return _STEAM_LOGGING_ENABLED

@@ -49,6 +49,15 @@ def test_parse_screensaver_args_ignores_noupdates_flag(monkeypatch) -> None:
     assert preview_hwnd is None
 
 
+def test_parse_screensaver_args_ignores_steam_dev_and_trace_flags(monkeypatch) -> None:
+    monkeypatch.setattr(main.sys, "argv", ["main.py", "--devsteam", "--steam", "/c"])
+
+    mode, preview_hwnd = main.parse_screensaver_args()
+
+    assert mode is main.ScreensaverMode.CONFIG
+    assert preview_hwnd is None
+
+
 def test_is_frozen_build_detects_srpss_executable_without_sys_frozen(monkeypatch) -> None:
     monkeypatch.setattr(main.sys, "frozen", False, raising=False)
     monkeypatch.setattr(main.sys, "executable", r"C:\Windows\System32\SRPSS.scr")

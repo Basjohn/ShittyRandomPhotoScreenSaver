@@ -37,6 +37,16 @@ Keep these regression-focused files discoverable and up to date when their bug f
 
 - `tests/test_settings_manager.py`
   Settings cache invalidation, section/root writes, legacy alias migration, visualizer schema version-gating, reset-to-defaults profile overrides, SST replace-import semantics, and bulk-mutation stale-cache prevention.
+- `tests/test_steam_credentials.py`
+  Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
+- `tests/test_steam_backend.py`
+  Steam-family source metadata and fixture-safe backend transport: publisher-only endpoint exclusion, user-key/profile redaction, public app-news endpoint shape, HTTP privacy/rate-limit classification, injected fake opener usage, and no live Steam calls.
+- `tests/test_steam_cache.py`
+  Steam-family versioned atomic cache behavior: opaque profile cache paths, source-provenanced read/write, failed-result no-write/no-freshen contract, success-result persistence, and corrupt-cache quarantine as a loud non-authoritative failure.
+- `tests/test_steam_request_policy.py`
+  Steam-family request identity/coalescing, generation-aware stale-result drops, joined-handle completion rejection, and bounded per-request backoff.
+- `tests/test_steam_profile_assets_events.py`
+  Steam-family profile policy-state persistence, corrupt-state quarantine, asset host/signature validation, fixture backend injection, and narrow non-secret `EventSystem` publication.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`

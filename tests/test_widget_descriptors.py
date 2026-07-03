@@ -3,6 +3,8 @@ from __future__ import annotations
 from core.settings.defaults import get_default_settings
 from rendering.widget_descriptors import (
     CUSTOM_POSITION_OPTION_LABEL,
+    FactoryWidgetDescriptor,
+    WidgetSettingsSectionDescriptor,
     apply_widget_section_save_results,
     build_widget_section_buttons,
     build_widget_stack_preview_config,
@@ -46,6 +48,47 @@ from rendering.widget_descriptors import (
     widget_writes_custom_position_key,
 )
 from PySide6.QtWidgets import QButtonGroup
+from core.dev_gates import force_gate, is_steam_enabled
+
+
+def test_steam_dev_gate_is_cli_owned_and_test_overridable():
+    prior_steam_gate = is_steam_enabled()
+    try:
+        force_gate(steam=False)
+        assert is_steam_enabled() is False
+        force_gate(steam=True)
+        assert is_steam_enabled() is True
+    finally:
+        force_gate(steam=prior_steam_gate)
+
+
+def test_widget_descriptors_accept_named_steam_dev_gate():
+    prior_steam_gate = is_steam_enabled()
+    try:
+        factory_descriptor = FactoryWidgetDescriptor(
+            settings_key="steam_progress",
+            attr_name="steam_progress_widget",
+            factory_name="steam_progress",
+            dev_feature_gate="steam",
+        )
+        section_descriptor = WidgetSettingsSectionDescriptor(
+            section_id="steam",
+            button_label="Steam",
+            button_attr_name="_btn_steam",
+            container_attr_name="_steam_container",
+            method_name="build_steam_ui",
+            dev_feature_gate="steam",
+        )
+
+        force_gate(steam=False)
+        assert factory_descriptor.is_enabled_in_environment() is False
+        assert section_descriptor.is_enabled_in_environment() is False
+
+        force_gate(steam=True)
+        assert factory_descriptor.is_enabled_in_environment() is True
+        assert section_descriptor.is_enabled_in_environment() is True
+    finally:
+        force_gate(steam=prior_steam_gate)
 
 
 def test_clock_descriptor_builds_expected_factory_kwargs():

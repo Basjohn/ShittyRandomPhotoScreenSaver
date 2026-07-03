@@ -1,0 +1,19 @@
+{
+  "response": {
+    "total_count": 2,
+    "games": [
+      {
+        "appid": 730,
+        "name": "Fixture Strike",
+        "playtime_2weeks": 42,
+        "playtime_forever": 1200
+      },
+      {
+        "appid": 570,
+        "name": "Fixture Defense",
+        "playtime_2weeks": 12,
+        "playtime_forever": 850
+      }
+    ]
+  }
+}

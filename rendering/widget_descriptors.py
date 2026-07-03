@@ -12,6 +12,7 @@ from importlib import import_module
 import os
 from typing import Any, Callable, Dict, Mapping
 
+from core.dev_gates import gate_signature, is_named_gate_enabled
 from PySide6.QtWidgets import QButtonGroup, QPushButton
 from core.settings.defaults import get_default_settings
 from rendering.custom_layout_contract import (
@@ -43,7 +44,14 @@ def _descriptor_env_signature() -> tuple[tuple[str, str | None], ...]:
     """Return the relevant environment signature for descriptor activation."""
 
     env_names = ("SRPSS_ENABLE_DEV",)
-    return tuple((name, os.getenv(name)) for name in env_names)
+    signature: list[tuple[str, str | None]] = [
+        (name, os.getenv(name)) for name in env_names
+    ]
+    signature.extend(
+        (f"gate:{name}", "true" if enabled else "false")
+        for name, enabled in gate_signature()
+    )
+    return tuple(signature)
 
 
 @dataclass(frozen=True)
@@ -63,9 +71,12 @@ class FactoryWidgetDescriptor:
     factory_shadows_kwarg: bool = False
     inject_shadows_into_config: bool = False
     dev_feature_env: str | None = None
+    dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
         """Return whether this descriptor is active in the current environment."""
+        if self.dev_feature_gate:
+            return is_named_gate_enabled(self.dev_feature_gate)
         if not self.dev_feature_env:
             return True
         return os.getenv(self.dev_feature_env, "false").lower() == "true"
@@ -229,8 +240,11 @@ class WidgetSettingsSectionDescriptor:
     default_selected: bool = False
     method_name: str | None = None
     dev_feature_env: str | None = None
+    dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
+        if self.dev_feature_gate:
+            return is_named_gate_enabled(self.dev_feature_gate)
         if not self.dev_feature_env:
             return True
         return os.getenv(self.dev_feature_env, "false").lower() == "true"
@@ -1118,8 +1132,11 @@ class WidgetRuntimeDescriptor:
     writes_custom_position_key: bool = True
     writes_custom_monitor_key: bool = True
     dev_feature_env: str | None = None
+    dev_feature_gate: str | None = None
 
     def is_enabled_in_environment(self) -> bool:
+        if self.dev_feature_gate:
+            return is_named_gate_enabled(self.dev_feature_gate)
         if not self.dev_feature_env:
             return True
         return os.getenv(self.dev_feature_env, "false").lower() == "true"

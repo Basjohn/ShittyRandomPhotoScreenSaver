@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict
 
 from core.logging.logger import get_logger
+from core.steam.credentials import strip_secret_fields as strip_steam_secret_fields
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 if TYPE_CHECKING:
@@ -31,6 +32,16 @@ def _normalize_widgets_mapping(widgets_map: Mapping[str, Any]) -> Dict[str, Any]
             apply_preset_overlay=False,
         )
     return widgets_dict
+
+
+def _strip_steam_secrets_from_snapshot(snapshot: Mapping[str, Any]) -> Dict[str, Any]:
+    cleaned, removed = strip_steam_secret_fields(snapshot)
+    if removed:
+        logger.warning(
+            "[SETTINGS][STEAM] Stripped %d Steam credential field(s) from settings snapshot",
+            removed,
+        )
+    return cleaned
 
 
 def export_to_sst(mgr: "SettingsManager", path: str) -> bool:
@@ -70,6 +81,8 @@ def export_to_sst(mgr: "SettingsManager", path: str) -> bool:
                     container[subkey] = value
                 else:
                     snapshot[key] = value
+
+            snapshot = _strip_steam_secrets_from_snapshot(snapshot)
 
         app_name = getattr(mgr, "_application", "Screensaver")
 
@@ -141,7 +154,8 @@ def import_from_sst(mgr: "SettingsManager", path: str, merge: bool = True) -> bo
         logger.warning("Settings snapshot root is not a mapping: %r", type(root))
         return False
 
-    normalized_root = normalize_sst_snapshot(root)
+    stripped_root = _strip_steam_secrets_from_snapshot(root)
+    normalized_root = normalize_sst_snapshot(stripped_root)
 
     try:
         with mgr._lock:
@@ -245,7 +259,8 @@ def preview_import_from_sst(mgr: "SettingsManager", path: str, merge: bool = Tru
         logger.warning("Settings snapshot root is not a mapping for preview: %r", type(root))
         return {}
 
-    normalized_root = normalize_sst_snapshot(root)
+    stripped_root = _strip_steam_secrets_from_snapshot(root)
+    normalized_root = normalize_sst_snapshot(stripped_root)
 
     diffs: Dict[str, Any] = {}
 

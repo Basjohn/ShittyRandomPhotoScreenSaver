@@ -16,7 +16,19 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-No active implementation task is currently queued. Await the next selected proposal.
+### Steam Widget Family, Dev-Gated Foundation
+
+- [x] Foundation gates complete:
+  - [x] `--devsteam` / `--steam` gate and sidecar routing are in place.
+  - [x] Steam credentials use strict DPAPI-only storage with SST/settings secret stripping.
+  - [x] Steam source feasibility is documented in `Docs/Steam_Data_Feasibility.md`.
+  - [x] Phase 2 backend/cache scaffolding is fixture-safe, generation-aware, backoff-aware, and asset-cache guarded.
+- [ ] Phase 3 descriptor/default/settings skeleton:
+  - [ ] Add four descriptor-owned factory entries behind `--devsteam`.
+  - [ ] Add canonical defaults for the four Steam cards and shared Steam preferences.
+  - [ ] Add one lazy Steam Settings section shell with Connection & Privacy plus four card groups.
+  - [ ] Confirm general Settings opening performs no Steam credential decrypt, cache scan, provider request, or asset fetch.
+  - [ ] Confirm disabled mock Steam cards create/reuse/remove through normal descriptors only.
 
 ## Watchlist
 
@@ -30,6 +42,7 @@ No active implementation task is currently queued. Await the next selected propo
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
 - [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.
 - [ ] Media metadata preservation during live visualizer preset churn: if it reopens, first suspect partial same-track playback snapshots during visualizer-only settings writes.
+- [ ] Steam widget family remains production-hidden until the user explicitly promotes it beyond `--devsteam`.
 
 ## Deferred / Not Active
 
