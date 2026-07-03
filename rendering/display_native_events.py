@@ -13,11 +13,12 @@ import logging
 import sys
 from typing import Optional, TYPE_CHECKING
 
-from PySide6.QtCore import QTimer, Qt, QEvent
+from PySide6.QtCore import Qt, QEvent
 from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import QWidget, QApplication
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.display_widget import (
     DisplayWidget,
@@ -332,7 +333,7 @@ def _dispatch_media_vk_feedback(widget, vk_code: int) -> None:
             try:
                 mute_btn = getattr(widget, "mute_button_widget", None)
                 if mute_btn is not None and hasattr(mute_btn, "poll_mute_state"):
-                    QTimer.singleShot(80, mute_btn.poll_mute_state)
+                    ThreadManager.single_shot(80, mute_btn.poll_mute_state)
             except Exception:
                 pass
         return

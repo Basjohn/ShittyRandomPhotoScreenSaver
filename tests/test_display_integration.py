@@ -1768,6 +1768,8 @@ class TestRegressionGuards:
 
         targets = (
             DisplayManager.initialize_displays,
+            DisplayManager.wait_for_all_displays_ready,
+            DisplayManager.flush_deferred_reddit_urls,
             engine_handlers.on_settings_requested,
         )
         for target in targets:
@@ -1780,6 +1782,35 @@ class TestRegressionGuards:
                             f"Found processEvents() call in {target.__qualname__}; "
                             "display/settings rebuild paths must not pump arbitrary UI work."
                         )
+
+    def test_lifecycle_widget_delays_use_thread_manager_not_raw_qtimer(self):
+        import engine.screensaver_engine as screensaver_engine
+        import rendering.display_input as display_input
+        import rendering.display_native_events as display_native_events
+        import rendering.widget_manager as widget_manager
+        import widgets.base_overlay_widget as base_overlay_widget
+        import widgets.cursor_halo as cursor_halo
+        import widgets.media_layout as media_layout
+
+        targets = (
+            screensaver_engine.ScreensaverEngine._schedule_startup_first_image_retry,
+            display_input.handle_mousePressEvent,
+            display_native_events._dispatch_media_vk_feedback,
+            widget_manager.WidgetManager._schedule_spotify_secondary_fades,
+            widget_manager.WidgetManager.register_spotify_secondary_fade,
+            widget_manager.WidgetManager._register_spotify_secondary_fade,
+            base_overlay_widget.BaseOverlayWidget._schedule_parent_stacking_recalc,
+            cursor_halo.CursorHaloWidget.move_to,
+            media_layout._defer_update_position,
+        )
+        for target in targets:
+            source = textwrap.dedent(inspect.getsource(target))
+            assert "QTimer.singleShot" not in source, (
+                f"{target.__qualname__} must use ThreadManager.single_shot for delayed runtime work"
+            )
+            assert "ThreadManager.single_shot" in source, (
+                f"{target.__qualname__} should keep delayed runtime work on the managed scheduler seam"
+            )
 
     def test_showfullscreen_not_deferred(self, qt_app, thread_manager):
         widget = DisplayWidget(0, DisplayMode.FILL, None, thread_manager=thread_manager)

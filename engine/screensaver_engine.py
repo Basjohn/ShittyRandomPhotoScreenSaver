@@ -977,7 +977,7 @@ class ScreensaverEngine(QObject):
             )
             self._schedule_startup_first_image_retry(attempt + 1)
 
-        QTimer.singleShot(delay_ms, _retry)
+        ThreadManager.single_shot(delay_ms, _retry)
     
     def _load_image_via_worker(
         self,

@@ -833,9 +833,9 @@ class DisplayManager(QObject):
                     logger.warning(f"[SYNC] Timeout waiting for displays: {len(ready_set)}/{expected_count} ready after {elapsed:.2f}s")
                     return False
                 
-                # Pump UI events while waiting (keeps UI responsive)
-                from PySide6.QtCore import QCoreApplication
-                QCoreApplication.processEvents()
+                # Do not pump arbitrary Qt events here; synchronized transition
+                # readiness must not become a UI-pressure escape hatch.
+                time.sleep(0.001)
         
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"[SYNC] All {expected_count} displays ready in {elapsed_ms:.1f}ms")
@@ -998,12 +998,7 @@ class DisplayManager(QObject):
             return
 
         if ensure_widgets_dismissed:
-            try:
-                app = QGuiApplication.instance()
-                if app is not None:
-                    app.processEvents()
-            except Exception:
-                logger.debug("[REDDIT] processEvents failed before flush", exc_info=True)
+            logger.debug("[REDDIT] Deferred flush requested after widget dismissal; no UI event pump required")
 
         logger.info("[REDDIT] Deferred URL flush started (count=%d)", len(urls))
 

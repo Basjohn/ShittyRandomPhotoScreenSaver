@@ -18,7 +18,7 @@ import os
 import time
 from typing import Optional
 
-from PySide6.QtCore import Qt, QPointF, QRectF, QElapsedTimer, QTimer
+from PySide6.QtCore import Qt, QPointF, QRectF, QElapsedTimer
 from PySide6.QtGui import (
     QColor,
     QMouseEvent,
@@ -35,6 +35,7 @@ from shiboken6 import Shiboken
 from core.animation.animator import AnimationManager
 from core.animation.types import EasingCurve
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.threading.manager import ThreadManager
 from rendering.multi_monitor_coordinator import get_coordinator
 
 logger = get_logger(__name__)
@@ -617,7 +618,7 @@ class CursorHaloWidget(QWidget):
                 return
             self._move_internal(pending[0], pending[1])
 
-        QTimer.singleShot(0, _flush)
+        ThreadManager.single_shot(0, _flush)
 
     # --- Helpers ---------------------------------------------------------
 

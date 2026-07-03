@@ -232,9 +232,9 @@ class WidgetManager:
                 if delay_ms <= 0:
                     starter()
                 else:
-                    QTimer.singleShot(delay_ms, starter)
+                    ThreadManager.single_shot(delay_ms, starter)
             except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule queued starter", exc_info=True)
                 try:
                     starter()
                 except Exception as inner:
@@ -2276,9 +2276,9 @@ class WidgetManager:
                 direct_delay_ms,
             )
             try:
-                QTimer.singleShot(direct_delay_ms, starter)
+                ThreadManager.single_shot(direct_delay_ms, starter)
             except Exception as e:
-                logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+                logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule direct starter", exc_info=True)
                 try:
                     starter()
                 except Exception as inner:
@@ -2303,9 +2303,9 @@ class WidgetManager:
             direct_delay_ms,
         )
         try:
-            QTimer.singleShot(direct_delay_ms, starter)
+            ThreadManager.single_shot(direct_delay_ms, starter)
         except Exception as e:
-            logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
+            logger.warning("[SPOTIFY_SECONDARY][FALLBACK] Failed to schedule compositor-ready starter", exc_info=True)
             try:
                 starter()
             except Exception as inner:
@@ -2477,7 +2477,7 @@ class WidgetManager:
                         attempt + 1,
                         delay_ms,
                     )
-                QTimer.singleShot(delay_ms, lambda: _starter(attempt + 1))
+                ThreadManager.single_shot(delay_ms, _starter, attempt + 1)
                 return
 
             if not anchor_visible and is_perf_metrics_enabled():

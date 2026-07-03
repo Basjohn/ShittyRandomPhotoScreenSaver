@@ -14,6 +14,7 @@ from PySide6.QtCore import QTimer, Qt, QPoint
 from PySide6.QtGui import QGuiApplication, QMouseEvent
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from rendering.custom_layout_manager import CustomLayoutManager
 from widgets.cursor_halo import CursorHaloWidget
 
@@ -480,7 +481,7 @@ def handle_mousePressEvent(widget, event: QMouseEvent) -> None:
                                 logger.debug("[REDDIT] MC mode: browser foreground attempted")
                             except Exception as e:
                                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-                        QTimer.singleShot(800, _bring_browser_foreground_mc)
+                        ThreadManager.single_shot(800, _bring_browser_foreground_mc)
                 
             defer_focus_restore = False
             try:

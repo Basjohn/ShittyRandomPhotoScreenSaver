@@ -426,8 +426,11 @@ class TestStartupCoordination:
 
         scheduled: list[int] = []
         monkeypatch.setattr(
-            "rendering.widget_manager.QTimer.singleShot",
-            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+            "rendering.widget_manager.ThreadManager.single_shot",
+            lambda delay_ms, starter, *args, **kwargs: (
+                scheduled.append(int(delay_ms)),
+                starter(*args, **kwargs),
+            ),
         )
         prewarm_calls: list[str] = []
         monkeypatch.setattr(
@@ -464,8 +467,11 @@ class TestStartupCoordination:
 
         scheduled: list[int] = []
         monkeypatch.setattr(
-            "rendering.widget_manager.QTimer.singleShot",
-            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+            "rendering.widget_manager.ThreadManager.single_shot",
+            lambda delay_ms, starter, *args, **kwargs: (
+                scheduled.append(int(delay_ms)),
+                starter(*args, **kwargs),
+            ),
         )
         prewarm_calls: list[str] = []
         monkeypatch.setattr(
@@ -496,8 +502,11 @@ class TestStartupCoordination:
 
         scheduled: list[int] = []
         monkeypatch.setattr(
-            "rendering.widget_manager.QTimer.singleShot",
-            lambda delay_ms, starter: scheduled.append(int(delay_ms)),
+            "rendering.widget_manager.ThreadManager.single_shot",
+            lambda delay_ms, starter, *args, **kwargs: (
+                scheduled.append(int(delay_ms)),
+                starter(*args, **kwargs),
+            ),
         )
         monkeypatch.setattr(
             manager,

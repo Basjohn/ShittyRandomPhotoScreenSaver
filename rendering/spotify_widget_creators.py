@@ -901,8 +901,8 @@ def create_spotify_volume_widget(
             logger.debug("[WIDGET_MANAGER] Exception suppressed: %s", e)
 
         mgr.register_widget("spotify_volume", vol)
-        # Add to expected overlays so it participates in coordinated fade
-        mgr.add_expected_overlay("spotify_volume")
+        # Spotify volume is a media-anchored secondary-stage overlay. It must
+        # not block the primary compositor-ready fade gate.
         mgr._bind_parent_attribute("spotify_volume_widget", vol)
         if is_perf_metrics_enabled():
             logger.info(
@@ -910,7 +910,7 @@ def create_spotify_volume_widget(
                 screen_index,
                 media_monitor_sel,
             )
-        logger.debug("Spotify volume widget created, will start with coordinated fade")
+        logger.debug("Spotify volume widget created, will start with Spotify secondary fade")
         return vol
     except Exception as e:
         logger.error("Failed to create Spotify volume widget: %s", e, exc_info=True)
@@ -1288,7 +1288,8 @@ def create_mute_button_widget(
             btn.set_colors(bg_qcolor, border_qcolor, icon_qcolor)
 
         mgr.register_widget("mute_button", btn)
-        mgr.add_expected_overlay("mute_button")
+        # Mute button is media-anchored secondary-stage UI and must not block
+        # the primary compositor-ready fade gate.
         mgr._bind_parent_attribute("mute_button_widget", btn)
         logger.debug("[MUTE_BTN] Created mute button widget (screen=%s)", screen_index)
         return btn

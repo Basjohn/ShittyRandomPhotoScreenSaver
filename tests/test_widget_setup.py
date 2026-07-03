@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from types import SimpleNamespace
 
 from rendering import display_overlays
@@ -8,7 +9,7 @@ from rendering.widget_setup import compute_expected_overlays
 from widgets.shadow_utils import ShadowFadeProfile
 
 
-def test_compute_expected_overlays_excludes_visualizer_from_primary_wave():
+def test_compute_expected_overlays_excludes_spotify_dependents_from_primary_wave():
     display = SimpleNamespace(screen_index=0)
     widgets_config = {
         "media": {
@@ -26,8 +27,19 @@ def test_compute_expected_overlays_excludes_visualizer_from_primary_wave():
     expected = compute_expected_overlays(display, widgets_config)
 
     assert "media" in expected
-    assert "spotify_volume" in expected
+    assert "spotify_volume" not in expected
     assert "spotify_visualizer" not in expected
+
+
+def test_spotify_secondary_creators_do_not_join_primary_expected_overlays():
+    from rendering.spotify_widget_creators import (
+        create_mute_button_widget,
+        create_spotify_volume_widget,
+    )
+
+    for creator in (create_spotify_volume_widget, create_mute_button_widget):
+        source = inspect.getsource(creator)
+        assert "add_expected_overlay" not in source
 
 
 def test_compute_expected_overlays_treats_reddit_master_toggle_as_family_gate():
@@ -64,16 +76,17 @@ def test_start_overlay_fades_uses_deliberate_primary_and_secondary_startup_delay
     )
 
     scheduled: list[int] = []
-    original_single_shot = display_overlays.QTimer.singleShot
+    original_single_shot = display_overlays.ThreadManager.single_shot
 
-    def _fake_single_shot(delay_ms, starter):
+    def _fake_single_shot(delay_ms, starter, *args, **kwargs):
         scheduled.append(int(delay_ms))
+        starter(*args, **kwargs)
 
-    display_overlays.QTimer.singleShot = staticmethod(_fake_single_shot)
+    display_overlays.ThreadManager.single_shot = staticmethod(_fake_single_shot)
     try:
         display_overlays.start_overlay_fades(widget)
     finally:
-        display_overlays.QTimer.singleShot = original_single_shot
+        display_overlays.ThreadManager.single_shot = original_single_shot
 
     expected_secondary_delay = get_overlay_startup_fade_policy().spotify_secondary_startup_delay_ms
 

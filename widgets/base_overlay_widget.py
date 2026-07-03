@@ -19,7 +19,7 @@ from abc import abstractmethod
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt, QTimer
+from PySide6.QtCore import QPoint, QRect, QRectF, QSize, Signal, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QLabel, QWidget
 try:
@@ -968,7 +968,7 @@ class BaseOverlayWidget(QLabel):
                 logger.debug("[STACK] Parent stacking recalculation failed", exc_info=True)
 
         try:
-            QTimer.singleShot(0, _run)
+            ThreadManager.single_shot(0, _run)
         except Exception:
             self._stack_recalc_pending = False
             logger.debug("[STACK] Failed to schedule parent stacking recalculation", exc_info=True)

@@ -5,7 +5,7 @@ Last updated: 2026-07-03
 ## Priority Guidance
 
 - Promote only when the item blocks active runtime-health work or has fresh log evidence.
-- The two remaining `processEvents()` seams are the highest-value cleanup candidate, but only after targeted bars prove exit/browser routing and transition synchronization do not regress.
+- Remaining direct `QTimer.singleShot` sites are mostly UI-local polish/debounce helpers; promote only if fresh evidence ties one to lifecycle, widget startup, settings return, or runtime churn.
 - Stale exported settings examples are documentation hygiene, not runtime risk; batch with a defaults/doc refresh rather than interrupting active lifecycle/perf work.
 - Compatibility-shell cleanup should remain low priority unless it causes import/runtime ambiguity.
 
@@ -17,6 +17,5 @@ Low-priority cleanup items discovered during unrelated work. These are not activ
 - [ ] Classify and either track or retire the `Imgur` overlay-raise TODO in [widgets/imgur/widget.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/widgets/imgur/widget.py).
 - [ ] Revisit [rendering/gl_compositor_pkg/__init__.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/gl_compositor_pkg/__init__.py) and decide whether it should remain a clearly quarantined compatibility shell or be folded into a cleaner package-facing contract.
 - [ ] Retire or quarantine [rendering/render_strategy.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/render_strategy.py). Current `rg` shows no live imports/callers, but the file still contains an old busy-wait timer loop and a separate update-queue helper; remove it only with a caller grep/bar so dynamic import assumptions do not regress.
-- [ ] Replace or retire the two remaining production `processEvents()` seams that were not part of the active settings/display-rebuild perf fix: the unused synchronized-transition wait loop in [engine/display_manager.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/engine/display_manager.py) and the Reddit exit URL-dismissal safety path in [engine/display_manager.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/engine/display_manager.py). Any removal needs targeted bars because UI pressure is forbidden, but exit/browser routing must not regress.
-- [ ] Classify and migrate remaining direct `QTimer.singleShot` sites. Promote only if adjacent to compositor/display/widget startup, settings runtime restart, first-frame readiness, or visualizer reveal; otherwise keep as UI-local cleanup. Current lower-priority examples include settings scroll/notices/about-image refresh, cursor-halo flush, browser foreground routing, media-layout retry, Gmail auth/status delay, and message-box auto-close helpers.
+- [ ] Classify and migrate remaining direct `QTimer.singleShot` sites only when they stop being UI-local. Current lower-priority examples include message-box auto-close, settings scroll/notices/about-image refresh, settings save debounce, system-tray tooltip refresh, Gmail auth/status delay, and tool/test-only helpers.
 - [ ] Investigate `ImagePrefetcher._submit_load.<locals>._on_done` callback `IndexError: pop index out of range` if it recurs. Latest rotated perf run showed it once in `core.threading.manager` after an image load callback; fix the source callback directly rather than adding retries or broad exception masking.

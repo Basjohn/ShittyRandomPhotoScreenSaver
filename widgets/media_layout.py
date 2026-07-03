@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PySide6.QtCore import QRect, QTimer
+from PySide6.QtCore import QRect
 from PySide6.QtGui import QFont, QFontMetrics
 from shiboken6 import Shiboken
 
 from core.logging.logger import get_logger
+from core.threading.manager import ThreadManager
 from widgets.base_overlay_widget import OverlayPosition, BaseOverlayWidget
 from widgets.media_widget import MediaPosition
 
@@ -47,7 +48,7 @@ def _defer_update_position(widget) -> None:
         except RuntimeError:
             return
 
-    QTimer.singleShot(16, _retry)
+    ThreadManager.single_shot(16, _retry)
 
 
 def compute_controls_layout(widget):

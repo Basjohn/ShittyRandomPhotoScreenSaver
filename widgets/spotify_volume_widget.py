@@ -302,7 +302,7 @@ class SpotifyVolumeWidget(QWidget):
         if parent is not None:
             try:
                 if bool(getattr(parent, "_custom_layout_runtime_stabilize_pending", False)):
-                    QTimer.singleShot(0, self.begin_spotify_secondary_stage)
+                    ThreadManager.single_shot(0, self.begin_spotify_secondary_stage)
                     return
             except Exception as e:
                 logger.debug("[SPOTIFY_VOL] Exception suppressed: %s", e)

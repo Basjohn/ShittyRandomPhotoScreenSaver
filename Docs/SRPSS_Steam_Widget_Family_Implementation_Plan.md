@@ -1242,7 +1242,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [ ] Confirm Abandonment last-played viability.
 - [ ] Confirm Progress source viability.
 - [ ] Implement CLI Gate for all of steam features using --devsteam .
-- [ ] Implement Steam Logging Sidecar --steam to use for all logging tasks.
+- [ ] Implement Steam Logging Sidecar --steam to use for all logging tasks where relevant going forward.
 
 **Gate:** Foundation source contract is explicit. Achievement Pulse may proceed only if library/recent/achievement data is proven. Abandonment and Progress remain blocked if their source gates are incomplete.
 
