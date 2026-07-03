@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-06-04
+Last updated: 2026-07-03
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -49,6 +49,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Steam-family profile policy-state persistence, corrupt-state quarantine, asset host/signature validation, fixture backend injection, and narrow non-secret `EventSystem` publication.
 - `tests/test_steam_phase3_settings_descriptors.py`
   Steam Phase 3 descriptor/default/settings skeleton coverage: `--devsteam` hidden/active descriptor views, shared/card defaults, lazy Settings no-work contract, non-secret save/load, dev-gated factories, and descriptor-driven `WidgetManager.setup_all_widgets` creation/reuse.
+- `tests/test_steam_phase4_mock_visuals.py`
+  Steam Phase 4 mock visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, long/unavailable fixture states, and tight `Custom` scaling that preserves authored visible-field count and rails.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`

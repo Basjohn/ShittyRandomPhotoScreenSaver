@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-02
+Last updated: 2026-07-03
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -84,7 +84,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Steam asset caches must validate host, size, and image signature before a future card can use the file for painting.
 - Steam widget visibility is descriptor-owned: `steam_progress`, `achievement_pulse`, `abandonment_issues`, and `friend_pulse` factory/runtime/Custom/settings metadata are active only behind the named `--devsteam` gate.
 - The Steam Settings section is lazy and inert by default. Opening general Settings must not decrypt Steam credentials, scan Steam caches/assets, contact Steam, construct runtime overlays, or mark Steam data fresh.
-- Phase-3 Steam card scaffolds may prove descriptor/factory/Custom wiring with static mock overlays only. Production data, asset loading, manual refresh, and richer painting belong to later phases and must keep ThreadManager/service-widget ownership rather than adding private timers or setup branches.
+- Steam card scaffolds may prove descriptor/factory/Custom wiring with provider-inert mock view models and shared painter helpers only. Production data, asset loading, manual refresh, and live provider scheduling belong to later phases and must keep ThreadManager/service-widget ownership rather than adding private timers or setup branches.
 
 ## 5. Visualizer System Contract
 

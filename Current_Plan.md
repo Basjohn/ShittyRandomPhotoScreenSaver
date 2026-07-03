@@ -28,12 +28,17 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Canonical defaults exist for shared Steam preferences and all four disabled cards.
   - [x] The lazy Steam Settings shell builds Connection & Privacy plus four card groups without credential/cache/provider work on general Settings open.
   - [x] Disabled mock cards create/reuse/remove through normal factory descriptors and `WidgetManager.setup_all_widgets`.
-- [ ] Phase 4 shared mock visual system:
-  - [ ] Add shared Steam card painting/layout helpers without provider, asset, or timer ownership.
-  - [ ] Define immutable mock card view models and fingerprints for all four cards.
-  - [ ] Add deterministic render/layout bars for normal, long-title, missing-artwork, unavailable/private, tight `Custom`, and DPR cases.
-  - [ ] Prove `Custom` rects uniformly scale the authored card/elements and never decide visible-field count, rails, or content availability.
-  - [ ] Prove constructors, `paintEvent`, and Settings preview do no Steam provider/cache/asset/credential work.
+- [x] Phase 4 shared mock visual system:
+  - [x] Shared Steam card painting/layout helpers are provider-, asset-, and timer-inert.
+  - [x] Immutable mock card view models and fingerprints exist for all four cards.
+  - [x] Deterministic render/layout bars cover normal, long-title, missing-artwork/placeholder, unavailable/private, tight `Custom`, and DPR cases.
+  - [x] `Custom` rects uniformly scale authored card/elements and never decide visible-field count, rails, or content availability.
+  - [x] Constructors, `paintEvent`, and Settings preview do no Steam provider/cache/asset/credential work.
+- [ ] Phase 5 Achievement Pulse first production slice:
+  - [ ] Resolve selected-app modes from fixture/cache records only: Most Recent, Recent #2-#5, and literal Custom app ID.
+  - [ ] Add selected-game achievement progress view-model mapping without provider calls from widget constructors or paint.
+  - [ ] Preserve unavailable/private/no-achievement states as literal card states, not substitute games.
+  - [ ] Add cache-first fixture bars before any live Steam request path is connected.
 
 ## Watchlist
 

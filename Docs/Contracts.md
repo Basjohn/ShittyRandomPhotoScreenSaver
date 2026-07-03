@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-06-29
+Last updated: 2026-07-03
 
 Short contract index for SRPSS.
 
@@ -50,7 +50,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Steam credential storage | `core/steam/credentials.py` | Steam settings UI, future Steam backend/cache, SST import/export | Steam API/profile secrets are not settings. Persist only DPAPI-protected payloads, reject plaintext fallback, keep cache identities opaque, and strip injected secrets from SST/settings transport. |
 | Steam source/backend/cache contract | `Docs/Steam_Data_Feasibility.md`, `core/steam/backend.py`, `core/steam/cache.py`, `core/steam/models.py` | Future Steam cards, Steam provider tests, Steam cache tests | Steam endpoints are source-classified before UI use, publisher-only endpoints are barred client-side, backend tests use fake openers/fixtures, and failed/private/invalid responses cannot freshen versioned cache. |
 | Steam request/profile/asset policy | `core/steam/request_policy.py`, `core/steam/profile_state.py`, `core/steam/assets.py`, `core/steam/events.py` | Future Steam provider scheduler, future Steam cards, Steam asset tests | Coalesce identical work by profile/source/category/app, drop stale-generation results, keep backoff explicit, store profile policy state outside settings, validate cached assets before paint use, and publish narrow non-secret data-ready events. |
-| Steam descriptor/settings skeleton | `rendering/widget_descriptors.py`, `rendering/widget_factories.py`, `widgets/steam_card_widget.py`, `ui/tabs/widgets_tab_steam.py` | Steam Phase 3 cards/settings, future Steam widget work | Four Steam cards are independent dev-gated descriptor/factory/runtime/Custom participants. The lazy Steam Settings shell and static mock card constructors must not decrypt credentials, scan caches/assets, contact Steam, or own timers. |
+| Steam descriptor/settings/visual skeleton | `rendering/widget_descriptors.py`, `rendering/widget_factories.py`, `widgets/steam_components.py`, `widgets/steam_card_widget.py`, `ui/tabs/widgets_tab_steam.py` | Steam Phase 3/4 cards/settings, future Steam widget work | Four Steam cards are independent dev-gated descriptor/factory/runtime/Custom participants. The lazy Steam Settings shell and mock card constructors/paint helpers must not decrypt credentials, scan caches/assets, contact Steam, or own timers. `Custom` uniformly scales authored card elements and never decides visible-field count, rails, or content availability. |
 | Visualizer settings grouped model | `core/settings/models/_spotify_visualizer.py` | snapshot/serializer/build callers | One ordered grouped field-spec contract for visualizer persistence. |
 | Visualizer normalization / legacy migration | `core/settings/visualizer_settings_snapshot.py`, `core/settings/visualizer_settings_contract.py` | preset import/runtime apply | One mapping-normalization seam and one technical migration seam. |
 | Shared list-widget capacity policy | `core/settings/widget_capacity_policy.py` | Gmail/Reddit settings + runtime | One active visible-capacity envelope for list widgets, with Reddit using the maximum as a candidate-cache window rather than a timed growth reveal. |

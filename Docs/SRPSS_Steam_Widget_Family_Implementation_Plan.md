@@ -1303,20 +1303,20 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 ## Phase 4 — Shared mock visual system
 
-- [ ] Add `widgets/steam_components.py`.
-- [ ] Implement painter-owned header/artwell/gradient/ring/avatar helpers.
-- [ ] Define immutable card view models and fingerprints.
+- [x] Add `widgets/steam_components.py`.
+- [x] Implement painter-owned header/artwell/gradient/ring/avatar helpers.
+- [x] Define immutable card view models and fingerprints.
 - [ ] Build deterministic mock-data render harness for:
-  - [ ] normal content;
-  - [ ] long title/headline;
-  - [ ] missing artwork;
-  - [ ] unavailable/private status;
-  - [ ] first/second optional field rail;
-  - [ ] tight Custom geometry with unchanged authored visible-field count;
-  - [ ] DPR variants.
-- [ ] Integrate stable paint cache rules.
-- [ ] Add visual/pixmap safety tests.
-- [ ] Prove no provider/asset work occurs in constructors, `paintEvent`, or Settings preview.
+  - [x] normal content;
+  - [x] long title/headline;
+  - [x] missing artwork / placeholder-art rendering;
+  - [x] unavailable/private status;
+  - [x] first/second optional field rail;
+  - [x] tight Custom geometry with unchanged authored visible-field count;
+  - [x] DPR variants.
+- [x] Integrate stable paint fingerprint rules for future paint-cache ownership.
+- [x] Add visual/pixmap safety tests.
+- [x] Prove no provider/asset work occurs in constructors, `paintEvent`, or Settings preview.
 
 **Gate:** All four cards render from fixture view models with normal, narrow, and Custom geometry without clipping outside their card or changing committed rectangle.
 
