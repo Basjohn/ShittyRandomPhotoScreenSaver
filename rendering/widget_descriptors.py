@@ -38,6 +38,22 @@ STANDARD_POSITION_OPTION_LABELS: tuple[str, ...] = (
     "Bottom Right",
 )
 CUSTOM_POSITION_OPTION_LABEL = "Custom"
+STEAM_WIDGET_IDS: tuple[str, ...] = (
+    "steam_progress",
+    "achievement_pulse",
+    "abandonment_issues",
+    "friend_pulse",
+)
+STEAM_SERVICE_RUNTIME_CONTRACTS: tuple[str, ...] = (
+    "cache_first",
+    "startup_freshness_policy",
+    "defer_during_parent_transition",
+    "deferred_result",
+    "preserve_visible_fallback",
+    "manual_refresh",
+    "requires_valid_content_before_fade",
+    "timer_stop_cleanup",
+)
 
 
 def _descriptor_env_signature() -> tuple[tuple[str, str | None], ...]:
@@ -195,6 +211,42 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         attr_name="gmail_widget",
         factory_name="gmail",
         inject_shadows_into_config=True,
+    ),
+    FactoryWidgetDescriptor(
+        settings_key="steam_progress",
+        attr_name="steam_progress_widget",
+        factory_name="steam_progress",
+        default_position="Top Right",
+        default_font_size=14,
+        inject_shadows_into_config=True,
+        dev_feature_gate="steam",
+    ),
+    FactoryWidgetDescriptor(
+        settings_key="achievement_pulse",
+        attr_name="achievement_pulse_widget",
+        factory_name="achievement_pulse",
+        default_position="Middle Right",
+        default_font_size=14,
+        inject_shadows_into_config=True,
+        dev_feature_gate="steam",
+    ),
+    FactoryWidgetDescriptor(
+        settings_key="abandonment_issues",
+        attr_name="abandonment_issues_widget",
+        factory_name="abandonment_issues",
+        default_position="Bottom Right",
+        default_font_size=14,
+        inject_shadows_into_config=True,
+        dev_feature_gate="steam",
+    ),
+    FactoryWidgetDescriptor(
+        settings_key="friend_pulse",
+        attr_name="friend_pulse_widget",
+        factory_name="friend_pulse",
+        default_position="Top Left",
+        default_font_size=14,
+        inject_shadows_into_config=True,
+        dev_feature_gate="steam",
     ),
 )
 
@@ -524,6 +576,42 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetSettingsSectionDescriptor(
+        section_id="steam",
+        button_label="Steam",
+        button_attr_name="_btn_steam",
+        container_attr_name="_steam_container",
+        builder_module="ui.tabs.widgets_tab_steam",
+        builder_name="build_steam_ui",
+        loader_module="ui.tabs.widgets_tab_steam",
+        loader_name="load_steam_settings",
+        loader_guard_attrs=("steam_privacy_mode",),
+        saver_module="ui.tabs.widgets_tab_steam",
+        saver_name="save_steam_settings",
+        saver_guard_attrs=("steam_privacy_mode",),
+        persisted_widget_keys=("steam",) + STEAM_WIDGET_IDS,
+        signal_block_attrs=(
+            "steam_privacy_mode",
+            "steam_refresh_minutes",
+            "steam_progress_enabled",
+            "steam_progress_position",
+            "steam_progress_monitor_combo",
+            "steam_progress_font_size",
+            "achievement_pulse_enabled",
+            "achievement_pulse_position",
+            "achievement_pulse_monitor_combo",
+            "achievement_pulse_font_size",
+            "abandonment_issues_enabled",
+            "abandonment_issues_position",
+            "abandonment_issues_monitor_combo",
+            "abandonment_issues_font_size",
+            "friend_pulse_enabled",
+            "friend_pulse_position",
+            "friend_pulse_monitor_combo",
+            "friend_pulse_font_size",
+        ),
+        dev_feature_gate="steam",
+    ),
+    WidgetSettingsSectionDescriptor(
         section_id="defaults",
         button_label="Defaults",
         button_attr_name="_btn_defaults",
@@ -614,6 +702,23 @@ WIDGET_CUSTOM_RESIZE_LOCK_DESCRIPTORS: tuple[WidgetCustomResizeLockDescriptor, .
         control_attrs=("gmail_font_size",),
         anchor_attr="gmail_font_size",
     ),
+    WidgetCustomResizeLockDescriptor(
+        section_id="steam",
+        widget_ids=STEAM_WIDGET_IDS,
+        position_combo_attrs=(
+            "steam_progress_position",
+            "achievement_pulse_position",
+            "abandonment_issues_position",
+            "friend_pulse_position",
+        ),
+        control_attrs=(
+            "steam_progress_font_size",
+            "achievement_pulse_font_size",
+            "abandonment_issues_font_size",
+            "friend_pulse_font_size",
+        ),
+        anchor_attr="steam_progress_font_size",
+    ),
 )
 
 
@@ -625,6 +730,10 @@ WIDGET_CUSTOM_POSITION_OPTION_DESCRIPTORS: tuple[WidgetCustomPositionOptionDescr
     WidgetCustomPositionOptionDescriptor("reddit2", "reddit2_position", "Top Left"),
     WidgetCustomPositionOptionDescriptor("gmail", "gmail_position", "Top Left"),
     WidgetCustomPositionOptionDescriptor("imgur", "imgur_position", "Top Right"),
+    WidgetCustomPositionOptionDescriptor("steam_progress", "steam_progress_position", "Top Right"),
+    WidgetCustomPositionOptionDescriptor("achievement_pulse", "achievement_pulse_position", "Middle Right"),
+    WidgetCustomPositionOptionDescriptor("abandonment_issues", "abandonment_issues_position", "Bottom Right"),
+    WidgetCustomPositionOptionDescriptor("friend_pulse", "friend_pulse_position", "Top Left"),
 )
 
 
@@ -1425,6 +1534,70 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         dev_feature_env="SRPSS_ENABLE_DEV",
     ),
     WidgetRuntimeDescriptor(
+        widget_id="steam_progress",
+        attr_name="steam_progress_widget",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.steam_progress", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=STEAM_SERVICE_RUNTIME_CONTRACTS,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="steam_card_scale",
+        dev_feature_gate="steam",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="achievement_pulse",
+        attr_name="achievement_pulse_widget",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.achievement_pulse", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=STEAM_SERVICE_RUNTIME_CONTRACTS,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="steam_card_scale",
+        dev_feature_gate="steam",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="abandonment_issues",
+        attr_name="abandonment_issues_widget",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.abandonment_issues", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=STEAM_SERVICE_RUNTIME_CONTRACTS,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="steam_card_scale",
+        dev_feature_gate="steam",
+    ),
+    WidgetRuntimeDescriptor(
+        widget_id="friend_pulse",
+        attr_name="friend_pulse_widget",
+        settings_section_id="steam",
+        settings_prefixes=("widgets.friend_pulse", "widgets.steam"),
+        startup_stage="primary",
+        service_backed=True,
+        position_option_labels=STANDARD_POSITION_OPTION_LABELS + (CUSTOM_POSITION_OPTION_LABEL,),
+        service_runtime_contracts=STEAM_SERVICE_RUNTIME_CONTRACTS,
+        supports_layout_edit_mode=True,
+        supports_custom_position_slot=True,
+        supports_layout_resize_edit=True,
+        requires_size_reset_affordance=True,
+        custom_layout_resize_mode="steam_card_scale",
+        dev_feature_gate="steam",
+    ),
+    WidgetRuntimeDescriptor(
         widget_id="spotify_visualizer",
         attr_name="spotify_visualizer_widget",
         settings_section_id="visualizers",
@@ -1915,6 +2088,15 @@ class WidgetStackPreviewDescriptor:
     position_attr_name: str
     monitor_attr_name: str
     fields: tuple[WidgetPreviewFieldDescriptor, ...]
+    dev_feature_env: str | None = None
+    dev_feature_gate: str | None = None
+
+    def is_enabled_in_environment(self) -> bool:
+        if self.dev_feature_gate:
+            return is_named_gate_enabled(self.dev_feature_gate)
+        if not self.dev_feature_env:
+            return True
+        return os.getenv(self.dev_feature_env, "false").lower() == "true"
 
     def build_preview_section(self, owner: Any) -> Dict[str, Any]:
         return {
@@ -2082,13 +2264,73 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("limit", "gmail_limit", "value", 5),
         ),
     ),
+    WidgetStackPreviewDescriptor(
+        widget_id="steam_progress",
+        widget_type_key="steam_progress",
+        status_attr_name="steam_progress_stack_status",
+        position_attr_name="steam_progress_position",
+        monitor_attr_name="steam_progress_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "steam_progress_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "steam_progress_position", "current_text", "Top Right"),
+            WidgetPreviewFieldDescriptor("monitor", "steam_progress_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "steam_progress_font_size", "value", 14),
+        ),
+        dev_feature_gate="steam",
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="achievement_pulse",
+        widget_type_key="achievement_pulse",
+        status_attr_name="achievement_pulse_stack_status",
+        position_attr_name="achievement_pulse_position",
+        monitor_attr_name="achievement_pulse_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "achievement_pulse_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "achievement_pulse_position", "current_text", "Middle Right"),
+            WidgetPreviewFieldDescriptor("monitor", "achievement_pulse_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "achievement_pulse_font_size", "value", 14),
+        ),
+        dev_feature_gate="steam",
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="abandonment_issues",
+        widget_type_key="abandonment_issues",
+        status_attr_name="abandonment_issues_stack_status",
+        position_attr_name="abandonment_issues_position",
+        monitor_attr_name="abandonment_issues_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "abandonment_issues_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "abandonment_issues_position", "current_text", "Bottom Right"),
+            WidgetPreviewFieldDescriptor("monitor", "abandonment_issues_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "abandonment_issues_font_size", "value", 14),
+        ),
+        dev_feature_gate="steam",
+    ),
+    WidgetStackPreviewDescriptor(
+        widget_id="friend_pulse",
+        widget_type_key="friend_pulse",
+        status_attr_name="friend_pulse_stack_status",
+        position_attr_name="friend_pulse_position",
+        monitor_attr_name="friend_pulse_monitor_combo",
+        fields=(
+            WidgetPreviewFieldDescriptor("enabled", "friend_pulse_enabled", "checked", False),
+            WidgetPreviewFieldDescriptor("position", "friend_pulse_position", "current_text", "Top Left"),
+            WidgetPreviewFieldDescriptor("monitor", "friend_pulse_monitor_combo", "current_text", "ALL"),
+            WidgetPreviewFieldDescriptor("font_size", "friend_pulse_font_size", "value", 14),
+        ),
+        dev_feature_gate="steam",
+    ),
 )
 
 
 def get_widget_stack_preview_descriptors() -> tuple[WidgetStackPreviewDescriptor, ...]:
     """Return canonical WidgetsTab stack-preview descriptors."""
 
-    return WIDGET_STACK_PREVIEW_DESCRIPTORS
+    return tuple(
+        descriptor
+        for descriptor in WIDGET_STACK_PREVIEW_DESCRIPTORS
+        if descriptor.is_enabled_in_environment()
+    )
 
 
 def get_widget_default_init_descriptors() -> tuple[WidgetDefaultInitDescriptor, ...]:

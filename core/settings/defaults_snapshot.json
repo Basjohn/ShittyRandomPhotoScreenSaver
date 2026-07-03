@@ -170,6 +170,68 @@
         }
     },
     "widgets": {
+        "abandonment_issues": {
+            "bg_color": [
+                35,
+                35,
+                35,
+                255
+            ],
+            "bg_opacity": 0.3,
+            "border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "border_opacity": 1.0,
+            "color": [
+                255,
+                255,
+                255,
+                230
+            ],
+            "enabled": false,
+            "font_family": "Inter",
+            "font_size": 14,
+            "margin": 30,
+            "monitor": "ALL",
+            "position": "Bottom Right",
+            "preferred_height": 180,
+            "preferred_width": 420,
+            "show_background": true
+        },
+        "achievement_pulse": {
+            "bg_color": [
+                35,
+                35,
+                35,
+                255
+            ],
+            "bg_opacity": 0.3,
+            "border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "border_opacity": 1.0,
+            "color": [
+                255,
+                255,
+                255,
+                230
+            ],
+            "enabled": false,
+            "font_family": "Inter",
+            "font_size": 14,
+            "margin": 30,
+            "monitor": "ALL",
+            "position": "Middle Right",
+            "preferred_height": 180,
+            "preferred_width": 420,
+            "show_background": true
+        },
         "clock": {
             "analog_face_shadow": true,
             "bg_color": [
@@ -246,6 +308,37 @@
             "show_seconds": false,
             "show_timezone": true,
             "timezone": "local"
+        },
+        "friend_pulse": {
+            "bg_color": [
+                35,
+                35,
+                35,
+                255
+            ],
+            "bg_opacity": 0.3,
+            "border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "border_opacity": 1.0,
+            "color": [
+                255,
+                255,
+                255,
+                230
+            ],
+            "enabled": false,
+            "font_family": "Inter",
+            "font_size": 14,
+            "margin": 30,
+            "monitor": "ALL",
+            "position": "Top Left",
+            "preferred_height": 180,
+            "preferred_width": 420,
+            "show_background": true
         },
         "global": {
             "card_border_width_px": 4,
@@ -912,8 +1005,8 @@
             "enabled": true,
             "mode": "bubble",
             "monitor": "ALL",
-            "osc_ghost_intensity": 0.4,
             "osc_ghost_decay": 0.4,
+            "osc_ghost_intensity": 0.4,
             "osc_ghost_line2_enabled": true,
             "osc_ghost_line3_enabled": true,
             "osc_ghost_line4_enabled": true,
@@ -1302,6 +1395,41 @@
             "spectrum_unique_colors": true,
             "spectrum_wave_amplitude": 0.5,
             "visualizers_enabled": true
+        },
+        "steam": {
+            "privacy_mode": "Strict",
+            "refresh_minutes": 30
+        },
+        "steam_progress": {
+            "bg_color": [
+                35,
+                35,
+                35,
+                255
+            ],
+            "bg_opacity": 0.3,
+            "border_color": [
+                255,
+                255,
+                255,
+                255
+            ],
+            "border_opacity": 1.0,
+            "color": [
+                255,
+                255,
+                255,
+                230
+            ],
+            "enabled": false,
+            "font_family": "Inter",
+            "font_size": 14,
+            "margin": 30,
+            "monitor": "ALL",
+            "position": "Top Right",
+            "preferred_height": 180,
+            "preferred_width": 420,
+            "show_background": true
         },
         "weather": {
             "bg_color": [

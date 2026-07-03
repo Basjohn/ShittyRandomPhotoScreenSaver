@@ -23,12 +23,16 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Steam credentials use strict DPAPI-only storage with SST/settings secret stripping.
   - [x] Steam source feasibility is documented in `Docs/Steam_Data_Feasibility.md`.
   - [x] Phase 2 backend/cache scaffolding is fixture-safe, generation-aware, backoff-aware, and asset-cache guarded.
-- [ ] Phase 3 descriptor/default/settings skeleton:
-  - [ ] Add four descriptor-owned factory entries behind `--devsteam`.
-  - [ ] Add canonical defaults for the four Steam cards and shared Steam preferences.
-  - [ ] Add one lazy Steam Settings section shell with Connection & Privacy plus four card groups.
-  - [ ] Confirm general Settings opening performs no Steam credential decrypt, cache scan, provider request, or asset fetch.
-  - [ ] Confirm disabled mock Steam cards create/reuse/remove through normal descriptors only.
+- [x] Phase 3 descriptor/default/settings skeleton:
+  - [x] Four descriptor-owned factory/runtime/custom entries are hidden unless `--devsteam` is active.
+  - [x] Canonical defaults exist for shared Steam preferences and all four disabled cards.
+  - [x] The lazy Steam Settings shell builds Connection & Privacy plus four card groups without credential/cache/provider work on general Settings open.
+  - [x] Disabled mock cards create/reuse/remove through normal factory descriptors and `WidgetManager.setup_all_widgets`.
+- [ ] Phase 4 shared mock visual system:
+  - [ ] Add shared Steam card painting/layout helpers without provider, asset, or timer ownership.
+  - [ ] Define immutable mock card view models and fingerprints for all four cards.
+  - [ ] Add deterministic render/layout bars for normal, long-title, missing-artwork, unavailable/private, tight `Custom`, and DPR cases.
+  - [ ] Prove constructors, `paintEvent`, and Settings preview do no Steam provider/cache/asset/credential work.
 
 ## Watchlist
 

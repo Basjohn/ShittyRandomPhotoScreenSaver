@@ -82,6 +82,9 @@ Canonical architecture and behavior contracts for SRPSS.
 - Steam backend/cache work lives under `core/steam/` and must stay fixture-safe until cards are explicitly promoted. Failed/private/invalid responses must not freshen valid cache records.
 - Steam request policy helpers may coalesce work, drop stale generations, and calculate backoff, but they must not own threads, timers, UI retries, or provider scheduling. Runtime scheduling remains ThreadManager-owned.
 - Steam asset caches must validate host, size, and image signature before a future card can use the file for painting.
+- Steam widget visibility is descriptor-owned: `steam_progress`, `achievement_pulse`, `abandonment_issues`, and `friend_pulse` factory/runtime/Custom/settings metadata are active only behind the named `--devsteam` gate.
+- The Steam Settings section is lazy and inert by default. Opening general Settings must not decrypt Steam credentials, scan Steam caches/assets, contact Steam, construct runtime overlays, or mark Steam data fresh.
+- Phase-3 Steam card scaffolds may prove descriptor/factory/Custom wiring with static mock overlays only. Production data, asset loading, manual refresh, and richer painting belong to later phases and must keep ThreadManager/service-widget ownership rather than adding private timers or setup branches.
 
 ## 5. Visualizer System Contract
 

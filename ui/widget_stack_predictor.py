@@ -107,6 +107,10 @@ class WidgetType(Enum):
     REDDIT2 = "reddit2"
     GMAIL = "gmail"
     SPOTIFY_VIS = "spotify_visualizer"
+    STEAM_PROGRESS = "steam_progress"
+    ACHIEVEMENT_PULSE = "achievement_pulse"
+    ABANDONMENT_ISSUES = "abandonment_issues"
+    FRIEND_PULSE = "friend_pulse"
 
 
 @dataclass
@@ -319,6 +323,12 @@ def estimate_gmail_size(font_size: int, item_count: int, width: int = 600) -> Tu
     )
 
 
+def estimate_steam_card_size(font_size: int, width: int = 420, height: int = 180) -> Tuple[int, int]:
+    """Estimate a Steam card scaffold size for settings stack prediction."""
+    scaled_height = max(int(height), int(font_size * 7.5))
+    return (max(260, int(width)), max(120, scaled_height))
+
+
 def estimate_spotify_vis_size(
     vis_settings: Dict,
     *,
@@ -481,6 +491,34 @@ def build_widget_estimates(settings: Dict) -> List[WidgetEstimate]:
             estimated_width=width,
             estimated_height=h,
         ))
+
+    steam_type_map = {
+        "steam_progress": WidgetType.STEAM_PROGRESS,
+        "achievement_pulse": WidgetType.ACHIEVEMENT_PULSE,
+        "abandonment_issues": WidgetType.ABANDONMENT_ISSUES,
+        "friend_pulse": WidgetType.FRIEND_PULSE,
+    }
+    for key, widget_type in steam_type_map.items():
+        steam_card = settings.get(key, {})
+        if not isinstance(steam_card, dict):
+            continue
+        if not steam_card.get("enabled", False):
+            continue
+        if str(steam_card.get("position", "")).strip().lower() == "custom":
+            continue
+        w, h = estimate_steam_card_size(
+            int(steam_card.get("font_size", 14)),
+            int(steam_card.get("preferred_width", 420)),
+            int(steam_card.get("preferred_height", 180)),
+        )
+        estimates.append(WidgetEstimate(
+            widget_type=widget_type,
+            position=steam_card.get("position", "Top Right"),
+            monitor=str(steam_card.get("monitor", "ALL")),
+            enabled=True,
+            estimated_width=w,
+            estimated_height=h,
+        ))
     
     # Spotify visualizer reserves authored lane space relative to Media
     # even though it is not independently stackable.
@@ -523,6 +561,10 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.REDDIT2: "Reddit 2",
         WidgetType.GMAIL: "Gmail",
         WidgetType.SPOTIFY_VIS: "Spotify Visualizer",
+        WidgetType.STEAM_PROGRESS: "Steam Progress",
+        WidgetType.ACHIEVEMENT_PULSE: "Achievement Pulse",
+        WidgetType.ABANDONMENT_ISSUES: "Abandonment Issues",
+        WidgetType.FRIEND_PULSE: "Friend Pulse",
     }
     return names.get(widget_type, widget_type.value)
 

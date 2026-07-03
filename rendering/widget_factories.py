@@ -1010,6 +1010,105 @@ class GmailWidgetFactory(WidgetFactory):
             return None
 
 
+class SteamCardFactory(WidgetFactory):
+    """Factory for dev-gated Steam card scaffolds."""
+
+    def __init__(
+        self,
+        settings: SettingsManager,
+        thread_manager: Optional["ThreadManager"] = None,
+        *,
+        widget_name: str,
+    ) -> None:
+        super().__init__(settings, thread_manager)
+        self._widget_name = widget_name
+
+    def get_widget_name(self) -> str:
+        return self._widget_name
+
+    def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
+        """Create one static Steam card scaffold with normal overlay styling."""
+        from core.dev_gates import is_steam_enabled
+        from core.settings.models import WidgetPosition, coerce_widget_position
+        from widgets.base_overlay_widget import OverlayPosition
+        from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
+
+        if not is_steam_enabled():
+            return None
+        if not SettingsManager.to_bool(config.get("enabled", False), False):
+            return None
+
+        definition = STEAM_CARD_DEFINITIONS.get(self._widget_name)
+        if definition is None:
+            logger.warning("[STEAM_WIDGET] Unknown Steam scaffold card: %s", self._widget_name)
+            return None
+
+        position_map = {
+            WidgetPosition.TOP_LEFT: OverlayPosition.TOP_LEFT,
+            WidgetPosition.TOP_CENTER: OverlayPosition.TOP_CENTER,
+            WidgetPosition.TOP_RIGHT: OverlayPosition.TOP_RIGHT,
+            WidgetPosition.MIDDLE_LEFT: OverlayPosition.MIDDLE_LEFT,
+            WidgetPosition.CENTER: OverlayPosition.CENTER,
+            WidgetPosition.MIDDLE_RIGHT: OverlayPosition.MIDDLE_RIGHT,
+            WidgetPosition.BOTTOM_LEFT: OverlayPosition.BOTTOM_LEFT,
+            WidgetPosition.BOTTOM_CENTER: OverlayPosition.BOTTOM_CENTER,
+            WidgetPosition.BOTTOM_RIGHT: OverlayPosition.BOTTOM_RIGHT,
+            WidgetPosition.CUSTOM: OverlayPosition.TOP_RIGHT,
+        }
+        default_position = str(config.get("_default_position", "Top Right") or "Top Right")
+        widget_position = coerce_widget_position(
+            config.get("position", default_position),
+            coerce_widget_position(default_position, WidgetPosition.TOP_RIGHT),
+        )
+
+        try:
+            widget = SteamCardWidget(
+                parent=parent,
+                definition=definition,
+                position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
+            )
+
+            if hasattr(widget, "set_font_family"):
+                widget.set_font_family(str(config.get("font_family", "Inter") or "Inter"))
+            widget.set_font_size(int(config.get("font_size", 14)))
+            widget.set_margin(int(config.get("margin", 30)))
+
+            text_qcolor = parse_color_to_qcolor(config.get("color", [255, 255, 255, 230]))
+            if text_qcolor is not None:
+                widget.set_text_color(text_qcolor)
+
+            bg_qcolor = parse_color_to_qcolor(config.get("bg_color", [35, 35, 35, 255]))
+            if bg_qcolor is not None:
+                widget.set_background_color(bg_qcolor)
+            widget.set_background_opacity(float(config.get("bg_opacity", 0.3)))
+
+            border_qcolor = parse_color_to_qcolor(
+                config.get("border_color", [255, 255, 255, 255]),
+                opacity_override=float(config.get("border_opacity", 1.0)),
+            )
+            if border_qcolor is not None:
+                widget.set_background_border(BaseOverlayWidget.get_global_border_width(), border_qcolor)
+
+            widget.set_show_background(
+                SettingsManager.to_bool(config.get("show_background", True), True)
+            )
+            if "preferred_width" in config or "preferred_height" in config:
+                width = max(260, int(config.get("preferred_width", 420)))
+                height = max(120, int(config.get("preferred_height", 180)))
+                widget.setMinimumSize(width, height)
+                widget.resize(width, height)
+
+            shadows_config = config.get("_shadows_config") or {}
+            if isinstance(shadows_config, dict) and hasattr(widget, "set_shadow_config"):
+                widget.set_shadow_config(shadows_config)
+
+            logger.debug("[STEAM_WIDGET] Created dev-gated mock card: %s", self._widget_name)
+            return widget
+        except Exception as exc:
+            logger.error("[STEAM_WIDGET] Failed to create %s: %s", self._widget_name, exc, exc_info=True)
+            return None
+
+
 # ---------------------------------------------------------------------------
 # Factory Registry
 # ---------------------------------------------------------------------------
@@ -1046,6 +1145,25 @@ class WidgetFactoryRegistry:
         self.register(GmailWidgetFactory(self._settings, self._thread_manager))
         self.register(SpotifyVisualizerFactory(self._settings, self._thread_manager))
         self.register(SpotifyVolumeFactory(self._settings, self._thread_manager))
+        try:
+            from core.dev_gates import is_steam_enabled
+
+            if is_steam_enabled():
+                for widget_name in (
+                    "steam_progress",
+                    "achievement_pulse",
+                    "abandonment_issues",
+                    "friend_pulse",
+                ):
+                    self.register(
+                        SteamCardFactory(
+                            self._settings,
+                            self._thread_manager,
+                            widget_name=widget_name,
+                        )
+                    )
+        except Exception:
+            logger.debug("[FACTORY_REGISTRY] Steam dev factories suppressed", exc_info=True)
 
     def set_thread_manager(self, thread_manager: Optional["ThreadManager"]) -> None:
         """Update thread manager on the registry and all factories."""

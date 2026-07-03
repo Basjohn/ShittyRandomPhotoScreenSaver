@@ -1,0 +1,213 @@
+"""Steam widget family settings section.
+
+Phase 3 keeps this dev-gated and provider-inert. Building or loading this
+section must not decrypt credentials, scan caches, fetch assets, or submit
+provider work.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Mapping
+
+from PySide6.QtWidgets import QCheckBox, QGroupBox, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
+
+from rendering.widget_descriptors import get_widget_position_option_labels
+from ui.tabs.shared_styles import INFO_LABEL_STYLE, STATUS_LABEL_STYLE, add_aligned_row, style_group_box
+from ui.widgets import StyledComboBox
+
+if TYPE_CHECKING:
+    from ui.tabs.widgets_tab import WidgetsTab
+
+
+_STEAM_CARD_ORDER: tuple[tuple[str, str, str], ...] = (
+    ("steam_progress", "Steam Progress", "Top Right"),
+    ("achievement_pulse", "Achievement Pulse", "Middle Right"),
+    ("abandonment_issues", "Abandonment Issues", "Bottom Right"),
+    ("friend_pulse", "Friend Pulse", "Top Left"),
+)
+
+
+def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
+    row, _label = add_aligned_row(parent, label_text, label_width=145, wrap=False)
+    return row
+
+
+def _section_config(
+    widgets_config: Mapping[str, Any],
+    section: str,
+) -> Mapping[str, Any]:
+    candidate = widgets_config.get(section, {})
+    return candidate if isinstance(candidate, Mapping) else {}
+
+
+def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, label: str, fallback_position: str) -> None:
+    group = QGroupBox(label)
+    style_group_box(group)
+    layout = QVBoxLayout(group)
+    layout.setSpacing(12)
+
+    enabled_attr = f"{key}_enabled"
+    position_attr = f"{key}_position"
+    monitor_attr = f"{key}_monitor_combo"
+    font_attr = f"{key}_font_size"
+    status_attr = f"{key}_stack_status"
+
+    enabled = QCheckBox(f"Enable {label}")
+    enabled.setProperty("circleIndicator", True)
+    enabled.setToolTip(f"Show the dev-gated {label} mock card.")
+    enabled.setChecked(tab._default_bool(key, "enabled", False))
+    enabled.stateChanged.connect(tab._save_settings)
+    setattr(tab, enabled_attr, enabled)
+    layout.addWidget(enabled)
+
+    position_row = _aligned_row(layout, "Position:")
+    position = StyledComboBox()
+    position.addItems(list(get_widget_position_option_labels(key)))
+    position.setMinimumWidth(150)
+    position.currentTextChanged.connect(tab._save_settings)
+    tab._set_combo_text(position, tab._default_str(key, "position", fallback_position))
+    setattr(tab, position_attr, position)
+    position_row.addWidget(position)
+    position_row.addStretch()
+
+    display_row = _aligned_row(layout, "Display:")
+    monitor = StyledComboBox(size_variant="compact")
+    monitor.addItems(["ALL", "1", "2", "3"])
+    monitor.setMinimumWidth(120)
+    monitor.currentTextChanged.connect(tab._save_settings)
+    tab._set_combo_text(monitor, str(tab._widget_default(key, "monitor", "ALL")))
+    setattr(tab, monitor_attr, monitor)
+    display_row.addWidget(monitor)
+    display_row.addStretch()
+
+    font_row = _aligned_row(layout, "Font Size:")
+    font_size = QSpinBox()
+    font_size.setRange(8, 40)
+    font_size.setValue(tab._default_int(key, "font_size", 14))
+    font_size.valueChanged.connect(tab._save_settings)
+    setattr(tab, font_attr, font_size)
+    font_row.addWidget(font_size)
+    font_row.addWidget(QLabel("px"))
+    font_row.addStretch()
+
+    status = QLabel("")
+    status.setStyleSheet(STATUS_LABEL_STYLE)
+    status.setWordWrap(True)
+    setattr(tab, status_attr, status)
+    layout.addWidget(status)
+
+    parent_layout.addWidget(group)
+
+
+def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
+    """Build the lazy Steam Settings section."""
+    container = QWidget()
+    root = QVBoxLayout(container)
+    root.setContentsMargins(0, 0, 0, 0)
+    root.setSpacing(16)
+
+    connection_group = QGroupBox("Connection & Privacy")
+    style_group_box(connection_group)
+    connection_layout = QVBoxLayout(connection_group)
+    connection_layout.setSpacing(12)
+
+    info = QLabel(
+        "Steam is currently development-gated. Opening this section does not check credentials, "
+        "scan caches, fetch assets, or contact Steam."
+    )
+    info.setWordWrap(True)
+    info.setStyleSheet(INFO_LABEL_STYLE)
+    connection_layout.addWidget(info)
+
+    privacy_row = _aligned_row(connection_layout, "Privacy Mode:")
+    tab.steam_privacy_mode = StyledComboBox()
+    tab.steam_privacy_mode.addItems(["Strict", "Balanced", "Rich"])
+    tab.steam_privacy_mode.setMinimumWidth(150)
+    tab.steam_privacy_mode.currentTextChanged.connect(tab._save_settings)
+    tab._set_combo_text(tab.steam_privacy_mode, tab._default_str("steam", "privacy_mode", "Strict"))
+    privacy_row.addWidget(tab.steam_privacy_mode)
+    privacy_row.addStretch()
+
+    refresh_row = _aligned_row(connection_layout, "Refresh Window:")
+    tab.steam_refresh_minutes = QSpinBox()
+    tab.steam_refresh_minutes.setRange(15, 240)
+    tab.steam_refresh_minutes.setSuffix(" min")
+    tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 30))
+    tab.steam_refresh_minutes.valueChanged.connect(tab._save_settings)
+    refresh_row.addWidget(tab.steam_refresh_minutes)
+    refresh_row.addStretch()
+
+    tab.steam_connection_status = QLabel("Connection not checked this session.")
+    tab.steam_connection_status.setStyleSheet(STATUS_LABEL_STYLE)
+    connection_layout.addWidget(tab.steam_connection_status)
+
+    root.addWidget(connection_group)
+
+    for key, label, fallback_position in _STEAM_CARD_ORDER:
+        _build_card_group(tab, root, key, label, fallback_position)
+
+    layout.addWidget(container)
+    return container
+
+
+def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) -> None:
+    """Load saved non-secret Steam settings into the lazy section controls."""
+    steam_config = _section_config(widgets_config, "steam")
+    tab._set_combo_text(
+        tab.steam_privacy_mode,
+        str(steam_config.get("privacy_mode", tab._default_str("steam", "privacy_mode", "Strict"))),
+    )
+    try:
+        tab.steam_refresh_minutes.setValue(
+            int(steam_config.get("refresh_minutes", tab._default_int("steam", "refresh_minutes", 30)))
+        )
+    except Exception:
+        tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 30))
+
+    for key, _label, fallback_position in _STEAM_CARD_ORDER:
+        config = _section_config(widgets_config, key)
+        getattr(tab, f"{key}_enabled").setChecked(
+            bool(config.get("enabled", tab._default_bool(key, "enabled", False)))
+        )
+        tab._set_combo_text(
+            getattr(tab, f"{key}_position"),
+            str(config.get("position", tab._default_str(key, "position", fallback_position))),
+        )
+        tab._set_combo_text(
+            getattr(tab, f"{key}_monitor_combo"),
+            str(config.get("monitor", tab._widget_default(key, "monitor", "ALL"))),
+        )
+        try:
+            getattr(tab, f"{key}_font_size").setValue(
+                int(config.get("font_size", tab._default_int(key, "font_size", 14)))
+            )
+        except Exception:
+            getattr(tab, f"{key}_font_size").setValue(tab._default_int(key, "font_size", 14))
+
+
+def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
+    defaults = tab._widget_defaults.get(key, {})
+    if not isinstance(defaults, dict):
+        defaults = {}
+    payload = dict(defaults)
+    payload.update({
+        "enabled": getattr(tab, f"{key}_enabled").isChecked(),
+        "position": getattr(tab, f"{key}_position").currentText(),
+        "monitor": getattr(tab, f"{key}_monitor_combo").currentText(),
+        "font_size": int(getattr(tab, f"{key}_font_size").value()),
+    })
+    return payload
+
+
+def save_steam_settings(tab: "WidgetsTab") -> tuple[dict[str, Any], ...]:
+    """Return shared Steam settings plus all four card payloads."""
+    steam_payload = {
+        "privacy_mode": tab.steam_privacy_mode.currentText(),
+        "refresh_minutes": int(tab.steam_refresh_minutes.value()),
+    }
+    return (
+        steam_payload,
+        _save_card(tab, "steam_progress"),
+        _save_card(tab, "achievement_pulse"),
+        _save_card(tab, "abandonment_issues"),
+        _save_card(tab, "friend_pulse"),
+    )

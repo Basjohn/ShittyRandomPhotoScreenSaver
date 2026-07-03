@@ -1287,19 +1287,19 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 ## Phase 3 — Descriptor, factory, defaults, and Steam Settings skeleton
 
-- [ ] Add four factory descriptors.
-- [ ] Add explicit descriptor-owned Steam service-runtime contract metadata.
-- [ ] Add one lazy Steam Settings section descriptor.
-- [ ] Add four Custom-position descriptors and Steam Custom lock metadata.
-- [ ] Add canonical defaults for all four cards and shared Steam preferences.
-- [ ] Update defaults normalization, snapshots, and import/reset coverage.
-- [ ] Wire factories through the standard registry/setup route.
-- [ ] Add lazy `widgets_tab_steam.py` shell with Connection & Privacy group and all card groups.
-- [ ] Block all signals during load/reset/import.
-- [ ] Confirm no network/decryption/cache scan during general Settings opening.
-- [ ] Confirm no hidden second setup branch exists in `widget_setup_all.py`.
+- [x] Add four factory descriptors.
+- [x] Add explicit descriptor-owned Steam service-runtime contract metadata.
+- [x] Add one lazy Steam Settings section descriptor.
+- [x] Add four Custom-position descriptors and Steam Custom lock metadata.
+- [x] Add canonical defaults for all four cards and shared Steam preferences.
+- [x] Update defaults normalization, snapshots, and import/reset coverage.
+- [x] Wire factories through the standard registry/setup route.
+- [x] Add lazy `widgets_tab_steam.py` shell with Connection & Privacy group and all card groups.
+- [x] Block all signals during load/reset/import through descriptor-owned signal-block attrs.
+- [x] Confirm no network/decryption/cache scan during general Settings opening.
+- [x] Confirm no hidden second setup branch exists in `widget_setup_all.py`.
 
-**Gate:** Four disabled mock cards can be created/reused/removed through normal descriptors, can enter Custom mode independently, and settings save/load works without provider access.
+**Gate:** Complete. Four disabled mock cards can be created/reused/removed through normal descriptors, can enter Custom mode independently, and settings save/load works without provider access.
 
 ## Phase 4 — Shared mock visual system
 

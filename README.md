@@ -51,10 +51,10 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
     - **Widgets** – clock(s), weather, media, Spotify visualizer, Reddit (You'll need to configure these to your liking! Geolocation is kinda shit.)
     - **Accessibility** - Join my crippled ass with these features! Background brightness dimming and pixel shifting because maybe you're feeling kinda weird or something.
     - **Presets** - Preset system to get going fast with an auto-saving custom preset for your personalization. 
-    - **About** – version, credits, SST-based settings Import/Export (human‑readable JSON snapshot per profile) and emergency defaults button
+    - **About** – version, credits, SST/JSON-based settings Import/Export, emergency defaults button and preset import/export.
     
-- **Hard‑exit mode & interaction gating**
-  - Optional "hard‑exit" mode: mouse movement/clicks no longer exit; only keyboard, context menu or reddit links exit.
+- **Interaction Mode & Interaction Gating**
+  - Optional "Interaction" mode: mouse movement/clicks no longer exit; only keyboard, context menu or reddit links exit.
   - Ctrl‑driven halo to interact with overlays (e.g. media controls, Reddit links) while the screensaver stays active.
 
   Why? Because you can actually click those reddit links! You can actually control Spotify through its controls in the widget! I never clicked the clock or weather though, you probably shouldn't     try it.
@@ -78,34 +78,31 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
 ### While the screensaver is running
 
 - **Hotkeys (do not exit)**
-  - `Z` – Previous image
-  - `X` – Next image
-  - `C` – Cycle transition type
-  - `S` – Open settings dialog (stops the saver, shows the config UI)
-[Keys do not work on MC Builds, only mouse and mouse context.]
+  -  'Z'             - Previous image
+  -  'X'             - Next image
+  -  'C'             - Cycle transition type
+  -  'S'             - Open settings dialog (stops the saver, shows the config UI)
+  -  'PgUp/PgDown'   - Global Volume Up/Down
+  -  'Spacebar'      - Play/Pause
+  -  'Home'          - Global Media Play Pause
+  -  'END'           - Global System Mute On/Off
 
 - **Exit keys (always exit)**
   - `Esc` – Exit screensaver
   - `Q` – Exit screensaver
 
-- **Other keys**
-  - **Normal mode** (hard‑exit OFF, Ctrl not held):
-    - *Any other key* exits the screensaver (e.g. Space, Enter, arrows, letters, numbers).
-  - **Hard‑exit mode** (hard‑exit ON) or **Ctrl interaction mode**:
-    - Non‑hotkey keys are ignored; only `Esc`/`Q` exit and `Z/X/C/S` perform their actions.
-
 - **Mouse**
-  - **Normal mode** (hard‑exit OFF):
+  - **Normal mode** (Interaction Mode OFF):
     - Move the mouse beyond a small threshold → exits the screensaver.
     - Any mouse button click → exits the screensaver.
-  - **Hard‑exit mode** (hard‑exit ON):
-    - Mouse movement and clicks **do not exit**, Double Clicks advance to the next image; use `Esc` or `Q` to exit.
+  - **Interaction mode** (Interaction ON):
+    - Mouse movement and clicks **do not exit**, Double Clicks advance to the next image; use `Esc` or `Q` or the context menu to exit.
   - **Right Click Context Menu**
     - Right Click while holding Ctrl and a glorious context menu is born.
-    - Use it for quick accurate transition and settings changes.
+    - Use it for EVERYTHING. EMBRACE IT. HOLD IT. DO NOT LET OTHERS KNOW YOU HAVE IT. IT IS YOURS ALONE.
     - 
 
-- **Ctrl halo interaction**
+- **Ctrl Halo interaction**
   - Hold `Ctrl` to show a halo/cursor proxy over the active display.
   - While Ctrl/halo is active, mouse clicks can interact with overlay widgets
     (e.g. media controls, Reddit links) without immediately exiting.
@@ -115,18 +112,20 @@ Transitions Showcase Shrunk Down To GitHub's 1999 Ass 10MB Limit:
 
 ## Settings Dialog
 
-You can open the settings dialog in two ways:
+You can open the settings dialog in three ways:
 
 - From Windows Screen Saver Settings, by clicking **Settings...** for SRPSS (see below).
 - From the running screensaver itself by pressing `S`.
+- From your precious right-click context menu.
 
 The settings dialog lets you:
 
-- Configure image sources (folders + RSS/JSON feeds)
-- Change display mode, interval, sharpen, and refresh sync
-- Choose the active transition with deep per‑type options
-- Enable/disable and style each overlay widget with sliders in your sliders.
-- Enable **INTERACTION MODE** becauseyou'refuckinghardcore (input.interaction_mode)
+- Configure EVERYTHING.
+- Change EVERYTHING.
+- DEVOUR EVERYTHING.
+- BECOME ONE.
+
+It also is a riduclously pretty looking thing that even simulates DWM transparency from the Vista era.
 
 All changes are applied immediately and persisted between runs.
 
@@ -145,6 +144,8 @@ Download a version, ideally the setup version if you want it to actually work.
 1. Yeah that's literally it.
 2. Really.
 
+- Note, all versions replace all visualizers every install because I do weird shit I cannot keep track of. If you have saved visualizer presets you want to preserve use export presets in about and then import them after the install. Your custom section visualizers are never touched.
+
 ### 2. Set SRPSS as your screensaver
 
 Check the open screensaver settings box in the installer (or leave it checked) and it will even take your lazy ass there.
@@ -157,14 +158,20 @@ In the **Screen Saver Settings** dialog:
 4. Click **Apply** and **OK**.
 
 ### 3. Settings
-  - Set your sources! Either a folder (or multiple) on your system with your wallpapers or RSS/JSON feeds or....both, yeah, both actually works.
-  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.
-  
+
+  - Set your sources! Either a folder (or multiple) on your system with your wallpapers or RSS/JSON feeds or....both with a weird ratio slider!
+  - If you are exceptionally lazy about your sources just click the "Just Make It Work" button at the bottom of the sources tab. It will just work.  
   - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
   - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
-  - Reddit can be set to any subreddit you want.
-  - Pro tip, don't set widgets to appear at the same location on the same screen. By default they don't.
+  - Reddit can be set to any kinky ass subreddit you want.
 
+### 4. Layout
+
+  - Right Click (With CNTRL held or Interaction Mode on) to open your bethrothed context menu and choose Edit.
+  - In this sexy new mode drag around the widgets, resize them by the corners or your scroll wheel however you like, even across displays. 
+  - When things look positioned like you'd like choose save in the context menu (or press enter like a bitch who cannot handle context menus) and it will apply.
+  - Revert in Edit is for going back to non-custom mode or saving yourself from weird changes. Each widget has a reset button in Edit mode and the Spotify widget even has an extra one for if the visualizer gets lost.
+  
 ## Versioning
 
 Version information is centralised in `versioning.py` and used by both runtime and build tooling and Inno installer is used for this to actually fucking work.

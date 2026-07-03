@@ -47,6 +47,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Steam-family request identity/coalescing, generation-aware stale-result drops, joined-handle completion rejection, and bounded per-request backoff.
 - `tests/test_steam_profile_assets_events.py`
   Steam-family profile policy-state persistence, corrupt-state quarantine, asset host/signature validation, fixture backend injection, and narrow non-secret `EventSystem` publication.
+- `tests/test_steam_phase3_settings_descriptors.py`
+  Steam Phase 3 descriptor/default/settings skeleton coverage: `--devsteam` hidden/active descriptor views, shared/card defaults, lazy Settings no-work contract, non-secret save/load, dev-gated factories, and descriptor-driven `WidgetManager.setup_all_widgets` creation/reuse.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`
