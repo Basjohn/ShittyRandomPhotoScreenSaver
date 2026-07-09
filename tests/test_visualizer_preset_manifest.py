@@ -7,6 +7,8 @@ from core.visualizer_preset_manifest import (
     is_managed_curated_preset_path,
     load_curated_visualizer_preset_manifest,
     mirror_curated_visualizer_preset_tree,
+    prune_duplicate_curated_preset_slots,
+    reconcile_curated_visualizer_preset_tree,
     regenerate_repo_shipped_visualizer_preset_artifacts,
     resolve_curated_visualizer_manifest_entries,
     scan_curated_visualizer_preset_tree,
@@ -111,6 +113,55 @@ def test_sync_curated_preset_tree_removes_stale_managed_file(tmp_path: Path) -> 
     assert kept.exists()
     assert not stale.exists()
     assert custom.exists()
+
+
+def test_reconcile_curated_preset_tree_prunes_duplicate_slots_and_rewrites_manifest(tmp_path: Path) -> None:
+    root = tmp_path / "visualizer_modes"
+    spectrum = root / "spectrum"
+    spectrum.mkdir(parents=True)
+    stale = spectrum / "preset_2_old.json"
+    current = spectrum / "preset_2_new.json"
+    other = spectrum / "preset_3_other.json"
+    stale.write_text('{"name":"Old"}', encoding="utf-8")
+    current.write_text('{"name":"New"}', encoding="utf-8")
+    other.write_text('{"name":"Other"}', encoding="utf-8")
+
+    old_time = 1_700_000_000
+    new_time = old_time + 60
+    stale.touch()
+    current.touch()
+    other.touch()
+    import os
+
+    os.utime(stale, (old_time, old_time))
+    os.utime(current, (new_time, new_time))
+
+    manifest_path = root.parent / "visualizer_modes_manifest.json"
+    manifest_path.write_text(
+        '{"managed_curated_files":["spectrum/preset_2_old.json"]}',
+        encoding="utf-8",
+    )
+
+    resolved = reconcile_curated_visualizer_preset_tree(root, allow_non_frozen=True)
+
+    assert stale.exists() is False
+    assert current.exists() is True
+    assert resolved == {"spectrum/preset_2_new.json", "spectrum/preset_3_other.json"}
+    assert load_curated_visualizer_preset_manifest(root) == resolved
+
+
+def test_duplicate_prune_is_frozen_or_explicit_only(tmp_path: Path) -> None:
+    root = tmp_path / "visualizer_modes"
+    spectrum = root / "spectrum"
+    spectrum.mkdir(parents=True)
+    old = spectrum / "preset_2_old.json"
+    new = spectrum / "preset_2_new.json"
+    old.write_text("{}", encoding="utf-8")
+    new.write_text("{}", encoding="utf-8")
+
+    assert prune_duplicate_curated_preset_slots(root) == []
+    assert old.exists()
+    assert new.exists()
 
 
 def test_write_manifest_persists_reconciled_live_entries_for_future_sync(tmp_path: Path) -> None:

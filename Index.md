@@ -80,6 +80,7 @@ Living map of the current SRPSS codebase.
 | Steam asset cache | `core/steam/assets.py` | Injected-fetcher Steam artwork/avatar validation, atomic cache writes, and bounded local asset eviction |
 | Steam fixture backend | `core/steam/mock_backend.py` | Test/card-fixture backend that never performs live Steam network calls |
 | Steam events | `core/steam/events.py` | Narrow non-secret `EventSystem` publication helpers for future Steam data-ready updates |
+| Steam Achievement Pulse resolver | `core/steam/achievement_pulse.py` | Pure cache/fixture selected-app and achievement-progress resolver for Most Recent, Recent #2-#5, and literal Custom app ID with unavailable/private states preserved |
 | Steam card visual components | `widgets/steam_components.py` | Provider-inert Steam mock view models, deterministic layout metrics, paint fingerprints, and shared painter helpers that keep `Custom` as uniform scale instead of content authority |
 | Steam card widget | `widgets/steam_card_widget.py` | Dev-gated Steam card overlays that consume resolved/mock view models through shared painter helpers while staying descriptor/factory/settings/Custom-owned and provider/cache/credential/timer inert |
 | Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy dev-gated Steam Settings section with inert Connection & Privacy controls plus four card groups; opening general Settings must not decrypt credentials, scan caches, fetch assets, or contact Steam |
@@ -237,6 +238,6 @@ Living map of the current SRPSS codebase.
 | `--steam` | Steam widget family diagnostics sidecar logs |
 | `--viz-diagnostics`, `--viz-diag` | Legacy compatibility alias for extra visualizer diagnostics |
 | `--fresh` | Clear all resolved runtime log files at startup |
-| `-devblob` | Enable blob mode gate |
+| `-devblob` | Enable blob mode gate | (Change this to --devblob in code at some random point)
 | `--devcurve` | Compatibility no-op alias |
 | `--devsteam` | Enable Steam widget family development gate |

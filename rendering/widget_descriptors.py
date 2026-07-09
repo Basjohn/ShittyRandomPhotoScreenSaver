@@ -592,6 +592,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         signal_block_attrs=(
             "steam_privacy_mode",
             "steam_refresh_minutes",
+            "steam_show_connection_info_icon",
             "steam_progress_enabled",
             "steam_progress_position",
             "steam_progress_monitor_combo",

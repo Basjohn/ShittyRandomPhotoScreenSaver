@@ -83,6 +83,9 @@ Canonical architecture and behavior contracts for SRPSS.
 - Steam request policy helpers may coalesce work, drop stale generations, and calculate backoff, but they must not own threads, timers, UI retries, or provider scheduling. Runtime scheduling remains ThreadManager-owned.
 - Steam asset caches must validate host, size, and image signature before a future card can use the file for painting.
 - Steam widget visibility is descriptor-owned: `steam_progress`, `achievement_pulse`, `abandonment_issues`, and `friend_pulse` factory/runtime/Custom/settings metadata are active only behind the named `--devsteam` gate.
+- Steam family cards use the shared header style: bundled Steam logo plus widget name. Enabled cards with no saved connection and no usable cache render a centered `Connect With Steam To Use` prompt, with only `Connect` acting as the settings affordance. Disabled cards remain hidden.
+- Valid cached Steam card data remains authoritative when the connection/token needs attention. If the cache is at least one day stale, the optional default-on orange info affordance may appear beside the header and route to Steam connection settings; it must not trigger fetch/retry behavior.
+- Future Steam OAuth/OpenID work must request the longest safe token/refresh lifetime available so users are not forced into frequent re-authentication.
 - The Steam Settings section is lazy and inert by default. Opening general Settings must not decrypt Steam credentials, scan Steam caches/assets, contact Steam, construct runtime overlays, or mark Steam data fresh.
 - Steam card scaffolds may prove descriptor/factory/Custom wiring with provider-inert mock view models and shared painter helpers only. Production data, asset loading, manual refresh, and live provider scheduling belong to later phases and must keep ThreadManager/service-widget ownership rather than adding private timers or setup branches.
 

@@ -1398,7 +1398,8 @@
         },
         "steam": {
             "privacy_mode": "Strict",
-            "refresh_minutes": 30
+            "refresh_minutes": 30,
+            "show_connection_info_icon": true
         },
         "steam_progress": {
             "bg_color": [

@@ -1,7 +1,7 @@
 {
   "mode": "spectrum",
-  "name": "Preset 3 (Mono)",
-  "preset_index": 2,
+  "name": "Preset 2 (Tetris)",
+  "preset_index": 1,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "spectrum",
   "snapshot": {
@@ -10,12 +10,12 @@
         "monitor": "2",
         "spectrum_growth": 5.0,
         "spectrum_render_mode": "segment",
-        "spectrum_unique_colors": false,
-        "spectrum_rainbow_border": false,
+        "spectrum_unique_colors": true,
+        "spectrum_rainbow_border": true,
         "spectrum_border_radius": 1.0,
         "spectrum_link_fill_border": false,
         "spectrum_glow_enabled": true,
-        "spectrum_glow_intensity": 0.15,
+        "spectrum_glow_intensity": 0.2,
         "spectrum_glow_color": [
           255,
           255,
@@ -23,8 +23,8 @@
           235
         ],
         "spectrum_ghosting_enabled": true,
-        "spectrum_ghost_alpha": 0.63,
-        "spectrum_ghost_decay": 0.2,
+        "spectrum_ghost_alpha": 0.56,
+        "spectrum_ghost_decay": 0.24,
         "spectrum_mirrored": true,
         "spectrum_shape_nodes": [
           [
@@ -32,12 +32,12 @@
             1.0
           ],
           [
-            0.15208090237261784,
+            0.1299578059071731,
             1.0
           ],
           [
-            0.654852320675106,
-            0.44753086419753124
+            0.547257876312719,
+            0.6698113207547169
           ],
           [
             1.0,
@@ -46,20 +46,20 @@
         ],
         "spectrum_notch_positions_mirrored": [
           [
-            0.07429015947102303,
+            0.0338389731621937,
             "Bass"
           ],
           [
-            0.5113924050632911,
-            "Mid"
+            0.24542979385453148,
+            "Vocal"
           ],
           [
-            0.6531645569620256,
+            0.9019836639439907,
             "Low-Mid"
           ],
           [
-            0.914430182808246,
-            "Vocal"
+            1.0,
+            "Mid"
           ]
         ],
         "spectrum_notch_positions_linear": [
@@ -85,25 +85,25 @@
           ]
         ],
         "spectrum_lane_strengths_mirrored": {
-          "Mid": 0.5,
-          "Vocal": 0.3974358974358989,
-          "Low-Mid": 0.5256410256410263,
-          "Bass": 0.2692307692307692
+          "Mid": 0.344,
+          "Vocal": 0.7435897435897451,
+          "Low-Mid": 0.2868,
+          "Bass": 0.11538461538461539
         },
         "spectrum_lane_strengths_linear": {
-          "Bass": 0.32,
-          "Low-Mid": 0.3228,
+          "Bass": 0.24,
+          "Low-Mid": 0.2868,
           "Vocal": 0.4096,
           "Hi-Mid": 0.672,
           "Treble": 1.0
         },
-        "spectrum_wave_amplitude": 0.15,
-        "spectrum_profile_floor": 0.22,
-        "spectrum_drop_speed": 0.64,
+        "spectrum_wave_amplitude": 0.24,
+        "spectrum_profile_floor": 0.24,
+        "spectrum_drop_speed": 0.56,
         "spectrum_bar_fill_color": [
-          0,
-          0,
-          0,
+          255,
+          255,
+          255,
           230
         ],
         "spectrum_bar_border_color": [
@@ -114,20 +114,20 @@
         ],
         "spectrum_bar_border_opacity": 1.0,
         "spectrum_dynamic_floor": true,
-        "spectrum_manual_floor": 0.52,
-        "spectrum_dynamic_range_enabled": false,
-        "spectrum_agc_strength": 0.4,
-        "spectrum_input_gain": 1.1,
-        "spectrum_kick_lane_gain": 1.85,
+        "spectrum_manual_floor": 0.48,
+        "spectrum_dynamic_range_enabled": true,
+        "spectrum_agc_strength": 0.3,
+        "spectrum_input_gain": 1.21,
+        "spectrum_kick_lane_gain": 1.7,
         "spectrum_transient_pulse_gain": 1.0,
-        "spectrum_transient_clamp": 2.2,
+        "spectrum_transient_clamp": 1.99,
         "spectrum_audio_block_size": 128,
         "spectrum_adaptive_sensitivity": false,
-        "spectrum_sensitivity": 1.21,
-        "spectrum_bar_count": 39,
-        "spectrum_lane_transient_mix": 0.95,
-        "spectrum_rainbow_enabled": false,
-        "spectrum_rainbow_speed": 0.6,
+        "spectrum_sensitivity": 1.1,
+        "spectrum_bar_count": 37,
+        "spectrum_lane_transient_mix": 0.9,
+        "spectrum_rainbow_enabled": true,
+        "spectrum_rainbow_speed": 0.5,
         "mode": "spectrum"
       }
     }

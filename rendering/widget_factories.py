@@ -1066,6 +1066,7 @@ class SteamCardFactory(WidgetFactory):
                 parent=parent,
                 definition=definition,
                 position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
+                initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
             )
 
             if hasattr(widget, "set_font_family"):
@@ -1102,7 +1103,7 @@ class SteamCardFactory(WidgetFactory):
             if isinstance(shadows_config, dict) and hasattr(widget, "set_shadow_config"):
                 widget.set_shadow_config(shadows_config)
 
-            logger.debug("[STEAM_WIDGET] Created dev-gated mock card: %s", self._widget_name)
+            logger.debug("[STEAM_WIDGET] Created dev-gated connect-required card: %s", self._widget_name)
             return widget
         except Exception as exc:
             logger.error("[STEAM_WIDGET] Failed to create %s: %s", self._widget_name, exc, exc_info=True)

@@ -741,6 +741,7 @@ class InputHandler(QObject):
         gmail_widget=None,
         imgur_widget=None,
         spotify_visualizer_widget=None,
+        steam_widgets=(),
     ) -> tuple:
         """
         Route clicks to interactive widgets in interaction mode.
@@ -816,6 +817,26 @@ class InputHandler(QObject):
                             handled = bool(handler(button))
             except Exception:
                 logger.debug("[INPUT] Visualizer click routing failed", exc_info=True)
+
+        # Steam dev-gated card affordances
+        if not handled:
+            for sw in tuple(steam_widgets or ()):
+                if sw is None:
+                    continue
+                try:
+                    if sw.isVisible() and sw.geometry().contains(pos):
+                        geom = sw.geometry()
+                        local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                        target = None
+                        if hasattr(sw, "settings_action_at"):
+                            target = sw.settings_action_at(local_pos)
+                        if target and hasattr(sw, "handle_click") and sw.handle_click(local_pos):
+                            handled = True
+                            self._prime_settings_section("steam")
+                            self.settings_requested.emit()
+                            break
+                except Exception:
+                    logger.debug("[INPUT] Steam click routing failed", exc_info=True)
         
         # Reddit widgets
         for rw in [reddit_widget, reddit2_widget]:
@@ -912,6 +933,29 @@ class InputHandler(QObject):
             reddit_url,
         )
         return handled, reddit_handled, reddit_url
+
+    def _prime_settings_section(self, section_id: str) -> None:
+        """Ask the ordinary Settings dialog to open on a widget sub-section."""
+
+        if self._settings_manager is None or not section_id:
+            return
+        try:
+            raw_state = self._settings_manager.get("ui.tab_state", {})
+            tab_state = dict(raw_state) if isinstance(raw_state, dict) else {}
+            raw_widgets = tab_state.get("widgets", {})
+            widgets_state = dict(raw_widgets) if isinstance(raw_widgets, dict) else {}
+            raw_view_state = widgets_state.get("view_state", {})
+            view_state = dict(raw_view_state) if isinstance(raw_view_state, dict) else {}
+            view_state["subtab_id"] = section_id
+            widgets_state["view_state"] = view_state
+            tab_state["widgets"] = widgets_state
+            self._settings_manager.set("ui.tab_state", tab_state)
+            # SettingsDialog._tab_keys currently keeps Widgets at index 3.
+            # This mirrors the existing persisted navigation seam instead of
+            # adding a widget-local Settings launcher.
+            self._settings_manager.set("ui.last_tab_index", 3)
+        except Exception:
+            logger.debug("[INPUT] Failed to prime Settings section %s", section_id, exc_info=True)
 
     def _route_media_left_click(self, mw, pos: QPoint) -> bool:
         """Route left click to media widget transport controls."""

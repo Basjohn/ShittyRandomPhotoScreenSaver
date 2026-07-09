@@ -51,6 +51,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Steam Phase 3 descriptor/default/settings skeleton coverage: `--devsteam` hidden/active descriptor views, shared/card defaults, lazy Settings no-work contract, non-secret save/load, dev-gated factories, and descriptor-driven `WidgetManager.setup_all_widgets` creation/reuse.
 - `tests/test_steam_phase4_mock_visuals.py`
   Steam Phase 4 mock visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, long/unavailable fixture states, and tight `Custom` scaling that preserves authored visible-field count and rails.
+- `tests/test_steam_achievement_pulse.py`
+  Steam Phase 5 Achievement Pulse coverage: pure cache/fixture selected-app resolution, literal unavailable/custom states, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`

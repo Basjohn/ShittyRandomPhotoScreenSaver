@@ -1,0 +1,243 @@
+{
+  "mode": "blob",
+  "name": "Preset 4 (Lute)",
+  "preset_index": 3,
+  "visualizer_preset_override": true,
+  "visualizer_preset_mode": "blob",
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "monitor": "2",
+        "blob_color": [
+          243,
+          243,
+          243,
+          230
+        ],
+        "blob_glow_color": [
+          254,
+          254,
+          254,
+          255
+        ],
+        "blob_edge_color": [
+          251,
+          252,
+          255,
+          215
+        ],
+        "blob_outline_color": [
+          255,
+          255,
+          255,
+          225
+        ],
+        "blob_pulse": 0.8,
+        "blob_pulse_release_ms": 271,
+        "blob_width": 1.0,
+        "blob_size": 0.3,
+        "blob_glow_intensity": 0.5,
+        "blob_reactive_glow": true,
+        "blob_glow_drive_mode": "vocal",
+        "blob_growth": 5.0,
+        "blob_reactive_deformation": 1.23,
+        "blob_constant_wobble": 0.27,
+        "blob_reactive_wobble": 2.42,
+        "blob_stretch": 0.45,
+        "blob_stage_gain": 1.0,
+        "blob_core_scale": 1.0,
+        "blob_core_floor_bias": 0.35,
+        "blob_stage_bias": 0.0,
+        "blob_stretch_tendency": 0.35,
+        "blob_stretch_inner": 0.0,
+        "blob_stretch_outer": 0.35,
+        "blob_glow_reactivity": 1.4,
+        "blob_glow_max_size": 1.1,
+        "blob_ghosting_enabled": true,
+        "blob_ghost_alpha": 0.49,
+        "blob_ghost_decay": 0.43,
+        "blob_shaper_enabled": true,
+        "blob_shape_base_nodes": [
+          [
+            0.9913587759625254,
+            0.6824871806229622
+          ],
+          [
+            0.23393779910454385,
+            0.5881780009216375
+          ],
+          [
+            0.5154249195362136,
+            0.5358479812268689
+          ],
+          [
+            0.7645938965312845,
+            0.6471632728943021
+          ]
+        ],
+        "blob_shape_reaction_nodes": [
+          [
+            0.12665043654266564,
+            3.5357240145789426
+          ],
+          [
+            0.25,
+            1.0
+          ],
+          [
+            0.3510676439328775,
+            2.6223163824902103
+          ],
+          [
+            0.49401690408215154,
+            3.350515387334935
+          ],
+          [
+            0.6576765869127688,
+            2.5948455819112515
+          ],
+          [
+            0.75,
+            1.0
+          ],
+          [
+            0.8650242804522068,
+            3.7629119273296188
+          ],
+          [
+            0.9937506980459506,
+            2.0756739860996114
+          ]
+        ],
+        "blob_shape_energy_nodes": [
+          {
+            "type": "vocals",
+            "x": 0.8362919132149901,
+            "y": 0.170611439842209,
+            "strength": 1.0,
+            "dir_x": 0.7566578029472293,
+            "dir_y": -0.6538111112844994,
+            "dir_len": 42.0,
+            "canvas": "react"
+          },
+          {
+            "type": "vocals",
+            "x": 0.1242603550295855,
+            "y": 0.16863905325443818,
+            "strength": 1.0,
+            "dir_x": -0.7625091353727899,
+            "dir_y": -0.6469774481950978,
+            "dir_len": 42.0,
+            "canvas": "react"
+          },
+          {
+            "type": "mid",
+            "x": 0.48915187376725766,
+            "y": 0.2238658777120314,
+            "strength": 1.0,
+            "dir_x": 4.263256414560599e-15,
+            "dir_y": 1.0,
+            "dir_len": 40.000000000000014,
+            "canvas": "react"
+          },
+          {
+            "type": "mid",
+            "x": 0.3668639053254438,
+            "y": 0.5,
+            "strength": 1.0,
+            "dir_x": 0.9992611746313143,
+            "dir_y": -0.038433122101205655,
+            "dir_len": 17.346149108343507,
+            "canvas": "react"
+          },
+          {
+            "type": "mid",
+            "x": 0.6331360946745562,
+            "y": 0.5,
+            "strength": 1.0,
+            "dir_x": -0.9972677544567092,
+            "dir_y": 0.07387168551531074,
+            "dir_len": 18.04931516090784,
+            "canvas": "react"
+          },
+          {
+            "type": "treble",
+            "x": 0.516765285996055,
+            "y": 0.9457593688362917,
+            "strength": 1.0,
+            "dir_x": -0.04756514941544873,
+            "dir_y": 0.9988681377244376,
+            "dir_len": 28.03172805550485,
+            "canvas": "react"
+          },
+          {
+            "type": "bass",
+            "x": 0.2110453648915185,
+            "y": 0.6893491124260355,
+            "strength": 1.0,
+            "dir_x": -0.9805806756909197,
+            "dir_y": -0.19611613513818646,
+            "dir_len": 14.0,
+            "canvas": "react"
+          },
+          {
+            "type": "bass",
+            "x": 0.7810650887573964,
+            "y": 0.7071005917159763,
+            "strength": 1.0,
+            "dir_x": 0.9954954725939521,
+            "dir_y": -0.09480909262799611,
+            "dir_len": 14.063348739819325,
+            "canvas": "react"
+          }
+        ],
+        "blob_shaper_base_strength": 0.5,
+        "blob_shaper_react_strength": 0.5,
+        "blob_shaper_idle_motion": 0.18,
+        "blob_shaper_audio_motion": 1.2,
+        "blob_topology": "circle",
+        "blob_ring_thickness": 0.7,
+        "blob_inward_liquid_enabled": true,
+        "blob_inward_liquid_reactivity": 1.0,
+        "blob_inward_liquid_max_size": 0.38,
+        "blob_inward_liquid_color": [
+          170,
+          225,
+          255,
+          190
+        ],
+        "blob_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "blob_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blob_bar_border_opacity": 1.0,
+        "blob_dynamic_floor": true,
+        "blob_manual_floor": 0.05,
+        "blob_dynamic_range_enabled": false,
+        "blob_agc_strength": 0.45,
+        "blob_input_gain": 0.35,
+        "blob_kick_lane_gain": 1.76,
+        "blob_transient_pulse_gain": 1.0,
+        "blob_transient_clamp": 2.35,
+        "blob_audio_block_size": 256,
+        "blob_adaptive_sensitivity": false,
+        "blob_sensitivity": 0.9,
+        "blob_bar_count": 40,
+        "blob_transient_mix_bass": 0.15,
+        "blob_transient_mix_vocal": 0.22,
+        "blob_rainbow_enabled": true,
+        "blob_rainbow_speed": 0.15,
+        "mode": "blob"
+      }
+    }
+  },
+  "description": "Saved from current Settings state."
+}

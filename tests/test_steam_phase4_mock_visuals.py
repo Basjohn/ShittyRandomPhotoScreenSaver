@@ -9,6 +9,7 @@ from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_components import (
     STEAM_CARD_AUTHORED_SIZE,
     build_mock_steam_view_model,
+    build_steam_connect_required_view_model,
     layout_steam_card,
     render_steam_card,
     with_long_title,
@@ -124,6 +125,18 @@ def test_steam_render_helper_handles_dpr_and_fixture_variants(qt_app) -> None:
     assert layout_1x.paint_fingerprint != unavailable_layout.paint_fingerprint
 
 
+def test_steam_connect_required_prompt_uses_prompt_layout_without_mock_artifact(qt_app) -> None:
+    model = build_steam_connect_required_view_model("steam_progress")
+    pixmap, layout = _render_to_pixmap(model, 420, 180, dpr=1.0)
+
+    assert not pixmap.isNull()
+    assert layout.visible_field_ids == ()
+    assert layout.art_rect.isNull()
+    assert layout.action_rects
+    assert layout.title_rect.center().x() == layout.authored_rect.center().x()
+    assert layout.status_rect.center().x() == layout.authored_rect.center().x()
+
+
 def test_steam_card_widget_paints_mock_model_without_provider_or_timer_hooks(qt_app) -> None:
     forbidden_sources = (
         "core.steam.backend",
@@ -136,6 +149,8 @@ def test_steam_card_widget_paints_mock_model_without_provider_or_timer_hooks(qt_
     source = "\n".join(
         (
             inspect.getsource(SteamCardWidget.__init__),
+            inspect.getsource(SteamCardWidget._activate_impl),
+            inspect.getsource(SteamCardWidget._start_widget_fade_in),
             inspect.getsource(SteamCardWidget._paint_before_native_text),
             inspect.getsource(SteamCardWidget.set_view_model),
         )

@@ -26,7 +26,11 @@ import sys
 from typing import Any, Dict, List, Mapping, TYPE_CHECKING
 
 from core.logging.logger import get_logger
-from core.visualizer_preset_manifest import mirror_curated_visualizer_preset_tree, sync_curated_preset_tree
+from core.visualizer_preset_manifest import (
+    mirror_curated_visualizer_preset_tree,
+    reconcile_curated_visualizer_preset_tree,
+    sync_curated_preset_tree,
+)
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,          # noqa: F401  intentional re-export
     resolve_all_preset_indices_from_getter,     # noqa: F401  intentional re-export
@@ -793,6 +797,7 @@ def _build_presets_for_mode(mode: str) -> List[VisualizerPreset]:
     global _CURATED_TREE_SYNCED
     if not _CURATED_TREE_SYNCED:
         try:
+            reconcile_curated_visualizer_preset_tree(_presets_root(), allow_non_frozen=True)
             sync_curated_preset_tree(_presets_root())
         except Exception:
             logger.debug("[VIS_PRESETS] Failed to sync curated preset tree", exc_info=True)

@@ -24,10 +24,10 @@ The four cards remain:
 
 | Stable widget key | Runtime card | Header label | Job |
 |---|---|---|---|
-| `steam_progress` | Steam Progress | `STEAM  |  Steam Progress` | Curate material changes in games already owned. |
-| `achievement_pulse` | Achievement Pulse | `STEAM  |  Achievement Pulse` | Present one tracked game’s achievement progress as a visual object. |
-| `abandonment_issues` | Abandonment Issues | `STEAM  |  Abandonment Issues` | Re-surface genuinely lapsed games without inventing history. |
-| `friend_pulse` | Friend Pulse | `STEAM  |  Friend Pulse` | Show a restrained, privacy-aware view of observable friend activity. |
+| `steam_progress` | Steam Progress | Steam logo + `Steam Progress` | Curate material changes in games already owned. |
+| `achievement_pulse` | Achievement Pulse | Steam logo + `Achievement Pulse` | Present one tracked game’s achievement progress as a visual object. |
+| `abandonment_issues` | Abandonment Issues | Steam logo + `Abandonment Issues` | Re-surface genuinely lapsed games without inventing history. |
+| `friend_pulse` | Friend Pulse | Steam logo + `Friend Pulse` | Show a restrained, privacy-aware view of observable friend activity. |
 
 ### 1.1 Corrections made to the initial proposal
 
@@ -105,6 +105,7 @@ core/steam/
     credentials.py          # strict encrypted credential/profile store
     backend.py              # supported request transport, timeouts, redaction, result model
     models.py               # frozen normalized records and result/status types
+    achievement_pulse.py    # pure selected-app and achievement-progress resolver
     cache.py                # versioned atomic family cache and migration
     assets.py               # safe artwork/avatar fetch, validation, eviction, local references
     errors.py               # public error classification / safe messages
@@ -183,7 +184,7 @@ persisted_widget_keys:
     ("steam_progress", "achievement_pulse", "abandonment_issues", "friend_pulse")
 ```
 
-That is one ordinary lazily built WidgetsTab section, not a second settings router. The section contains five normal group boxes: **Connection & Privacy**, then one group for each card.
+That is one ordinary lazily built WidgetsTab section, not a second settings router. The section uses the standard collapsible widget-settings bucket pattern: **Connection & Privacy**, then one bucket for each card.
 
 Add descriptor-owned Custom metadata for **every** Steam card:
 
@@ -585,6 +586,7 @@ All cards inherit SRPSS’s existing card controls for:
 - shared painter-owned card/header/text shadows;
 - position/Custom routing;
 - standard dark-card visual language.
+- the shared header composition: customizable header styling with the bundled `images/Steam_Logo.png` mark followed by the card name, e.g. `Steam logo + Achievement Pulse`.
 
 Steam-specific settings should be limited to actual Steam presentation choices:
 
@@ -686,6 +688,19 @@ The Steam section is lazy-built once through the descriptor registry. Opening th
 
 First visit builds the UI controls from canonical defaults and saved non-secret settings. It shows a neutral “Connection not checked this session” status until the user explicitly tests, refreshes, saves a key, or opens an already-running runtime status view through an existing safe notification path.
 
+### 8.1.1 Enabled-card connection state
+
+This section uses “connection” as the current implementation word. If a later Steam OAuth/OpenID path is adopted, it must follow the same card-state contract and request the longest safe token/refresh lifetime Steam permits. Users should not be forced to re-authenticate unless Steam or the user explicitly invalidates the credential.
+
+- A disabled Steam card remains hidden.
+- An enabled Steam card with valid live data or valid cache paints that content.
+- An enabled Steam card with no saved Steam connection and no usable cache paints the normal card shell plus a centered prompt: `Connect With Steam To Use`. This state must not paint mock-art wells, fixture field rails, accent underlines, or other content-only placeholders.
+- Only the word `Connect` is underlined/click-targeted. Activating it must open Settings directly to the Steam connection section through the shared settings/navigation seam, not through a widget-local browser helper.
+- This prompt does not contradict “valid cache paints first”: cache remains authoritative when present, even if the current connection is unavailable.
+- If the saved connection/token is expired or otherwise unauthorised but cache is still usable, the card keeps painting cache and may show a small orange `i` info affordance beside the header. The info affordance is optional, enabled by default, and should be general enough for future Gmail/IMAP stale-connection use.
+- The info affordance must not be eager. It appears only when the displayed cache is at least `1 day` stale and the connection state needs user attention. Clicking it uses the same Settings target as the `Connect` prompt.
+- The info icon is diagnostic/user-guidance UI, not a fetch trigger, retry loop, or fallback success state.
+
 ### 8.2 Connection & Privacy group
 
 Controls:
@@ -703,6 +718,7 @@ Controls:
 - **Refresh Steam Data**.
 - **Clear Steam Cache**.
 - **Disconnect Steam** (confirmation, deletes credentials and account-private state).
+- **Show stale connection info icon** (default on).
 - compact privacy note for Friend Pulse.
 - no key reveal button.
 
@@ -885,7 +901,7 @@ Dynamic modes default to `Skip games with unavailable achievements = on`.
 
 Default composition:
 
-- Steam header;
+- Steam logo + `Achievement Pulse` header using the shared Steam card header style;
 - game artwork;
 - painter-drawn circular progress ring;
 - percentage inside ring;
@@ -1320,20 +1336,30 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** All four cards render from fixture view models with normal, narrow, and Custom geometry without clipping outside their card or changing committed rectangle.
 
-## Phase 5 — Achievement Pulse
+## Phase 5 — Achievement Pulse cache/fixture slice
 
-- [ ] Implement local library index/autocomplete.
-- [ ] Implement Most Recent, Recent #2–#5, and Custom selection.
-- [ ] Implement selected-app achievement cache/refresh.
-- [ ] Implement eligibility/unavailable policy.
-- [ ] Implement painter-drawn ring and tile highlight modes.
-- [ ] Implement card fields/settings/manual refresh.
+- [x] Implement Most Recent, Recent #2–#5, and literal Custom app-ID selection from cache/fixture payloads only.
+- [x] Implement selected-app achievement progress view-model mapping.
+- [x] Preserve private/unavailable/no-achievement as literal card states with no substitute game.
+- [x] Add shared Steam logo + card-name header composition.
+- [x] Add enabled-card no-connection/no-cache prompt and stale-cache info affordance.
+- [x] Add cache-first fixture bars before live provider hookup.
+
+**Gate:** A Custom game persists by app ID in the pure resolver; dynamic selection remains safe when a recent game lacks achievements; card state can render cache/fixture, connect-required, and stale-connection affordance paths without provider/cache/credential work in constructors or paint.
+
+## Phase 6 — Achievement Pulse real data hookup
+
+- [ ] Connect the pure resolver to versioned Steam cache records.
+- [ ] Implement selected-app achievement cache refresh through shared service-widget/ThreadManager scheduling only.
+- [ ] Implement local library index/autocomplete if the Custom app-ID control proves too brittle for users.
+- [ ] Implement painter-drawn ring and tile highlight modes after the cache-backed model is stable.
+- [ ] Implement card fields/settings/manual refresh without cache churn for unchanged visible models.
 - [ ] Implement cache-first/fade/transition deferral integration.
 - [ ] Add real-account manual validation after fixture coverage.
 
-**Gate:** A Custom game persists by app ID; dynamic selection remains safe when a recent game lacks achievements; unchanged results do not repaint/cache-write.
+**Gate:** Achievement Pulse can paint real cache first, refresh without private timers or UI pressure, and preserve unavailable/private states without blank flashes or substitute games.
 
-## Phase 6 — Abandonment Issues, only after timestamp proof
+## Phase 7 — Abandonment Issues, only after timestamp proof
 
 - [ ] Implement last-played confidence/provenance handling.
 - [ ] Implement candidate eligibility/score/cooldowns/pin/Never Show.
@@ -1344,7 +1370,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** Smart Abandonment cannot display an inferred date. No-op if reliable timestamp source is absent.
 
-## Phase 7 — Friend Pulse
+## Phase 8 — Friend Pulse
 
 - [ ] Implement profile-private friend snapshots and delta ledger.
 - [ ] Implement first-snapshot/no-history policy.
@@ -1358,7 +1384,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** private/unavailable does not masquerade as offline; first observation is labelled accurately; grid/list have a hard cap and obey Custom.
 
-## Phase 8 — Steam Progress, only after event source proof
+## Phase 9 — Steam Progress, only after event source proof
 
 - [ ] Implement source adapter and source-provenance/fingerprint model.
 - [ ] Implement Focus Library candidate pool.
@@ -1371,7 +1397,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** default card only presents source-proven meaningful events and cannot become a noisy patch ticker.
 
-## Phase 9 — Full integration, docs, packaging, and release bar
+## Phase 10 — Full integration, docs, packaging, and release bar
 
 - [ ] Run full suite.
 - [ ] Run focused Steam tests.
@@ -1531,9 +1557,10 @@ Assert:
 
 | Scenario | Expected result |
 |---|---|
-| Clean install / no credentials | No Steam card fades in; Settings explains configuration path. |
+| Enabled card, no connection and no usable cache | Card shell remains visible with centered `Connect With Steam To Use`; no mock-art/content placeholders appear; only `Connect` is underlined/clickable and routes through the shared Settings request path toward Steam connection settings. |
 | Valid credential, empty cache | Cache initializes after ordinary background request; no UI freeze. |
 | Valid cached data, network offline | Cached card remains visible; no timestamp is falsely freshened. |
+| Expired/unauthorized connection with cache at least 1 day stale | Cached card remains visible; optional default-on orange info affordance appears beside the header and routes through the same Settings request path. |
 | Private friend/library data | No “offline everyone” interpretation; Settings shows safe availability state. |
 | Invalid API key | Cache preserved; safe error, no secret logging. |
 | `--noupdates` | No automatic requests; cache can still display; manual refresh follows deliberate route. |
@@ -1601,7 +1628,7 @@ Look for:
 - [ ] Cards use shared painter-owned shadow/card language and strong clipped art.
 - [ ] No provider/cache/image work occurs in paint or constructors.
 - [ ] Valid cache paints first without blank flash.
-- [ ] No-cache/unavailable cards do not fade in merely to show a dead panel.
+- [ ] Disabled cards stay hidden; enabled cards with no connection and no usable cache show the centered Steam connection prompt instead of a dead panel.
 - [ ] Transition-aware deferral and visible-fallback rules use the shared service helpers.
 - [ ] Identical resolved visible models do not produce cache churn or repaint churn.
 - [ ] Assets are DPR-aware and prepared outside paint.

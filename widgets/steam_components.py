@@ -6,14 +6,19 @@ production Steam data path is wired into runtime cards.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable
 
-from PySide6.QtCore import QRectF, QSizeF, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen
+from PySide6.QtCore import QRect, QRectF, QSizeF, Qt
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+
+from core.steam.achievement_pulse import AchievementPulseResolved
+from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_with_shadow
 
 
 STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
+STEAM_SETTINGS_TARGET = "steam_connection"
+STEAM_STALE_CONNECTION_INFO_SECONDS = 24 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -42,6 +47,14 @@ class SteamCardViewModel:
     status: str
     accent: str
     fields: tuple[SteamCardField, ...]
+    state: str = "content"
+    action_text: str = ""
+    action_label: str = ""
+    settings_target: str = ""
+    show_connection_info: bool = False
+    connection_info_target: str = ""
+    connection_info_tooltip: str = ""
+    cache_age_seconds: float | None = None
 
     @property
     def enabled_field_ids(self) -> tuple[str, ...]:
@@ -58,6 +71,14 @@ class SteamCardViewModel:
             self.status,
             self.accent,
             tuple(field.fingerprint() for field in self.fields),
+            self.state,
+            self.action_text,
+            self.action_label,
+            self.settings_target,
+            self.show_connection_info,
+            self.connection_info_target,
+            self.connection_info_tooltip,
+            self.cache_age_seconds,
         )
 
 
@@ -70,6 +91,8 @@ class SteamCardLayout:
     scale: float
     content_rect: QRectF
     header_rect: QRectF
+    logo_rect: QRectF
+    header_text_rect: QRectF
     art_rect: QRectF
     title_rect: QRectF
     subtitle_rect: QRectF
@@ -78,6 +101,8 @@ class SteamCardLayout:
     field_rects: tuple[tuple[str, QRectF, int], ...]
     visible_field_ids: tuple[str, ...]
     paint_fingerprint: tuple[object, ...]
+    action_rects: tuple[tuple[str, QRectF], ...] = field(default_factory=tuple)
+    info_rect: QRectF | None = None
 
     @property
     def rails(self) -> tuple[int, ...]:
@@ -170,6 +195,128 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
     )
 
 
+def build_steam_connect_required_view_model(card_id: str) -> SteamCardViewModel:
+    """Return an enabled-card prompt state for missing connection/cache."""
+
+    base = build_mock_steam_view_model(card_id)
+    return SteamCardViewModel(
+        card_id=base.card_id,
+        header=base.header,
+        title="",
+        subtitle="",
+        metric_label="",
+        metric_value="",
+        status="Steam connection required",
+        accent=base.accent,
+        fields=(),
+        state="connect_required",
+        action_text="Connect With Steam To Use",
+        action_label="Connect",
+        settings_target=STEAM_SETTINGS_TARGET,
+    )
+
+
+def _format_playtime(minutes: int | None) -> str:
+    if minutes is None:
+        return "Unknown"
+    hours = minutes / 60.0
+    if hours < 1:
+        return f"{minutes}m"
+    return f"{hours:.1f}h" if hours < 10 else f"{int(round(hours))}h"
+
+
+def build_achievement_pulse_view_model(
+    resolved: AchievementPulseResolved,
+    *,
+    cache_age_seconds: float | None = None,
+    connection_needs_attention: bool = False,
+    show_connection_info_icon: bool = True,
+) -> SteamCardViewModel:
+    """Map a pure Achievement Pulse resolution into the shared card view model."""
+
+    base = build_mock_steam_view_model("achievement_pulse")
+    if not resolved.ok:
+        model = SteamCardViewModel(
+            card_id="achievement_pulse",
+            header=base.header,
+            title=resolved.title or "Achievement Pulse",
+            subtitle=resolved.unavailable_reason or "Achievement data is unavailable.",
+            metric_label="State",
+            metric_value="Unavailable",
+            status=resolved.selection_label,
+            accent=base.accent,
+            fields=(
+                SteamCardField("selected", "Selected", resolved.selection_label),
+                SteamCardField("appid", "App", str(resolved.appid or "Unknown")),
+                SteamCardField("source", "Source", resolved.source_label),
+            ),
+            state="unavailable",
+        )
+    else:
+        percent_text = f"{resolved.percent:.0f}%" if resolved.percent is not None else "Unknown"
+        latest = resolved.latest_achievement or "No unlocked achievement yet"
+        model = SteamCardViewModel(
+            card_id="achievement_pulse",
+            header=base.header,
+            title=resolved.title,
+            subtitle=f"Latest: {latest}",
+            metric_label="Unlocked",
+            metric_value=f"{resolved.unlocked}/{resolved.total}",
+            status=resolved.selection_label,
+            accent=base.accent,
+            fields=(
+                SteamCardField("total", "Total", percent_text),
+                SteamCardField("latest", "Latest", latest),
+                SteamCardField("playtime", "Playtime", _format_playtime(resolved.playtime_forever_minutes)),
+                SteamCardField("source", "Source", resolved.source_label),
+                SteamCardField("selected", "Selected", resolved.selection_label),
+            ),
+        )
+
+    return with_stale_connection_info(
+        model,
+        cache_age_seconds=cache_age_seconds,
+        enabled=show_connection_info_icon,
+        connection_needs_attention=connection_needs_attention,
+    )
+
+
+def with_stale_connection_info(
+    model: SteamCardViewModel,
+    *,
+    cache_age_seconds: float | None,
+    enabled: bool = True,
+    connection_needs_attention: bool = True,
+) -> SteamCardViewModel:
+    """Attach the optional stale-connection info affordance to a cached model."""
+
+    should_show = (
+        enabled
+        and connection_needs_attention
+        and cache_age_seconds is not None
+        and cache_age_seconds >= STEAM_STALE_CONNECTION_INFO_SECONDS
+    )
+    return SteamCardViewModel(
+        card_id=model.card_id,
+        header=model.header,
+        title=model.title,
+        subtitle=model.subtitle,
+        metric_label=model.metric_label,
+        metric_value=model.metric_value,
+        status=model.status,
+        accent=model.accent,
+        fields=model.fields,
+        state=model.state,
+        action_text=model.action_text,
+        action_label=model.action_label,
+        settings_target=model.settings_target,
+        show_connection_info=should_show,
+        connection_info_target=STEAM_SETTINGS_TARGET if should_show else "",
+        connection_info_tooltip="Steam connection needs attention; cached data is at least 1 day old." if should_show else "",
+        cache_age_seconds=cache_age_seconds,
+    )
+
+
 def with_long_title(model: SteamCardViewModel) -> SteamCardViewModel:
     """Return a long-title variant for deterministic layout bars."""
 
@@ -183,6 +330,14 @@ def with_long_title(model: SteamCardViewModel) -> SteamCardViewModel:
         status=model.status,
         accent=model.accent,
         fields=model.fields,
+        state=model.state,
+        action_text=model.action_text,
+        action_label=model.action_label,
+        settings_target=model.settings_target,
+        show_connection_info=model.show_connection_info,
+        connection_info_target=model.connection_info_target,
+        connection_info_tooltip=model.connection_info_tooltip,
+        cache_age_seconds=model.cache_age_seconds,
     )
 
 
@@ -199,6 +354,14 @@ def with_unavailable_state(model: SteamCardViewModel) -> SteamCardViewModel:
         status="Unavailable fixture",
         accent=model.accent,
         fields=model.fields,
+        state="unavailable",
+        action_text=model.action_text,
+        action_label=model.action_label,
+        settings_target=model.settings_target,
+        show_connection_info=model.show_connection_info,
+        connection_info_target=model.connection_info_target,
+        connection_info_tooltip=model.connection_info_tooltip,
+        cache_age_seconds=model.cache_age_seconds,
     )
 
 
@@ -245,12 +408,15 @@ def layout_steam_card(
     authored_rect = QRectF(origin_x, origin_y, painted_w, painted_h)
 
     logical_content = QRectF(18.0, 16.0, 384.0, 148.0)
-    header = QRectF(18.0, 14.0, 222.0, 24.0)
+    header = QRectF(18.0, 15.0, 224.0, 40.0)
+    logo = QRectF(32.0, 23.0, 24.0, 24.0)
+    header_text = QRectF(64.0, 17.0, 162.0, 36.0)
     art = QRectF(290.0, 42.0, 94.0, 74.0)
     title = QRectF(18.0, 45.0, 258.0, 30.0)
     subtitle = QRectF(18.0, 76.0, 258.0, 28.0)
     metric = QRectF(290.0, 122.0, 94.0, 28.0)
     status = QRectF(18.0, 145.0, 258.0, 18.0)
+    info = QRectF(250.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
 
     fields = _enabled_fields(model.fields)
     field_rects: list[tuple[str, QRectF, int]] = []
@@ -263,6 +429,18 @@ def layout_steam_card(
         x = 18.0 + column * (field_w + gap)
         y = 109.0 + rail * 20.0
         field_rects.append((field.field_id, _map_rect(QRectF(x, y, field_w, field_h), origin_x, origin_y, scale), rail))
+
+    action_rects: list[tuple[str, QRectF]] = []
+    if model.state == "connect_required" and model.settings_target:
+        prompt_rect = QRectF(44.0, 76.0, 332.0, 34.0)
+        connect_rect = QRectF(116.0, 76.0, 82.0, 34.0)
+        title = prompt_rect
+        subtitle = QRectF(44.0, 113.0, 332.0, 24.0)
+        status = subtitle
+        art = QRectF()
+        metric = QRectF()
+        field_rects.clear()
+        action_rects.append((model.settings_target, _map_rect(connect_rect, origin_x, origin_y, scale)))
 
     paint_fingerprint = (
         model.content_fingerprint(),
@@ -277,6 +455,8 @@ def layout_steam_card(
         scale=scale,
         content_rect=_map_rect(logical_content, origin_x, origin_y, scale),
         header_rect=_map_rect(header, origin_x, origin_y, scale),
+        logo_rect=_map_rect(logo, origin_x, origin_y, scale),
+        header_text_rect=_map_rect(header_text, origin_x, origin_y, scale),
         art_rect=_map_rect(art, origin_x, origin_y, scale),
         title_rect=_map_rect(title, origin_x, origin_y, scale),
         subtitle_rect=_map_rect(subtitle, origin_x, origin_y, scale),
@@ -285,6 +465,8 @@ def layout_steam_card(
         field_rects=tuple(field_rects),
         visible_field_ids=tuple(field.field_id for field in fields),
         paint_fingerprint=paint_fingerprint,
+        action_rects=tuple(action_rects),
+        info_rect=_map_rect(info, origin_x, origin_y, scale) if info is not None else None,
     )
 
 
@@ -296,6 +478,7 @@ def _draw_elided_text(
     color: QColor,
     font: QFont,
     flags: Qt.AlignmentFlag | Qt.TextFlag = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+    shadow: bool = True,
 ) -> None:
     painter.save()
     try:
@@ -303,9 +486,118 @@ def _draw_elided_text(
         painter.setPen(color)
         metrics = QFontMetricsF(font)
         elided = metrics.elidedText(text, Qt.TextElideMode.ElideRight, max(1.0, rect.width()))
-        painter.drawText(rect, int(flags), elided)
+        draw_text_rect_with_shadow(
+            painter,
+            rect.toAlignedRect(),
+            int(flags),
+            elided,
+            font_size=max(1, font.pointSize()),
+            enabled=shadow,
+        )
     finally:
         painter.restore()
+
+
+def _draw_underlined_text(
+    painter: QPainter,
+    rect: QRectF,
+    prefix: str,
+    suffix: str,
+    *,
+    color: QColor,
+    font: QFont,
+) -> None:
+    painter.save()
+    try:
+        font = QFont(font)
+        min_point_size = max(6, int(round(font.pointSize() * 0.72)))
+        painter.setFont(font)
+        painter.setPen(color)
+        metrics = QFontMetricsF(font)
+        prefix_width = metrics.horizontalAdvance(prefix)
+        suffix_width = metrics.horizontalAdvance(suffix)
+        total_width = prefix_width + suffix_width
+        while total_width > rect.width() and font.pointSize() > min_point_size:
+            font.setPointSize(font.pointSize() - 1)
+            painter.setFont(font)
+            metrics = QFontMetricsF(font)
+            prefix_width = metrics.horizontalAdvance(prefix)
+            suffix_width = metrics.horizontalAdvance(suffix)
+            total_width = prefix_width + suffix_width
+        if total_width > rect.width():
+            suffix = metrics.elidedText(suffix, Qt.TextElideMode.ElideRight, max(1.0, rect.width() - prefix_width))
+            suffix_width = metrics.horizontalAdvance(suffix)
+            total_width = prefix_width + suffix_width
+        x = rect.x() + max(0.0, (rect.width() - total_width) * 0.5)
+        y = rect.y() + (rect.height() + metrics.ascent() - metrics.descent()) * 0.5
+        prefix_rect = QRectF(x, rect.y(), prefix_width + 2.0, rect.height())
+        suffix_rect = QRectF(x + prefix_width, rect.y(), suffix_width + 2.0, rect.height())
+        draw_text_rect_with_shadow(
+            painter,
+            prefix_rect.toAlignedRect(),
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            prefix,
+            font_size=max(1, font.pointSize()),
+        )
+        underline_y = y + max(1.0, 2.0 * rect.height() / 28.0)
+        painter.drawLine(
+            QRectF(x, underline_y, prefix_width, 1.0).topLeft(),
+            QRectF(x + prefix_width, underline_y, 1.0, 1.0).topLeft(),
+        )
+        draw_text_rect_with_shadow(
+            painter,
+            suffix_rect.toAlignedRect(),
+            int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+            suffix,
+            font_size=max(1, font.pointSize()),
+        )
+    finally:
+        painter.restore()
+
+
+def _draw_header_badge(
+    painter: QPainter,
+    layout: SteamCardLayout,
+    model: SteamCardViewModel,
+    *,
+    logo_pixmap: QPixmap | None,
+    header_font: QFont,
+    text_color: QColor,
+) -> None:
+    border = QColor(255, 255, 255, 235)
+    draw_rounded_rect_with_shadow(
+        painter,
+        layout.header_rect.toAlignedRect(),
+        max(8.0, 12.0 * layout.scale),
+        border,
+        max(2, int(round(2.0 * layout.scale))),
+        shadow_enabled=True,
+    )
+
+    if logo_pixmap is not None and not logo_pixmap.isNull():
+        painter.drawPixmap(layout.logo_rect.toAlignedRect(), logo_pixmap)
+    else:
+        accent = _accent_color(model)
+        painter.setBrush(QColor(accent.red(), accent.green(), accent.blue(), 210))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(layout.logo_rect)
+        _draw_elided_text(
+            painter,
+            layout.logo_rect,
+            "S",
+            color=QColor(255, 255, 255, 235),
+            font=header_font,
+            flags=Qt.AlignmentFlag.AlignCenter,
+        )
+
+    _draw_elided_text(
+        painter,
+        layout.header_text_rect,
+        model.header,
+        color=text_color,
+        font=header_font,
+        flags=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+    )
 
 
 def render_steam_card(
@@ -317,6 +609,7 @@ def render_steam_card(
     font_size: int = 14,
     text_color: QColor | None = None,
     dpr: float = 1.0,
+    logo_pixmap: QPixmap | None = None,
 ) -> SteamCardLayout:
     """Paint a Steam card mock and return the layout used."""
 
@@ -330,45 +623,74 @@ def render_steam_card(
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        glow = QLinearGradient(layout.authored_rect.topLeft(), layout.authored_rect.bottomRight())
-        faint = QColor(accent)
-        faint.setAlpha(46)
-        transparent = QColor(accent)
-        transparent.setAlpha(0)
-        glow.setColorAt(0.0, faint)
-        glow.setColorAt(1.0, transparent)
-        painter.fillRect(layout.authored_rect.adjusted(2, 2, -2, -2), glow)
-
-        accent_pen = QPen(accent, max(1.0, 3.0 * layout.scale))
-        accent_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        painter.setPen(accent_pen)
-        painter.drawLine(layout.header_rect.bottomLeft(), layout.header_rect.bottomRight())
-
-        art_path = QPainterPath()
-        art_path.addRoundedRect(layout.art_rect, 10.0 * layout.scale, 10.0 * layout.scale)
-        art_fill = QLinearGradient(layout.art_rect.topLeft(), layout.art_rect.bottomRight())
-        art_color = QColor(accent)
-        art_color.setAlpha(150)
-        art_fill.setColorAt(0.0, art_color)
-        art_fill.setColorAt(1.0, QColor(10, 16, 26, 190))
-        painter.fillPath(art_path, art_fill)
-        painter.setPen(QPen(QColor(255, 255, 255, 160), max(1.0, 1.5 * layout.scale)))
-        painter.drawPath(art_path)
-
         base_size = max(7, int(font_size * layout.scale))
-        header_font = QFont(font_family, max(6, int(base_size * 0.82)), QFont.Weight.DemiBold)
+        header_font = QFont(font_family, max(7, int(base_size * 1.05)), QFont.Weight.Bold)
         title_font = QFont(font_family, max(8, int(base_size * 1.28)), QFont.Weight.Bold)
         subtitle_font = QFont(font_family, max(7, int(base_size * 0.86)), QFont.Weight.Normal)
         metric_font = QFont(font_family, max(8, int(base_size * 1.18)), QFont.Weight.Bold)
         field_font = QFont(font_family, max(6, int(base_size * 0.68)), QFont.Weight.DemiBold)
 
-        _draw_elided_text(painter, layout.header_rect, f"STEAM | {model.header}", color=muted, font=header_font)
+        _draw_header_badge(
+            painter,
+            layout,
+            model,
+            logo_pixmap=logo_pixmap,
+            header_font=header_font,
+            text_color=color,
+        )
+        if layout.info_rect is not None:
+            painter.setBrush(QColor(240, 144, 45, 230))
+            painter.setPen(QPen(QColor(255, 230, 180, 220), max(1.0, layout.scale)))
+            painter.drawEllipse(layout.info_rect)
+            info_font = QFont(font_family, max(6, int(base_size * 0.68)), QFont.Weight.Bold)
+            _draw_elided_text(
+                painter,
+                layout.info_rect.adjusted(0.0, -0.5 * layout.scale, 0.0, 0.0),
+                "i",
+                color=QColor(30, 20, 10, 230),
+                font=info_font,
+                flags=Qt.AlignmentFlag.AlignCenter,
+            )
+
+        if model.state == "connect_required":
+            prompt_font = QFont(font_family, max(9, int(base_size * 1.12)), QFont.Weight.Bold)
+            _draw_underlined_text(
+                painter,
+                layout.title_rect,
+                model.action_label or "Connect",
+                model.action_text.replace(model.action_label or "Connect", "", 1) or " With Steam To Use",
+                color=color,
+                font=prompt_font,
+            )
+            _draw_elided_text(
+                painter,
+                layout.status_rect,
+                model.status,
+                color=muted,
+                font=subtitle_font,
+                flags=Qt.AlignmentFlag.AlignCenter,
+            )
+            return layout
+
+        if not layout.art_rect.isNull() and layout.art_rect.width() > 0 and layout.art_rect.height() > 0:
+            art_path = QPainterPath()
+            art_path.addRoundedRect(layout.art_rect, 10.0 * layout.scale, 10.0 * layout.scale)
+            art_fill = QLinearGradient(layout.art_rect.topLeft(), layout.art_rect.bottomRight())
+            art_color = QColor(accent)
+            art_color.setAlpha(90)
+            art_fill.setColorAt(0.0, art_color)
+            art_fill.setColorAt(1.0, QColor(12, 15, 20, 120))
+            painter.fillPath(art_path, art_fill)
+            painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 1.5 * layout.scale)))
+            painter.drawPath(art_path)
+
         _draw_elided_text(painter, layout.title_rect, model.title, color=color, font=title_font)
         _draw_elided_text(painter, layout.subtitle_rect, model.subtitle, color=muted, font=subtitle_font)
+        metric_text = f"{model.metric_label}: {model.metric_value}" if model.metric_label else model.metric_value
         _draw_elided_text(
             painter,
             layout.metric_rect,
-            f"{model.metric_label}: {model.metric_value}",
+            metric_text,
             color=color,
             font=metric_font,
             flags=Qt.AlignmentFlag.AlignCenter,

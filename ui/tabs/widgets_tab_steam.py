@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping
 
-from PySide6.QtWidgets import QCheckBox, QGroupBox, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QHBoxLayout, QLabel, QSpinBox, QVBoxLayout, QWidget
 
 from rendering.widget_descriptors import get_widget_position_option_labels
-from ui.tabs.shared_styles import INFO_LABEL_STYLE, STATUS_LABEL_STYLE, add_aligned_row, style_group_box
+from ui.tabs.shared_styles import INFO_LABEL_STYLE, STATUS_LABEL_STYLE, add_aligned_row, build_bucket_toggle
 from ui.widgets import StyledComboBox
 
 if TYPE_CHECKING:
@@ -39,10 +39,20 @@ def _section_config(
     return candidate if isinstance(candidate, Mapping) else {}
 
 
+def _finalize_bucket_body(toggle, body: QWidget) -> None:
+    expanded = bool(toggle.isChecked())
+    if body.isHidden() == expanded:
+        body.setVisible(expanded)
+
+
 def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, label: str, fallback_position: str) -> None:
-    group = QGroupBox(label)
-    style_group_box(group)
-    layout = QVBoxLayout(group)
+    toggle, body, layout = build_bucket_toggle(
+        parent_layout,
+        label,
+        expanded=tab.get_widget_bucket_state("steam", key, default=False),
+        on_toggle=lambda checked, bucket=key: tab.set_widget_bucket_state("steam", bucket, checked),
+        defer_initial_visibility=True,
+    )
     layout.setSpacing(12)
 
     enabled_attr = f"{key}_enabled"
@@ -95,7 +105,7 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
     setattr(tab, status_attr, status)
     layout.addWidget(status)
 
-    parent_layout.addWidget(group)
+    _finalize_bucket_body(toggle, body)
 
 
 def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
@@ -105,9 +115,13 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     root.setContentsMargins(0, 0, 0, 0)
     root.setSpacing(16)
 
-    connection_group = QGroupBox("Connection & Privacy")
-    style_group_box(connection_group)
-    connection_layout = QVBoxLayout(connection_group)
+    connection_toggle, connection_body, connection_layout = build_bucket_toggle(
+        root,
+        "Connection & Privacy",
+        expanded=tab.get_widget_bucket_state("steam", "connection", default=False),
+        on_toggle=lambda checked: tab.set_widget_bucket_state("steam", "connection", checked),
+        defer_initial_visibility=True,
+    )
     connection_layout.setSpacing(12)
 
     info = QLabel(
@@ -136,11 +150,20 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     refresh_row.addWidget(tab.steam_refresh_minutes)
     refresh_row.addStretch()
 
+    tab.steam_show_connection_info_icon = QCheckBox("Show stale connection info icon")
+    tab.steam_show_connection_info_icon.setProperty("circleIndicator", True)
+    tab.steam_show_connection_info_icon.setToolTip(
+        "Show a small orange info icon when cached Steam data is at least one day stale and the connection needs attention."
+    )
+    tab.steam_show_connection_info_icon.setChecked(tab._default_bool("steam", "show_connection_info_icon", True))
+    tab.steam_show_connection_info_icon.stateChanged.connect(tab._save_settings)
+    connection_layout.addWidget(tab.steam_show_connection_info_icon)
+
     tab.steam_connection_status = QLabel("Connection not checked this session.")
     tab.steam_connection_status.setStyleSheet(STATUS_LABEL_STYLE)
     connection_layout.addWidget(tab.steam_connection_status)
 
-    root.addWidget(connection_group)
+    _finalize_bucket_body(connection_toggle, connection_body)
 
     for key, label, fallback_position in _STEAM_CARD_ORDER:
         _build_card_group(tab, root, key, label, fallback_position)
@@ -162,6 +185,9 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
         )
     except Exception:
         tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 30))
+    tab.steam_show_connection_info_icon.setChecked(
+        bool(steam_config.get("show_connection_info_icon", tab._default_bool("steam", "show_connection_info_icon", True)))
+    )
 
     for key, _label, fallback_position in _STEAM_CARD_ORDER:
         config = _section_config(widgets_config, key)
@@ -203,6 +229,7 @@ def save_steam_settings(tab: "WidgetsTab") -> tuple[dict[str, Any], ...]:
     steam_payload = {
         "privacy_mode": tab.steam_privacy_mode.currentText(),
         "refresh_minutes": int(tab.steam_refresh_minutes.value()),
+        "show_connection_info_icon": bool(tab.steam_show_connection_info_icon.isChecked()),
     }
     return (
         steam_payload,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QToolButton, QWidget
 
 from core.dev_gates import force_gate, is_steam_enabled
 from core.settings.defaults import get_default_settings
@@ -23,6 +23,13 @@ from rendering.widget_factories import WidgetFactoryRegistry
 from rendering.widget_manager import WidgetManager
 from ui.tabs.widgets_tab import WidgetsTab
 from core.resources.manager import ResourceManager
+
+
+def _find_toggle(container, text: str) -> QToolButton | None:
+    for toggle in container.findChildren(QToolButton):
+        if toggle.text() == text:
+            return toggle
+    return None
 
 
 def _with_steam_gate(enabled: bool):
@@ -84,7 +91,11 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
 def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
-    assert widgets["steam"] == {"privacy_mode": "Strict", "refresh_minutes": 30}
+    assert widgets["steam"] == {
+        "privacy_mode": "Strict",
+        "refresh_minutes": 30,
+        "show_connection_info_icon": True,
+    }
     for widget_id in STEAM_WIDGET_IDS:
         card = widgets[widget_id]
         assert card["enabled"] is False
@@ -118,6 +129,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
             assert hasattr(tab, "steam_privacy_mode")
+            tab.steam_show_connection_info_icon.setChecked(False)
             tab.steam_progress_enabled.setChecked(True)
             tab._set_combo_text(tab.steam_progress_position, "Center")
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
@@ -129,9 +141,35 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
 
             steam_payload, progress_payload, *_rest = collect_widget_section_save_result(tab, "steam")
             assert steam_payload["privacy_mode"] == tab.steam_privacy_mode.currentText()
+            assert steam_payload["show_connection_info_icon"] is False
             assert progress_payload["enabled"] is True
             assert progress_payload["position"] == "Center"
             assert "api_key" not in steam_payload
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settings_manager) -> None:
+    prior = _with_steam_gate(True)
+    try:
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            checks = (
+                ("Connection & Privacy", "steam", "connection"),
+                ("Steam Progress", "steam", "steam_progress"),
+                ("Achievement Pulse", "steam", "achievement_pulse"),
+                ("Abandonment Issues", "steam", "abandonment_issues"),
+                ("Friend Pulse", "steam", "friend_pulse"),
+            )
+            for text, section, bucket in checks:
+                toggle = _find_toggle(tab._steam_container, text)
+                assert toggle is not None, f"Missing Steam bucket toggle: {text}"
+                assert toggle.isChecked() is False
+                toggle.click()
+                qt_app.processEvents()
+                assert tab.get_widget_bucket_state(section, bucket, False) is True
         finally:
             tab.deleteLater()
     finally:
@@ -171,6 +209,7 @@ def test_steam_factories_are_dev_gated_and_disabled_cards_create_nothing(
             )
             assert widget is not None
             assert widget.objectName() == "steam_progress_overlay"
+            assert getattr(widget, "_view_model").state == "connect_required"
             widget.deleteLater()
         finally:
             parent.deleteLater()

@@ -15,6 +15,7 @@ from core.logging.logger import get_logger
 logger = get_logger(__name__)
 
 _MANAGED_PRESET_NAME_RE = re.compile(r"^preset[_-]*\d+(?:[_-].+)?\.json$", re.IGNORECASE)
+_MANAGED_PRESET_SLOT_RE = re.compile(r"^preset[_-]*(\d+)(?:[_-].+)?\.json$", re.IGNORECASE)
 
 
 def _is_frozen_build() -> bool:
@@ -64,6 +65,21 @@ def scan_curated_visualizer_preset_tree(root: Path) -> set[str]:
     return discovered
 
 
+def _managed_curated_preset_slot(relative_path: Path) -> tuple[str, int] | None:
+    if not is_managed_curated_preset_path(relative_path):
+        return None
+    match = _MANAGED_PRESET_SLOT_RE.match(relative_path.name)
+    if match is None:
+        return None
+    try:
+        slot = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    if slot < 1:
+        return None
+    return (relative_path.parts[0], slot)
+
+
 def load_curated_visualizer_preset_manifest(root: Path | None = None) -> set[str]:
     manifest_path = get_visualizer_preset_manifest_path(root)
     try:
@@ -90,6 +106,77 @@ def write_curated_visualizer_preset_manifest(
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     payload = build_curated_visualizer_manifest_payload(resolved_entries)
     manifest_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return resolved_entries
+
+
+def prune_duplicate_curated_preset_slots(
+    root: Path,
+    *,
+    allow_non_frozen: bool = False,
+) -> list[Path]:
+    """Remove older duplicate managed preset files that share one mode/slot.
+
+    Curated presets are authored by stable ``mode + preset number``. If a user
+    replaces a preset by dropping in a new ``preset_2_*.json`` file, the older
+    managed file is no longer authoritative and should not keep producing a
+    duplicate-slot override at runtime.
+    """
+
+    if not allow_non_frozen and not _is_frozen_build():
+        return []
+    if not root.exists() or not root.is_dir():
+        return []
+
+    by_slot: dict[tuple[str, int], list[Path]] = {}
+    for json_path in root.rglob("*.json"):
+        try:
+            relative_path = json_path.relative_to(root)
+        except Exception:
+            continue
+        slot = _managed_curated_preset_slot(relative_path)
+        if slot is None:
+            continue
+        by_slot.setdefault(slot, []).append(json_path)
+
+    removed: list[Path] = []
+    for (mode, slot), paths in sorted(by_slot.items()):
+        if len(paths) <= 1:
+            continue
+        ordered = sorted(
+            paths,
+            key=lambda path: (
+                path.stat().st_mtime_ns if path.exists() else -1,
+                path.name.lower(),
+            ),
+        )
+        keep = ordered[-1]
+        for stale in ordered[:-1]:
+            try:
+                stale.unlink()
+                removed.append(stale)
+            except Exception as exc:
+                logger.warning("[VIS_PRESET_MANIFEST] Failed to remove duplicate preset %s: %s", stale, exc)
+        logger.warning(
+            "[VIS_PRESET_MANIFEST] Removed %d duplicate curated preset file(s) for %s preset %d; kept %s",
+            len(ordered) - 1,
+            mode,
+            slot,
+            keep.name,
+        )
+    return removed
+
+
+def reconcile_curated_visualizer_preset_tree(
+    root: Path,
+    *,
+    allow_non_frozen: bool = False,
+) -> set[str]:
+    """Prune invalid duplicate slots and rewrite the manifest to live truth."""
+
+    prune_duplicate_curated_preset_slots(root, allow_non_frozen=allow_non_frozen)
+    resolved_entries = resolve_curated_visualizer_manifest_entries(root)
+    if allow_non_frozen or _is_frozen_build():
+        return write_curated_visualizer_preset_manifest(root, resolved_entries)
     return resolved_entries
 
 
