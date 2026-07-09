@@ -17,13 +17,14 @@ def input_handler():
     handler._parent = MagicMock()
     return handler
 
-def create_key_event(key, native_scan_code=0, native_virtual_key=0):
+def create_key_event(key, native_scan_code=0, native_virtual_key=0, modifiers=Qt.KeyboardModifier.NoModifier):
     """Create a mock QKeyEvent."""
     event = MagicMock(spec=QKeyEvent)
     event.key.return_value = key
     event.nativeScanCode.return_value = native_scan_code
     event.nativeVirtualKey.return_value = native_virtual_key
     event.text.return_value = ""
+    event.modifiers.return_value = modifiers
     return event
 
 def test_media_keys_are_ignored_volume_up(input_handler):
@@ -165,6 +166,107 @@ def test_end_key_routes_global_mute_toggle_signal(input_handler):
     result = input_handler.handle_key_press(event)
     assert result is True, "End should be handled as a focused global-mute hotkey"
     mock_slot.assert_called_once()
+
+
+def test_digit_key_routes_layout_slot_load_without_exit(input_handler):
+    event = create_key_event(Qt.Key.Key_1)
+
+    load_slot = MagicMock()
+    exit_slot = MagicMock()
+    input_handler.layout_slot_load_requested.connect(load_slot)
+    input_handler.exit_requested.connect(exit_slot)
+
+    result = input_handler.handle_key_press(event)
+
+    assert result is True
+    load_slot.assert_called_once_with("1")
+    exit_slot.assert_not_called()
+
+
+def test_shift_digit_routes_layout_slot_save_without_exit(input_handler):
+    event = create_key_event(
+        Qt.Key.Key_0,
+        modifiers=Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    save_slot = MagicMock()
+    exit_slot = MagicMock()
+    input_handler.layout_slot_save_requested.connect(save_slot)
+    input_handler.exit_requested.connect(exit_slot)
+
+    result = input_handler.handle_key_press(event)
+
+    assert result is True
+    save_slot.assert_called_once_with("0")
+    exit_slot.assert_not_called()
+
+
+def test_shifted_number_symbol_routes_layout_slot_save(input_handler):
+    event = create_key_event(
+        Qt.Key.Key_Exclam,
+        modifiers=Qt.KeyboardModifier.ShiftModifier,
+    )
+
+    save_slot = MagicMock()
+    input_handler.layout_slot_save_requested.connect(save_slot)
+
+    result = input_handler.handle_key_press(event)
+
+    assert result is True
+    save_slot.assert_called_once_with("1")
+
+
+def test_bare_shift_is_consumed_without_exit(input_handler):
+    event = create_key_event(Qt.Key.Key_Shift)
+
+    exit_slot = MagicMock()
+    input_handler.exit_requested.connect(exit_slot)
+
+    result = input_handler.handle_key_press(event)
+
+    assert result is True
+    exit_slot.assert_not_called()
+
+
+def test_display_edit_mode_routes_digit_slots_before_key_swallow():
+    event = create_key_event(Qt.Key.Key_2)
+    event.accept = MagicMock()
+    event.ignore = MagicMock()
+    stub = SimpleNamespace(
+        _custom_layout_edit_active=True,
+        _load_layout_slot=MagicMock(return_value=True),
+        _save_layout_slot=MagicMock(return_value=True),
+    )
+    stub._layout_slot_id_for_key_event = lambda event: DisplayWidget._layout_slot_id_for_key_event(stub, event)
+
+    DisplayWidget.keyPressEvent(stub, event)
+
+    stub._load_layout_slot.assert_called_once_with("2", commit_edit_session=True)
+    stub._save_layout_slot.assert_not_called()
+    event.accept.assert_called_once()
+    event.ignore.assert_not_called()
+
+
+def test_display_edit_mode_routes_shift_digit_save_before_key_swallow():
+    event = create_key_event(
+        Qt.Key.Key_3,
+        modifiers=Qt.KeyboardModifier.ShiftModifier,
+    )
+    event.accept = MagicMock()
+    event.ignore = MagicMock()
+    stub = SimpleNamespace(
+        _custom_layout_edit_active=True,
+        _load_layout_slot=MagicMock(return_value=True),
+        _save_layout_slot=MagicMock(return_value=True),
+    )
+    stub._layout_slot_id_for_key_event = lambda event: DisplayWidget._layout_slot_id_for_key_event(stub, event)
+
+    DisplayWidget.keyPressEvent(stub, event)
+
+    stub._save_layout_slot.assert_called_once_with("3", commit_edit_session=True)
+    stub._load_layout_slot.assert_not_called()
+    event.accept.assert_called_once()
+    event.ignore.assert_not_called()
 
 
 def test_display_widget_play_pause_hotkey_dispatches_media_feedback():

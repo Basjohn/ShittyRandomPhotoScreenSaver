@@ -62,6 +62,8 @@ class InputHandler(QObject):
     global_volume_down_requested = Signal()
     global_mute_toggle_requested = Signal()
     context_menu_requested = Signal(QPoint)  # Global position for menu popup
+    layout_slot_load_requested = Signal(str)
+    layout_slot_save_requested = Signal(str)
     
     # Exit threshold for mouse movement (pixels)
     MOUSE_EXIT_THRESHOLD = 10
@@ -177,6 +179,9 @@ class InputHandler(QObject):
         # Ctrl key handling is done by DisplayWidget for halo management
         if key == Qt.Key.Key_Control:
             return False  # Let DisplayWidget handle Ctrl
+        if key == Qt.Key.Key_Shift:
+            logger.debug("[INPUT_HANDLER] Shift key consumed for layout slot chords")
+            return True
         
         # Media keys should never cause exit, but we still mirror feedback
         if self._is_media_key(event):
@@ -190,6 +195,16 @@ class InputHandler(QObject):
         interaction_mode_enabled = self.is_interaction_mode_enabled()
         
         # Hotkeys (always available regardless of Interaction Mode/Ctrl state)
+        slot_id = self._layout_slot_id_for_key_event(event)
+        if slot_id is not None:
+            modifiers = event.modifiers()
+            if bool(modifiers & Qt.KeyboardModifier.ShiftModifier):
+                logger.info("Shift+%s pressed - layout slot save requested", slot_id)
+                self.layout_slot_save_requested.emit(slot_id)
+            else:
+                logger.info("%s key pressed - layout slot load requested", slot_id)
+                self.layout_slot_load_requested.emit(slot_id)
+            return True
         if key_text == 'z' or key == Qt.Key.Key_Z or native_vk == 0x5A:
             logger.info("Z key pressed - previous image requested")
             self.previous_image_requested.emit()
@@ -260,6 +275,43 @@ class InputHandler(QObject):
         self._exiting = True
         self.exit_requested.emit()
         return True
+
+    def _layout_slot_id_for_key_event(self, event: QKeyEvent) -> str | None:
+        key = event.key()
+        key_map = {
+            Qt.Key.Key_1: "1",
+            Qt.Key.Key_2: "2",
+            Qt.Key.Key_3: "3",
+            Qt.Key.Key_4: "4",
+            Qt.Key.Key_5: "5",
+            Qt.Key.Key_6: "6",
+            Qt.Key.Key_7: "7",
+            Qt.Key.Key_8: "8",
+            Qt.Key.Key_9: "9",
+            Qt.Key.Key_0: "0",
+            Qt.Key.Key_Exclam: "1",
+            Qt.Key.Key_At: "2",
+            Qt.Key.Key_NumberSign: "3",
+            Qt.Key.Key_Dollar: "4",
+            Qt.Key.Key_Percent: "5",
+            Qt.Key.Key_AsciiCircum: "6",
+            Qt.Key.Key_Ampersand: "7",
+            Qt.Key.Key_Asterisk: "8",
+            Qt.Key.Key_ParenLeft: "9",
+            Qt.Key.Key_ParenRight: "0",
+        }
+        slot_id = key_map.get(key)
+        if slot_id is not None:
+            return slot_id
+
+        try:
+            native_vk = int(event.nativeVirtualKey() or 0) if hasattr(event, "nativeVirtualKey") else 0
+        except Exception as e:
+            logger.debug("[INPUT_HANDLER] Exception suppressed: %s", e)
+            native_vk = 0
+        if 0x30 <= native_vk <= 0x39:
+            return chr(native_vk)
+        return None
 
     def _resolve_media_widget(self):
         """Return the best media widget candidate across the active display set."""

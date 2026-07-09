@@ -462,6 +462,10 @@
             "tag": "most_viral",
             "update_interval": 600
         },
+        "layout_slots": {
+            "slots": {},
+            "version": 1
+        },
         "media": {
             "artwork_size": 250,
             "bg_color": [

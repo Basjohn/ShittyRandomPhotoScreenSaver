@@ -371,6 +371,8 @@ class DisplayWidget(QWidget):
             self._input_handler.global_volume_down_requested.connect(self._on_global_volume_down_requested)
             self._input_handler.global_mute_toggle_requested.connect(self._on_global_mute_toggle_requested)
             self._input_handler.context_menu_requested.connect(self._on_context_menu_requested)
+            self._input_handler.layout_slot_load_requested.connect(self._on_layout_slot_load_requested)
+            self._input_handler.layout_slot_save_requested.connect(self._on_layout_slot_save_requested)
         except Exception:
             logger.debug("[DISPLAY_WIDGET] Failed to create InputHandler", exc_info=True)
         
@@ -794,6 +796,59 @@ class DisplayWidget(QWidget):
 
     def _request_custom_layout_runtime_reload(self) -> None:
         self.custom_layout_reload_requested.emit()
+
+    def _save_layout_slot(self, slot_id: str, *, commit_edit_session: bool = False) -> bool:
+        settings_manager = self.settings_manager
+        if settings_manager is None:
+            return False
+        try:
+            if commit_edit_session and self._custom_layout_edit_active:
+                if not self._custom_layout_manager.commit_session_without_reload():
+                    return False
+            from core.settings.layout_slots import save_layout_slot
+
+            widgets_map = settings_manager.get_widgets_map()
+            if not save_layout_slot(widgets_map, slot_id):
+                logger.info("[LAYOUT_SLOT] Ignored invalid layout slot save request: %s", slot_id)
+                return False
+            settings_manager.set_widgets_map(widgets_map, emit_change=False)
+            settings_manager.save()
+            logger.info("[LAYOUT_SLOT] Saved layout slot %s", slot_id)
+            if commit_edit_session:
+                self._request_custom_layout_runtime_reload()
+            return True
+        except Exception:
+            logger.debug("[LAYOUT_SLOT] Failed to save layout slot %s", slot_id, exc_info=True)
+            return False
+
+    def _load_layout_slot(self, slot_id: str, *, commit_edit_session: bool = False) -> bool:
+        settings_manager = self.settings_manager
+        if settings_manager is None:
+            return False
+        try:
+            if commit_edit_session and self._custom_layout_edit_active:
+                if not self._custom_layout_manager.commit_session_without_reload():
+                    return False
+            from core.settings.layout_slots import apply_layout_slot
+
+            widgets_map = settings_manager.get_widgets_map()
+            if not apply_layout_slot(widgets_map, slot_id):
+                logger.info("[LAYOUT_SLOT] Layout slot %s is empty or invalid; load ignored", slot_id)
+                return False
+            settings_manager.set_widgets_map(widgets_map)
+            settings_manager.save()
+            logger.info("[LAYOUT_SLOT] Loaded layout slot %s", slot_id)
+            self._request_custom_layout_runtime_reload()
+            return True
+        except Exception:
+            logger.debug("[LAYOUT_SLOT] Failed to load layout slot %s", slot_id, exc_info=True)
+            return False
+
+    def _on_layout_slot_load_requested(self, slot_id: str) -> None:
+        self._load_layout_slot(slot_id)
+
+    def _on_layout_slot_save_requested(self, slot_id: str) -> None:
+        self._save_layout_slot(slot_id)
 
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on the WidgetManager and TransitionFactory.
@@ -1665,6 +1720,14 @@ class DisplayWidget(QWidget):
         key = event.key()
 
         if self._custom_layout_edit_active:
+            slot_id = self._layout_slot_id_for_key_event(event)
+            if slot_id is not None:
+                if bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                    self._save_layout_slot(slot_id, commit_edit_session=True)
+                else:
+                    self._load_layout_slot(slot_id, commit_edit_session=True)
+                event.accept()
+                return
             if key in (Qt.Key.Key_Escape,):
                 self._cancel_custom_layout_edit_mode()
                 event.accept()
@@ -1704,6 +1767,31 @@ class DisplayWidget(QWidget):
                 logger.debug("[KEY] Key press delegation failed", exc_info=True)
         
         event.ignore()
+
+    def _layout_slot_id_for_key_event(self, event: QKeyEvent) -> str | None:
+        key_map = {
+            Qt.Key.Key_1: "1",
+            Qt.Key.Key_2: "2",
+            Qt.Key.Key_3: "3",
+            Qt.Key.Key_4: "4",
+            Qt.Key.Key_5: "5",
+            Qt.Key.Key_6: "6",
+            Qt.Key.Key_7: "7",
+            Qt.Key.Key_8: "8",
+            Qt.Key.Key_9: "9",
+            Qt.Key.Key_0: "0",
+            Qt.Key.Key_Exclam: "1",
+            Qt.Key.Key_At: "2",
+            Qt.Key.Key_NumberSign: "3",
+            Qt.Key.Key_Dollar: "4",
+            Qt.Key.Key_Percent: "5",
+            Qt.Key.Key_AsciiCircum: "6",
+            Qt.Key.Key_Ampersand: "7",
+            Qt.Key.Key_Asterisk: "8",
+            Qt.Key.Key_ParenLeft: "9",
+            Qt.Key.Key_ParenRight: "0",
+        }
+        return key_map.get(event.key())
 
     def keyReleaseEvent(self, event: QKeyEvent) -> None:
         key = event.key()

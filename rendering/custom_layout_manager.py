@@ -424,6 +424,9 @@ class CustomLayoutManager:
         return True
 
     def save_session(self) -> bool:
+        return self.commit_session_without_reload(request_reload=True)
+
+    def commit_session_without_reload(self, *, request_reload: bool = False) -> bool:
         if not self._active:
             return False
 
@@ -488,7 +491,7 @@ class CustomLayoutManager:
                     restore_live_visibility=False,
                     restore_special_widgets=False,
                 )
-            if not self._request_runtime_reload():
+            if request_reload and not self._request_runtime_reload():
                 self._reload_widgets_across_instances()
             return True
         finally:

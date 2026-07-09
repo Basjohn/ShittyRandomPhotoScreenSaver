@@ -1,0 +1,256 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from types import SimpleNamespace
+from unittest.mock import Mock
+
+from core.settings.layout_slots import (
+    apply_layout_slot,
+    capture_layout_slot,
+    get_layout_slot_payload,
+    normalize_layout_slot_id,
+    save_layout_slot,
+)
+from rendering.display_widget import DisplayWidget
+
+
+def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
+    widgets = {
+        "clock": {
+            "enabled": True,
+            "position": "Top Right",
+            "monitor": "ALL",
+            "font_size": 64,
+            "timezone": "Europe/Paris",
+        },
+        "reddit": {
+            "enabled": True,
+            "position": "Bottom Left",
+            "monitor": "2",
+            "limit": 12,
+            "font_size": 18,
+            "subreddit": "CityPorn",
+            "provider": "rss",
+        },
+        "gmail": {
+            "enabled": False,
+            "position": "Top Center",
+            "limit": 5,
+            "sender_column_width": 220,
+            "account_slot": "2",
+            "filter_label": "Alerts",
+        },
+        "spotify_visualizer": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+            "mode": "bubble",
+            "bubble_big_count": 11,
+        },
+        "custom_layout": {"displays": {"screen:a": {"clock": {"rect": {"x": 0.1}}}}},
+        "custom_layout_restore": {"widgets": {"clock": {"position": "Top Right", "monitor": "ALL"}}},
+        "layout_slots": {"version": 1, "slots": {"1": {"bad": "recursive"}}},
+    }
+
+    payload = capture_layout_slot(widgets)
+
+    assert payload["custom_layout"] == widgets["custom_layout"]
+    assert payload["custom_layout_restore"] == widgets["custom_layout_restore"]
+    assert payload["widgets"]["clock"] == {
+        "enabled": True,
+        "position": "Top Right",
+        "monitor": "ALL",
+        "font_size": 64,
+    }
+    assert payload["widgets"]["reddit"] == {
+        "enabled": True,
+        "position": "Bottom Left",
+        "monitor": "2",
+        "limit": 12,
+        "font_size": 18,
+    }
+    assert payload["widgets"]["gmail"] == {
+        "enabled": False,
+        "position": "Top Center",
+        "limit": 5,
+        "sender_column_width": 220,
+    }
+    assert payload["widgets"]["spotify_visualizer"] == {
+        "enabled": True,
+        "position": "Custom",
+        "monitor": "1",
+    }
+    assert "layout_slots" not in payload["widgets"]
+
+
+def test_apply_layout_slot_preserves_sources_and_replaces_layout_fields():
+    widgets = {
+        "clock": {
+            "position": "Bottom Right",
+            "font_size": 30,
+            "timezone": "local",
+        },
+        "reddit": {
+            "position": "Top Left",
+            "limit": 3,
+            "subreddit": "Games",
+            "provider": "public_json",
+        },
+        "custom_layout": {"displays": {"screen:stale": {"clock": {}}}},
+        "layout_slots": {
+            "version": 1,
+            "slots": {
+                "1": {
+                    "version": 1,
+                    "widgets": {
+                        "clock": {"position": "Top Right", "font_size": 64},
+                        "reddit": {
+                            "position": "Bottom Left",
+                            "limit": 12,
+                            "subreddit": "ShouldNotApply",
+                        },
+                    },
+                    "custom_layout": {"displays": {}},
+                    "custom_layout_restore": {"widgets": {}},
+                }
+            },
+        },
+    }
+
+    assert apply_layout_slot(widgets, "1") is True
+
+    assert widgets["clock"]["position"] == "Top Right"
+    assert widgets["clock"]["font_size"] == 64
+    assert widgets["clock"]["timezone"] == "local"
+    assert widgets["reddit"]["position"] == "Bottom Left"
+    assert widgets["reddit"]["limit"] == 12
+    assert widgets["reddit"]["subreddit"] == "Games"
+    assert widgets["reddit"]["provider"] == "public_json"
+    assert widgets["custom_layout"] == {"displays": {}}
+    assert widgets["custom_layout_restore"] == {"widgets": {}}
+
+
+def test_slot_zero_round_trips_and_invalid_slots_do_not_mutate():
+    widgets = {
+        "clock": {"position": "Top Left", "font_size": 24},
+        "reddit": {"subreddit": "All", "limit": 5},
+    }
+
+    assert save_layout_slot(widgets, "0") is True
+    assert normalize_layout_slot_id("0") == "0"
+    assert get_layout_slot_payload(widgets, "0") is not None
+
+    widgets["clock"]["position"] = "Bottom Right"
+    widgets["reddit"]["limit"] = 2
+    before_invalid = deepcopy(widgets)
+
+    assert apply_layout_slot(widgets, "bad") is False
+    assert widgets == before_invalid
+
+    assert apply_layout_slot(widgets, "0") is True
+    assert widgets["clock"]["position"] == "Top Left"
+    assert widgets["reddit"]["limit"] == 5
+
+
+def test_save_layout_slot_never_recursively_captures_slots():
+    widgets = {
+        "clock": {"position": "Top Left", "font_size": 24},
+        "layout_slots": {"version": 1, "slots": {"1": {"old": "payload"}}},
+    }
+
+    assert save_layout_slot(widgets, "2") is True
+    payload = get_layout_slot_payload(widgets, "2")
+
+    assert payload is not None
+    assert "layout_slots" not in payload["widgets"]
+
+
+class _SettingsStub:
+    def __init__(self, widgets: dict) -> None:
+        self.widgets = deepcopy(widgets)
+        self.saved = 0
+        self.emit_changes: list[bool] = []
+
+    def get_widgets_map(self) -> dict:
+        return deepcopy(self.widgets)
+
+    def set_widgets_map(self, widgets: dict, *, emit_change: bool = True) -> None:
+        self.widgets = deepcopy(widgets)
+        self.emit_changes.append(emit_change)
+
+    def save(self) -> None:
+        self.saved += 1
+
+
+def test_display_save_slot_while_editing_commits_once_then_reloads():
+    settings = _SettingsStub({"clock": {"position": "Top Left", "font_size": 24}})
+    manager = Mock()
+    manager.commit_session_without_reload.return_value = True
+    display = SimpleNamespace(
+        settings_manager=settings,
+        _custom_layout_edit_active=True,
+        _custom_layout_manager=manager,
+        _request_custom_layout_runtime_reload=Mock(),
+    )
+
+    assert DisplayWidget._save_layout_slot(display, "1", commit_edit_session=True) is True
+
+    manager.commit_session_without_reload.assert_called_once_with()
+    display._request_custom_layout_runtime_reload.assert_called_once_with()
+    assert settings.saved == 1
+    assert "1" in settings.widgets["layout_slots"]["slots"]
+    assert settings.emit_changes == [False]
+
+
+def test_display_save_slot_outside_edit_mode_does_not_emit_live_refresh():
+    settings = _SettingsStub({"media": {"position": "Bottom Right", "provider": "spotify"}})
+    display = SimpleNamespace(
+        settings_manager=settings,
+        _custom_layout_edit_active=False,
+        _custom_layout_manager=Mock(),
+        _request_custom_layout_runtime_reload=Mock(),
+    )
+
+    assert DisplayWidget._save_layout_slot(display, "1") is True
+
+    assert settings.saved == 1
+    assert settings.emit_changes == [False]
+    display._request_custom_layout_runtime_reload.assert_not_called()
+    assert settings.widgets["media"]["provider"] == "spotify"
+    assert "1" in settings.widgets["layout_slots"]["slots"]
+
+
+def test_display_load_slot_while_editing_commits_applies_and_preserves_slot():
+    slot_payload = {
+        "version": 1,
+        "widgets": {"clock": {"position": "Bottom Right", "font_size": 64}},
+        "custom_layout": {"displays": {}},
+        "custom_layout_restore": {"widgets": {}},
+    }
+    settings = _SettingsStub(
+        {
+            "clock": {"position": "Top Left", "font_size": 24, "timezone": "local"},
+            "layout_slots": {"version": 1, "slots": {"1": deepcopy(slot_payload)}},
+            "custom_layout": {"displays": {"screen:old": {"clock": {}}}},
+        }
+    )
+    manager = Mock()
+    manager.commit_session_without_reload.return_value = True
+    display = SimpleNamespace(
+        settings_manager=settings,
+        _custom_layout_edit_active=True,
+        _custom_layout_manager=manager,
+        _request_custom_layout_runtime_reload=Mock(),
+    )
+
+    assert DisplayWidget._load_layout_slot(display, "1", commit_edit_session=True) is True
+
+    manager.commit_session_without_reload.assert_called_once_with()
+    display._request_custom_layout_runtime_reload.assert_called_once_with()
+    assert settings.widgets["clock"] == {
+        "position": "Bottom Right",
+        "font_size": 64,
+        "timezone": "local",
+    }
+    assert settings.widgets["custom_layout"] == {"displays": {}}
+    assert settings.widgets["layout_slots"]["slots"]["1"] == slot_payload

@@ -113,6 +113,7 @@ No shadow frameworks or parallel ownership paths.
 
 ## 5.3 CUSTOM Layout Safety
 - CUSTOM layout/edit mode must continue to extend descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
+- Layout slots must stay source-free and allowlist-based. They may copy placement, enabled state, size/count/layout-affecting fields, and the CUSTOM layout maps, but must not become broad widget snapshots that capture providers, accounts, subreddit/weather/source choices, visualizer mode/preset/technical payloads, sounds, credentials, or cache identity.
 - Edit mode remains a global active-display shell session; do not reintroduce display-local partial edit semantics.
 - Edit-mode shell/grid ownership should follow normal runtime where possible: prefer display-owned child surfaces with explicit cross-display reparenting over separate top-level tool windows plus repeated `raise_()` correction.
 - In edit mode, keep geometry authority clean too: `EditShellWidget` should emit/request global rects only, and `CustomLayoutManager` should own the live apply path plus global-to-local conversion instead of letting the shell move against an old parent first and then correcting it afterward.
