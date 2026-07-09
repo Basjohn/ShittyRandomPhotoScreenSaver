@@ -42,13 +42,18 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Add enabled-card connection states: no connection + no usable cache shows centered `Connect With Steam To Use` without mock-art/content placeholders; cache remains visible when the connection needs attention.
   - [x] Add optional default-on stale connection info icon, shown only for cached data at least 1 day stale and routed through the shared Settings request seam.
   - [x] Add cache-first fixture bars before any live Steam request path is connected.
-- [ ] Steam family shell + user-facing connection prelude:
-  - [ ] Add the outer bordered Steam family shell with the main `Enable Steam Widget` toggle so the section matches Gmail/Reddit bucket framing.
-  - [ ] Keep the Connection & Privacy bucket as the first inner bucket and keep the account-connection affordance explicit before real-data Phase 6 work.
-  - [ ] Keep the shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
-- [ ] Steam OAuth/OpenID auth seam:
-  - [ ] Decide whether the supported auth contract is OAuth, OpenID, or a narrower Steam identity/token seam.
-  - [ ] Add the actual user-facing connection/disconnect flow and persisted credential/status contract.
+- [x] Steam family shell + user-facing connection prelude:
+  - [x] Add the outer bordered Steam family shell with the main `Enable Steam Widget` toggle so the section matches Gmail/Reddit bucket framing.
+  - [x] Keep the Connection & Privacy bucket as the first inner bucket and keep the account-connection affordance explicit before real-data Phase 6 work.
+  - [x] Keep the shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [ ] Steam identity and credential flow:
+  - [ ] Add two explicit connection buttons in `Connection & Privacy`: `Connect ID` and `Connect API KEY`.
+  - [ ] Route each main button through a styled explanatory popup; only popup actions open the browser or read/paste credentials.
+  - [ ] Use `Connect ID` for Steam OpenID sign-in so the app can capture SteamID64 without password handling.
+  - [ ] Use `Connect API KEY` to open `https://steamcommunity.com/dev/apikey`, explain Steam's domain-label form, suggest `localhost`, and provide an explicit user-clicked `Paste Key` action.
+  - [ ] Render a small green check beside each completed connection part and show small orange `Please Connect Both For Access` text until both are complete.
+  - [ ] Persist the credential/status contract only after SteamID64 and user Web API key validate together.
+  - [ ] Keep any future OAuth use explicitly optional and scope-gated to a Valve-documented endpoint need.
   - [ ] Keep auth off constructors/paint and on the shared thread/service seams only.
 - [ ] Steam Phase 6, Achievement Pulse real data hookup:
   - [ ] Connect the pure Achievement Pulse resolver to versioned Steam cache records without provider calls from constructors or paint.

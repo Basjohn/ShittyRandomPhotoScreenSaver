@@ -33,7 +33,7 @@ The four cards remain:
 
 | Draft assumption | Revised decision |
 |---|---|
-| “Genericify the existing OAuth functionality.” | Do **not** generalise Gmail OAuth. The proposed Steam data path is a narrowly scoped Steam credential/API-key integration, not a Gmail-derived authentication framework. Any optional Steam identity/OpenID work is a separate future discovery item, not a prerequisite or a hidden dependency. |
+| “Genericify the existing OAuth functionality.” | Do **not** generalise Gmail OAuth. The proposed Steam data path is a narrowly scoped Steam credential path built around the user Web API key plus linked SteamID. OpenID is only the browser identity-linking step, and any Steam OAuth use is a separate future discovery item only if Valve documents the exact needed scope. |
 | One shared layer can own its own worker/timer machinery. | The shared Steam layer may own normalized data, in-flight request coalescing, cache records, and request policy. `ThreadManager`, `ResourceManager`, `SettingsManager`, `EventSystem`, `AnimationManager`, and existing service-widget helpers remain the owners of work, lifecycle, events, timing, and UI deferral. |
 | All cards can simply carry their own “local selection history.” | Semantic selection, cooldowns, dismissals, and rotations are **profile-level family state**, shared across displays. A runtime overlay instance owns only geometry, DPR-specific paint cache, and current applied view state. This prevents duplicate fetches and monitor-by-monitor drift. |
 | A fifth enabled field always creates a second rail. | Authored card layout decides whether enabled fields use a first rail, second rail, or compact authored presentation. `Custom` geometry only scales/moves the already-authored card and its elements; it must not decide how many enabled fields are shown, hide lower-priority content, or take outer-size authority back. |
@@ -214,6 +214,13 @@ This prevents runtime code from inferring Steam behavior through arbitrary `star
 ### 4.1 Credential decision
 
 Steam credentials are **not** ordinary widget settings.
+
+The finished connection state has two required parts:
+
+- `SteamID64`, captured through the `Connect ID` browser/OpenID flow.
+- User Web API key, captured through the `Connect API KEY` browser/key form plus explicit `Paste Key` action.
+
+Both parts must validate together before Steam account data is considered available. One completed part is a setup-in-progress state, not a partial runtime access state.
 
 The Steam API key and the account/profile identifier used with it live in an encrypted, per-user credential payload. The UI may retain non-sensitive card preferences in `settings_v2.json`, but it must never write the key into:
 
@@ -690,7 +697,7 @@ First visit builds the UI controls from canonical defaults and saved non-secret 
 
 ### 8.1.1 Enabled-card connection state
 
-This section uses “connection” as the current implementation word for the pre-auth seam. OAuth/OpenID is the actual next auth slice and must follow the same card-state contract and request the longest safe token/refresh lifetime Steam permits. Users should not be forced to re-authenticate unless Steam or the user explicitly invalidates the credential.
+This section uses “connection” as the current implementation word for the pre-auth seam. `Connect ID` uses Steam OpenID as the browser identity step; it yields SteamID64 only. `Connect API KEY` opens Steam's Web API key page and captures the user Web API key through an explicit paste action. The player-data APIs used by this family need both SteamID64 and the user Web API key. OAuth is a separate Steamworks path for specific partner APIs and is only used if Valve documents it for the exact needed scope. Users should not be forced to re-authenticate unless Steam or the user explicitly invalidates the credential.
 
 - A disabled Steam card remains hidden.
 - An enabled Steam card with valid live data or valid cache paints that content.
@@ -706,9 +713,22 @@ This section uses “connection” as the current implementation word for the pr
 Controls:
 
 - Steam integration status: Not configured / Not checked / Connected / Cache only / Private or unavailable / Error.
-- Profile identifier field.
-- API-key password field, always blank on load.
-- **Save & Test**:
+- `Connect ID` button:
+  - shows a styled popup before opening the browser;
+  - popup copy: `This allows the app to know who you are on Steam`;
+  - popup action opens the Steam OpenID sign-in/identity flow;
+  - success renders a small green check beside the button.
+- `Connect API KEY` button:
+  - shows a styled popup before opening the browser;
+  - popup first line: `This allows the app to read Achievement/Friend/Library Data`;
+  - popup second line: `Use the form to get your API Key and click the paste button here once you have it.`;
+  - if Steam's form asks for a domain label, the popup should also say: `Use 'localhost' as the domain on the form`;
+  - popup action opens `https://steamcommunity.com/dev/apikey`;
+  - popup includes an explicit `Paste Key` action that reads the clipboard only after the user clicks it;
+  - success renders a small green check beside the button.
+- Small orange setup text: `Please Connect Both For Access` until both connection parts have green checks.
+- Manual fallback profile identifier and API-key fields may exist behind an advanced/repair affordance, but the main user path is `Connect ID` plus `Connect API KEY`.
+- **Test & Save**:
   - tests submitted credentials in background first;
   - persists them in strict DPAPI storage only after success;
   - returns UI updates to the UI thread;
@@ -1216,7 +1236,7 @@ It records evidence from controlled, non-secret test runs and becomes the author
 
 ### 10.1 Required discovery tasks
 
-- [ ] Confirm the intended Steam credential/account configuration without copying Gmail OAuth code.
+- [ ] Confirm the intended Steam identity + user-key credential configuration without copying Gmail OAuth code or publisher-key assumptions.
 - [ ] Verify strict DPAPI storage and failure behavior.
 - [ ] Capture sanitized, local fixture payloads for:
   - [ ] owned library;
@@ -1361,15 +1381,19 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** Steam settings read like a single family section and the connection seam is explicit before live data work begins.
 
-## Phase 5.6 — Steam OAuth/OpenID auth seam and user-facing connection flow
+## Phase 5.6 — Steam identity, user-key, and connection flow
 
-- [ ] Decide and implement the real user-facing account connection path for Steam, including whether the supported contract is OAuth, OpenID, or a narrower Steam-specific identity/token seam.
+- [ ] Implement `Connect ID` as the browser/OpenID identity-linking path so the app can capture SteamID64 without password handling.
+- [ ] Implement `Connect API KEY` as the user-key path: styled popup, browser open to `https://steamcommunity.com/dev/apikey`, `localhost` domain guidance, explicit user-clicked `Paste Key`, redacted validation, and no silent clipboard reads.
+- [ ] Render per-button green checks and the small orange `Please Connect Both For Access` state until SteamID64 and user Web API key validate together.
+- [ ] Store the user Web API key encrypted and never in repo/defaults/logs; store only safe non-secret connection status/fingerprints in normal settings/UI state.
+- [ ] Keep OAuth as an explicit future option only if Valve documents the exact required scope for a later Steamworks endpoint.
 - [ ] Add the settings-side auth controls and status states needed for connecting, disconnecting, and reusing a persisted credential without exposing the secret.
 - [ ] Preserve the centered connect-required card state while making the new auth state explicit and testable.
 - [ ] Keep auth work off paint and constructors, and keep it on the shared thread/service ownership seams.
 - [ ] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
 
-**Gate:** Steam has an explicit user-facing account connection/auth flow that can be tested before live data hookup.
+**Gate:** Steam has an explicit user-facing identity + credential flow that can be tested before live data hookup.
 
 ## Phase 6 — Achievement Pulse real data hookup
 

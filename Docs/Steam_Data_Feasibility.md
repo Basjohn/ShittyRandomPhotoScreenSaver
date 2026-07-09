@@ -13,6 +13,14 @@ This document records the first supported-source pass for the dev-gated Steam wi
 - No authenticated Store scraping, cookies, browser automation, Steam Guard handling, or Steam password handling.
 - Public app-news is allowed as app-specific source material, not as a personalized whole-library feed.
 
+## Authentication Model
+
+- `Connect ID` uses Steam OpenID as the browser identity-linking step. It establishes the user's SteamID64, but it does not by itself grant access to player-data endpoints.
+- `Connect API KEY` opens Steam's Web API key form and captures the user's key through an explicit user-clicked paste action. Steam's form is website-shaped and may ask for a domain label; `localhost` is the intended SRPSS guidance for a local desktop app unless fresh validation proves Steam rejects it.
+- The player-data sources in this document require both a user Web API key and linked SteamID64 before runtime account data is considered available.
+- OAuth exists in Steamworks for some partner-site and partner-application flows, but it is not the baseline contract for the current Steam widget family unless Valve documents the exact needed scope for a later endpoint.
+- Publisher Web API keys remain excluded from client runtime.
+
 ## Source Matrix
 
 | Capability | Source | Status | Usable fields | Privacy / failure behavior | Card impact |
