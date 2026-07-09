@@ -91,7 +91,15 @@ class SteamCardWidget(BaseOverlayWidget):
     def _load_steam_logo() -> QPixmap:
         logo_path = Path(__file__).resolve().parent.parent / "images" / "Steam_Logo.png"
         pixmap = QPixmap(str(logo_path))
-        return pixmap if not pixmap.isNull() else QPixmap()
+        if pixmap.isNull():
+            return QPixmap()
+        try:
+            from widgets.steam_components import _crop_logo_pixmap_to_alpha_bounds
+
+            cropped = _crop_logo_pixmap_to_alpha_bounds(pixmap, str(logo_path))
+            return cropped if not cropped.isNull() else pixmap
+        except Exception:
+            return pixmap
 
     def _update_content(self) -> None:
         self.setToolTip(f"Steam mock card: {self.definition.title}")

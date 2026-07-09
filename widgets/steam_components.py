@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from PySide6.QtCore import QRect, QRectF, QSizeF, Qt
+from PySide6.QtCore import QRectF, QSizeF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
 from core.steam.achievement_pulse import AchievementPulseResolved
@@ -193,8 +193,6 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
         accent=accent,
         fields=tuple(SteamCardField(field_id, label, value) for field_id, label, value in fields),
     )
-
-
 def build_steam_connect_required_view_model(card_id: str) -> SteamCardViewModel:
     """Return an enabled-card prompt state for missing connection/cache."""
 
@@ -214,6 +212,28 @@ def build_steam_connect_required_view_model(card_id: str) -> SteamCardViewModel:
         action_label="Connect",
         settings_target=STEAM_SETTINGS_TARGET,
     )
+
+
+def _crop_logo_pixmap_to_alpha_bounds(pixmap: QPixmap, path_hint: str | None = None) -> QPixmap:
+    """Return a tight crop of the visible Steam glyph if a source has padding."""
+
+    if pixmap.isNull():
+        return pixmap
+    try:
+        from PIL import Image
+
+        if path_hint:
+            with Image.open(path_hint) as image:
+                alpha = image.convert("RGBA").getchannel("A")
+                bounds = alpha.getbbox()
+            if bounds is None:
+                return pixmap
+            left, top, right, bottom = bounds
+            cropped = pixmap.copy(left, top, max(1, right - left), max(1, bottom - top))
+            return cropped if not cropped.isNull() else pixmap
+    except Exception:
+        return pixmap
+    return pixmap
 
 
 def _format_playtime(minutes: int | None) -> str:
@@ -408,14 +428,14 @@ def layout_steam_card(
     authored_rect = QRectF(origin_x, origin_y, painted_w, painted_h)
 
     logical_content = QRectF(18.0, 16.0, 384.0, 148.0)
-    header = QRectF(18.0, 15.0, 224.0, 40.0)
-    logo = QRectF(32.0, 23.0, 24.0, 24.0)
-    header_text = QRectF(64.0, 17.0, 162.0, 36.0)
-    art = QRectF(290.0, 42.0, 94.0, 74.0)
-    title = QRectF(18.0, 45.0, 258.0, 30.0)
-    subtitle = QRectF(18.0, 76.0, 258.0, 28.0)
-    metric = QRectF(290.0, 122.0, 94.0, 28.0)
-    status = QRectF(18.0, 145.0, 258.0, 18.0)
+    header = QRectF(18.0, 14.0, 254.0, 40.0)
+    logo = QRectF(30.0, 19.0, 30.0, 30.0)
+    header_text = QRectF(67.0, 16.0, 183.0, 34.0)
+    art = QRectF(294.0, 42.0, 88.0, 74.0)
+    title = QRectF(18.0, 45.0, 278.0, 30.0)
+    subtitle = QRectF(18.0, 76.0, 278.0, 28.0)
+    metric = QRectF(294.0, 122.0, 88.0, 28.0)
+    status = QRectF(18.0, 145.0, 278.0, 18.0)
     info = QRectF(250.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
 
     fields = _enabled_fields(model.fields)
@@ -565,6 +585,14 @@ def _draw_header_badge(
     text_color: QColor,
 ) -> None:
     border = QColor(255, 255, 255, 235)
+    badge_path = QPainterPath()
+    badge_path.addRoundedRect(layout.header_rect, max(8.0, 12.0 * layout.scale), max(8.0, 12.0 * layout.scale))
+    fill_a = QColor(27, 30, 38, 220)
+    fill_b = QColor(15, 18, 24, 225)
+    badge_fill = QLinearGradient(layout.header_rect.topLeft(), layout.header_rect.bottomRight())
+    badge_fill.setColorAt(0.0, fill_a)
+    badge_fill.setColorAt(1.0, fill_b)
+    painter.fillPath(badge_path, badge_fill)
     draw_rounded_rect_with_shadow(
         painter,
         layout.header_rect.toAlignedRect(),
@@ -575,7 +603,27 @@ def _draw_header_badge(
     )
 
     if logo_pixmap is not None and not logo_pixmap.isNull():
-        painter.drawPixmap(layout.logo_rect.toAlignedRect(), logo_pixmap)
+        try:
+            dpr = max(1.0, float(painter.device().devicePixelRatioF()))
+        except Exception:
+            dpr = 1.0
+        target_w = max(1, int(round(layout.logo_rect.width() * dpr)))
+        target_h = max(1, int(round(layout.logo_rect.height() * dpr)))
+        scaled = logo_pixmap.scaled(
+            target_w,
+            target_h,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        try:
+            scaled.setDevicePixelRatio(dpr)
+        except Exception:
+            pass
+        logical_w = max(1.0, float(scaled.width()) / dpr)
+        logical_h = max(1.0, float(scaled.height()) / dpr)
+        logo_x = layout.logo_rect.x() + max(0.0, (layout.logo_rect.width() - logical_w) * 0.5)
+        logo_y = layout.logo_rect.y() + max(0.0, (layout.logo_rect.height() - logical_h) * 0.5)
+        painter.drawPixmap(int(round(logo_x)), int(round(logo_y)), scaled)
     else:
         accent = _accent_color(model)
         painter.setBrush(QColor(accent.red(), accent.green(), accent.blue(), 210))

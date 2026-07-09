@@ -99,6 +99,15 @@ def test_steam_layout_rects_stay_inside_target_for_phase4_matrix() -> None:
                 _assert_inside(geometry, rect)
 
 
+def test_steam_header_layout_reserves_room_for_long_card_titles() -> None:
+    layout = layout_steam_card(build_mock_steam_view_model("achievement_pulse"), QRectF(0, 0, 420, 180))
+
+    assert layout.header_rect.width() >= 250.0
+    assert layout.logo_rect.width() >= 28.0
+    assert layout.header_text_rect.width() >= 180.0
+    assert layout.title_rect.width() >= 270.0
+
+
 def test_steam_render_helper_handles_dpr_and_fixture_variants(qt_app) -> None:
     for widget_id in STEAM_CARD_DEFINITIONS:
         pixmap, layout = _render_to_pixmap(build_mock_steam_view_model(widget_id), 420, 180, dpr=1.0)
