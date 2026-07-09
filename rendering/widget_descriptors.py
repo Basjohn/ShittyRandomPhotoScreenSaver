@@ -590,6 +590,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
         saver_guard_attrs=("steam_privacy_mode",),
         persisted_widget_keys=("steam",) + STEAM_WIDGET_IDS,
         signal_block_attrs=(
+            "steam_enabled",
             "steam_privacy_mode",
             "steam_refresh_minutes",
             "steam_show_connection_info_icon",

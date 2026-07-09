@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-03
+Last updated: 2026-07-09
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -84,6 +84,7 @@ Canonical architecture and behavior contracts for SRPSS.
 - Steam asset caches must validate host, size, and image signature before a future card can use the file for painting.
 - Steam widget visibility is descriptor-owned: `steam_progress`, `achievement_pulse`, `abandonment_issues`, and `friend_pulse` factory/runtime/Custom/settings metadata are active only behind the named `--devsteam` gate.
 - Steam family cards use the shared header style: bundled Steam logo plus widget name. Enabled cards with no saved connection and no usable cache render a centered `Connect With Steam To Use` prompt, with only `Connect` acting as the settings affordance. Disabled cards remain hidden.
+- The Steam Settings section uses a bordered family shell with a top-level enabled/configured checkbox above the Connection & Privacy bucket and the four card buckets. That shell is a UI-facing configuration flag, not a second runtime master-switch authority.
 - Valid cached Steam card data remains authoritative when the connection/token needs attention. If the cache is at least one day stale, the optional default-on orange info affordance may appear beside the header and route to Steam connection settings; it must not trigger fetch/retry behavior.
 - Future Steam OAuth/OpenID work must request the longest safe token/refresh lifetime available so users are not forced into frequent re-authentication.
 - The Steam Settings section is lazy and inert by default. Opening general Settings must not decrypt Steam credentials, scan Steam caches/assets, contact Steam, construct runtime overlays, or mark Steam data fresh.

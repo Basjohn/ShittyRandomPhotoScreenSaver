@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtWidgets import QToolButton, QWidget
+from PySide6.QtWidgets import QGroupBox, QToolButton, QWidget
 
 from core.dev_gates import force_gate, is_steam_enabled
 from core.settings.defaults import get_default_settings
@@ -92,6 +92,7 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
     assert widgets["steam"] == {
+        "enabled": True,
         "privacy_mode": "Strict",
         "refresh_minutes": 30,
         "show_connection_info_icon": True,
@@ -129,7 +130,10 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
             assert hasattr(tab, "steam_privacy_mode")
+            assert tab.steam_enabled.isChecked() is True
+            assert any(box.title() == "Steam Widget" for box in tab.findChildren(QGroupBox))
             tab.steam_show_connection_info_icon.setChecked(False)
+            tab.steam_enabled.setChecked(False)
             tab.steam_progress_enabled.setChecked(True)
             tab._set_combo_text(tab.steam_progress_position, "Center")
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
@@ -140,6 +144,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert preview["steam_progress"]["position"] == "Center"
 
             steam_payload, progress_payload, *_rest = collect_widget_section_save_result(tab, "steam")
+            assert steam_payload["enabled"] is False
             assert steam_payload["privacy_mode"] == tab.steam_privacy_mode.currentText()
             assert steam_payload["show_connection_info_icon"] is False
             assert progress_payload["enabled"] is True

@@ -1,7 +1,7 @@
 # SRPSS Steam Widget Family — Architecture-Safe Implementation Plan
 
 **Status:** Dev-gated implementation active
-**Date:** 2026-07-03  
+**Date:** 2026-07-09  
 **Scope:** Four independently enabled Steam overlay cards: **Steam Progress**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.  
 **Repository target:** `Basjohn/ShittyRandomPhotoScreenSaver`  
 **Supersedes:** Draft 0.1 Steam Subwidgets proposal
@@ -16,7 +16,7 @@ The implementation must, however, be built as an ordinary SRPSS widget family:
 
 - four **separate descriptor-backed overlay widgets**;
 - one shared, narrowly scoped **Steam provider/cache layer**;
-- one lazily built **Steam** Settings section containing four card groups;
+- one lazily built **Steam** Settings section containing a bordered family shell, a family-level enabled/configured flag, and four card groups;
 - normal SRPSS factory, lifecycle, Custom-layout, input, cache, diagnostics, and settings contracts;
 - no private timer manager, thread pool, event loop, widget registry, layout system, or browser launcher.
 
@@ -686,11 +686,11 @@ The Steam section is lazy-built once through the descriptor registry. Opening th
 - start a refresh timer;
 - change an enabled card’s lifecycle.
 
-First visit builds the UI controls from canonical defaults and saved non-secret settings. It shows a neutral “Connection not checked this session” status until the user explicitly tests, refreshes, saves a key, or opens an already-running runtime status view through an existing safe notification path.
+First visit builds the UI controls from canonical defaults and saved non-secret settings. The top-level Steam family shell includes a family-level enable/configured toggle, then the standard Connection & Privacy bucket and card buckets. It shows a neutral “Connection not checked this session” status until the user explicitly tests, refreshes, saves a key, or opens an already-running runtime status view through an existing safe notification path.
 
 ### 8.1.1 Enabled-card connection state
 
-This section uses “connection” as the current implementation word. If a later Steam OAuth/OpenID path is adopted, it must follow the same card-state contract and request the longest safe token/refresh lifetime Steam permits. Users should not be forced to re-authenticate unless Steam or the user explicitly invalidates the credential.
+This section uses “connection” as the current implementation word for the pre-auth seam. OAuth/OpenID is the actual next auth slice and must follow the same card-state contract and request the longest safe token/refresh lifetime Steam permits. Users should not be forced to re-authenticate unless Steam or the user explicitly invalidates the credential.
 
 - A disabled Steam card remains hidden.
 - An enabled Steam card with valid live data or valid cache paints that content.
@@ -721,6 +721,12 @@ Controls:
 - **Show stale connection info icon** (default on).
 - compact privacy note for Friend Pulse.
 - no key reveal button.
+
+### 8.2.1 Family shell contract
+
+- The Steam family shell is a UI-facing configured flag, not a second runtime master-switch authority.
+- The shell should read like the other family settings sections: bordered container, main family toggle, then nested buckets.
+- Actual runtime availability still derives from secure credential state plus individual card enablement.
 
 Controls must be signal-blocked while settings load/reset/import populates them. Any dynamic panel visibility change must avoid redundant `setVisible()` churn during construction.
 
@@ -1346,6 +1352,24 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Add cache-first fixture bars before live provider hookup.
 
 **Gate:** A Custom game persists by app ID in the pure resolver; dynamic selection remains safe when a recent game lacks achievements; card state can render cache/fixture, connect-required, and stale-connection affordance paths without provider/cache/credential work in constructors or paint.
+
+## Phase 5.5 — Steam family shell and connection prelude
+
+- [ ] Add the bordered family shell and family-level enabled/configured toggle around the Steam settings buckets.
+- [ ] Keep the Connection & Privacy bucket as the first inner bucket and keep the user-facing connection affordance explicit before live data work.
+- [ ] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+
+**Gate:** Steam settings read like a single family section and the connection seam is explicit before live data work begins.
+
+## Phase 5.6 — Steam OAuth/OpenID auth seam and user-facing connection flow
+
+- [ ] Decide and implement the real user-facing account connection path for Steam, including whether the supported contract is OAuth, OpenID, or a narrower Steam-specific identity/token seam.
+- [ ] Add the settings-side auth controls and status states needed for connecting, disconnecting, and reusing a persisted credential without exposing the secret.
+- [ ] Preserve the centered connect-required card state while making the new auth state explicit and testable.
+- [ ] Keep auth work off paint and constructors, and keep it on the shared thread/service ownership seams.
+- [ ] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+
+**Gate:** Steam has an explicit user-facing account connection/auth flow that can be tested before live data hookup.
 
 ## Phase 6 — Achievement Pulse real data hookup
 

@@ -42,6 +42,14 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [x] Add enabled-card connection states: no connection + no usable cache shows centered `Connect With Steam To Use` without mock-art/content placeholders; cache remains visible when the connection needs attention.
   - [x] Add optional default-on stale connection info icon, shown only for cached data at least 1 day stale and routed through the shared Settings request seam.
   - [x] Add cache-first fixture bars before any live Steam request path is connected.
+- [ ] Steam family shell + user-facing connection prelude:
+  - [ ] Add the outer bordered Steam family shell with the main `Enable Steam Widget` toggle so the section matches Gmail/Reddit bucket framing.
+  - [ ] Keep the Connection & Privacy bucket as the first inner bucket and keep the account-connection affordance explicit before real-data Phase 6 work.
+  - [ ] Keep the shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [ ] Steam OAuth/OpenID auth seam:
+  - [ ] Decide whether the supported auth contract is OAuth, OpenID, or a narrower Steam identity/token seam.
+  - [ ] Add the actual user-facing connection/disconnect flow and persisted credential/status contract.
+  - [ ] Keep auth off constructors/paint and on the shared thread/service seams only.
 - [ ] Steam Phase 6, Achievement Pulse real data hookup:
   - [ ] Connect the pure Achievement Pulse resolver to versioned Steam cache records without provider calls from constructors or paint.
   - [ ] Use shared service-widget/ThreadManager scheduling for any live refresh path; no private timers, raw `QTimer`, or UI-pressure retries.

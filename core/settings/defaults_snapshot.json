@@ -1401,6 +1401,7 @@
             "visualizers_enabled": true
         },
         "steam": {
+            "enabled": true,
             "privacy_mode": "Strict",
             "refresh_minutes": 30,
             "show_connection_info_icon": true

@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-03
+Last updated: 2026-07-09
 
 Living map of the current SRPSS codebase.
 
@@ -84,7 +84,7 @@ Living map of the current SRPSS codebase.
 | Steam Achievement Pulse resolver | `core/steam/achievement_pulse.py` | Pure cache/fixture selected-app and achievement-progress resolver for Most Recent, Recent #2-#5, and literal Custom app ID with unavailable/private states preserved |
 | Steam card visual components | `widgets/steam_components.py` | Provider-inert Steam mock view models, deterministic layout metrics, paint fingerprints, and shared painter helpers that keep `Custom` as uniform scale instead of content authority |
 | Steam card widget | `widgets/steam_card_widget.py` | Dev-gated Steam card overlays that consume resolved/mock view models through shared painter helpers while staying descriptor/factory/settings/Custom-owned and provider/cache/credential/timer inert |
-| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy dev-gated Steam Settings section with inert Connection & Privacy controls plus four card groups; opening general Settings must not decrypt credentials, scan caches, fetch assets, or contact Steam |
+| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy dev-gated Steam Settings section with a bordered family shell, family-level enabled/configured flag, inert Connection & Privacy controls, and four card groups; opening general Settings must not decrypt credentials, scan caches, fetch assets, or contact Steam |
 
 ## Performance and Observability
 
