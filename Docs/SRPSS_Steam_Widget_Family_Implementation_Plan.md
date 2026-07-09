@@ -1375,34 +1375,34 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 ## Phase 5.5 — Steam family shell and connection prelude
 
-- [ ] Add the bordered family shell and family-level enabled/configured toggle around the Steam settings buckets.
-- [ ] Keep the Connection & Privacy bucket as the first inner bucket and keep the user-facing connection affordance explicit before live data work.
-- [ ] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [x] Add the bordered family shell and family-level enabled/configured toggle around the Steam settings buckets.
+- [x] Keep the Connection & Privacy bucket as the first inner bucket and keep the user-facing connection affordance explicit before live data work.
+- [x] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
 
 **Gate:** Steam settings read like a single family section and the connection seam is explicit before live data work begins.
 
 ## Phase 5.6 — Steam identity, user-key, and connection flow
 
-- [ ] Implement `Connect ID` as the browser/OpenID identity-linking path so the app can capture SteamID64 without password handling.
-- [ ] Implement `Connect API KEY` as the user-key path: styled popup, browser open to `https://steamcommunity.com/dev/apikey`, `localhost` domain guidance, explicit user-clicked `Paste Key`, redacted validation, and no silent clipboard reads.
-- [ ] Render per-button green checks and the small orange `Please Connect Both For Access` state until SteamID64 and user Web API key validate together.
-- [ ] Store the user Web API key encrypted and never in repo/defaults/logs; store only safe non-secret connection status/fingerprints in normal settings/UI state.
-- [ ] Keep OAuth as an explicit future option only if Valve documents the exact required scope for a later Steamworks endpoint.
-- [ ] Add the settings-side auth controls and status states needed for connecting, disconnecting, and reusing a persisted credential without exposing the secret.
-- [ ] Preserve the centered connect-required card state while making the new auth state explicit and testable.
-- [ ] Keep auth work off paint and constructors, and keep it on the shared thread/service ownership seams.
-- [ ] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [x] Implement `Connect ID` as the browser/OpenID identity-linking path so the app can capture SteamID64 without password handling.
+- [x] Implement `Connect API KEY` as the user-key path: styled popup, browser open to `https://steamcommunity.com/dev/apikey`, `localhost` domain guidance, explicit user-clicked `Paste Key`, redacted validation, and no silent clipboard reads.
+- [x] Render per-button green checks and the small orange `Please Connect Both For Access` state until SteamID64 and user Web API key validate together.
+- [x] Store the user Web API key encrypted and never in repo/defaults/logs; store only safe non-secret connection status/fingerprints in normal settings/UI state.
+- [x] Keep OAuth as an explicit future option only if Valve documents the exact required scope for a later Steamworks endpoint.
+- [x] Add the settings-side auth controls and status states needed for connecting, disconnecting, and reusing a persisted credential without exposing the secret.
+- [x] Preserve the centered connect-required card state while making the new auth state explicit and testable.
+- [x] Keep auth work off paint and constructors, and keep it on the shared thread/service ownership seams.
+- [x] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
 
 **Gate:** Steam has an explicit user-facing identity + credential flow that can be tested before live data hookup.
 
 ## Phase 6 — Achievement Pulse real data hookup
 
-- [ ] Connect the pure resolver to versioned Steam cache records.
-- [ ] Implement selected-app achievement cache refresh through shared service-widget/ThreadManager scheduling only.
+- [x] Connect the pure resolver to versioned Steam cache records.
+- [x] Implement selected-app achievement cache refresh through shared service-widget/ThreadManager scheduling only.
 - [ ] Implement local library index/autocomplete if the Custom app-ID control proves too brittle for users.
 - [ ] Implement painter-drawn ring and tile highlight modes after the cache-backed model is stable.
 - [ ] Implement card fields/settings/manual refresh without cache churn for unchanged visible models.
-- [ ] Implement cache-first/fade/transition deferral integration.
+- [x] Implement cache-first/fade/transition deferral integration.
 - [ ] Add real-account manual validation after fixture coverage.
 
 **Gate:** Achievement Pulse can paint real cache first, refresh without private timers or UI pressure, and preserve unavailable/private states without blank flashes or substitute games.

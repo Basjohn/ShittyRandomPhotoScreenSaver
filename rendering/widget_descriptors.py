@@ -602,6 +602,8 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "achievement_pulse_position",
             "achievement_pulse_monitor_combo",
             "achievement_pulse_font_size",
+            "achievement_pulse_selection_mode",
+            "achievement_pulse_custom_appid",
             "abandonment_issues_enabled",
             "abandonment_issues_position",
             "abandonment_issues_monitor_combo",

@@ -18,47 +18,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ### Steam Widget Family, Dev-Gated Foundation
 
-- [x] Foundation gates complete:
-  - [x] `--devsteam` / `--steam` gate and sidecar routing are in place.
-  - [x] Steam credentials use strict DPAPI-only storage with SST/settings secret stripping.
-  - [x] Steam source feasibility is documented in `Docs/Steam_Data_Feasibility.md`.
-  - [x] Phase 2 backend/cache scaffolding is fixture-safe, generation-aware, backoff-aware, and asset-cache guarded.
-- [x] Phase 3 descriptor/default/settings skeleton:
-  - [x] Four descriptor-owned factory/runtime/custom entries are hidden unless `--devsteam` is active.
-  - [x] Canonical defaults exist for shared Steam preferences and all four disabled cards.
-  - [x] The lazy Steam Settings shell builds bucketed Connection & Privacy plus four card buckets without credential/cache/provider work on general Settings open.
-  - [x] Disabled mock cards create/reuse/remove through normal factory descriptors and `WidgetManager.setup_all_widgets`.
-- [x] Phase 4 shared mock visual system:
-  - [x] Shared Steam card painting/layout helpers are provider-, asset-, and timer-inert.
-  - [x] Immutable mock card view models and fingerprints exist for all four cards.
-  - [x] Deterministic render/layout bars cover normal, long-title, missing-artwork/placeholder, unavailable/private, tight `Custom`, and DPR cases.
-  - [x] `Custom` rects uniformly scale authored card/elements and never decide visible-field count, rails, or content availability.
-  - [x] Constructors, `paintEvent`, and Settings preview do no Steam provider/cache/asset/credential work.
-- [x] Phase 5 Achievement Pulse cache/fixture slice:
-  - [x] Resolve selected-app modes from fixture/cache records only: Most Recent, Recent #2-#5, and literal Custom app ID.
-  - [x] Add selected-game achievement progress view-model mapping without provider calls from widget constructors or paint.
-  - [x] Preserve unavailable/private/no-achievement states as literal card states, not substitute games.
-  - [x] Keep shared Steam headers as bundled Steam logo + widget name, with widget styling still customizable through normal card settings.
-  - [x] Add enabled-card connection states: no connection + no usable cache shows centered `Connect With Steam To Use` without mock-art/content placeholders; cache remains visible when the connection needs attention.
-  - [x] Add optional default-on stale connection info icon, shown only for cached data at least 1 day stale and routed through the shared Settings request seam.
-  - [x] Add cache-first fixture bars before any live Steam request path is connected.
-- [x] Steam family shell + user-facing connection prelude:
-  - [x] Add the outer bordered Steam family shell with the main `Enable Steam Widget` toggle so the section matches Gmail/Reddit bucket framing.
-  - [x] Keep the Connection & Privacy bucket as the first inner bucket and keep the account-connection affordance explicit before real-data Phase 6 work.
-  - [x] Keep the shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
-- [ ] Steam identity and credential flow:
-  - [ ] Add two explicit connection buttons in `Connection & Privacy`: `Connect ID` and `Connect API KEY`.
-  - [ ] Route each main button through a styled explanatory popup; only popup actions open the browser or read/paste credentials.
-  - [ ] Use `Connect ID` for Steam OpenID sign-in so the app can capture SteamID64 without password handling.
-  - [ ] Use `Connect API KEY` to open `https://steamcommunity.com/dev/apikey`, explain Steam's domain-label form, suggest `localhost`, and provide an explicit user-clicked `Paste Key` action.
-  - [ ] Render a small green check beside each completed connection part and show small orange `Please Connect Both For Access` text until both are complete.
-  - [ ] Persist the credential/status contract only after SteamID64 and user Web API key validate together.
-  - [ ] Keep any future OAuth use explicitly optional and scope-gated to a Valve-documented endpoint need.
-  - [ ] Keep auth off constructors/paint and on the shared thread/service seams only.
 - [ ] Steam Phase 6, Achievement Pulse real data hookup:
-  - [ ] Connect the pure Achievement Pulse resolver to versioned Steam cache records without provider calls from constructors or paint.
-  - [ ] Use shared service-widget/ThreadManager scheduling for any live refresh path; no private timers, raw `QTimer`, or UI-pressure retries.
-  - [ ] Preserve cache-first fade behavior and stale-connection affordances during transition deferral/settings rebuilds.
+  - [ ] Add the painter-drawn ring and tile-highlight modes only after the cache-backed card fields are settled.
+  - [ ] Validate the cache-first fetch/result lifecycle against a real Steam account, `--noupdates`, transitions, and multi-monitor Custom geometry.
 
 ## Watchlist
 

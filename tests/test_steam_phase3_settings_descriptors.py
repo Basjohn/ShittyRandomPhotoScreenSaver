@@ -138,6 +138,8 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab._set_combo_text(tab.steam_progress_position, "Center")
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
             tab.steam_progress_font_size.setValue(18)
+            tab.achievement_pulse_selection_mode.setCurrentIndex(5)
+            tab.achievement_pulse_custom_appid.setValue(367520)
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is True
@@ -150,6 +152,10 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert progress_payload["enabled"] is True
             assert progress_payload["position"] == "Center"
             assert "api_key" not in steam_payload
+            assert "profile_identifier" not in steam_payload
+            achievement_payload = collect_widget_section_save_result(tab, "steam")[2]
+            assert achievement_payload["selection_mode"] == "custom"
+            assert achievement_payload["custom_appid"] == 367520
         finally:
             tab.deleteLater()
     finally:
@@ -175,6 +181,38 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
                 toggle.click()
                 qt_app.processEvents()
                 assert tab.get_widget_bucket_state(section, bucket, False) is True
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_steam_connection_controls_stay_inert_until_explicit_user_action(
+    qt_app,
+    settings_manager,
+    monkeypatch,
+) -> None:
+    prior = _with_steam_gate(True)
+    checks: list[bool] = []
+    try:
+        monkeypatch.setattr(
+            "ui.tabs.widgets_tab_steam.get_storage_status",
+            lambda: checks.append(True) or type(
+                "Status",
+                (),
+                {"storage_available": True, "has_credentials": False, "message": "Steam is not connected."},
+            )(),
+        )
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            assert tab.steam_connect_id_btn.text() == "Connect ID"
+            assert tab.steam_connect_api_key_btn.text() == "Connect API KEY"
+            assert tab.steam_access_status.text() == "Please Connect Both For Access"
+            assert checks == []
+
+            tab.steam_check_connection_btn.click()
+            assert checks == [True]
+            assert tab.steam_connection_status.text() == "Steam is not connected."
         finally:
             tab.deleteLater()
     finally:
@@ -216,6 +254,21 @@ def test_steam_factories_are_dev_gated_and_disabled_cards_create_nothing(
             assert widget.objectName() == "steam_progress_overlay"
             assert getattr(widget, "_view_model").state == "connect_required"
             widget.deleteLater()
+
+            achievement_widget = registry.create_widget(
+                "achievement_pulse",
+                parent,
+                {
+                    "enabled": True,
+                    "position": "Middle Right",
+                    "selection_mode": "custom",
+                    "custom_appid": 367520,
+                },
+            )
+            assert achievement_widget is not None
+            assert getattr(achievement_widget, "_achievement_selection").mode == "custom"
+            assert getattr(achievement_widget, "_achievement_selection").custom_appid == 367520
+            achievement_widget.deleteLater()
         finally:
             parent.deleteLater()
     finally:

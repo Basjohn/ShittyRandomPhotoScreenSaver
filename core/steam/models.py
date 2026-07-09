@@ -74,6 +74,7 @@ class SteamResult:
     http_status: int | None = None
     attempted_sources: tuple[SteamSourceId, ...] = field(default_factory=tuple)
     from_cache: bool = False
+    fetched_at: float | None = None
 
     @property
     def ok(self) -> bool:

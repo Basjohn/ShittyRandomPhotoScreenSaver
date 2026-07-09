@@ -222,6 +222,7 @@
                 255,
                 230
             ],
+            "custom_appid": null,
             "enabled": false,
             "font_family": "Inter",
             "font_size": 14,
@@ -230,6 +231,7 @@
             "position": "Middle Right",
             "preferred_height": 180,
             "preferred_width": 420,
+            "selection_mode": "most_recent",
             "show_background": true
         },
         "clock": {

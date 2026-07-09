@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QPixmap
 from widgets.shadow_utils import ShadowFadeProfile
 
 from core.logging.logger import get_logger
+from core.steam.achievement_pulse import AchievementPulseSelection
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.steam_components import (
     STEAM_CARD_AUTHORED_SIZE,
@@ -72,9 +73,11 @@ class SteamCardWidget(BaseOverlayWidget):
         definition: SteamCardDefinition,
         position: OverlayPosition = OverlayPosition.TOP_RIGHT,
         initial_view_model: SteamCardViewModel | None = None,
+        achievement_selection: AchievementPulseSelection = AchievementPulseSelection(),
     ) -> None:
         super().__init__(parent=parent, position=position, overlay_name=definition.widget_id)
         self.definition = definition
+        self._achievement_selection = achievement_selection
         self._defer_visibility_for_fade_sync = True
         self._view_model: SteamCardViewModel = initial_view_model or build_mock_steam_view_model(definition.widget_id)
         self._last_layout: SteamCardLayout | None = None
@@ -117,6 +120,10 @@ class SteamCardWidget(BaseOverlayWidget):
         self._view_model = view_model
         self.update()
 
+    def set_achievement_selection(self, selection: AchievementPulseSelection) -> None:
+        """Set persisted non-secret app selection before an activation refresh."""
+        self._achievement_selection = selection
+
     def last_layout(self) -> SteamCardLayout | None:
         """Return the most recent layout metrics, primarily for bars/tests."""
 
@@ -145,6 +152,12 @@ class SteamCardWidget(BaseOverlayWidget):
         self.settings_requested.emit(target)
         return True
 
+    def handle_double_click(self, _local_pos: QPoint) -> bool:
+        """Use a blank-card double click as the explicit Achievement Pulse refresh action."""
+        if self.definition.widget_id != "achievement_pulse":
+            return False
+        return self.request_manual_refresh()
+
     def _activate_impl(self) -> None:
         """Activate a provider-inert card through the normal coordinated fade path."""
 
@@ -168,6 +181,214 @@ class SteamCardWidget(BaseOverlayWidget):
     def _handle_fade_complete(self) -> None:
         self._has_faded_in = True
         self.on_fade_complete()
+
+    def on_fade_complete(self) -> None:
+        """Begin the cache-only Achievement Pulse path after normal activation."""
+        super().on_fade_complete()
+        if self.definition.widget_id == "achievement_pulse":
+            self._load_achievement_pulse_cache()
+
+    def _load_achievement_pulse_cache(self) -> None:
+        """Load a cached card model off the UI thread after the fade boundary."""
+        if getattr(self, "_achievement_cache_load_started", False):
+            return
+        if not self._ensure_thread_manager("Achievement Pulse cache load"):
+            return
+        self._achievement_cache_load_started = True
+        generation = int(getattr(self, "_achievement_cache_generation", 0)) + 1
+        self._achievement_cache_generation = generation
+
+        def _load_snapshot():
+            from core.steam.achievement_pulse_cache import load_achievement_pulse_cache_snapshot
+            from core.steam.credentials import read_credential_metadata
+
+            metadata = read_credential_metadata()
+            if metadata is None:
+                return None, None
+            return metadata, load_achievement_pulse_cache_snapshot(
+                profile_key=metadata.profile_cache_key,
+                selection=self._achievement_selection,
+            )
+
+        def _finished(task_result) -> None:
+            from core.threading.manager import ThreadManager
+
+            def _apply_result() -> None:
+                if getattr(self, "_achievement_cache_generation", None) != generation:
+                    return
+                metadata, snapshot = task_result.result if task_result.success else (None, None)
+                if snapshot is None or not snapshot.has_usable_cache:
+                    if metadata is not None:
+                        self._refresh_achievement_pulse_cache(cache_age_seconds=None)
+                    return
+                self._apply_achievement_pulse_snapshot(snapshot)
+                self._refresh_achievement_pulse_cache(cache_age_seconds=snapshot.cache_age_seconds)
+
+            ThreadManager.run_on_ui_thread(_apply_result)
+
+        try:
+            self._thread_manager.submit_io_task(
+                _load_snapshot,
+                task_id=f"steam_achievement_cache_load_{generation}",
+                callback=_finished,
+            )
+        except Exception:
+            self._achievement_cache_load_started = False
+            logger.warning("[STEAM] Could not submit Achievement Pulse cache load", exc_info=True)
+
+    def _refresh_achievement_pulse_cache(
+        self,
+        *,
+        cache_age_seconds: float | None,
+        force: bool = False,
+    ) -> bool:
+        """Submit one startup refresh through the shared ThreadManager only."""
+        from core.runtime_flags import automatic_service_updates_enabled
+
+        if not force and not automatic_service_updates_enabled():
+            return False
+        if not force and cache_age_seconds is not None and cache_age_seconds < 15 * 60:
+            return False
+        if getattr(self, "_achievement_refresh_in_progress", False):
+            return True
+        if not self._ensure_thread_manager("Achievement Pulse refresh"):
+            return False
+        self._achievement_refresh_in_progress = True
+        generation = int(getattr(self, "_achievement_cache_generation", 0)) + 1
+        self._achievement_cache_generation = generation
+
+        def _refresh_snapshot():
+            from core.steam.achievement_pulse_cache import (
+                AchievementPulseRefreshOutcome,
+                load_achievement_pulse_cache_snapshot,
+                refresh_achievement_pulse_cache,
+            )
+            from core.steam.credentials import SteamCredentialError, load_credentials, read_credential_metadata
+
+            try:
+                credential = load_credentials()
+            except SteamCredentialError:
+                metadata = read_credential_metadata()
+                if metadata is None:
+                    return None
+                return AchievementPulseRefreshOutcome(
+                    snapshot=load_achievement_pulse_cache_snapshot(
+                        profile_key=metadata.profile_cache_key,
+                        selection=self._achievement_selection,
+                    ),
+                    connection_needs_attention=True,
+                )
+            if credential is None:
+                return None
+            return refresh_achievement_pulse_cache(
+                credential=credential,
+                selection=self._achievement_selection,
+                force=force,
+            )
+
+        def _finished(task_result) -> None:
+            from core.threading.manager import ThreadManager
+
+            def _apply_result() -> None:
+                if getattr(self, "_achievement_cache_generation", None) != generation:
+                    return
+                self._achievement_refresh_in_progress = False
+                outcome = task_result.result if task_result.success else None
+                if outcome is not None and getattr(outcome, "snapshot", None) is not None:
+                    self._apply_achievement_pulse_snapshot(
+                        outcome.snapshot,
+                        connection_needs_attention=bool(outcome.connection_needs_attention),
+                    )
+
+            ThreadManager.run_on_ui_thread(_apply_result)
+
+        try:
+            self._thread_manager.submit_io_task(
+                _refresh_snapshot,
+                task_id=f"steam_achievement_refresh_{generation}",
+                callback=_finished,
+            )
+        except Exception:
+            self._achievement_refresh_in_progress = False
+            logger.warning("[STEAM] Could not submit Achievement Pulse refresh", exc_info=True)
+            return False
+        return True
+
+    def request_manual_refresh(self) -> bool:
+        """Request a user-initiated refresh without bypassing provider backoff/dedupe."""
+        if self.definition.widget_id != "achievement_pulse":
+            return False
+        from widgets.service_widget_runtime import defer_refresh_if_transition
+
+        if defer_refresh_if_transition(
+            self,
+            pending_attr="_pending_achievement_manual_refresh",
+            schedule_callback=self._schedule_deferred_manual_refresh,
+            logger=logger,
+            log_message="[STEAM] Deferred manual Achievement Pulse refresh during parent transition",
+        ):
+            return True
+        return self._refresh_achievement_pulse_cache(cache_age_seconds=None, force=True)
+
+    def _schedule_deferred_manual_refresh(self) -> None:
+        from core.threading.manager import ThreadManager
+
+        ThreadManager.single_shot(250, self._run_deferred_manual_refresh)
+
+    def _run_deferred_manual_refresh(self) -> None:
+        from widgets.service_widget_runtime import parent_transition_running
+
+        if not getattr(self, "_pending_achievement_manual_refresh", False):
+            return
+        if parent_transition_running(self):
+            self._schedule_deferred_manual_refresh()
+            return
+        self._pending_achievement_manual_refresh = False
+        self._refresh_achievement_pulse_cache(cache_age_seconds=None, force=True)
+
+    def _apply_achievement_pulse_snapshot(self, snapshot, *, connection_needs_attention: bool = False) -> None:
+        """Apply a cache snapshot without repaint churn or transition interruption."""
+        from widgets.service_widget_runtime import defer_value_if_transition
+        from widgets.steam_components import build_achievement_pulse_view_model
+
+        model = build_achievement_pulse_view_model(
+            snapshot.resolved,
+            cache_age_seconds=snapshot.cache_age_seconds,
+            connection_needs_attention=connection_needs_attention,
+        )
+        if defer_value_if_transition(
+            self,
+            attr_name="_deferred_achievement_view_model",
+            value=model,
+            clear_attrs=(),
+            schedule_callback=self._schedule_deferred_achievement_apply,
+            logger=logger,
+            log_message="[STEAM] Deferred Achievement Pulse result during parent transition",
+        ):
+            return
+        self._apply_achievement_pulse_view_model(model)
+
+    def _schedule_deferred_achievement_apply(self) -> None:
+        from core.threading.manager import ThreadManager
+
+        ThreadManager.single_shot(250, self._apply_deferred_achievement_view_model)
+
+    def _apply_deferred_achievement_view_model(self) -> None:
+        from widgets.service_widget_runtime import parent_transition_running
+
+        model = getattr(self, "_deferred_achievement_view_model", None)
+        if model is None:
+            return
+        if parent_transition_running(self):
+            self._schedule_deferred_achievement_apply()
+            return
+        self._deferred_achievement_view_model = None
+        self._apply_achievement_pulse_view_model(model)
+
+    def _apply_achievement_pulse_view_model(self, model: SteamCardViewModel) -> None:
+        if model.content_fingerprint() != self._view_model.content_fingerprint():
+            self.set_view_model(model)
+        self._has_displayed_valid_data = True
 
     def _start_widget_fade_in(self, duration_ms: int | None = None) -> None:
         """Start the same painter-owned overlay fade profile used by other cards."""

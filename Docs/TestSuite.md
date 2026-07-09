@@ -38,7 +38,9 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_settings_manager.py`
   Settings cache invalidation, section/root writes, legacy alias migration, visualizer schema version-gating, reset-to-defaults profile overrides, SST replace-import semantics, and bulk-mutation stale-cache prevention.
 - `tests/test_steam_credentials.py`
-  Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
+  Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys/metadata routing, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
+- `tests/test_steam_openid.py`
+  Steam identity-link request construction, strict claimed-ID/callback validation, Steam `check_authentication` verification through an injected opener, and unpredictable loopback callback setup.
 - `tests/test_steam_backend.py`
   Steam-family source metadata and fixture-safe backend transport: publisher-only endpoint exclusion, user-key/profile redaction, public app-news endpoint shape, HTTP privacy/rate-limit classification, injected fake opener usage, and no live Steam calls.
 - `tests/test_steam_cache.py`
@@ -52,7 +54,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_steam_phase4_mock_visuals.py`
   Steam Phase 4 mock visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, long/unavailable fixture states, and tight `Custom` scaling that preserves authored visible-field count and rails.
 - `tests/test_steam_achievement_pulse.py`
-  Steam Phase 5 Achievement Pulse coverage: pure cache/fixture selected-app resolution, literal unavailable/custom states, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
+  Steam Phase 5/6 Achievement Pulse coverage: pure selected-app resolution, persisted Custom app-ID settings, opaque cache snapshot/age handling, successful-result-only refresh caching, fresh-request coalescing, manual-refresh routing, cached unauthorized connection-attention handling, literal unavailable/custom states, cache application after activation, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`

@@ -287,6 +287,26 @@ def fetch_json(
         )
 
 
+def validate_connection(
+    *,
+    api_key: str,
+    steamid: str,
+    opener: Callable[[urllib.request.Request, float], Any] | None = None,
+) -> SteamResult:
+    """Validate an explicitly user-submitted Steam key/identity pair.
+
+    This deliberately performs one narrow, redacted player-summary request and
+    does not write cache records or schedule card refresh work.  It is used by
+    the Settings ``Save & Test`` action before DPAPI persistence.
+    """
+    endpoint = build_endpoint(
+        SteamSourceId.PLAYER_SUMMARIES,
+        api_key=api_key,
+        steamid=steamid,
+    )
+    return fetch_json(endpoint, opener=opener)
+
+
 def _default_open(request: urllib.request.Request, timeout: float) -> Any:
     return urllib.request.urlopen(request, timeout=timeout)
 

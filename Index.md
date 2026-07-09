@@ -72,19 +72,21 @@ Living map of the current SRPSS codebase.
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files, including Steam credential/cache roots |
-| Steam credential storage | `core/steam/credentials.py` | Dev-gated Steam family strict credential seam: DPAPI-only encrypted payloads, no plaintext fallback, safe redaction/fingerprints, opaque account cache keys, disconnect/cache-clear helpers, and UI-safe input/storage status without settings export leakage |
+| Steam credential storage | `core/steam/credentials.py` | Dev-gated Steam family strict credential seam: DPAPI-only encrypted payloads, no plaintext fallback, safe redaction/fingerprints, opaque account cache keys, safe metadata routing, disconnect/cache-clear helpers, and UI-safe input/storage status without settings export leakage |
+| Steam OpenID identity link | `core/steam/openid.py` | Short-lived loopback OpenID callback, state/return-url/claimed-ID checks, and Steam `check_authentication` verification; no password or API-key handling |
 | Steam typed models | `core/steam/models.py` | Frozen source/result/cache-facing data types for the dev-gated Steam backend and future card view models |
 | Steam backend metadata/transport | `core/steam/backend.py` | Client-safe endpoint metadata, publisher-only source exclusion, user-key/profile redaction, injected-opener JSON transport, and safe HTTP/error classification |
-| Steam cache | `core/steam/cache.py` | Versioned atomic Steam cache envelopes that preserve source provenance and refuse to freshen cache from failed/private/invalid provider results |
+| Steam cache | `core/steam/cache.py` | Versioned atomic Steam cache envelopes that preserve source provenance, fetched timestamps, opaque profile-key routing, and refuse to freshen cache from failed/private/invalid provider results |
 | Steam request policy | `core/steam/request_policy.py` | Profile/source/category/app request identity, in-flight coalescing, stale-generation drops, and bounded backoff without owning threads or timers |
 | Steam profile policy state | `core/steam/profile_state.py` | Account-private rotation/cooldown/dismissal state outside settings exports |
 | Steam asset cache | `core/steam/assets.py` | Injected-fetcher Steam artwork/avatar validation, atomic cache writes, and bounded local asset eviction |
 | Steam fixture backend | `core/steam/mock_backend.py` | Test/card-fixture backend that never performs live Steam network calls |
 | Steam events | `core/steam/events.py` | Narrow non-secret `EventSystem` publication helpers for future Steam data-ready updates |
 | Steam Achievement Pulse resolver | `core/steam/achievement_pulse.py` | Pure cache/fixture selected-app and achievement-progress resolver for Most Recent, Recent #2-#5, and literal Custom app ID with unavailable/private states preserved |
+| Steam Achievement Pulse cache bridge | `core/steam/achievement_pulse_cache.py` | Cache-first selected-app snapshot assembly and bounded successful-result-only recent/achievement refresh work; unauthorized refreshes retain cache while flagging safe connection attention, manual refresh may bypass freshness but not coalescing/backoff, and this module owns no threads, timers, UI, or credential decryption |
 | Steam card visual components | `widgets/steam_components.py` | Provider-inert Steam mock view models, deterministic layout metrics, paint fingerprints, and shared painter helpers that keep `Custom` as uniform scale instead of content authority |
-| Steam card widget | `widgets/steam_card_widget.py` | Dev-gated Steam card overlays that consume resolved/mock view models through shared painter helpers while staying descriptor/factory/settings/Custom-owned and provider/cache/credential/timer inert |
-| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy dev-gated Steam Settings section with a bordered family shell, family-level enabled/configured flag, inert Connection & Privacy controls, and four card groups; opening general Settings must not decrypt credentials, scan caches, fetch assets, or contact Steam |
+| Steam card widget | `widgets/steam_card_widget.py` | Dev-gated Steam card overlays that consume resolved/mock view models through shared painter helpers; Achievement Pulse alone can load cache and schedule one bounded refresh after activation through ThreadManager, with a transition-safe explicit manual refresh, while constructors, paint, and Settings remain inert |
+| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy dev-gated Steam Settings section with a bordered family shell, explicit OpenID/API-key connect controls, DPAPI-safe saved-status/disconnect actions, non-secret Achievement Pulse selection controls, and four card groups; opening general Settings must not decrypt credentials, scan caches, fetch assets, or contact Steam |
 
 ## Performance and Observability
 

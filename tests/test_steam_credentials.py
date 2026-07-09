@@ -17,9 +17,11 @@ from core.steam.credentials import (
     get_storage_status,
     load_credentials,
     redact_mapping,
+    read_credential_metadata,
     save_credentials,
     strip_secret_fields,
     validate_credential_input,
+    write_credential_metadata,
 )
 
 
@@ -237,3 +239,21 @@ def test_steam_credential_input_status_is_ui_safe(monkeypatch) -> None:
     assert ready.can_save_after_test is False
     assert SENTINEL_KEY not in ready.message
     assert SENTINEL_PROFILE not in ready.message
+
+
+def test_credential_metadata_routes_cache_without_decrypting_credentials(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from core.settings import storage_paths
+
+    storage_paths.reset_module_cache()
+    credential = SteamCredentialPayload(
+        api_key=SENTINEL_KEY,
+        profile_identifier=SENTINEL_PROFILE,
+    )
+    write_credential_metadata(credential)
+
+    metadata = read_credential_metadata()
+
+    assert metadata is not None
+    assert metadata.profile_cache_key == derive_profile_cache_key(SENTINEL_PROFILE)
+    assert SENTINEL_PROFILE not in metadata.profile_cache_key

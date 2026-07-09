@@ -1010,6 +1010,14 @@ class GmailWidgetFactory(WidgetFactory):
             return None
 
 
+def _coerce_optional_appid(value: Any) -> int | None:
+    try:
+        appid = int(value)
+    except (TypeError, ValueError):
+        return None
+    return appid if appid > 0 else None
+
+
 class SteamCardFactory(WidgetFactory):
     """Factory for dev-gated Steam card scaffolds."""
 
@@ -1030,6 +1038,7 @@ class SteamCardFactory(WidgetFactory):
         """Create one static Steam card scaffold with normal overlay styling."""
         from core.dev_gates import is_steam_enabled
         from core.settings.models import WidgetPosition, coerce_widget_position
+        from core.steam.achievement_pulse import AchievementPulseSelection
         from widgets.base_overlay_widget import OverlayPosition
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 
@@ -1067,6 +1076,10 @@ class SteamCardFactory(WidgetFactory):
                 definition=definition,
                 position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
                 initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
+                achievement_selection=AchievementPulseSelection(
+                    mode=str(config.get("selection_mode", "most_recent") or "most_recent"),
+                    custom_appid=_coerce_optional_appid(config.get("custom_appid")),
+                ),
             )
 
             if hasattr(widget, "set_font_family"):

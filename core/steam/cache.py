@@ -58,6 +58,28 @@ def cache_path_for(
     return root / f"{safe_cache_key}.json"
 
 
+def cache_path_for_profile_key(
+    profile_key: str,
+    cache_key: str,
+    *,
+    profile: str | None = None,
+    root: Path | None = None,
+) -> Path:
+    """Return a cache path from an already-opaque profile key.
+
+    Runtime cache-first card loads use credential metadata rather than
+    decrypting the SteamID64 merely to locate account-private cache records.
+    """
+    safe_profile_key = _safe_cache_name(profile_key)
+    if not safe_profile_key.startswith("profile_"):
+        raise ValueError("Steam cache profile key must be opaque and profile-derived")
+    safe_cache_key = _safe_cache_name(cache_key)
+    if root is None:
+        root = get_steam_cache_dir(profile=profile, profile_key=safe_profile_key)
+    root.mkdir(parents=True, exist_ok=True)
+    return root / f"{safe_cache_key}.json"
+
+
 def write_cache_record(record: SteamCacheRecord, path: Path) -> Path:
     """Atomically write a Steam cache record."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -133,6 +155,7 @@ def read_cache_record(path: Path) -> SteamResult:
             payload=dict(payload),
             attempted_sources=attempted or (source_id,),
             from_cache=True,
+            fetched_at=float(raw["fetched_at"]),
         )
     except Exception as exc:
         corrupt_path = path.with_name(f"{path.name}.corrupt")

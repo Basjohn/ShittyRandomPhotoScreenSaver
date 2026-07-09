@@ -5,7 +5,21 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtTest import QSignalSpy
 
 from core.steam.achievement_pulse import AchievementPulseSelection, resolve_achievement_pulse
+from core.steam.achievement_pulse_cache import (
+    OWNED_GAMES_CACHE_KEY,
+    RECENT_GAMES_CACHE_KEY,
+    achievement_cache_key_for_app,
+    load_achievement_pulse_cache_snapshot,
+    refresh_achievement_pulse_cache,
+)
+from core.steam.cache import SteamCacheRecord, cache_path_for_profile_key, write_cache_record
+from core.steam.credentials import (
+    SteamCredentialPayload,
+    derive_profile_cache_key,
+    write_credential_metadata,
+)
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
+from core.threading.manager import TaskResult
 from widgets.steam_components import (
     STEAM_SETTINGS_TARGET,
     STEAM_STALE_CONNECTION_INFO_SECONDS,
@@ -195,3 +209,249 @@ def test_steam_settings_target_primes_widgets_steam_subtab() -> None:
 
     assert settings.values["ui.last_tab_index"] == 3
     assert settings.values["ui.tab_state"]["widgets"]["view_state"]["subtab_id"] == "steam"
+
+
+def test_achievement_pulse_cache_snapshot_uses_opaque_profile_key_and_real_record_age(tmp_path) -> None:
+    profile_key = "profile_1234567890abcdef12345678"
+    now = 10_000.0
+
+    def _write(cache_key: str, source_id: SteamSourceId, payload: dict, fetched_at: float) -> None:
+        path = cache_path_for_profile_key(profile_key, cache_key, root=tmp_path)
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=fetched_at,
+            ),
+            path,
+        )
+
+    _write(
+        RECENT_GAMES_CACHE_KEY,
+        SteamSourceId.RECENTLY_PLAYED,
+        {"response": {"games": [{"appid": 111, "name": "Hollow Knight", "playtime_forever": 600}]}},
+        now - 120,
+    )
+    _write(
+        OWNED_GAMES_CACHE_KEY,
+        SteamSourceId.OWNED_GAMES,
+        {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+        now - 120,
+    )
+    _write(
+        achievement_cache_key_for_app(111),
+        SteamSourceId.PLAYER_ACHIEVEMENTS,
+        {"playerstats": {"gameName": "Hollow Knight", "achievements": [{"name": "Start", "achieved": 1}]}},
+        now - 60,
+    )
+
+    snapshot = load_achievement_pulse_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=now,
+    )
+
+    assert snapshot.has_usable_cache is True
+    assert snapshot.resolved.ok is True
+    assert snapshot.resolved.title == "Hollow Knight"
+    assert snapshot.cache_age_seconds == 120
+    assert snapshot.achievement_result is not None
+    assert snapshot.achievement_result.from_cache is True
+
+
+def test_achievement_pulse_cache_snapshot_keeps_custom_unavailable_literal(tmp_path) -> None:
+    profile_key = "profile_1234567890abcdef12345678"
+    snapshot = load_achievement_pulse_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        selection=AchievementPulseSelection(mode="custom", custom_appid=999),
+    )
+
+    assert snapshot.has_usable_cache is False
+    assert snapshot.resolved.ok is False
+    assert snapshot.resolved.appid == 999
+    assert "unavailable" in snapshot.resolved.unavailable_reason.lower()
+
+
+def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_123456",
+        profile_identifier="76561198000000000",
+    )
+    requests: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def read(self, _limit: int) -> bytes:
+            return self._payload
+
+    def _opener(request, _timeout: float):
+        requests.append(request.full_url)
+        if "GetRecentlyPlayedGames" in request.full_url:
+            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight"}]}}')
+        if "GetPlayerAchievements" in request.full_url:
+            return _Response(b'{"playerstats":{"gameName":"Hollow Knight","achievements":[{"name":"Start","achieved":1}]}}')
+        raise AssertionError(request.full_url)
+
+    first = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_000.0,
+    )
+    second = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_000.0,
+    )
+    manual = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_050.0,
+        force=True,
+    )
+
+    assert first.resolved.ok is True
+    assert second.resolved.ok is True
+    assert manual.resolved.ok is True
+    assert manual.cache_age_seconds == 50
+    assert len(requests) == 4
+
+
+def test_achievement_pulse_unauthorized_refresh_keeps_cache_and_flags_connection(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_123456",
+        profile_identifier="76561198000000000",
+    )
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=RECENT_GAMES_CACHE_KEY,
+            source_id=SteamSourceId.RECENTLY_PLAYED,
+            payload={"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY, root=tmp_path),
+    )
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=achievement_cache_key_for_app(111),
+            source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+            payload={"playerstats": {"gameName": "Hollow Knight", "achievements": [{"name": "Start", "achieved": 1}]}},
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, achievement_cache_key_for_app(111), root=tmp_path),
+    )
+
+    class _UnauthorizedResponse:
+        status = 403
+
+        def read(self, _limit: int) -> bytes:
+            return b"{}"
+
+    outcome = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=lambda _request, _timeout: _UnauthorizedResponse(),
+        now=100_000.0,
+    )
+
+    assert outcome.connection_needs_attention is True
+    assert outcome.snapshot.resolved.ok is True
+    assert outcome.snapshot.cache_age_seconds == 99_000
+
+
+def test_achievement_pulse_widget_applies_cache_after_activation_boundary(qt_app, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from core.settings import storage_paths
+
+    storage_paths.reset_module_cache()
+    profile_identifier = "76561198000000000"
+    credential = SteamCredentialPayload(api_key="fake_steam_api_key_123456", profile_identifier=profile_identifier)
+    write_credential_metadata(credential)
+
+    # The cache root is account-private; the card never needs to decrypt the ID to read it.
+    profile_key = derive_profile_cache_key(profile_identifier)
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=RECENT_GAMES_CACHE_KEY,
+            source_id=SteamSourceId.RECENTLY_PLAYED,
+            payload={"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY),
+    )
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=OWNED_GAMES_CACHE_KEY,
+            source_id=SteamSourceId.OWNED_GAMES,
+            payload={"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, OWNED_GAMES_CACHE_KEY),
+    )
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=achievement_cache_key_for_app(111),
+            source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+            payload={"playerstats": {"gameName": "Hollow Knight", "achievements": [{"name": "Start", "achieved": 1}]}},
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, achievement_cache_key_for_app(111)),
+    )
+
+    class _InlineThreadManager:
+        def submit_io_task(self, func, *, task_id, callback):
+            callback(TaskResult(success=True, result=func(), task_id=task_id))
+            return task_id
+
+    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
+    try:
+        widget.set_thread_manager(_InlineThreadManager())
+        widget._load_achievement_pulse_cache()
+        qt_app.processEvents()
+
+        assert widget._view_model.state == "content"
+        assert widget._view_model.title == "Hollow Knight"
+        assert widget._has_displayed_valid_data is True
+    finally:
+        widget.deleteLater()
+
+
+def test_achievement_pulse_fresh_cache_does_not_schedule_or_decrypt(qt_app) -> None:
+    class _NoTaskThreadManager:
+        def submit_io_task(self, *_args, **_kwargs):
+            raise AssertionError("fresh cache must not submit a Steam refresh task")
+
+    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
+    try:
+        widget.set_thread_manager(_NoTaskThreadManager())
+        widget._refresh_achievement_pulse_cache(cache_age_seconds=60.0)
+    finally:
+        widget.deleteLater()
+
+
+def test_achievement_pulse_manual_refresh_submits_even_when_automatic_updates_are_off(qt_app, monkeypatch) -> None:
+    calls: list[str] = []
+
+    class _InlineThreadManager:
+        def submit_io_task(self, func, *, task_id, callback):
+            calls.append(task_id)
+            callback(TaskResult(success=True, result=func(), task_id=task_id))
+            return task_id
+
+    monkeypatch.setattr("core.steam.credentials.load_credentials", lambda: None)
+    widget = SteamCardWidget(definition=STEAM_CARD_DEFINITIONS["achievement_pulse"])
+    try:
+        widget.set_thread_manager(_InlineThreadManager())
+        assert widget.request_manual_refresh() is True
+        assert calls and calls[0].startswith("steam_achievement_refresh_")
+    finally:
+        widget.deleteLater()

@@ -113,6 +113,15 @@ class SteamCredentialStorageStatus:
     message: str
 
 
+@dataclass(frozen=True)
+class SteamCredentialMetadata:
+    """Non-secret credential metadata usable by cache-first runtime work."""
+
+    profile_cache_key: str
+    provider_mode: str
+    updated_at: float | None
+
+
 def _optional_float(value: Any) -> float | None:
     try:
         if value is None:
@@ -328,6 +337,29 @@ def get_storage_status(*, profile: str | None = None) -> SteamCredentialStorageS
         has_credentials=False,
         message="Steam is not connected.",
     )
+
+
+def read_credential_metadata(*, profile: str | None = None) -> SteamCredentialMetadata | None:
+    """Read safe cache-routing metadata without decrypting Steam credentials."""
+    path = get_steam_credential_meta_file(profile)
+    if not path.exists():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, Mapping) or raw.get("schema_version") != SCHEMA_VERSION:
+            return None
+        profile_cache_key = raw.get("profile_cache_key")
+        if not isinstance(profile_cache_key, str) or not profile_cache_key.startswith("profile_"):
+            return None
+        provider_mode = raw.get("provider_mode")
+        return SteamCredentialMetadata(
+            profile_cache_key=profile_cache_key,
+            provider_mode=provider_mode if isinstance(provider_mode, str) and provider_mode else "steam_web_api",
+            updated_at=_optional_float(raw.get("updated_at")),
+        )
+    except Exception:
+        logger.warning("[STEAM] Ignoring invalid non-secret credential metadata")
+        return None
 
 
 def validate_credential_input(api_key: str | None, profile_identifier: str | None) -> SteamCredentialInputStatus:
