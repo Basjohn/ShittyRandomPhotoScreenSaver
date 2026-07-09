@@ -42,13 +42,13 @@ def test_build_endpoint_redacts_user_key_and_profile_id() -> None:
     endpoint = build_endpoint(
         SteamSourceId.RECENTLY_PLAYED,
         api_key="STEAM_KEY_SHOULD_NOT_LEAK_1234567890",
-        steamid="76561198000000000",
+        steamid="76561197960265728",
         count=5,
     )
 
     redacted_url = endpoint.redacted_url()
     assert "STEAM_KEY_SHOULD_NOT_LEAK" not in redacted_url
-    assert "76561198000000000" not in redacted_url
+    assert "76561197960265728" not in redacted_url
     assert "count=5" in redacted_url
     assert endpoint.redacted_params()["key"].startswith("<key:")
     assert endpoint.redacted_params()["steamid"].startswith("<steamid:")
@@ -61,6 +61,23 @@ def test_public_app_news_endpoint_does_not_require_user_key() -> None:
     assert "key" not in endpoint.params
     assert "steamid" not in endpoint.params
     assert "ISteamNews/GetNewsForApp" in endpoint.url
+
+
+def test_client_key_endpoints_use_the_public_steam_web_api_host() -> None:
+    for source_id in (
+        SteamSourceId.RECENTLY_PLAYED,
+        SteamSourceId.OWNED_GAMES,
+        SteamSourceId.PLAYER_ACHIEVEMENTS,
+        SteamSourceId.ACHIEVEMENT_SCHEMA,
+        SteamSourceId.FRIEND_LIST,
+        SteamSourceId.PLAYER_SUMMARIES,
+    ):
+        endpoint = build_endpoint(
+            source_id,
+            api_key="STEAMKEY0123456789ABCDEF",
+            steamid="76561197960265728",
+        )
+        assert endpoint.url.startswith("https://api.steampowered.com/")
 
 
 def test_http_status_classification_keeps_private_distinct_from_offline() -> None:
@@ -92,7 +109,7 @@ def test_fetch_json_classifies_http_error_without_throwing() -> None:
     endpoint = build_endpoint(
         SteamSourceId.FRIEND_LIST,
         api_key="STEAM_KEY_SHOULD_NOT_LEAK_1234567890",
-        steamid="76561198000000000",
+        steamid="76561197960265728",
     )
 
     def opener(request, timeout):

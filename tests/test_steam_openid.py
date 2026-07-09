@@ -12,7 +12,8 @@ from core.steam.openid import (
 )
 
 
-STEAM_ID64 = "76561198000000000"
+# SteamID64's account-id-zero base value is a structural sentinel, not a user.
+STEAM_ID64 = "76561197960265728"
 RETURN_TO = "http://127.0.0.1:48123/steam/openid?state=fake_state"
 
 
@@ -56,7 +57,7 @@ def test_build_login_url_uses_steam_openid_and_fixed_local_callback() -> None:
 def test_extract_steam_id64_accepts_only_documented_claimed_id_shape() -> None:
     assert extract_steam_id64(f"https://steamcommunity.com/openid/id/{STEAM_ID64}") == STEAM_ID64
     assert extract_steam_id64(f"http://steamcommunity.com/openid/id/{STEAM_ID64}/") == STEAM_ID64
-    assert extract_steam_id64("https://evil.example/openid/id/76561198000000000") is None
+    assert extract_steam_id64("https://evil.example/openid/id/76561197960265728") is None
     assert extract_steam_id64("https://steamcommunity.com/openid/id/not-a-steamid") is None
 
 

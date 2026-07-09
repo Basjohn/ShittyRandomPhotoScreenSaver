@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ _ALLOWED_SUFFIX_BY_KIND = {
     "jpeg": b"\xff\xd8\xff",
     "webp": b"RIFF",
 }
+_STEAM_APP_HEADER_URL = "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg"
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,40 @@ class SteamAssetRecord:
     path: Path
     bytes_written: int
     image_kind: str
+
+
+def find_cached_asset(cache_dir: Path, url: str) -> Path | None:
+    """Return a validated asset-cache entry by URL fingerprint without network IO."""
+    fingerprint = hashlib.sha256(url.encode("utf-8")).hexdigest()[:24]
+    for suffix in _ALLOWED_SUFFIX_BY_KIND:
+        candidate = cache_dir / f"{fingerprint}.{suffix}"
+        if candidate.is_file() and candidate.stat().st_size > 0:
+            return candidate
+    return None
+
+
+def fetch_steam_app_header(
+    *,
+    cache_dir: Path,
+    appid: int,
+    fetcher: Callable[[str], bytes] | None = None,
+) -> SteamAssetRecord | SteamResult:
+    """Load or cache the selected app's public Steam header image."""
+    safe_appid = max(1, int(appid))
+    url = _STEAM_APP_HEADER_URL.format(appid=safe_appid)
+    cached = find_cached_asset(cache_dir, url)
+    if cached is not None:
+        return SteamAssetRecord(
+            url_fingerprint=hashlib.sha256(url.encode("utf-8")).hexdigest()[:24],
+            path=cached,
+            bytes_written=cached.stat().st_size,
+            image_kind=cached.suffix.lstrip("."),
+        )
+    return fetch_and_cache_asset(
+        cache_dir=cache_dir,
+        url=url,
+        fetcher=fetcher or _default_fetch_asset,
+    )
 
 
 def cache_asset_from_bytes(
@@ -84,6 +120,12 @@ def fetch_and_cache_asset(
         logger.warning("[STEAM] Asset fetch failed url_hash=%s error=%s", hashlib.sha256(url.encode("utf-8")).hexdigest()[:12], exc)
         return SteamResult(status=SteamResultStatus.NETWORK_ERROR, message="Steam asset fetch failed.")
     return cache_asset_from_bytes(cache_dir=cache_dir, url=url, data=data, allowed_hosts=allowed_hosts)
+
+
+def _default_fetch_asset(url: str) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam-DevGate/0.1"})
+    with urllib.request.urlopen(request, timeout=12.0) as response:
+        return response.read(MAX_STEAM_ASSET_BYTES + 1)
 
 
 def prune_asset_cache(cache_dir: Path, *, max_files: int = 256) -> int:

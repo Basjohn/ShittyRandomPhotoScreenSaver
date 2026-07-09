@@ -884,7 +884,10 @@ class InputHandler(QObject):
                             target = sw.settings_action_at(local_pos)
                         if target and hasattr(sw, "handle_click") and sw.handle_click(local_pos):
                             handled = True
-                            self._prime_settings_section("steam")
+                            self._prime_settings_section(
+                                "steam",
+                                bucket="connection" if target == "steam_connection" else None,
+                            )
                             self.settings_requested.emit()
                             break
                 except Exception:
@@ -986,7 +989,7 @@ class InputHandler(QObject):
         )
         return handled, reddit_handled, reddit_url
 
-    def _prime_settings_section(self, section_id: str) -> None:
+    def _prime_settings_section(self, section_id: str, *, bucket: str | None = None) -> None:
         """Ask the ordinary Settings dialog to open on a widget sub-section."""
 
         if self._settings_manager is None or not section_id:
@@ -1002,6 +1005,11 @@ class InputHandler(QObject):
             widgets_state["view_state"] = view_state
             tab_state["widgets"] = widgets_state
             self._settings_manager.set("ui.tab_state", tab_state)
+            if bucket:
+                raw_buckets = self._settings_manager.get("ui.widget_bucket_states", {})
+                bucket_states = dict(raw_buckets) if isinstance(raw_buckets, dict) else {}
+                bucket_states[f"{section_id}:{bucket}"] = True
+                self._settings_manager.set("ui.widget_bucket_states", bucket_states)
             # SettingsDialog._tab_keys currently keeps Widgets at index 3.
             # This mirrors the existing persisted navigation seam instead of
             # adding a widget-local Settings launcher.

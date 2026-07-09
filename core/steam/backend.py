@@ -315,17 +315,17 @@ def _source_url(source_id: SteamSourceId) -> str:
     if source_id == SteamSourceId.APP_NEWS:
         return "https://api.steampowered.com/ISteamNews/GetNewsForApp/v2/"
     if source_id == SteamSourceId.RECENTLY_PLAYED:
-        return "https://partner.steam-api.com/IPlayerService/GetRecentlyPlayedGames/v1/"
+        return "https://api.steampowered.com/IPlayerService/GetRecentlyPlayedGames/v1/"
     if source_id == SteamSourceId.OWNED_GAMES:
-        return "https://partner.steam-api.com/IPlayerService/GetOwnedGames/v1/"
+        return "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/"
     if source_id == SteamSourceId.PLAYER_ACHIEVEMENTS:
-        return "https://partner.steam-api.com/ISteamUserStats/GetPlayerAchievements/v1/"
+        return "https://api.steampowered.com/ISteamUserStats/GetPlayerAchievements/v1/"
     if source_id == SteamSourceId.ACHIEVEMENT_SCHEMA:
-        return "https://partner.steam-api.com/ISteamUserStats/GetSchemaForGame/v2/"
+        return "https://api.steampowered.com/ISteamUserStats/GetSchemaForGame/v2/"
     if source_id == SteamSourceId.FRIEND_LIST:
-        return "https://partner.steam-api.com/ISteamUser/GetFriendList/v1/"
+        return "https://api.steampowered.com/ISteamUser/GetFriendList/v1/"
     if source_id == SteamSourceId.PLAYER_SUMMARIES:
-        return "https://partner.steam-api.com/ISteamUser/GetPlayerSummaries/v2/"
+        return "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/"
     raise ValueError(f"Unsupported Steam source: {source_id.value}")
 
 

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import replace
 
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QPainter, QPixmap
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_components import (
+    ACHIEVEMENT_PULSE_AUTHORED_SIZE,
     STEAM_CARD_AUTHORED_SIZE,
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
@@ -18,11 +20,13 @@ from widgets.steam_components import (
 
 
 def _assert_inside(outer: QRectF, inner: QRectF) -> None:
+    if inner.isNull():
+        return
     expanded = QRectF(outer).adjusted(-0.75, -0.75, 0.75, 0.75)
     assert expanded.contains(inner), f"{inner} escaped {outer}"
 
 
-def _render_to_pixmap(model, width: int, height: int, *, dpr: float = 1.0):
+def _render_to_pixmap(model, width: int, height: int, *, dpr: float = 1.0, artwork_image: QImage | None = None):
     pixmap = QPixmap(max(1, int(width * dpr)), max(1, int(height * dpr)))
     pixmap.setDevicePixelRatio(dpr)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -35,6 +39,7 @@ def _render_to_pixmap(model, width: int, height: int, *, dpr: float = 1.0):
             font_family="Inter",
             font_size=14,
             dpr=dpr,
+            artwork_image=artwork_image,
         )
     finally:
         painter.end()
@@ -100,12 +105,132 @@ def test_steam_layout_rects_stay_inside_target_for_phase4_matrix() -> None:
 
 
 def test_steam_header_layout_reserves_room_for_long_card_titles() -> None:
-    layout = layout_steam_card(build_mock_steam_view_model("achievement_pulse"), QRectF(0, 0, 420, 180))
+    layout = layout_steam_card(
+        build_mock_steam_view_model("achievement_pulse"),
+        QRectF(0, 0, ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(), ACHIEVEMENT_PULSE_AUTHORED_SIZE.height()),
+    )
 
     assert layout.header_rect.width() >= 250.0
     assert layout.logo_rect.width() >= 28.0
     assert layout.header_text_rect.width() >= 180.0
-    assert layout.title_rect.width() >= 270.0
+    assert layout.title_rect.width() >= 300.0
+
+
+def test_achievement_pulse_authored_layout_keeps_all_data_regions_separate() -> None:
+    model = build_mock_steam_view_model("achievement_pulse")
+    layout = layout_steam_card(
+        model,
+        QRectF(0, 0, ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(), ACHIEVEMENT_PULSE_AUTHORED_SIZE.height()),
+    )
+    field_rects = [rect for _field_id, rect, _rail in layout.field_rects]
+
+    assert layout.art_rect.intersects(layout.title_rect) is False
+    assert layout.art_rect.intersects(layout.subtitle_rect) is False
+    assert layout.metric_rect.intersects(layout.status_rect) is False
+    assert len(field_rects) == len(model.enabled_field_ids)
+    for index, rect in enumerate(field_rects):
+        assert all(not rect.intersects(other) for other in field_rects[index + 1:])
+
+
+def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -> None:
+    model = build_mock_steam_view_model("achievement_pulse")
+    target = QRectF(
+        0,
+        0,
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(),
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.height(),
+    )
+
+    wide = layout_steam_card(model, target, artwork_shape="wide")
+    square = layout_steam_card(model, target, artwork_shape="square")
+    hidden = layout_steam_card(model, target, show_artwork=False)
+
+    assert wide.art_rect.top() == wide.header_rect.top()
+    assert square.art_rect.top() == square.title_rect.top()
+    assert square.art_rect.width() == square.art_rect.height()
+    assert hidden.art_rect.isNull()
+    assert hidden.title_rect.width() > wide.title_rect.width()
+
+
+def test_achievement_pulse_latest_unlocks_and_fields_use_available_vertical_space() -> None:
+    model = build_mock_steam_view_model("achievement_pulse")
+    target = QRectF(
+        0,
+        0,
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(),
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.height(),
+    )
+    layout = layout_steam_card(model, target)
+    one_rail = layout_steam_card(replace(model, fields=model.fields[:3]), target)
+
+    assert len(layout.latest_unlock_rects) == 3
+    assert layout.latest_unlock_rects[0].height() > layout.latest_unlock_rects[1].height()
+    assert max(rect.bottom() for _field_id, rect, _rail in one_rail.field_rects) >= 274.0
+    assert layout.status_rect.isNull()
+
+
+def test_achievement_pulse_artwork_paints_its_local_image_after_card_content() -> None:
+    model = build_mock_steam_view_model("achievement_pulse")
+    artwork = QImage(360, 164, QImage.Format.Format_ARGB32_Premultiplied)
+    artwork.fill(QColor("#714c3e"))
+    pixmap, layout = _render_to_pixmap(model, 540, 290, artwork_image=artwork)
+
+    pixel = pixmap.toImage().pixelColor(int(layout.art_rect.center().x()), int(layout.art_rect.center().y()))
+    assert pixel.name() == "#714c3e"
+
+
+def test_achievement_pulse_square_artwork_uses_centered_cover_crop() -> None:
+    model = build_mock_steam_view_model("achievement_pulse")
+    artwork = QImage(300, 100, QImage.Format.Format_ARGB32_Premultiplied)
+    artwork.fill(QColor("#c43b36"))
+    painter = QPainter(artwork)
+    try:
+        painter.fillRect(100, 0, 100, 100, QColor("#38a169"))
+    finally:
+        painter.end()
+
+    pixmap = QPixmap(540, 290)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    card_painter = QPainter(pixmap)
+    try:
+        layout = render_steam_card(
+            card_painter,
+            model,
+            QRectF(0, 0, 540, 290),
+            artwork_image=artwork,
+            artwork_shape="square",
+        )
+    finally:
+        card_painter.end()
+
+    center = pixmap.toImage().pixelColor(int(layout.art_rect.center().x()), int(layout.art_rect.center().y()))
+    assert center.name() == "#38a169"
+
+
+def test_achievement_pulse_runtime_artwork_cache_is_dpr_aware(qt_app) -> None:
+    widget = SteamCardWidget(
+        definition=STEAM_CARD_DEFINITIONS["achievement_pulse"],
+        achievement_artwork_shape="square",
+    )
+    try:
+        source = QImage(300, 100, QImage.Format.Format_ARGB32_Premultiplied)
+        source.fill(QColor("#c43b36"))
+        source_painter = QPainter(source)
+        try:
+            source_painter.fillRect(100, 0, 100, 100, QColor("#38a169"))
+        finally:
+            source_painter.end()
+        widget._achievement_artwork = source
+
+        first = widget._scaled_achievement_artwork(QRectF(0, 0, 118, 118), 2.0)
+        second = widget._scaled_achievement_artwork(QRectF(0, 0, 118, 118), 2.0)
+
+        assert (first.width(), first.height()) == (236, 236)
+        assert first.devicePixelRatio() == 2.0
+        assert first.pixelColor(first.width() // 2, first.height() // 2).name() == "#38a169"
+        assert second.cacheKey() == first.cacheKey()
+    finally:
+        widget.deleteLater()
 
 
 def test_steam_render_helper_handles_dpr_and_fixture_variants(qt_app) -> None:

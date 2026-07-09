@@ -7,16 +7,17 @@ production Steam data path is wired into runtime cards.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from PySide6.QtCore import QRectF, QSizeF, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
 
 from core.steam.achievement_pulse import AchievementPulseResolved
 from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_with_shadow
 
 
 STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
+ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(540.0, 290.0)
 STEAM_SETTINGS_TARGET = "steam_connection"
 STEAM_STALE_CONNECTION_INFO_SECONDS = 24 * 60 * 60
 
@@ -36,9 +37,10 @@ class SteamCardField:
 
 @dataclass(frozen=True)
 class SteamCardViewModel:
-    """Immutable fixture view model consumed by Steam card painters."""
+    """Immutable presentation view model consumed by Steam card painters."""
 
     card_id: str
+    appid: int | None
     header: str
     title: str
     subtitle: str
@@ -47,6 +49,7 @@ class SteamCardViewModel:
     status: str
     accent: str
     fields: tuple[SteamCardField, ...]
+    latest_unlocks: tuple[str, ...] = ()
     state: str = "content"
     action_text: str = ""
     action_label: str = ""
@@ -63,6 +66,7 @@ class SteamCardViewModel:
     def content_fingerprint(self) -> tuple[object, ...]:
         return (
             self.card_id,
+            self.appid,
             self.header,
             self.title,
             self.subtitle,
@@ -71,6 +75,7 @@ class SteamCardViewModel:
             self.status,
             self.accent,
             tuple(field.fingerprint() for field in self.fields),
+            self.latest_unlocks,
             self.state,
             self.action_text,
             self.action_label,
@@ -98,6 +103,7 @@ class SteamCardLayout:
     subtitle_rect: QRectF
     metric_rect: QRectF
     status_rect: QRectF
+    latest_unlock_rects: tuple[QRectF, ...]
     field_rects: tuple[tuple[str, QRectF, int], ...]
     visible_field_ids: tuple[str, ...]
     paint_fingerprint: tuple[object, ...]
@@ -184,6 +190,7 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
     )
     return SteamCardViewModel(
         card_id=card_id,
+        appid=None,
         header=header,
         title=title,
         subtitle=subtitle,
@@ -192,6 +199,11 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
         status=status,
         accent=accent,
         fields=tuple(SteamCardField(field_id, label, value) for field_id, label, value in fields),
+        latest_unlocks=(
+            ("Steel Soul", "False Knight", "Charmed")
+            if card_id == "achievement_pulse"
+            else ()
+        ),
     )
 def build_steam_connect_required_view_model(card_id: str) -> SteamCardViewModel:
     """Return an enabled-card prompt state for missing connection/cache."""
@@ -199,6 +211,7 @@ def build_steam_connect_required_view_model(card_id: str) -> SteamCardViewModel:
     base = build_mock_steam_view_model(card_id)
     return SteamCardViewModel(
         card_id=base.card_id,
+        appid=base.appid,
         header=base.header,
         title="",
         subtitle="",
@@ -251,13 +264,22 @@ def build_achievement_pulse_view_model(
     cache_age_seconds: float | None = None,
     connection_needs_attention: bool = False,
     show_connection_info_icon: bool = True,
+    field_visibility: Mapping[str, bool] | None = None,
+    latest_unlock_count: int = 1,
 ) -> SteamCardViewModel:
     """Map a pure Achievement Pulse resolution into the shared card view model."""
 
     base = build_mock_steam_view_model("achievement_pulse")
+    visibility = dict(field_visibility or {})
+
+    def _field_enabled(field_id: str) -> bool:
+        return bool(visibility.get(field_id, field_id != "selected"))
+
+    latest_count = max(1, min(3, int(latest_unlock_count)))
     if not resolved.ok:
         model = SteamCardViewModel(
             card_id="achievement_pulse",
+            appid=resolved.appid,
             header=base.header,
             title=resolved.title or "Achievement Pulse",
             subtitle=resolved.unavailable_reason or "Achievement data is unavailable.",
@@ -266,31 +288,37 @@ def build_achievement_pulse_view_model(
             status=resolved.selection_label,
             accent=base.accent,
             fields=(
-                SteamCardField("selected", "Selected", resolved.selection_label),
-                SteamCardField("appid", "App", str(resolved.appid or "Unknown")),
-                SteamCardField("source", "Source", resolved.source_label),
+                SteamCardField("selected", "Selected", resolved.selection_label, _field_enabled("selected")),
+                SteamCardField("appid", "App", str(resolved.appid or "Unknown"), _field_enabled("appid")),
+                SteamCardField("source", "Source", resolved.source_label, _field_enabled("source")),
             ),
             state="unavailable",
         )
     else:
         percent_text = f"{resolved.percent:.0f}%" if resolved.percent is not None else "Unknown"
-        latest = resolved.latest_achievement or "No unlocked achievement yet"
+        resolved_latest = resolved.latest_achievements
+        if not resolved_latest and resolved.latest_achievement:
+            resolved_latest = (resolved.latest_achievement,)
+        if not resolved_latest:
+            resolved_latest = ("No unlocked achievement yet",)
+        latest_unlocks = resolved_latest[:latest_count] if _field_enabled("latest") else ()
         model = SteamCardViewModel(
             card_id="achievement_pulse",
+            appid=resolved.appid,
             header=base.header,
             title=resolved.title,
-            subtitle=f"Latest: {latest}",
+            subtitle="",
             metric_label="Unlocked",
             metric_value=f"{resolved.unlocked}/{resolved.total}",
             status=resolved.selection_label,
             accent=base.accent,
             fields=(
-                SteamCardField("total", "Total", percent_text),
-                SteamCardField("latest", "Latest", latest),
-                SteamCardField("playtime", "Playtime", _format_playtime(resolved.playtime_forever_minutes)),
-                SteamCardField("source", "Source", resolved.source_label),
-                SteamCardField("selected", "Selected", resolved.selection_label),
+                SteamCardField("total", "Total", percent_text, _field_enabled("total")),
+                SteamCardField("playtime", "Playtime", _format_playtime(resolved.playtime_forever_minutes), _field_enabled("playtime")),
+                SteamCardField("source", "Source", resolved.source_label, _field_enabled("source")),
+                SteamCardField("selected", "Selected", resolved.selection_label, _field_enabled("selected")),
             ),
+            latest_unlocks=latest_unlocks,
         )
 
     return with_stale_connection_info(
@@ -318,6 +346,7 @@ def with_stale_connection_info(
     )
     return SteamCardViewModel(
         card_id=model.card_id,
+        appid=model.appid,
         header=model.header,
         title=model.title,
         subtitle=model.subtitle,
@@ -326,6 +355,7 @@ def with_stale_connection_info(
         status=model.status,
         accent=model.accent,
         fields=model.fields,
+        latest_unlocks=model.latest_unlocks,
         state=model.state,
         action_text=model.action_text,
         action_label=model.action_label,
@@ -342,6 +372,7 @@ def with_long_title(model: SteamCardViewModel) -> SteamCardViewModel:
 
     return SteamCardViewModel(
         card_id=model.card_id,
+        appid=model.appid,
         header=model.header,
         title=f"{model.title}: A Very Long Localized Title That Must Scale Without Reauthoring Content",
         subtitle=f"{model.subtitle} with extra localized context that remains authored content.",
@@ -350,6 +381,7 @@ def with_long_title(model: SteamCardViewModel) -> SteamCardViewModel:
         status=model.status,
         accent=model.accent,
         fields=model.fields,
+        latest_unlocks=model.latest_unlocks,
         state=model.state,
         action_text=model.action_text,
         action_label=model.action_label,
@@ -366,6 +398,7 @@ def with_unavailable_state(model: SteamCardViewModel) -> SteamCardViewModel:
 
     return SteamCardViewModel(
         card_id=model.card_id,
+        appid=model.appid,
         header=model.header,
         title=model.title,
         subtitle="Private or unavailable source; showing cache-safe fixture state.",
@@ -374,6 +407,7 @@ def with_unavailable_state(model: SteamCardViewModel) -> SteamCardViewModel:
         status="Unavailable fixture",
         accent=model.accent,
         fields=model.fields,
+        latest_unlocks=model.latest_unlocks,
         state="unavailable",
         action_text=model.action_text,
         action_label=model.action_label,
@@ -408,6 +442,8 @@ def layout_steam_card(
     target_rect: QRectF,
     *,
     dpr: float = 1.0,
+    show_artwork: bool = True,
+    artwork_shape: str = "wide",
 ) -> SteamCardLayout:
     """Resolve display layout while keeping Custom geometry as uniform scale.
 
@@ -417,8 +453,9 @@ def layout_steam_card(
     """
 
     target = QRectF(target_rect)
-    authored_w = STEAM_CARD_AUTHORED_SIZE.width()
-    authored_h = STEAM_CARD_AUTHORED_SIZE.height()
+    authored_size = ACHIEVEMENT_PULSE_AUTHORED_SIZE if model.card_id == "achievement_pulse" else STEAM_CARD_AUTHORED_SIZE
+    authored_w = authored_size.width()
+    authored_h = authored_size.height()
     scale = max(0.05, min(target.width() / authored_w, target.height() / authored_h))
     painted_w = authored_w * scale
     painted_h = authored_h * scale
@@ -427,27 +464,67 @@ def layout_steam_card(
 
     authored_rect = QRectF(origin_x, origin_y, painted_w, painted_h)
 
-    logical_content = QRectF(18.0, 16.0, 384.0, 148.0)
-    header = QRectF(18.0, 14.0, 254.0, 40.0)
-    logo = QRectF(30.0, 19.0, 30.0, 30.0)
-    header_text = QRectF(67.0, 16.0, 183.0, 34.0)
-    art = QRectF(294.0, 42.0, 88.0, 74.0)
-    title = QRectF(18.0, 45.0, 278.0, 30.0)
-    subtitle = QRectF(18.0, 76.0, 278.0, 28.0)
-    metric = QRectF(294.0, 122.0, 88.0, 28.0)
-    status = QRectF(18.0, 145.0, 278.0, 18.0)
-    info = QRectF(250.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
+    is_achievement_pulse = model.card_id == "achievement_pulse"
+    resolved_artwork_shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    if is_achievement_pulse:
+        logical_content = QRectF(18.0, 14.0, 504.0, 260.0)
+        header = QRectF(18.0, 14.0, 302.0, 38.0)
+        logo = QRectF(30.0, 19.0, 28.0, 28.0)
+        header_text = QRectF(66.0, 16.0, 236.0, 34.0)
+        if not show_artwork:
+            art = QRectF()
+            title_width = 504.0
+        elif resolved_artwork_shape == "square":
+            art = QRectF(404.0, 62.0, 118.0, 118.0)
+            title_width = 370.0
+        else:
+            art = QRectF(342.0, 14.0, 180.0, 86.0)
+            title_width = 310.0
+        title = QRectF(18.0, 62.0, title_width, 34.0)
+        subtitle = QRectF(18.0, 100.0, title_width, 62.0)
+        metric = QRectF(342.0, 184.0 if resolved_artwork_shape == "square" and show_artwork else 108.0, 180.0, 28.0)
+        status = QRectF()
+        info = QRectF(300.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
+        logical_latest_rects = tuple(
+            QRectF(
+                18.0,
+                100.0 if index == 0 else 130.0 + (index - 1) * 16.0,
+                title_width,
+                26.0 if index == 0 else 14.0,
+            )
+            for index, _latest in enumerate(model.latest_unlocks[:3])
+        )
+    else:
+        logical_content = QRectF(18.0, 16.0, 384.0, 148.0)
+        header = QRectF(18.0, 14.0, 254.0, 40.0)
+        logo = QRectF(30.0, 19.0, 30.0, 30.0)
+        header_text = QRectF(67.0, 16.0, 183.0, 34.0)
+        art = QRectF(294.0, 42.0, 88.0, 74.0)
+        title = QRectF(18.0, 45.0, 278.0, 30.0)
+        subtitle = QRectF(18.0, 76.0, 278.0, 28.0)
+        metric = QRectF(294.0, 122.0, 88.0, 28.0)
+        status = QRectF(18.0, 145.0, 278.0, 18.0)
+        info = QRectF(250.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
+        logical_latest_rects = ()
 
     fields = _enabled_fields(model.fields)
     field_rects: list[tuple[str, QRectF, int]] = []
-    field_w = 84.0
-    field_h = 18.0
-    gap = 8.0
+    field_w = 159.0 if is_achievement_pulse else 84.0
+    field_h = 26.0 if is_achievement_pulse else 18.0
+    gap = 9.0 if is_achievement_pulse else 8.0
+    achievement_rail_count = max(1, (len(fields) + 2) // 3)
+    achievement_first_rail_y = 248.0 - (achievement_rail_count - 1) * 32.0
     for index, field in enumerate(fields):
-        rail = 0 if index < 4 else 1
-        column = index if index < 4 else index - 4
-        x = 18.0 + column * (field_w + gap)
-        y = 109.0 + rail * 20.0
+        if is_achievement_pulse:
+            rail = index // 3
+            column = index % 3
+            x = 18.0 + column * (field_w + gap)
+            y = achievement_first_rail_y + rail * 32.0
+        else:
+            rail = 0 if index < 4 else 1
+            column = index if index < 4 else index - 4
+            x = 18.0 + column * (field_w + gap)
+            y = 109.0 + rail * 20.0
         field_rects.append((field.field_id, _map_rect(QRectF(x, y, field_w, field_h), origin_x, origin_y, scale), rail))
 
     action_rects: list[tuple[str, QRectF]] = []
@@ -459,6 +536,7 @@ def layout_steam_card(
         status = subtitle
         art = QRectF()
         metric = QRectF()
+        logical_latest_rects = ()
         field_rects.clear()
         action_rects.append((model.settings_target, _map_rect(connect_rect, origin_x, origin_y, scale)))
 
@@ -467,6 +545,8 @@ def layout_steam_card(
         round(target.width(), 2),
         round(target.height(), 2),
         round(float(dpr), 3),
+        bool(show_artwork),
+        resolved_artwork_shape,
     )
 
     return SteamCardLayout(
@@ -482,6 +562,7 @@ def layout_steam_card(
         subtitle_rect=_map_rect(subtitle, origin_x, origin_y, scale),
         metric_rect=_map_rect(metric, origin_x, origin_y, scale),
         status_rect=_map_rect(status, origin_x, origin_y, scale),
+        latest_unlock_rects=tuple(_map_rect(rect, origin_x, origin_y, scale) for rect in logical_latest_rects),
         field_rects=tuple(field_rects),
         visible_field_ids=tuple(field.field_id for field in fields),
         paint_fingerprint=paint_fingerprint,
@@ -586,7 +667,7 @@ def _draw_header_badge(
 ) -> None:
     border = QColor(255, 255, 255, 235)
     badge_path = QPainterPath()
-    badge_path.addRoundedRect(layout.header_rect, max(8.0, 12.0 * layout.scale), max(8.0, 12.0 * layout.scale))
+    badge_path.addRoundedRect(layout.header_rect, max(6.0, 8.0 * layout.scale), max(6.0, 8.0 * layout.scale))
     fill_a = QColor(27, 30, 38, 220)
     fill_b = QColor(15, 18, 24, 225)
     badge_fill = QLinearGradient(layout.header_rect.topLeft(), layout.header_rect.bottomRight())
@@ -596,7 +677,7 @@ def _draw_header_badge(
     draw_rounded_rect_with_shadow(
         painter,
         layout.header_rect.toAlignedRect(),
-        max(8.0, 12.0 * layout.scale),
+        max(6.0, 8.0 * layout.scale),
         border,
         max(2, int(round(2.0 * layout.scale))),
         shadow_enabled=True,
@@ -648,6 +729,45 @@ def _draw_header_badge(
     )
 
 
+def _draw_soft_rounded_shadow(
+    painter: QPainter,
+    rect: QRectF,
+    *,
+    radius: float,
+    scale: float,
+) -> None:
+    """Paint the same inexpensive multi-pass shadow used by Media artwork."""
+
+    painter.save()
+    try:
+        painter.setPen(Qt.PenStyle.NoPen)
+        for offset, alpha in ((2.0, 25), (4.0, 35), (6.0, 45), (8.0, 30)):
+            distance = offset * scale
+            shadow_rect = rect.adjusted(distance, distance, distance, distance)
+            shadow_path = QPainterPath()
+            shadow_path.addRoundedRect(shadow_rect, radius, radius)
+            painter.setBrush(QColor(0, 0, 0, alpha))
+            painter.drawPath(shadow_path)
+    finally:
+        painter.restore()
+
+
+def _cover_source_rect(image: QImage, target_rect: QRectF) -> QRectF:
+    """Return a centered source crop that fills the target without distortion."""
+
+    source_w = max(1.0, float(image.width()))
+    source_h = max(1.0, float(image.height()))
+    target_w = max(1.0, target_rect.width())
+    target_h = max(1.0, target_rect.height())
+    source_aspect = source_w / source_h
+    target_aspect = target_w / target_h
+    if source_aspect > target_aspect:
+        crop_w = source_h * target_aspect
+        return QRectF((source_w - crop_w) * 0.5, 0.0, crop_w, source_h)
+    crop_h = source_w / target_aspect
+    return QRectF(0.0, (source_h - crop_h) * 0.5, source_w, crop_h)
+
+
 def render_steam_card(
     painter: QPainter,
     model: SteamCardViewModel,
@@ -658,10 +778,19 @@ def render_steam_card(
     text_color: QColor | None = None,
     dpr: float = 1.0,
     logo_pixmap: QPixmap | None = None,
+    artwork_image: QImage | None = None,
+    show_artwork: bool = True,
+    artwork_shape: str = "wide",
 ) -> SteamCardLayout:
     """Paint a Steam card mock and return the layout used."""
 
-    layout = layout_steam_card(model, target_rect, dpr=dpr)
+    layout = layout_steam_card(
+        model,
+        target_rect,
+        dpr=dpr,
+        show_artwork=show_artwork,
+        artwork_shape=artwork_shape,
+    )
     accent = _accent_color(model)
     color = QColor(text_color or QColor(255, 255, 255, 230))
     muted = QColor(color)
@@ -670,13 +799,19 @@ def render_steam_card(
     painter.save()
     try:
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
         base_size = max(7, int(font_size * layout.scale))
         header_font = QFont(font_family, max(7, int(base_size * 1.05)), QFont.Weight.Bold)
-        title_font = QFont(font_family, max(8, int(base_size * 1.28)), QFont.Weight.Bold)
+        title_extra = int(round(3.0 * layout.scale)) if model.card_id == "achievement_pulse" else 0
+        title_font = QFont(font_family, max(8, int(base_size * 1.28) + title_extra), QFont.Weight.Bold)
         subtitle_font = QFont(font_family, max(7, int(base_size * 0.86)), QFont.Weight.Normal)
-        metric_font = QFont(font_family, max(8, int(base_size * 1.18)), QFont.Weight.Bold)
-        field_font = QFont(font_family, max(6, int(base_size * 0.68)), QFont.Weight.DemiBold)
+        latest_primary_size = max(8, int(base_size * 0.86) + int(round(2.0 * layout.scale)))
+        latest_primary_font = QFont(font_family, latest_primary_size, QFont.Weight.DemiBold)
+        latest_secondary_font = QFont(font_family, max(6, int(round(latest_primary_size * 0.5))), QFont.Weight.DemiBold)
+        metric_scale = 0.95 if model.card_id == "achievement_pulse" else 1.18
+        metric_font = QFont(font_family, max(8, int(base_size * metric_scale)), QFont.Weight.Bold)
+        field_font = QFont(font_family, max(7, int(base_size * 0.78)), QFont.Weight.DemiBold)
 
         _draw_header_badge(
             painter,
@@ -721,8 +856,15 @@ def render_steam_card(
             return layout
 
         if not layout.art_rect.isNull() and layout.art_rect.width() > 0 and layout.art_rect.height() > 0:
+            art_radius = max(6.0, 8.0 * layout.scale)
+            _draw_soft_rounded_shadow(
+                painter,
+                layout.art_rect,
+                radius=art_radius,
+                scale=layout.scale,
+            )
             art_path = QPainterPath()
-            art_path.addRoundedRect(layout.art_rect, 10.0 * layout.scale, 10.0 * layout.scale)
+            art_path.addRoundedRect(layout.art_rect, art_radius, art_radius)
             art_fill = QLinearGradient(layout.art_rect.topLeft(), layout.art_rect.bottomRight())
             art_color = QColor(accent)
             art_color.setAlpha(90)
@@ -733,7 +875,18 @@ def render_steam_card(
             painter.drawPath(art_path)
 
         _draw_elided_text(painter, layout.title_rect, model.title, color=color, font=title_font)
-        _draw_elided_text(painter, layout.subtitle_rect, model.subtitle, color=muted, font=subtitle_font)
+        if layout.latest_unlock_rects:
+            for index, (latest, latest_rect) in enumerate(zip(model.latest_unlocks, layout.latest_unlock_rects)):
+                latest_text = f"Latest: {latest}" if index == 0 else f"{index + 1}. {latest}"
+                _draw_elided_text(
+                    painter,
+                    latest_rect,
+                    latest_text,
+                    color=color if index == 0 else muted,
+                    font=latest_primary_font if index == 0 else latest_secondary_font,
+                )
+        elif model.subtitle:
+            _draw_elided_text(painter, layout.subtitle_rect, model.subtitle, color=muted, font=subtitle_font)
         metric_text = f"{model.metric_label}: {model.metric_value}" if model.metric_label else model.metric_value
         _draw_elided_text(
             painter,
@@ -743,18 +896,26 @@ def render_steam_card(
             font=metric_font,
             flags=Qt.AlignmentFlag.AlignCenter,
         )
-        _draw_elided_text(painter, layout.status_rect, model.status, color=muted, font=subtitle_font)
+        if model.status and not layout.status_rect.isNull():
+            _draw_elided_text(painter, layout.status_rect, model.status, color=muted, font=subtitle_font)
 
         field_by_id = {field.field_id: field for field in model.fields}
         for field_id, field_rect, rail in layout.field_rects:
             field = field_by_id[field_id]
             pill = QPainterPath()
-            pill.addRoundedRect(field_rect, 7.0 * layout.scale, 7.0 * layout.scale)
+            pill_radius = max(6.0, 8.0 * layout.scale)
+            pill.addRoundedRect(field_rect, pill_radius, pill_radius)
             fill = QColor(accent)
             fill.setAlpha(38 if rail == 0 else 26)
             painter.fillPath(pill, fill)
-            painter.setPen(QPen(QColor(accent.red(), accent.green(), accent.blue(), 120), max(1.0, layout.scale)))
-            painter.drawPath(pill)
+            draw_rounded_rect_with_shadow(
+                painter,
+                field_rect.toAlignedRect(),
+                pill_radius,
+                QColor(accent.red(), accent.green(), accent.blue(), 120),
+                max(1, int(round(layout.scale))),
+                shadow_enabled=True,
+            )
             _draw_elided_text(
                 painter,
                 field_rect.adjusted(5.0 * layout.scale, 0.0, -5.0 * layout.scale, 0.0),
@@ -762,7 +923,26 @@ def render_steam_card(
                 color=color,
                 font=field_font,
             )
+
     finally:
+        painter.restore()
+
+    if artwork_image is not None and not artwork_image.isNull() and not layout.art_rect.isNull():
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
+        painter.setOpacity(1.0)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        art_radius = max(6.0, 8.0 * layout.scale)
+        artwork_clip = QPainterPath()
+        artwork_clip.addRoundedRect(layout.art_rect, art_radius, art_radius)
+        painter.setClipPath(artwork_clip)
+        painter.drawImage(layout.art_rect, artwork_image, _cover_source_rect(artwork_image, layout.art_rect))
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
+        artwork_border = QPainterPath()
+        artwork_border.addRoundedRect(layout.art_rect, art_radius, art_radius)
+        painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 1.5 * layout.scale)))
+        painter.drawPath(artwork_border)
         painter.restore()
 
     return layout

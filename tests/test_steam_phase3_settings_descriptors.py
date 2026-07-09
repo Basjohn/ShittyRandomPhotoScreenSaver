@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import importlib
 import sys
 
-from PySide6.QtWidgets import QGroupBox, QToolButton, QWidget
+from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QDialog, QGroupBox, QLabel, QLineEdit, QToolButton, QWidget
 
 from core.dev_gates import force_gate, is_steam_enabled
 from core.settings.defaults import get_default_settings
@@ -40,6 +43,11 @@ def _with_steam_gate(enabled: bool):
 
 def _restore_steam_gate(prior: bool) -> None:
     force_gate(steam=prior)
+
+
+def _steam_settings_module():
+    """Resolve the live lazy-loaded Steam section module for handler tests."""
+    return importlib.import_module("ui.tabs.widgets_tab_steam")
 
 
 def test_steam_phase3_descriptors_are_hidden_without_dev_gate() -> None:
@@ -94,7 +102,7 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert widgets["steam"] == {
         "enabled": True,
         "privacy_mode": "Strict",
-        "refresh_minutes": 30,
+        "refresh_minutes": 10,
         "show_connection_info_icon": True,
     }
     for widget_id in STEAM_WIDGET_IDS:
@@ -102,8 +110,15 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
         assert card["enabled"] is False
         assert card["monitor"] == "ALL"
         assert card["show_background"] is True
-        assert card["preferred_width"] == 420
-        assert card["preferred_height"] == 180
+        expected_size = (540, 290) if widget_id == "achievement_pulse" else (420, 180)
+        assert (card["preferred_width"], card["preferred_height"]) == expected_size
+    achievement = widgets["achievement_pulse"]
+    assert achievement["show_artwork"] is True
+    assert achievement["artwork_shape"] == "wide"
+    assert achievement["latest_unlock_count"] == 1
+    assert achievement["show_latest"] is True
+    assert all(achievement[f"show_{field_id}"] is True for field_id in ("total", "playtime", "source"))
+    assert achievement["show_selected"] is False
 
 
 def test_lazy_widgets_tab_does_not_import_steam_settings_section_on_general_open(
@@ -137,9 +152,15 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.steam_progress_enabled.setChecked(True)
             tab._set_combo_text(tab.steam_progress_position, "Center")
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
+            tab.steam_progress_font_family.setCurrentFont(QFont("Jost"))
             tab.steam_progress_font_size.setValue(18)
             tab.achievement_pulse_selection_mode.setCurrentIndex(5)
             tab.achievement_pulse_custom_appid.setValue(367520)
+            tab.achievement_pulse_show_artwork.setChecked(False)
+            tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
+            tab.achievement_pulse_show_latest.setChecked(False)
+            tab.achievement_pulse_latest_unlock_count.setValue(3)
+            tab.achievement_pulse_show_source.setChecked(False)
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is True
@@ -151,11 +172,17 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert steam_payload["show_connection_info_icon"] is False
             assert progress_payload["enabled"] is True
             assert progress_payload["position"] == "Center"
+            assert progress_payload["font_family"] == "Jost"
             assert "api_key" not in steam_payload
             assert "profile_identifier" not in steam_payload
             achievement_payload = collect_widget_section_save_result(tab, "steam")[2]
             assert achievement_payload["selection_mode"] == "custom"
             assert achievement_payload["custom_appid"] == 367520
+            assert achievement_payload["show_artwork"] is False
+            assert achievement_payload["artwork_shape"] == "square"
+            assert achievement_payload["show_latest"] is False
+            assert achievement_payload["latest_unlock_count"] == 3
+            assert achievement_payload["show_source"] is False
         finally:
             tab.deleteLater()
     finally:
@@ -208,11 +235,157 @@ def test_steam_connection_controls_stay_inert_until_explicit_user_action(
             assert tab.steam_connect_id_btn.text() == "Connect ID"
             assert tab.steam_connect_api_key_btn.text() == "Connect API KEY"
             assert tab.steam_access_status.text() == "Please Connect Both For Access"
-            assert checks == []
+            assert checks == [True]
 
             tab.steam_check_connection_btn.click()
-            assert checks == [True]
+            assert checks == [True, True]
             assert tab.steam_connection_status.text() == "Steam is not connected."
+            assert tab.steam_saved_connection_feedback.text() == "Reconnection Needed"
+            assert tab.steam_saved_connection_feedback.isHidden() is False
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_saved_connection_status_hydrates_green_on_every_settings_open(
+    qt_app,
+    settings_manager,
+    monkeypatch,
+) -> None:
+    prior = _with_steam_gate(True)
+    checks: list[bool] = []
+    try:
+        monkeypatch.setattr(
+            "ui.tabs.widgets_tab_steam.get_storage_status",
+            lambda: checks.append(True) or type(
+                "Status",
+                (),
+                {"storage_available": True, "has_credentials": True, "message": "Connected."},
+            )(),
+        )
+        for _index in range(2):
+            tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+            try:
+                assert tab.steam_identity_check.text() == "Connected"
+                assert tab.steam_api_key_check.text() == "Connected"
+                assert tab.steam_access_status.text() == "Steam account access is ready."
+                assert tab.steam_connection_status.text() == "Saved Steam identity and API key are available."
+                assert tab.steam_saved_connection_feedback.isHidden() is True
+            finally:
+                tab.deleteLater()
+                qt_app.processEvents()
+        assert checks == [True, True]
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_saved_connection_check_preserves_pending_openid_identity(qt_app, settings_manager, monkeypatch) -> None:
+    prior = _with_steam_gate(True)
+    try:
+        monkeypatch.setattr(
+            "ui.tabs.widgets_tab_steam.get_storage_status",
+            lambda: type(
+                "Status",
+                (),
+                {"storage_available": True, "has_credentials": False, "message": "Steam is not connected."},
+            )(),
+        )
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            tab._steam_pending_profile_identifier = "76561197960265728"
+
+            _steam_settings_module()._on_steam_check_saved_connection(tab)
+
+            assert tab._steam_pending_profile_identifier == "76561197960265728"
+            assert tab.steam_identity_check.text() == "Connected"
+            assert tab.steam_api_key_check.text() == "Not connected"
+            assert tab.steam_connection_status.text() == "Steam ID is linked. Add your Web API key to finish connecting."
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_open_api_key_page_pivots_immediately_to_paste_dialog(qt_app, settings_manager, monkeypatch) -> None:
+    prior = _with_steam_gate(True)
+    opened: list[tuple[str, bool, str]] = []
+    shown: list[bool] = []
+
+    class _OpenPopup:
+        result_value = "open"
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def exec(self) -> int:
+            return 0
+
+    try:
+        module = _steam_settings_module()
+        monkeypatch.setattr(module, "StyledPopup", _OpenPopup)
+        monkeypatch.setattr(
+            module,
+            "open_url",
+            lambda url, *, prefer_direct, source: opened.append((url, prefer_direct, source)) or True,
+        )
+        monkeypatch.setattr(module, "_show_api_key_dialog", lambda _tab: shown.append(True))
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            module._on_steam_connect_api_key(tab)
+
+            assert opened == [("https://steamcommunity.com/dev/apikey", True, "steam_settings")]
+            assert shown == [True]
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_steam_api_key_dialog_uses_app_styling_and_visible_input(qt_app, settings_manager) -> None:
+    prior = _with_steam_gate(True)
+    observed: dict[str, object] = {}
+    try:
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            def _inspect_and_close() -> None:
+                dialog = tab.findChild(QDialog, "steamApiKeyDialog")
+                assert dialog is not None
+                input_field = dialog.findChild(QLineEdit, "steamApiKeyInput")
+                assert input_field is not None
+                observed["echo_mode"] = input_field.echoMode()
+                observed["style"] = dialog.styleSheet()
+                message_label = next(
+                    label for label in dialog.findChildren(QLabel) if "localhost" in label.text()
+                )
+                observed["message"] = message_label.text()
+                observed["message_style"] = message_label.styleSheet()
+                observed["frameless"] = bool(dialog.windowFlags() & Qt.WindowType.FramelessWindowHint)
+                dialog.reject()
+
+            QTimer.singleShot(0, _inspect_and_close)
+            _steam_settings_module()._show_api_key_dialog(tab)
+
+            assert observed["echo_mode"] == QLineEdit.EchoMode.Normal
+            assert "#steamApiKeyDialogSurface" in observed["style"]
+            assert "<b>localhost</b>" in observed["message"]
+            assert "font-size: 13px" in observed["message_style"]
+            assert observed["frameless"] is True
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, settings_manager) -> None:
+    prior = _with_steam_gate(True)
+    try:
+        settings_manager.set("ui.widget_bucket_states", {"steam:connection": True})
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            toggle = _find_toggle(tab._steam_container, "Connection & Privacy")
+            assert toggle is not None
+            assert toggle.isChecked() is True
         finally:
             tab.deleteLater()
     finally:
@@ -263,11 +436,17 @@ def test_steam_factories_are_dev_gated_and_disabled_cards_create_nothing(
                     "position": "Middle Right",
                     "selection_mode": "custom",
                     "custom_appid": 367520,
+                    "show_artwork": False,
+                    "artwork_shape": "square",
+                    "latest_unlock_count": 3,
                 },
             )
             assert achievement_widget is not None
             assert getattr(achievement_widget, "_achievement_selection").mode == "custom"
             assert getattr(achievement_widget, "_achievement_selection").custom_appid == 367520
+            assert getattr(achievement_widget, "_achievement_show_artwork") is False
+            assert getattr(achievement_widget, "_achievement_artwork_shape") == "square"
+            assert getattr(achievement_widget, "_achievement_latest_unlock_count") == 3
             achievement_widget.deleteLater()
         finally:
             parent.deleteLater()
@@ -290,6 +469,7 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
         parent.resize(1280, 720)
         manager = WidgetManager(parent, ResourceManager())
         settings = _SteamSetupSettings({
+            "steam": {"refresh_minutes": 5},
             "steam_progress": {
                 "enabled": True,
                 "monitor": "ALL",
@@ -307,6 +487,7 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
             created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
             assert "steam_progress_widget" in created
             assert created["steam_progress_widget"] is getattr(parent, "steam_progress_widget")
+            assert getattr(created["steam_progress_widget"], "_refresh_minutes") == 5
             assert "achievement_pulse_widget" not in created
 
             created_again = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)

@@ -143,6 +143,11 @@ def safe_fingerprint(value: str) -> str:
     return digest[:12]
 
 
+def normalize_api_key(api_key: str | None) -> str:
+    """Remove copy/paste whitespace from the normal alphanumeric Steam key."""
+    return "".join(api_key.split()) if isinstance(api_key, str) else ""
+
+
 def redact_secret(value: str | None, *, label: str = "redacted") -> str:
     """Return a safe redaction marker that never includes the secret itself."""
     if not value:
@@ -370,11 +375,18 @@ def validate_credential_input(api_key: str | None, profile_identifier: str | Non
             can_save_after_test=False,
             message="Strict Steam credential storage is unavailable on this platform.",
         )
-    if not isinstance(api_key, str) or len(api_key.strip()) < 16:
+    normalized_api_key = normalize_api_key(api_key)
+    if len(normalized_api_key) < 16:
         return SteamCredentialInputStatus(
             can_test=False,
             can_save_after_test=False,
             message="Enter a Steam API key before testing.",
+        )
+    if not normalized_api_key.isalnum():
+        return SteamCredentialInputStatus(
+            can_test=False,
+            can_save_after_test=False,
+            message="Steam API keys contain letters and numbers only, with no spaces.",
         )
     if not isinstance(profile_identifier, str) or not profile_identifier.strip():
         return SteamCredentialInputStatus(

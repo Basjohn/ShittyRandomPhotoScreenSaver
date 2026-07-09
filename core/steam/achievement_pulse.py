@@ -35,6 +35,7 @@ class AchievementPulseResolved:
     total: int = 0
     percent: float | None = None
     latest_achievement: str = ""
+    latest_achievements: tuple[str, ...] = ()
     playtime_forever_minutes: int | None = None
     unavailable_reason: str = ""
     source_label: str = "Cache"
@@ -139,6 +140,36 @@ def _achievement_title(row: Mapping[str, Any]) -> str:
     return "Achievement"
 
 
+def _unlock_time(row: Mapping[str, Any]) -> int:
+    try:
+        return max(0, int(row.get("unlocktime") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _schema_display_names(schema_result: SteamResult | None) -> dict[str, str]:
+    """Map Steam's internal achievement ids to its user-facing schema labels."""
+    payload = _payload(schema_result)
+    game = payload.get("game")
+    if not isinstance(game, Mapping):
+        return {}
+    stats = game.get("availableGameStats")
+    if not isinstance(stats, Mapping):
+        return {}
+    achievements = stats.get("achievements")
+    if not isinstance(achievements, list):
+        return {}
+    display_names: dict[str, str] = {}
+    for row in achievements:
+        if not isinstance(row, Mapping):
+            continue
+        internal_name = row.get("name")
+        display_name = row.get("displayName")
+        if isinstance(internal_name, str) and internal_name and isinstance(display_name, str) and display_name.strip():
+            display_names[internal_name] = display_name.strip()
+    return display_names
+
+
 def _playtime_forever(game: Mapping[str, Any] | None) -> int | None:
     if not isinstance(game, Mapping):
         return None
@@ -156,6 +187,7 @@ def resolve_achievement_pulse(
     achievement_results: Mapping[int, SteamResult],
     selection: AchievementPulseSelection = AchievementPulseSelection(),
     library_result: SteamResult | None = None,
+    schema_result: SteamResult | None = None,
 ) -> AchievementPulseResolved:
     """Resolve the selected Achievement Pulse game from cache/fixture results."""
 
@@ -219,10 +251,13 @@ def resolve_achievement_pulse(
         )
 
     unlocked_rows = tuple(row for row in rows if bool(row.get("achieved")))
-    latest = ""
+    latest_achievements: tuple[str, ...] = ()
     if unlocked_rows:
-        latest_row = max(unlocked_rows, key=lambda row: int(row.get("unlocktime") or 0))
-        latest = _achievement_title(latest_row)
+        schema_names = _schema_display_names(schema_result)
+        latest_achievements = tuple(
+            schema_names.get(str(row.get("apiname") or row.get("name")), "") or _achievement_title(row)
+            for row in sorted(unlocked_rows, key=_unlock_time, reverse=True)[:3]
+        )
 
     total = len(rows)
     unlocked = len(unlocked_rows)
@@ -235,7 +270,8 @@ def resolve_achievement_pulse(
         unlocked=unlocked,
         total=total,
         percent=percent,
-        latest_achievement=latest,
+        latest_achievement=latest_achievements[0] if latest_achievements else "",
+        latest_achievements=latest_achievements,
         playtime_forever_minutes=_playtime_forever(selected_game),
         source_label="Cache" if achievement_result.from_cache else "Fixture",
     )

@@ -15,9 +15,9 @@ from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 
 
 def test_cache_path_uses_opaque_profile_key(tmp_path: Path) -> None:
-    path = cache_path_for("76561198000000000", "Achievement Pulse/Recent", root=tmp_path)
+    path = cache_path_for("76561197960265728", "Achievement Pulse/Recent", root=tmp_path)
 
-    assert "76561198000000000" not in str(path)
+    assert "76561197960265728" not in str(path)
     assert path.name == "achievement_pulse_recent.json"
 
 

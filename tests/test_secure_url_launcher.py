@@ -16,6 +16,43 @@ def test_open_url_uses_bridge_when_available(mock_bridge) -> None:
 
 
 @patch("core.windows.secure_url_launcher.reddit_helper_bridge")
+@patch("core.windows.secure_url_launcher.QDesktopServices.openUrl", return_value=True)
+def test_open_url_prefers_native_direct_launch_for_settings(mock_open, mock_bridge) -> None:
+    from core.windows.secure_url_launcher import open_url
+
+    assert open_url("https://example.com", prefer_direct=True, source="steam_settings") is True
+
+    mock_open.assert_called_once()
+    mock_bridge.is_bridge_available.assert_not_called()
+    mock_bridge.enqueue_url.assert_not_called()
+
+
+@patch("core.windows.secure_url_launcher.reddit_helper_runtime.ensure_helper_runtime")
+@patch("core.windows.secure_url_launcher.reddit_helper_bridge")
+@patch("core.windows.secure_url_launcher.QDesktopServices.openUrl", return_value=False)
+def test_open_url_uses_and_wakes_secure_handoff_after_direct_failure(
+    mock_open,
+    mock_bridge,
+    mock_ensure_helper,
+) -> None:
+    from core.windows.secure_url_launcher import open_url
+
+    mock_bridge.is_bridge_available.return_value = True
+    mock_bridge.enqueue_url.return_value = True
+
+    assert open_url("https://example.com", prefer_direct=True, source="steam_settings") is True
+
+    mock_open.assert_called_once()
+    mock_bridge.enqueue_url.assert_called_once_with("https://example.com", source="steam_settings")
+    mock_ensure_helper.assert_called_once_with(
+        source="steam_settings_url",
+        owner_pid=None,
+        idle_exit_seconds=60,
+        allow_system=True,
+    )
+
+
+@patch("core.windows.secure_url_launcher.reddit_helper_bridge")
 @patch("core.windows.secure_url_launcher.webbrowser.open")
 def test_open_url_fallback_to_browser(mock_webbrowser, mock_bridge) -> None:
     from core.windows.secure_url_launcher import open_url
@@ -23,7 +60,7 @@ def test_open_url_fallback_to_browser(mock_webbrowser, mock_bridge) -> None:
     mock_bridge.is_bridge_available.return_value = False
 
     assert open_url("https://example.com") is True
-    mock_webbrowser.assert_called_once_with("https://example.com")
+    mock_webbrowser.assert_called_once_with("https://example.com", new=1)
 
 
 @patch("core.windows.secure_url_launcher.reddit_helper_bridge")

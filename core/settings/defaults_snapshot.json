@@ -202,6 +202,7 @@
             "show_background": true
         },
         "achievement_pulse": {
+            "artwork_shape": "wide",
             "bg_color": [
                 35,
                 35,
@@ -226,13 +227,20 @@
             "enabled": false,
             "font_family": "Inter",
             "font_size": 14,
+            "latest_unlock_count": 1,
             "margin": 30,
             "monitor": "ALL",
             "position": "Middle Right",
-            "preferred_height": 180,
-            "preferred_width": 420,
+            "preferred_height": 290,
+            "preferred_width": 540,
             "selection_mode": "most_recent",
-            "show_background": true
+            "show_artwork": true,
+            "show_background": true,
+            "show_latest": true,
+            "show_playtime": true,
+            "show_selected": false,
+            "show_source": true,
+            "show_total": true
         },
         "clock": {
             "analog_face_shadow": true,
@@ -1405,7 +1413,7 @@
         "steam": {
             "enabled": true,
             "privacy_mode": "Strict",
-            "refresh_minutes": 30,
+            "refresh_minutes": 10,
             "show_connection_info_icon": true
         },
         "steam_progress": {

@@ -16,11 +16,22 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
+### Blob Normal / Shaped Architecture Split, Dev-Gated
+
+- [ ] Establish one explicit, preset-owned Blob type contract (`normal` / `shaped`) with forward migration from the legacy shaper toggle and clean replace semantics across defaults, model, snapshot normalization, curated/custom presets, import/export, startup, and hot preset switching.
+- [ ] Split Blob settings construction and binding into shared appearance/layout controls plus dedicated Normal Blob and Shaped Blob custom builders; expose the Blob type as the high-level choice and show only the selected type's controls.
+- [ ] Split Blob runtime ownership into dedicated Normal and Shaped render paths and shaders while keeping shared audio, activation, overlay cadence, and healthy visualizer modes neutral and unchanged.
+- [ ] Rebuild Normal Blob around the older organic contract: constant living wobble plus music-reactive wobble/tendril extension, bounded inward motion that never reveals a raw circle or deep pinch, smooth release, and visibly reactive inner paint.
+- [ ] Rebuild Shaped Blob around authored-contour fidelity plus bounded music-reactive wobble, local deviations, and moderate mutations that return cleanly to the goal shape.
+- [ ] Reset subtype-owned solver/profile/ghost state at activation and Blob-type boundaries so startup, settings refresh, curated preset apply, custom preset apply, and runtime cycling cannot inherit the other Blob type's state.
+- [ ] Add preset/model/UI/runtime/shader regressions and authored synthetic-audio oracles for both Blob types; run the pre/post current-good visualizer lock, focused Blob suite, preset audit, defaults parity, and documentation drift pass.
+
 ### Steam Widget Family, Dev-Gated Foundation
 
 - [ ] Steam Phase 6, Achievement Pulse real data hookup:
-  - [ ] Add the painter-drawn ring and tile-highlight modes only after the cache-backed card fields are settled.
-  - [ ] Validate the cache-first fetch/result lifecycle against a real Steam account, `--noupdates`, transitions, and multi-monitor Custom geometry.
+  - [ ] In a fresh compiled `--devsteam` run, verify saved identity/API-key status is green on every Steam Settings reopen without clicking Check Saved Connection, and confirm cached Achievement Pulse content appears without a connect-required flash.
+  - [ ] Validate wide/default and square artwork, artwork-off mode, font-family changes, one/two/three latest unlocks, and bottom-anchored information blocks at authored size plus narrow/tall multi-monitor `Custom` geometry.
+  - [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs.
 
 ## Watchlist
 
@@ -69,7 +80,5 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 1.2 Assess feasability of adding "Shadow Direction" with a arrow like grid GUI (much like photoshops resize arrows in canvas resize look) where users can click one of 8 cardinal directions and change the general shadow direction of all our widgets/their backdrops to face a certain direction. The button would be inset to show which direction is chosen. Default is how we are now with bottom right aimed shadows. All other directions would use current settings adjusted for that direction relatively.
 1.3. Bucket the General section as you go to avoid messes.
 2. Measure logs drift idle vs drift soft-passages vs drift loud-passages to make sure there is an actual noticible increase in drift with loudest passages and minimal during idle. Use any logs and collect evidence about this.
-3. Long term deferred task. Split Blob within its own custom builder, wiring and shaders to have normal blob and shaped blob as high level options that change the entire blob worked with. It would need to be preset compatible. Normal blob would need to go back to similiar design of very old builds (~3.0) while maintaining improvements (like inner paint reactions - which is broken right now too). This would under no cirumstances effect the general audio/visualizer systems that are shared, completely isolated, adjusting the blobs to our architecture and not the other way around. Long term goal, extremely heavy planning and research required before considering or detailing further.
-4. If not already present add support for .mp3 files in our email alert system (and general sound architecture) it is no longer as closed off as it used to be, turns out since 2017 we don't need lincences or ffmpeg for it in Python!
 ----
 ######

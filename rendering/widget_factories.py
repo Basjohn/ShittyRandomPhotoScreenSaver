@@ -13,7 +13,7 @@ This decomposition improves:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
 
 from PySide6.QtWidgets import QWidget
 
@@ -1019,7 +1019,7 @@ def _coerce_optional_appid(value: Any) -> int | None:
 
 
 class SteamCardFactory(WidgetFactory):
-    """Factory for dev-gated Steam card scaffolds."""
+    """Factory for dev-gated Steam cards."""
 
     def __init__(
         self,
@@ -1034,13 +1034,20 @@ class SteamCardFactory(WidgetFactory):
     def get_widget_name(self) -> str:
         return self._widget_name
 
-    def create(self, parent: QWidget, config: Dict[str, Any]) -> Optional[QWidget]:
-        """Create one static Steam card scaffold with normal overlay styling."""
+    def create(
+        self,
+        parent: QWidget,
+        config: Dict[str, Any],
+        *,
+        steam_settings: Mapping[str, Any] | None = None,
+    ) -> Optional[QWidget]:
+        """Create one Steam card with normal overlay styling."""
         from core.dev_gates import is_steam_enabled
         from core.settings.models import WidgetPosition, coerce_widget_position
         from core.steam.achievement_pulse import AchievementPulseSelection
         from widgets.base_overlay_widget import OverlayPosition
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
+        from widgets.steam_components import ACHIEVEMENT_PULSE_AUTHORED_SIZE
 
         if not is_steam_enabled():
             return None
@@ -1071,6 +1078,14 @@ class SteamCardFactory(WidgetFactory):
         )
 
         try:
+            shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
+            field_defaults = {
+                "total": True,
+                "latest": True,
+                "playtime": True,
+                "source": True,
+                "selected": False,
+            }
             widget = SteamCardWidget(
                 parent=parent,
                 definition=definition,
@@ -1080,6 +1095,17 @@ class SteamCardFactory(WidgetFactory):
                     mode=str(config.get("selection_mode", "most_recent") or "most_recent"),
                     custom_appid=_coerce_optional_appid(config.get("custom_appid")),
                 ),
+                achievement_field_visibility={
+                    field_id: SettingsManager.to_bool(
+                        config.get(f"show_{field_id}", default_value),
+                        default_value,
+                    )
+                    for field_id, default_value in field_defaults.items()
+                },
+                achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
+                achievement_show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
+                achievement_artwork_shape=str(config.get("artwork_shape", "wide") or "wide"),
+                refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
             )
 
             if hasattr(widget, "set_font_family"):
@@ -1109,6 +1135,12 @@ class SteamCardFactory(WidgetFactory):
             if "preferred_width" in config or "preferred_height" in config:
                 width = max(260, int(config.get("preferred_width", 420)))
                 height = max(120, int(config.get("preferred_height", 180)))
+                if definition.widget_id == "achievement_pulse" and (width, height) in {
+                    (420, 180),
+                    (540, 250),
+                }:
+                    width = int(ACHIEVEMENT_PULSE_AUTHORED_SIZE.width())
+                    height = int(ACHIEVEMENT_PULSE_AUTHORED_SIZE.height())
                 widget.setMinimumSize(width, height)
                 widget.resize(width, height)
 

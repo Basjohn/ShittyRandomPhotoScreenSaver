@@ -16,6 +16,7 @@ from core.steam.credentials import (
     get_profile_cache_dir_for_credentials,
     get_storage_status,
     load_credentials,
+    normalize_api_key,
     redact_mapping,
     read_credential_metadata,
     save_credentials,
@@ -26,7 +27,9 @@ from core.steam.credentials import (
 
 
 SENTINEL_KEY = "fake_steam_api_key_do_not_export_12345"
-SENTINEL_PROFILE = "76561198000000000"
+# SteamID64's account-id-zero base value is a structural sentinel, not a user.
+SENTINEL_PROFILE = "76561197960265728"
+VALID_API_KEY = "SteamApiKey0123456789ABCDEF"
 
 
 def _make_manager(tmp_path: Path) -> SettingsManager:
@@ -230,15 +233,35 @@ def test_steam_credential_input_status_is_ui_safe(monkeypatch) -> None:
     monkeypatch.setattr("core.steam.credentials.steam_storage_available", lambda: True)
 
     missing_key = validate_credential_input("", SENTINEL_PROFILE)
-    missing_profile = validate_credential_input(SENTINEL_KEY, "")
-    ready = validate_credential_input(SENTINEL_KEY, SENTINEL_PROFILE)
+    missing_profile = validate_credential_input(VALID_API_KEY, "")
+    ready = validate_credential_input(VALID_API_KEY, SENTINEL_PROFILE)
 
     assert missing_key.can_test is False
     assert missing_profile.can_test is False
     assert ready.can_test is True
     assert ready.can_save_after_test is False
-    assert SENTINEL_KEY not in ready.message
+    assert VALID_API_KEY not in ready.message
     assert SENTINEL_PROFILE not in ready.message
+
+
+def test_steam_api_key_normalization_removes_copy_paste_whitespace(monkeypatch) -> None:
+    monkeypatch.setattr("core.steam.credentials.steam_storage_available", lambda: True)
+    spaced_key = "  STEAM KEY 0123\n4567\t89ABCDEF  "
+
+    normalized = normalize_api_key(spaced_key)
+    status = validate_credential_input(normalized, SENTINEL_PROFILE)
+
+    assert normalized == "STEAMKEY0123456789ABCDEF"
+    assert status.can_test is True
+
+
+def test_steam_credential_input_rejects_non_alphanumeric_key(monkeypatch) -> None:
+    monkeypatch.setattr("core.steam.credentials.steam_storage_available", lambda: True)
+
+    status = validate_credential_input("STEAM-KEY-0123456789ABCDEF", SENTINEL_PROFILE)
+
+    assert status.can_test is False
+    assert "letters and numbers only" in status.message
 
 
 def test_credential_metadata_routes_cache_without_decrypting_credentials(tmp_path: Path, monkeypatch) -> None:

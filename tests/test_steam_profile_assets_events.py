@@ -3,7 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.events.event_system import EventSystem
-from core.steam.assets import SteamAssetRecord, cache_asset_from_bytes, fetch_and_cache_asset, prune_asset_cache
+from core.steam.assets import (
+    SteamAssetRecord,
+    cache_asset_from_bytes,
+    fetch_and_cache_asset,
+    fetch_steam_app_header,
+    prune_asset_cache,
+)
 from core.steam.events import STEAM_DATA_READY_EVENT, publish_steam_data_ready
 from core.steam.mock_backend import SteamFixtureBackend
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
@@ -70,6 +76,26 @@ def test_asset_cache_writes_valid_image_with_injected_fetcher_and_prunes(tmp_pat
         (tmp_path / f"extra_{idx}.png").write_bytes(b"\x89PNG\r\n\x1a\nx")
     removed = prune_asset_cache(tmp_path, max_files=2)
     assert removed >= 2
+
+
+def test_steam_app_header_reuses_the_validated_cached_file(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    first = fetch_steam_app_header(
+        cache_dir=tmp_path,
+        appid=1086940,
+        fetcher=lambda url: calls.append(url) or b"\xff\xd8\xfffake-jpeg",
+    )
+    second = fetch_steam_app_header(
+        cache_dir=tmp_path,
+        appid=1086940,
+        fetcher=lambda url: calls.append(url) or b"\xff\xd8\xffshould-not-fetch",
+    )
+
+    assert isinstance(first, SteamAssetRecord)
+    assert isinstance(second, SteamAssetRecord)
+    assert first.path == second.path
+    assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg"]
 
 
 def test_fixture_backend_reads_checked_in_payload_without_network() -> None:

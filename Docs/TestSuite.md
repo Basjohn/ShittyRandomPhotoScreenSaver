@@ -41,6 +41,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys/metadata routing, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
 - `tests/test_steam_openid.py`
   Steam identity-link request construction, strict claimed-ID/callback validation, Steam `check_authentication` verification through an injected opener, and unpredictable loopback callback setup.
+- `tests/test_secure_url_launcher.py`
+  Central URL-route behavior: direct native launch for interactive Steam Settings/MC paths, helper wake after genuine secure-desktop fallback, and browser fallback behavior.
 - `tests/test_steam_backend.py`
   Steam-family source metadata and fixture-safe backend transport: publisher-only endpoint exclusion, user-key/profile redaction, public app-news endpoint shape, HTTP privacy/rate-limit classification, injected fake opener usage, and no live Steam calls.
 - `tests/test_steam_cache.py`
@@ -50,11 +52,11 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_steam_profile_assets_events.py`
   Steam-family profile policy-state persistence, corrupt-state quarantine, asset host/signature validation, fixture backend injection, and narrow non-secret `EventSystem` publication.
 - `tests/test_steam_phase3_settings_descriptors.py`
-  Steam Phase 3 descriptor/default/settings skeleton coverage: `--devsteam` hidden/active descriptor views, shared/card defaults, lazy Settings no-work contract, non-secret save/load, dev-gated factories, and descriptor-driven `WidgetManager.setup_all_widgets` creation/reuse.
+  Steam descriptor/default/settings coverage: `--devsteam` hidden/active descriptor views, shared/card defaults, lazy general-Settings behavior, safe saved-connection status hydration on each Steam-section construction, font/artwork/latest-unlock round trips, 5/10-minute freshness settings, dev-gated factories, and descriptor-driven `WidgetManager.setup_all_widgets` creation/reuse.
 - `tests/test_steam_phase4_mock_visuals.py`
-  Steam Phase 4 mock visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, long/unavailable fixture states, and tight `Custom` scaling that preserves authored visible-field count and rails.
+  Steam visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, wide/square artwork alignment and centered cover crop, latest-unlock hierarchy, bottom-anchored rounded/shadowed fields, long/unavailable states, and tight `Custom` scaling that preserves authored visible-field count and rails.
 - `tests/test_steam_achievement_pulse.py`
-  Steam Phase 5/6 Achievement Pulse coverage: pure selected-app resolution, persisted Custom app-ID settings, opaque cache snapshot/age handling, successful-result-only refresh caching, fresh-request coalescing, manual-refresh routing, cached unauthorized connection-attention handling, literal unavailable/custom states, cache application after activation, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
+  Steam Phase 5/6 Achievement Pulse coverage: pure selected-app resolution, ordered three-unlock schema labels, persisted Custom app-ID settings, opaque cache snapshot/age handling, successful-result-only refresh caching, cache-before-first-fade behavior, 5-minute runtime freshness threshold, manual-refresh routing, cached unauthorized connection-attention handling, literal unavailable/custom states, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
 - `tests/test_settings_defaults_parity.py`
   Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
 - `tests/test_visualizer_presets.py`

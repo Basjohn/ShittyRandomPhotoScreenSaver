@@ -203,7 +203,7 @@ class SteamOpenIdLinkSession:
             opener=self._opener,
         )
         self._set_result(result)
-        title = "Steam identity linked" if result.success else "Steam connection failed"
+        title = "SRPSS Steam identity linked" if result.success else "SRPSS Steam connection failed"
         self._write_response(handler, 200 if result.success else 400, title, result.message)
 
     def _set_result(self, result: SteamOpenIdResult) -> None:

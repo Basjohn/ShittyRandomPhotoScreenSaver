@@ -134,6 +134,7 @@ class StyledPopup(QDialog):
         # Message
         if self._message:
             msg_label = QLabel(self._message)
+            msg_label.setTextFormat(Qt.TextFormat.RichText)
             msg_label.setWordWrap(True)
             msg_label.setStyleSheet("""
                 font-size: 12px;

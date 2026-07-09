@@ -31,6 +31,7 @@ from core.steam.request_policy import (
 RECENT_GAMES_CACHE_KEY = "achievement_pulse_recent_games"
 OWNED_GAMES_CACHE_KEY = "achievement_pulse_owned_games"
 ACHIEVEMENTS_CACHE_KEY_PREFIX = "achievement_pulse_achievements_"
+ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX = "achievement_pulse_schema_"
 _REFRESH_FRESH_WINDOW_SECONDS = 60.0
 _refresh_coordinator = SteamRequestCoordinator()
 _refresh_backoff = SteamBackoffPolicy()
@@ -46,6 +47,7 @@ class AchievementPulseCacheSnapshot:
     recent_result: SteamResult
     library_result: SteamResult
     achievement_result: SteamResult | None
+    schema_result: SteamResult | None
     cache_age_seconds: float | None
 
     @property
@@ -78,6 +80,11 @@ def achievement_cache_key_for_app(appid: int) -> str:
     return f"{ACHIEVEMENTS_CACHE_KEY_PREFIX}{max(0, int(appid))}"
 
 
+def achievement_schema_cache_key_for_app(appid: int) -> str:
+    """Return a stable cache key for one app's achievement display schema."""
+    return f"{ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX}{max(0, int(appid))}"
+
+
 def load_achievement_pulse_cache_snapshot(
     *,
     profile_key: str,
@@ -101,6 +108,7 @@ def load_achievement_pulse_cache_snapshot(
         library_result=library_result,
     )
     achievement_result: SteamResult | None = None
+    schema_result: SteamResult | None = None
     achievement_results: dict[int, SteamResult] = {}
     if selection_probe.appid is not None:
         achievement_result = read_record(
@@ -112,15 +120,24 @@ def load_achievement_pulse_cache_snapshot(
             )
         )
         achievement_results[selection_probe.appid] = achievement_result
+        schema_result = read_record(
+            cache_path_for_profile_key(
+                profile_key,
+                achievement_schema_cache_key_for_app(selection_probe.appid),
+                profile=profile,
+                root=root,
+            )
+        )
     resolved = resolve_achievement_pulse(
         recent_result=recent_result,
         achievement_results=achievement_results,
         selection=selection,
         library_result=library_result,
+        schema_result=schema_result,
     )
     timestamps = [
         result.fetched_at
-        for result in (recent_result, library_result, achievement_result)
+        for result in (recent_result, library_result, achievement_result, schema_result)
         if result is not None and result.ok and result.fetched_at is not None
     ]
     reference_now = time.time() if now is None else float(now)
@@ -130,6 +147,7 @@ def load_achievement_pulse_cache_snapshot(
         recent_result=recent_result,
         library_result=library_result,
         achievement_result=achievement_result,
+        schema_result=schema_result,
         cache_age_seconds=cache_age_seconds,
     )
 
@@ -196,6 +214,17 @@ def refresh_achievement_pulse_cache(
                 profile_key=profile_key,
                 cache_key=achievement_cache_key_for_app(selection_probe.appid),
                 source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+                credential=credential,
+                appid=selection_probe.appid,
+                profile=profile,
+                root=root,
+                opener=opener,
+                now=reference_now,
+            ))
+            refresh_results.append(_fetch_and_cache(
+                profile_key=profile_key,
+                cache_key=achievement_schema_cache_key_for_app(selection_probe.appid),
+                source_id=SteamSourceId.ACHIEVEMENT_SCHEMA,
                 credential=credential,
                 appid=selection_probe.appid,
                 profile=profile,
