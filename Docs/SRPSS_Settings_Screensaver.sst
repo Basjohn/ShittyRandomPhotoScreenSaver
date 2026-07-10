@@ -1,7 +1,10 @@
 {
   "application": "Screensaver",
   "metadata": {
-    "last_migration_completed": "2026-07-10T20:32:57.841498Z",
+    "last_migration_completed": "2026-07-10T21:48:46.147069Z",
+    "legacy_profile": "Screensaver",
+    "migrated_at": "2026-07-10T21:48:46.145550Z",
+    "migrated_from": "qsettings",
     "visualizer_schema_version": 1
   },
   "profile": "Screensaver",

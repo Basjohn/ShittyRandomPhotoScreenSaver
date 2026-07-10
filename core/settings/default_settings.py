@@ -1200,7 +1200,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                          'font_size': 25,
                          'icon_alignment': 'RIGHT',
                          'icon_size': 96,
-                         'location': 'San Francisco',
+                         'location': '',
                          'margin': 30,
                          'monitor': 1,
                          'position': 'Bottom Right',
