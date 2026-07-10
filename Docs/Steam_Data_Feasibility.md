@@ -6,7 +6,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 
 ## Rules
 
-- Achievement Pulse and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Progress, Abandonment Issues, and Friend Pulse prototypes.
+- Achievement Pulse and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Journey, Abandonment Issues, and Friend Pulse prototypes; `steam_progress` remains its compatibility key.
 - User Steam API keys/profile identifiers are credentials, not settings.
 - Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
@@ -29,7 +29,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 | Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional | app id, title/icon when appinfo is included, playtime forever | Returns owned games only when owned-game details are visible to caller | Library index foundation; cannot fabricate missing apps |
 | Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state, schema totals/names | Requires user key, profile id, app id; per-app availability may vary | Achievement Pulse uses schema display names instead of internal ids and can proceed with unavailable/private branches |
 | Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse can proceed only with privacy-aware empty states |
-| App news | `ISteamNews/GetNewsForApp/v2` | Conditional | app id, headline/blurb/date/feed/url | Public app-specific endpoint; not personalized and not library-wide | Steam Progress may use only bounded watched/focus-app scans |
+| App news | `ISteamNews/GetNewsForApp/v2` | Conditional | app id, headline/blurb/date/feed/url | Public app-specific endpoint; not personalized and not library-wide | Steam Journey may use only bounded watched/focus-app scans |
 | General per-game last played | None proven | Unavailable | none | `GetRecentlyPlayedGames` is recent-only; `GetOwnedGames` does not prove a general reliable timestamp in this pass | Abandonment Issues remains blocked from smart last-played claims |
 | Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
 | Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
@@ -54,7 +54,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 - Blocked for smart last-played behavior until a reliable general last-played source is proven.
 - A future cache-observation mode could show “not observed recently” only if the copy clearly avoids claiming Steam last-played dates.
 
-### Steam Progress
+### Steam Journey
 
 - Partially viable only as a bounded app-news/focus-app pulse.
 - It must not scan the whole library frequently by default and must not pretend public app news is personalized progress.

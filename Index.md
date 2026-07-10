@@ -60,8 +60,10 @@ Living map of the current SRPSS codebase.
 
 | Module | File | Role |
 |---|---|---|
-| Canonical defaults | `core/settings/default_settings.py` | Source of default values, including shared widget-global defaults such as card-border width and authored-stacking opt-in |
-| Defaults API | `core/settings/defaults.py` | Default loading + preserve-on-reset contract |
+| Canonical base defaults | `core/settings/default_settings.py` | Base source values, including shared widget-global defaults such as card-border width and authored-stacking opt-in |
+| Default profile overrides | `core/settings/default_profile_overrides.py` | Small generated Normal/MC override mapping; Normal differences apply to both profiles and MC differences layer on top without renaming stable settings keys |
+| Defaults API | `core/settings/defaults.py` | Canonical Normal/MC resolution, deep profile-overlay merge, and preserve-on-reset contract |
+| Defaults editor | `tools/default_settings_editor.py` | Standalone recursive Normal/MC defaults editor with typed values, generated tooltips, search, atomic compact overrides, out-of-repo single-level undo, and fresh-process JSON/SST regeneration |
 | Layout slots | `core/settings/layout_slots.py` | Pure source-free widget layout-slot capture/apply helpers for `widgets.layout_slots`, including slot id normalization, layout-field allowlisting, custom-layout map copy semantics, and source/provider/account exclusion |
 | List-capacity policy | `core/settings/widget_capacity_policy.py` | Shared active list-widget capacity policy (`5..25`) and fixed candidate-window envelope |
 | Settings store | `core/settings/json_store.py` | Atomic JSON persistence |
@@ -82,11 +84,11 @@ Living map of the current SRPSS codebase.
 | Steam asset cache | `core/steam/assets.py` | Injected-fetcher Steam artwork/avatar validation, atomic cache writes, and bounded local asset eviction |
 | Steam fixture backend | `core/steam/mock_backend.py` | Test/card-fixture backend that never performs live Steam network calls |
 | Steam events | `core/steam/events.py` | Narrow non-secret `EventSystem` publication helpers for future Steam data-ready updates |
-| Steam Achievement Pulse resolver | `core/steam/achievement_pulse.py` | Pure cache/fixture selected-app and achievement-progress resolver that maps schema display names over internal achievement ids, retains the newest five unlocks plus the previous recent-game title, and supports Most Recent, Recent #2-#5, and literal Custom app ID while preserving unavailable/private states |
-| Steam Achievement Pulse cache bridge | `core/steam/achievement_pulse_cache.py` | Cache-first selected-app snapshot assembly and bounded successful-result-only recent/achievement-schema refresh work; a short-lived profile/namespace/selection success marker suppresses immediate multi-display follower batches without rewriting unchanged cache, unauthorized refreshes retain cache while flagging safe connection attention, manual refresh may bypass freshness but not coalescing/backoff, and this module owns no threads, timers, UI, or credential decryption |
-| Steam card visual components | `widgets/steam_components.py` | Provider-inert Steam view models, deterministic authored layout metrics, measured occupancy-aware field planning, paint fingerprints, and shared painter helpers that keep `Custom` as uniform scale instead of content authority; Achievement Pulse owns header-aligned wide and bounded 140-190 portrait-backed square cover crops, centered-below-art Unlocked geometry, a one-to-five unprefixed latest-unlock hierarchy, and bottom-anchored uppercase compact/double capsules with fitted values, RGBA styling, and exterior shadows |
+| Steam Achievement Pulse resolver | `core/steam/achievement_pulse.py` | Pure cache/fixture selected-app and achievement-progress resolver that maps schema display names over internal achievement ids, retains the newest five unlocks plus previous/recent display names, and supports Most Recent, Recent #2-#5, and literal Custom app ID while preserving unavailable/private states |
+| Steam Achievement Pulse cache bridge | `core/steam/achievement_pulse_cache.py` | Cache-first selected-app snapshot assembly, one-record recent-title lookup for Settings, and bounded successful-result-only recent/achievement-schema refresh work; a short-lived profile/namespace/selection success marker suppresses immediate multi-display follower batches without rewriting unchanged cache, unauthorized refreshes retain cache while flagging safe connection attention, manual refresh may bypass freshness but not coalescing/backoff, and this module owns no threads, timers, UI, or credential decryption |
+| Steam card visual components | `widgets/steam_components.py` | Provider-inert Steam view models, deterministic authored layout metrics, measured occupancy-aware field planning, paint fingerprints, and shared painter helpers that keep `Custom` as uniform scale instead of content authority; Achievement Pulse owns optically header-aligned wide and bounded 140-190 portrait-backed square cover crops (default 140), centered-below-art Unlocked geometry, a one-to-five unprefixed latest-unlock hierarchy, colon-free compact capsules, and centered double headings/fitted values with `PREVIOUSLY`, RGBA styling, and exterior shadows |
 | Steam card widget | `widgets/steam_card_widget.py` | Steam card overlays that consume resolved/mock view models through shared painter helpers; public Achievement Pulse preloads cache before first fade, schedules one bounded schema/artwork refresh after fade using the shared 5-240 minute freshness window, caches DPR-aware artwork scaling, and accepts transition-safe manual refresh while constructors and paint remain provider-inert; unfinished cards remain dev-gated |
-| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy public Steam Settings section with a bordered family shell, explicit OpenID/API-key connect controls, safe encrypted-storage status hydration, DPAPI-safe disconnect actions, family font controls, and Achievement Pulse artwork/shape/bounded-square-size/one-to-five-unlock/field/double-capsule/RGBA preferences; unfinished card buckets remain hidden without `--devsteam`, opening general Settings remains inert, and opening Steam never decrypts credentials or contacts Steam |
+| Steam settings shell | `ui/tabs/widgets_tab_steam.py` | Lazy public Steam Settings section with a bordered family shell, explicit OpenID/API-key connect controls, safe encrypted-storage status hydration, DPAPI-safe disconnect actions, family font controls, bracketed cache-only recent-game choice names, and Achievement Pulse artwork/shape/bounded-square-size/one-to-five-unlock/field/double-capsule/RGBA preferences; unfinished card buckets remain hidden without `--devsteam`, opening general Settings remains inert, and opening Steam never decrypts credentials or contacts Steam |
 
 ## Performance and Observability
 
@@ -214,6 +216,7 @@ Living map of the current SRPSS codebase.
 | `tools/flicker_test.py` | Settings dialog flicker/ghost harness |
 | `tools/winprobe_observer.py` | External transient HWND observer |
 | `tools/reddit_helper_task_harness.py` | Scheduled-task helper smoke test |
+| `tools/default_settings_editor.py` | Auto-discovering Normal/MC canonical defaults editor with save/regenerate and local single-level undo |
 | `tools/regen_qrc.py` | Regenerate Qt icon resource module |
 | `tools/hardware_ingress_validator.py` | Hardware-ingress validation layer for U-05 — correlates real physical key events with SRPSS log responses |
 
@@ -243,4 +246,4 @@ Living map of the current SRPSS codebase.
 | `--fresh` | Clear all resolved runtime log files at startup |
 | `-devblob` | Enable blob mode gate | (Change this to --devblob in code at some random point)
 | `--devcurve` | Compatibility no-op alias |
-| `--devsteam` | Show unfinished Steam Progress, Friend Pulse, and Abandonment Issues card prototypes |
+| `--devsteam` | Show unfinished Steam Journey, Friend Pulse, and Abandonment Issues card prototypes |

@@ -46,7 +46,7 @@ class SteamCardDefinition:
 STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
     "steam_progress": SteamCardDefinition(
         widget_id="steam_progress",
-        title="Steam Progress",
+        title="Steam Journey",
         subtitle="Dev-gated update card scaffold",
     ),
     "achievement_pulse": SteamCardDefinition(

@@ -22,6 +22,7 @@ from typing import Dict, Any, Mapping
 from copy import deepcopy
 
 from .default_settings import DEFAULT_SETTINGS
+from .default_profile_overrides import PROFILE_DEFAULT_OVERRIDES
 from .visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
 # Keys to preserve during reset (user-specific data)
@@ -32,14 +33,51 @@ PRESERVE_ON_RESET = frozenset({
     'widgets.weather.latitude',
     'widgets.weather.longitude',
 })
-CANONICAL_DEFAULTS = deepcopy(DEFAULT_SETTINGS)
-CANONICAL_DEFAULTS.pop("preset", None)
-CANONICAL_DEFAULTS.pop("custom_preset_backup", None)
+NORMAL_PROFILE = "Screensaver"
+MC_PROFILE = "Screensaver_MC"
 
 
-def get_default_settings() -> Dict[str, Any]:
-    """Return the canonical default settings dictionary."""
-    defaults = deepcopy(CANONICAL_DEFAULTS)
+def merge_default_overrides(base: Mapping[str, Any], overrides: Mapping[str, Any]) -> Dict[str, Any]:
+    """Deep-merge one profile override mapping without mutating either input."""
+
+    merged = deepcopy(dict(base))
+    for key, value in overrides.items():
+        current = merged.get(key)
+        if isinstance(current, Mapping) and isinstance(value, Mapping):
+            merged[key] = merge_default_overrides(current, value)
+        else:
+            merged[key] = deepcopy(value)
+    return merged
+
+
+def get_base_default_settings() -> Dict[str, Any]:
+    """Return source defaults before editable profile overlays are applied."""
+
+    defaults = deepcopy(DEFAULT_SETTINGS)
+    defaults.pop("preset", None)
+    defaults.pop("custom_preset_backup", None)
+    return defaults
+
+
+def get_profile_default_overrides() -> Dict[str, Dict[str, Any]]:
+    """Return a safe copy of the editable profile override data."""
+
+    return deepcopy(PROFILE_DEFAULT_OVERRIDES)
+
+
+def get_default_settings(application: str | None = None) -> Dict[str, Any]:
+    """Return canonical defaults resolved for Normal or MC profile behavior."""
+
+    profile = MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
+    defaults = merge_default_overrides(
+        get_base_default_settings(),
+        PROFILE_DEFAULT_OVERRIDES.get(NORMAL_PROFILE, {}),
+    )
+    if profile == MC_PROFILE:
+        defaults = merge_default_overrides(
+            defaults,
+            PROFILE_DEFAULT_OVERRIDES.get(MC_PROFILE, {}),
+        )
 
     widgets = defaults.get("widgets")
     if isinstance(widgets, Mapping):
@@ -58,12 +96,15 @@ def get_default_settings() -> Dict[str, Any]:
     return defaults
 
 
-def get_flat_defaults() -> Dict[str, Any]:
+CANONICAL_DEFAULTS = get_default_settings(NORMAL_PROFILE)
+
+
+def get_flat_defaults(application: str | None = None) -> Dict[str, Any]:
     """Return defaults in flat key format (e.g., 'display.mode').
 
     This is useful for QSettings which uses dot-notation keys.
     """
-    nested = get_default_settings()
+    nested = get_default_settings(application)
     flat: Dict[str, Any] = {}
 
     def flatten(d: Dict[str, Any], prefix: str = '') -> None:

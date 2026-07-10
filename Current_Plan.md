@@ -29,9 +29,9 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 ### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
 
 - [ ] In a fresh compiled run without `--devsteam`, verify saved identity/API-key status stays green on every Steam Settings reopen and cached Achievement Pulse content appears before the coordinated fade without a connect-required flash.
-- [ ] Validate wide/default artwork, header-aligned 140/180/190 square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, Previous-field toggling, compact versus measured double-capsule behavior for long data, alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
+- [ ] Validate wide artwork plus the 140px-default/190px-maximum header-aligned square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, cached bracketed names beside recent-game choices without selection-signal churn, Previous-field toggling, colon-free compact capsules, centred measured double-capsule headings (`PREVIOUSLY` for Previous), alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
 - [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs; confirm a multi-display `--steam` startup emits one provider batch per profile/cache namespace/selection rather than one batch per overlay.
-- [ ] In a separate `--devsteam` run, confirm only Steam Progress, Friend Pulse, and Abandonment Issues become visible and remain disabled/provider-inert by default.
+- [ ] In a separate `--devsteam` run, confirm only Steam Journey, Friend Pulse, and Abandonment Issues become visible and remain disabled/provider-inert by default.
 
 ## Watchlist
 
@@ -45,7 +45,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
 - [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.
 - [ ] Media metadata preservation during live visualizer preset churn: if it reopens, first suspect partial same-track playback snapshots during visualizer-only settings writes.
-- [ ] Steam Progress, Friend Pulse, and Abandonment Issues remain production-hidden until each is explicitly promoted beyond `--devsteam`.
+- [ ] Steam Journey, Friend Pulse, and Abandonment Issues remain production-hidden until each is explicitly promoted beyond `--devsteam`.
 
 ## Deferred / Not Active
 

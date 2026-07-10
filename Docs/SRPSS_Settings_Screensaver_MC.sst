@@ -1,7 +1,9 @@
 {
   "application": "Screensaver_MC",
   "metadata": {
-    "last_migration_completed": "2026-05-07T00:31:43.951623Z"
+    "profile": "Screensaver_MC",
+    "version": 2,
+    "visualizer_schema_version": 1
   },
   "profile": "Screensaver_MC",
   "settings_version": 2,
@@ -164,6 +166,93 @@
       "tab_state.widgets.view_state.subtab": 2
     },
     "widgets": {
+      "abandonment_issues": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Bottom Right",
+        "preferred_height": 180,
+        "preferred_width": 420,
+        "show_background": true
+      },
+      "achievement_pulse": {
+        "artwork_shape": "wide",
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "capsule_border_color": [
+          199,
+          213,
+          224,
+          145
+        ],
+        "capsule_fill_color": [
+          199,
+          213,
+          224,
+          38
+        ],
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "custom_appid": null,
+        "double_capsule_long_data": true,
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "latest_unlock_count": 1,
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Middle Right",
+        "preferred_height": 290,
+        "preferred_width": 540,
+        "selection_mode": "most_recent",
+        "show_artwork": true,
+        "show_background": true,
+        "show_latest": true,
+        "show_playtime": true,
+        "show_previous": true,
+        "show_selected": false,
+        "show_source": false,
+        "show_total": true,
+        "square_artwork_size": 140
+      },
       "clock": {
         "analog_face_shadow": true,
         "bg_color": [
@@ -172,7 +261,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -241,8 +330,40 @@
         "show_timezone": true,
         "timezone": "local"
       },
+      "friend_pulse": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Top Left",
+        "preferred_height": 180,
+        "preferred_width": 420,
+        "show_background": true
+      },
       "global": {
-        "card_border_width_px": 4
+        "card_border_width_px": 4,
+        "stacking_enabled": true
       },
       "gmail": {
         "account_slot": "0",
@@ -253,7 +374,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -321,7 +442,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -362,6 +483,10 @@
         "tag": "most_viral",
         "update_interval": 600
       },
+      "layout_slots": {
+        "slots": {},
+        "version": 1
+      },
       "media": {
         "artwork_size": 250,
         "bg_color": [
@@ -370,7 +495,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -389,7 +514,7 @@
         "font_size": 20,
         "margin": 30,
         "monitor": "2",
-        "mute_button_enabled": true,
+        "mute_button_enabled": false,
         "position": "Bottom Left",
         "provider": "spotify",
         "rounded_artwork_border": true,
@@ -411,7 +536,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -434,6 +559,7 @@
         "margin": 30,
         "monitor": 2,
         "position": "Bottom Center",
+        "provider": "rss",
         "show_background": true,
         "show_refresh_spiral": true,
         "show_separators": true,
@@ -446,7 +572,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,
@@ -486,23 +612,23 @@
         "text_opacity": 0.33
       },
       "spotify_visualizer": {
-        "bar_border_color": [
+        "blob_adaptive_sensitivity": true,
+        "blob_agc_strength": 0.5,
+        "blob_audio_block_size": 512,
+        "blob_bar_border_color": [
           255,
           255,
           255,
           255
         ],
-        "bar_border_opacity": 1.0,
-        "bar_fill_color": [
+        "blob_bar_border_opacity": 1.0,
+        "blob_bar_count": 32,
+        "blob_bar_fill_color": [
           255,
           255,
           255,
           230
         ],
-        "blob_adaptive_sensitivity": true,
-        "blob_agc_strength": 0.5,
-        "blob_audio_block_size": 512,
-        "blob_bar_count": 32,
         "blob_color": [
           0,
           105,
@@ -619,13 +745,27 @@
         "bubble_adaptive_sensitivity": true,
         "bubble_agc_strength": 0.5,
         "bubble_audio_block_size": 512,
+        "bubble_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "bubble_bar_border_opacity": 1.0,
         "bubble_bar_count": 48,
+        "bubble_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "bubble_big_bass_pulse": 0.8,
         "bubble_big_contraction_bias": 1.0,
         "bubble_big_count": 11,
         "bubble_big_size_clamp": 4.0,
         "bubble_big_size_max": 0.03,
         "bubble_big_specular_max_size": 2.5,
+        "bubble_big_visual_smoothing": 0.5,
         "bubble_bounce_big_pct": 70,
         "bubble_bounce_big_speed": 0.8,
         "bubble_bounce_same_only": false,
@@ -655,6 +795,7 @@
           255
         ],
         "bubble_gradient_semantics_version": 2,
+        "bubble_group_drift": false,
         "bubble_growth": 5.0,
         "bubble_input_gain": 1.0,
         "bubble_kick_lane_gain": 1.0,
@@ -700,7 +841,20 @@
         "devcurve_adaptive_sensitivity": true,
         "devcurve_agc_strength": 0.5,
         "devcurve_audio_block_size": 0,
+        "devcurve_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "devcurve_bar_border_opacity": 1.0,
         "devcurve_bar_count": 32,
+        "devcurve_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "devcurve_base_level": 0.58,
         "devcurve_dynamic_floor": true,
         "devcurve_dynamic_range_enabled": false,
@@ -869,16 +1023,14 @@
         "devcurve_motion_power": 1.0,
         "devcurve_rainbow_enabled": false,
         "devcurve_rainbow_speed": 0.5,
-        "devcurve_sensitivity": 0.4,
+        "devcurve_sensitivity": 1.0,
         "devcurve_smoothness": 0.55,
         "devcurve_transient_clamp": 1.5,
         "devcurve_transient_pulse_gain": 1.0,
         "enabled": true,
-        "ghost_alpha": 0.4,
-        "ghost_decay": 0.35,
-        "ghosting_enabled": true,
-        "mode": "spectrum",
+        "mode": "bubble",
         "monitor": "ALL",
+        "osc_ghost_decay": 0.4,
         "osc_ghost_intensity": 0.4,
         "osc_ghost_line2_enabled": true,
         "osc_ghost_line3_enabled": true,
@@ -973,7 +1125,20 @@
         "oscilloscope_adaptive_sensitivity": true,
         "oscilloscope_agc_strength": 0.5,
         "oscilloscope_audio_block_size": 512,
+        "oscilloscope_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "oscilloscope_bar_border_opacity": 1.0,
         "oscilloscope_bar_count": 32,
+        "oscilloscope_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "oscilloscope_dynamic_floor": true,
         "oscilloscope_dynamic_range_enabled": false,
         "oscilloscope_input_gain": 1.0,
@@ -985,13 +1150,15 @@
         "oscilloscope_transient_clamp": 1.5,
         "oscilloscope_transient_pulse_gain": 1.0,
         "oscilloscope_transient_width_mix": 0.35,
+        "position": "Follow Media",
+        "preset_blob": 1,
         "preset_bubble": 0,
         "preset_devcurve": 0,
         "preset_oscilloscope": 0,
         "preset_sine_wave": 2,
         "preset_spectrum": 0,
-        "rainbow_enabled": true,
-        "rainbow_speed": 0.3,
+        "rainbow_enabled": false,
+        "rainbow_speed": 0.5,
         "sine_card_adaptation": 0.3,
         "sine_crawl_amount": 0.4,
         "sine_density": 1.0,
@@ -1103,7 +1270,20 @@
         "sine_wave_adaptive_sensitivity": true,
         "sine_wave_agc_strength": 0.5,
         "sine_wave_audio_block_size": 512,
+        "sine_wave_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "sine_wave_bar_border_opacity": 1.0,
         "sine_wave_bar_count": 40,
+        "sine_wave_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "sine_wave_dynamic_floor": true,
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 0.8,
@@ -1113,7 +1293,7 @@
         "sine_wave_manual_floor": 0.12,
         "sine_wave_rainbow_enabled": false,
         "sine_wave_rainbow_speed": 0.5,
-        "sine_wave_sensitivity": 2.75,
+        "sine_wave_sensitivity": 0.4,
         "sine_wave_transient_clamp": 1.5,
         "sine_wave_transient_pulse_gain": 1.0,
         "sine_wave_transient_width_mix": 0.4,
@@ -1122,7 +1302,20 @@
         "spectrum_adaptive_sensitivity": true,
         "spectrum_agc_strength": 0.5,
         "spectrum_audio_block_size": 512,
+        "spectrum_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "spectrum_bar_border_opacity": 1.0,
         "spectrum_bar_count": 33,
+        "spectrum_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "spectrum_border_radius": 2.0,
         "spectrum_drop_speed": 1.0,
         "spectrum_dynamic_floor": true,
@@ -1200,8 +1393,8 @@
         ],
         "spectrum_profile_floor": 0.12,
         "spectrum_rainbow_border": false,
-        "spectrum_rainbow_enabled": true,
-        "spectrum_rainbow_speed": 0.3,
+        "spectrum_rainbow_enabled": false,
+        "spectrum_rainbow_speed": 0.5,
         "spectrum_render_mode": "bars",
         "spectrum_sensitivity": 0.4,
         "spectrum_shape_nodes": [
@@ -1228,6 +1421,43 @@
         "spectrum_wave_amplitude": 0.5,
         "visualizers_enabled": true
       },
+      "steam": {
+        "enabled": true,
+        "privacy_mode": "Strict",
+        "refresh_minutes": 10,
+        "show_connection_info_icon": true
+      },
+      "steam_progress": {
+        "bg_color": [
+          35,
+          35,
+          35,
+          255
+        ],
+        "bg_opacity": 0.3,
+        "border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "border_opacity": 1.0,
+        "color": [
+          255,
+          255,
+          255,
+          230
+        ],
+        "enabled": false,
+        "font_family": "Inter",
+        "font_size": 14,
+        "margin": 30,
+        "monitor": "ALL",
+        "position": "Top Right",
+        "preferred_height": 180,
+        "preferred_width": 420,
+        "show_background": true
+      },
       "weather": {
         "bg_color": [
           35,
@@ -1235,7 +1465,7 @@
           35,
           255
         ],
-        "bg_opacity": 0.6,
+        "bg_opacity": 0.3,
         "border_color": [
           255,
           255,

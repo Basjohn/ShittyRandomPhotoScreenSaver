@@ -1114,7 +1114,7 @@ class SteamCardFactory(WidgetFactory):
                 achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
                 achievement_show_artwork=achievement_show_artwork,
                 achievement_artwork_shape=achievement_artwork_shape,
-                achievement_square_artwork_size=int(config.get("square_artwork_size", 180)),
+                achievement_square_artwork_size=int(config.get("square_artwork_size", 140)),
                 achievement_double_capsule_long_data=SettingsManager.to_bool(
                     config.get("double_capsule_long_data", True),
                     True,

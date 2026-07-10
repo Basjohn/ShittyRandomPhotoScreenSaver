@@ -255,7 +255,7 @@
             "show_selected": false,
             "show_source": false,
             "show_total": true,
-            "square_artwork_size": 180
+            "square_artwork_size": 140
         },
         "clock": {
             "analog_face_shadow": true,

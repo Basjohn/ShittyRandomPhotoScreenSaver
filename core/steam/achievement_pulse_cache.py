@@ -16,6 +16,7 @@ from pathlib import Path
 from core.steam.achievement_pulse import (
     AchievementPulseResolved,
     AchievementPulseSelection,
+    recent_game_titles,
     resolve_achievement_pulse,
 )
 from core.steam.cache import cache_path_for_profile_key, read_cache_record
@@ -86,6 +87,26 @@ def achievement_cache_key_for_app(appid: int) -> str:
 def achievement_schema_cache_key_for_app(appid: int) -> str:
     """Return a stable cache key for one app's achievement display schema."""
     return f"{ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX}{max(0, int(appid))}"
+
+
+def load_recent_game_titles_from_cache(
+    *,
+    profile_key: str,
+    profile: str | None = None,
+    root: Path | None = None,
+    read_record: Callable[[Path], SteamResult] = read_cache_record,
+) -> tuple[str, ...]:
+    """Read only the bounded recent-games record for Settings display labels."""
+
+    result = read_record(
+        cache_path_for_profile_key(
+            profile_key,
+            RECENT_GAMES_CACHE_KEY,
+            profile=profile,
+            root=root,
+        )
+    )
+    return recent_game_titles(result, limit=5)
 
 
 def load_achievement_pulse_cache_snapshot(

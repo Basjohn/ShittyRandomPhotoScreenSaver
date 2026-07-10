@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-06-30
+Last updated: 2026-07-10
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -10,6 +10,26 @@ Compact reference for recurring SRPSS investigation harnesses and probes.
 - For visual, timing-sensitive, or focus-sensitive bugs, harness success is evidence, not final sign-off.
 
 ## Settings / Windowing
+
+### Canonical defaults editor and regeneration
+- Purpose: inspect or change every discovered Normal/MC fresh-install/reset default without hand-editing the large base mapping or drifting generated artifacts.
+- Tool: `tools/default_settings_editor.py`
+- GUI command:
+```powershell
+python tools/default_settings_editor.py
+```
+- Headless construction/discovery bar:
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+python tools/default_settings_editor.py --smoke-test
+python -m pytest tests/test_default_settings_editor.py tests/test_settings_defaults_parity.py -q
+```
+- Notes:
+  - Normal overrides are inherited by both profiles; MC stores only differences from resolved Normal defaults.
+  - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes.
+  - Failed save/undo regeneration restores the prior profile source, prior undo state, and regenerated artifacts when rollback generation remains available; a second rollback failure is reported explicitly.
+  - Undo state is local under `%LOCALAPPDATA%/SRPSS/DefaultSettingsEditor`, never in the repository.
+  - The editor changes fresh/reset defaults, not the current user's saved settings.
 
 ### WidgetsTab lazy-section and settings-lifetime slice
 - Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, visualizer-section persistence, dev-gated Blob UI construction, and stale settings-slider QObject lifetime handling.

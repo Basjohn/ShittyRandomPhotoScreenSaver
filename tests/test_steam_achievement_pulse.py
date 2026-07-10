@@ -4,13 +4,14 @@ from PySide6.QtCore import QPoint, QRectF, Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtTest import QSignalSpy
 
-from core.steam.achievement_pulse import AchievementPulseSelection, resolve_achievement_pulse
+from core.steam.achievement_pulse import AchievementPulseSelection, recent_game_titles, resolve_achievement_pulse
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
     RECENT_GAMES_CACHE_KEY,
     achievement_cache_key_for_app,
     achievement_schema_cache_key_for_app,
     load_achievement_pulse_cache_snapshot,
+    load_recent_game_titles_from_cache,
     refresh_achievement_pulse_cache,
 )
 from core.steam.cache import SteamCacheRecord, cache_path_for_profile_key, write_cache_record
@@ -58,6 +59,48 @@ def _recent_result() -> SteamResult:
 
 def _achievements(game_name: str, rows: list[dict]) -> SteamResult:
     return _success({"playerstats": {"gameName": game_name, "achievements": rows}})
+
+
+def test_recent_game_titles_preserve_cached_ordinals_and_normalize_whitespace() -> None:
+    result = _success(
+        {
+            "response": {
+                "games": [
+                    {"appid": 111, "name": "  Hollow   Knight  "},
+                    {"appid": 222, "name": "Celeste"},
+                    {"appid": 333},
+                ]
+            }
+        },
+        source_id=SteamSourceId.RECENTLY_PLAYED,
+    )
+
+    assert recent_game_titles(result) == ("Hollow Knight", "Celeste", "App 333")
+
+
+def test_recent_game_titles_load_from_one_opaque_profile_cache_record(tmp_path) -> None:
+    profile_key = "profile_1234567890abcdef12345678"
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=RECENT_GAMES_CACHE_KEY,
+            source_id=SteamSourceId.RECENTLY_PLAYED,
+            payload={
+                "response": {
+                    "games": [
+                        {"appid": 111, "name": "Hollow Knight"},
+                        {"appid": 222, "name": "Celeste"},
+                    ]
+                }
+            },
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY, root=tmp_path),
+    )
+
+    assert load_recent_game_titles_from_cache(profile_key=profile_key, root=tmp_path) == (
+        "Hollow Knight",
+        "Celeste",
+    )
 
 
 def test_achievement_pulse_resolves_recent_selection_from_cache_records_only() -> None:

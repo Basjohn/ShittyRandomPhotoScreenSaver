@@ -1,8 +1,8 @@
 # SRPSS Steam Widget Family — Architecture-Safe Implementation Plan
 
-**Status:** Achievement Pulse promoted; Steam Progress, Abandonment Issues, and Friend Pulse remain dev-gated
+**Status:** Achievement Pulse promoted; Steam Journey, Abandonment Issues, and Friend Pulse remain dev-gated
 **Date:** 2026-07-10
-**Scope:** Four independently enabled Steam overlay cards: **Steam Progress**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.  
+**Scope:** Four independently enabled Steam overlay cards: **Steam Journey**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.
 **Repository target:** `Basjohn/ShittyRandomPhotoScreenSaver`  
 **Supersedes:** Draft 0.1 Steam Subwidgets proposal
 
@@ -24,7 +24,7 @@ The four cards remain:
 
 | Stable widget key | Runtime card | Header label | Job |
 |---|---|---|---|
-| `steam_progress` | Steam Progress | Steam logo + `Steam Progress` | Curate material changes in games already owned. |
+| `steam_progress` | Steam Journey | Steam logo + `Steam Journey` | Curate material changes across the user's library journey. The stable key remains unchanged for compatibility. |
 | `achievement_pulse` | Achievement Pulse | Steam logo + `Achievement Pulse` | Present one tracked game’s achievement progress as a visual object. |
 | `abandonment_issues` | Abandonment Issues | Steam logo + `Abandonment Issues` | Re-surface genuinely lapsed games without inventing history. |
 | `friend_pulse` | Friend Pulse | Steam logo + `Friend Pulse` | Show a restrained, privacy-aware view of observable friend activity. |
@@ -38,9 +38,9 @@ The four cards remain:
 | All cards can simply carry their own “local selection history.” | Semantic selection, cooldowns, dismissals, and rotations are **profile-level family state**, shared across displays. A runtime overlay instance owns only geometry, DPR-specific paint cache, and current applied view state. This prevents duplicate fetches and monitor-by-monitor drift. |
 | A fifth enabled field always creates a second rail. | Authored card layout decides whether enabled fields use a first rail, second rail, or compact authored presentation. `Custom` geometry only scales/moves the already-authored card and its elements; it must not decide how many enabled fields are shown, hide lower-priority content, or take outer-size authority back. |
 | Every label/value pair must fit one capsule. | Compact capsules remain the default, but the shared visual grammar may measure a value before layout. When enabled and the compact value region would elide, the field reserves the same column on the next whole rail for a fitted full-width value capsule. |
-| Artwork shape is a fixed visual preset. | Artwork variants have authored alignment rails and safe user bounds. Achievement Pulse square artwork shares the wide/header top-right rails and allows 140-190 authored pixels, default 180; the layout reserves the maximum envelope so size changes do not reflow other content. |
-| A polished mock is enough to define the remaining cards. | Achievement Pulse is now the raw family baseline. Future cards must inherit its settings, painter, measurement, cache-first, multi-display, and validation lessons unless a card-specific contract explicitly justifies a difference. |
-| Steam Progress can promise a general owned-library update feed. | It ships only after a documented, supported data source is proven against a real test account. No authenticated Store scraping, personalised Calendar dependency, cookies, or undocumented feed may become a fallback. |
+| Artwork shape is a fixed visual preset. | Artwork variants have authored alignment rails and safe user bounds. Achievement Pulse square artwork shares the wide/header top-right rails and allows 140-190 authored pixels, default 140; the layout reserves the maximum envelope so size changes do not reflow other content. |
+| A polished mock is enough to define the remaining cards. | Achievement Pulse is now the engineering baseline, not a family-wide skin. Future cards inherit settings, painter safety, measurement, cache-first, multi-display, and validation lessons while deliberately establishing different silhouettes and content primitives. |
+| Steam Journey can promise a general owned-library update feed. | It ships only after a documented, supported data source is proven against a real test account. No authenticated Store scraping, personalised Calendar dependency, cookies, or undocumented feed may become a fallback. |
 | Abandonment Issues can infer absence from playtime or Recent Games. | It may show a last-played age only when the source provenance says the timestamp is reliable for that app/profile. Unknown is a real state, not a value to estimate. |
 | Offline friends can always be shown desaturated. | Offline avatars are only meaningful in the explicit presentation/filter modes that include them. The default card remains “currently playing / observed game-change” content and does not silently turn unavailable friend data into an offline roster. |
 
@@ -486,15 +486,16 @@ Initial category defaults, all canonical settings/defaults rather than UI litera
 | Data category | Nominal cadence when needed | Eligibility |
 |---|---:|---|
 | Account/library index | 24 hours | At least one enabled Steam card needs library/title resolution. |
-| Recent games | 15 minutes | Achievement Pulse dynamic mode, Steam Progress focus pool, or Abandonment exclusion needs it. |
-| One selected achievement snapshot | 30 minutes | Achievement Pulse has a resolvable eligible app. |
-| Friend snapshot | 15 minutes | Friend Pulse is enabled and configured. |
-| Progress candidate feed | 6 hours | Steam Progress is enabled and a validated supported source exists. |
+| Recent games | Shared Steam window: 10-minute default, 5-minute minimum | Achievement Pulse dynamic mode, Steam Journey focus pool, or Abandonment exclusion needs it. |
+| One selected achievement snapshot | Shared Steam window: 10-minute default, 5-minute minimum | Achievement Pulse has a resolvable eligible app. |
+| Friend snapshot | Shared Steam window: 10-minute default, 5-minute minimum | Friend Pulse is enabled and configured. |
+| Journey candidate feed | 6 hours | Steam Journey is enabled and a validated supported source exists. |
 | Artwork/avatar | On demand | Referenced item is selected/visible and valid local asset is absent or stale. |
 
 Additional policy:
 
 - `--noupdates` disables automatic Steam retrieval. Cached content remains eligible to display. Manual refresh remains a deliberate route, following the shared service contract.
+- Per-category cache reuse may suppress an unnecessary source call, but it must not raise the user-visible shared Steam freshness control above its 5-minute minimum/10-minute default contract.
 - No enabled Steam card means no automatic Steam fetch.
 - The first valid cache paints immediately; a fresh cache suppresses startup traffic according to the shared freshness window.
 - When a parent display reports pending/running transition work, defer refresh dispatch and result application through `widgets/service_widget_runtime.py`.
@@ -518,7 +519,7 @@ steam.data_updated
 
 Cards subscribe only to categories they need. The payload carries no API key, full raw response, or mutable provider object.
 
-Cards resolve their own display model from the updated cache. The backend does not know how an Achievement ring, dusty cover art, friend grid, or Steam Progress headline is painted.
+Cards resolve their own display model from the updated cache. The backend does not know how an Achievement summary, Journey event strip, dusty cover treatment, or friend constellation is painted.
 
 ---
 
@@ -774,11 +775,11 @@ No Steam card should create a competing global “Steam enabled” master switch
 
 ## 9. Card specifications
 
-## 9.1 Steam Progress
+## 9.1 Steam Journey
 
 ### Product statement
 
-Steam Progress answers:
+Steam Journey answers:
 
 > What changed in games I own that is material enough to be worth seeing?
 
@@ -800,7 +801,7 @@ The technical note must record:
 - known missing categories;
 - fallback behaviour.
 
-If the source cannot support a credible update feed, Steam Progress is deferred. Do not replace it with Store scraping, Calendar scraping, or an invented “update” label.
+If the source cannot support a credible update feed, Steam Journey is deferred. Do not replace it with Store scraping, Calendar scraping, or an invented “update” label.
 
 ### Candidate pool
 
@@ -809,7 +810,7 @@ Default **Focus Library** candidate pool:
 1. recently played owned games;
 2. high-playtime owned games, capped by a canonical default;
 3. watched games;
-4. recent Steam Progress winners retained only long enough to avoid disappearing before display.
+4. recent Steam Journey winners retained only long enough to avoid disappearing before display.
 
 Rules:
 
@@ -820,7 +821,7 @@ Rules:
 
 ### Classification and scoring
 
-Keep scoring in the Steam Progress widget/model layer, not in generic provider transport.
+Keep scoring in the Steam Journey widget/model layer, not in generic provider transport.
 
 Suggested score inputs:
 
@@ -961,7 +962,7 @@ Future achievement-specific extensions such as a progress ring, rarity, unlock d
 
 ### Achievement Pulse baseline standard for future Steam cards
 
-Achievement Pulse is the current raw visual and customization standard for this family. Future cards do not have to copy its information architecture, but they must begin from the same authored-layout, settings, rendering, cache, and validation contracts. A divergence must be justified by the new card's data rather than by convenience or a second ad hoc painter.
+Achievement Pulse is the current engineering and customization standard for this family, not a visual identity template. Future cards begin from the same authored-layout, settings, rendering, cache, and validation contracts, while a distinct default silhouette and content hierarchy are requirements rather than exceptions.
 
 #### Authored canvas and scaling
 
@@ -975,8 +976,8 @@ The painter lays out in authored coordinates and then applies one uniform scale 
 
 #### Artwork contract
 
-- Wide art is `180 x 86`, aligned to the header's top rail at authored `y = 14` and the common right rail at `x = 522`.
-- Square art is user-adjustable from `140` through `190` authored pixels, default `180`.
+- Wide art is `180 x 86`, aligned to the header's top rail at authored `y = 14` and the common right rail at `x = 522`. Its artwork border uses the header's stroke weight so the visible top silhouette does not sit one pixel low at scaled sizes.
+- Square art is user-adjustable from `140` through `190` authored pixels, default `140`.
 - Every Square size keeps the same header-aligned top and right rails. The title width is derived from the selected art's left edge, while the overall Square canvas reserves the safe maximum envelope.
 - `Unlocked` stays centred directly below the artwork with a six-pixel authored gap. Artwork sizing may not move it beside the image, place it over a capsule, or trigger a top-to-bottom card rearrangement.
 - Artwork uses a cover crop inside the rounded well rather than a distorted stretch or an unfilled letterbox. The portrait source is preferred for Square mode when available.
@@ -992,7 +993,7 @@ Future cards may add avatars, event thumbnails, strips, or grids, but each visua
 - The header remains the card identity anchor. The game title is the strongest content text and is currently base size `+5` with a bold weight.
 - The first latest-unlock line is base size `+2` and demibold. Unlocks 2 through 5 render beneath it at approximately half size so the first item remains the focal point.
 - Unlock names never render list numbers or a redundant `Latest:` label.
-- Capsule labels and values are uppercase. Labels align left and values align right in compact mode.
+- Capsule labels and values are uppercase and colon-free. Labels align left and values align right in compact mode.
 - Text fitting may reduce only the affected detail/value text down to an explicit readable floor before final elision. It may not globally shrink the card or silently reduce unrelated labels.
 - All high-contrast text uses the established painter-owned text shadow treatment and remains readable against transparent card backgrounds.
 
@@ -1007,9 +1008,9 @@ Achievement Pulse uses a three-column capsule grid:
 - fill and border are separate alpha-capable colour swatches;
 - the capsule shadow is exterior-only, primarily bottom-right, and must not show through the translucent top-left interior.
 
-Compact mode measures a label and value region, keeps `LABEL:` left and the result right, and elides only when the value cannot fit. When `Double Capsule For Long Data` is enabled and the measured value would elide:
+Compact mode measures a label and value region, keeps `LABEL` left and the result right, and elides only when the value cannot fit. When `Double Capsule For Long Data` is enabled and the measured value would elide:
 
-1. The label keeps its original capsule and column.
+1. The label keeps its original capsule and column, becomes a centred heading, and remains colon-free. Previous changes to the more cohesive heading `PREVIOUSLY`; other fields retain their ordinary wording.
 2. The value reserves the same column on the immediately following whole rail.
 3. The detail capsule contains the full uppercase value, centred and progressively fitted to the available width.
 4. Occupancy planning prevents later fields from using either reserved slot.
@@ -1023,7 +1024,7 @@ The decision is measurement-based, not field-name-based. `Previous` is the expec
 |---|---|
 | Artwork | On |
 | Artwork shape | Wide |
-| Square artwork size | `180` |
+| Square artwork size | `140` |
 | Latest unlocks | On, `1` |
 | Font | `Inter`, `14 pt` base |
 | Total | On |
@@ -1036,7 +1037,7 @@ The decision is measurement-based, not field-name-based. `Previous` is the expec
 | Capsule border | `[199, 213, 224, 145]` RGBA |
 | Authored preferred size | `540 x 290`; Square selects its safe `540 x 318` envelope |
 
-Defaults must remain single-source through `default_settings.py`, generated snapshots, descriptor signal blocking, settings load/save, factory construction, and runtime widget state. A control is not complete until all of those seams and their round-trip tests agree.
+Defaults must remain single-source through the base mapping, Normal/MC profile overlays, `defaults.py`, generated snapshots, descriptor signal blocking, settings load/save, factory construction, and runtime widget state. A control is not complete until all of those seams and their round-trip tests agree.
 
 #### Data, cache, and lifecycle contract
 
@@ -1047,10 +1048,11 @@ Defaults must remain single-source through `default_settings.py`, generated snap
 - Profile data and semantic rotation are shared across displays; geometry, DPR paint caches, and the current applied view remain instance-local.
 - A refresh generation, selected app ID, field visibility, artwork variant/size, DPR, colours, font inputs, and doubled-field IDs all participate in the relevant model/paint cache authority.
 - Constructors, Settings preview, and `paintEvent` perform no credential access, provider request, cache scan, image decode, or source artwork scaling.
+- Opening the Steam section may submit one bounded recent-games cache-record read through shared IO so Most Recent / Recent #2-#5 labels can include cached names in parentheses. It may not enumerate cache directories or change the persisted mode value while decorating labels.
 
 #### Required inheritance for future Steam cards
 
-Steam Progress, Abandonment Issues, and Friend Pulse must reuse or extend the following baseline rather than recreating it:
+Steam Journey, Abandonment Issues, and Friend Pulse must reuse or extend the following baseline rather than recreating it:
 
 - shared Steam header/logo treatment and painter-owned frame/shadows;
 - family font and text-colour controls;
@@ -1062,14 +1064,26 @@ Steam Progress, Abandonment Issues, and Friend Pulse must reuse or extend the fo
 - central input/secure URL routing;
 - deterministic fixture view models and runtime-shaped geometry/render tests.
 
-Card-specific data can justify a different content primitive. Friend Pulse may need avatar cells or a bounded grid; Steam Progress may need an event strip; Abandonment Issues may use a restrained age treatment. Those additions still need authored bounds, measurable occupancy, explicit empty/private states, prepared assets, and the same settings/lifecycle ownership.
+Card-specific data should produce a different content primitive. Friend Pulse may use avatar constellations or a bounded social grid; Steam Journey should use a chronological/event-strip language; Abandonment Issues should use a tactile archival/age treatment. Those additions still need authored bounds, measurable occupancy, explicit empty/private states, prepared assets, and the same settings/lifecycle ownership.
+
+#### Required visual identity separation
+
+The shared baseline is a chassis, not a template. Each promoted card must be recognizable with its title hidden:
+
+- Achievement Pulse remains a typographic achievement ledger: dominant game title, latest-unlock hierarchy, artwork + Unlocked pairing, and compact supporting capsules.
+- Steam Journey should read as forward movement through a library: chronological ribbon, route/timeline, event cards, or directional progression. Its event strip must not default to Achievement Pulse's three-column statistic grid.
+- Abandonment Issues should feel archival and rediscovered: tactile cover treatment, age stamp/calendar cue, shelf/file-card structure, and a restrained warm or weathered accent. It must not read as an achievement ledger with different copy.
+- Friend Pulse should feel social and live: avatars, presence relationships, constellation/orbit or bounded social-grid structure, and event emphasis. It must not reduce friends to the same title/artwork/capsule hierarchy as a game card.
+- Each card owns a distinct accent palette, dominant shape, information rhythm, and at most a few meaningful motion cues. Shared Steam logo/header DNA, shadows, font controls, alpha swatches, prepared assets, and `Custom` scaling do not erase those differences.
+- Reusing an Achievement Pulse component is encouraged; reusing its complete composition requires explicit evidence that the new card's data genuinely has the same hierarchy.
 
 #### Baseline anti-patterns
 
 Do not:
 
 - copy the old ring/tile mock into every card as visual decoration;
-- make `Source: Cache` a default capsule when cache reuse is normal;
+- clone Achievement Pulse's full title/artwork/three-column capsule composition for cards with different semantics;
+- make cache provenance a default capsule when cache reuse is normal;
 - key user-visible strings from provider IDs such as `BG3_Quest12` when a localized display name is available;
 - force every label/value into one capsule and accept avoidable truncation;
 - let artwork size push `Unlocked` beside the image or reflow the whole card;
@@ -1110,8 +1124,9 @@ Do not:
 - Wide and every allowed Square artwork size remain top/right aligned to the header rail.
 - Square artwork remains cover-filled, and `Unlocked` stays below it without capsule overlap.
 - One through five unlock names remain unnumbered and preserve the intended type hierarchy.
-- Capsule labels/results remain readable, uppercase, and oppositely aligned in compact mode.
-- Long measured values use a same-column detail capsule only when the option is enabled and compact text would elide.
+- Capsule labels/results remain readable, uppercase, colon-free, and oppositely aligned in compact mode.
+- Long measured values use a same-column detail capsule only when the option is enabled and compact text would elide; the upper heading is centred and Previous reads `PREVIOUSLY`.
+- Recent selection labels may include cached game names in parentheses without changing their stable mode data or submitting provider work.
 - Capsule fill/border alpha, font family/size, artwork visibility/shape/size, and field choices round-trip through Settings.
 - Cache-first startup does not flash a false disconnected state or require reauthorization on every run.
 - Checking a saved connection never clears a valid linked Steam ID or cached card model.
@@ -1402,7 +1417,7 @@ It records evidence from controlled, non-secret test runs and becomes the author
 | Global rarity | Pending | percentage/availability | Pending | 24 h or source-defined | Optional field only |
 | Friends | Pending | identity/status/current game | Pending | 15 min | Required for Friend Pulse |
 | Per-game last played | Pending | timestamp + confidence | Pending | source-defined | Hard gate for smart Abandonment |
-| News/update events | Pending | fingerprint/date/category/headline | Pending | 6 h | Hard gate for Steam Progress |
+| News/update events | Pending | fingerprint/date/category/headline | Pending | 6 h | Hard gate for Steam Journey |
 | Artwork/avatar | Pending | supported variants/URL policy | Pending | on demand | Shared visual asset path |
 
 Nothing in the product documentation should move from “conditional” to “available” without this evidence.
@@ -1417,7 +1432,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 - [x] Read current `Spec.md`, `Index.md`, `Current_Plan.md`, `Docs/Guardrails.md`, `Docs/TestSuite.md`, `Docs/Harness_Index.md`, and descriptor/service-widget contracts before edits.
 - [x] Keep this Steam plan aligned with the current descriptor/settings/service-widget architecture.
-- [x] Implement a central named `--devsteam` visibility gate, initially for the full family and now retained only for the unfinished Steam Progress, Friend Pulse, and Abandonment Issues prototypes after Achievement Pulse promotion.
+- [x] Implement a central named `--devsteam` visibility gate, initially for the full family and now retained only for the unfinished Steam Journey, Friend Pulse, and Abandonment Issues prototypes after Achievement Pulse promotion.
 - [x] Extend descriptor activation with a central named dev-gate seam so Steam does not use environment-variable activation.
 - [x] Implement `--steam` as the Steam sidecar diagnostics flag, routed to `screensaver_steam.log`.
 - [x] Ensure `--devsteam` and `--steam` are ignored by screensaver mode parsing.
@@ -1499,8 +1514,8 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Integrate stable paint fingerprint rules for future paint-cache ownership.
 - [x] Add visual/pixmap safety tests.
 - [x] Prove no provider/asset work occurs in constructors, `paintEvent`, or Settings preview.
-- [x] Promote Achievement Pulse's header, typography, artwork rails, capsules, alpha swatches, and authored scaling as the current family visual baseline.
-- [x] Add bounded header-aligned Square artwork sizing (`140-190`, default `180`) with cover crop, prepared-size/DPR cache keys, and fixed-below-art `Unlocked` geometry.
+- [x] Promote Achievement Pulse's header, typography, artwork rails, capsules, alpha swatches, and authored scaling as the current family engineering baseline while requiring distinct future-card identities.
+- [x] Add bounded header-aligned Square artwork sizing (`140-190`, default `140`) with cover crop, prepared-size/DPR cache keys, matched header/artwork stroke, and fixed-below-art `Unlocked` geometry.
 - [x] Add occupancy-aware measured double capsules for long values without field-specific layout exceptions.
 
 **Gate:** All four cards render from fixture view models with normal, narrow, and Custom geometry without clipping outside their card or changing committed rectangle.
@@ -1546,6 +1561,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [ ] Re-evaluate painter-drawn ring, rarity, date, and tile-highlight extensions only after the promoted typographic card has real-runtime evidence; they are not baseline requirements.
 - [x] Implement card fields/settings/manual refresh without cache churn for unchanged visible models.
 - [x] Implement one-to-five latest unlocks, artwork visibility/shape/bounded Square size, family typography, supporting field choices, alpha capsule swatches, and measured double capsules.
+- [x] Decorate Most Recent / Recent #2-#5 Settings choices with position-preserving names from one bounded cache-only IO read.
 - [x] Implement cache-first/fade/transition deferral integration.
 - [ ] Add real-account manual validation after fixture coverage.
 
@@ -1576,7 +1592,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** private/unavailable does not masquerade as offline; first observation is labelled accurately; grid/list have a hard cap and obey Custom.
 
-## Phase 9 — Steam Progress, only after event source proof
+## Phase 9 — Steam Journey, only after event source proof
 
 - [ ] Implement source adapter and source-provenance/fingerprint model.
 - [ ] Implement Focus Library candidate pool.
@@ -1750,8 +1766,8 @@ Assert:
 - Wide and Square art remain clipped to a rounded cover-filled well without stretching;
 - Square size clamps to safe bounds and keeps the shared header/right rails;
 - `Unlocked` remains directly below Square art with authored padding and no capsule intersection;
-- compact capsule labels/results remain left/right aligned and un-clipped at supported defaults;
-- measured double capsules remain same-column, use whole rails, and fit the full value before final elision;
+- compact capsule labels/results remain colon-free, left/right aligned, and un-clipped at supported defaults;
+- measured double capsules centre their upper headings, remain same-column, use whole rails, and fit the full value before final elision;
 - capsule fill/border alpha does not expose shadow through the translucent top-left interior;
 - one-to-five unlock names remain unnumbered, unprefixed, and vertically separated;
 - friend avatar overlap remains within card;
@@ -1771,10 +1787,10 @@ Assert:
 | `--noupdates` | No automatic requests; cache can still display; manual refresh follows deliberate route. |
 | Parent image transition during refresh | Fetch/result apply/spinner respects deferred service helper contract. |
 | Settings open/close without Steam tab visit | No Steam auth/cache/provider activity. |
-| Steam tab open | Controls build once and rehydrate only non-secret encrypted-storage availability; no credential decrypt, provider request, or full library refresh. |
+| Steam tab open | Controls build once, rehydrate non-secret encrypted-storage availability, and read at most one recent-games cache record on shared IO for bracketed selection names; no credential decrypt, directory scan, provider request, or full library refresh. |
 | Check Saved Connection | UI remains responsive; success/failure feedback is gentle; a failed check does not erase the linked Steam ID or valid cached card. |
 | Square artwork size 140 / 180 / 190 | Art remains header/right aligned and cover-filled; title, latest unlocks, `Unlocked`, capsules, shadows, and card bounds do not overlap or clip. |
-| Long Previous value with double capsules on | `PREVIOUS:` stays in its capsule; the fitted full value appears directly below in the same column; later fields avoid both slots. |
+| Long Previous value with double capsules on | Centred `PREVIOUSLY` occupies the upper capsule; the fitted full value appears directly below in the same column; later fields avoid both slots. |
 | Long Previous value with double capsules off | Compact capsule intentionally elides only the value; no extra rail is reserved. |
 | Capsule alpha extremes | Fill and border reflect selected RGBA independently; shadow remains exterior-only and text remains legible. |
 | Normal monitor position | Card participates in shared stacking with other authored cards. |
@@ -1787,7 +1803,7 @@ Assert:
 
 Use existing diagnostic flags rather than always-on logging:
 
-Use `--devsteam` only when the pass intentionally includes Steam Progress, Friend Pulse, or Abandonment Issues.
+Use `--devsteam` only when the pass intentionally includes Steam Journey, Friend Pulse, or Abandonment Issues.
 
 ```text
 --steam
@@ -1857,7 +1873,7 @@ Look for:
 - [ ] Achievement Pulse is useful first and has literal Custom selection.
 - [ ] Abandonment Issues refuses to invent last-played history.
 - [ ] Friend Pulse is social but bounded and privacy-aware.
-- [ ] Steam Progress stays a curated, source-proven update pulse rather than a patch ticker.
+- [ ] Steam Journey stays a curated, source-proven library journey rather than a patch ticker.
 - [ ] Every card can be disabled, positioned, Custom-positioned, reset, and tested independently.
 
 ---
@@ -1891,4 +1907,4 @@ The safest first user-visible slice is:
 6. cache-first, transition-safe real provider hookup for that one card;
 7. validate frozen build, Custom geometry, export redaction, and multi-monitor behavior.
 
-That slice proves the two highest-risk family contracts—secure service data and dynamic Custom cards—before Friend Pulse privacy, Abandonment timestamp provenance, or Steam Progress editorial/news classification are allowed to multiply the surface area.
+That slice proves the two highest-risk family contracts—secure service data and dynamic Custom cards—before Friend Pulse privacy, Abandonment timestamp provenance, or Steam Journey editorial/news classification are allowed to multiply the surface area.

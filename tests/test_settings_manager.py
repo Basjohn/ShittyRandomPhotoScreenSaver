@@ -472,6 +472,18 @@ class TestSettingsManagerDefaults:
         assert manager.get("input.interaction_mode") is True
         assert manager.get("display.show_on_monitors") == [1]
 
+    def test_fresh_mc_profile_uses_same_resolved_defaults_as_reset(self, tmp_path: Path) -> None:
+        manager = SettingsManager(
+            organization="TestOrg",
+            application="Screensaver_MC",
+            storage_base_dir=tmp_path / "fresh_mc_profile",
+        )
+
+        assert manager.get("input.interaction_mode") is True
+        assert manager.get("display.show_on_monitors") == [1]
+        assert manager.get("widgets.gmail.monitor") == "2"
+        assert manager.get("widgets.media.monitor") == "2"
+
     def test_legacy_hard_exit_alias_migrates_to_interaction_mode(self, tmp_path: Path) -> None:
         manager = _make_manager(tmp_path)
         manager._settings.remove("input.interaction_mode")
@@ -554,7 +566,6 @@ class TestSettingsManagerDefaults:
         manager._settings.setValue("widgets.weather.intense_shadow", True)
 
         removed = manager.cleanup_obsolete_settings()
-        widgets = manager.get("widgets")
 
         assert "widgets.clock.analog_shadow_intense" in removed
         assert "widgets.clock.digital_shadow_intense" in removed

@@ -64,6 +64,18 @@ def _recent_games(recent_result: SteamResult | None) -> tuple[Mapping[str, Any],
     return tuple(game for game in games if isinstance(game, Mapping) and _coerce_appid(game.get("appid")) is not None)
 
 
+def recent_game_titles(recent_result: SteamResult | None, *, limit: int = 5) -> tuple[str, ...]:
+    """Return position-preserving display names from one cached recent-games result."""
+
+    resolved_limit = max(1, min(5, int(limit)))
+    titles: list[str] = []
+    for game in _recent_games(recent_result)[:resolved_limit]:
+        appid = _coerce_appid(game.get("appid"))
+        fallback = f"App {appid}" if appid is not None else "Steam Game"
+        titles.append(" ".join(_game_name(game, fallback).split()))
+    return tuple(titles)
+
+
 def _coerce_appid(value: Any) -> int | None:
     try:
         appid = int(value)

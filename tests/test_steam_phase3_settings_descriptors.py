@@ -5,6 +5,7 @@ import sys
 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QColor, QFont
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QDialog, QGroupBox, QLabel, QLineEdit, QToolButton, QWidget
 
 from core.dev_gates import force_gate, is_steam_enabled
@@ -124,7 +125,7 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert achievement["show_selected"] is False
     assert achievement["capsule_fill_color"] == [199, 213, 224, 38]
     assert achievement["capsule_border_color"] == [199, 213, 224, 145]
-    assert achievement["square_artwork_size"] == 180
+    assert achievement["square_artwork_size"] == 140
     assert achievement["double_capsule_long_data"] is True
 
 
@@ -207,6 +208,34 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
         _restore_steam_gate(prior)
 
 
+def test_achievement_selection_names_are_bracketed_without_changing_saved_mode(qt_app, settings_manager) -> None:
+    prior = _with_steam_gate(False)
+    try:
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            combo = tab.achievement_pulse_selection_mode
+            module = _steam_settings_module()
+            module._set_achievement_selection_mode(combo, "recent_3")
+            spy = QSignalSpy(combo.currentIndexChanged)
+
+            module._apply_achievement_selection_titles(
+                tab,
+                ("Baldur's Gate 3", "Soulstone Survivors", "Celeste"),
+            )
+
+            assert combo.itemText(0) == "Most Recent (Baldur's Gate 3)"
+            assert combo.itemText(1) == "Recent #2 (Soulstone Survivors)"
+            assert combo.itemText(2) == "Recent #3 (Celeste)"
+            assert combo.itemText(3) == "Recent #4"
+            assert combo.itemText(5) == "Custom App ID"
+            assert combo.currentData() == "recent_3"
+            assert spy.count() == 0
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
 def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settings_manager) -> None:
     prior = _with_steam_gate(True)
     try:
@@ -214,7 +243,7 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
         try:
             checks = (
                 ("Connection & Privacy", "steam", "connection"),
-                ("Steam Progress", "steam", "steam_progress"),
+                ("Steam Journey", "steam", "steam_progress"),
                 ("Achievement Pulse", "steam", "achievement_pulse"),
                 ("Abandonment Issues", "steam", "abandonment_issues"),
                 ("Friend Pulse", "steam", "friend_pulse"),
@@ -239,7 +268,7 @@ def test_unfinished_steam_card_buckets_are_hidden_without_dev_gate(qt_app, setti
         try:
             achievement = _find_toggle(tab._steam_container, "Achievement Pulse")
             assert achievement is not None and achievement.isHidden() is False
-            for label in ("Steam Progress", "Abandonment Issues", "Friend Pulse"):
+            for label in ("Steam Journey", "Abandonment Issues", "Friend Pulse"):
                 toggle = _find_toggle(tab._steam_container, label)
                 assert toggle is not None and toggle.isHidden() is True
         finally:

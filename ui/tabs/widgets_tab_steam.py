@@ -1,14 +1,15 @@
 """Steam widget family settings section.
 
-Building or loading this section must not decrypt credentials, scan caches,
-fetch assets, or submit provider work. Achievement Pulse is public while the
-three unfinished card groups remain hidden without ``--devsteam``.
+Building or loading this section must not decrypt credentials, scan cache
+directories, fetch assets, or submit provider work. It may read one bounded
+recent-games cache record on shared IO to label Achievement Pulse choices.
+Achievement Pulse is public while three unfinished cards stay dev-gated.
 """
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Mapping
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QFont, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,12 +29,14 @@ from PySide6.QtWidgets import (
 
 from core.dev_gates import is_steam_enabled
 from core.resources.manager import ResourceManager
+from core.steam.achievement_pulse_cache import load_recent_game_titles_from_cache
 from core.steam.backend import validate_connection
 from core.steam.credentials import (
     SteamCredentialPayload,
     disconnect_account,
     get_storage_status,
     normalize_api_key,
+    read_credential_metadata,
     save_credentials,
     validate_credential_input,
 )
@@ -62,7 +65,7 @@ if TYPE_CHECKING:
 
 
 _STEAM_CARD_ORDER: tuple[tuple[str, str, str], ...] = (
-    ("steam_progress", "Steam Progress", "Top Right"),
+    ("steam_progress", "Steam Journey", "Top Right"),
     ("achievement_pulse", "Achievement Pulse", "Middle Right"),
     ("abandonment_issues", "Abandonment Issues", "Bottom Right"),
     ("friend_pulse", "Friend Pulse", "Top Left"),
@@ -505,6 +508,7 @@ def _on_steam_disconnect(tab: "WidgetsTab") -> None:
                 tab._steam_pending_profile_identifier = None
                 _set_connection_checks(tab, identity_ready=False, key_ready=False)
                 _set_connection_status(tab, "Steam is disconnected.", state="warning")
+                _apply_achievement_selection_titles(tab, ())
             else:
                 _set_connection_status(tab, "Steam disconnect did not complete. Please try again.", state="error")
         ThreadManager.run_on_ui_thread(_apply_result)
@@ -544,6 +548,66 @@ def _set_achievement_selection_mode(combo: StyledComboBox, mode: str) -> None:
             combo.setCurrentIndex(index)
             return
     combo.setCurrentIndex(0)
+
+
+def _achievement_selection_label(mode: str, recent_titles: tuple[str, ...]) -> str:
+    base_labels = {value: label for label, value in _ACHIEVEMENT_SELECTION_OPTIONS}
+    base = base_labels.get(mode, mode)
+    if mode == "custom" or mode not in {"most_recent", "recent_2", "recent_3", "recent_4", "recent_5"}:
+        return base
+    index = 0 if mode == "most_recent" else int(mode.rsplit("_", 1)[-1]) - 1
+    if 0 <= index < len(recent_titles) and recent_titles[index]:
+        return f"{base} ({recent_titles[index]})"
+    return base
+
+
+def _apply_achievement_selection_titles(tab: "WidgetsTab", recent_titles: tuple[str, ...]) -> None:
+    combo = getattr(tab, "achievement_pulse_selection_mode", None)
+    if combo is None:
+        return
+    blocker = QSignalBlocker(combo)
+    try:
+        for index in range(combo.count()):
+            mode = str(combo.itemData(index) or "")
+            combo.setItemText(index, _achievement_selection_label(mode, recent_titles))
+    finally:
+        del blocker
+
+
+def _hydrate_achievement_selection_titles(tab: "WidgetsTab") -> None:
+    """Hydrate recent choice names from one cache record without blocking Settings."""
+
+    generation = int(getattr(tab, "_steam_recent_titles_generation", 0)) + 1
+    tab._steam_recent_titles_generation = generation
+    settings = getattr(tab, "_settings", None)
+    profile = settings.get_application_name() if settings is not None else None
+
+    def _read_titles() -> tuple[str, ...]:
+        metadata = read_credential_metadata(profile=profile)
+        if metadata is None:
+            return ()
+        return load_recent_game_titles_from_cache(
+            profile_key=metadata.profile_cache_key,
+            profile=profile,
+        )
+
+    def _finished(task_result) -> None:
+        def _apply_result() -> None:
+            if getattr(tab, "_steam_recent_titles_generation", None) != generation:
+                return
+            titles = task_result.result if task_result.success else ()
+            _apply_achievement_selection_titles(tab, tuple(titles or ()))
+
+        ThreadManager.run_on_ui_thread(_apply_result)
+
+    try:
+        _get_steam_thread_manager(tab).submit_io_task(
+            _read_titles,
+            task_id=f"steam_recent_selection_titles_{generation}",
+            callback=_finished,
+        )
+    except Exception:
+        _apply_achievement_selection_titles(tab, ())
 
 
 def _set_combo_data(combo: StyledComboBox, value: str) -> None:
@@ -832,9 +896,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Achievement Pulse is available normally; unfinished Steam Progress, Abandonment Issues, and Friend Pulse "
-        "remain hidden unless --devsteam is used. Opening this section reads only encrypted-storage availability "
-        "and never decrypts credentials or contacts Steam."
+        "Achievement Pulse is available normally; unfinished Steam Journey, Abandonment Issues, and Friend Pulse "
+        "remain hidden unless --devsteam is used. Opening this section reads encrypted-storage availability and "
+        "one cached recent-games record only; it never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
     info.setStyleSheet(INFO_LABEL_STYLE)
@@ -919,6 +983,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
             fallback_position,
             visible=key == "achievement_pulse" or show_unfinished_cards,
         )
+    _hydrate_achievement_selection_titles(tab)
 
     root.addWidget(tab._steam_controls_container)
     tab.steam_enabled.stateChanged.connect(lambda _state: _update_steam_enabled_visibility(tab))

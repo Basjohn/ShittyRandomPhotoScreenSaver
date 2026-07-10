@@ -561,7 +561,7 @@ def _get_widget_display_name(widget_type: WidgetType) -> str:
         WidgetType.REDDIT2: "Reddit 2",
         WidgetType.GMAIL: "Gmail",
         WidgetType.SPOTIFY_VIS: "Spotify Visualizer",
-        WidgetType.STEAM_PROGRESS: "Steam Progress",
+        WidgetType.STEAM_PROGRESS: "Steam Journey",
         WidgetType.ACHIEVEMENT_PULSE: "Achievement Pulse",
         WidgetType.ABANDONMENT_ISSUES: "Abandonment Issues",
         WidgetType.FRIEND_PULSE: "Friend Pulse",

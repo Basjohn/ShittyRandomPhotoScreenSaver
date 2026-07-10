@@ -280,15 +280,13 @@ class SettingsManager(QObject):
     def _set_defaults(self) -> None:
         """Set default values if not already present."""
         from core.settings.defaults import get_default_settings
-        canonical = get_default_settings()
+        canonical = get_default_settings(self._application)
 
         defaults: Dict[str, Any] = {
             # User-specific sources should remain dynamic on first run.
             'sources.folders': self._get_default_image_folders(),
             'sources.rss_feeds': [],
         }
-
-        self._apply_profile_overrides(defaults)
 
         for section in ('display', 'input', 'queue', 'sources', 'timing'):
             section_value = canonical.get(section)
@@ -350,18 +348,6 @@ class SettingsManager(QObject):
         transitions_dict = dict(value) if isinstance(value, Mapping) else {}
         self._settings.setValue('transitions', transitions_dict)
         return transitions_dict
-
-    def _apply_profile_overrides(self, defaults: Dict[str, Any]) -> None:
-        """Apply per-profile default overrides before merging canonical values."""
-        app_name = getattr(self, "_application", "")
-        if app_name == "Screensaver_MC":
-            defaults['display.show_on_monitors'] = [1]
-            defaults['input.interaction_mode'] = True
-            widgets = defaults.setdefault('widgets', {})
-            gmail = widgets.setdefault('gmail', {})
-            gmail['monitor'] = '2'
-            media = widgets.setdefault('media', {})
-            media['monitor'] = '2'
 
     def _visualizer_schema_version(self) -> int:
         """Return the persisted visualizer schema version from metadata."""
@@ -490,7 +476,7 @@ class SettingsManager(QObject):
 
         # Import canonical defaults to ensure consistency
         from core.settings.defaults import get_default_settings
-        defaults = get_default_settings()
+        defaults = get_default_settings(self._application)
         widgets_defaults = defaults.get('widgets', {})
 
         key = str(section) if section is not None else ''
@@ -816,7 +802,7 @@ class SettingsManager(QObject):
         """Reset only the spotify visualizer settings to canonical defaults."""
         from core.settings.defaults import get_default_settings
 
-        defaults = get_default_settings()
+        defaults = get_default_settings(self._application)
         widgets_defaults = defaults.get('widgets', {}) if isinstance(defaults, Mapping) else {}
         vis_defaults = widgets_defaults.get('spotify_visualizer', {})
         if not isinstance(vis_defaults, Mapping):
@@ -963,7 +949,7 @@ class SettingsManager(QObject):
                 logger.warning(f"Repairing widgets: was {type(widgets).__name__}, expected mapping")
                 try:
                     from core.settings.defaults import get_default_settings
-                    canonical_widgets = get_default_settings().get('widgets', {})
+                    canonical_widgets = get_default_settings(self._application).get('widgets', {})
                     if isinstance(canonical_widgets, Mapping):
                         self._store_widgets_root_locked(dict(canonical_widgets))
                     else:
@@ -999,7 +985,7 @@ class SettingsManager(QObject):
                 logger.warning(f"Repairing transitions: was {type(transitions).__name__}, expected mapping")
                 try:
                     from core.settings.defaults import get_default_settings
-                    canonical_transitions = get_default_settings().get('transitions', {})
+                    canonical_transitions = get_default_settings(self._application).get('transitions', {})
                     if isinstance(canonical_transitions, Mapping):
                         self._store_transitions_root_locked(dict(canonical_transitions))
                     else:
@@ -1129,8 +1115,7 @@ class SettingsManager(QObject):
             # Apply new defaults from defaults module
             # Some sections (widgets, transitions) are stored as nested dicts,
             # while others use flat dot-notation keys for QSettings compatibility
-            defaults = get_default_settings()
-            self._apply_profile_overrides(defaults)
+            defaults = get_default_settings(self._application)
             
             # Sections that should be stored as nested dicts (not flattened)
             nested_sections = {'widgets', 'transitions'}

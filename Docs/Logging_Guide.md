@@ -74,7 +74,7 @@ Legacy compatibility:
   - `--perf --cache`
 - Steam widget family investigations:
   - `--steam --cache --set`
-  - Add `--devsteam` only when investigating Steam Progress, Friend Pulse, or Abandonment Issues prototypes.
+  - Add `--devsteam` only when investigating Steam Journey, Friend Pulse, or Abandonment Issues prototypes.
 
 ## Perf Semantics
 - Transition-scoped perf warnings should describe active-cadence problems, not intentional idle time.

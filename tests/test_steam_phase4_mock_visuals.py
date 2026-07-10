@@ -278,12 +278,14 @@ def test_achievement_pulse_double_capsule_renders_label_above_fitted_full_value(
 
     monkeypatch.setattr(steam_components, "_draw_elided_text", _capture)
     long_previous = "DARK SOULS III: THE FIRE FADES EDITION"
+    long_selection = "RECENT SELECTION WITH A VERY LONG DESCRIPTION"
     model = replace(
         build_mock_steam_view_model("achievement_pulse"),
         fields=(
             SteamCardField("total", "Total", "13%"),
             SteamCardField("playtime", "Playtime", "39h"),
             SteamCardField("previous", "Previous", long_previous),
+            SteamCardField("selected", "Selected", long_selection),
         ),
     )
     pixmap = QPixmap(540, 318)
@@ -300,9 +302,11 @@ def test_achievement_pulse_double_capsule_renders_label_above_fitted_full_value(
     finally:
         painter.end()
 
-    label_call = next(call for call in calls if call[0] == "PREVIOUS:")
+    label_call = next(call for call in calls if call[0] == "PREVIOUSLY")
+    selected_label_call = next(call for call in calls if call[0] == "SELECTED")
     value_call = next(call for call in calls if call[0] == long_previous)
-    assert label_call[2] & Qt.AlignmentFlag.AlignLeft
+    assert label_call[2] & Qt.AlignmentFlag.AlignHCenter
+    assert selected_label_call[2] & Qt.AlignmentFlag.AlignHCenter
     assert value_call[2] & Qt.AlignmentFlag.AlignHCenter
     assert value_call[1] < label_call[1]
 
@@ -427,7 +431,9 @@ def test_achievement_pulse_capsules_and_latest_unlocks_use_authored_text_alignme
     pixmap, _layout = _render_to_pixmap(model, 540, 290)
 
     assert not pixmap.isNull()
-    assert ("TOTAL:", Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter) in calls
+    assert ("TOTAL", Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter) in calls
+    capsule_labels = {"TOTAL", "PLAYTIME", "PREVIOUS", "SOURCE", "SELECTED"}
+    assert all(text not in {f"{label}:" for label in capsule_labels} for text, _flags in calls)
     value_flags = next(flags for text, flags in calls if text == "67%")
     assert value_flags & Qt.AlignmentFlag.AlignRight
     assert all(text != "Total: 67%" for text, _flags in calls)

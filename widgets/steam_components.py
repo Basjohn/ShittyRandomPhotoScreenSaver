@@ -31,7 +31,7 @@ STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
 ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(540.0, 290.0)
 ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE = QSizeF(540.0, 318.0)
 ACHIEVEMENT_SQUARE_ARTWORK_MIN = 140
-ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT = 180
+ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT = 140
 ACHIEVEMENT_SQUARE_ARTWORK_MAX = 190
 ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
 ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
@@ -145,7 +145,7 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
 
     data = {
         "steam_progress": (
-            "Steam Progress",
+            "Steam Journey",
             "Library Pulse",
             "3 meaningful updates found",
             "Updates",
@@ -502,6 +502,12 @@ def _capsule_text_rects(
     return label_rect, value_rect
 
 
+def _capsule_label_text(field: SteamCardField, *, doubled: bool) -> str:
+    if doubled and field.field_id == "previous":
+        return "PREVIOUSLY"
+    return field.label.upper()
+
+
 def _gui_application_available() -> bool:
     return isinstance(QGuiApplication.instance(), QGuiApplication)
 
@@ -534,7 +540,7 @@ def _plan_achievement_fields(
     placements: list[tuple[SteamCardField, int, int, bool]] = []
 
     for card_field in fields:
-        label_text = f"{card_field.label.upper()}:"
+        label_text = _capsule_label_text(card_field, doubled=False)
         _label_rect, value_rect = _capsule_text_rects(
             probe_rect,
             label_text=label_text,
@@ -1152,7 +1158,7 @@ def render_steam_card(
             art_fill.setColorAt(0.0, art_color)
             art_fill.setColorAt(1.0, QColor(12, 15, 20, 120))
             painter.fillPath(art_path, art_fill)
-            painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 1.5 * layout.scale)))
+            painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 2.0 * layout.scale)))
             painter.drawPath(art_path)
 
         _draw_elided_text(painter, layout.title_rect, model.title, color=color, font=title_font)
@@ -1195,9 +1201,9 @@ def render_steam_card(
                 fill_color=capsule_fill_color,
                 border_color=capsule_border_color,
             )
-            label_text = f"{field.label.upper()}:"
             value_text = str(field.value).upper()
             detail = detail_by_id.get(field_id)
+            label_text = _capsule_label_text(field, doubled=detail is not None)
             if detail is not None:
                 label_rect = field_rect.adjusted(
                     7.0 * layout.scale,
@@ -1211,6 +1217,7 @@ def render_steam_card(
                     label_text,
                     color=color,
                     font=field_font,
+                    flags=Qt.AlignmentFlag.AlignCenter,
                 )
                 detail_rect, detail_rail = detail
                 _draw_capsule_shell(
@@ -1278,7 +1285,7 @@ def render_steam_card(
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         artwork_border = QPainterPath()
         artwork_border.addRoundedRect(layout.art_rect, art_radius, art_radius)
-        painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 1.5 * layout.scale)))
+        painter.setPen(QPen(QColor(255, 255, 255, 175), max(1.0, 2.0 * layout.scale)))
         painter.drawPath(artwork_border)
         painter.restore()
 

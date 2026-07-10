@@ -126,7 +126,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
     - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
-    - --devsteam - Show unfinished Steam Progress, Abandonment Issues, and Friend Pulse cards
+    - --devsteam - Show unfinished Steam Journey, Abandonment Issues, and Friend Pulse cards
     
     Returns:
         tuple: (ScreensaverMode, preview_window_handle)
