@@ -2,7 +2,7 @@
     "accessibility": {
         "dimming": {
             "enabled": false,
-            "opacity": 50
+            "opacity": 40
         },
         "pixel_shift": {
             "enabled": false,
@@ -31,7 +31,7 @@
     },
     "sources": {
         "folders": [],
-        "local_ratio": 95,
+        "local_ratio": 55,
         "mode": "folders",
         "rss_background_cap": 30,
         "rss_feeds": [],
@@ -39,10 +39,10 @@
         "rss_rotating_cache_size": 20,
         "rss_save_directory": "",
         "rss_save_to_disk": false,
-        "rss_stale_minutes": 30
+        "rss_stale_minutes": 60
     },
     "timing": {
-        "interval": 140
+        "interval": 60
     },
     "transitions": {
         "blinds": {
@@ -106,7 +106,7 @@
             "light_direction": 3,
             "mode": "Converge",
             "overlap": 4.0,
-            "particle_radius": 9.0,
+            "particle_radius": 8.000000000000004,
             "swirl_order": 2,
             "swirl_strength": 1.0,
             "swirl_turns": 3.5000000000000004,
@@ -410,21 +410,21 @@
             "header_logo_px_adjust": 0,
             "limit": 5,
             "margin": 30,
-            "max_sender_words": 3,
+            "max_sender_words": 2,
             "max_subject_chars": 0,
-            "max_subject_words": 4,
+            "max_subject_words": 3,
             "monitor": "1",
             "play_sound_on_new_mail": false,
             "position": "Top Center",
             "refresh_minutes": 5,
-            "sender_column_width": 180,
+            "sender_column_width": 120,
             "separator_color": [
                 200,
                 200,
                 200,
                 40
             ],
-            "separator_thickness": 1,
+            "separator_thickness": 2,
             "show_background": true,
             "show_envelope_icon": true,
             "show_header_border": true,
