@@ -232,7 +232,6 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         base_settings_key="steam",
         base_settings_kwarg="steam_settings",
         inject_shadows_into_config=True,
-        dev_feature_gate="steam",
     ),
     FactoryWidgetDescriptor(
         settings_key="abandonment_issues",
@@ -616,10 +615,15 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "achievement_pulse_custom_appid",
             "achievement_pulse_show_artwork",
             "achievement_pulse_artwork_shape",
+            "achievement_pulse_square_artwork_size",
+            "achievement_pulse_capsule_fill_color_btn",
+            "achievement_pulse_capsule_border_color_btn",
+            "achievement_pulse_double_capsule_long_data",
             "achievement_pulse_latest_unlock_count",
             "achievement_pulse_show_total",
             "achievement_pulse_show_latest",
             "achievement_pulse_show_playtime",
+            "achievement_pulse_show_previous",
             "achievement_pulse_show_source",
             "achievement_pulse_show_selected",
             "abandonment_issues_enabled",
@@ -633,7 +637,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "friend_pulse_font_family",
             "friend_pulse_font_size",
         ),
-        dev_feature_gate="steam",
     ),
     WidgetSettingsSectionDescriptor(
         section_id="defaults",
@@ -1587,7 +1590,6 @@ WIDGET_RUNTIME_DESCRIPTORS: tuple[WidgetRuntimeDescriptor, ...] = (
         supports_layout_resize_edit=True,
         requires_size_reset_affordance=True,
         custom_layout_resize_mode="steam_card_scale",
-        dev_feature_gate="steam",
     ),
     WidgetRuntimeDescriptor(
         widget_id="abandonment_issues",
@@ -2314,7 +2316,6 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "achievement_pulse_monitor_combo", "current_text", "ALL"),
             WidgetPreviewFieldDescriptor("font_size", "achievement_pulse_font_size", "value", 14),
         ),
-        dev_feature_gate="steam",
     ),
     WidgetStackPreviewDescriptor(
         widget_id="abandonment_issues",

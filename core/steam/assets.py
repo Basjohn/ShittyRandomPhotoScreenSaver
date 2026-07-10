@@ -20,7 +20,10 @@ _ALLOWED_SUFFIX_BY_KIND = {
     "jpeg": b"\xff\xd8\xff",
     "webp": b"RIFF",
 }
-_STEAM_APP_HEADER_URL = "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg"
+_STEAM_APP_ARTWORK_URLS = {
+    "wide": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg",
+    "square": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
+}
 
 
 @dataclass(frozen=True)
@@ -50,8 +53,27 @@ def fetch_steam_app_header(
     fetcher: Callable[[str], bytes] | None = None,
 ) -> SteamAssetRecord | SteamResult:
     """Load or cache the selected app's public Steam header image."""
+
+    return fetch_steam_app_artwork(
+        cache_dir=cache_dir,
+        appid=appid,
+        artwork_shape="wide",
+        fetcher=fetcher,
+    )
+
+
+def fetch_steam_app_artwork(
+    *,
+    cache_dir: Path,
+    appid: int,
+    artwork_shape: str,
+    fetcher: Callable[[str], bytes] | None = None,
+) -> SteamAssetRecord | SteamResult:
+    """Load the public header or portrait library capsule for one app."""
+
     safe_appid = max(1, int(appid))
-    url = _STEAM_APP_HEADER_URL.format(appid=safe_appid)
+    shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    url = _STEAM_APP_ARTWORK_URLS[shape].format(appid=safe_appid)
     cached = find_cached_asset(cache_dir, url)
     if cached is not None:
         return SteamAssetRecord(
@@ -123,7 +145,7 @@ def fetch_and_cache_asset(
 
 
 def _default_fetch_asset(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam-DevGate/0.1"})
+    request = urllib.request.Request(url, headers={"User-Agent": "SRPSS-Steam/0.1"})
     with urllib.request.urlopen(request, timeout=12.0) as response:
         return response.read(MAX_STEAM_ASSET_BYTES + 1)
 

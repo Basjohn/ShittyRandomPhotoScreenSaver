@@ -1,12 +1,12 @@
 # Steam Data Feasibility
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
-This document records the first supported-source pass for the dev-gated Steam widget family. It is not a product changelog; it is the source gate that decides which card concepts may proceed to fixture-backed implementation.
+This document records the supported-source pass for the Steam widget family. Achievement Pulse is the first normally visible card; the document remains the source gate for unfinished card concepts.
 
 ## Rules
 
-- Steam remains hidden unless `--devsteam` is present.
+- Achievement Pulse and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Progress, Abandonment Issues, and Friend Pulse prototypes.
 - User Steam API keys/profile identifiers are credentials, not settings.
 - Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
@@ -38,10 +38,10 @@ This document records the first supported-source pass for the dev-gated Steam wi
 
 ### Achievement Pulse
 
-- May proceed through the implemented cache-first path because synthetic fixtures cover recent games, owned games, achievement lists, schema names/totals, private/unavailable states, and empty achievement responses; live-account validation remains required before promotion.
+- Proceeds through the implemented cache-first path without `--devsteam` because synthetic fixtures cover recent games, owned games, achievement lists, schema names/totals, private/unavailable states, and empty achievement responses; the card remains disabled by default until the user enables it.
 - Dynamic recent-game selection must stay honest when a recent app lacks achievements.
 - Custom selection persists by app id, not title text.
-- The resolver may retain the newest three unlocked achievements, ordered by unlock time and mapped through schema display names. Missing schema labels fall back to the achievement row without exposing internal ids when a user-facing name is available.
+- The resolver may retain the newest five unlocked achievements, ordered by unlock time and mapped through schema display names. It may also expose the second recently played game as the non-source-authoritative Previous field. Missing schema labels fall back to the achievement row without exposing internal ids when a user-facing name is available.
 - The shared Steam freshness window is a non-secret preference with a 5-minute minimum and 10-minute default. It gates bounded startup refresh work; it does not authorize a private polling loop.
 
 ### Friend Pulse
@@ -65,7 +65,7 @@ This document records the first supported-source pass for the dev-gated Steam wi
 - `core/steam/models.py` owns frozen result/source/view data types.
 - `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache.
 - `core/steam/request_policy.py`, `profile_state.py`, `assets.py`, `events.py`, and `mock_backend.py` complete the Phase 2 non-UI foundation: coalescing, stale-generation drops, bounded backoff, account-private policy state, validated asset cache, narrow data-ready publication, and fixture-only backend injection.
-- `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path: cache resolution before first reveal, refresh only after fade, up to three latest unlock labels, validated local artwork, and presentation-only GUI preferences that never become source authority.
+- `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, refresh only after fade, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, second-recent-game presentation, validated wide header/portrait library artwork, header-aligned bounded square sizing, collision-free whole-rail compositions, measured long-value double capsules, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
 - Tests must use injected fake openers and fixtures; no live Steam requests in the suite.
 
 ## Primary Source Links
@@ -74,3 +74,4 @@ This document records the first supported-source pass for the dev-gated Steam wi
 - `ISteamUserStats`: https://partner.steamgames.com/doc/webapi/ISteamUserStats
 - `ISteamUser`: https://partner.steamgames.com/doc/webapi/ISteamUser
 - `ISteamNews`: https://partner.steamgames.com/doc/webapi/ISteamNews
+- Steam Library Assets: https://partner.steamgames.com/doc/store/assets/libraryassets

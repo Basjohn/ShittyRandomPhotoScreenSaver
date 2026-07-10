@@ -37,6 +37,9 @@ _refresh_coordinator = SteamRequestCoordinator()
 _refresh_backoff = SteamBackoffPolicy()
 _refresh_locks: dict[str, threading.Lock] = {}
 _refresh_locks_guard = threading.Lock()
+_RefreshIdentity = tuple[str, str, str, str, int | None]
+_refresh_success_at: dict[_RefreshIdentity, float] = {}
+_refresh_success_guard = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -161,7 +164,7 @@ def refresh_achievement_pulse_cache(
     opener=None,
     now: float | None = None,
     force: bool = False,
-) -> AchievementPulseCacheSnapshot:
+) -> AchievementPulseRefreshOutcome:
     """Refresh the selected app through the cache boundary without owning scheduling.
 
     Callers must run this explicit IO operation through ``ThreadManager``.
@@ -170,6 +173,12 @@ def refresh_achievement_pulse_cache(
     """
     profile_key = derive_profile_cache_key(credential.profile_identifier)
     reference_now = time.time() if now is None else float(now)
+    refresh_identity = _refresh_identity(
+        profile_key=profile_key,
+        selection=selection,
+        profile=profile,
+        root=root,
+    )
     lock = _refresh_lock_for(profile_key)
     with lock:
         existing = load_achievement_pulse_cache_snapshot(
@@ -181,8 +190,13 @@ def refresh_achievement_pulse_cache(
         )
         if (
             not force
-            and existing.cache_age_seconds is not None
-            and existing.cache_age_seconds < _REFRESH_FRESH_WINDOW_SECONDS
+            and (
+                (
+                    existing.cache_age_seconds is not None
+                    and existing.cache_age_seconds < _REFRESH_FRESH_WINDOW_SECONDS
+                )
+                or _has_recent_success(refresh_identity, now=reference_now)
+            )
         ):
             return AchievementPulseRefreshOutcome(snapshot=existing)
 
@@ -243,6 +257,8 @@ def refresh_achievement_pulse_cache(
             result.status == SteamResultStatus.UNAUTHORIZED
             for result in refresh_results
         )
+        if refresh_results and all(result.ok for result in refresh_results):
+            _record_refresh_success(refresh_identity, now=reference_now)
         return AchievementPulseRefreshOutcome(
             snapshot=snapshot,
             connection_needs_attention=needs_attention,
@@ -302,3 +318,43 @@ def _refresh_lock_for(profile_key: str) -> threading.Lock:
             lock = threading.Lock()
             _refresh_locks[profile_key] = lock
         return lock
+
+
+def _refresh_identity(
+    *,
+    profile_key: str,
+    selection: AchievementPulseSelection,
+    profile: str | None,
+    root: Path | None,
+) -> _RefreshIdentity:
+    return (
+        profile_key,
+        str(profile or ""),
+        str(root or ""),
+        selection.mode,
+        selection.custom_appid,
+    )
+
+
+def _has_recent_success(identity: _RefreshIdentity, *, now: float) -> bool:
+    with _refresh_success_guard:
+        completed_at = _refresh_success_at.get(identity)
+        if completed_at is None:
+            return False
+        age = now - completed_at
+        if 0.0 <= age < _REFRESH_FRESH_WINDOW_SECONDS:
+            return True
+        _refresh_success_at.pop(identity, None)
+        return False
+
+
+def _record_refresh_success(identity: _RefreshIdentity, *, now: float) -> None:
+    with _refresh_success_guard:
+        expired = [
+            key
+            for key, completed_at in _refresh_success_at.items()
+            if not 0.0 <= now - completed_at < _REFRESH_FRESH_WINDOW_SECONDS
+        ]
+        for key in expired:
+            _refresh_success_at.pop(key, None)
+        _refresh_success_at[identity] = now

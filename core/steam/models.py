@@ -1,4 +1,4 @@
-"""Typed Steam provider/result models for the dev-gated Steam widget family."""
+"""Typed Steam provider/result models for the Steam widget family."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

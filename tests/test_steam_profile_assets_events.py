@@ -7,6 +7,7 @@ from core.steam.assets import (
     SteamAssetRecord,
     cache_asset_from_bytes,
     fetch_and_cache_asset,
+    fetch_steam_app_artwork,
     fetch_steam_app_header,
     prune_asset_cache,
 )
@@ -96,6 +97,20 @@ def test_steam_app_header_reuses_the_validated_cached_file(tmp_path: Path) -> No
     assert isinstance(second, SteamAssetRecord)
     assert first.path == second.path
     assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg"]
+
+
+def test_square_steam_artwork_uses_the_portrait_library_capsule(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    asset = fetch_steam_app_artwork(
+        cache_dir=tmp_path,
+        appid=1086940,
+        artwork_shape="square",
+        fetcher=lambda url: calls.append(url) or b"\xff\xd8\xfffake-jpeg",
+    )
+
+    assert isinstance(asset, SteamAssetRecord)
+    assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/library_600x900.jpg"]
 
 
 def test_fixture_backend_reads_checked_in_payload_without_network() -> None:

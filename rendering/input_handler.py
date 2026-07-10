@@ -870,7 +870,7 @@ class InputHandler(QObject):
             except Exception:
                 logger.debug("[INPUT] Visualizer click routing failed", exc_info=True)
 
-        # Steam dev-gated card affordances
+        # Steam card affordances (unfinished cards may still be dev-gated).
         if not handled:
             for sw in tuple(steam_widgets or ()):
                 if sw is None:

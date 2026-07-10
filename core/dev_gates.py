@@ -3,7 +3,7 @@
 Gates are activated via command-line flags:
     python main.py --debug -devblob   # enable Blob mode
     python main.py --debug --devcurve # legacy no-op (kept for compatibility)
-    python main.py --debug --devsteam # enable Steam widget family while in development
+    python main.py --debug --devsteam # show unfinished Steam card prototypes
 
 These flags are stripped from sys.argv before screensaver mode parsing.
 Tests can call ``force_gate()`` to enable gates without CLI flags.
@@ -31,7 +31,7 @@ def is_blob_enabled() -> bool:
 
 
 def is_steam_enabled() -> bool:
-    """True when the Steam widget family should be visible in UI/runtime."""
+    """True when unfinished Steam cards should be visible in UI/runtime."""
     return _DEV_STEAM
 
 

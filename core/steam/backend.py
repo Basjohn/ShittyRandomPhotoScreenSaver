@@ -1,8 +1,8 @@
 """Steam Web API endpoint metadata and safe fixture-friendly transport.
 
-The Steam widget family is still dev-gated. This module may describe supported
-sources and fetch through an injected opener, but tests must not perform live
-network calls.
+This module describes supported Steam sources and fetches through an injected
+opener, but tests must not perform live network calls. Unfinished cards remain
+behind ``--devsteam`` independently of the production Achievement Pulse path.
 """
 from __future__ import annotations
 

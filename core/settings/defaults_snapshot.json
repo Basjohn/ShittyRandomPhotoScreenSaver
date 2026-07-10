@@ -217,6 +217,18 @@
                 255
             ],
             "border_opacity": 1.0,
+            "capsule_border_color": [
+                199,
+                213,
+                224,
+                145
+            ],
+            "capsule_fill_color": [
+                199,
+                213,
+                224,
+                38
+            ],
             "color": [
                 255,
                 255,
@@ -224,6 +236,7 @@
                 230
             ],
             "custom_appid": null,
+            "double_capsule_long_data": true,
             "enabled": false,
             "font_family": "Inter",
             "font_size": 14,
@@ -238,9 +251,11 @@
             "show_background": true,
             "show_latest": true,
             "show_playtime": true,
+            "show_previous": true,
             "show_selected": false,
-            "show_source": true,
-            "show_total": true
+            "show_source": false,
+            "show_total": true,
+            "square_artwork_size": 180
         },
         "clock": {
             "analog_face_shadow": true,

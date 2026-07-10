@@ -567,6 +567,7 @@ def test_factory_widget_descriptors_cover_factory_backed_widget_families():
         "reddit",
         "reddit2",
         "gmail",
+        "achievement_pulse",
     ]
     if any(descriptor.settings_key == "imgur" for descriptor in descriptors):
         expected.insert(7, "imgur")
@@ -693,17 +694,17 @@ def test_finalize_widget_startup_reapplies_saved_custom_layouts_after_startup(mo
     deferred_calls: list[int] = []
 
     monkeypatch.setattr(widget_setup_all, "_start_widgets", lambda widgets: startup_calls.append("start"))
-    monkeypatch.setattr(
-        widget_setup_all.QTimer,
-        "singleShot",
-        lambda delay, callback: (deferred_calls.append(delay), callback()),
-    )
+    def _single_shot(delay, callback, *args, **kwargs):
+        deferred_calls.append(delay)
+        callback(*args, **kwargs)
+
+    monkeypatch.setattr(widget_setup_all.ThreadManager, "single_shot", _single_shot)
 
     widget_setup_all._finalize_widget_startup(manager, created)
 
     assert startup_calls == ["start"]
-    assert parent.apply_calls == ["apply", "apply", "apply"]
-    assert deferred_calls == [0]
+    assert parent.apply_calls == ["apply", "apply"]
+    assert deferred_calls == [widget_setup_all.SPOTIFY_CUSTOM_LAYOUT_STABILIZE_VERIFY_MS]
     assert created["reddit_widget"].raised == 1
 
 

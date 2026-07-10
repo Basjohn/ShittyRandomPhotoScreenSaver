@@ -37,7 +37,7 @@ Notes:
 | `--set` | `screensaver_settings.log` | Settings mutations, imports, schema normalization, and settings-binding traces. |
 | `--life` | `screensaver_lifecycle.log` | Widget, worker, and engine lifecycle/setup/teardown diagnostics. |
 | `--cache` | `screensaver_cache.log` | Image-cache authority, prefetch targeting, scaled warmup, and worker-fallback classification traces. |
-| `--steam` | `screensaver_steam.log` | Steam widget family provider/cache/widget diagnostics while the family is dev-gated. |
+| `--steam` | `screensaver_steam.log` | Steam provider/cache/widget diagnostics for public Achievement Pulse and the unfinished card prototypes. |
 
 Legacy compatibility:
 - `--viz-diagnostics` and `--viz-diag` remain accepted aliases for extra visualizer diagnostics, but `--viz` is the preferred operator flag.
@@ -48,7 +48,7 @@ Legacy compatibility:
   - `python main.py --debug --geo --life`
   - `python main.py --perf --viz`
   - `python main.py --perf --cache`
-  - `python main.py --devsteam --steam --cache`
+  - `python main.py --steam --cache`
 - `--fresh` means a genuinely clean slate for the resolved runtime log directory:
   all existing log files there are deleted before the new launch starts logging.
 - Startup logs should advertise both:
@@ -73,7 +73,8 @@ Legacy compatibility:
 - Cache/prefetch/prescale investigations:
   - `--perf --cache`
 - Steam widget family investigations:
-  - `--devsteam --steam --cache --set`
+  - `--steam --cache --set`
+  - Add `--devsteam` only when investigating Steam Progress, Friend Pulse, or Abandonment Issues prototypes.
 
 ## Perf Semantics
 - Transition-scoped perf warnings should describe active-cadence problems, not intentional idle time.

@@ -4,7 +4,7 @@ import importlib
 import sys
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import QDialog, QGroupBox, QLabel, QLineEdit, QToolButton, QWidget
 
 from core.dev_gates import force_gate, is_steam_enabled
@@ -50,19 +50,21 @@ def _steam_settings_module():
     return importlib.import_module("ui.tabs.widgets_tab_steam")
 
 
-def test_steam_phase3_descriptors_are_hidden_without_dev_gate() -> None:
+def test_achievement_pulse_descriptors_are_public_while_unfinished_cards_stay_gated() -> None:
     prior = _with_steam_gate(False)
     try:
-        assert not set(STEAM_WIDGET_IDS).intersection(
-            descriptor.settings_key for descriptor in get_factory_widget_descriptors()
-        )
-        assert "steam" not in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
-        assert not set(STEAM_WIDGET_IDS).intersection(
-            descriptor.widget_id for descriptor in get_widget_runtime_descriptors()
-        )
-        assert not set(STEAM_WIDGET_IDS).intersection(
-            descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()
-        )
+        unfinished = set(STEAM_WIDGET_IDS) - {"achievement_pulse"}
+        factory_ids = {descriptor.settings_key for descriptor in get_factory_widget_descriptors()}
+        runtime_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
+        preview_ids = {descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()}
+        custom_ids = {descriptor.widget_id for descriptor in get_widget_custom_position_option_descriptors()}
+
+        assert "achievement_pulse" in factory_ids & runtime_ids & preview_ids & custom_ids
+        assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
+        assert not unfinished.intersection(factory_ids)
+        assert not unfinished.intersection(runtime_ids)
+        assert not unfinished.intersection(preview_ids)
+        assert not unfinished.intersection(custom_ids)
     finally:
         _restore_steam_gate(prior)
 
@@ -117,8 +119,13 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert achievement["artwork_shape"] == "wide"
     assert achievement["latest_unlock_count"] == 1
     assert achievement["show_latest"] is True
-    assert all(achievement[f"show_{field_id}"] is True for field_id in ("total", "playtime", "source"))
+    assert all(achievement[f"show_{field_id}"] is True for field_id in ("total", "playtime", "previous"))
+    assert achievement["show_source"] is False
     assert achievement["show_selected"] is False
+    assert achievement["capsule_fill_color"] == [199, 213, 224, 38]
+    assert achievement["capsule_border_color"] == [199, 213, 224, 145]
+    assert achievement["square_artwork_size"] == 180
+    assert achievement["double_capsule_long_data"] is True
 
 
 def test_lazy_widgets_tab_does_not_import_steam_settings_section_on_general_open(
@@ -158,9 +165,15 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_custom_appid.setValue(367520)
             tab.achievement_pulse_show_artwork.setChecked(False)
             tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
+            tab.achievement_pulse_square_artwork_size.setValue(190)
+            tab.achievement_pulse_double_capsule_long_data.setChecked(False)
+            assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
             tab.achievement_pulse_show_latest.setChecked(False)
-            tab.achievement_pulse_latest_unlock_count.setValue(3)
+            tab.achievement_pulse_latest_unlock_count.setValue(5)
+            tab.achievement_pulse_show_previous.setChecked(False)
             tab.achievement_pulse_show_source.setChecked(False)
+            tab.achievement_pulse_capsule_fill_color_btn.color_changed.emit(QColor(12, 34, 56, 78))
+            tab.achievement_pulse_capsule_border_color_btn.color_changed.emit(QColor(90, 87, 65, 43))
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is True
@@ -180,9 +193,14 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert achievement_payload["custom_appid"] == 367520
             assert achievement_payload["show_artwork"] is False
             assert achievement_payload["artwork_shape"] == "square"
+            assert achievement_payload["square_artwork_size"] == 190
+            assert achievement_payload["double_capsule_long_data"] is False
             assert achievement_payload["show_latest"] is False
-            assert achievement_payload["latest_unlock_count"] == 3
+            assert achievement_payload["latest_unlock_count"] == 5
+            assert achievement_payload["show_previous"] is False
             assert achievement_payload["show_source"] is False
+            assert achievement_payload["capsule_fill_color"] == [12, 34, 56, 78]
+            assert achievement_payload["capsule_border_color"] == [90, 87, 65, 43]
         finally:
             tab.deleteLater()
     finally:
@@ -208,6 +226,22 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
                 toggle.click()
                 qt_app.processEvents()
                 assert tab.get_widget_bucket_state(section, bucket, False) is True
+        finally:
+            tab.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_unfinished_steam_card_buckets_are_hidden_without_dev_gate(qt_app, settings_manager) -> None:
+    prior = _with_steam_gate(False)
+    try:
+        tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
+        try:
+            achievement = _find_toggle(tab._steam_container, "Achievement Pulse")
+            assert achievement is not None and achievement.isHidden() is False
+            for label in ("Steam Progress", "Abandonment Issues", "Friend Pulse"):
+                toggle = _find_toggle(tab._steam_container, label)
+                assert toggle is not None and toggle.isHidden() is True
         finally:
             tab.deleteLater()
     finally:
@@ -392,14 +426,17 @@ def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, setti
         _restore_steam_gate(prior)
 
 
-def test_steam_factories_are_dev_gated_and_disabled_cards_create_nothing(
+def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
     qt_app,
     settings_manager,
 ) -> None:
     prior = _with_steam_gate(False)
     try:
-        hidden_registry = WidgetFactoryRegistry(settings_manager)
-        assert hidden_registry.get_factory("steam_progress") is None
+        public_registry = WidgetFactoryRegistry(settings_manager)
+        assert public_registry.get_factory("achievement_pulse") is not None
+        assert public_registry.get_factory("steam_progress") is None
+        assert public_registry.get_factory("abandonment_issues") is None
+        assert public_registry.get_factory("friend_pulse") is None
     finally:
         _restore_steam_gate(prior)
 
@@ -436,17 +473,26 @@ def test_steam_factories_are_dev_gated_and_disabled_cards_create_nothing(
                     "position": "Middle Right",
                     "selection_mode": "custom",
                     "custom_appid": 367520,
-                    "show_artwork": False,
+                    "show_artwork": True,
                     "artwork_shape": "square",
-                    "latest_unlock_count": 3,
+                    "square_artwork_size": 190,
+                    "double_capsule_long_data": False,
+                    "latest_unlock_count": 5,
+                    "capsule_fill_color": [12, 34, 56, 78],
+                    "capsule_border_color": [90, 87, 65, 43],
                 },
             )
             assert achievement_widget is not None
             assert getattr(achievement_widget, "_achievement_selection").mode == "custom"
             assert getattr(achievement_widget, "_achievement_selection").custom_appid == 367520
-            assert getattr(achievement_widget, "_achievement_show_artwork") is False
+            assert getattr(achievement_widget, "_achievement_show_artwork") is True
             assert getattr(achievement_widget, "_achievement_artwork_shape") == "square"
-            assert getattr(achievement_widget, "_achievement_latest_unlock_count") == 3
+            assert getattr(achievement_widget, "_achievement_square_artwork_size") == 190
+            assert getattr(achievement_widget, "_achievement_double_capsule_long_data") is False
+            assert getattr(achievement_widget, "_achievement_latest_unlock_count") == 5
+            assert achievement_widget.minimumHeight() == 318
+            assert getattr(achievement_widget, "_achievement_capsule_fill_color").getRgb() == (12, 34, 56, 78)
+            assert getattr(achievement_widget, "_achievement_capsule_border_color").getRgb() == (90, 87, 65, 43)
             achievement_widget.deleteLater()
         finally:
             parent.deleteLater()

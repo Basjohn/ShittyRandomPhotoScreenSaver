@@ -1,8 +1,7 @@
-"""Dev-gated mock Steam card overlays.
+"""Steam card overlays with cache-first Achievement Pulse support.
 
-These cards intentionally avoid provider, cache, credential, and timer work so
-the Steam family can prove descriptor, factory, settings, Custom-layout, and
-shared visual contracts before production data is wired.
+Constructors and paint stay provider-inert. The unfinished card prototypes remain
+dev-gated while Achievement Pulse resolves data through its bounded cache bridge.
 """
 from __future__ import annotations
 
@@ -18,13 +17,17 @@ from core.logging.logger import get_logger
 from core.steam.achievement_pulse import AchievementPulseSelection
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.steam_components import (
-    ACHIEVEMENT_PULSE_AUTHORED_SIZE,
+    ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+    ACHIEVEMENT_CAPSULE_FILL_RGBA,
+    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     STEAM_CARD_AUTHORED_SIZE,
     SteamCardLayout,
     SteamCardViewModel,
+    achievement_pulse_authored_size,
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
     layout_steam_card,
+    normalize_achievement_square_artwork_size,
     render_steam_card,
 )
 
@@ -49,7 +52,7 @@ STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
     "achievement_pulse": SteamCardDefinition(
         widget_id="achievement_pulse",
         title="Achievement Pulse",
-        subtitle="Dev-gated achievement card scaffold",
+        subtitle="Cache-first achievement card",
     ),
     "abandonment_issues": SteamCardDefinition(
         widget_id="abandonment_issues",
@@ -65,7 +68,7 @@ STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
 
 
 class SteamCardWidget(BaseOverlayWidget):
-    """Framed dev-gated Steam card with cache-first presentation support."""
+    """Framed Steam card with cache-first Achievement Pulse support."""
 
     settings_requested = Signal(str)
 
@@ -81,21 +84,35 @@ class SteamCardWidget(BaseOverlayWidget):
         achievement_latest_unlock_count: int = 1,
         achievement_show_artwork: bool = True,
         achievement_artwork_shape: str = "wide",
+        achievement_square_artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+        achievement_double_capsule_long_data: bool = True,
+        achievement_capsule_fill_color: QColor | None = None,
+        achievement_capsule_border_color: QColor | None = None,
         refresh_minutes: int = 10,
     ) -> None:
         super().__init__(parent=parent, position=position, overlay_name=definition.widget_id)
         self.definition = definition
         self._achievement_selection = achievement_selection
         self._achievement_field_visibility = dict(achievement_field_visibility or {})
-        self._achievement_latest_unlock_count = max(1, min(3, int(achievement_latest_unlock_count)))
+        self._achievement_latest_unlock_count = max(1, min(5, int(achievement_latest_unlock_count)))
         self._achievement_show_artwork = bool(achievement_show_artwork)
         self._achievement_artwork_shape = (
             "square" if str(achievement_artwork_shape).strip().lower() == "square" else "wide"
         )
+        self._achievement_square_artwork_size = normalize_achievement_square_artwork_size(
+            achievement_square_artwork_size
+        )
+        self._achievement_double_capsule_long_data = bool(achievement_double_capsule_long_data)
+        self._achievement_capsule_fill_color = QColor(
+            achievement_capsule_fill_color or QColor(*ACHIEVEMENT_CAPSULE_FILL_RGBA)
+        )
+        self._achievement_capsule_border_color = QColor(
+            achievement_capsule_border_color or QColor(*ACHIEVEMENT_CAPSULE_BORDER_RGBA)
+        )
         self._refresh_minutes = max(5, int(refresh_minutes))
         self._achievement_artwork = QImage()
         self._achievement_scaled_artwork_cache = QImage()
-        self._achievement_scaled_artwork_cache_key: tuple[int, int, int, float] | None = None
+        self._achievement_scaled_artwork_cache_key: tuple[int, int, int, float, str] | None = None
         self._defer_visibility_for_fade_sync = True
         self._view_model: SteamCardViewModel = initial_view_model or build_mock_steam_view_model(definition.widget_id)
         self._last_layout: SteamCardLayout | None = None
@@ -105,7 +122,10 @@ class SteamCardWidget(BaseOverlayWidget):
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.setWordWrap(False)
         authored_size = (
-            ACHIEVEMENT_PULSE_AUTHORED_SIZE
+            achievement_pulse_authored_size(
+                show_artwork=self._achievement_show_artwork,
+                artwork_shape=self._achievement_artwork_shape,
+            )
             if definition.widget_id == "achievement_pulse"
             else STEAM_CARD_AUTHORED_SIZE
         )
@@ -132,7 +152,10 @@ class SteamCardWidget(BaseOverlayWidget):
 
     def _calculate_content_size(self) -> QSize:
         authored_size = (
-            ACHIEVEMENT_PULSE_AUTHORED_SIZE
+            achievement_pulse_authored_size(
+                show_artwork=self._achievement_show_artwork,
+                artwork_shape=self._achievement_artwork_shape,
+            )
             if self.definition.widget_id == "achievement_pulse"
             else STEAM_CARD_AUTHORED_SIZE
         )
@@ -214,7 +237,7 @@ class SteamCardWidget(BaseOverlayWidget):
                 parent.request_overlay_fade_sync(self.get_overlay_name(), _starter)
                 return
             except Exception:
-                # The card is dev-gated, but a fade-sync failure is still a lifecycle fallback.
+                # A fade-sync failure remains a lifecycle fallback even for a public card.
                 logger.warning(
                     "[LIFECYCLE][FALLBACK] Steam card fade-sync failed; using direct fade",
                     exc_info=True,
@@ -463,26 +486,28 @@ class SteamCardWidget(BaseOverlayWidget):
         self._has_displayed_valid_data = True
 
     def _load_achievement_artwork(self, appid: int) -> None:
-        """Load one cached-or-public app header after resolved content reaches the card."""
-        if getattr(self, "_achievement_artwork_appid", None) == appid:
+        """Load one cached public header or portrait capsule for the selected app."""
+        artwork_identity = (appid, self._achievement_artwork_shape)
+        if getattr(self, "_achievement_artwork_identity", None) == artwork_identity:
             return
         if not self._ensure_thread_manager("Achievement Pulse artwork"):
             return
-        self._achievement_artwork_appid = appid
+        self._achievement_artwork_identity = artwork_identity
         generation = int(getattr(self, "_achievement_artwork_generation", 0)) + 1
         self._achievement_artwork_generation = generation
 
         def _load_artwork():
             from core.settings.storage_paths import get_steam_cache_dir
-            from core.steam.assets import SteamAssetRecord, fetch_steam_app_header
+            from core.steam.assets import SteamAssetRecord, fetch_steam_app_artwork
             from core.steam.credentials import read_credential_metadata
 
             metadata = read_credential_metadata()
             if metadata is None:
                 return None
-            asset = fetch_steam_app_header(
+            asset = fetch_steam_app_artwork(
                 cache_dir=get_steam_cache_dir(profile_key=metadata.profile_cache_key) / "assets",
                 appid=appid,
+                artwork_shape=self._achievement_artwork_shape,
             )
             return asset.path if isinstance(asset, SteamAssetRecord) else None
 
@@ -505,7 +530,7 @@ class SteamCardWidget(BaseOverlayWidget):
         try:
             self._thread_manager.submit_io_task(
                 _load_artwork,
-                task_id=f"steam_achievement_artwork_{appid}_{generation}",
+                task_id=f"steam_achievement_artwork_{self._achievement_artwork_shape}_{appid}_{generation}",
                 callback=_finished,
             )
         except Exception:
@@ -519,7 +544,13 @@ class SteamCardWidget(BaseOverlayWidget):
         scale_dpr = max(1.0, float(dpr))
         target_w = max(1, int(round(art_rect.width() * scale_dpr)))
         target_h = max(1, int(round(art_rect.height() * scale_dpr)))
-        cache_key = (int(self._achievement_artwork.cacheKey()), target_w, target_h, scale_dpr)
+        cache_key = (
+            int(self._achievement_artwork.cacheKey()),
+            target_w,
+            target_h,
+            scale_dpr,
+            self._achievement_artwork_shape,
+        )
         if (
             self._achievement_scaled_artwork_cache_key == cache_key
             and not self._achievement_scaled_artwork_cache.isNull()
@@ -534,11 +565,11 @@ class SteamCardWidget(BaseOverlayWidget):
         )
         crop_x = max(0, (scaled.width() - target_w) // 2)
         crop_y = max(0, (scaled.height() - target_h) // 2)
-        cropped = scaled.copy(crop_x, crop_y, target_w, target_h)
-        cropped.setDevicePixelRatio(scale_dpr)
-        self._achievement_scaled_artwork_cache = cropped
+        prepared = scaled.copy(crop_x, crop_y, target_w, target_h)
+        prepared.setDevicePixelRatio(scale_dpr)
+        self._achievement_scaled_artwork_cache = prepared
         self._achievement_scaled_artwork_cache_key = cache_key
-        return cropped
+        return prepared
 
     def _start_widget_fade_in(self, duration_ms: int | None = None) -> None:
         """Start the same painter-owned overlay fade profile used by other cards."""
@@ -586,6 +617,10 @@ class SteamCardWidget(BaseOverlayWidget):
                 dpr=dpr,
                 show_artwork=self._achievement_show_artwork,
                 artwork_shape=self._achievement_artwork_shape,
+                square_artwork_size=self._achievement_square_artwork_size,
+                double_capsule_long_data=self._achievement_double_capsule_long_data,
+                font_family=self.get_font_family(),
+                font_size=self.get_font_size(),
             )
             artwork = (
                 self._scaled_achievement_artwork(preview_layout.art_rect, dpr)
@@ -604,6 +639,10 @@ class SteamCardWidget(BaseOverlayWidget):
                 artwork_image=artwork,
                 show_artwork=self._achievement_show_artwork,
                 artwork_shape=self._achievement_artwork_shape,
+                square_artwork_size=self._achievement_square_artwork_size,
+                double_capsule_long_data=self._achievement_double_capsule_long_data,
+                capsule_fill_color=self._achievement_capsule_fill_color,
+                capsule_border_color=self._achievement_capsule_border_color,
             )
         finally:
             if painter is not None:

@@ -82,13 +82,14 @@ def test_achievement_pulse_resolves_recent_selection_from_cache_records_only() -
     assert resolved.total == 3
     assert resolved.latest_achievement == "Late Win"
     assert resolved.latest_achievements == ("Late Win", "Start")
+    assert resolved.previous_game_title == "Celeste"
     assert resolved.selection_label == "Most Recent"
 
     model = build_achievement_pulse_view_model(resolved)
     assert model.card_id == "achievement_pulse"
     assert model.metric_value == "2/3"
     assert model.latest_unlocks == ("Late Win",)
-    assert model.enabled_field_ids == ("total", "playtime", "source")
+    assert model.enabled_field_ids == ("total", "playtime", "previous")
 
 
 def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> None:
@@ -115,14 +116,14 @@ def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> 
     assert resolved.latest_achievement == "A Hero's Welcome"
 
 
-def test_achievement_pulse_exposes_three_newest_unlocks_in_schema_order() -> None:
+def test_achievement_pulse_exposes_five_newest_unlocks_in_schema_order() -> None:
     schema_rows = [
         {"name": f"INTERNAL_{index}", "displayName": f"Unlock {index}"}
-        for index in range(1, 5)
+        for index in range(1, 7)
     ]
     achievement_rows = [
         {"apiname": f"INTERNAL_{index}", "achieved": 1, "unlocktime": index * 10}
-        for index in range(1, 5)
+        for index in range(1, 7)
     ]
     resolved = resolve_achievement_pulse(
         recent_result=_recent_result(),
@@ -133,8 +134,10 @@ def test_achievement_pulse_exposes_three_newest_unlocks_in_schema_order() -> Non
         ),
     )
 
-    assert resolved.latest_achievements == ("Unlock 4", "Unlock 3", "Unlock 2")
-    assert build_achievement_pulse_view_model(resolved, latest_unlock_count=3).latest_unlocks == (
+    assert resolved.latest_achievements == ("Unlock 6", "Unlock 5", "Unlock 4", "Unlock 3", "Unlock 2")
+    assert build_achievement_pulse_view_model(resolved, latest_unlock_count=5).latest_unlocks == (
+        "Unlock 6",
+        "Unlock 5",
         "Unlock 4",
         "Unlock 3",
         "Unlock 2",
@@ -389,6 +392,86 @@ def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tm
     assert achievement_schema_cache_key_for_app(111) in {
         path.stem for path in tmp_path.rglob("*.json")
     }
+
+
+def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follower(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_123456",
+        profile_identifier="76561197960265728",
+    )
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    recent_payload = {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}}
+    achievement_payload = {
+        "playerstats": {
+            "gameName": "Hollow Knight",
+            "achievements": [{"name": "Start", "achieved": 1}],
+        }
+    }
+    schema_payload = {
+        "game": {
+            "availableGameStats": {
+                "achievements": [{"name": "Start", "displayName": "First Step"}]
+            }
+        }
+    }
+    for cache_key, source_id, payload in (
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, recent_payload),
+        (achievement_cache_key_for_app(111), SteamSourceId.PLAYER_ACHIEVEMENTS, achievement_payload),
+        (achievement_schema_cache_key_for_app(111), SteamSourceId.ACHIEVEMENT_SCHEMA, schema_payload),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=1_000.0,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    requests: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def read(self, _limit: int) -> bytes:
+            return self._payload
+
+    def _opener(request, _timeout: float):
+        requests.append(request.full_url)
+        if "GetRecentlyPlayedGames" in request.full_url:
+            return _Response(b'{"response":{"games":[{"appid":111,"name":"Hollow Knight"}]}}')
+        if "GetPlayerAchievements" in request.full_url:
+            return _Response(
+                b'{"playerstats":{"gameName":"Hollow Knight","achievements":[{"name":"Start","achieved":1}]}}'
+            )
+        if "GetSchemaForGame" in request.full_url:
+            return _Response(
+                b'{"game":{"availableGameStats":{"achievements":[{"name":"Start","displayName":"First Step"}]}}}'
+            )
+        raise AssertionError(request.full_url)
+
+    first = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_000.0,
+    )
+    follower = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_001.0,
+    )
+
+    assert first.resolved.ok is True
+    assert follower.resolved.ok is True
+    assert first.cache_age_seconds == 9_000.0
+    assert follower.cache_age_seconds == 9_001.0
+    assert len(requests) == 3
 
 
 def test_achievement_pulse_unauthorized_refresh_keeps_cache_and_flags_connection(tmp_path) -> None:

@@ -36,6 +36,7 @@ class AchievementPulseResolved:
     percent: float | None = None
     latest_achievement: str = ""
     latest_achievements: tuple[str, ...] = ()
+    previous_game_title: str = ""
     playtime_forever_minutes: int | None = None
     unavailable_reason: str = ""
     source_label: str = "Cache"
@@ -193,6 +194,12 @@ def resolve_achievement_pulse(
 
     selected_game: Mapping[str, Any] | None = None
     appid: int | None = None
+    recent_games = _recent_games(recent_result)
+    previous_game_title = (
+        _game_name(recent_games[1], str(recent_games[1].get("appid") or "Previous Game"))
+        if len(recent_games) > 1
+        else ""
+    )
 
     if selection.mode == "custom":
         appid = _coerce_appid(selection.custom_appid)
@@ -202,20 +209,21 @@ def resolve_achievement_pulse(
                 appid=None,
                 title="Custom App",
                 selection_label=_selection_label(selection),
+                previous_game_title=previous_game_title,
                 unavailable_reason="No custom Steam app ID selected",
             )
     else:
-        games = _recent_games(recent_result)
         index = _selection_index(selection.mode)
-        if index >= len(games):
+        if index >= len(recent_games):
             return AchievementPulseResolved(
                 status="unavailable",
                 appid=None,
                 title="Recent Game",
                 selection_label=_selection_label(selection),
+                previous_game_title=previous_game_title,
                 unavailable_reason=f"{_selection_label(selection)} is not available in cache",
             )
-        selected_game = games[index]
+        selected_game = recent_games[index]
         appid = _coerce_appid(selected_game.get("appid"))
 
     assert appid is not None
@@ -237,6 +245,7 @@ def resolve_achievement_pulse(
             appid=appid,
             title=title,
             selection_label=_selection_label(selection, appid),
+            previous_game_title=previous_game_title,
             playtime_forever_minutes=_playtime_forever(selected_game),
             unavailable_reason="Achievement data is unavailable or private",
         )
@@ -246,6 +255,7 @@ def resolve_achievement_pulse(
             appid=appid,
             title=title,
             selection_label=_selection_label(selection, appid),
+            previous_game_title=previous_game_title,
             playtime_forever_minutes=_playtime_forever(selected_game),
             unavailable_reason="No achievements reported for this app",
         )
@@ -256,7 +266,7 @@ def resolve_achievement_pulse(
         schema_names = _schema_display_names(schema_result)
         latest_achievements = tuple(
             schema_names.get(str(row.get("apiname") or row.get("name")), "") or _achievement_title(row)
-            for row in sorted(unlocked_rows, key=_unlock_time, reverse=True)[:3]
+            for row in sorted(unlocked_rows, key=_unlock_time, reverse=True)[:5]
         )
 
     total = len(rows)
@@ -272,6 +282,7 @@ def resolve_achievement_pulse(
         percent=percent,
         latest_achievement=latest_achievements[0] if latest_achievements else "",
         latest_achievements=latest_achievements,
+        previous_game_title=previous_game_title,
         playtime_forever_minutes=_playtime_forever(selected_game),
         source_label="Cache" if achievement_result.from_cache else "Fixture",
     )

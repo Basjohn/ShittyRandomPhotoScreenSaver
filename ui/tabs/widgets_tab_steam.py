@@ -1,8 +1,8 @@
 """Steam widget family settings section.
 
-Phase 3 keeps this dev-gated and provider-inert. Building or loading this
-section must not decrypt credentials, scan caches, fetch assets, or submit
-provider work.
+Building or loading this section must not decrypt credentials, scan caches,
+fetch assets, or submit provider work. Achievement Pulse is public while the
+three unfinished card groups remain hidden without ``--devsteam``.
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from core.dev_gates import is_steam_enabled
 from core.resources.manager import ResourceManager
 from core.steam.backend import validate_connection
 from core.steam.credentials import (
@@ -41,7 +42,7 @@ from core.steam.openid import SteamOpenIdLinkSession
 from core.threading.manager import ThreadManager
 from core.windows.secure_url_launcher import open_url
 from rendering.widget_descriptors import get_widget_position_option_labels
-from ui.styled_popup import StyledPopup
+from ui.styled_popup import ColorSwatchButton, StyledPopup
 from ui.tabs.shared_styles import (
     INFO_LABEL_STYLE,
     STATUS_LABEL_STYLE,
@@ -50,6 +51,11 @@ from ui.tabs.shared_styles import (
     style_group_box,
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
+from widgets.steam_components import (
+    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+    ACHIEVEMENT_SQUARE_ARTWORK_MAX,
+    ACHIEVEMENT_SQUARE_ARTWORK_MIN,
+)
 
 if TYPE_CHECKING:
     from ui.tabs.widgets_tab import WidgetsTab
@@ -73,13 +79,52 @@ _ACHIEVEMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
 _ACHIEVEMENT_FIELD_OPTIONS: tuple[tuple[str, str], ...] = (
     ("total", "Show completion"),
     ("playtime", "Show playtime"),
+    ("previous", "Show previous game"),
     ("source", "Show source"),
     ("selected", "Show selection"),
 )
+_ACHIEVEMENT_FIELD_DEFAULTS = {
+    "total": True,
+    "playtime": True,
+    "previous": True,
+    "source": False,
+    "selected": False,
+}
 _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Wide", "wide"),
     ("Square", "square"),
 )
+_ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
+_ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
+
+
+def _coerce_rgba_color(value: object, fallback: tuple[int, int, int, int]) -> QColor:
+    """Resolve a saved RGBA value without allowing malformed settings into Qt."""
+
+    if isinstance(value, QColor) and value.isValid():
+        return QColor(value)
+    if isinstance(value, (list, tuple)) and len(value) in {3, 4}:
+        try:
+            channels = [max(0, min(255, int(channel))) for channel in value]
+            if len(channels) == 3:
+                channels.append(255)
+            return QColor(*channels)
+        except (TypeError, ValueError):
+            pass
+    if isinstance(value, str):
+        color = QColor(value)
+        if color.isValid():
+            return color
+    return QColor(*fallback)
+
+
+def _rgba_payload(color: QColor) -> list[int]:
+    return [color.red(), color.green(), color.blue(), color.alpha()]
+
+
+def _set_achievement_capsule_color(tab: "WidgetsTab", attr_name: str, color: QColor) -> None:
+    setattr(tab, attr_name, QColor(color))
+    tab._save_settings()
 
 
 class _DraggableSteamApiKeyDialog(QDialog):
@@ -511,9 +556,14 @@ def _set_combo_data(combo: StyledComboBox, value: str) -> None:
 
 def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
     shape = getattr(tab, "achievement_pulse_artwork_shape", None)
+    size = getattr(tab, "achievement_pulse_square_artwork_size", None)
     visible = getattr(tab, "achievement_pulse_show_artwork", None)
     if shape is not None and visible is not None:
         shape.setEnabled(visible.isChecked())
+        if size is not None:
+            size.setEnabled(
+                visible.isChecked() and str(shape.currentData() or "wide") == "square"
+            )
 
 
 def _update_achievement_latest_controls(tab: "WidgetsTab") -> None:
@@ -530,7 +580,15 @@ def _update_steam_enabled_visibility(tab: "WidgetsTab") -> None:
         container.setVisible(bool(enabled))
 
 
-def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, label: str, fallback_position: str) -> None:
+def _build_card_group(
+    tab: "WidgetsTab",
+    parent_layout: QVBoxLayout,
+    key: str,
+    label: str,
+    fallback_position: str,
+    *,
+    visible: bool = True,
+) -> None:
     toggle, body, layout = build_bucket_toggle(
         parent_layout,
         label,
@@ -549,7 +607,7 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
 
     enabled = QCheckBox(f"Enable {label}")
     enabled.setProperty("circleIndicator", True)
-    enabled.setToolTip(f"Show the dev-gated {label} mock card.")
+    enabled.setToolTip(f"Show the {label} card.")
     enabled.setChecked(tab._default_bool(key, "enabled", False))
     enabled.stateChanged.connect(tab._save_settings)
     setattr(tab, enabled_attr, enabled)
@@ -637,10 +695,69 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
             artwork_shape.addItem(shape_label, shape_value)
         _set_combo_data(artwork_shape, str(tab._widget_default(key, "artwork_shape", "wide")))
         artwork_shape.currentIndexChanged.connect(tab._save_settings)
+        artwork_shape.currentIndexChanged.connect(lambda _index: _update_achievement_artwork_controls(tab))
         tab.achievement_pulse_artwork_shape = artwork_shape
         artwork_shape_row.addWidget(artwork_shape)
         artwork_shape_row.addStretch()
+
+        artwork_size_row = _aligned_row(layout, "Square Artwork Size:")
+        square_artwork_size = QSpinBox()
+        square_artwork_size.setRange(
+            ACHIEVEMENT_SQUARE_ARTWORK_MIN,
+            ACHIEVEMENT_SQUARE_ARTWORK_MAX,
+        )
+        square_artwork_size.setValue(
+            tab._default_int(key, "square_artwork_size", ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT)
+        )
+        square_artwork_size.setAccelerated(True)
+        square_artwork_size.valueChanged.connect(tab._save_settings)
+        tab.achievement_pulse_square_artwork_size = square_artwork_size
+        artwork_size_row.addWidget(square_artwork_size)
+        artwork_size_row.addWidget(QLabel("px"))
+        artwork_size_row.addStretch()
         _update_achievement_artwork_controls(tab)
+
+        capsule_fill_row = _aligned_row(layout, "Capsule Fill:")
+        tab._achievement_capsule_fill_color = _coerce_rgba_color(
+            tab._widget_default(key, "capsule_fill_color", _ACHIEVEMENT_CAPSULE_FILL_RGBA),
+            _ACHIEVEMENT_CAPSULE_FILL_RGBA,
+        )
+        tab.achievement_pulse_capsule_fill_color_btn = ColorSwatchButton(
+            tab._achievement_capsule_fill_color,
+            title="Choose Achievement Capsule Fill Color",
+            show_alpha=True,
+        )
+        tab.achievement_pulse_capsule_fill_color_btn.color_changed.connect(
+            lambda color: _set_achievement_capsule_color(tab, "_achievement_capsule_fill_color", color)
+        )
+        capsule_fill_row.addWidget(tab.achievement_pulse_capsule_fill_color_btn)
+        capsule_fill_row.addStretch()
+
+        capsule_border_row = _aligned_row(layout, "Capsule Border:")
+        tab._achievement_capsule_border_color = _coerce_rgba_color(
+            tab._widget_default(key, "capsule_border_color", _ACHIEVEMENT_CAPSULE_BORDER_RGBA),
+            _ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+        )
+        tab.achievement_pulse_capsule_border_color_btn = ColorSwatchButton(
+            tab._achievement_capsule_border_color,
+            title="Choose Achievement Capsule Border Color",
+            show_alpha=True,
+        )
+        tab.achievement_pulse_capsule_border_color_btn.color_changed.connect(
+            lambda color: _set_achievement_capsule_color(tab, "_achievement_capsule_border_color", color)
+        )
+        capsule_border_row.addWidget(tab.achievement_pulse_capsule_border_color_btn)
+        capsule_border_row.addStretch()
+
+        double_capsule = QCheckBox("Double Capsule For Long Data")
+        double_capsule.setProperty("circleIndicator", True)
+        double_capsule.setToolTip(
+            "When a field value would truncate, place its label above a full-width fitted value capsule."
+        )
+        double_capsule.setChecked(tab._default_bool(key, "double_capsule_long_data", True))
+        double_capsule.stateChanged.connect(tab._save_settings)
+        tab.achievement_pulse_double_capsule_long_data = double_capsule
+        layout.addWidget(double_capsule)
 
         latest_row = _aligned_row(layout, "Latest Unlocks:")
         show_latest = QCheckBox("Show Latest Unlocks")
@@ -651,7 +768,7 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
         tab.achievement_pulse_show_latest = show_latest
         latest_row.addWidget(show_latest)
         latest_count = QSpinBox()
-        latest_count.setRange(1, 3)
+        latest_count.setRange(1, 5)
         latest_count.setValue(tab._default_int(key, "latest_unlock_count", 1))
         latest_count.valueChanged.connect(tab._save_settings)
         tab.achievement_pulse_latest_unlock_count = latest_count
@@ -665,7 +782,7 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
         for field_id, label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
             field_toggle.setProperty("circleIndicator", True)
-            fallback = False if field_id == "selected" else True
+            fallback = _ACHIEVEMENT_FIELD_DEFAULTS[field_id]
             field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
             field_toggle.stateChanged.connect(tab._save_settings)
             setattr(tab, f"achievement_pulse_show_{field_id}", field_toggle)
@@ -678,6 +795,9 @@ def _build_card_group(tab: "WidgetsTab", parent_layout: QVBoxLayout, key: str, l
     layout.addWidget(status)
 
     _finalize_bucket_body(toggle, body)
+    if not visible:
+        toggle.hide()
+        body.hide()
 
 
 def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
@@ -712,8 +832,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Steam is currently development-gated. Opening this section reads only encrypted-storage "
-        "availability; it does not decrypt credentials, scan caches, fetch assets, or contact Steam."
+        "Achievement Pulse is available normally; unfinished Steam Progress, Abandonment Issues, and Friend Pulse "
+        "remain hidden unless --devsteam is used. Opening this section reads only encrypted-storage availability "
+        "and never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
     info.setStyleSheet(INFO_LABEL_STYLE)
@@ -788,8 +909,16 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
 
     _finalize_bucket_body(connection_toggle, connection_body)
 
+    show_unfinished_cards = is_steam_enabled()
     for key, label, fallback_position in _STEAM_CARD_ORDER:
-        _build_card_group(tab, _steam_controls_layout, key, label, fallback_position)
+        _build_card_group(
+            tab,
+            _steam_controls_layout,
+            key,
+            label,
+            fallback_position,
+            visible=key == "achievement_pulse" or show_unfinished_cards,
+        )
 
     root.addWidget(tab._steam_controls_container)
     tab.steam_enabled.stateChanged.connect(lambda _state: _update_steam_enabled_visibility(tab))
@@ -859,6 +988,51 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 tab.achievement_pulse_artwork_shape,
                 str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "wide"))),
             )
+            try:
+                tab.achievement_pulse_square_artwork_size.setValue(
+                    int(
+                        config.get(
+                            "square_artwork_size",
+                            tab._default_int(
+                                key,
+                                "square_artwork_size",
+                                ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+                            ),
+                        )
+                    )
+                )
+            except (TypeError, ValueError):
+                tab.achievement_pulse_square_artwork_size.setValue(
+                    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
+                )
+            tab._achievement_capsule_fill_color = _coerce_rgba_color(
+                config.get(
+                    "capsule_fill_color",
+                    tab._widget_default(key, "capsule_fill_color", _ACHIEVEMENT_CAPSULE_FILL_RGBA),
+                ),
+                _ACHIEVEMENT_CAPSULE_FILL_RGBA,
+            )
+            tab.achievement_pulse_capsule_fill_color_btn.set_color(
+                tab._achievement_capsule_fill_color
+            )
+            tab._achievement_capsule_border_color = _coerce_rgba_color(
+                config.get(
+                    "capsule_border_color",
+                    tab._widget_default(key, "capsule_border_color", _ACHIEVEMENT_CAPSULE_BORDER_RGBA),
+                ),
+                _ACHIEVEMENT_CAPSULE_BORDER_RGBA,
+            )
+            tab.achievement_pulse_capsule_border_color_btn.set_color(
+                tab._achievement_capsule_border_color
+            )
+            tab.achievement_pulse_double_capsule_long_data.setChecked(
+                bool(
+                    config.get(
+                        "double_capsule_long_data",
+                        tab._default_bool(key, "double_capsule_long_data", True),
+                    )
+                )
+            )
             tab.achievement_pulse_show_latest.setChecked(
                 bool(config.get("show_latest", tab._default_bool(key, "show_latest", True)))
             )
@@ -869,7 +1043,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             except Exception:
                 tab.achievement_pulse_latest_unlock_count.setValue(1)
             for field_id, _label_text in _ACHIEVEMENT_FIELD_OPTIONS:
-                fallback = False if field_id == "selected" else True
+                fallback = _ACHIEVEMENT_FIELD_DEFAULTS[field_id]
                 getattr(tab, f"achievement_pulse_show_{field_id}").setChecked(
                     bool(config.get(f"show_{field_id}", tab._default_bool(key, f"show_{field_id}", fallback)))
                 )
@@ -897,6 +1071,12 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["custom_appid"] = custom_appid or None
         payload["show_artwork"] = bool(tab.achievement_pulse_show_artwork.isChecked())
         payload["artwork_shape"] = str(tab.achievement_pulse_artwork_shape.currentData() or "wide")
+        payload["square_artwork_size"] = int(tab.achievement_pulse_square_artwork_size.value())
+        payload["double_capsule_long_data"] = bool(
+            tab.achievement_pulse_double_capsule_long_data.isChecked()
+        )
+        payload["capsule_fill_color"] = _rgba_payload(tab._achievement_capsule_fill_color)
+        payload["capsule_border_color"] = _rgba_payload(tab._achievement_capsule_border_color)
         payload["show_latest"] = bool(tab.achievement_pulse_show_latest.isChecked())
         payload["latest_unlock_count"] = int(tab.achievement_pulse_latest_unlock_count.value())
         for field_id, _label_text in _ACHIEVEMENT_FIELD_OPTIONS:

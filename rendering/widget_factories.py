@@ -1019,7 +1019,7 @@ def _coerce_optional_appid(value: Any) -> int | None:
 
 
 class SteamCardFactory(WidgetFactory):
-    """Factory for dev-gated Steam cards."""
+    """Factory for Achievement Pulse and gated Steam card prototypes."""
 
     def __init__(
         self,
@@ -1047,9 +1047,9 @@ class SteamCardFactory(WidgetFactory):
         from core.steam.achievement_pulse import AchievementPulseSelection
         from widgets.base_overlay_widget import OverlayPosition
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
-        from widgets.steam_components import ACHIEVEMENT_PULSE_AUTHORED_SIZE
+        from widgets.steam_components import achievement_pulse_authored_size
 
-        if not is_steam_enabled():
+        if self._widget_name != "achievement_pulse" and not is_steam_enabled():
             return None
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
@@ -1079,11 +1079,20 @@ class SteamCardFactory(WidgetFactory):
 
         try:
             shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
+            achievement_show_artwork = SettingsManager.to_bool(config.get("show_artwork", True), True)
+            achievement_artwork_shape = str(config.get("artwork_shape", "wide") or "wide")
+            achievement_capsule_fill = parse_color_to_qcolor(
+                config.get("capsule_fill_color", [199, 213, 224, 38])
+            )
+            achievement_capsule_border = parse_color_to_qcolor(
+                config.get("capsule_border_color", [199, 213, 224, 145])
+            )
             field_defaults = {
                 "total": True,
                 "latest": True,
                 "playtime": True,
-                "source": True,
+                "previous": True,
+                "source": False,
                 "selected": False,
             }
             widget = SteamCardWidget(
@@ -1103,8 +1112,15 @@ class SteamCardFactory(WidgetFactory):
                     for field_id, default_value in field_defaults.items()
                 },
                 achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
-                achievement_show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
-                achievement_artwork_shape=str(config.get("artwork_shape", "wide") or "wide"),
+                achievement_show_artwork=achievement_show_artwork,
+                achievement_artwork_shape=achievement_artwork_shape,
+                achievement_square_artwork_size=int(config.get("square_artwork_size", 180)),
+                achievement_double_capsule_long_data=SettingsManager.to_bool(
+                    config.get("double_capsule_long_data", True),
+                    True,
+                ),
+                achievement_capsule_fill_color=achievement_capsule_fill,
+                achievement_capsule_border_color=achievement_capsule_border,
                 refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
             )
 
@@ -1138,9 +1154,14 @@ class SteamCardFactory(WidgetFactory):
                 if definition.widget_id == "achievement_pulse" and (width, height) in {
                     (420, 180),
                     (540, 250),
+                    (540, 290),
                 }:
-                    width = int(ACHIEVEMENT_PULSE_AUTHORED_SIZE.width())
-                    height = int(ACHIEVEMENT_PULSE_AUTHORED_SIZE.height())
+                    authored_size = achievement_pulse_authored_size(
+                        show_artwork=achievement_show_artwork,
+                        artwork_shape=achievement_artwork_shape,
+                    )
+                    width = int(authored_size.width())
+                    height = int(authored_size.height())
                 widget.setMinimumSize(width, height)
                 widget.resize(width, height)
 
@@ -1148,7 +1169,7 @@ class SteamCardFactory(WidgetFactory):
             if isinstance(shadows_config, dict) and hasattr(widget, "set_shadow_config"):
                 widget.set_shadow_config(shadows_config)
 
-            logger.debug("[STEAM_WIDGET] Created dev-gated connect-required card: %s", self._widget_name)
+            logger.debug("[STEAM_WIDGET] Created connect-required Steam card: %s", self._widget_name)
             return widget
         except Exception as exc:
             logger.error("[STEAM_WIDGET] Failed to create %s: %s", self._widget_name, exc, exc_info=True)
@@ -1194,22 +1215,19 @@ class WidgetFactoryRegistry:
         try:
             from core.dev_gates import is_steam_enabled
 
+            widget_names = ["achievement_pulse"]
             if is_steam_enabled():
-                for widget_name in (
-                    "steam_progress",
-                    "achievement_pulse",
-                    "abandonment_issues",
-                    "friend_pulse",
-                ):
-                    self.register(
-                        SteamCardFactory(
-                            self._settings,
-                            self._thread_manager,
-                            widget_name=widget_name,
-                        )
+                widget_names.extend(("steam_progress", "abandonment_issues", "friend_pulse"))
+            for widget_name in widget_names:
+                self.register(
+                    SteamCardFactory(
+                        self._settings,
+                        self._thread_manager,
+                        widget_name=widget_name,
                     )
+                )
         except Exception:
-            logger.debug("[FACTORY_REGISTRY] Steam dev factories suppressed", exc_info=True)
+            logger.debug("[FACTORY_REGISTRY] Steam factories could not be registered", exc_info=True)
 
     def set_thread_manager(self, thread_manager: Optional["ThreadManager"]) -> None:
         """Update thread manager on the registry and all factories."""

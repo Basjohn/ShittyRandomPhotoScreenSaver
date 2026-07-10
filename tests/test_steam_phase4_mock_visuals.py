@@ -3,13 +3,21 @@ from __future__ import annotations
 import inspect
 from dataclasses import replace
 
+import pytest
+import widgets.steam_components as steam_components
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_components import (
     ACHIEVEMENT_PULSE_AUTHORED_SIZE,
+    ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE,
+    ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+    ACHIEVEMENT_SQUARE_ARTWORK_MAX,
+    ACHIEVEMENT_SQUARE_ARTWORK_MIN,
     STEAM_CARD_AUTHORED_SIZE,
+    SteamCardField,
+    _draw_bottom_right_outside_shadow,
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
     layout_steam_card,
@@ -17,6 +25,9 @@ from widgets.steam_components import (
     with_long_title,
     with_unavailable_state,
 )
+
+
+pytestmark = pytest.mark.usefixtures("qt_app")
 
 
 def _assert_inside(outer: QRectF, inner: QRectF) -> None:
@@ -102,6 +113,8 @@ def test_steam_layout_rects_stay_inside_target_for_phase4_matrix() -> None:
                 _assert_inside(geometry, rect)
             for _field_id, rect, _rail in layout.field_rects:
                 _assert_inside(geometry, rect)
+            for _field_id, rect, _rail in layout.field_detail_rects:
+                _assert_inside(geometry, rect)
 
 
 def test_steam_header_layout_reserves_room_for_long_card_titles() -> None:
@@ -134,22 +147,164 @@ def test_achievement_pulse_authored_layout_keeps_all_data_regions_separate() -> 
 
 def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -> None:
     model = build_mock_steam_view_model("achievement_pulse")
-    target = QRectF(
+    wide_target = QRectF(
         0,
         0,
         ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(),
         ACHIEVEMENT_PULSE_AUTHORED_SIZE.height(),
     )
+    square_target = QRectF(
+        0,
+        0,
+        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.width(),
+        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.height(),
+    )
 
-    wide = layout_steam_card(model, target, artwork_shape="wide")
-    square = layout_steam_card(model, target, artwork_shape="square")
-    hidden = layout_steam_card(model, target, show_artwork=False)
+    wide = layout_steam_card(model, wide_target, artwork_shape="wide")
+    square = layout_steam_card(model, square_target, artwork_shape="square")
+    smallest = layout_steam_card(
+        model,
+        square_target,
+        artwork_shape="square",
+        square_artwork_size=ACHIEVEMENT_SQUARE_ARTWORK_MIN - 100,
+    )
+    largest = layout_steam_card(
+        model,
+        square_target,
+        artwork_shape="square",
+        square_artwork_size=ACHIEVEMENT_SQUARE_ARTWORK_MAX + 100,
+    )
+    hidden = layout_steam_card(model, wide_target, show_artwork=False)
 
     assert wide.art_rect.top() == wide.header_rect.top()
-    assert square.art_rect.top() == square.title_rect.top()
+    assert square.art_rect.top() == square.header_rect.top()
+    assert square.art_rect.right() == wide.art_rect.right()
     assert square.art_rect.width() == square.art_rect.height()
+    assert square.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
+    assert smallest.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_MIN
+    assert largest.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_MAX
+    assert smallest.art_rect.topRight() == largest.art_rect.topRight()
+    assert largest.art_rect.intersects(largest.header_rect) is False
+    assert square.art_rect.center().x() == square.metric_rect.center().x()
+    assert square.art_rect.bottom() < square.metric_rect.top()
+    assert largest.metric_rect.bottom() < min(
+        rect.top() for _field_id, rect, _rail in largest.field_rects
+    )
     assert hidden.art_rect.isNull()
     assert hidden.title_rect.width() > wide.title_rect.width()
+
+
+def test_achievement_pulse_double_capsule_reserves_aligned_detail_slot_only_for_long_values() -> None:
+    long_previous = "Dark Souls III: The Fire Fades Edition"
+    model = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        fields=(
+            SteamCardField("total", "Total", "13%"),
+            SteamCardField("playtime", "Playtime", "39h"),
+            SteamCardField("previous", "Previous", long_previous),
+            SteamCardField("source", "Source", "Cache"),
+        ),
+    )
+    target = QRectF(
+        0,
+        0,
+        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.width(),
+        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.height(),
+    )
+
+    doubled = layout_steam_card(
+        model,
+        target,
+        artwork_shape="square",
+        double_capsule_long_data=True,
+    )
+    compact = layout_steam_card(
+        model,
+        target,
+        artwork_shape="square",
+        double_capsule_long_data=False,
+    )
+    short = layout_steam_card(
+        replace(
+            model,
+            fields=tuple(
+                replace(field, value="Celeste") if field.field_id == "previous" else field
+                for field in model.fields
+            ),
+        ),
+        target,
+        artwork_shape="square",
+        double_capsule_long_data=True,
+    )
+
+    assert [field_id for field_id, _rect, _rail in doubled.field_detail_rects] == ["previous"]
+    assert compact.field_detail_rects == ()
+    assert short.field_detail_rects == ()
+    previous_top = next(rect for field_id, rect, _rail in doubled.field_rects if field_id == "previous")
+    previous_detail = doubled.field_detail_rects[0][1]
+    assert previous_top.x() == previous_detail.x()
+    assert previous_top.width() == previous_detail.width()
+    assert previous_detail.top() - previous_top.bottom() == 6.0
+    all_rects = [rect for _field_id, rect, _rail in doubled.field_rects + doubled.field_detail_rects]
+    for index, rect in enumerate(all_rects):
+        assert all(not rect.intersects(other) for other in all_rects[index + 1:])
+
+
+def test_achievement_pulse_double_capsule_has_pre_application_measurement_fallback(monkeypatch) -> None:
+    model = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        fields=(
+            SteamCardField("previous", "Previous", "A Very Long Previous Game Name That Needs Its Own Rail"),
+        ),
+    )
+    monkeypatch.setattr(steam_components, "_gui_application_available", lambda: False)
+
+    layout = layout_steam_card(
+        model,
+        QRectF(0, 0, ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(), ACHIEVEMENT_PULSE_AUTHORED_SIZE.height()),
+        double_capsule_long_data=True,
+    )
+
+    assert tuple(field_id for field_id, _rect, _rail in layout.field_detail_rects) == ("previous",)
+
+
+def test_achievement_pulse_double_capsule_renders_label_above_fitted_full_value(monkeypatch) -> None:
+    calls: list[tuple[str, int, Qt.AlignmentFlag | Qt.TextFlag]] = []
+    original = steam_components._draw_elided_text
+
+    def _capture(painter, rect, text, *, color, font, flags=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shadow=True):
+        calls.append((text, font.pointSize(), flags))
+        return original(painter, rect, text, color=color, font=font, flags=flags, shadow=shadow)
+
+    monkeypatch.setattr(steam_components, "_draw_elided_text", _capture)
+    long_previous = "DARK SOULS III: THE FIRE FADES EDITION"
+    model = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        fields=(
+            SteamCardField("total", "Total", "13%"),
+            SteamCardField("playtime", "Playtime", "39h"),
+            SteamCardField("previous", "Previous", long_previous),
+        ),
+    )
+    pixmap = QPixmap(540, 318)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        render_steam_card(
+            painter,
+            model,
+            QRectF(0, 0, 540, 318),
+            artwork_shape="square",
+            double_capsule_long_data=True,
+        )
+    finally:
+        painter.end()
+
+    label_call = next(call for call in calls if call[0] == "PREVIOUS:")
+    value_call = next(call for call in calls if call[0] == long_previous)
+    assert label_call[2] & Qt.AlignmentFlag.AlignLeft
+    assert value_call[2] & Qt.AlignmentFlag.AlignHCenter
+    assert value_call[1] < label_call[1]
 
 
 def test_achievement_pulse_latest_unlocks_and_fields_use_available_vertical_space() -> None:
@@ -163,7 +318,7 @@ def test_achievement_pulse_latest_unlocks_and_fields_use_available_vertical_spac
     layout = layout_steam_card(model, target)
     one_rail = layout_steam_card(replace(model, fields=model.fields[:3]), target)
 
-    assert len(layout.latest_unlock_rects) == 3
+    assert len(layout.latest_unlock_rects) == 5
     assert layout.latest_unlock_rects[0].height() > layout.latest_unlock_rects[1].height()
     assert max(rect.bottom() for _field_id, rect, _rail in one_rail.field_rects) >= 274.0
     assert layout.status_rect.isNull()
@@ -179,32 +334,39 @@ def test_achievement_pulse_artwork_paints_its_local_image_after_card_content() -
     assert pixel.name() == "#714c3e"
 
 
-def test_achievement_pulse_square_artwork_uses_centered_cover_crop() -> None:
+def test_achievement_pulse_square_artwork_cover_fills_from_portrait_source() -> None:
     model = build_mock_steam_view_model("achievement_pulse")
-    artwork = QImage(300, 100, QImage.Format.Format_ARGB32_Premultiplied)
+    artwork = QImage(100, 300, QImage.Format.Format_ARGB32_Premultiplied)
     artwork.fill(QColor("#c43b36"))
     painter = QPainter(artwork)
     try:
-        painter.fillRect(100, 0, 100, 100, QColor("#38a169"))
+        painter.fillRect(0, 100, 100, 100, QColor("#38a169"))
+        painter.fillRect(0, 200, 100, 100, QColor("#3769b0"))
     finally:
         painter.end()
 
-    pixmap = QPixmap(540, 290)
+    pixmap = QPixmap(540, 318)
     pixmap.fill(Qt.GlobalColor.transparent)
     card_painter = QPainter(pixmap)
     try:
         layout = render_steam_card(
             card_painter,
             model,
-            QRectF(0, 0, 540, 290),
+            QRectF(0, 0, 540, 318),
             artwork_image=artwork,
             artwork_shape="square",
         )
     finally:
         card_painter.end()
 
-    center = pixmap.toImage().pixelColor(int(layout.art_rect.center().x()), int(layout.art_rect.center().y()))
+    rendered = pixmap.toImage()
+    center_y = int(layout.art_rect.center().y())
+    left = rendered.pixelColor(int(layout.art_rect.left() + 3), center_y)
+    center = rendered.pixelColor(int(layout.art_rect.center().x()), center_y)
+    right = rendered.pixelColor(int(layout.art_rect.right() - 3), center_y)
+    assert left.name() == "#38a169"
     assert center.name() == "#38a169"
+    assert right.name() == "#38a169"
 
 
 def test_achievement_pulse_runtime_artwork_cache_is_dpr_aware(qt_app) -> None:
@@ -213,24 +375,64 @@ def test_achievement_pulse_runtime_artwork_cache_is_dpr_aware(qt_app) -> None:
         achievement_artwork_shape="square",
     )
     try:
-        source = QImage(300, 100, QImage.Format.Format_ARGB32_Premultiplied)
+        source = QImage(100, 300, QImage.Format.Format_ARGB32_Premultiplied)
         source.fill(QColor("#c43b36"))
         source_painter = QPainter(source)
         try:
-            source_painter.fillRect(100, 0, 100, 100, QColor("#38a169"))
+            source_painter.fillRect(0, 100, 100, 100, QColor("#38a169"))
+            source_painter.fillRect(0, 200, 100, 100, QColor("#3769b0"))
         finally:
             source_painter.end()
         widget._achievement_artwork = source
 
-        first = widget._scaled_achievement_artwork(QRectF(0, 0, 118, 118), 2.0)
-        second = widget._scaled_achievement_artwork(QRectF(0, 0, 118, 118), 2.0)
+        first = widget._scaled_achievement_artwork(QRectF(0, 0, 180, 180), 2.0)
+        second = widget._scaled_achievement_artwork(QRectF(0, 0, 180, 180), 2.0)
 
-        assert (first.width(), first.height()) == (236, 236)
+        assert (first.width(), first.height()) == (360, 360)
         assert first.devicePixelRatio() == 2.0
         assert first.pixelColor(first.width() // 2, first.height() // 2).name() == "#38a169"
         assert second.cacheKey() == first.cacheKey()
     finally:
         widget.deleteLater()
+
+
+def test_achievement_pulse_capsule_shadow_is_exclusively_bottom_right(qt_app) -> None:
+    image = QImage(220, 90, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    try:
+        _draw_bottom_right_outside_shadow(
+            painter,
+            QRectF(20, 20, 160, 40),
+            radius=8.0,
+            scale=1.0,
+        )
+    finally:
+        painter.end()
+
+    assert image.pixelColor(18, 18).alpha() == 0
+    assert image.pixelColor(182, 62).alpha() > 0
+
+
+def test_achievement_pulse_capsules_and_latest_unlocks_use_authored_text_alignment(monkeypatch) -> None:
+    calls: list[tuple[str, Qt.AlignmentFlag | Qt.TextFlag]] = []
+    original = steam_components._draw_elided_text
+
+    def _capture(painter, rect, text, *, color, font, flags=Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shadow=True):
+        calls.append((text, flags))
+        return original(painter, rect, text, color=color, font=font, flags=flags, shadow=shadow)
+
+    monkeypatch.setattr(steam_components, "_draw_elided_text", _capture)
+    model = build_mock_steam_view_model("achievement_pulse")
+    pixmap, _layout = _render_to_pixmap(model, 540, 290)
+
+    assert not pixmap.isNull()
+    assert ("TOTAL:", Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter) in calls
+    value_flags = next(flags for text, flags in calls if text == "67%")
+    assert value_flags & Qt.AlignmentFlag.AlignRight
+    assert all(text != "Total: 67%" for text, _flags in calls)
+    assert all(not text.startswith("Latest:") for text, _flags in calls)
+    assert all(not text.startswith(("2. ", "3. ", "4. ", "5. ")) for text, _flags in calls)
 
 
 def test_steam_render_helper_handles_dpr_and_fixture_variants(qt_app) -> None:

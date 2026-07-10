@@ -10,7 +10,18 @@ from dataclasses import dataclass, field
 from typing import Iterable, Mapping
 
 from PySide6.QtCore import QRectF, QSizeF, Qt
-from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QFontMetricsF,
+    QGuiApplication,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+)
 
 from core.steam.achievement_pulse import AchievementPulseResolved
 from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_with_shadow
@@ -18,6 +29,12 @@ from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_w
 
 STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
 ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(540.0, 290.0)
+ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE = QSizeF(540.0, 318.0)
+ACHIEVEMENT_SQUARE_ARTWORK_MIN = 140
+ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT = 180
+ACHIEVEMENT_SQUARE_ARTWORK_MAX = 190
+ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
+ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
 STEAM_SETTINGS_TARGET = "steam_connection"
 STEAM_STALE_CONNECTION_INFO_SECONDS = 24 * 60 * 60
 
@@ -105,6 +122,7 @@ class SteamCardLayout:
     status_rect: QRectF
     latest_unlock_rects: tuple[QRectF, ...]
     field_rects: tuple[tuple[str, QRectF, int], ...]
+    field_detail_rects: tuple[tuple[str, QRectF, int], ...]
     visible_field_ids: tuple[str, ...]
     paint_fingerprint: tuple[object, ...]
     action_rects: tuple[tuple[str, QRectF], ...] = field(default_factory=tuple)
@@ -112,7 +130,14 @@ class SteamCardLayout:
 
     @property
     def rails(self) -> tuple[int, ...]:
-        return tuple(sorted({rail for _field_id, _rect, rail in self.field_rects}))
+        return tuple(
+            sorted(
+                {
+                    rail
+                    for _field_id, _rect, rail in self.field_rects + self.field_detail_rects
+                }
+            )
+        )
 
 
 def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
@@ -200,7 +225,7 @@ def build_mock_steam_view_model(card_id: str) -> SteamCardViewModel:
         accent=accent,
         fields=tuple(SteamCardField(field_id, label, value) for field_id, label, value in fields),
         latest_unlocks=(
-            ("Steel Soul", "False Knight", "Charmed")
+            ("Steel Soul", "False Knight", "Charmed", "Dream No More", "Pure Completion")
             if card_id == "achievement_pulse"
             else ()
         ),
@@ -271,11 +296,16 @@ def build_achievement_pulse_view_model(
 
     base = build_mock_steam_view_model("achievement_pulse")
     visibility = dict(field_visibility or {})
+    field_defaults = {
+        "previous": True,
+        "selected": False,
+        "source": False,
+    }
 
     def _field_enabled(field_id: str) -> bool:
-        return bool(visibility.get(field_id, field_id != "selected"))
+        return bool(visibility.get(field_id, field_defaults.get(field_id, True)))
 
-    latest_count = max(1, min(3, int(latest_unlock_count)))
+    latest_count = max(1, min(5, int(latest_unlock_count)))
     if not resolved.ok:
         model = SteamCardViewModel(
             card_id="achievement_pulse",
@@ -290,6 +320,7 @@ def build_achievement_pulse_view_model(
             fields=(
                 SteamCardField("selected", "Selected", resolved.selection_label, _field_enabled("selected")),
                 SteamCardField("appid", "App", str(resolved.appid or "Unknown"), _field_enabled("appid")),
+                SteamCardField("previous", "Previous", resolved.previous_game_title or "Unavailable", _field_enabled("previous")),
                 SteamCardField("source", "Source", resolved.source_label, _field_enabled("source")),
             ),
             state="unavailable",
@@ -315,6 +346,7 @@ def build_achievement_pulse_view_model(
             fields=(
                 SteamCardField("total", "Total", percent_text, _field_enabled("total")),
                 SteamCardField("playtime", "Playtime", _format_playtime(resolved.playtime_forever_minutes), _field_enabled("playtime")),
+                SteamCardField("previous", "Previous", resolved.previous_game_title or "Unavailable", _field_enabled("previous")),
                 SteamCardField("source", "Source", resolved.source_label, _field_enabled("source")),
                 SteamCardField("selected", "Selected", resolved.selection_label, _field_enabled("selected")),
             ),
@@ -437,6 +469,121 @@ def _enabled_fields(fields: Iterable[SteamCardField]) -> tuple[SteamCardField, .
     return tuple(field for field in fields if field.enabled)
 
 
+def normalize_achievement_square_artwork_size(value: object) -> int:
+    """Clamp square artwork to the authored header/title collision envelope."""
+
+    try:
+        resolved = int(value)
+    except (TypeError, ValueError):
+        resolved = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
+    return max(ACHIEVEMENT_SQUARE_ARTWORK_MIN, min(ACHIEVEMENT_SQUARE_ARTWORK_MAX, resolved))
+
+
+def _capsule_text_rects(
+    rect: QRectF,
+    *,
+    label_text: str,
+    font: QFont,
+    scale: float,
+) -> tuple[QRectF, QRectF]:
+    inner = rect.adjusted(7.0 * scale, 0.0, -7.0 * scale, 0.0)
+    label_width = min(
+        inner.width() * 0.58,
+        _layout_text_advance(font, label_text) + 2.0 * scale,
+    )
+    gap = max(3.0, 4.0 * scale)
+    label_rect = QRectF(inner.x(), inner.y(), label_width, inner.height())
+    value_rect = QRectF(
+        label_rect.right() + gap,
+        inner.y(),
+        max(1.0, inner.right() - label_rect.right() - gap),
+        inner.height(),
+    )
+    return label_rect, value_rect
+
+
+def _gui_application_available() -> bool:
+    return isinstance(QGuiApplication.instance(), QGuiApplication)
+
+
+def _layout_text_advance(font: QFont, text: str) -> float:
+    """Measure layout text without making pre-QApplication probes fatal."""
+
+    if _gui_application_available():
+        return QFontMetricsF(font).horizontalAdvance(text)
+
+    point_size = font.pointSizeF()
+    if point_size <= 0:
+        point_size = 10.0
+    narrow = set(" !'(),.:;I[]`ijl|1")
+    wide = set("MW@#%&QO0")
+    units = sum(0.38 if char in narrow else 0.92 if char in wide else 0.68 for char in text)
+    return units * point_size
+
+
+def _plan_achievement_fields(
+    fields: tuple[SteamCardField, ...],
+    *,
+    font_family: str,
+    font_size: int,
+    double_capsule_long_data: bool,
+) -> tuple[tuple[tuple[SteamCardField, int, int, bool], ...], int]:
+    field_font = QFont(font_family, max(7, int(font_size * 0.78)), QFont.Weight.DemiBold)
+    probe_rect = QRectF(0.0, 0.0, 159.0, 26.0)
+    occupied: set[tuple[int, int]] = set()
+    placements: list[tuple[SteamCardField, int, int, bool]] = []
+
+    for card_field in fields:
+        label_text = f"{card_field.label.upper()}:"
+        _label_rect, value_rect = _capsule_text_rects(
+            probe_rect,
+            label_text=label_text,
+            font=field_font,
+            scale=1.0,
+        )
+        value_text = str(card_field.value).upper()
+        use_double = bool(
+            double_capsule_long_data
+            and _layout_text_advance(field_font, value_text) > value_rect.width()
+        )
+
+        slot = 0
+        while True:
+            rail, column = divmod(slot, 3)
+            top_slot = (rail, column)
+            detail_slot = (rail + 1, column)
+            if top_slot not in occupied and (not use_double or detail_slot not in occupied):
+                break
+            slot += 1
+        occupied.add(top_slot)
+        if use_double:
+            occupied.add(detail_slot)
+        placements.append((card_field, rail, column, use_double))
+
+    rail_count = max((rail for rail, _column in occupied), default=0) + 1
+    return tuple(placements), rail_count
+
+
+def achievement_pulse_authored_size(
+    *,
+    show_artwork: bool,
+    artwork_shape: str,
+    field_rail_count: int = 2,
+) -> QSizeF:
+    """Return the authored canvas for the selected Achievement Pulse artwork mode."""
+
+    extra_rails = max(0, int(field_rail_count) - 2)
+    if show_artwork and str(artwork_shape).strip().lower() == "square":
+        return QSizeF(
+            ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.width(),
+            ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.height() + extra_rails * 32.0,
+        )
+    return QSizeF(
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(),
+        ACHIEVEMENT_PULSE_AUTHORED_SIZE.height() + extra_rails * 32.0,
+    )
+
+
 def layout_steam_card(
     model: SteamCardViewModel,
     target_rect: QRectF,
@@ -444,16 +591,42 @@ def layout_steam_card(
     dpr: float = 1.0,
     show_artwork: bool = True,
     artwork_shape: str = "wide",
+    square_artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+    double_capsule_long_data: bool = False,
+    font_family: str = "Inter",
+    font_size: int = 14,
 ) -> SteamCardLayout:
     """Resolve display layout while keeping Custom geometry as uniform scale.
 
-    The authored layout is always computed from ``STEAM_CARD_AUTHORED_SIZE``.
-    The target rectangle can shrink or grow that authored card, but it never
-    changes visible-field count, rails, or content availability.
+    The authored layout is computed from the selected card/mode envelope. The
+    target rectangle can shrink or grow that authored card, but it never changes
+    visible-field count, rail ownership, or content availability.
     """
 
     target = QRectF(target_rect)
-    authored_size = ACHIEVEMENT_PULSE_AUTHORED_SIZE if model.card_id == "achievement_pulse" else STEAM_CARD_AUTHORED_SIZE
+    is_achievement_pulse = model.card_id == "achievement_pulse"
+    resolved_artwork_shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    square_mode = is_achievement_pulse and show_artwork and resolved_artwork_shape == "square"
+    resolved_square_artwork_size = normalize_achievement_square_artwork_size(square_artwork_size)
+    fields = _enabled_fields(model.fields)
+    achievement_placements: tuple[tuple[SteamCardField, int, int, bool], ...] = ()
+    achievement_rail_count = max(1, (len(fields) + 2) // 3)
+    if is_achievement_pulse:
+        achievement_placements, achievement_rail_count = _plan_achievement_fields(
+            fields,
+            font_family=font_family,
+            font_size=font_size,
+            double_capsule_long_data=double_capsule_long_data,
+        )
+    authored_size = (
+        achievement_pulse_authored_size(
+            show_artwork=show_artwork,
+            artwork_shape=resolved_artwork_shape,
+            field_rail_count=achievement_rail_count,
+        )
+        if is_achievement_pulse
+        else STEAM_CARD_AUTHORED_SIZE
+    )
     authored_w = authored_size.width()
     authored_h = authored_size.height()
     scale = max(0.05, min(target.width() / authored_w, target.height() / authored_h))
@@ -464,10 +637,8 @@ def layout_steam_card(
 
     authored_rect = QRectF(origin_x, origin_y, painted_w, painted_h)
 
-    is_achievement_pulse = model.card_id == "achievement_pulse"
-    resolved_artwork_shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
     if is_achievement_pulse:
-        logical_content = QRectF(18.0, 14.0, 504.0, 260.0)
+        logical_content = QRectF(18.0, 14.0, 504.0, authored_h - 30.0)
         header = QRectF(18.0, 14.0, 302.0, 38.0)
         logo = QRectF(30.0, 19.0, 28.0, 28.0)
         header_text = QRectF(66.0, 16.0, 236.0, 34.0)
@@ -475,24 +646,34 @@ def layout_steam_card(
             art = QRectF()
             title_width = 504.0
         elif resolved_artwork_shape == "square":
-            art = QRectF(404.0, 62.0, 118.0, 118.0)
-            title_width = 370.0
+            art_left = 522.0 - resolved_square_artwork_size
+            art = QRectF(
+                art_left,
+                14.0,
+                float(resolved_square_artwork_size),
+                float(resolved_square_artwork_size),
+            )
+            title_width = art_left - 32.0
         else:
             art = QRectF(342.0, 14.0, 180.0, 86.0)
             title_width = 310.0
         title = QRectF(18.0, 62.0, title_width, 34.0)
-        subtitle = QRectF(18.0, 100.0, title_width, 62.0)
-        metric = QRectF(342.0, 184.0 if resolved_artwork_shape == "square" and show_artwork else 108.0, 180.0, 28.0)
+        subtitle = QRectF(18.0, 100.0, title_width, 88.0)
+        metric = (
+            QRectF(art.x(), art.bottom() + 6.0, art.width(), 28.0)
+            if square_mode
+            else QRectF(342.0, 108.0, 180.0, 28.0)
+        )
         status = QRectF()
         info = QRectF(300.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
         logical_latest_rects = tuple(
             QRectF(
                 18.0,
-                100.0 if index == 0 else 130.0 + (index - 1) * 16.0,
+                100.0 if index == 0 else 130.0 + (index - 1) * 14.0,
                 title_width,
-                26.0 if index == 0 else 14.0,
+                26.0 if index == 0 else 13.0,
             )
-            for index, _latest in enumerate(model.latest_unlocks[:3])
+            for index, _latest in enumerate(model.latest_unlocks[:5])
         )
     else:
         logical_content = QRectF(18.0, 16.0, 384.0, 148.0)
@@ -507,25 +688,52 @@ def layout_steam_card(
         info = QRectF(250.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
         logical_latest_rects = ()
 
-    fields = _enabled_fields(model.fields)
     field_rects: list[tuple[str, QRectF, int]] = []
+    field_detail_rects: list[tuple[str, QRectF, int]] = []
     field_w = 159.0 if is_achievement_pulse else 84.0
     field_h = 26.0 if is_achievement_pulse else 18.0
     gap = 9.0 if is_achievement_pulse else 8.0
-    achievement_rail_count = max(1, (len(fields) + 2) // 3)
-    achievement_first_rail_y = 248.0 - (achievement_rail_count - 1) * 32.0
-    for index, field in enumerate(fields):
-        if is_achievement_pulse:
-            rail = index // 3
-            column = index % 3
+    achievement_last_rail_y = authored_h - 42.0
+    achievement_first_rail_y = achievement_last_rail_y - (achievement_rail_count - 1) * 32.0
+    if is_achievement_pulse:
+        for card_field, rail, column, use_double in achievement_placements:
             x = 18.0 + column * (field_w + gap)
             y = achievement_first_rail_y + rail * 32.0
-        else:
+            field_rects.append(
+                (
+                    card_field.field_id,
+                    _map_rect(QRectF(x, y, field_w, field_h), origin_x, origin_y, scale),
+                    rail,
+                )
+            )
+            if use_double:
+                detail_rail = rail + 1
+                detail_y = achievement_first_rail_y + detail_rail * 32.0
+                field_detail_rects.append(
+                    (
+                        card_field.field_id,
+                        _map_rect(
+                            QRectF(x, detail_y, field_w, field_h),
+                            origin_x,
+                            origin_y,
+                            scale,
+                        ),
+                        detail_rail,
+                    )
+                )
+    else:
+        for index, card_field in enumerate(fields):
             rail = 0 if index < 4 else 1
             column = index if index < 4 else index - 4
             x = 18.0 + column * (field_w + gap)
             y = 109.0 + rail * 20.0
-        field_rects.append((field.field_id, _map_rect(QRectF(x, y, field_w, field_h), origin_x, origin_y, scale), rail))
+            field_rects.append(
+                (
+                    card_field.field_id,
+                    _map_rect(QRectF(x, y, field_w, field_h), origin_x, origin_y, scale),
+                    rail,
+                )
+            )
 
     action_rects: list[tuple[str, QRectF]] = []
     if model.state == "connect_required" and model.settings_target:
@@ -538,6 +746,7 @@ def layout_steam_card(
         metric = QRectF()
         logical_latest_rects = ()
         field_rects.clear()
+        field_detail_rects.clear()
         action_rects.append((model.settings_target, _map_rect(connect_rect, origin_x, origin_y, scale)))
 
     paint_fingerprint = (
@@ -547,6 +756,9 @@ def layout_steam_card(
         round(float(dpr), 3),
         bool(show_artwork),
         resolved_artwork_shape,
+        resolved_square_artwork_size,
+        bool(double_capsule_long_data),
+        tuple(field_id for field_id, _rect, _rail in field_detail_rects),
     )
 
     return SteamCardLayout(
@@ -564,6 +776,7 @@ def layout_steam_card(
         status_rect=_map_rect(status, origin_x, origin_y, scale),
         latest_unlock_rects=tuple(_map_rect(rect, origin_x, origin_y, scale) for rect in logical_latest_rects),
         field_rects=tuple(field_rects),
+        field_detail_rects=tuple(field_detail_rects),
         visible_field_ids=tuple(field.field_id for field in fields),
         paint_fingerprint=paint_fingerprint,
         action_rects=tuple(action_rects),
@@ -768,6 +981,66 @@ def _cover_source_rect(image: QImage, target_rect: QRectF) -> QRectF:
     return QRectF(0.0, (source_h - crop_h) * 0.5, source_w, crop_h)
 
 
+def _draw_bottom_right_outside_shadow(
+    painter: QPainter,
+    rect: QRectF,
+    *,
+    radius: float,
+    scale: float,
+) -> None:
+    """Paint a capsule shadow only beyond its bottom/right silhouette."""
+
+    original = QPainterPath()
+    original.addRoundedRect(rect, radius, radius)
+    painter.save()
+    try:
+        painter.setPen(Qt.PenStyle.NoPen)
+        for offset, alpha in ((2.0, 42), (4.0, 30), (6.0, 18)):
+            shifted = QPainterPath(original)
+            shifted.translate(offset * scale, offset * scale)
+            outside = shifted.subtracted(original)
+            painter.setBrush(QColor(0, 0, 0, alpha))
+            painter.drawPath(outside)
+    finally:
+        painter.restore()
+
+
+def _draw_capsule_shell(
+    painter: QPainter,
+    rect: QRectF,
+    *,
+    rail: int,
+    accent: QColor,
+    scale: float,
+    fill_color: QColor | None,
+    border_color: QColor | None,
+) -> None:
+    radius = max(6.0, 8.0 * scale)
+    pill = QPainterPath()
+    pill.addRoundedRect(rect, radius, radius)
+    _draw_bottom_right_outside_shadow(painter, rect, radius=radius, scale=scale)
+
+    fill = QColor(fill_color) if fill_color is not None else QColor(accent)
+    if fill_color is None:
+        fill.setAlpha(38 if rail == 0 else 26)
+    painter.fillPath(pill, fill)
+
+    border = QColor(border_color) if border_color is not None else QColor(accent)
+    if border_color is None:
+        border.setAlpha(145)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.setPen(QPen(border, max(1.0, scale)))
+    painter.drawPath(pill)
+
+
+def _fit_font_to_width(font: QFont, text: str, width: float) -> QFont:
+    fitted = QFont(font)
+    minimum = max(6, int(round(fitted.pointSize() * 0.65)))
+    while fitted.pointSize() > minimum and QFontMetricsF(fitted).horizontalAdvance(text) > width:
+        fitted.setPointSize(fitted.pointSize() - 1)
+    return fitted
+
+
 def render_steam_card(
     painter: QPainter,
     model: SteamCardViewModel,
@@ -781,6 +1054,10 @@ def render_steam_card(
     artwork_image: QImage | None = None,
     show_artwork: bool = True,
     artwork_shape: str = "wide",
+    square_artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+    double_capsule_long_data: bool = False,
+    capsule_fill_color: QColor | None = None,
+    capsule_border_color: QColor | None = None,
 ) -> SteamCardLayout:
     """Paint a Steam card mock and return the layout used."""
 
@@ -790,6 +1067,10 @@ def render_steam_card(
         dpr=dpr,
         show_artwork=show_artwork,
         artwork_shape=artwork_shape,
+        square_artwork_size=square_artwork_size,
+        double_capsule_long_data=double_capsule_long_data,
+        font_family=font_family,
+        font_size=font_size,
     )
     accent = _accent_color(model)
     color = QColor(text_color or QColor(255, 255, 255, 230))
@@ -803,7 +1084,7 @@ def render_steam_card(
 
         base_size = max(7, int(font_size * layout.scale))
         header_font = QFont(font_family, max(7, int(base_size * 1.05)), QFont.Weight.Bold)
-        title_extra = int(round(3.0 * layout.scale)) if model.card_id == "achievement_pulse" else 0
+        title_extra = int(round(5.0 * layout.scale)) if model.card_id == "achievement_pulse" else 0
         title_font = QFont(font_family, max(8, int(base_size * 1.28) + title_extra), QFont.Weight.Bold)
         subtitle_font = QFont(font_family, max(7, int(base_size * 0.86)), QFont.Weight.Normal)
         latest_primary_size = max(8, int(base_size * 0.86) + int(round(2.0 * layout.scale)))
@@ -877,11 +1158,10 @@ def render_steam_card(
         _draw_elided_text(painter, layout.title_rect, model.title, color=color, font=title_font)
         if layout.latest_unlock_rects:
             for index, (latest, latest_rect) in enumerate(zip(model.latest_unlocks, layout.latest_unlock_rects)):
-                latest_text = f"Latest: {latest}" if index == 0 else f"{index + 1}. {latest}"
                 _draw_elided_text(
                     painter,
                     latest_rect,
-                    latest_text,
+                    latest,
                     color=color if index == 0 else muted,
                     font=latest_primary_font if index == 0 else latest_secondary_font,
                 )
@@ -900,28 +1180,85 @@ def render_steam_card(
             _draw_elided_text(painter, layout.status_rect, model.status, color=muted, font=subtitle_font)
 
         field_by_id = {field.field_id: field for field in model.fields}
+        detail_by_id = {
+            field_id: (detail_rect, detail_rail)
+            for field_id, detail_rect, detail_rail in layout.field_detail_rects
+        }
         for field_id, field_rect, rail in layout.field_rects:
             field = field_by_id[field_id]
-            pill = QPainterPath()
-            pill_radius = max(6.0, 8.0 * layout.scale)
-            pill.addRoundedRect(field_rect, pill_radius, pill_radius)
-            fill = QColor(accent)
-            fill.setAlpha(38 if rail == 0 else 26)
-            painter.fillPath(pill, fill)
-            draw_rounded_rect_with_shadow(
+            _draw_capsule_shell(
                 painter,
-                field_rect.toAlignedRect(),
-                pill_radius,
-                QColor(accent.red(), accent.green(), accent.blue(), 120),
-                max(1, int(round(layout.scale))),
-                shadow_enabled=True,
+                field_rect,
+                rail=rail,
+                accent=accent,
+                scale=layout.scale,
+                fill_color=capsule_fill_color,
+                border_color=capsule_border_color,
+            )
+            label_text = f"{field.label.upper()}:"
+            value_text = str(field.value).upper()
+            detail = detail_by_id.get(field_id)
+            if detail is not None:
+                label_rect = field_rect.adjusted(
+                    7.0 * layout.scale,
+                    0.0,
+                    -7.0 * layout.scale,
+                    0.0,
+                )
+                _draw_elided_text(
+                    painter,
+                    label_rect,
+                    label_text,
+                    color=color,
+                    font=field_font,
+                )
+                detail_rect, detail_rail = detail
+                _draw_capsule_shell(
+                    painter,
+                    detail_rect,
+                    rail=detail_rail,
+                    accent=accent,
+                    scale=layout.scale,
+                    fill_color=capsule_fill_color,
+                    border_color=capsule_border_color,
+                )
+                value_rect = detail_rect.adjusted(
+                    7.0 * layout.scale,
+                    0.0,
+                    -7.0 * layout.scale,
+                    0.0,
+                )
+                fitted_font = _fit_font_to_width(field_font, value_text, value_rect.width())
+                _draw_elided_text(
+                    painter,
+                    value_rect,
+                    value_text,
+                    color=color,
+                    font=fitted_font,
+                    flags=Qt.AlignmentFlag.AlignCenter,
+                )
+                continue
+
+            label_rect, value_rect = _capsule_text_rects(
+                field_rect,
+                label_text=label_text,
+                font=field_font,
+                scale=layout.scale,
             )
             _draw_elided_text(
                 painter,
-                field_rect.adjusted(5.0 * layout.scale, 0.0, -5.0 * layout.scale, 0.0),
-                f"{field.label}: {field.value}",
+                label_rect,
+                label_text,
                 color=color,
                 font=field_font,
+            )
+            _draw_elided_text(
+                painter,
+                value_rect,
+                value_text,
+                color=color,
+                font=field_font,
+                flags=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
             )
 
     finally:

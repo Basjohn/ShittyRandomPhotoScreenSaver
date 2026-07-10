@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-09
+Last updated: 2026-07-10
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -26,12 +26,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Reset subtype-owned solver/profile/ghost state at activation and Blob-type boundaries so startup, settings refresh, curated preset apply, custom preset apply, and runtime cycling cannot inherit the other Blob type's state.
 - [ ] Add preset/model/UI/runtime/shader regressions and authored synthetic-audio oracles for both Blob types; run the pre/post current-good visualizer lock, focused Blob suite, preset audit, defaults parity, and documentation drift pass.
 
-### Steam Widget Family, Dev-Gated Foundation
+### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
 
-- [ ] Steam Phase 6, Achievement Pulse real data hookup:
-  - [ ] In a fresh compiled `--devsteam` run, verify saved identity/API-key status is green on every Steam Settings reopen without clicking Check Saved Connection, and confirm cached Achievement Pulse content appears without a connect-required flash.
-  - [ ] Validate wide/default and square artwork, artwork-off mode, font-family changes, one/two/three latest unlocks, and bottom-anchored information blocks at authored size plus narrow/tall multi-monitor `Custom` geometry.
-  - [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs.
+- [ ] In a fresh compiled run without `--devsteam`, verify saved identity/API-key status stays green on every Steam Settings reopen and cached Achievement Pulse content appears before the coordinated fade without a connect-required flash.
+- [ ] Validate wide/default artwork, header-aligned 140/180/190 square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, Previous-field toggling, compact versus measured double-capsule behavior for long data, alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
+- [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs; confirm a multi-display `--steam` startup emits one provider batch per profile/cache namespace/selection rather than one batch per overlay.
+- [ ] In a separate `--devsteam` run, confirm only Steam Progress, Friend Pulse, and Abandonment Issues become visible and remain disabled/provider-inert by default.
 
 ## Watchlist
 
@@ -45,7 +45,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
 - [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.
 - [ ] Media metadata preservation during live visualizer preset churn: if it reopens, first suspect partial same-track playback snapshots during visualizer-only settings writes.
-- [ ] Steam widget family remains production-hidden until the user explicitly promotes it beyond `--devsteam`.
+- [ ] Steam Progress, Friend Pulse, and Abandonment Issues remain production-hidden until each is explicitly promoted beyond `--devsteam`.
 
 ## Deferred / Not Active
 

@@ -131,6 +131,7 @@ def test_widget_settings_section_descriptors_default_order():
         "visualizers",
         "reddit",
         "gmail",
+        "steam",
         "defaults",
     ]
 
