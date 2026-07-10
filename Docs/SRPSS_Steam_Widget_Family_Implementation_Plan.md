@@ -16,7 +16,7 @@ The implementation must, however, be built as an ordinary SRPSS widget family:
 
 - four **separate descriptor-backed overlay widgets**;
 - one shared, narrowly scoped **Steam provider/cache layer**;
-- one lazily built **Steam** Settings section containing a bordered family shell, a family-level enabled/configured flag, and four card groups;
+- one lazily built **Steam** Settings section containing a bordered family shell, a true family master, and four card groups with nested Layout/Appearance/Content buckets where applicable;
 - normal SRPSS factory, lifecycle, Custom-layout, input, cache, diagnostics, and settings contracts;
 - no private timer manager, thread pool, event loop, widget registry, layout system, or browser launcher.
 
@@ -749,9 +749,10 @@ Controls:
 
 ### 8.2.1 Family shell contract
 
-- The Steam family shell is a UI-facing configured flag, not a second runtime master-switch authority.
-- The shell should read like the other family settings sections: bordered container, main family toggle, then nested buckets.
-- Actual runtime availability still derives from secure credential state plus individual card enablement.
+- `widgets.steam.enabled` is the runtime and settings-visibility master for the complete family.
+- When it is off, every Steam descriptor/factory/expected-overlay/stack-preview path resolves disabled and all subordinate Settings controls are hidden.
+- Individual card enablement remains persisted while the family is off; re-enabling the family restores those authored choices rather than rewriting them.
+- The shell should read like the other family settings sections: bordered container, main family toggle, then Connection & Privacy plus per-card buckets.
 
 Controls must be signal-blocked while settings load/reset/import populates them. Any dynamic panel visibility change must avoid redundant `setVisible()` churn during construction.
 
@@ -769,7 +770,7 @@ Every card gets:
 - clear unavailable-state explanation in Settings only;
 - `Reset this card to defaults` routed through the canonical defaults/reset contract.
 
-No Steam card should create a competing global “Steam enabled” master switch. A non-sensitive “configured” flag may support the UI, but actual runtime availability derives from secure credential state plus card enablement.
+No individual Steam card should create another family master. Runtime card availability requires the family master, the card's own enabled value, monitor eligibility, and a valid cache/connect-required presentation state; credential state determines data access, not whether the family master is obeyed.
 
 ---
 
@@ -955,7 +956,8 @@ Future achievement-specific extensions such as a progress ring, rarity, unlock d
 - latest-unlock visibility and count from 1 through 5;
 - widget-family font and base size;
 - supporting field visibility;
-- `Double Capsule For Long Data`;
+- default-on `Enable Double Capsules` for every visible supporting field;
+- independent capsule font size;
 - capsule fill RGBA and border RGBA;
 - standard card background, border, text colour, position, monitor, and Custom controls;
 - manual refresh.
@@ -970,7 +972,7 @@ Achievement Pulse is the current engineering and customization standard for this
 |---|---:|---|
 | Artwork hidden or Wide | `540 x 290` | Uses the compact card envelope. |
 | Square artwork | `540 x 318` | Reserves the portrait art + `Unlocked` envelope without pushing the card into a top-to-bottom composition. |
-| Additional capsule rail | `+32` height | Grows by whole authored rails only when measured field occupancy needs it. |
+| Additional capsule rail | measured capsule height + gap | Grows by whole authored rails; larger capsule fonts increase both capsule and authored-card height without moving upper content. |
 
 The painter lays out in authored coordinates and then applies one uniform scale into the target rectangle. `Custom` may move and scale the completed card, but it may not alter field count, artwork shape, rail assignment, typography hierarchy, or visibility according to incidental target dimensions. Extra target space is letterboxed/centred by the standard layout rather than used as a reflow trigger.
 
@@ -993,7 +995,7 @@ Future cards may add avatars, event thumbnails, strips, or grids, but each visua
 - The header remains the card identity anchor. The game title is the strongest content text and is currently base size `+5` with a bold weight.
 - The first latest-unlock line is base size `+2` and demibold. Unlocks 2 through 5 render beneath it at approximately half size so the first item remains the focal point.
 - Unlock names never render list numbers or a redundant `Latest:` label.
-- Capsule labels and values are uppercase and colon-free. Labels align left and values align right in compact mode.
+- Capsule labels and values are uppercase and colon-free. Labels align left and values align right in compact mode; doubled headings and values centre independently.
 - Text fitting may reduce only the affected detail/value text down to an explicit readable floor before final elision. It may not globally shrink the card or silently reduce unrelated labels.
 - All high-contrast text uses the established painter-owned text shadow treatment and remains readable against transparent card backgrounds.
 
@@ -1001,40 +1003,41 @@ Future cards may add avatars, event thumbnails, strips, or grids, but each visua
 
 Achievement Pulse uses a three-column capsule grid:
 
-- each capsule is `159 x 26` authored pixels;
+- each capsule is `159 x 26` authored pixels at the baseline capsule font and grows vertically from measured font metrics;
 - columns have a nine-pixel gap;
-- rails use a 32-pixel pitch, leaving six pixels between capsule shells;
+- rails use capsule height plus a measured gap, never less than six authored pixels;
 - rounding follows the shared header/card visual language rather than oversized pill geometry;
 - fill and border are separate alpha-capable colour swatches;
 - the capsule shadow is exterior-only, primarily bottom-right, and must not show through the translucent top-left interior.
 
-Compact mode measures a label and value region, keeps `LABEL` left and the result right, and elides only when the value cannot fit. When `Double Capsule For Long Data` is enabled and the measured value would elide:
+Compact mode measures a label and value region, keeps `LABEL` left and the result right, and elides only when the value cannot fit. When `Enable Double Capsules` is on, every visible supporting field follows the same two-rail contract regardless of value length:
 
 1. The label keeps its original capsule and column, becomes a centred heading, and remains colon-free. Previous changes to the more cohesive heading `PREVIOUSLY`; other fields retain their ordinary wording.
 2. The value reserves the same column on the immediately following whole rail.
 3. The detail capsule contains the full uppercase value, centred and progressively fitted to the available width.
-4. Occupancy planning prevents later fields from using either reserved slot.
-5. If occupancy extends beyond two rails, the authored canvas grows in 32-pixel increments instead of overlapping, clipping, or rearranging upper content.
+4. Occupancy planning places up to three headings on one rail and their three matching values directly below; later fields begin another complete heading/value pair of rails.
+5. If occupancy or capsule typography extends beyond the baseline envelope, the authored canvas grows by whole measured rails instead of overlapping, clipping, or rearranging upper content.
 
-The decision is measurement-based, not field-name-based. `Previous` is the expected common beneficiary, but any future long value receives the same behavior. Turning the option off restores compact elision without changing other layout rules.
+Turning the option off restores compact label/value capsules without changing field order or other layout rules. The capsule font is independent from the family base font; increasing it grows the shell/rail/card envelope, while long lower values may still fit down to the explicit readable floor before final elision.
 
 #### Current defaults
 
 | Preference | Achievement Pulse default |
 |---|---|
 | Artwork | On |
-| Artwork shape | Wide |
+| Artwork shape | Square |
 | Square artwork size | `140` |
-| Latest unlocks | On, `1` |
-| Font | `Inter`, `14 pt` base |
+| Latest unlocks | On, `5` |
+| Font | `Inter`, `15 pt` base |
 | Total | On |
 | Playtime | On |
 | Previous | On |
 | Source | Off |
 | Selected mode | Off |
-| Double Capsule For Long Data | On |
+| Double Capsules | On |
+| Capsule font | `12 pt` |
 | Capsule fill | `[199, 213, 224, 38]` RGBA |
-| Capsule border | `[199, 213, 224, 145]` RGBA |
+| Capsule border | `[227, 243, 255, 200]` RGBA |
 | Authored preferred size | `540 x 290`; Square selects its safe `540 x 318` envelope |
 
 Defaults must remain single-source through the base mapping, Normal/MC profile overlays, `defaults.py`, generated snapshots, descriptor signal blocking, settings load/save, factory construction, and runtime widget state. A control is not complete until all of those seams and their round-trip tests agree.
@@ -1046,7 +1049,7 @@ Defaults must remain single-source through the base mapping, Normal/MC profile o
 - Steam refresh cadence has a five-minute minimum and ten-minute default unless a source-specific policy is deliberately slower.
 - Same-payload refreshes do not rewrite cache records, invalidate prepared artwork, or repaint unchanged visible models.
 - Profile data and semantic rotation are shared across displays; geometry, DPR paint caches, and the current applied view remain instance-local.
-- A refresh generation, selected app ID, field visibility, artwork variant/size, DPR, colours, font inputs, and doubled-field IDs all participate in the relevant model/paint cache authority.
+- A refresh generation, selected app ID, field visibility, artwork variant/size, DPR, colours, family/capsule font inputs, and double-capsule mode all participate in the relevant model/paint cache authority.
 - Constructors, Settings preview, and `paintEvent` perform no credential access, provider request, cache scan, image decode, or source artwork scaling.
 - Opening the Steam section may submit one bounded recent-games cache-record read through shared IO so Most Recent / Recent #2-#5 labels can include cached names in parentheses. It may not enumerate cache directories or change the persisted mode value while decorating labels.
 
@@ -1057,7 +1060,7 @@ Steam Journey, Abandonment Issues, and Friend Pulse must reuse or extend the fol
 - shared Steam header/logo treatment and painter-owned frame/shadows;
 - family font and text-colour controls;
 - artwork visibility, bounded shape/size semantics where artwork exists, cover crop, and DPR-aware prepared assets;
-- alpha-capable capsule fill/border controls and measured long-value handling where capsules exist;
+- alpha-capable capsule fill/border controls, compact/all-field-double modes, and measured capsule-font growth where capsules exist;
 - authored-layout ownership followed by uniform `Custom` scaling;
 - descriptor/defaults/settings/factory/runtime parity;
 - cache-first startup, unchanged-model suppression, shared refresh policy, and generation safety;
@@ -1099,7 +1102,7 @@ Do not:
 - [ ] Private, unavailable, empty, stale, malformed, and rate-limited states are distinct and honest.
 - [ ] Normal, longest realistic text, missing-art, and maximum-field fixture renders are captured and inspected.
 - [ ] Every artwork/thumbnail/avatar variant has min/max bounds, source-aspect behavior, DPR preparation, and collision tests.
-- [ ] Compact and long values are measured; truncation is intentional and tested.
+- [ ] If the card uses capsules, compact and all-field-double modes plus independent capsule typography are measured; truncation and authored growth are intentional and tested.
 - [ ] All field combinations remain inside authored bounds with no pairwise overlap.
 - [ ] `Custom` move/scale preserves authored composition and committed geometry.
 - [ ] Multi-display instances share provider data but not geometry/DPR pixmaps.
@@ -1516,7 +1519,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Prove no provider/asset work occurs in constructors, `paintEvent`, or Settings preview.
 - [x] Promote Achievement Pulse's header, typography, artwork rails, capsules, alpha swatches, and authored scaling as the current family engineering baseline while requiring distinct future-card identities.
 - [x] Add bounded header-aligned Square artwork sizing (`140-190`, default `140`) with cover crop, prepared-size/DPR cache keys, matched header/artwork stroke, and fixed-below-art `Unlocked` geometry.
-- [x] Add occupancy-aware measured double capsules for long values without field-specific layout exceptions.
+- [x] Add compact versus default-on all-field double capsules, whole-row occupancy, and independent capsule-font-driven rail/card growth without field-specific geometry exceptions.
 
 **Gate:** All four cards render from fixture view models with normal, narrow, and Custom geometry without clipping outside their card or changing committed rectangle.
 
@@ -1533,11 +1536,11 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 ## Phase 5.5 — Steam family shell and connection prelude
 
-- [x] Add the bordered family shell and family-level enabled/configured toggle around the Steam settings buckets.
+- [x] Add the bordered family shell and true family master around the Steam settings buckets.
 - [x] Keep the Connection & Privacy bucket as the first inner bucket and keep the user-facing connection affordance explicit before live data work.
-- [x] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [x] Gate factory creation, expected-overlay truth, stack preview/status, and subordinate Settings visibility from the family master while preserving individual card choices.
 
-**Gate:** Steam settings read like a single family section and the connection seam is explicit before live data work begins.
+**Gate:** Steam settings read like a single family section, the connection seam is explicit before live data work begins, and master-off is authoritative across settings/runtime/preview seams.
 
 ## Phase 5.6 — Steam identity, user-key, and connection flow
 
@@ -1549,7 +1552,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Add the settings-side auth controls and status states needed for connecting, disconnecting, and reusing a persisted credential without exposing the secret.
 - [x] Preserve the centered connect-required card state while making the new auth state explicit and testable.
 - [x] Keep auth work off paint and constructors, and keep it on the shared thread/service ownership seams.
-- [x] Keep the family shell/configured flag separate from any future runtime master switch so card enablement remains the runtime authority.
+- [x] Keep connection readiness separate from the family master: credentials govern data access while the master governs family participation.
 
 **Gate:** Steam has an explicit user-facing identity + credential flow that can be tested before live data hookup.
 
@@ -1560,7 +1563,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [ ] Implement local library index/autocomplete if the Custom app-ID control proves too brittle for users.
 - [ ] Re-evaluate painter-drawn ring, rarity, date, and tile-highlight extensions only after the promoted typographic card has real-runtime evidence; they are not baseline requirements.
 - [x] Implement card fields/settings/manual refresh without cache churn for unchanged visible models.
-- [x] Implement one-to-five latest unlocks, artwork visibility/shape/bounded Square size, family typography, supporting field choices, alpha capsule swatches, and measured double capsules.
+- [x] Implement one-to-five latest unlocks, artwork visibility/shape/bounded Square size, family typography, supporting field choices, alpha capsule swatches, compact/default-on-all-field double capsules, and independent capsule typography.
 - [x] Decorate Most Recent / Recent #2-#5 Settings choices with position-preserving names from one bounded cache-only IO read.
 - [x] Implement cache-first/fade/transition deferral integration.
 - [ ] Add real-account manual validation after fixture coverage.
@@ -1714,7 +1717,7 @@ Required bars:
 - [x] unauthorized refresh preserves valid cache and marks connection attention;
 - [x] Settings/defaults/factory/runtime parity for artwork, font, fields, capsule alpha, and double-capsule controls;
 - [x] bounded Square artwork and fixed-below-art `Unlocked` geometry at minimum/default/maximum size;
-- [x] measured long values reserve a collision-free same-column detail capsule while short values stay compact;
+- [x] compact mode and default-on all-field double mode use collision-free whole rows, with `PREVIOUSLY`, independent capsule font sizing, and measured authored-card growth;
 - [ ] local index autocomplete never calls network, if autocomplete is promoted beyond direct Custom app ID;
 - [ ] any future ring/rarity/date/tile mode has its own deterministic model, settings, geometry, and render bars before implementation.
 
@@ -1767,7 +1770,7 @@ Assert:
 - Square size clamps to safe bounds and keeps the shared header/right rails;
 - `Unlocked` remains directly below Square art with authored padding and no capsule intersection;
 - compact capsule labels/results remain colon-free, left/right aligned, and un-clipped at supported defaults;
-- measured double capsules centre their upper headings, remain same-column, use whole rails, and fit the full value before final elision;
+- all-field double capsules centre their upper headings and lower values, remain same-column, use whole measured rails, grow with capsule font size, and fit the full value before final elision;
 - capsule fill/border alpha does not expose shadow through the translucent top-left interior;
 - one-to-five unlock names remain unnumbered, unprefixed, and vertically separated;
 - friend avatar overlap remains within card;
@@ -1787,11 +1790,13 @@ Assert:
 | `--noupdates` | No automatic requests; cache can still display; manual refresh follows deliberate route. |
 | Parent image transition during refresh | Fetch/result apply/spinner respects deferred service helper contract. |
 | Settings open/close without Steam tab visit | No Steam auth/cache/provider activity. |
+| Steam family master off | No Steam card is created, expected by fade coordination, or included in stack preview/status; subordinate settings are hidden and saved card choices remain intact for re-enable. |
 | Steam tab open | Controls build once, rehydrate non-secret encrypted-storage availability, and read at most one recent-games cache record on shared IO for bracketed selection names; no credential decrypt, directory scan, provider request, or full library refresh. |
 | Check Saved Connection | UI remains responsive; success/failure feedback is gentle; a failed check does not erase the linked Steam ID or valid cached card. |
 | Square artwork size 140 / 180 / 190 | Art remains header/right aligned and cover-filled; title, latest unlocks, `Unlocked`, capsules, shadows, and card bounds do not overlap or clip. |
-| Long Previous value with double capsules on | Centred `PREVIOUSLY` occupies the upper capsule; the fitted full value appears directly below in the same column; later fields avoid both slots. |
-| Long Previous value with double capsules off | Compact capsule intentionally elides only the value; no extra rail is reserved. |
+| Double capsules on | Every visible field receives a centred upper heading and fitted lower value; `Previous` uses `PREVIOUSLY`; complete heading/value row pairs grow downward without overlap. |
+| Double capsules off | Every field uses the compact colon-free left-label/right-value composition and elides only its own value. |
+| Capsule font minimum/default/maximum | Capsule height, rail pitch, widget minimum, and authored card height grow as required while title/art/Unlocked remain fixed and `Custom` remains a uniform scale. |
 | Capsule alpha extremes | Fill and border reflect selected RGBA independently; shadow remains exterior-only and text remains legible. |
 | Normal monitor position | Card participates in shared stacking with other authored cards. |
 | Custom on one/multiple displays | Committed rect survives long title, field toggles, restart, and monitor/DPR change. |

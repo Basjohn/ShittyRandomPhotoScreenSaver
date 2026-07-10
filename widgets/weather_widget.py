@@ -9,7 +9,7 @@ from pathlib import Path
 import json
 import random
 from PySide6.QtWidgets import QWidget, QSizePolicy, QHBoxLayout, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt, Signal, QSize, QTimer
+from PySide6.QtCore import QPoint, QRect, Qt, Signal, QSize, QTimer
 from PySide6.QtGui import QFont, QPainter, QPen, QColor, QFontMetrics, QPixmap
 from shiboken6 import Shiboken
 
@@ -85,6 +85,7 @@ _ICON_ALIGNMENT_OPTIONS = {"LEFT", "RIGHT", "NONE"}
 _DEFAULT_ICON_ALIGNMENT = "RIGHT"
 _DEFAULT_ICON_SIZE = 120
 _DEFAULT_DETAIL_ICON_SIZE = 16
+WEATHER_SETTINGS_TARGET = "weather_location"
 
 
 def _normalize_weather_location_key(value: Any) -> str:
@@ -111,6 +112,7 @@ class WeatherWidget(BaseOverlayWidget):
     # Signals
     weather_updated = Signal(dict)  # Emits weather data
     error_occurred = Signal(str)
+    settings_requested = Signal(str)
     
     # Override defaults for weather widget
     DEFAULT_FONT_SIZE = 24
@@ -133,7 +135,7 @@ class WeatherWidget(BaseOverlayWidget):
         # Defer visibility until fade sync triggers
         self._defer_visibility_for_fade_sync = True
         
-        self._location = location
+        self._location = str(location or "").strip()
         self._weather_position = position  # Keep original enum for compatibility
         self._position = OverlayPosition(position.value)
         self._update_timer: Optional[QTimer] = None
@@ -187,6 +189,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._detail_icon_size = _DEFAULT_DETAIL_ICON_SIZE
         self._last_is_day = True
         self._last_weather_code: Optional[int] = None
+        self._missing_location_active = False
 
         # UI Components (created in _setup_ui)
         self._root_layout: Optional[QVBoxLayout] = None
@@ -563,8 +566,82 @@ class WeatherWidget(BaseOverlayWidget):
 
     def _update_content(self) -> None:
         """Required by BaseOverlayWidget - update weather display."""
-        if self._cached_data:
+        if not self._location.strip():
+            self._show_missing_location_state()
+        elif self._cached_data:
             self._update_display(self._cached_data)
+
+    def _request_fade_in(self) -> None:
+        """Join the normal coordinated fade without duplicating lifecycle branches."""
+
+        def _starter() -> None:
+            if Shiboken.isValid(self):
+                self._fade_in()
+
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
+            try:
+                parent.request_overlay_fade_sync("weather", _starter)
+                return
+            except Exception as exc:
+                logger.debug("[WEATHER] Coordinated fade request failed: %s", exc)
+        _starter()
+
+    def _show_missing_location_state(self) -> None:
+        """Render a stable, provider-inert settings affordance for blank location."""
+        if not Shiboken.isValid(self):
+            return
+        self._missing_location_active = True
+        self.setText("")
+        self._city_label.setText("Weather location required")
+        self._city_label.setFont(
+            QFont(self._font_family, max(12, int(self._font_size * 0.82)), QFont.Weight.Bold)
+        )
+        self._conditions_label.setText("Open Weather Settings")
+        action_font = QFont(
+            self._font_family,
+            max(11, int(self._font_size * 0.65)),
+            QFont.Weight.DemiBold,
+        )
+        action_font.setUnderline(True)
+        self._conditions_label.setFont(action_font)
+        self._city_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._conditions_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        color = self._text_color
+        self._city_label.setStyleSheet(
+            f"color: rgba({color.red()}, {color.green()}, {color.blue()}, {color.alpha()});"
+        )
+        self._conditions_label.setStyleSheet("color: rgba(103, 193, 245, 235);")
+        self._conditions_label.setWordWrap(False)
+        if self._condition_icon_widget is not None:
+            self._condition_icon_widget.clear_icon()
+            self._condition_icon_widget.setVisible(False)
+        if self._details_separator is not None:
+            self._details_separator.setVisible(False)
+        if self._detail_row_widget is not None:
+            self._detail_row_widget.setVisible(False)
+        if self._detail_row_container is not None:
+            self._detail_row_container.setVisible(False)
+        if self._forecast_separator is not None:
+            self._forecast_separator.setVisible(False)
+        if self._forecast_label is not None:
+            self._forecast_label.setVisible(False)
+        if self._text_column is not None:
+            self._text_column.setMinimumHeight(74)
+        if self._primary_row is not None:
+            self._primary_row.setMinimumHeight(82)
+        self._refresh_outer_geometry_for_runtime_content()
+
+    def _restore_location_layout_state(self) -> None:
+        if not self._missing_location_active:
+            return
+        self._missing_location_active = False
+        if self._text_column is not None:
+            self._text_column.setMinimumHeight(0)
+        if self._primary_row is not None:
+            self._primary_row.setMinimumHeight(0)
+        self._conditions_label.setWordWrap(False)
+        self._apply_text_alignment()
     
     # -------------------------------------------------------------------------
     # Lifecycle Implementation Hooks
@@ -573,15 +650,19 @@ class WeatherWidget(BaseOverlayWidget):
     def _initialize_impl(self) -> None:
         """Initialize weather resources (lifecycle hook)."""
         self._load_startup_cache()
+        if not self._location.strip():
+            self._show_missing_location_state()
         logger.debug("[LIFECYCLE] WeatherWidget initialized")
     
     def _activate_impl(self) -> None:
         """Activate weather widget - start updates (lifecycle hook)."""
+        if not self._location.strip():
+            self._show_missing_location_state()
+            self._request_fade_in()
+            logger.info("[LIFECYCLE] WeatherWidget activated in missing-location state")
+            return
         if not self._ensure_thread_manager("WeatherWidget._activate_impl"):
             raise RuntimeError("ThreadManager not available")
-        
-        if not self._location:
-            raise ValueError("No location configured for weather widget")
         
         # Display cached data if available
         if self._is_cache_valid():
@@ -590,15 +671,7 @@ class WeatherWidget(BaseOverlayWidget):
         self._schedule_refresh_cycle()
         
         # Fade in
-        parent = self.parent()
-        if parent is not None and hasattr(parent, "request_overlay_fade_sync"):
-            try:
-                parent.request_overlay_fade_sync("weather", lambda: self._fade_in())
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-                self._fade_in()
-        else:
-            self._fade_in()
+        self._request_fade_in()
         
         logger.debug("[LIFECYCLE] WeatherWidget activated")
     
@@ -624,19 +697,13 @@ class WeatherWidget(BaseOverlayWidget):
         if self._enabled:
             logger.warning("[FALLBACK] Weather widget already running")
             return
-        if not self._ensure_thread_manager("WeatherWidget.start"):
+        if not self._location.strip():
+            self._show_missing_location_state()
+            self._enabled = True
+            self._request_fade_in()
+            logger.info("Weather widget started in missing-location state")
             return
-        
-        if not self._location:
-            error_msg = "No location configured for weather widget"
-            logger.error(error_msg)
-            self.setText("Weather: No Location")
-            try:
-                self._refresh_outer_geometry_for_runtime_content()
-            except Exception as e:
-                logger.debug("[WEATHER] Exception suppressed: %s", e)
-            self.show()
-            self.error_occurred.emit(error_msg)
+        if not self._ensure_thread_manager("WeatherWidget.start"):
             return
 
         if self._is_cache_valid():
@@ -1123,6 +1190,10 @@ class WeatherWidget(BaseOverlayWidget):
         """Update widget display with weather data using new layout."""
         if not Shiboken.isValid(self):
             return
+        if not self._location.strip():
+            self._show_missing_location_state()
+            return
+        self._restore_location_layout_state()
         if not data:
             self._city_label.setText("Weather: No Data")
             self._conditions_label.setText("")
@@ -1342,15 +1413,33 @@ class WeatherWidget(BaseOverlayWidget):
         Args:
             location: City name or coordinates
         """
-        self._location = location
+        self._location = str(location or "").strip()
         
         # Clear cache
         self._cached_data = None
         self._cache_time = None
         
         # Fetch new data if running
-        if self._enabled:
+        if not self._location:
+            self._show_missing_location_state()
+        elif self._enabled:
+            self._restore_location_layout_state()
             self._fetch_weather()
+
+    def settings_action_at(self, local_pos: QPoint) -> str | None:
+        """Return the Weather-settings action only over the inert-state link."""
+        if not self._missing_location_active or self._conditions_label is None:
+            return None
+        top_left = self._conditions_label.mapTo(self, QPoint(0, 0))
+        action_rect = QRect(top_left, self._conditions_label.size())
+        return WEATHER_SETTINGS_TARGET if action_rect.contains(local_pos) else None
+
+    def handle_click(self, local_pos: QPoint) -> bool:
+        target = self.settings_action_at(local_pos)
+        if target is None:
+            return False
+        self.settings_requested.emit(target)
+        return True
     
     def set_position(self, position: WeatherPosition) -> None:
         """

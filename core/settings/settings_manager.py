@@ -78,7 +78,7 @@ class SettingsManager(QObject):
 
         app_name = application
         try:
-            if application == "Screensaver":
+            if application == "Screensaver" and storage_base_dir is None:
                 from core.settings.storage_paths import detect_current_profile
                 app_name = detect_current_profile(default="Screensaver")
         except Exception as exc:

@@ -1051,6 +1051,9 @@ class SteamCardFactory(WidgetFactory):
 
         if self._widget_name != "achievement_pulse" and not is_steam_enabled():
             return None
+        shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
+        if not SettingsManager.to_bool(shared_steam_settings.get("enabled", True), True):
+            return None
         if not SettingsManager.to_bool(config.get("enabled", False), False):
             return None
 
@@ -1078,7 +1081,6 @@ class SteamCardFactory(WidgetFactory):
         )
 
         try:
-            shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
             achievement_show_artwork = SettingsManager.to_bool(config.get("show_artwork", True), True)
             achievement_artwork_shape = str(config.get("artwork_shape", "wide") or "wide")
             achievement_capsule_fill = parse_color_to_qcolor(
@@ -1112,13 +1114,21 @@ class SteamCardFactory(WidgetFactory):
                     for field_id, default_value in field_defaults.items()
                 },
                 achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
+                achievement_show_latest_artwork=SettingsManager.to_bool(
+                    config.get("show_latest_achievement_artwork", True),
+                    True,
+                ),
                 achievement_show_artwork=achievement_show_artwork,
                 achievement_artwork_shape=achievement_artwork_shape,
                 achievement_square_artwork_size=int(config.get("square_artwork_size", 140)),
-                achievement_double_capsule_long_data=SettingsManager.to_bool(
-                    config.get("double_capsule_long_data", True),
+                achievement_double_capsules=SettingsManager.to_bool(
+                    config.get(
+                        "double_capsules",
+                        config.get("double_capsule_long_data", True),
+                    ),
                     True,
                 ),
+                achievement_capsule_font_size=int(config.get("capsule_font_size", 12)),
                 achievement_capsule_fill_color=achievement_capsule_fill,
                 achievement_capsule_border_color=achievement_capsule_border,
                 refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
@@ -1162,6 +1172,8 @@ class SteamCardFactory(WidgetFactory):
                     )
                     width = int(authored_size.width())
                     height = int(authored_size.height())
+                width = max(width, widget.minimumWidth())
+                height = max(height, widget.minimumHeight())
                 widget.setMinimumSize(width, height)
                 widget.resize(width, height)
 

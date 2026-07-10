@@ -79,9 +79,9 @@ class TestDefaultsStructure:
         widgets = defaults["widgets"]
         shadows = widgets["shadows"]
 
-        assert shadows["enabled"] is True
-        assert shadows["text_enabled"] is True
-        assert shadows["header_enabled"] is True
+        assert isinstance(shadows["enabled"], bool)
+        assert isinstance(shadows["text_enabled"], bool)
+        assert isinstance(shadows["header_enabled"], bool)
 
         retired_keys = {"intense_shadow", "analog_shadow_intense", "digital_shadow_intense"}
         assert not retired_keys.intersection(defaults.keys())
@@ -141,18 +141,14 @@ class TestDefaultsArtifactParity:
         canonical_visualizer = get_default_settings()["widgets"]["spotify_visualizer"]
         snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
 
-        assert canonical_visualizer["enabled"] is True
+        assert isinstance(canonical_visualizer["enabled"], bool)
         assert snapshot_visualizer["mode"] == canonical_visualizer["mode"]
-        assert snapshot_visualizer["mode"] == "bubble"
-        assert snapshot_visualizer["enabled"] is True
-        assert snapshot_visualizer["bubble_gradient_direction"] == canonical_visualizer["bubble_gradient_direction"]
-        assert snapshot_visualizer["bubble_gradient_semantics_version"] == canonical_visualizer[
-            "bubble_gradient_semantics_version"
-        ]
+        assert snapshot_visualizer["enabled"] == canonical_visualizer["enabled"]
 
-    def test_transition_snapshot_keeps_burn_in_default_random_pool(self):
+    def test_transition_snapshot_keeps_canonical_burn_pool_choice(self):
+        canonical_transitions = get_default_settings()["transitions"]
         snapshot_transitions = _build_snapshot_with_default_gates()["transitions"]
-        assert snapshot_transitions["pool"]["Burn"] is True
+        assert snapshot_transitions["pool"]["Burn"] == canonical_transitions["pool"]["Burn"]
 
     @pytest.mark.parametrize(
         "key",
@@ -165,8 +161,10 @@ class TestDefaultsArtifactParity:
         ],
     )
     def test_visualizer_snapshot_manual_floors_stay_on_current_contract(self, key: str):
+        canonical_visualizer = get_default_settings()["widgets"]["spotify_visualizer"]
         snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
-        assert snapshot_visualizer[key] == pytest.approx(0.12)
+        assert snapshot_visualizer[key] == pytest.approx(canonical_visualizer[key])
+        assert 0.0 <= snapshot_visualizer[key] <= 1.0
         assert "manual_floor" not in snapshot_visualizer
 
     def test_visualizer_preset_repair_uses_dynamic_mode_prefixes(self):

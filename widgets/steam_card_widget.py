@@ -5,6 +5,8 @@ dev-gated while Achievement Pulse resolves data through its bounded cache bridge
 """
 from __future__ import annotations
 
+import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -19,14 +21,18 @@ from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
 from widgets.steam_components import (
     ACHIEVEMENT_CAPSULE_BORDER_RGBA,
     ACHIEVEMENT_CAPSULE_FILL_RGBA,
+    ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
     ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     STEAM_CARD_AUTHORED_SIZE,
     SteamCardLayout,
     SteamCardViewModel,
+    achievement_capsule_geometry,
+    achievement_field_rail_count,
     achievement_pulse_authored_size,
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
     layout_steam_card,
+    normalize_achievement_capsule_font_size,
     normalize_achievement_square_artwork_size,
     render_steam_card,
 )
@@ -82,10 +88,12 @@ class SteamCardWidget(BaseOverlayWidget):
         achievement_selection: AchievementPulseSelection = AchievementPulseSelection(),
         achievement_field_visibility: Mapping[str, bool] | None = None,
         achievement_latest_unlock_count: int = 1,
+        achievement_show_latest_artwork: bool = True,
         achievement_show_artwork: bool = True,
         achievement_artwork_shape: str = "wide",
         achievement_square_artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
-        achievement_double_capsule_long_data: bool = True,
+        achievement_double_capsules: bool = True,
+        achievement_capsule_font_size: int = ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
         achievement_capsule_fill_color: QColor | None = None,
         achievement_capsule_border_color: QColor | None = None,
         refresh_minutes: int = 10,
@@ -95,6 +103,7 @@ class SteamCardWidget(BaseOverlayWidget):
         self._achievement_selection = achievement_selection
         self._achievement_field_visibility = dict(achievement_field_visibility or {})
         self._achievement_latest_unlock_count = max(1, min(5, int(achievement_latest_unlock_count)))
+        self._achievement_show_latest_artwork = bool(achievement_show_latest_artwork)
         self._achievement_show_artwork = bool(achievement_show_artwork)
         self._achievement_artwork_shape = (
             "square" if str(achievement_artwork_shape).strip().lower() == "square" else "wide"
@@ -102,7 +111,10 @@ class SteamCardWidget(BaseOverlayWidget):
         self._achievement_square_artwork_size = normalize_achievement_square_artwork_size(
             achievement_square_artwork_size
         )
-        self._achievement_double_capsule_long_data = bool(achievement_double_capsule_long_data)
+        self._achievement_double_capsules = bool(achievement_double_capsules)
+        self._achievement_capsule_font_size = normalize_achievement_capsule_font_size(
+            achievement_capsule_font_size
+        )
         self._achievement_capsule_fill_color = QColor(
             achievement_capsule_fill_color or QColor(*ACHIEVEMENT_CAPSULE_FILL_RGBA)
         )
@@ -113,6 +125,9 @@ class SteamCardWidget(BaseOverlayWidget):
         self._achievement_artwork = QImage()
         self._achievement_scaled_artwork_cache = QImage()
         self._achievement_scaled_artwork_cache_key: tuple[int, int, int, float, str] | None = None
+        self._achievement_latest_artwork = QImage()
+        self._achievement_scaled_latest_artwork_cache = QImage()
+        self._achievement_scaled_latest_artwork_cache_key: tuple[int, int, int, float] | None = None
         self._defer_visibility_for_fade_sync = True
         self._view_model: SteamCardViewModel = initial_view_model or build_mock_steam_view_model(definition.widget_id)
         self._last_layout: SteamCardLayout | None = None
@@ -121,14 +136,7 @@ class SteamCardWidget(BaseOverlayWidget):
         self.setText("")
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.setWordWrap(False)
-        authored_size = (
-            achievement_pulse_authored_size(
-                show_artwork=self._achievement_show_artwork,
-                artwork_shape=self._achievement_artwork_shape,
-            )
-            if definition.widget_id == "achievement_pulse"
-            else STEAM_CARD_AUTHORED_SIZE
-        )
+        authored_size = self._authored_content_size()
         self.setMinimumSize(QSize(int(authored_size.width()), int(authored_size.height())))
         self._apply_base_styling()
         self._update_content()
@@ -151,18 +159,63 @@ class SteamCardWidget(BaseOverlayWidget):
         self.setToolTip(f"Steam card: {self.definition.title}")
 
     def _calculate_content_size(self) -> QSize:
-        authored_size = (
-            achievement_pulse_authored_size(
-                show_artwork=self._achievement_show_artwork,
-                artwork_shape=self._achievement_artwork_shape,
-            )
-            if self.definition.widget_id == "achievement_pulse"
-            else STEAM_CARD_AUTHORED_SIZE
-        )
+        authored_size = self._authored_content_size()
         return QSize(
-            max(int(authored_size.width()), self.minimumWidth()),
-            max(int(authored_size.height()), self.minimumHeight()),
+            max(int(math.ceil(authored_size.width())), self.minimumWidth()),
+            max(int(math.ceil(authored_size.height())), self.minimumHeight()),
         )
+
+    def _achievement_capsule_field_count(self) -> int:
+        if self._view_model.fields:
+            return sum(1 for field in self._view_model.fields if field.enabled)
+        defaults = {
+            "total": True,
+            "playtime": True,
+            "previous": True,
+            "source": False,
+            "selected": False,
+        }
+        return sum(
+            1
+            for field_id, default in defaults.items()
+            if bool(self._achievement_field_visibility.get(field_id, default))
+        )
+
+    def _authored_content_size(self):
+        if self.definition.widget_id != "achievement_pulse":
+            return STEAM_CARD_AUTHORED_SIZE
+        field_count = self._achievement_capsule_field_count()
+        field_rails = achievement_field_rail_count(
+            field_count,
+            double_capsules=self._achievement_double_capsules,
+        )
+        capsule_height, capsule_gap = achievement_capsule_geometry(
+            font_family=self.get_font_family(),
+            capsule_font_size=self._achievement_capsule_font_size,
+        )
+        return achievement_pulse_authored_size(
+            show_artwork=self._achievement_show_artwork,
+            artwork_shape=self._achievement_artwork_shape,
+            field_rail_count=field_rails,
+            capsule_height=capsule_height,
+            capsule_gap=capsule_gap,
+        )
+
+    def _grow_to_authored_content_size(self) -> None:
+        """Grow non-Custom cards when capsule typography needs more vertical room."""
+
+        if self.definition.widget_id != "achievement_pulse":
+            return
+        authored = self._authored_content_size()
+        width = int(math.ceil(authored.width()))
+        height = int(math.ceil(authored.height()))
+        self.setMinimumSize(
+            max(self.minimumWidth(), width),
+            max(self.minimumHeight(), height),
+        )
+        if self._active_custom_layout_rect() is None:
+            self.resize(max(self.width(), width), max(self.height(), height))
+            self.updateGeometry()
 
     def set_text_color(self, color: QColor) -> None:
         super().set_text_color(color)
@@ -172,6 +225,7 @@ class SteamCardWidget(BaseOverlayWidget):
         """Apply an already-resolved view model without provider/cache work."""
 
         self._view_model = view_model
+        self._grow_to_authored_content_size()
         self.update()
 
     def set_achievement_selection(self, selection: AchievementPulseSelection) -> None:
@@ -483,6 +537,10 @@ class SteamCardWidget(BaseOverlayWidget):
             self.set_view_model(model)
         if self._achievement_show_artwork and model.appid is not None:
             self._load_achievement_artwork(model.appid)
+        if self._achievement_show_latest_artwork and model.latest_unlock_icon_url:
+            self._load_latest_achievement_artwork(model.latest_unlock_icon_url)
+        else:
+            self._clear_latest_achievement_artwork()
         self._has_displayed_valid_data = True
 
     def _load_achievement_artwork(self, appid: int) -> None:
@@ -536,6 +594,78 @@ class SteamCardWidget(BaseOverlayWidget):
         except Exception:
             logger.warning("[STEAM] Could not submit Achievement Pulse artwork load", exc_info=True)
 
+    def _clear_latest_achievement_artwork(self) -> None:
+        if (
+            not getattr(self, "_achievement_latest_artwork_identity", "")
+            and self._achievement_latest_artwork.isNull()
+        ):
+            return
+        self._achievement_latest_artwork_generation = int(
+            getattr(self, "_achievement_latest_artwork_generation", 0)
+        ) + 1
+        self._achievement_latest_artwork_identity = ""
+        self._achievement_latest_artwork = QImage()
+        self._achievement_scaled_latest_artwork_cache = QImage()
+        self._achievement_scaled_latest_artwork_cache_key = None
+        self.update()
+
+    def _load_latest_achievement_artwork(self, icon_url: str) -> None:
+        """Load the schema-owned primary achievement icon through the asset cache."""
+        safe_url = str(icon_url or "").strip()
+        if not safe_url:
+            self._clear_latest_achievement_artwork()
+            return
+        if getattr(self, "_achievement_latest_artwork_identity", "") == safe_url:
+            return
+        if not self._ensure_thread_manager("Achievement Pulse latest artwork"):
+            return
+
+        self._achievement_latest_artwork_identity = safe_url
+        generation = int(getattr(self, "_achievement_latest_artwork_generation", 0)) + 1
+        self._achievement_latest_artwork_generation = generation
+        url_fingerprint = hashlib.sha256(safe_url.encode("utf-8")).hexdigest()[:12]
+
+        def _load_artwork():
+            from core.settings.storage_paths import get_steam_cache_dir
+            from core.steam.assets import SteamAssetRecord, fetch_steam_achievement_icon
+            from core.steam.credentials import read_credential_metadata
+
+            metadata = read_credential_metadata()
+            if metadata is None:
+                return None
+            asset = fetch_steam_achievement_icon(
+                cache_dir=get_steam_cache_dir(profile_key=metadata.profile_cache_key) / "assets",
+                url=safe_url,
+            )
+            return asset.path if isinstance(asset, SteamAssetRecord) else None
+
+        def _finished(task_result) -> None:
+            from core.threading.manager import ThreadManager
+
+            def _apply_result() -> None:
+                if getattr(self, "_achievement_latest_artwork_generation", None) != generation:
+                    return
+                asset_path = task_result.result if task_result.success else None
+                image = QImage(str(asset_path)) if asset_path else QImage()
+                self._achievement_latest_artwork = image
+                self._achievement_scaled_latest_artwork_cache = QImage()
+                self._achievement_scaled_latest_artwork_cache_key = None
+                self.update()
+
+            ThreadManager.run_on_ui_thread(_apply_result)
+
+        try:
+            self._thread_manager.submit_io_task(
+                _load_artwork,
+                task_id=f"steam_achievement_latest_artwork_{url_fingerprint}_{generation}",
+                callback=_finished,
+            )
+        except Exception:
+            logger.warning(
+                "[STEAM] Could not submit latest achievement artwork load",
+                exc_info=True,
+            )
+
     def _scaled_achievement_artwork(self, art_rect: QRectF, dpr: float) -> QImage:
         """Return a cached DPR-aware cover crop using Media's quality policy."""
 
@@ -569,6 +699,39 @@ class SteamCardWidget(BaseOverlayWidget):
         prepared.setDevicePixelRatio(scale_dpr)
         self._achievement_scaled_artwork_cache = prepared
         self._achievement_scaled_artwork_cache_key = cache_key
+        return prepared
+
+    def _scaled_latest_achievement_artwork(self, art_rect: QRectF, dpr: float) -> QImage:
+        """Return a cached DPR-aware cover crop for the 40px achievement flair."""
+        if self._achievement_latest_artwork.isNull() or art_rect.isNull():
+            return QImage()
+        scale_dpr = max(1.0, float(dpr))
+        target_w = max(1, int(round(art_rect.width() * scale_dpr)))
+        target_h = max(1, int(round(art_rect.height() * scale_dpr)))
+        cache_key = (
+            int(self._achievement_latest_artwork.cacheKey()),
+            target_w,
+            target_h,
+            scale_dpr,
+        )
+        if (
+            self._achievement_scaled_latest_artwork_cache_key == cache_key
+            and not self._achievement_scaled_latest_artwork_cache.isNull()
+        ):
+            return self._achievement_scaled_latest_artwork_cache
+
+        scaled = self._achievement_latest_artwork.scaled(
+            target_w,
+            target_h,
+            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        crop_x = max(0, (scaled.width() - target_w) // 2)
+        crop_y = max(0, (scaled.height() - target_h) // 2)
+        prepared = scaled.copy(crop_x, crop_y, target_w, target_h)
+        prepared.setDevicePixelRatio(scale_dpr)
+        self._achievement_scaled_latest_artwork_cache = prepared
+        self._achievement_scaled_latest_artwork_cache_key = cache_key
         return prepared
 
     def _start_widget_fade_in(self, duration_ms: int | None = None) -> None:
@@ -611,6 +774,10 @@ class SteamCardWidget(BaseOverlayWidget):
                 max(1.0, float(self.height() - shrink_b)),
             )
             dpr = max(1.0, float(self.devicePixelRatioF()))
+            show_latest_artwork = bool(
+                self._achievement_show_latest_artwork
+                and not self._achievement_latest_artwork.isNull()
+            )
             preview_layout = layout_steam_card(
                 self._view_model,
                 target,
@@ -618,13 +785,23 @@ class SteamCardWidget(BaseOverlayWidget):
                 show_artwork=self._achievement_show_artwork,
                 artwork_shape=self._achievement_artwork_shape,
                 square_artwork_size=self._achievement_square_artwork_size,
-                double_capsule_long_data=self._achievement_double_capsule_long_data,
+                show_latest_artwork=show_latest_artwork,
+                double_capsules=self._achievement_double_capsules,
+                capsule_font_size=self._achievement_capsule_font_size,
                 font_family=self.get_font_family(),
                 font_size=self.get_font_size(),
             )
             artwork = (
                 self._scaled_achievement_artwork(preview_layout.art_rect, dpr)
                 if self._achievement_show_artwork
+                else QImage()
+            )
+            latest_artwork = (
+                self._scaled_latest_achievement_artwork(
+                    preview_layout.latest_unlock_art_rect,
+                    dpr,
+                )
+                if show_latest_artwork
                 else QImage()
             )
             self._last_layout = render_steam_card(
@@ -637,10 +814,13 @@ class SteamCardWidget(BaseOverlayWidget):
                 dpr=dpr,
                 logo_pixmap=self._steam_logo,
                 artwork_image=artwork,
+                latest_artwork_image=latest_artwork,
                 show_artwork=self._achievement_show_artwork,
                 artwork_shape=self._achievement_artwork_shape,
                 square_artwork_size=self._achievement_square_artwork_size,
-                double_capsule_long_data=self._achievement_double_capsule_long_data,
+                show_latest_artwork=show_latest_artwork,
+                double_capsules=self._achievement_double_capsules,
+                capsule_font_size=self._achievement_capsule_font_size,
                 capsule_fill_color=self._achievement_capsule_fill_color,
                 capsule_border_color=self._achievement_capsule_border_color,
             )

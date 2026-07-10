@@ -26,6 +26,14 @@ class SettingsDialogCacheData:
 
 _cache: SettingsDialogCacheData | None = None
 _CACHE_FILENAME = "settings_dialog_cache.json"
+_DEFAULTS_SOURCE_PATHS = tuple(
+    Path(__file__).resolve().parents[1] / "core" / "settings" / filename
+    for filename in (
+        "defaults.py",
+        "default_settings.py",
+        "default_profile_overrides.py",
+    )
+)
 
 
 def _cache_file() -> Path:
@@ -34,18 +42,8 @@ def _cache_file() -> Path:
 
 def _compute_defaults_generation() -> float:
     """Use defaults module mtimes as a cheap invalidation hook."""
-    defaults_paths = [
-        Path(__file__).resolve().parents[1]
-        / "core"
-        / "settings"
-        / "defaults.py",
-        Path(__file__).resolve().parents[1]
-        / "core"
-        / "settings"
-        / "default_settings.py",
-    ]
     mtimes = []
-    for defaults_path in defaults_paths:
+    for defaults_path in _DEFAULTS_SOURCE_PATHS:
         try:
             mtimes.append(defaults_path.stat().st_mtime)
         except FileNotFoundError:

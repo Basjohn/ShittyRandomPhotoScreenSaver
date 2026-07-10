@@ -30,33 +30,33 @@
         "bubble_bounce_same_only": true,
         "bubble_collision_pop_mode": "one",
         "bubble_outline_color": [
-          151,
-          213,
+          219,
+          239,
           255,
-          220
+          255
         ],
         "bubble_specular_color": [
-          180,
-          220,
+          219,
+          239,
           255,
           255
         ],
         "bubble_gradient_light": [
           0,
-          98,
-          217,
+          82,
+          175,
           255
         ],
         "bubble_gradient_dark": [
           0,
-          25,
-          74,
+          16,
+          45,
           255
         ],
         "bubble_pop_color": [
-          40,
-          120,
-          200,
+          38,
+          115,
+          191,
           255
         ],
         "bubble_specular_direction": "top_left",
@@ -92,7 +92,7 @@
         "bubble_dynamic_range_enabled": false,
         "bubble_agc_strength": 0.0,
         "bubble_input_gain": 0.75,
-        "bubble_kick_lane_gain": 0.8,
+        "bubble_kick_lane_gain": 1.0,
         "bubble_transient_pulse_gain": 0.05,
         "bubble_transient_clamp": 1.15,
         "bubble_audio_block_size": 128,

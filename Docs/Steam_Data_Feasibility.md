@@ -27,7 +27,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 |---|---|---|---|---|---|
 | Recently played games | `IPlayerService/GetRecentlyPlayedGames/v1` | Conditional | app id, recent playtime, ordered recent app list | Requires user key and profile id; response depends on account visibility and Steam behavior | Achievement Pulse may use this for dynamic recent selection after fixture/live validation |
 | Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional | app id, title/icon when appinfo is included, playtime forever | Returns owned games only when owned-game details are visible to caller | Library index foundation; cannot fabricate missing apps |
-| Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state, schema totals/names | Requires user key, profile id, app id; per-app availability may vary | Achievement Pulse uses schema display names instead of internal ids and can proceed with unavailable/private branches |
+| Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names and may add the primary achieved icon without making artwork authoritative |
 | Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse can proceed only with privacy-aware empty states |
 | App news | `ISteamNews/GetNewsForApp/v2` | Conditional | app id, headline/blurb/date/feed/url | Public app-specific endpoint; not personalized and not library-wide | Steam Journey may use only bounded watched/focus-app scans |
 | General per-game last played | None proven | Unavailable | none | `GetRecentlyPlayedGames` is recent-only; `GetOwnedGames` does not prove a general reliable timestamp in this pass | Abandonment Issues remains blocked from smart last-played claims |
@@ -42,6 +42,7 @@ This document records the supported-source pass for the Steam widget family. Ach
 - Dynamic recent-game selection must stay honest when a recent app lacks achievements.
 - Custom selection persists by app id, not title text.
 - The resolver may retain the newest five unlocked achievements, ordered by unlock time and mapped through schema display names. It may also expose the second recently played game as the non-source-authoritative Previous field. Missing schema labels fall back to the achievement row without exposing internal ids when a user-facing name is available.
+- The primary newest unlock may join to its schema `icon`. Only HTTPS URLs on the validated Steam asset allowlist may be fetched; missing, invalid, or failed icon data removes only the optional 40px flair and never the unlock text/card state.
 - The shared Steam freshness window is a non-secret preference with a 5-minute minimum and 10-minute default. It gates bounded startup refresh work; it does not authorize a private polling loop.
 
 ### Friend Pulse
@@ -65,13 +66,14 @@ This document records the supported-source pass for the Steam widget family. Ach
 - `core/steam/models.py` owns frozen result/source/view data types.
 - `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache.
 - `core/steam/request_policy.py`, `profile_state.py`, `assets.py`, `events.py`, and `mock_backend.py` complete the Phase 2 non-UI foundation: coalescing, stale-generation drops, bounded backoff, account-private policy state, validated asset cache, narrow data-ready publication, and fixture-only backend injection.
-- `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, refresh only after fade, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, second-recent-game presentation, validated wide header/portrait library artwork, header-aligned bounded square sizing, collision-free whole-rail compositions, measured long-value double capsules, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
+- `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, refresh only after fade, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, optional measured-text-adjacent primary schema-icon flair, second-recent-game presentation, validated wide header/portrait library artwork, header-aligned bounded square sizing, collision-free whole-rail compositions, compact or default-on all-field double capsules with independent font-driven growth, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
 - Tests must use injected fake openers and fixtures; no live Steam requests in the suite.
 
 ## Primary Source Links
 
 - `IPlayerService`: https://partner.steamgames.com/doc/webapi/IPlayerService
 - `ISteamUserStats`: https://partner.steamgames.com/doc/webapi/ISteamUserStats
+- Steam Achievements: https://partner.steamgames.com/doc/features/achievements
 - `ISteamUser`: https://partner.steamgames.com/doc/webapi/ISteamUser
 - `ISteamNews`: https://partner.steamgames.com/doc/webapi/ISteamNews
 - Steam Library Assets: https://partner.steamgames.com/doc/store/assets/libraryassets

@@ -1,10 +1,10 @@
 """Standalone GUI for editing canonical Normal and MC default settings.
 
-The tree is generated recursively from the live canonical defaults API, so new
-settings appear automatically. Saved changes are stored as compact profile
-overrides rather than rewriting the large base defaults literal. Regeneration
-runs in fresh Python processes so generated JSON and both SST snapshots see the
-new module immediately.
+The tree is generated recursively from the canonical base literal, so new
+settings appear automatically. Normal saves become the authoritative base;
+only MC differences remain in the compact profile overlay. Regeneration runs
+in fresh Python processes so generated JSON and both SST snapshots see the new
+sources immediately.
 """
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ import ast
 import json
 import os
 from copy import deepcopy
+from dataclasses import dataclass
 from pathlib import Path
 from pprint import pformat
 import subprocess
@@ -21,12 +22,14 @@ import time
 from typing import Any, Callable, Iterable, Mapping
 
 from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QComboBox,
     QDoubleSpinBox,
+    QFileDialog,
+    QFontComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -49,11 +52,13 @@ if str(REPO_ROOT) not in sys.path:
 from core.settings.defaults import (  # noqa: E402
     MC_PROFILE,
     NORMAL_PROFILE,
-    get_base_default_settings,
+    PRESERVE_ON_RESET,
     merge_default_overrides,
 )
 from ui.settings_theme import load_theme  # noqa: E402
+from ui.styled_popup import ColorSwatchButton  # noqa: E402
 
+DEFAULT_SETTINGS_PATH = REPO_ROOT / "core" / "settings" / "default_settings.py"
 PROFILE_OVERRIDES_PATH = REPO_ROOT / "core" / "settings" / "default_profile_overrides.py"
 SNAPSHOT_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_defaults_snapshot_artifacts.py"
 SST_REGEN_SCRIPT = REPO_ROOT / "tools" / "regenerate_sst_defaults.py"
@@ -70,14 +75,71 @@ _NO_DEFAULT = object()
 _PROFILE_MODULE_HEADER = '''"""Profile-specific canonical default overrides.
 
 This small data module is written by ``tools/default_settings_editor.py``.
-Normal overrides apply to both builds; MC overrides apply on top for the
-``Screensaver_MC`` profile. Stable profile names keep generated SST artifacts
-and runtime reset behavior on the same source.
+Normal defaults live directly in ``default_settings.py``. Only MC differences
+apply on top for the ``Screensaver_MC`` profile. Stable profile names keep
+generated SST artifacts and runtime reset behavior on the same source.
 """
 from __future__ import annotations
 
 
 '''
+_DEFAULT_SETTINGS_MODULE_HEADER = '''"""Canonical Normal-profile defaults.
+
+This literal is the authoritative fresh-install and Reset to Defaults source.
+It may be edited directly or through ``tools/default_settings_editor.py``.
+Generated defaults artifacts must follow this source rather than override it.
+"""
+from __future__ import annotations
+
+
+'''
+_HIDDEN_BASE_KEYS = frozenset({"preset", "custom_preset_backup"})
+_TRANSPORT_KEYS = frozenset({
+    "application",
+    "metadata",
+    "profile",
+    "settings_version",
+    "snapshot_version",
+    "version",
+})
+_PROFILE_LOCAL_IMPORT_PATHS = (
+    "widgets.custom_layout",
+    "widgets.layout_slots",
+)
+
+_TEXT_OPTIONS_BY_PATH: dict[tuple[str, ...], tuple[str, ...]] = {
+    ("display", "mode"): ("fill", "fit", "shrink", "stretch", "center"),
+    ("display", "render_backend_mode"): ("opengl", "software"),
+    ("input", "halo_shape"): (
+        "circle",
+        "ring",
+        "crosshair",
+        "diamond",
+        "dot",
+        "cursor_light",
+        "cursor_dark",
+    ),
+    ("sources", "mode"): ("folders",),
+    ("widgets", "achievement_pulse", "artwork_shape"): ("wide", "square"),
+    ("widgets", "achievement_pulse", "selection_mode"): (
+        "most_recent",
+        "recent_2",
+        "recent_3",
+        "recent_4",
+        "recent_5",
+        "custom",
+    ),
+    ("widgets", "gmail", "date_display_mode"): ("relative", "numeric", "words"),
+    ("widgets", "imgur", "layout_mode"): ("grid", "featured", "hybrid"),
+    ("widgets", "media", "provider"): ("spotify", "musicbee"),
+    ("widgets", "reddit", "provider"): ("rss", "html", "pullpush", "public_json"),
+    ("widgets", "steam", "privacy_mode"): ("Strict", "Balanced", "Rich"),
+    ("widgets", "weather", "icon_alignment"): ("LEFT", "RIGHT"),
+}
+_TEXT_OPTIONS_BY_KEY: dict[str, tuple[str, ...]] = {
+    "display_mode": ("digital", "analog"),
+    "format": ("12h", "24h"),
+}
 
 _SECTION_DESCRIPTIONS = {
     "accessibility": "accessibility and display-protection behavior",
@@ -101,6 +163,62 @@ def _profile_payload(overrides: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
     }
 
 
+def _load_literal_assignment(path: Path, assignment_name: str) -> Mapping[str, Any]:
+    source = path.read_text(encoding="utf-8")
+    parsed = ast.parse(source, filename=str(path))
+    for node in parsed.body:
+        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
+            continue
+        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        if not any(
+            isinstance(target, ast.Name) and target.id == assignment_name
+            for target in targets
+        ):
+            continue
+        value = ast.literal_eval(node.value)
+        if isinstance(value, Mapping):
+            return value
+        break
+    raise ValueError(f"{path} does not define a literal {assignment_name} mapping")
+
+
+def load_default_settings_source(path: Path = DEFAULT_SETTINGS_PATH) -> dict[str, Any]:
+    """Read the canonical literal without importing or executing its module."""
+    return deepcopy(dict(_load_literal_assignment(path, "DEFAULT_SETTINGS")))
+
+
+def editable_base_settings(source_settings: Mapping[str, Any]) -> dict[str, Any]:
+    """Return user-facing base defaults while preserving retired payloads off-screen."""
+    editable = deepcopy(dict(source_settings))
+    for key in _HIDDEN_BASE_KEYS:
+        editable.pop(key, None)
+    return editable
+
+
+def build_canonical_default_source(
+    source_settings: Mapping[str, Any],
+    normal_model: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Replace editable base sections while retaining hidden compatibility payloads."""
+    result = {
+        key: deepcopy(value)
+        for key, value in source_settings.items()
+        if key in _HIDDEN_BASE_KEYS
+    }
+    result.update(deepcopy(dict(normal_model)))
+    return result
+
+
+def render_default_settings_module(settings: Mapping[str, Any]) -> str:
+    """Render deterministic importable Python for the authoritative base literal."""
+    return (
+        _DEFAULT_SETTINGS_MODULE_HEADER
+        + "DEFAULT_SETTINGS = "
+        + pformat(dict(settings), width=100, sort_dicts=True)
+        + "\n"
+    )
+
+
 def render_profile_overrides_module(overrides: Mapping[str, Any]) -> str:
     """Render deterministic importable Python for the small profile overlay."""
 
@@ -115,20 +233,7 @@ def render_profile_overrides_module(overrides: Mapping[str, Any]) -> str:
 
 def load_profile_overrides(path: Path = PROFILE_OVERRIDES_PATH) -> dict[str, dict[str, Any]]:
     """Read only the literal override assignment without executing the module."""
-
-    source = path.read_text(encoding="utf-8")
-    parsed = ast.parse(source, filename=str(path))
-    for node in parsed.body:
-        if not isinstance(node, (ast.Assign, ast.AnnAssign)):
-            continue
-        targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-        if not any(isinstance(target, ast.Name) and target.id == "PROFILE_DEFAULT_OVERRIDES" for target in targets):
-            continue
-        value = ast.literal_eval(node.value)
-        if not isinstance(value, Mapping):
-            break
-        return _profile_payload(value)
-    raise ValueError(f"{path} does not define a literal PROFILE_DEFAULT_OVERRIDES mapping")
+    return _profile_payload(_load_literal_assignment(path, "PROFILE_DEFAULT_OVERRIDES"))
 
 
 def deep_difference(base: Mapping[str, Any], target: Mapping[str, Any]) -> dict[str, Any]:
@@ -162,9 +267,109 @@ def build_profile_overrides(
     normal = dict(models[NORMAL_PROFILE])
     mc = dict(models[MC_PROFILE])
     return {
-        NORMAL_PROFILE: deep_difference(base, normal),
+        NORMAL_PROFILE: {},
         MC_PROFILE: deep_difference(normal, mc),
     }
+
+
+@dataclass(frozen=True)
+class ImportedDefaults:
+    settings: dict[str, Any]
+    removed_secret_fields: int = 0
+    skipped_paths: tuple[str, ...] = ()
+
+
+def _looks_private_import_key(key: str) -> bool:
+    lowered = str(key).strip().lower()
+    return (
+        lowered in {
+            "api_key",
+            "client_secret",
+            "credential",
+            "credentials",
+            "password",
+            "refresh_token",
+            "access_token",
+            "token",
+        }
+        or lowered.endswith(("_api_key", "_password", "_secret", "_token"))
+        or "credential" in lowered
+    )
+
+
+def _strip_private_import_fields(
+    mapping: Mapping[str, Any],
+    prefix: tuple[str, ...] = (),
+) -> tuple[dict[str, Any], int, list[str]]:
+    cleaned: dict[str, Any] = {}
+    removed = 0
+    skipped: list[str] = []
+    for raw_key, value in mapping.items():
+        key = str(raw_key)
+        path = (*prefix, key)
+        dotted = ".".join(path)
+        if _looks_private_import_key(key):
+            removed += 1
+            skipped.append(dotted)
+            continue
+        if isinstance(value, Mapping):
+            child, child_removed, child_skipped = _strip_private_import_fields(value, path)
+            cleaned[key] = child
+            removed += child_removed
+            skipped.extend(child_skipped)
+            continue
+        if (
+            isinstance(value, str)
+            and any(token in key.lower() for token in ("path", "file", "folder"))
+            and Path(value).is_absolute()
+        ):
+            skipped.append(dotted)
+            continue
+        cleaned[key] = deepcopy(value)
+    return cleaned, removed, skipped
+
+
+def _remove_import_path(mapping: dict[str, Any], dotted_path: str) -> bool:
+    parts = tuple(part for part in dotted_path.split(".") if part)
+    if not parts:
+        return False
+    current: Any = mapping
+    for part in parts[:-1]:
+        if not isinstance(current, dict) or part not in current:
+            return False
+        current = current[part]
+    if not isinstance(current, dict) or parts[-1] not in current:
+        return False
+    current.pop(parts[-1], None)
+    return True
+
+
+def load_importable_settings_snapshot(path: Path) -> ImportedDefaults:
+    """Load an SST/main-settings JSON snapshot without importing private state."""
+    loaded = json.loads(Path(path).read_text(encoding="utf-8"))
+    root: Any = loaded.get("snapshot", {}) if isinstance(loaded, Mapping) and "snapshot" in loaded else loaded
+    if not isinstance(root, Mapping):
+        raise ValueError("The selected file does not contain a settings mapping")
+
+    from core.settings.sst_io import normalize_sst_snapshot
+    from core.steam.credentials import strip_secret_fields
+
+    steam_cleaned, steam_removed = strip_secret_fields(root)
+    private_cleaned, private_removed, skipped = _strip_private_import_fields(steam_cleaned)
+    normalized = normalize_sst_snapshot(private_cleaned)
+    for key in _TRANSPORT_KEYS | _HIDDEN_BASE_KEYS:
+        normalized.pop(key, None)
+    for dotted_path in PRESERVE_ON_RESET:
+        if _remove_import_path(normalized, dotted_path):
+            skipped.append(dotted_path)
+    for dotted_path in _PROFILE_LOCAL_IMPORT_PATHS:
+        if _remove_import_path(normalized, dotted_path):
+            skipped.append(dotted_path)
+    return ImportedDefaults(
+        settings=normalized,
+        removed_secret_fields=steam_removed + private_removed,
+        skipped_paths=tuple(sorted(set(skipped))),
+    )
 
 
 def iter_leaf_settings(
@@ -207,6 +412,42 @@ def leaf_paths(mapping: Mapping[str, Any]) -> set[tuple[str, ...]]:
     return {path for path, _value in iter_leaf_settings(mapping)}
 
 
+def merge_imported_profile(
+    models: Mapping[str, Mapping[str, Any]],
+    profile: str,
+    imported: Mapping[str, Any],
+    mc_explicit_paths: set[tuple[str, ...]],
+) -> tuple[dict[str, dict[str, Any]], set[tuple[str, ...]]]:
+    """Merge imported settings while preserving MC's explicit inheritance breaks."""
+    merged_models = {
+        NORMAL_PROFILE: deepcopy(dict(models[NORMAL_PROFILE])),
+        MC_PROFILE: deepcopy(dict(models[MC_PROFILE])),
+    }
+    explicit_paths = set(mc_explicit_paths)
+
+    if profile == MC_PROFILE:
+        merged_models[MC_PROFILE] = merge_default_overrides(
+            merged_models[MC_PROFILE],
+            imported,
+        )
+        explicit_paths.update(leaf_paths(imported))
+        return merged_models, explicit_paths
+
+    old_mc = merged_models[MC_PROFILE]
+    explicit_values = {
+        path: deepcopy(get_path(old_mc, path))
+        for path in explicit_paths
+        if get_path(old_mc, path, _MISSING) is not _MISSING
+    }
+    new_normal = merge_default_overrides(merged_models[NORMAL_PROFILE], imported)
+    new_mc = deepcopy(new_normal)
+    for path, value in explicit_values.items():
+        set_path(new_mc, path, value)
+    merged_models[NORMAL_PROFILE] = new_normal
+    merged_models[MC_PROFILE] = new_mc
+    return merged_models, explicit_paths
+
+
 def format_value(value: Any) -> str:
     if isinstance(value, bool):
         return "true" if value else "false"
@@ -237,6 +478,44 @@ def _pretty_name(raw: str) -> str:
     return raw.replace("_", " ").strip().title()
 
 
+def _valid_text_hint(path: tuple[str, ...]) -> str:
+    key = path[-1]
+    if key == "monitor":
+        return "Valid text: ALL or a positive monitor number accepted by the corresponding Display control."
+    if key == "position":
+        return (
+            "Valid text values: Top Left, Top Center, Top Right, Middle Left, Center, "
+            "Middle Right, Bottom Left, Bottom Center, Bottom Right; Custom or Follow Media "
+            "only when the corresponding Position control offers it."
+        )
+    options = _TEXT_OPTIONS_BY_PATH.get(path) or _TEXT_OPTIONS_BY_KEY.get(path[-1])
+    if options:
+        return "Valid text values: " + ", ".join(options) + "."
+
+    if key == "font_family":
+        return "Valid text: the exact family name of any font installed on the target system."
+    if key == "timezone":
+        return "Valid text: local, UTC, a fixed UTC offset, or an IANA timezone name."
+    if key == "location":
+        return "Valid text: a city, town, or place name accepted by the Weather location lookup."
+    if key == "subreddit":
+        return "Valid text: a subreddit name without the /r/ prefix, or All."
+    if key == "filter_label":
+        return "Valid text: an existing Gmail label such as INBOX."
+    if key == "account_slot":
+        return "Valid text: a non-negative account slot number, such as 0."
+    if key == "max_workers":
+        return "Valid text: auto, or a positive whole-number worker count."
+    if any(token in key for token in ("path", "file", "folder", "directory")):
+        return "Valid text: an empty value or a filesystem path appropriate to this setting."
+    if key in {"tag", "custom_tag"}:
+        return "Valid text: a provider-supported tag; custom_tag may also be empty."
+    return (
+        "Valid text: free text unless the corresponding main-app control presents choices; "
+        "for a choice control, use its exact persisted value."
+    )
+
+
 def setting_tooltip(path: tuple[str, ...], value: Any, profile: str) -> str:
     """Generate a useful tooltip for every current and future setting leaf."""
 
@@ -263,11 +542,13 @@ def setting_tooltip(path: tuple[str, ...], value: Any, profile: str) -> str:
     else:
         explanation = f"Sets {label.lower()} for {owner} within {section}."
     profile_text = PROFILE_LABELS.get(profile, profile)
+    text_hint = f"{_valid_text_hint(path)}\n\n" if isinstance(value, str) else ""
     return (
         f"{explanation}\n\n"
         f"Key: {'.'.join(path)}\n"
         f"Profile view: {profile_text}\n"
         f"Value type: {value_type_name(value)}\n\n"
+        f"{text_hint}"
         "These defaults affect fresh profiles and Reset to Defaults. Runtime-enforced policy may still supersede a value."
     )
 
@@ -287,27 +568,50 @@ def default_undo_path() -> Path:
     return local_root / "SRPSS" / "DefaultSettingsEditor" / "most_recent_undo.json"
 
 
-def write_undo_record(source_text: str, path: Path | None = None) -> Path:
+def write_undo_record(
+    source_text: str,
+    path: Path | None = None,
+    *,
+    base_source_text: str | None = None,
+) -> Path:
     undo_path = path or default_undo_path()
     payload = {
-        "schema_version": 1,
+        "schema_version": 2 if base_source_text is not None else 1,
         "created_at": time.time(),
         "source_text": source_text,
     }
+    if base_source_text is not None:
+        payload["base_source_text"] = base_source_text
+        payload["overrides_source_text"] = source_text
     atomic_write_text(undo_path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
     return undo_path
 
 
-def read_undo_record(path: Path | None = None) -> str | None:
+def read_undo_sources(path: Path | None = None) -> tuple[str | None, str] | None:
     undo_path = path or default_undo_path()
     if not undo_path.exists():
         return None
     try:
         payload = json.loads(undo_path.read_text(encoding="utf-8"))
-        source = payload.get("source_text") if isinstance(payload, Mapping) else None
-        return source if isinstance(source, str) and "PROFILE_DEFAULT_OVERRIDES" in source else None
+        if not isinstance(payload, Mapping):
+            return None
+        overrides_source = payload.get("overrides_source_text", payload.get("source_text"))
+        base_source = payload.get("base_source_text")
+        if not isinstance(overrides_source, str) or "PROFILE_DEFAULT_OVERRIDES" not in overrides_source:
+            return None
+        if base_source is not None and (
+            not isinstance(base_source, str) or "DEFAULT_SETTINGS" not in base_source
+        ):
+            return None
+        return base_source, overrides_source
     except Exception:
         return None
+
+
+def read_undo_record(path: Path | None = None) -> str | None:
+    """Backward-compatible access to the override half of the undo record."""
+    sources = read_undo_sources(path)
+    return sources[1] if sources is not None else None
 
 
 def regenerate_default_artifacts() -> str:
@@ -331,6 +635,42 @@ def regenerate_default_artifacts() -> str:
     return "\n".join(output)
 
 
+def _is_color_setting(path: tuple[str, ...] | None, value: Any) -> bool:
+    return bool(
+        path
+        and "color" in path[-1].lower()
+        and isinstance(value, (list, tuple))
+        and len(value) in {3, 4}
+        and all(isinstance(channel, (int, float)) for channel in value)
+    )
+
+
+def _color_from_value(value: Any) -> QColor:
+    channels = [max(0, min(255, int(round(channel)))) for channel in value]
+    if len(channels) == 3:
+        channels.append(255)
+    return QColor(*channels)
+
+
+def _color_icon(value: Any) -> QIcon:
+    pixmap = QPixmap(32, 20)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    try:
+        tile = 4
+        for y in range(2, 18, tile):
+            for x in range(2, 30, tile):
+                shade = 210 if ((x // tile) + (y // tile)) % 2 == 0 else 125
+                painter.fillRect(x, y, tile, tile, QColor(shade, shade, shade))
+        painter.fillRect(2, 2, 28, 16, _color_from_value(value))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(255, 255, 255, 210), 1))
+        painter.drawRoundedRect(1, 1, 30, 18, 4, 4)
+    finally:
+        painter.end()
+    return QIcon(pixmap)
+
+
 class DefaultsTree(QTreeWidget):
     """Restrict editing to the value column while retaining keyboard editing."""
 
@@ -345,6 +685,24 @@ class DefaultValueDelegate(QStyledItemDelegate):
 
     def createEditor(self, parent, option, index):  # noqa: ANN001, N802
         value = index.data(VALUE_ROLE)
+        path = index.data(PATH_ROLE)
+        if _is_color_setting(path, value):
+            editor = ColorSwatchButton(
+                _color_from_value(value),
+                parent=parent,
+                title=f"Choose {_pretty_name(path[-1])}",
+                show_alpha=len(value) == 4,
+            )
+            editor.setMinimumHeight(30)
+            editor.setMaximumHeight(34)
+            editor.color_changed.connect(lambda _color, target=editor: self.commitData.emit(target))
+            editor.color_changed.connect(lambda _color, target=editor: self.closeEditor.emit(target))
+            return editor
+        if isinstance(path, tuple) and path[-1].lower() == "font_family":
+            editor = QFontComboBox(parent)
+            editor.activated.connect(lambda _index, target=editor: self.commitData.emit(target))
+            editor.activated.connect(lambda _index, target=editor: self.closeEditor.emit(target))
+            return editor
         if isinstance(value, bool):
             editor = QComboBox(parent)
             editor.addItem("true", True)
@@ -364,7 +722,11 @@ class DefaultValueDelegate(QStyledItemDelegate):
 
     def setEditorData(self, editor, index) -> None:  # noqa: ANN001, N802
         value = index.data(VALUE_ROLE)
-        if isinstance(editor, QComboBox):
+        if isinstance(editor, ColorSwatchButton):
+            editor.set_color(_color_from_value(value))
+        elif isinstance(editor, QFontComboBox):
+            editor.setCurrentFont(QFont(str(value)))
+        elif isinstance(editor, QComboBox):
             editor.setCurrentIndex(0 if bool(value) else 1)
         elif isinstance(editor, QSpinBox):
             editor.setValue(int(value))
@@ -377,7 +739,14 @@ class DefaultValueDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model: QAbstractItemModel, index: QModelIndex) -> None:  # noqa: ANN001, N802
         original = index.data(VALUE_ROLE)
         try:
-            if isinstance(editor, QComboBox):
+            if isinstance(editor, ColorSwatchButton):
+                color = editor.color()
+                value = [color.red(), color.green(), color.blue()]
+                if isinstance(original, (list, tuple)) and len(original) == 4:
+                    value.append(color.alpha())
+            elif isinstance(editor, QFontComboBox):
+                value = editor.currentFont().family()
+            elif isinstance(editor, QComboBox):
                 value = bool(editor.currentData())
             elif isinstance(editor, QSpinBox):
                 value = int(editor.value())
@@ -401,19 +770,23 @@ class DefaultSettingsEditor(QMainWindow):
     def __init__(
         self,
         *,
+        base_path: Path = DEFAULT_SETTINGS_PATH,
         overrides_path: Path = PROFILE_OVERRIDES_PATH,
         undo_path: Path | None = None,
         regenerate: Callable[[], str] = regenerate_default_artifacts,
     ) -> None:
         super().__init__()
+        self._base_path = Path(base_path)
         self._overrides_path = Path(overrides_path)
         self._undo_path = undo_path or default_undo_path()
         self._regenerate = regenerate
-        self._base = get_base_default_settings()
-        self._overrides = load_profile_overrides(self._overrides_path)
-        self._models = build_profile_models(self._base, self._overrides)
-        self._initial_models = deepcopy(self._models)
-        self._mc_explicit_paths = leaf_paths(self._overrides.get(MC_PROFILE, {}))
+        self._source_settings: dict[str, Any] = {}
+        self._base: dict[str, Any] = {}
+        self._overrides: dict[str, dict[str, Any]] = {}
+        self._models: dict[str, dict[str, Any]] = {}
+        self._initial_models: dict[str, dict[str, Any]] = {}
+        self._mc_explicit_paths: set[tuple[str, ...]] = set()
+        self._reload_sources_from_disk()
         self._profile = NORMAL_PROFILE
         self._building_tree = False
         self._leaf_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
@@ -438,7 +811,7 @@ class DefaultSettingsEditor(QMainWindow):
         title.setFont(QFont("Jost", 24, QFont.Weight.Black))
         layout.addWidget(title)
         subtitle = QLabel(
-            "Edit every canonical fresh-install/reset value. New settings appear automatically; current user profiles are not modified."
+            "Edit every canonical fresh-install/reset value. Normal writes the authoritative base; MC stores only its differences. Current user profiles are not modified."
         )
         subtitle.setObjectName("defaultsFoundrySubtitle")
         subtitle.setWordWrap(True)
@@ -453,10 +826,17 @@ class DefaultSettingsEditor(QMainWindow):
             self.profile_combo.addItem(PROFILE_LABELS[profile], profile)
         self.profile_combo.setMinimumWidth(210)
         self.profile_combo.setToolTip(
-            "Normal changes become shared defaults. MC changes are stored only when they differ from the resolved Normal value."
+            "Normal changes rewrite the canonical base. MC changes are stored only when they differ from the resolved Normal value."
         )
         self.profile_combo.currentIndexChanged.connect(self._on_profile_changed)
         controls.addWidget(self.profile_combo)
+        self.import_button = QPushButton("Import SST / JSON Into Selected Profile")
+        self.import_button.setToolTip(
+            "Merge a main-application SST or settings JSON snapshot into the selected defaults view. "
+            "Credentials, source lists, weather location, and machine-local absolute paths are excluded."
+        )
+        self.import_button.clicked.connect(self._import_snapshot)
+        controls.addWidget(self.import_button)
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Search dotted keys, labels, values, or types...")
         self.search_edit.setClearButtonEnabled(True)
@@ -525,7 +905,7 @@ class DefaultSettingsEditor(QMainWindow):
                 color: #edf1ed;
                 outline: none;
             }
-            QTreeWidget#defaultsFoundryTree::item { min-height: 25px; padding: 2px 5px; }
+            QTreeWidget#defaultsFoundryTree::item { min-height: 32px; padding: 2px 5px; }
             QTreeWidget#defaultsFoundryTree::item:selected { background: rgba(60, 108, 103, 210); }
             QHeaderView::section {
                 background: rgba(31, 47, 48, 245); color: #f4c66d; border: none;
@@ -545,8 +925,21 @@ class DefaultSettingsEditor(QMainWindow):
 
     def _origin_for(self, path: tuple[str, ...]) -> str:
         if self._profile == NORMAL_PROFILE:
-            return "Normal override" if get_path(self._base, path, _MISSING) != get_path(self._models[NORMAL_PROFILE], path) else "Base"
+            return (
+                "Pending Base"
+                if get_path(self._base, path, _MISSING)
+                != get_path(self._models[NORMAL_PROFILE], path, _MISSING)
+                else "Canonical Base"
+            )
         return "MC override" if get_path(self._models[NORMAL_PROFILE], path, _MISSING) != get_path(self._models[MC_PROFILE], path) else "Inherited"
+
+    def _reload_sources_from_disk(self) -> None:
+        self._source_settings = load_default_settings_source(self._base_path)
+        self._base = editable_base_settings(self._source_settings)
+        self._overrides = load_profile_overrides(self._overrides_path)
+        self._models = build_profile_models(self._base, self._overrides)
+        self._initial_models = deepcopy(self._models)
+        self._mc_explicit_paths = leaf_paths(self._overrides.get(MC_PROFILE, {}))
 
     def _reload_tree(self) -> None:
         self._building_tree = True
@@ -575,6 +968,8 @@ class DefaultSettingsEditor(QMainWindow):
             item.setData(1, VALUE_ROLE, deepcopy(value))
             item.setData(1, TYPE_ROLE, value_type_name(value))
             item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+            if _is_color_setting(path, value):
+                item.setIcon(1, _color_icon(value))
             tooltip = setting_tooltip(path, value, self._profile)
             for column in range(4):
                 item.setToolTip(column, tooltip)
@@ -609,6 +1004,7 @@ class DefaultSettingsEditor(QMainWindow):
         self._building_tree = True
         try:
             item.setText(3, self._origin_for(path))
+            item.setIcon(1, _color_icon(value) if _is_color_setting(path, value) else QIcon())
             initial = get_path(self._initial_models[self._profile], path, _MISSING)
             item.setForeground(1, QColor("#f4c66d") if value != initial else QColor("#edf1ed"))
         finally:
@@ -642,23 +1038,76 @@ class DefaultSettingsEditor(QMainWindow):
         self.save_button.setEnabled(enabled)
         self.undo_button.setEnabled(enabled and read_undo_record(self._undo_path) is not None)
         self.discard_button.setEnabled(enabled)
+        self.import_button.setEnabled(enabled)
 
     def _update_undo_state(self) -> None:
         self.undo_button.setEnabled(read_undo_record(self._undo_path) is not None)
 
+    def _import_snapshot(self) -> None:
+        selected_path, _selected_filter = QFileDialog.getOpenFileName(
+            self,
+            f"Import Defaults Into {PROFILE_LABELS[self._profile]}",
+            "",
+            "Settings snapshots (*.sst *.json);;All files (*)",
+        )
+        if not selected_path:
+            return
+        try:
+            imported = load_importable_settings_snapshot(Path(selected_path))
+            if not imported.settings:
+                raise ValueError("The snapshot had no importable settings after privacy filtering")
+            self._models, self._mc_explicit_paths = merge_imported_profile(
+                self._models,
+                self._profile,
+                imported.settings,
+                self._mc_explicit_paths,
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Defaults Import Failed", str(exc))
+            return
+
+        self._reload_tree()
+        imported_count = len(leaf_paths(imported.settings))
+        skipped_count = len(imported.skipped_paths)
+        self._set_status(
+            f"Imported {imported_count} settings into {PROFILE_LABELS[self._profile]} "
+            f"({imported.removed_secret_fields} secret and {skipped_count} private/profile fields excluded). "
+            "Review, then Save and Regenerate Defaults."
+        )
+
     def _save_and_regenerate(self) -> None:
-        source_before = self._overrides_path.read_text(encoding="utf-8")
-        undo_before = self._undo_path.read_text(encoding="utf-8") if self._undo_path.exists() else None
-        overrides = build_profile_overrides(self._base, self._models)
-        source_after = render_profile_overrides_module(overrides)
+        base_source_before = self._base_path.read_text(encoding="utf-8")
+        overrides_source_before = self._overrides_path.read_text(encoding="utf-8")
+        undo_before = (
+            self._undo_path.read_text(encoding="utf-8")
+            if self._undo_path.exists()
+            else None
+        )
+        canonical_settings = build_canonical_default_source(
+            self._source_settings,
+            self._models[NORMAL_PROFILE],
+        )
+        base_source_after = render_default_settings_module(canonical_settings)
+        overrides = build_profile_overrides(
+            self._models[NORMAL_PROFILE],
+            self._models,
+        )
+        overrides_source_after = render_profile_overrides_module(overrides)
+
         self._set_actions_enabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            write_undo_record(source_before, self._undo_path)
-            atomic_write_text(self._overrides_path, source_after)
+            write_undo_record(
+                overrides_source_before,
+                self._undo_path,
+                base_source_text=base_source_before,
+            )
+            atomic_write_text(self._base_path, base_source_after)
+            atomic_write_text(self._overrides_path, overrides_source_after)
             output = self._regenerate()
         except Exception as exc:
-            atomic_write_text(self._overrides_path, source_before)
+            atomic_write_text(self._base_path, base_source_before)
+            atomic_write_text(self._overrides_path, overrides_source_before)
             rollback_error: Exception | None = None
             try:
                 self._regenerate()
@@ -673,34 +1122,42 @@ class DefaultSettingsEditor(QMainWindow):
                 message += f"\n\nArtifact rollback also failed: {rollback_error}"
             QMessageBox.critical(self, "Defaults Not Saved", message)
             self._set_status(
-                "Save failed; profile overrides and the previous undo record were restored."
+                "Save failed; canonical base, MC overrides, artifacts, and undo were restored."
                 if rollback_error is None
-                else "Save failed; profile overrides were restored, but generated artifacts need regeneration."
+                else "Save failed; source files were restored, but generated artifacts need regeneration."
             )
         else:
-            self._overrides = overrides
-            self._initial_models = deepcopy(self._models)
-            self._mc_explicit_paths = leaf_paths(overrides.get(MC_PROFILE, {}))
+            self._reload_sources_from_disk()
             self._reload_tree()
-            self._set_status(output.splitlines()[-1] if output else "Defaults and generated artifacts saved.")
+            self._set_status(
+                output.splitlines()[-1]
+                if output
+                else "Canonical Normal defaults, MC differences, and artifacts saved."
+            )
         finally:
             QApplication.restoreOverrideCursor()
             self._set_actions_enabled(True)
             self._update_undo_state()
 
     def _undo_and_regenerate(self) -> None:
-        restored_source = read_undo_record(self._undo_path)
-        if restored_source is None:
+        restored_sources = read_undo_sources(self._undo_path)
+        if restored_sources is None:
             self._update_undo_state()
             return
-        current_source = self._overrides_path.read_text(encoding="utf-8")
+        restored_base_source, restored_overrides_source = restored_sources
+        current_base_source = self._base_path.read_text(encoding="utf-8")
+        current_overrides_source = self._overrides_path.read_text(encoding="utf-8")
+
         self._set_actions_enabled(False)
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            atomic_write_text(self._overrides_path, restored_source)
+            if restored_base_source is not None:
+                atomic_write_text(self._base_path, restored_base_source)
+            atomic_write_text(self._overrides_path, restored_overrides_source)
             output = self._regenerate()
         except Exception as exc:
-            atomic_write_text(self._overrides_path, current_source)
+            atomic_write_text(self._base_path, current_base_source)
+            atomic_write_text(self._overrides_path, current_overrides_source)
             rollback_error: Exception | None = None
             try:
                 self._regenerate()
@@ -711,30 +1168,28 @@ class DefaultSettingsEditor(QMainWindow):
                 message += f"\n\nArtifact rollback also failed: {rollback_error}"
             QMessageBox.critical(self, "Undo Failed", message)
             self._set_status(
-                "Undo failed; current profile overrides and artifacts were restored."
+                "Undo failed; current canonical base, MC overrides, and artifacts were restored."
                 if rollback_error is None
-                else "Undo failed; current profile overrides were restored, but generated artifacts need regeneration."
+                else "Undo failed; current sources were restored, but generated artifacts need regeneration."
             )
         else:
             self._undo_path.unlink(missing_ok=True)
-            self._overrides = load_profile_overrides(self._overrides_path)
-            self._models = build_profile_models(self._base, self._overrides)
-            self._initial_models = deepcopy(self._models)
-            self._mc_explicit_paths = leaf_paths(self._overrides.get(MC_PROFILE, {}))
+            self._reload_sources_from_disk()
             self._reload_tree()
-            self._set_status(output.splitlines()[-1] if output else "Most recent save undone and artifacts regenerated.")
+            self._set_status(
+                output.splitlines()[-1]
+                if output
+                else "Most recent defaults save undone and artifacts regenerated."
+            )
         finally:
             QApplication.restoreOverrideCursor()
             self._set_actions_enabled(True)
             self._update_undo_state()
 
     def _discard_unsaved(self) -> None:
-        self._overrides = load_profile_overrides(self._overrides_path)
-        self._models = build_profile_models(self._base, self._overrides)
-        self._initial_models = deepcopy(self._models)
-        self._mc_explicit_paths = leaf_paths(self._overrides.get(MC_PROFILE, {}))
+        self._reload_sources_from_disk()
         self._reload_tree()
-        self._set_status("Unsaved edits discarded.")
+        self._set_status("Unsaved edits and imports discarded.")
 
     def smoke_check(self) -> tuple[int, int]:
         leaves = len(self._leaf_items)

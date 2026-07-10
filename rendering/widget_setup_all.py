@@ -366,6 +366,21 @@ def _create_factory_widgets(
         if not descriptor.is_enabled_in_environment():
             continue
 
+        if descriptor.base_enabled_gate and descriptor.base_settings_key:
+            family_settings = widgets_config.get(descriptor.base_settings_key, {})
+            family_enabled = (
+                SettingsManager.to_bool(family_settings.get("enabled", True), True)
+                if isinstance(family_settings, dict)
+                else True
+            )
+            if not family_enabled:
+                logger.debug(
+                    "[WIDGET_MANAGER] Descriptor %s skipped by disabled family=%s",
+                    descriptor.settings_key,
+                    descriptor.base_settings_key,
+                )
+                continue
+
         widget_settings = widgets_config.get(descriptor.settings_key, {})
         monitor_sel = widget_settings.get('monitor', 'ALL')
         show_on_this = _show_on_this_monitor(screen_index, monitor_sel)

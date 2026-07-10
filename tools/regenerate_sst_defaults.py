@@ -1,15 +1,15 @@
 """Utility to regenerate canonical SST snapshots from default settings.
 
-This script instantiates a throwaway SettingsManager pointing at a dedicated
-organization name so it never touches the real user profile. It resets to the
-current canonical defaults, removes any user-preserved keys (sources folders,
-and exports the snapshot to the Docs/ directory so the
-documentation stays in sync with `core/settings/defaults.py`.
+This script instantiates SettingsManager against a temporary filesystem root,
+so reset/save/export work can never touch an installed Normal or MC profile.
+It resets to the current canonical defaults, removes user-preserved fields,
+and exports the snapshots into Docs/.
 """
 from __future__ import annotations
 
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 from typing import Iterable, Tuple
 
@@ -35,8 +35,18 @@ def _apply_doc_overrides(manager: SettingsManager) -> None:
     manager.set('widgets.weather.longitude', '')
 
 
-def _export_snapshot(application: str, output_path: Path, organization: str = "SRPSS_DocSnapshot") -> None:
-    manager = SettingsManager(organization=organization, application=application)
+def _export_snapshot(
+    application: str,
+    output_path: Path,
+    *,
+    organization: str,
+    storage_base_dir: Path,
+) -> None:
+    manager = SettingsManager(
+        organization=organization,
+        application=application,
+        storage_base_dir=storage_base_dir,
+    )
     manager.reset_to_defaults()
     _apply_doc_overrides(manager)
     manager.save()
@@ -44,6 +54,27 @@ def _export_snapshot(application: str, output_path: Path, organization: str = "S
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not manager.export_to_sst(str(output_path)):
         raise RuntimeError(f"Failed to export SST for {application} to {output_path}")
+
+
+def regenerate_sst_defaults(
+    docs_dir: Path,
+    *,
+    organization: str = "SRPSS_DocSnapshot",
+    storage_base_dir: Path,
+) -> tuple[Path, ...]:
+    """Export both profiles while keeping all SettingsManager writes isolated."""
+
+    outputs: list[Path] = []
+    for app_name, filename in EXPORT_TARGETS:
+        output_file = docs_dir / filename
+        _export_snapshot(
+            app_name,
+            output_file,
+            organization=organization,
+            storage_base_dir=storage_base_dir,
+        )
+        outputs.append(output_file)
+    return tuple(outputs)
 
 
 def main(argv: Iterable[str] | None = None) -> None:
@@ -61,9 +92,13 @@ def main(argv: Iterable[str] | None = None) -> None:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     docs_dir = Path(args.docs_dir)
-    for app_name, filename in EXPORT_TARGETS:
-        output_file = docs_dir / filename
-        _export_snapshot(app_name, output_file, organization=args.organization)
+    with tempfile.TemporaryDirectory(prefix="srpss_defaults_") as temp_dir:
+        outputs = regenerate_sst_defaults(
+            docs_dir,
+            organization=args.organization,
+            storage_base_dir=Path(temp_dir),
+        )
+    for (app_name, _filename), output_file in zip(EXPORT_TARGETS, outputs):
         print(f"[DOCS] Exported {app_name} defaults to {output_file}")
 
 

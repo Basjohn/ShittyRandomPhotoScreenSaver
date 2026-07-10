@@ -5,6 +5,8 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 roundtrips behave as expected.
 """
 from contextlib import contextmanager
+from copy import deepcopy
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -191,6 +193,44 @@ class TestWidgetsTab:
             assert widgets_cfg.get("clock", {}).get("enabled") is False
             assert widgets_cfg.get("weather", {}).get("location") == "Johannesburg"
             assert widgets_cfg.get("weather", {}).get("position") == "Top Left"
+        finally:
+            tab.deleteLater()
+
+    def test_lazy_save_omits_expected_unhydrated_sections_without_guard_warning(
+        self,
+        qt_app,
+        settings_manager,
+        caplog,
+    ):
+        visualizer = {
+            "enabled": True,
+            "mode": "bubble",
+            "preset_bubble": 3,
+            "future_unknown_value": {"keep": [1, 2, 3]},
+        }
+        settings_manager.set("widgets", {
+            "clock": {"enabled": True, "position": "Top Right"},
+            "weather": {"enabled": True, "location": "Johannesburg"},
+            "spotify_visualizer": visualizer,
+            "shadows": {"enabled": True, "text_enabled": True, "header_enabled": True},
+            "global": {"card_border_width_px": 3},
+        })
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "clock"},
+        )
+        try:
+            visualizer_before_save = deepcopy(
+                settings_manager.get("widgets.spotify_visualizer")
+            )
+            with caplog.at_level(logging.WARNING, logger="ui.tabs.widgets_tab"):
+                tab.clock_enabled.setChecked(False)
+                tab._save_settings_now()
+
+            assert "blocked_save_from_unhydrated_section" not in caplog.text
+            assert settings_manager.get("widgets.spotify_visualizer") == visualizer_before_save
         finally:
             tab.deleteLater()
 
@@ -661,31 +701,29 @@ class TestWidgetsTab:
         mgr.reset_to_defaults()
 
         tab = WidgetsTab(mgr)
+        defaults = get_default_settings()["widgets"]
+        clock_defaults = defaults["clock"]
+        weather_defaults = defaults["weather"]
+        shadow_defaults = defaults["shadows"]
 
-        # Clock defaults: enabled on all monitors, Top Right, 24h, seconds on,
-        # analogue mode with the background frame OFF to match new defaults snapshot.
-        assert tab.clock_enabled.isChecked() is True
-        assert tab.clock_position.currentText() == "Top Right"
-        assert tab.clock_format.currentText() == "24 Hour"
-        assert tab.clock_seconds.isChecked() is True
-        assert tab.clock_show_background.isChecked() is False
-        assert tab.clock_bg_opacity.value() == 30
-        # Monitor selection uses canonical 'ALL' default so combo reflects that
-        assert tab.clock_monitor_combo.currentText() == "ALL"
+        assert tab.clock_enabled.isChecked() is bool(clock_defaults["enabled"])
+        assert tab.clock_position.currentText() == str(clock_defaults["position"])
+        expected_format = "24 Hour" if clock_defaults["format"] == "24h" else "12 Hour"
+        assert tab.clock_format.currentText() == expected_format
+        assert tab.clock_seconds.isChecked() is bool(clock_defaults["show_seconds"])
+        assert tab.clock_show_background.isChecked() is bool(clock_defaults["show_background"])
+        assert tab.clock_bg_opacity.value() == round(float(clock_defaults["bg_opacity"]) * 100)
+        assert tab.clock_monitor_combo.currentText() == str(clock_defaults["monitor"])
 
-        # Weather defaults: enabled on monitor 1 with a Top Left layout and a
-        # non-empty location (placeholder "New York" or a timezone-derived
-        # city), styled with background enabled at the current canonical opacity.
-        assert tab.weather_enabled.isChecked() is True
-        assert tab.weather_position.currentText() == "Top Left"
-        loc = tab.weather_location.text()
-        assert isinstance(loc, str) and loc
-        assert tab.weather_show_forecast.isChecked() is True  # Default is True per defaults.py
-        assert tab.weather_show_background.isChecked() is True
-        assert tab.weather_bg_opacity.value() == 30
-        assert tab.widget_shadows_enabled.isChecked() is True
-        assert tab.widget_text_shadows_enabled.isChecked() is True
-        assert tab.widget_header_shadows_enabled.isChecked() is True
+        assert tab.weather_enabled.isChecked() is bool(weather_defaults["enabled"])
+        assert tab.weather_position.currentText() == str(weather_defaults["position"])
+        assert tab.weather_location.text() == str(weather_defaults["location"])
+        assert tab.weather_show_forecast.isChecked() is bool(weather_defaults["show_forecast"])
+        assert tab.weather_show_background.isChecked() is bool(weather_defaults["show_background"])
+        assert tab.weather_bg_opacity.value() == round(float(weather_defaults["bg_opacity"]) * 100)
+        assert tab.widget_shadows_enabled.isChecked() is bool(shadow_defaults["enabled"])
+        assert tab.widget_text_shadows_enabled.isChecked() is bool(shadow_defaults["text_enabled"])
+        assert tab.widget_header_shadows_enabled.isChecked() is bool(shadow_defaults["header_enabled"])
 
         tab.deleteLater()
 

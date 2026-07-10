@@ -12,7 +12,7 @@ import pytest
 class TestApplicationNameDetection:
     """Tests for automatic application name detection."""
     
-    def test_default_application_name(self, tmp_path):
+    def test_explicit_storage_root_honors_exact_application_name(self, tmp_path):
         """Test default application name is Screensaver."""
         from core.settings.settings_manager import SettingsManager
         
@@ -20,10 +20,9 @@ class TestApplicationNameDetection:
         settings = SettingsManager(application="Screensaver", storage_base_dir=tmp_path)
         app_name = settings.get_application_name()
         
-        # Should be Screensaver or Screensaver_MC depending on how tests are run
-        assert app_name in ("Screensaver", "Screensaver_MC")
+        assert app_name == "Screensaver"
     
-    def test_mc_detection_from_argv(self, tmp_path):
+    def test_mc_detection_from_argv_without_explicit_storage_root(self, tmp_path, monkeypatch):
         """Test MC detection from sys.argv."""
         import sys
         
@@ -32,8 +31,14 @@ class TestApplicationNameDetection:
         try:
             sys.argv = ["main_mc.py"]
             
-            from core.settings.settings_manager import SettingsManager
-            settings = SettingsManager(application="Screensaver", storage_base_dir=tmp_path)
+            import core.settings.settings_manager as settings_module
+
+            monkeypatch.setattr(
+                settings_module,
+                "determine_storage_path",
+                lambda application, base_dir=None: tmp_path / application / "settings_v2.json",
+            )
+            settings = settings_module.SettingsManager(application="Screensaver")
             
             # Should detect MC build from argv
             app_name = settings.get_application_name()

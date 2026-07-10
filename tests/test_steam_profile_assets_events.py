@@ -7,6 +7,7 @@ from core.steam.assets import (
     SteamAssetRecord,
     cache_asset_from_bytes,
     fetch_and_cache_asset,
+    fetch_steam_achievement_icon,
     fetch_steam_app_artwork,
     fetch_steam_app_header,
     prune_asset_cache,
@@ -54,11 +55,18 @@ def test_asset_cache_rejects_bad_host_and_bad_image_signature(tmp_path: Path) ->
         url="https://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
         data=b"not an image",
     )
+    bad_scheme = cache_asset_from_bytes(
+        cache_dir=tmp_path,
+        url="http://cdn.akamai.steamstatic.com/steam/apps/730/header.jpg",
+        data=b"\xff\xd8\xffnot-https",
+    )
 
     assert isinstance(bad_host, SteamResult)
     assert bad_host.status == SteamResultStatus.ASSET_INVALID
     assert isinstance(bad_signature, SteamResult)
     assert bad_signature.status == SteamResultStatus.ASSET_INVALID
+    assert isinstance(bad_scheme, SteamResult)
+    assert bad_scheme.status == SteamResultStatus.ASSET_INVALID
 
 
 def test_asset_cache_writes_valid_image_with_injected_fetcher_and_prunes(tmp_path: Path) -> None:
@@ -111,6 +119,37 @@ def test_square_steam_artwork_uses_the_portrait_library_capsule(tmp_path: Path) 
 
     assert isinstance(asset, SteamAssetRecord)
     assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/library_600x900.jpg"]
+
+
+def test_achievement_icon_accepts_schema_host_and_reuses_cache(tmp_path: Path) -> None:
+    calls: list[str] = []
+    url = (
+        "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/"
+        "1086940/achievement.jpg"
+    )
+
+    first = fetch_steam_achievement_icon(
+        cache_dir=tmp_path,
+        url=url,
+        fetcher=lambda requested: calls.append(requested) or b"\xff\xd8\xfficon",
+    )
+    second = fetch_steam_achievement_icon(
+        cache_dir=tmp_path,
+        url=url,
+        fetcher=lambda requested: calls.append(requested) or b"\xff\xd8\xffunused",
+    )
+    rejected = fetch_steam_achievement_icon(
+        cache_dir=tmp_path,
+        url="http://steamcdn-a.akamaihd.net/not-https.jpg",
+        fetcher=lambda requested: b"\xff\xd8\xffunsafe",
+    )
+
+    assert isinstance(first, SteamAssetRecord)
+    assert isinstance(second, SteamAssetRecord)
+    assert first.path == second.path
+    assert calls == [url]
+    assert isinstance(rejected, SteamResult)
+    assert rejected.status == SteamResultStatus.ASSET_INVALID
 
 
 def test_fixture_backend_reads_checked_in_payload_without_network() -> None:

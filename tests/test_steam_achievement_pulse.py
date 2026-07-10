@@ -136,6 +136,10 @@ def test_achievement_pulse_resolves_recent_selection_from_cache_records_only() -
 
 
 def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> None:
+    icon_url = (
+        "https://steamcdn-a.akamaihd.net/steamcommunity/public/images/apps/"
+        "111/latest.jpg"
+    )
     resolved = resolve_achievement_pulse(
         recent_result=_recent_result(),
         achievement_results={
@@ -148,7 +152,11 @@ def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> 
             {
                 "game": {
                     "availableGameStats": {
-                        "achievements": [{"name": "BG3_Quest12", "displayName": "A Hero's Welcome"}]
+                        "achievements": [{
+                            "name": "BG3_Quest12",
+                            "displayName": "A Hero's Welcome",
+                            "icon": icon_url,
+                        }]
                     }
                 }
             },
@@ -157,6 +165,37 @@ def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> 
     )
 
     assert resolved.latest_achievement == "A Hero's Welcome"
+    assert resolved.latest_achievement_icon_url == icon_url
+    assert build_achievement_pulse_view_model(resolved).latest_unlock_icon_url == icon_url
+
+
+def test_achievement_pulse_omits_non_https_schema_icon_without_losing_unlock() -> None:
+    resolved = resolve_achievement_pulse(
+        recent_result=_recent_result(),
+        achievement_results={
+            111: _achievements(
+                "Hollow Knight",
+                [{"apiname": "START", "achieved": 1, "unlocktime": 20}],
+            )
+        },
+        schema_result=_success(
+            {
+                "game": {
+                    "availableGameStats": {
+                        "achievements": [{
+                            "name": "START",
+                            "displayName": "First Step",
+                            "icon": "http://steamcdn-a.akamaihd.net/insecure.jpg",
+                        }]
+                    }
+                }
+            },
+            source_id=SteamSourceId.ACHIEVEMENT_SCHEMA,
+        ),
+    )
+
+    assert resolved.latest_achievement == "First Step"
+    assert resolved.latest_achievement_icon_url == ""
 
 
 def test_achievement_pulse_exposes_five_newest_unlocks_in_schema_order() -> None:

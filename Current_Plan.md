@@ -29,9 +29,19 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 ### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
 
 - [ ] In a fresh compiled run without `--devsteam`, verify saved identity/API-key status stays green on every Steam Settings reopen and cached Achievement Pulse content appears before the coordinated fade without a connect-required flash.
-- [ ] Validate wide artwork plus the 140px-default/190px-maximum header-aligned square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, cached bracketed names beside recent-game choices without selection-signal churn, Previous-field toggling, colon-free compact capsules, centred measured double-capsule headings (`PREVIOUSLY` for Previous), alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
+- [ ] Validate wide artwork plus the 140px-default/190px-maximum header-aligned square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, the optional framed 40px primary achievement icon immediately after the primary achievement text without moving other elements, cached bracketed names beside recent-game choices without selection-signal churn, Previous-field toggling, compact capsules versus default-on all-field double capsules (`PREVIOUSLY` for Previous), independent capsule-font growth, alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
+- [ ] In a compiled multi-display run, turn the Steam family master off and confirm all cards disappear, all subordinate settings stay hidden, fade coordination does not wait for Steam, and re-enabling restores the previously saved per-card choices.
 - [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs; confirm a multi-display `--steam` startup emits one provider batch per profile/cache namespace/selection rather than one batch per overlay.
 - [ ] In a separate `--devsteam` run, confirm only Steam Journey, Friend Pulse, and Abandonment Issues become visible and remain disabled/provider-inert by default.
+
+### Defaults Foundry Canonical Authority Validation
+
+- [ ] In the visible Foundry, verify RGBA leaves open the application alpha swatch, `font_family` leaves open a font chooser, Normal rows identify as Canonical/Pending Base, and MC rows identify inherited versus MC-only values without clipping or editor-row styling regressions.
+- [ ] Import a disposable exported SST/`settings_v2.json` into each selected profile, confirm the preview excludes credentials/source lists/weather identity/machine-local paths/CUSTOM geometry/layout slots and string tooltips identify valid text domains, then hash both installed profile JSON files before and after Save and Regenerate to verify they remain byte-identical while Normal rewrites only the canonical base and MC remains a compact differential; use Undo Most Recent and Regenerate to restore both sources/artifacts.
+
+### Weather Blank-Location Inert State Validation
+
+- [ ] In a compiled run with Weather enabled and location blank, verify the card remains normally spaced, `Open Weather Settings` opens the Weather source bucket, no provider/timer work starts, and no lifecycle fallback or missing-location error appears.
 
 ## Watchlist
 
@@ -39,8 +49,8 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Visualizer timing: if `--viz` logs show slow `_on_tick` phase breakdowns, fix the named owner directly; if only tick gaps appear, treat it as event-loop/timer delivery pressure rather than visualizer work.
 - [ ] Reddit cadence: in the next long compiled run, confirm both widgets fire near due cadence, sparse HTML does not become the repeated primary source after partial rescue, and failed/empty chains do not freshen cache timestamps.
 - [ ] Visualizer CUSTOM geometry route repair: reopen only if fresh logs show repeated bucket repair, duplicate-owner fallback, requested-monitor fallback, replay-green/runtime-wrong geometry, or settings-return suppression/stranding.
-- [ ] Display wake / monitor recreate: keep the latest behavior accepted unless black-background recovery, missing compositor surfaces, duplicate displays, or placeholder truth returns.
-- [ ] Settings runtime restart: reopen only if deleted Qt wrapper errors, stale background hydration, or settings-exit runtime bleed returns in `--set` / main logs.
+- [ ] Display wake / monitor recreate: keep the latest behavior accepted unless black-background recovery, missing compositor surfaces, duplicate displays, placeholder truth, or an exhausted per-display image-replacement warning returns. A worker-rejected first candidate should now recover that display within the same compute pass.
+- [ ] Settings runtime restart: expected lazy-section omission must stay free of `blocked_save_from_unhydrated_section`; reopen only if that warning reflects a real direct unhydrated save, deleted Qt wrapper errors, stale background hydration, or settings-exit runtime bleed in `--set` / main logs.
 - [ ] Sources / RSS reset: validate that "Just Make It Work" preserves existing RSS cache, emits one deferred source-change during settings, and settings exit performs only one clean source/RSS initialization without stranding media or visualizer.
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
 - [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.

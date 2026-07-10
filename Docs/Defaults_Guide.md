@@ -1,16 +1,19 @@
 # Defaults Guide
 
-Last updated: 2026-06-30
+Last updated: 2026-07-10
 
 Canonical guidance for defaults, reset behavior, snapshots, and import safety.
 
 ## 1. Sources Of Truth
 - Canonical defaults: `core/settings/default_settings.py`.
+- MC-only differences: `core/settings/default_profile_overrides.py`.
 - Defaults API, normalization, and preserve-on-reset rules: `core/settings/defaults.py`.
 - Generated parity artifacts: `core/settings/defaults_snapshot.py`, `defaults_snapshot.json`, and `defaults_generated.py`.
 - Persistent settings store: `JsonSettingsStore` through `SettingsManager`.
 
 Generated artifacts are derived outputs. Regenerate them with the project tool instead of hand-editing them.
+
+Normal/Screensaver defaults are not an override layer. `default_settings.py` is their authoritative base. `Screensaver_MC` resolves that base plus only the compact MC differences in `default_profile_overrides.py`.
 
 ## 2. Storage Shape
 - Standard profile settings file: `%APPDATA%/SRPSS/settings_v2.json`.
@@ -33,7 +36,7 @@ Use public `SettingsManager` accessors for active settings paths. Do not reach i
 
 ## 5. Safe Default Change Workflow
 When changing a user-facing default:
-- update `core/settings/default_settings.py`,
+- update `core/settings/default_settings.py` directly or use `tools/default_settings_editor.py`,
 - update typed models or normalization helpers where applicable,
 - update UI load/save behavior,
 - regenerate defaults snapshot artifacts,
@@ -41,14 +44,29 @@ When changing a user-facing default:
 - add migration/import coverage if existing user settings are affected,
 - and refresh `Spec.md`, `Index.md`, or focused docs only when live contracts changed.
 
-## 6. Visualizer Defaults
+A successful Defaults Foundry **Save and Regenerate Defaults** establishes the new authoritative Normal base and MC differential. Existing tests, generated artifacts, and policy text must be updated to follow that saved value; they may reject or revert it only when a reproducible runtime, safety, migration, or compatibility regression proves the value harmful. Tests are guards around the defaults contract, not a second defaults authority.
+
+## 6. Defaults Foundry
+- Run `python tools/default_settings_editor.py` for the standalone styled editor.
+- The tree recursively discovers every editable leaf in the canonical base. New settings therefore appear without a handwritten Foundry form.
+- Normal edits rewrite `default_settings.py`. MC edits serialize only values that differ from resolved Normal defaults.
+- Boolean, integer, decimal, JSON, font-family, and RGBA colour values use type-aware controls. Colour controls use the application's alpha-capable swatch picker.
+- **Import SST / JSON Into Selected Profile** merges a main-application SST or `settings_v2.json` snapshot into the selected Normal or MC model before save.
+- Imports strip Steam and generic credential fields, preserve reset-owned source/weather values, reject machine-local absolute path values, and exclude `widgets.custom_layout` plus `widgets.layout_slots` as active profile/machine-local state. Import never changes the current user profile and does not write defaults until Save and Regenerate is pressed.
+- Every text leaf tooltip identifies registered finite values or describes the accepted free-text domain; font leaves continue to use the installed-font chooser.
+- Save and single-level undo are transactional across the canonical base, MC overlay, and regenerated JSON/SST artifacts. Undo state lives under `%LOCALAPPDATA%/SRPSS/DefaultSettingsEditor`, outside the repository.
+- Artifact regeneration creates every `SettingsManager` with an explicit temporary `storage_base_dir`. The Foundry must never inspect, migrate, reset, validate, or rewrite the installed `%APPDATA%/SRPSS*` `settings_v2.json` files; existing installation settings remain valid and untouched when defaults change.
+- Retired `preset` and `custom_preset_backup` payloads remain hidden compatibility data and preserve their values when the Foundry rewrites editable defaults.
+
+## 7. Visualizer Defaults
 Visualizer default changes also need:
 - mode-registry and `_spotify_visualizer.py` grouped field-spec review,
 - curated preset expectations reviewed where authored payloads rely on old values,
 - visualizer preset repair/import/export coverage when schema shape changes,
 - and runtime-shaped validation when the change affects visible mode behavior.
 
-## 7. CUSTOM And Widget Defaults
+## 8. CUSTOM And Widget Defaults
 - Authored defaults remain the fallback even when a widget uses `Custom`.
 - Committed CUSTOM geometry overlays authored defaults; it is not a replacement defaults surface.
+- Canonical `widgets.layout_slots` starts empty. Saved slots belong to an installation profile and must not be promoted into defaults or checked-in snapshots.
 - If a settings control becomes derived or locked under `Custom`, lock it in UI rather than inventing a hidden alternate default.

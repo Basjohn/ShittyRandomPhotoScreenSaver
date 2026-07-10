@@ -84,6 +84,7 @@ class FactoryWidgetDescriptor:
     default_font_size: int | None = None
     base_settings_key: str | None = None
     base_settings_kwarg: str | None = None
+    base_enabled_gate: bool = False
     factory_shadows_kwarg: bool = False
     inject_shadows_into_config: bool = False
     dev_feature_env: str | None = None
@@ -220,6 +221,7 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         default_font_size=14,
         base_settings_key="steam",
         base_settings_kwarg="steam_settings",
+        base_enabled_gate=True,
         inject_shadows_into_config=True,
         dev_feature_gate="steam",
     ),
@@ -231,6 +233,7 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         default_font_size=16,
         base_settings_key="steam",
         base_settings_kwarg="steam_settings",
+        base_enabled_gate=True,
         inject_shadows_into_config=True,
     ),
     FactoryWidgetDescriptor(
@@ -241,6 +244,7 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         default_font_size=14,
         base_settings_key="steam",
         base_settings_kwarg="steam_settings",
+        base_enabled_gate=True,
         inject_shadows_into_config=True,
         dev_feature_gate="steam",
     ),
@@ -252,6 +256,7 @@ FACTORY_WIDGET_DESCRIPTORS: tuple[FactoryWidgetDescriptor, ...] = (
         default_font_size=14,
         base_settings_key="steam",
         base_settings_kwarg="steam_settings",
+        base_enabled_gate=True,
         inject_shadows_into_config=True,
         dev_feature_gate="steam",
     ),
@@ -618,8 +623,10 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "achievement_pulse_square_artwork_size",
             "achievement_pulse_capsule_fill_color_btn",
             "achievement_pulse_capsule_border_color_btn",
-            "achievement_pulse_double_capsule_long_data",
+            "achievement_pulse_double_capsules",
+            "achievement_pulse_capsule_font_size",
             "achievement_pulse_latest_unlock_count",
+            "achievement_pulse_show_latest_artwork",
             "achievement_pulse_show_total",
             "achievement_pulse_show_latest",
             "achievement_pulse_show_playtime",
@@ -2114,6 +2121,7 @@ class WidgetStackPreviewDescriptor:
     position_attr_name: str
     monitor_attr_name: str
     fields: tuple[WidgetPreviewFieldDescriptor, ...]
+    family_enabled_attr_name: str | None = None
     dev_feature_env: str | None = None
     dev_feature_gate: str | None = None
 
@@ -2125,10 +2133,18 @@ class WidgetStackPreviewDescriptor:
         return os.getenv(self.dev_feature_env, "false").lower() == "true"
 
     def build_preview_section(self, owner: Any) -> Dict[str, Any]:
-        return {
+        section = {
             field.key: _read_preview_attr(owner, field)
             for field in self.fields
         }
+        if self.family_enabled_attr_name:
+            family_control = getattr(owner, self.family_enabled_attr_name, None)
+            try:
+                if family_control is not None and not bool(family_control.isChecked()):
+                    section["enabled"] = False
+            except Exception:
+                pass
+        return section
 
 
 @dataclass(frozen=True)
@@ -2302,6 +2318,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "steam_progress_monitor_combo", "current_text", "ALL"),
             WidgetPreviewFieldDescriptor("font_size", "steam_progress_font_size", "value", 14),
         ),
+        family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",
     ),
     WidgetStackPreviewDescriptor(
@@ -2316,6 +2333,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "achievement_pulse_monitor_combo", "current_text", "ALL"),
             WidgetPreviewFieldDescriptor("font_size", "achievement_pulse_font_size", "value", 14),
         ),
+        family_enabled_attr_name="steam_enabled",
     ),
     WidgetStackPreviewDescriptor(
         widget_id="abandonment_issues",
@@ -2329,6 +2347,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "abandonment_issues_monitor_combo", "current_text", "ALL"),
             WidgetPreviewFieldDescriptor("font_size", "abandonment_issues_font_size", "value", 14),
         ),
+        family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",
     ),
     WidgetStackPreviewDescriptor(
@@ -2343,6 +2362,7 @@ WIDGET_STACK_PREVIEW_DESCRIPTORS: tuple[WidgetStackPreviewDescriptor, ...] = (
             WidgetPreviewFieldDescriptor("monitor", "friend_pulse_monitor_combo", "current_text", "ALL"),
             WidgetPreviewFieldDescriptor("font_size", "friend_pulse_font_size", "value", 14),
         ),
+        family_enabled_attr_name="steam_enabled",
         dev_feature_gate="steam",
     ),
 )
@@ -2378,6 +2398,13 @@ def collect_widget_stack_status_targets(owner: Any) -> tuple[WidgetStackStatusTa
 
     targets: list[WidgetStackStatusTarget] = []
     for descriptor in get_widget_stack_preview_descriptors():
+        if descriptor.family_enabled_attr_name:
+            family_control = getattr(owner, descriptor.family_enabled_attr_name, None)
+            try:
+                if family_control is not None and not bool(family_control.isChecked()):
+                    continue
+            except Exception:
+                pass
         status_label = getattr(owner, descriptor.status_attr_name, None)
         pos_combo = getattr(owner, descriptor.position_attr_name, None)
         mon_combo = getattr(owner, descriptor.monitor_attr_name, None)

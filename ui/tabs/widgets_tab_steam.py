@@ -55,6 +55,9 @@ from ui.tabs.shared_styles import (
 )
 from ui.widgets import StyledComboBox, StyledFontComboBox
 from widgets.steam_components import (
+    ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
+    ACHIEVEMENT_CAPSULE_FONT_SIZE_MAX,
+    ACHIEVEMENT_CAPSULE_FONT_SIZE_MIN,
     ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
     ACHIEVEMENT_SQUARE_ARTWORK_MIN,
@@ -632,9 +635,12 @@ def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
 
 def _update_achievement_latest_controls(tab: "WidgetsTab") -> None:
     count = getattr(tab, "achievement_pulse_latest_unlock_count", None)
+    artwork = getattr(tab, "achievement_pulse_show_latest_artwork", None)
     visible = getattr(tab, "achievement_pulse_show_latest", None)
     if count is not None and visible is not None:
         count.setEnabled(visible.isChecked())
+    if artwork is not None and visible is not None:
+        artwork.setEnabled(visible.isChecked())
 
 
 def _update_steam_enabled_visibility(tab: "WidgetsTab") -> None:
@@ -642,6 +648,29 @@ def _update_steam_enabled_visibility(tab: "WidgetsTab") -> None:
     container = getattr(tab, "_steam_controls_container", None)
     if container is not None:
         container.setVisible(bool(enabled))
+
+
+def _build_card_subbucket(
+    tab: "WidgetsTab",
+    parent_layout: QVBoxLayout,
+    card_key: str,
+    bucket_key: str,
+    label: str,
+    *,
+    expanded: bool = False,
+) -> tuple[object, QWidget, QVBoxLayout]:
+    state_key = f"{card_key}_{bucket_key}"
+    toggle, body, layout = build_bucket_toggle(
+        parent_layout,
+        label,
+        expanded=tab.get_widget_bucket_state("steam", state_key, default=expanded),
+        on_toggle=lambda checked, key=state_key: tab.set_widget_bucket_state(
+            "steam", key, checked
+        ),
+        defer_initial_visibility=True,
+    )
+    layout.setSpacing(12)
+    return toggle, body, layout
 
 
 def _build_card_group(
@@ -653,14 +682,14 @@ def _build_card_group(
     *,
     visible: bool = True,
 ) -> None:
-    toggle, body, layout = build_bucket_toggle(
+    toggle, body, card_layout = build_bucket_toggle(
         parent_layout,
         label,
         expanded=tab.get_widget_bucket_state("steam", key, default=False),
         on_toggle=lambda checked, bucket=key: tab.set_widget_bucket_state("steam", bucket, checked),
         defer_initial_visibility=True,
     )
-    layout.setSpacing(12)
+    card_layout.setSpacing(12)
 
     enabled_attr = f"{key}_enabled"
     position_attr = f"{key}_position"
@@ -675,7 +704,15 @@ def _build_card_group(
     enabled.setChecked(tab._default_bool(key, "enabled", False))
     enabled.stateChanged.connect(tab._save_settings)
     setattr(tab, enabled_attr, enabled)
-    layout.addWidget(enabled)
+    card_layout.addWidget(enabled)
+
+    layout_toggle, layout_body, layout = _build_card_subbucket(
+        tab,
+        card_layout,
+        key,
+        "layout",
+        "Layout",
+    )
 
     position_row = _aligned_row(layout, "Position:")
     position = StyledComboBox()
@@ -697,7 +734,24 @@ def _build_card_group(
     display_row.addWidget(monitor)
     display_row.addStretch()
 
-    font_family_row = _aligned_row(layout, "Font:")
+    _finalize_bucket_body(layout_toggle, layout_body)
+    appearance_toggle, appearance_body, appearance_layout = _build_card_subbucket(
+        tab,
+        card_layout,
+        key,
+        "appearance",
+        "Appearance",
+    )
+    if key == "achievement_pulse":
+        content_toggle, content_body, content_layout = _build_card_subbucket(
+            tab,
+            card_layout,
+            key,
+            "content",
+            "Content",
+        )
+
+    font_family_row = _aligned_row(appearance_layout, "Font:")
     font_family = StyledFontComboBox(size_variant="hero")
     font_family.setCurrentFont(QFont(tab._default_str(key, "font_family", "Inter")))
     font_family.setMinimumWidth(220)
@@ -706,7 +760,7 @@ def _build_card_group(
     font_family_row.addWidget(font_family)
     font_family_row.addStretch()
 
-    font_row = _aligned_row(layout, "Font Size:")
+    font_row = _aligned_row(appearance_layout, "Font Size:")
     font_size = QSpinBox()
     font_size.setRange(8, 40)
     font_size.setValue(tab._default_int(key, "font_size", 14))
@@ -717,7 +771,7 @@ def _build_card_group(
     font_row.addStretch()
 
     if key == "achievement_pulse":
-        selection_row = _aligned_row(layout, "Game Selection:")
+        selection_row = _aligned_row(content_layout, "Game Selection:")
         selection_mode = StyledComboBox()
         for label_text, mode in _ACHIEVEMENT_SELECTION_OPTIONS:
             selection_mode.addItem(label_text, mode)
@@ -730,7 +784,7 @@ def _build_card_group(
         selection_row.addWidget(selection_mode)
         selection_row.addStretch()
 
-        appid_row = _aligned_row(layout, "Custom App ID:")
+        appid_row = _aligned_row(content_layout, "Custom App ID:")
         custom_appid = QSpinBox()
         custom_appid.setRange(0, 2_147_483_647)
         custom_appid.setSpecialValueText("Not set")
@@ -743,7 +797,7 @@ def _build_card_group(
         appid_row.addWidget(custom_appid)
         appid_row.addStretch()
 
-        artwork_row = _aligned_row(layout, "Artwork:")
+        artwork_row = _aligned_row(appearance_layout, "Artwork:")
         show_artwork = QCheckBox("Show Artwork")
         show_artwork.setProperty("circleIndicator", True)
         show_artwork.setChecked(tab._default_bool(key, "show_artwork", True))
@@ -753,7 +807,7 @@ def _build_card_group(
         artwork_row.addWidget(show_artwork)
         artwork_row.addStretch()
 
-        artwork_shape_row = _aligned_row(layout, "Artwork Shape:")
+        artwork_shape_row = _aligned_row(appearance_layout, "Artwork Shape:")
         artwork_shape = StyledComboBox()
         for shape_label, shape_value in _ACHIEVEMENT_ARTWORK_SHAPES:
             artwork_shape.addItem(shape_label, shape_value)
@@ -764,7 +818,7 @@ def _build_card_group(
         artwork_shape_row.addWidget(artwork_shape)
         artwork_shape_row.addStretch()
 
-        artwork_size_row = _aligned_row(layout, "Square Artwork Size:")
+        artwork_size_row = _aligned_row(appearance_layout, "Square Artwork Size:")
         square_artwork_size = QSpinBox()
         square_artwork_size.setRange(
             ACHIEVEMENT_SQUARE_ARTWORK_MIN,
@@ -781,7 +835,7 @@ def _build_card_group(
         artwork_size_row.addStretch()
         _update_achievement_artwork_controls(tab)
 
-        capsule_fill_row = _aligned_row(layout, "Capsule Fill:")
+        capsule_fill_row = _aligned_row(appearance_layout, "Capsule Fill:")
         tab._achievement_capsule_fill_color = _coerce_rgba_color(
             tab._widget_default(key, "capsule_fill_color", _ACHIEVEMENT_CAPSULE_FILL_RGBA),
             _ACHIEVEMENT_CAPSULE_FILL_RGBA,
@@ -797,7 +851,7 @@ def _build_card_group(
         capsule_fill_row.addWidget(tab.achievement_pulse_capsule_fill_color_btn)
         capsule_fill_row.addStretch()
 
-        capsule_border_row = _aligned_row(layout, "Capsule Border:")
+        capsule_border_row = _aligned_row(appearance_layout, "Capsule Border:")
         tab._achievement_capsule_border_color = _coerce_rgba_color(
             tab._widget_default(key, "capsule_border_color", _ACHIEVEMENT_CAPSULE_BORDER_RGBA),
             _ACHIEVEMENT_CAPSULE_BORDER_RGBA,
@@ -813,17 +867,39 @@ def _build_card_group(
         capsule_border_row.addWidget(tab.achievement_pulse_capsule_border_color_btn)
         capsule_border_row.addStretch()
 
-        double_capsule = QCheckBox("Double Capsule For Long Data")
+        double_capsule = QCheckBox("Enable Double Capsules")
         double_capsule.setProperty("circleIndicator", True)
         double_capsule.setToolTip(
-            "When a field value would truncate, place its label above a full-width fitted value capsule."
+            "Give every displayed supporting field a centered label capsule and a separate value capsule."
         )
-        double_capsule.setChecked(tab._default_bool(key, "double_capsule_long_data", True))
+        double_capsule.setChecked(tab._default_bool(key, "double_capsules", True))
         double_capsule.stateChanged.connect(tab._save_settings)
-        tab.achievement_pulse_double_capsule_long_data = double_capsule
-        layout.addWidget(double_capsule)
+        tab.achievement_pulse_double_capsules = double_capsule
+        appearance_layout.addWidget(double_capsule)
 
-        latest_row = _aligned_row(layout, "Latest Unlocks:")
+        capsule_font_row = _aligned_row(appearance_layout, "Capsule Font Size:")
+        capsule_font_size = QSpinBox()
+        capsule_font_size.setRange(
+            ACHIEVEMENT_CAPSULE_FONT_SIZE_MIN,
+            ACHIEVEMENT_CAPSULE_FONT_SIZE_MAX,
+        )
+        capsule_font_size.setValue(
+            tab._default_int(
+                key,
+                "capsule_font_size",
+                ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
+            )
+        )
+        capsule_font_size.setToolTip(
+            "Capsule label/value text size. The authored card and capsule rails grow as needed."
+        )
+        capsule_font_size.valueChanged.connect(tab._save_settings)
+        tab.achievement_pulse_capsule_font_size = capsule_font_size
+        capsule_font_row.addWidget(capsule_font_size)
+        capsule_font_row.addWidget(QLabel("px"))
+        capsule_font_row.addStretch()
+
+        latest_row = _aligned_row(content_layout, "Latest Unlocks:")
         show_latest = QCheckBox("Show Latest Unlocks")
         show_latest.setProperty("circleIndicator", True)
         show_latest.setChecked(tab._default_bool(key, "show_latest", True))
@@ -838,11 +914,25 @@ def _build_card_group(
         tab.achievement_pulse_latest_unlock_count = latest_count
         latest_row.addWidget(latest_count)
         latest_row.addStretch()
+
+        latest_artwork_row = _aligned_row(content_layout, "Latest Artwork:")
+        show_latest_artwork = QCheckBox("Show Latest Achievement Artwork")
+        show_latest_artwork.setProperty("circleIndicator", True)
+        show_latest_artwork.setToolTip(
+            "Show the newest unlocked achievement's 40px Steam icon when its schema provides one."
+        )
+        show_latest_artwork.setChecked(
+            tab._default_bool(key, "show_latest_achievement_artwork", True)
+        )
+        show_latest_artwork.stateChanged.connect(tab._save_settings)
+        tab.achievement_pulse_show_latest_artwork = show_latest_artwork
+        latest_artwork_row.addWidget(show_latest_artwork)
+        latest_artwork_row.addStretch()
         _update_achievement_latest_controls(tab)
 
         fields_label = QLabel("Displayed Fields:")
         fields_label.setStyleSheet(INFO_LABEL_STYLE)
-        layout.addWidget(fields_label)
+        content_layout.addWidget(fields_label)
         for field_id, label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
             field_toggle.setProperty("circleIndicator", True)
@@ -850,13 +940,17 @@ def _build_card_group(
             field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
             field_toggle.stateChanged.connect(tab._save_settings)
             setattr(tab, f"achievement_pulse_show_{field_id}", field_toggle)
-            layout.addWidget(field_toggle)
+            content_layout.addWidget(field_toggle)
+
+        _finalize_bucket_body(content_toggle, content_body)
+
+    _finalize_bucket_body(appearance_toggle, appearance_body)
 
     status = QLabel("")
     status.setStyleSheet(STATUS_LABEL_STYLE)
     status.setWordWrap(True)
     setattr(tab, status_attr, status)
-    layout.addWidget(status)
+    card_layout.addWidget(status)
 
     _finalize_bucket_body(toggle, body)
     if not visible:
@@ -875,7 +969,7 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     tab.steam_enabled = QCheckBox("Enable Steam Widget")
     tab.steam_enabled.setProperty("circleIndicator", True)
     tab.steam_enabled.setToolTip(
-        "Shows the Steam family shell and its card buckets in the settings dialog."
+        "Master switch for the Steam widget family. Turning it off disables every Steam card and hides all Steam settings."
     )
     tab.steam_enabled.setChecked(tab._default_bool("steam", "enabled", True))
     tab.steam_enabled.stateChanged.connect(tab._save_settings)
@@ -1090,16 +1184,41 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab.achievement_pulse_capsule_border_color_btn.set_color(
                 tab._achievement_capsule_border_color
             )
-            tab.achievement_pulse_double_capsule_long_data.setChecked(
-                bool(
-                    config.get(
-                        "double_capsule_long_data",
-                        tab._default_bool(key, "double_capsule_long_data", True),
+            double_capsules = config.get(
+                "double_capsules",
+                config.get(
+                    "double_capsule_long_data",
+                    tab._default_bool(key, "double_capsules", True),
+                ),
+            )
+            tab.achievement_pulse_double_capsules.setChecked(bool(double_capsules))
+            try:
+                tab.achievement_pulse_capsule_font_size.setValue(
+                    int(
+                        config.get(
+                            "capsule_font_size",
+                            tab._default_int(
+                                key,
+                                "capsule_font_size",
+                                ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
+                            ),
+                        )
                     )
                 )
-            )
+            except (TypeError, ValueError):
+                tab.achievement_pulse_capsule_font_size.setValue(
+                    ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT
+                )
             tab.achievement_pulse_show_latest.setChecked(
                 bool(config.get("show_latest", tab._default_bool(key, "show_latest", True)))
+            )
+            tab.achievement_pulse_show_latest_artwork.setChecked(
+                bool(
+                    config.get(
+                        "show_latest_achievement_artwork",
+                        tab._default_bool(key, "show_latest_achievement_artwork", True),
+                    )
+                )
             )
             try:
                 tab.achievement_pulse_latest_unlock_count.setValue(
@@ -1115,6 +1234,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             _update_achievement_artwork_controls(tab)
             _update_achievement_latest_controls(tab)
 
+    _update_steam_enabled_visibility(tab)
     _hydrate_saved_connection_status(tab)
 
 
@@ -1137,12 +1257,15 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["show_artwork"] = bool(tab.achievement_pulse_show_artwork.isChecked())
         payload["artwork_shape"] = str(tab.achievement_pulse_artwork_shape.currentData() or "wide")
         payload["square_artwork_size"] = int(tab.achievement_pulse_square_artwork_size.value())
-        payload["double_capsule_long_data"] = bool(
-            tab.achievement_pulse_double_capsule_long_data.isChecked()
-        )
+        payload.pop("double_capsule_long_data", None)
+        payload["double_capsules"] = bool(tab.achievement_pulse_double_capsules.isChecked())
+        payload["capsule_font_size"] = int(tab.achievement_pulse_capsule_font_size.value())
         payload["capsule_fill_color"] = _rgba_payload(tab._achievement_capsule_fill_color)
         payload["capsule_border_color"] = _rgba_payload(tab._achievement_capsule_border_color)
         payload["show_latest"] = bool(tab.achievement_pulse_show_latest.isChecked())
+        payload["show_latest_achievement_artwork"] = bool(
+            tab.achievement_pulse_show_latest_artwork.isChecked()
+        )
         payload["latest_unlock_count"] = int(tab.achievement_pulse_latest_unlock_count.value())
         for field_id, _label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             payload[f"show_{field_id}"] = bool(getattr(tab, f"achievement_pulse_show_{field_id}").isChecked())

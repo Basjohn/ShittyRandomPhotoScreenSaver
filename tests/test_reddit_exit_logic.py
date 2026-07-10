@@ -277,10 +277,15 @@ class TestCleanQueueFlow:
     def test_mc_flush_opens_directly(self, qt_app, monkeypatch):
         """MC build flush opens URLs via QDesktopServices."""
         from engine.display_manager import DisplayManager
-        from PySide6.QtCore import QTimer
-
         manager = DisplayManager()
         manager._deferred_reddit_urls = ["https://example.com/mc-flush"]
+
+        class _ImmediateThreadManager:
+            @staticmethod
+            def single_shot(_ms, callback):
+                callback()
+
+        manager._thread_manager = _ImmediateThreadManager()
 
         monkeypatch.setattr("core.mc.is_mc_build", lambda: True)
 
@@ -302,12 +307,6 @@ class TestCleanQueueFlow:
                 (url, preferred_display_index, tuple(fallback_keywords))
             ) or True,
         )
-        monkeypatch.setattr(
-            QTimer,
-            "singleShot",
-            staticmethod(lambda _ms, fn: fn()),
-        )
-
         manager.flush_deferred_reddit_urls()
 
         assert open_calls == ["https://example.com/mc-flush"]

@@ -38,7 +38,13 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_settings_manager.py`
   Settings cache invalidation, section/root writes, legacy alias migration, visualizer schema version-gating, identical fresh/reset profile-default resolution, SST replace-import semantics, and bulk-mutation stale-cache prevention.
 - `tests/test_default_settings_editor.py`
-  Normal/MC profile overlay resolution, recursive future-setting discovery, compact difference serialization, generated hover descriptions, standalone editor construction, transactional save/single-level undo behavior, and injected regeneration-failure rollback of profile source, prior undo state, and artifacts without touching real generated artifacts.
+  Authoritative Normal-base/MC-difference resolution, recursive future-setting discovery, compact MC serialization, generated valid-text hover descriptions for every string leaf, alpha-swatch/font delegate selection, privacy-filtered SST/JSON import including CUSTOM/layout-slot exclusion, MC-difference preservation across Normal import, standalone editor construction, dual-source transactional save/single-level undo behavior, and injected regeneration-failure rollback without touching real generated artifacts.
+- `tests/test_regenerate_sst_defaults.py`
+  SST regeneration isolation: both Normal and MC SettingsManager instances must receive the explicit temporary storage root before any reset/save/export operation.
+- `tests/test_settings_profile_separation.py`
+  Explicit storage roots honor the exact requested profile while ordinary production construction retains argv-based Normal/MC profile detection.
+- `tests/test_image_pipeline.py`
+  Image-cache/prefetch behavior plus bounded per-display replacement after a missing or worker-rejected candidate, atomic common-candidate replacement for same-image multi-monitor mode, and the no-direct-`QTimer.singleShot` ownership bar.
 - `tests/test_steam_credentials.py`
   Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys/metadata routing, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
 - `tests/test_steam_openid.py`
@@ -52,15 +58,17 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_steam_request_policy.py`
   Steam-family request identity/coalescing, generation-aware stale-result drops, joined-handle completion rejection, and bounded per-request backoff.
 - `tests/test_steam_profile_assets_events.py`
-  Steam-family profile policy-state persistence, corrupt-state quarantine, asset host/signature validation, fixture backend injection, and narrow non-secret `EventSystem` publication.
+  Steam-family profile policy-state persistence, corrupt-state quarantine, app-art/schema-achievement-icon HTTPS host/signature validation and cache reuse, fixture backend injection, and narrow non-secret `EventSystem` publication.
 - `tests/test_steam_phase3_settings_descriptors.py`
-  Steam descriptor/default/settings coverage: public Achievement Pulse plus `--devsteam`-only unfinished cards, shared/card defaults, lazy general-Settings behavior, safe saved-connection status hydration, signal-silent bracketed recent-game labels, font/artwork/bounded-square-size/five-unlock/Previous/double-capsule/RGBA round trips, hidden prototype buckets, 5/10-minute freshness settings, and descriptor-driven creation/reuse.
+  Steam descriptor/default/settings coverage: public Achievement Pulse plus `--devsteam`-only unfinished cards, true family-master factory/expected-overlay gating, preserved card choices, nested Layout/Appearance/Content buckets, shared/card default schema, lazy general-Settings behavior, safe saved-connection status hydration, signal-silent bracketed recent-game labels, font/game-art/latest-achievement-artwork/bounded-square-size/five-unlock/Previous/all-field-double-capsule/capsule-font/RGBA round trips, hidden prototype buckets, 5/10-minute freshness settings, legacy capsule-key reads, and descriptor-driven creation/reuse.
 - `tests/test_steam_phase4_mock_visuals.py`
-  Steam visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, optically matched header/artwork strokes, shared top/right rails for wide and clamped 140/190 square cover crops with 140 default, centered-below-art Unlocked geometry, measured selective double-capsule placement, centered doubled headings (`PREVIOUSLY` for Previous), colon-free compact labels, full-width value fitting, collision-free whole-rail growth, five-unlock prefix-free hierarchy, exterior shadows, long/unavailable states, and tight `Custom` scaling that preserves authored visible-field count and rails.
+  Steam visual-system coverage: deterministic fixture view models, provider-inert painter helpers, content/paint fingerprints, DPR render variants, optically matched header/artwork strokes, shared top/right rails for wide and clamped 140/190 square cover crops with 140 default, centered-below-art Unlocked geometry, measured-text-adjacent non-reflowing 40px primary-achievement icon geometry/paint, compact versus all-field double-capsule placement, centered doubled headings (`PREVIOUSLY` for Previous), independent capsule-font-driven capsule/card growth, colon-free compact labels, full-width value fitting, collision-free whole-rail growth, five-unlock prefix-free hierarchy, exterior shadows, long/unavailable states, and tight `Custom` scaling that preserves authored visible-field count and rails.
 - `tests/test_steam_achievement_pulse.py`
-  Steam Phase 5/6 Achievement Pulse coverage: pure selected-app resolution, normalized position-preserving recent title extraction, one-record opaque cache label loading, ordered five-unlock schema labels, persisted Custom app-ID settings, opaque cache snapshot/age handling, successful-result-only refresh caching, immediate multi-display follower suppression for unchanged successful payloads, cache-before-first-fade behavior, 5-minute runtime freshness threshold, manual-refresh routing, cached unauthorized connection-attention handling, literal unavailable/custom states, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
+  Steam Phase 5/6 Achievement Pulse coverage: pure selected-app resolution, normalized position-preserving recent title extraction, one-record opaque cache label loading, ordered five-unlock schema labels, primary achieved-icon join with insecure/missing-icon fallback, persisted Custom app-ID settings, opaque cache snapshot/age handling, successful-result-only refresh caching, immediate multi-display follower suppression for unchanged successful payloads, cache-before-first-fade behavior, 5-minute runtime freshness threshold, manual-refresh routing, cached unauthorized connection-attention handling, literal unavailable/custom states, shared connect-required prompt geometry, stale connection info thresholding, and card click target emission.
 - `tests/test_settings_defaults_parity.py`
-  Canonical defaults parity, preserve-on-reset keys, and derived defaults snapshot expectations.
+  Canonical defaults parity, preserve-on-reset keys, safe schema/range expectations, and derived snapshot equality without stale hardcoded values overriding Foundry-authored defaults.
+- `tests/test_settings_dialog_cache.py`
+  Settings-dialog defaults-cache invalidation tracks both the authoritative Normal source and generated MC differential source.
 - `tests/test_visualizer_presets.py`
   Preset repair/reindex behavior, SST export/import roundtrip, and canonical visualizer snapshot integrity.
 - `tests/test_gmail_oauth.py`
@@ -84,7 +92,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_clock_widget.py`
   Clock fade-sync parity and analogue-specific rendering contracts such as circular background-card behavior.
 - `tests/test_widgets_tab.py`
-  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, explicit `Custom` slot enable/disable behavior, section-level CUSTOM size-lock UX, styled `Disable Custom Mode` revert affordance behavior, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
+  Descriptor-driven WidgetsTab section order, descriptor-owned position-combo parity, explicit `Custom` slot enable/disable behavior, section-level CUSTOM size-lock UX, styled `Disable Custom Mode` revert affordance behavior, descriptor-owned current-widget preview/config composition, descriptor-owned section load/save routing, hydrated-only normal lazy saves without false guard warnings, exact preservation of unhydrated visualizer payloads, lazy-section build parity, descriptor-owned inter-section dependency restore behavior, bucket-state persistence, and visualizer/settings integration paths.
 - `tests/test_widget_visual_padding.py`
   BaseOverlayWidget visual-padding math plus `_custom_layout_local_rect` override behavior used by first-phase CUSTOM layout reapply, including managed `ThreadManager.single_shot(...)` scheduling and no self-reschedule churn during authoritative CUSTOM geometry correction.
 - `tests/test_spotify_visualizer_widget.py`
@@ -107,7 +115,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_media_widget_runtime_methods.py`
   Media deferred callbacks, canonical smart-poll timer reset, pending-state debounce cleanup, optimistic media-control repaint/update behavior, and the rule that live media visibility re-entry stays suppressed while a CUSTOM shell session is active.
 - `tests/test_weather_widget.py`
-  Weather retry timer cleanup, retry timer reuse, retry timeout state handling, provider-backed stale startup cache recovery when widget-local cache is invalid or mismatched, lifecycle initialize cache-authority parity, and canonical startup/steady-state refresh scheduling parity across lifecycle entry paths.
+  Weather retry timer cleanup, retry timer reuse, retry timeout state handling, provider-backed stale startup cache recovery when widget-local cache is invalid or mismatched, lifecycle initialize cache-authority parity, canonical startup/steady-state refresh scheduling parity across lifecycle entry paths, and provider-inert blank-location spacing/action routing without ThreadManager or timer work.
 - `tests/test_imgur_widget.py`
   Imgur lifecycle cleanup, grid/layout behavior, click routing, and canonical periodic refresh timer reschedule/stop ownership.
 - `tests/test_spotify_volume_widget.py`

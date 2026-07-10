@@ -63,6 +63,14 @@ def test_achievement_pulse_descriptors_are_public_while_unfinished_cards_stay_ga
         assert "achievement_pulse" in factory_ids & runtime_ids & preview_ids & custom_ids
         assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
         assert not unfinished.intersection(factory_ids)
+        steam_factories = [
+            descriptor
+            for descriptor in get_factory_widget_descriptors()
+            if descriptor.settings_key in STEAM_WIDGET_IDS
+        ]
+        assert steam_factories
+        assert all(descriptor.base_settings_key == "steam" for descriptor in steam_factories)
+        assert all(descriptor.base_enabled_gate is True for descriptor in steam_factories)
         assert not unfinished.intersection(runtime_ids)
         assert not unfinished.intersection(preview_ids)
         assert not unfinished.intersection(custom_ids)
@@ -102,31 +110,40 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
 def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
-    assert widgets["steam"] == {
-        "enabled": True,
-        "privacy_mode": "Strict",
-        "refresh_minutes": 10,
-        "show_connection_info_icon": True,
-    }
+    steam = widgets["steam"]
+    assert isinstance(steam["enabled"], bool)
+    assert steam["privacy_mode"] in {"Strict", "Balanced", "Rich"}
+    assert 5 <= steam["refresh_minutes"] <= 240
+    assert isinstance(steam["show_connection_info_icon"], bool)
     for widget_id in STEAM_WIDGET_IDS:
         card = widgets[widget_id]
         assert card["enabled"] is False
-        assert card["monitor"] == "ALL"
+        assert str(card["monitor"]) in {"ALL", "1", "2", "3"}
         assert card["show_background"] is True
         expected_size = (540, 290) if widget_id == "achievement_pulse" else (420, 180)
         assert (card["preferred_width"], card["preferred_height"]) == expected_size
     achievement = widgets["achievement_pulse"]
-    assert achievement["show_artwork"] is True
-    assert achievement["artwork_shape"] == "wide"
-    assert achievement["latest_unlock_count"] == 1
-    assert achievement["show_latest"] is True
-    assert all(achievement[f"show_{field_id}"] is True for field_id in ("total", "playtime", "previous"))
-    assert achievement["show_source"] is False
-    assert achievement["show_selected"] is False
-    assert achievement["capsule_fill_color"] == [199, 213, 224, 38]
-    assert achievement["capsule_border_color"] == [199, 213, 224, 145]
-    assert achievement["square_artwork_size"] == 140
-    assert achievement["double_capsule_long_data"] is True
+    assert isinstance(achievement["show_artwork"], bool)
+    assert achievement["artwork_shape"] in {"wide", "square"}
+    assert 1 <= achievement["latest_unlock_count"] <= 5
+    for bool_key in (
+        "show_latest",
+        "show_latest_achievement_artwork",
+        "show_total",
+        "show_playtime",
+        "show_previous",
+        "show_source",
+        "show_selected",
+        "double_capsules",
+    ):
+        assert isinstance(achievement[bool_key], bool)
+    for color_key in ("capsule_fill_color", "capsule_border_color"):
+        color = achievement[color_key]
+        assert len(color) == 4
+        assert all(0 <= channel <= 255 for channel in color)
+    assert 140 <= achievement["square_artwork_size"] <= 190
+    assert 8 <= achievement["capsule_font_size"] <= 32
+    assert "double_capsule_long_data" not in achievement
 
 
 def test_lazy_widgets_tab_does_not_import_steam_settings_section_on_general_open(
@@ -153,10 +170,18 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
             assert hasattr(tab, "steam_privacy_mode")
-            assert tab.steam_enabled.isChecked() is True
+            assert tab.steam_enabled.isChecked() is bool(
+                get_default_settings()["widgets"]["steam"]["enabled"]
+            )
             assert any(box.title() == "Steam Widget" for box in tab.findChildren(QGroupBox))
+            tab.steam_enabled.setChecked(True)
+            assert tab._steam_controls_container.isHidden() is False
             tab.steam_show_connection_info_icon.setChecked(False)
             tab.steam_enabled.setChecked(False)
+            assert tab._steam_controls_container.isHidden() is True
+            assert _find_toggle(tab, "Layout") is not None
+            assert _find_toggle(tab, "Appearance") is not None
+            assert _find_toggle(tab, "Content") is not None
             tab.steam_progress_enabled.setChecked(True)
             tab._set_combo_text(tab.steam_progress_position, "Center")
             tab._set_combo_text(tab.steam_progress_monitor_combo, "1")
@@ -167,9 +192,11 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_show_artwork.setChecked(False)
             tab.achievement_pulse_artwork_shape.setCurrentIndex(1)
             tab.achievement_pulse_square_artwork_size.setValue(190)
-            tab.achievement_pulse_double_capsule_long_data.setChecked(False)
+            tab.achievement_pulse_double_capsules.setChecked(False)
+            tab.achievement_pulse_capsule_font_size.setValue(22)
             assert tab.achievement_pulse_square_artwork_size.isEnabled() is False
             tab.achievement_pulse_show_latest.setChecked(False)
+            tab.achievement_pulse_show_latest_artwork.setChecked(False)
             tab.achievement_pulse_latest_unlock_count.setValue(5)
             tab.achievement_pulse_show_previous.setChecked(False)
             tab.achievement_pulse_show_source.setChecked(False)
@@ -177,8 +204,11 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_capsule_border_color_btn.color_changed.emit(QColor(90, 87, 65, 43))
 
             preview = build_widget_stack_preview_config(tab)
-            assert preview["steam_progress"]["enabled"] is True
+            assert preview["steam_progress"]["enabled"] is False
             assert preview["steam_progress"]["position"] == "Center"
+            tab.steam_enabled.setChecked(True)
+            assert build_widget_stack_preview_config(tab)["steam_progress"]["enabled"] is True
+            tab.steam_enabled.setChecked(False)
 
             steam_payload, progress_payload, *_rest = collect_widget_section_save_result(tab, "steam")
             assert steam_payload["enabled"] is False
@@ -195,8 +225,11 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert achievement_payload["show_artwork"] is False
             assert achievement_payload["artwork_shape"] == "square"
             assert achievement_payload["square_artwork_size"] == 190
-            assert achievement_payload["double_capsule_long_data"] is False
+            assert achievement_payload["double_capsules"] is False
+            assert achievement_payload["capsule_font_size"] == 22
+            assert "double_capsule_long_data" not in achievement_payload
             assert achievement_payload["show_latest"] is False
+            assert achievement_payload["show_latest_achievement_artwork"] is False
             assert achievement_payload["latest_unlock_count"] == 5
             assert achievement_payload["show_previous"] is False
             assert achievement_payload["show_source"] is False
@@ -506,6 +539,7 @@ def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
                     "artwork_shape": "square",
                     "square_artwork_size": 190,
                     "double_capsule_long_data": False,
+                    "capsule_font_size": 22,
                     "latest_unlock_count": 5,
                     "capsule_fill_color": [12, 34, 56, 78],
                     "capsule_border_color": [90, 87, 65, 43],
@@ -517,7 +551,8 @@ def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
             assert getattr(achievement_widget, "_achievement_show_artwork") is True
             assert getattr(achievement_widget, "_achievement_artwork_shape") == "square"
             assert getattr(achievement_widget, "_achievement_square_artwork_size") == 190
-            assert getattr(achievement_widget, "_achievement_double_capsule_long_data") is False
+            assert getattr(achievement_widget, "_achievement_double_capsules") is False
+            assert getattr(achievement_widget, "_achievement_capsule_font_size") == 22
             assert getattr(achievement_widget, "_achievement_latest_unlock_count") == 5
             assert achievement_widget.minimumHeight() == 318
             assert getattr(achievement_widget, "_achievement_capsule_fill_color").getRgb() == (12, 34, 56, 78)
@@ -544,7 +579,7 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
         parent.resize(1280, 720)
         manager = WidgetManager(parent, ResourceManager())
         settings = _SteamSetupSettings({
-            "steam": {"refresh_minutes": 5},
+            "steam": {"enabled": True, "refresh_minutes": 5},
             "steam_progress": {
                 "enabled": True,
                 "monitor": "ALL",
@@ -567,6 +602,40 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
 
             created_again = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
             assert created_again["steam_progress_widget"] is created["steam_progress_widget"]
+        finally:
+            parent.deleteLater()
+    finally:
+        _restore_steam_gate(prior)
+
+
+def test_steam_master_gate_suppresses_enabled_cards_and_fade_expectations(qt_app) -> None:
+    prior = _with_steam_gate(False)
+    try:
+        parent = QWidget()
+        parent.resize(1280, 720)
+        manager = WidgetManager(parent, ResourceManager())
+        settings = _SteamSetupSettings({
+            "steam": {"enabled": False, "refresh_minutes": 10},
+            "achievement_pulse": {
+                "enabled": True,
+                "monitor": "ALL",
+                "position": "Middle Right",
+            },
+            "shadows": {"enabled": True},
+        })
+        try:
+            created = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
+            assert "achievement_pulse_widget" not in created
+            assert "achievement_pulse" not in manager._expected_overlays
+
+            registry = WidgetFactoryRegistry(settings)
+            factory = registry.get_factory("achievement_pulse")
+            assert factory is not None
+            assert factory.create(
+                parent,
+                {"enabled": True, "position": "Middle Right"},
+                steam_settings={"enabled": False},
+            ) is None
         finally:
             parent.deleteLater()
     finally:

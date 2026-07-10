@@ -14,6 +14,12 @@ from core.steam.models import SteamResult, SteamResultStatus
 logger = get_logger(__name__)
 
 MAX_STEAM_ASSET_BYTES = 2_000_000
+STEAM_ASSET_ALLOWED_HOSTS = (
+    "cdn.akamai.steamstatic.com",
+    "avatars.steamstatic.com",
+    "shared.akamai.steamstatic.com",
+    "steamcdn-a.akamaihd.net",
+)
 _ALLOWED_SUFFIX_BY_KIND = {
     "png": b"\x89PNG\r\n\x1a\n",
     "jpg": b"\xff\xd8\xff",
@@ -89,18 +95,54 @@ def fetch_steam_app_artwork(
     )
 
 
+def fetch_steam_achievement_icon(
+    *,
+    cache_dir: Path,
+    url: str,
+    fetcher: Callable[[str], bytes] | None = None,
+) -> SteamAssetRecord | SteamResult:
+    """Load one HTTPS achievement icon from Steam's schema-owned asset hosts."""
+
+    safe_url = str(url or "").strip()
+    parsed = urlparse(safe_url)
+    if (
+        parsed.scheme.lower() != "https"
+        or (parsed.hostname or "").lower() not in STEAM_ASSET_ALLOWED_HOSTS
+    ):
+        return SteamResult(
+            status=SteamResultStatus.ASSET_INVALID,
+            message="Steam achievement icon URL is not allowed.",
+        )
+    cached = find_cached_asset(cache_dir, safe_url)
+    if cached is not None:
+        return SteamAssetRecord(
+            url_fingerprint=hashlib.sha256(safe_url.encode("utf-8")).hexdigest()[:24],
+            path=cached,
+            bytes_written=cached.stat().st_size,
+            image_kind=cached.suffix.lstrip("."),
+        )
+    return fetch_and_cache_asset(
+        cache_dir=cache_dir,
+        url=safe_url,
+        fetcher=fetcher or _default_fetch_asset,
+    )
+
+
 def cache_asset_from_bytes(
     *,
     cache_dir: Path,
     url: str,
     data: bytes,
-    allowed_hosts: tuple[str, ...] = ("cdn.akamai.steamstatic.com", "avatars.steamstatic.com", "shared.akamai.steamstatic.com"),
+    allowed_hosts: tuple[str, ...] = STEAM_ASSET_ALLOWED_HOSTS,
 ) -> SteamAssetRecord | SteamResult:
     """Validate and atomically cache an already-fetched Steam image payload."""
     parsed = urlparse(url)
     host = (parsed.hostname or "").lower()
-    if host not in allowed_hosts:
-        return SteamResult(status=SteamResultStatus.ASSET_INVALID, message="Steam asset host is not allowed.")
+    if parsed.scheme.lower() != "https" or host not in allowed_hosts:
+        return SteamResult(
+            status=SteamResultStatus.ASSET_INVALID,
+            message="Steam asset URL is not allowed.",
+        )
     if not data or len(data) > MAX_STEAM_ASSET_BYTES:
         return SteamResult(status=SteamResultStatus.ASSET_INVALID, message="Steam asset size is invalid.")
     kind = _detect_image_kind(data)
@@ -133,7 +175,7 @@ def fetch_and_cache_asset(
     cache_dir: Path,
     url: str,
     fetcher: Callable[[str], bytes],
-    allowed_hosts: tuple[str, ...] = ("cdn.akamai.steamstatic.com", "avatars.steamstatic.com", "shared.akamai.steamstatic.com"),
+    allowed_hosts: tuple[str, ...] = STEAM_ASSET_ALLOWED_HOSTS,
 ) -> SteamAssetRecord | SteamResult:
     """Fetch through an injected fetcher, then validate/cache the asset."""
     try:

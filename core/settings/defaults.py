@@ -51,7 +51,7 @@ def merge_default_overrides(base: Mapping[str, Any], overrides: Mapping[str, Any
 
 
 def get_base_default_settings() -> Dict[str, Any]:
-    """Return source defaults before editable profile overlays are applied."""
+    """Return the authoritative Normal-profile defaults."""
 
     defaults = deepcopy(DEFAULT_SETTINGS)
     defaults.pop("preset", None)
@@ -69,10 +69,7 @@ def get_default_settings(application: str | None = None) -> Dict[str, Any]:
     """Return canonical defaults resolved for Normal or MC profile behavior."""
 
     profile = MC_PROFILE if application == MC_PROFILE else NORMAL_PROFILE
-    defaults = merge_default_overrides(
-        get_base_default_settings(),
-        PROFILE_DEFAULT_OVERRIDES.get(NORMAL_PROFILE, {}),
-    )
+    defaults = get_base_default_settings()
     if profile == MC_PROFILE:
         defaults = merge_default_overrides(
             defaults,

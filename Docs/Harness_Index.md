@@ -22,17 +22,20 @@ python tools/default_settings_editor.py
 ```powershell
 $env:QT_QPA_PLATFORM='offscreen'
 python tools/default_settings_editor.py --smoke-test
-python -m pytest tests/test_default_settings_editor.py tests/test_settings_defaults_parity.py -q
+python -m pytest tests/test_default_settings_editor.py tests/test_regenerate_sst_defaults.py tests/test_settings_profile_separation.py tests/test_settings_dialog_cache.py tests/test_settings_defaults_parity.py -q
 ```
 - Notes:
-  - Normal overrides are inherited by both profiles; MC stores only differences from resolved Normal defaults.
-  - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes.
-  - Failed save/undo regeneration restores the prior profile source, prior undo state, and regenerated artifacts when rollback generation remains available; a second rollback failure is reported explicitly.
+  - Normal writes the authoritative `default_settings.py` base; MC stores only differences from resolved Normal defaults.
+  - Alpha colour swatches and font-family leaves use application controls; all other leaves remain type-aware and recursively discovered.
+  - **Import SST / JSON Into Selected Profile** merges an exported application snapshot into the selected model while stripping credentials, reset-preserved source/weather state, machine-local absolute paths, active CUSTOM geometry, and layout slots. It remains unsaved until Save and Regenerate.
+  - Every string leaf tooltip identifies registered finite choices or its accepted free-text domain.
+  - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes, with SST managers rooted in a temporary directory rather than either installed profile.
+  - Failed save/undo regeneration restores the prior canonical base, MC source, prior undo state, and regenerated artifacts when rollback generation remains available; a second rollback failure is reported explicitly.
   - Undo state is local under `%LOCALAPPDATA%/SRPSS/DefaultSettingsEditor`, never in the repository.
   - The editor changes fresh/reset defaults, not the current user's saved settings.
 
 ### WidgetsTab lazy-section and settings-lifetime slice
-- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, visualizer-section persistence, dev-gated Blob UI construction, and stale settings-slider QObject lifetime handling.
+- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, hydrated-only normal save collection, the still-loud direct unhydrated-save guard, visualizer-section persistence, dev-gated Blob UI construction, and stale settings-slider QObject lifetime handling.
 - Use when:
   - editing `ui/tabs/widgets_tab.py`
   - editing `ui/tabs/widgets_tab_media.py`

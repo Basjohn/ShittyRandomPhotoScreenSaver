@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-01
+Last updated: 2026-07-10
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -13,29 +13,33 @@ This is the long-term anti-regression record for the project, not an active task
 3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
-1. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-2. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-3. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-4. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-5. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-6. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-7. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-8. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-9. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-10. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-11. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-12. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-13. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-14. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-15. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-16. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-17. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-18. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-19. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-20. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-21. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-22. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
-
+1. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)](#R-35)
+2. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)](#R-34)
+3. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+4. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+5. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+6. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+7. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+8. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+9. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+10. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+11. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+12. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+13. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+14. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+15. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+16. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+17. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+18. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+19. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+20. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+21. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+22. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+23. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+24. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+25. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+26. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+27. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -57,6 +61,78 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="R-35"></a>
+### [R-35] 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** `Enable Steam Widget` could be off while a card such as Achievement Pulse still appeared. The settings shell disappeared, but card-level `enabled` remained sufficient to create the overlay.
+- **Root cause:** the top-level Steam flag was documented and implemented as UI-only. Descriptor setup and the Steam factory checked only environment/card gates, so runtime creation and fade-expected truth ignored the family flag.
+- **Fix:** Steam factory descriptors now declare a base `steam.enabled` gate. Setup applies it before expected-overlay registration or factory creation, and the factory repeats the check as a defensive direct-call boundary. The UI hides all subordinate settings and now groups card controls into Layout, Appearance, and Content buckets. Card-level choices remain persisted while the family is off.
+- **Bars:** `tests/test_steam_phase3_settings_descriptors.py` proves descriptor metadata, hidden subordinate controls, retained card payloads, no created card, no expected overlay, and direct-factory refusal while the master is disabled.
+- **Runtime validation target:** in a compiled normal run, turning the family off must remove every Steam card on all displays; reopening Steam settings should show only the master. Re-enabling must restore the previously selected card choices without a fade stall.
+
+<a id="R-34"></a>
+### [R-34] 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** with no Weather location, the card was visually squashed and offered no route to configure it. Logs showed lifecycle activation failing, setup falling back to legacy `start()`, and legacy start logging the same missing-location error.
+- **Root cause:** blank location was treated as an activation exception. The fallback then called `setText()` on the QLabel-backed overlay despite the real content living in child layouts, bypassing normal card geometry and creating two divergent lifecycle branches.
+- **Fix:** blank location is now a successful provider-inert state. It renders a minimum-height `Weather location required` / `Open Weather Settings` composition, joins the normal fade, submits no ThreadManager/provider/timer work, and routes only the action-label hit area through centralized input to Weather's `source_layout` bucket.
+- **Bars:** `tests/test_weather_widget.py` proves initialize/activate and legacy start are thread/timer inert, spacing is retained, action hit-testing emits the narrow target, and central navigation primes the Weather section/bucket.
+- **Runtime validation target:** start a compiled run with Weather enabled and location blank; the inert card should be comfortably spaced, its link should open Weather Location settings, and logs must contain neither lifecycle fallback nor missing-location fetch errors.
+
+<a id="R-33"></a>
+### [R-33] 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Observed failure pattern:** Foundry Save and Regenerate could make existing installation JSON appear invalid/reset, turning a small default tweak into a disruptive profile recovery. The canonical Normal literal also contained saved layout-slot display identities and geometry from one machine.
+- **Root cause:** `regenerate_sst_defaults.py` relied on a throwaway QSettings organization, but JSON storage paths are application/profile-owned and ignore that organization. Because no `storage_base_dir` was supplied, `reset_to_defaults()` and `save()` targeted installed `Screensaver` / `Screensaver_MC` JSON. Separately, Foundry import did not exclude profile-local CUSTOM/layout-slot payloads, allowing active machine geometry into defaults.
+- **Fix:** SST generation now creates a temporary directory and passes it explicitly to every `SettingsManager`. Explicit storage roots also suppress argv/profile auto-detection so tools honor the requested application exactly. Foundry imports exclude CUSTOM geometry and layout slots, canonical slots start empty, and text settings describe finite values or accepted free-text domains.
+- **Bars:** `tests/test_regenerate_sst_defaults.py` fails unless both managers receive the isolated root; `tests/test_settings_profile_separation.py` locks explicit-root identity; `tests/test_default_settings_editor.py` proves machine geometry is stripped and every text leaf has guidance; defaults parity validates regenerated artifacts.
+- **Security/privacy note:** regenerated canonical JSON/SST files contain no saved display identities/layout slots. The Foundry changes defaults and checked-in artifacts only; it no longer opens or mutates installed settings JSON.
+
+<a id="R-32"></a>
+### [R-32] 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** an ordinary save after opening only a small subset of lazy widget sections emitted `blocked_save_from_unhydrated_section` for every other section, including Clock, Weather, Media, Visualizers, Reddit, Gmail, and Steam.
+- **Evidence:** at `14:12:26`, the WidgetsTab log declared only `defaults` and `gmail` built/hydrated, then immediately warned that all intentionally unbuilt descriptors were blocked.
+- **Root cause:** `_save_settings_now()` passed the full descriptor registry to `collect_widget_section_save_results()`. The collector correctly treated unhydrated sections as unsafe, preserved their existing values, and fired the guard, but expected lazy omission had already been misclassified as an attempted save. The caller then ran visualizer merge/normalization even when Visualizers was unhydrated, creating a second mutation seam outside the guard.
+- **Fix:** normal save orchestration now passes only hydrated descriptors. The collector's direct unhydrated guard remains unchanged and tested. Visualizer merge, normalization, and Custom snapshot persistence run only when the Visualizers descriptor is hydrated; otherwise the persisted mapping is left untouched.
+- **Bars:** `tests/test_widgets_tab.py` proves an ordinary Clock-only lazy save emits no blocked warning and preserves the exact pre-save visualizer payload. `tests/test_widget_descriptors.py` directly invokes an unhydrated descriptor and proves the warning/preservation guard still fires.
+- **Runtime validation target:** ordinary saves after visiting one or two widget sections should not emit `blocked_save_from_unhydrated_section`. Any future occurrence should now represent a real orchestration bug rather than expected lazy omission.
+
+<a id="R-31"></a>
+### [R-31] 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** after one CUSTOM edit/reinitialization, Display 0 returned but Display 1 stayed blank, resembling the older missing-compositor or stale-geometry family. Many surrounding edits succeeded.
+- **Evidence:** at `14:00:26`, both display widgets, render surfaces, shared compositors, and GL contexts initialized. Display 1's selected RSS image was then rejected by ImageWorker because `222972620` decoded pixels exceeded Pillow's `178956970` decompression-bomb limit. The pipeline logged `ImageWorker failed for display 1, skipping image`; Display 0 committed its first frame, while Display 1 never did. Before and after this cycle, both displays repeatedly committed first frames successfully.
+- **Root cause:** image-worker failure was terminal only for that display. The queue already had replacement candidates, but the multi-display compute pass returned a partial result, leaving a healthy compositor with no first image.
+- **Fix:** rejected/missing candidates now use a bounded worker-side replacement loop. Different-image mode replaces only the failed display and records the actual selected metadata. Same-image mode retries one common candidate atomically across all displays so the shared-image contract cannot split. No repaint retry, display rebuild, rescue timer, or extra UI pressure was added.
+- **Bars:** `tests/test_image_pipeline.py` models the exact Display 1 rejection/replacement path, duplicate rejected-candidate skipping, same-image atomic replacement, existing cache/prefetch behavior, and the no-direct-`QTimer.singleShot` rule.
+- **Runtime validation target:** a future invalid/oversized image should log a recovered replacement and still reach `First frame committed` on every active display. Exhaustion remains loud and bounded.
 
 <a id="R-30"></a>
 ### [R-30] 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)

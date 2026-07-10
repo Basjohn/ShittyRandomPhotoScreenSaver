@@ -4,7 +4,7 @@ import json
 import pytest
 from unittest.mock import Mock, patch
 from PySide6.QtWidgets import QWidget, QApplication
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QPoint, QRect, Qt
 from PySide6.QtGui import QColor
 from widgets.weather_widget import WeatherWidget, WeatherPosition, WeatherFetcher
 from widgets.weather_components import WeatherConditionIcon
@@ -79,6 +79,104 @@ def test_weather_creation(qapp, parent_widget):
     assert weather._weather_position == WeatherPosition.BOTTOM_LEFT
     assert weather.get_position().value == WeatherPosition.BOTTOM_LEFT.value
     assert weather.is_running() is False
+
+
+def test_weather_missing_location_is_spaced_provider_inert_settings_state(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    weather = WeatherWidget(parent=parent_widget, location="   ")
+    calls: list[str] = []
+    monkeypatch.setattr(weather, "_ensure_thread_manager", lambda _owner: calls.append("thread") or True)
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
+    monkeypatch.setattr(weather, "_fade_in", lambda: calls.append("fade"))
+
+    weather._initialize_impl()
+    weather._activate_impl()
+    parent_widget.show()
+    weather.show()
+    qapp.processEvents()
+
+    assert weather._missing_location_active is True
+    assert weather._city_label.text() == "Weather location required"
+    assert weather._conditions_label.text() == "Open Weather Settings"
+    assert weather._primary_row.minimumHeight() >= 82
+    assert weather._text_column.minimumHeight() >= 74
+    assert calls == ["fade"]
+
+    local_action = weather._conditions_label.mapTo(
+        weather,
+        weather._conditions_label.rect().center(),
+    )
+    emitted: list[str] = []
+    weather.settings_requested.connect(emitted.append)
+    assert weather.settings_action_at(local_action) == "weather_location"
+    assert weather.handle_click(local_action) is True
+    assert emitted == ["weather_location"]
+    assert weather.settings_action_at(QPoint(0, 0)) is None
+
+
+def test_weather_missing_location_legacy_start_does_not_require_thread_manager(
+    qapp,
+    parent_widget,
+    monkeypatch,
+):
+    weather = WeatherWidget(parent=parent_widget, location="")
+    calls: list[str] = []
+    monkeypatch.setattr(weather, "_ensure_thread_manager", lambda _owner: calls.append("thread") or False)
+    monkeypatch.setattr(weather, "_schedule_refresh_cycle", lambda: calls.append("schedule"))
+    monkeypatch.setattr(weather, "_fade_in", lambda: calls.append("fade"))
+
+    weather.start()
+
+    assert weather.is_running() is True
+    assert calls == ["fade"]
+
+
+def test_weather_settings_link_routes_through_central_settings_navigation(qapp):
+    from rendering.input_handler import InputHandler
+
+    class _Settings:
+        def __init__(self) -> None:
+            self.values: dict[str, object] = {}
+
+        def get(self, key, default=None):
+            return self.values.get(key, default)
+
+        def set(self, key, value) -> None:
+            self.values[key] = value
+
+    settings = _Settings()
+    handler = InputHandler(None, settings_manager=settings)
+    requested: list[bool] = []
+    handler.settings_requested.connect(lambda: requested.append(True))
+
+    event = Mock()
+    event.pos.return_value = QPoint(120, 70)
+    event.button.return_value = Qt.MouseButton.LeftButton
+    weather = Mock()
+    weather.isVisible.return_value = True
+    weather.geometry.return_value = QRect(20, 20, 260, 120)
+    weather.settings_action_at.return_value = "weather_location"
+    weather.handle_click.return_value = True
+
+    handled, reddit_handled, reddit_url = handler.route_widget_click(
+        event,
+        None,
+        None,
+        None,
+        None,
+        weather_widget=weather,
+    )
+
+    assert handled is True
+    assert reddit_handled is False
+    assert reddit_url is None
+    assert requested == [True]
+    assert settings.values["ui.tab_state"]["widgets"]["view_state"]["subtab_id"] == "weather"
+    assert settings.values["ui.widget_bucket_states"]["weather:source_layout"] is True
+    assert settings.values["ui.last_tab_index"] == 3
 
 
 def test_weather_no_api_key(qapp, parent_widget):

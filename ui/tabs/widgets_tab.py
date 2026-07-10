@@ -242,6 +242,14 @@ class WidgetsTab(QWidget):
             return True
         return section in getattr(self, "_hydrated_widget_sections", set())
 
+    def _get_hydrated_widget_save_descriptors(self):
+        """Return sections that normal save orchestration is allowed to collect."""
+        return tuple(
+            descriptor
+            for descriptor in self._widget_section_descriptors
+            if self._can_save_widget_section(descriptor.section_id)
+        )
+
     def _log_widget_hydration_blocked_save(self, section_id: str) -> None:
         section = str(section_id or "").strip()
         if not section:
@@ -1645,18 +1653,22 @@ class WidgetsTab(QWidget):
         if not isinstance(existing_widgets, dict):
             existing_widgets = {}
 
+        save_descriptors = self._get_hydrated_widget_save_descriptors()
         section_results = collect_widget_section_save_results(
             self,
             existing_widgets,
-            self._widget_section_descriptors,
+            save_descriptors,
         )
-        spotify_vis_config = section_results.get('spotify_visualizer', {})
+        visualizers_hydrated = any(
+            descriptor.section_id == "visualizers"
+            for descriptor in save_descriptors
+        )
 
         apply_widget_section_save_results(
             existing_widgets,
             section_results,
             exclude_keys=("spotify_visualizer",),
-            descriptors=self._widget_section_descriptors,
+            descriptors=save_descriptors,
         )
 
         clock_config = existing_widgets.get('clock', {})
@@ -1664,26 +1676,27 @@ class WidgetsTab(QWidget):
         media_config = existing_widgets.get('media', {})
         reddit_config = existing_widgets.get('reddit', {})
 
-        # Merge current-mode visualizer settings into the existing config so
-        # that other modes' persisted keys are preserved across save cycles.
-        # save_media_settings only collects shared + active-mode keys; without
-        # the merge every save would wipe all inactive-mode settings.
         existing_vis = existing_widgets.get('spotify_visualizer', {})
         if not isinstance(existing_vis, dict):
             existing_vis = {}
-        existing_vis.update(spotify_vis_config)
 
-        spotify_vis_config = normalize_visualizer_section_mapping(
-            existing_vis,
-            apply_preset_overlay=False,
-        )
-
-        existing_widgets['spotify_visualizer'] = spotify_vis_config
+        if visualizers_hydrated:
+            # The saver only collects shared + active-mode keys, so merge with
+            # inactive-mode state before normalization when this section was edited.
+            existing_vis.update(section_results.get('spotify_visualizer', {}))
+            spotify_vis_config = normalize_visualizer_section_mapping(
+                existing_vis,
+                apply_preset_overlay=False,
+            )
+            existing_widgets['spotify_visualizer'] = spotify_vis_config
+        else:
+            # Unbuilt lazy UI must not normalize or rewrite persisted visualizer state.
+            spotify_vis_config = dict(existing_vis)
 
         current_vis_mode = str(spotify_vis_config.get('mode', _DEFAULT_VISUALIZER_MODE) or _DEFAULT_VISUALIZER_MODE)
         current_preset_index = self._resolve_visualizer_preset_index(current_vis_mode, spotify_vis_config)
         current_custom_index = get_custom_preset_index(current_vis_mode)
-        if current_preset_index == current_custom_index:
+        if visualizers_hydrated and current_preset_index == current_custom_index:
             snapshot = self._extract_visualizer_snapshot(current_vis_mode, spotify_vis_config)
             cache = self._settings.get(VISUALIZER_CUSTOM_STORAGE_KEY, {})
             if not isinstance(cache, dict):

@@ -36,6 +36,7 @@ class AchievementPulseResolved:
     percent: float | None = None
     latest_achievement: str = ""
     latest_achievements: tuple[str, ...] = ()
+    latest_achievement_icon_url: str = ""
     previous_game_title: str = ""
     playtime_forever_minutes: int | None = None
     unavailable_reason: str = ""
@@ -160,8 +161,8 @@ def _unlock_time(row: Mapping[str, Any]) -> int:
         return 0
 
 
-def _schema_display_names(schema_result: SteamResult | None) -> dict[str, str]:
-    """Map Steam's internal achievement ids to its user-facing schema labels."""
+def _schema_achievement_rows(schema_result: SteamResult | None) -> dict[str, Mapping[str, Any]]:
+    """Map Steam's internal achievement ids to their cache-safe schema rows."""
     payload = _payload(schema_result)
     game = payload.get("game")
     if not isinstance(game, Mapping):
@@ -172,15 +173,31 @@ def _schema_display_names(schema_result: SteamResult | None) -> dict[str, str]:
     achievements = stats.get("achievements")
     if not isinstance(achievements, list):
         return {}
-    display_names: dict[str, str] = {}
+    schema_rows: dict[str, Mapping[str, Any]] = {}
     for row in achievements:
         if not isinstance(row, Mapping):
             continue
         internal_name = row.get("name")
-        display_name = row.get("displayName")
-        if isinstance(internal_name, str) and internal_name and isinstance(display_name, str) and display_name.strip():
-            display_names[internal_name] = display_name.strip()
-    return display_names
+        if isinstance(internal_name, str) and internal_name:
+            schema_rows[internal_name] = row
+    return schema_rows
+
+
+def _schema_display_name(row: Mapping[str, Any] | None) -> str:
+    if not isinstance(row, Mapping):
+        return ""
+    display_name = row.get("displayName")
+    return display_name.strip() if isinstance(display_name, str) else ""
+
+
+def _schema_icon_url(row: Mapping[str, Any] | None) -> str:
+    if not isinstance(row, Mapping):
+        return ""
+    value = row.get("icon")
+    if not isinstance(value, str):
+        return ""
+    url = value.strip()
+    return url if url.lower().startswith("https://") else ""
 
 
 def _playtime_forever(game: Mapping[str, Any] | None) -> int | None:
@@ -274,12 +291,21 @@ def resolve_achievement_pulse(
 
     unlocked_rows = tuple(row for row in rows if bool(row.get("achieved")))
     latest_achievements: tuple[str, ...] = ()
+    latest_achievement_icon_url = ""
     if unlocked_rows:
-        schema_names = _schema_display_names(schema_result)
+        schema_rows = _schema_achievement_rows(schema_result)
+        latest_rows = sorted(unlocked_rows, key=_unlock_time, reverse=True)[:5]
         latest_achievements = tuple(
-            schema_names.get(str(row.get("apiname") or row.get("name")), "") or _achievement_title(row)
-            for row in sorted(unlocked_rows, key=_unlock_time, reverse=True)[:5]
+            _schema_display_name(
+                schema_rows.get(str(row.get("apiname") or row.get("name") or ""))
+            )
+            or _achievement_title(row)
+            for row in latest_rows
         )
+        primary_schema_row = schema_rows.get(
+            str(latest_rows[0].get("apiname") or latest_rows[0].get("name") or "")
+        )
+        latest_achievement_icon_url = _schema_icon_url(primary_schema_row)
 
     total = len(rows)
     unlocked = len(unlocked_rows)
@@ -294,6 +320,7 @@ def resolve_achievement_pulse(
         percent=percent,
         latest_achievement=latest_achievements[0] if latest_achievements else "",
         latest_achievements=latest_achievements,
+        latest_achievement_icon_url=latest_achievement_icon_url,
         previous_game_title=previous_game_title,
         playtime_forever_minutes=_playtime_forever(selected_game),
         source_label="Cache" if achievement_result.from_cache else "Fixture",

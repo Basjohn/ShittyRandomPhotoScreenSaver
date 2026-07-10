@@ -11,6 +11,8 @@ from engine.image_pipeline import (
     _cache_trace,
     _describe_prefetcher_state,
     _get_cached_pixmap_variants,
+    _process_display_with_replacements,
+    _process_same_image_with_replacements,
     notify_transition_complete,
     schedule_prefetch,
 )
@@ -29,6 +31,80 @@ def _solid_qimage(width: int, height: int, color: QColor) -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32)
     image.fill(color)
     return image
+
+
+def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):
+    bad = SimpleNamespace(local_path=r"C:\wall\decompression-bomb.jpg", url=None)
+    good = SimpleNamespace(local_path=r"C:\wall\replacement.jpg", url=None)
+    queued = [bad, good]
+    engine = SimpleNamespace(
+        image_queue=SimpleNamespace(next=lambda: queued.pop(0) if queued else None)
+    )
+    attempted = []
+
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+        attempted.append((display_index, str(meta.local_path)))
+        if meta is bad:
+            return None
+        return {"path": str(meta.local_path)}
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    result, selected = _process_display_with_replacements(
+        engine,
+        object(),
+        1,
+        bad,
+        False,
+        False,
+        max_replacements=2,
+    )
+
+    assert result == {"path": str(good.local_path)}
+    assert selected is good
+    assert attempted == [
+        (1, str(bad.local_path)),
+        (1, str(good.local_path)),
+    ]
+
+
+def test_same_image_replacement_stays_atomic_across_displays(monkeypatch):
+    bad = SimpleNamespace(local_path=r"C:\wall\target-size-rejected.jpg", url=None)
+    good = SimpleNamespace(local_path=r"C:\wall\common-replacement.jpg", url=None)
+    queued = [good]
+    engine = SimpleNamespace(
+        image_queue=SimpleNamespace(next=lambda: queued.pop(0) if queued else None)
+    )
+    attempted = []
+
+    def _process(_engine, _display, display_index, meta, _lanczos, _sharpen):
+        attempted.append((display_index, str(meta.local_path)))
+        if meta is bad and display_index == 1:
+            return None
+        return {"path": str(meta.local_path), "display": display_index}
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    processed, selected = _process_same_image_with_replacements(
+        engine,
+        [object(), object()],
+        bad,
+        False,
+        False,
+        max_replacements=1,
+    )
+
+    assert selected is good
+    assert [processed[index]["path"] for index in (0, 1)] == [
+        str(good.local_path),
+        str(good.local_path),
+    ]
+    assert attempted == [
+        (0, str(bad.local_path)),
+        (1, str(bad.local_path)),
+        (0, str(good.local_path)),
+        (1, str(good.local_path)),
+    ]
 
 
 def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):

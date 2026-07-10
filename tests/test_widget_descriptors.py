@@ -565,6 +565,38 @@ def test_collect_widget_section_save_results_runs_savers_and_preserves_unbuilt_s
     }
 
 
+def test_collect_widget_section_save_results_keeps_unhydrated_guard_active():
+    blocked = []
+
+    class _Owner:
+        def _can_save_widget_section(self, section_id):
+            return False
+
+        def _log_widget_hydration_blocked_save(self, section_id):
+            blocked.append(section_id)
+
+    owner = _Owner()
+    descriptor = type(
+        "_D",
+        (),
+        {
+            "section_id": "steam",
+            "persisted_widget_keys": ("steam",),
+            "can_save_for_owner": lambda self, current_owner: True,
+            "resolve_saver": lambda self: lambda current_owner: {"enabled": False},
+        },
+    )()
+
+    results = collect_widget_section_save_results(
+        owner,
+        {"steam": {"enabled": True, "future_key": "preserved"}},
+        (descriptor,),
+    )
+
+    assert blocked == ["steam"]
+    assert results == {"steam": {"enabled": True, "future_key": "preserved"}}
+
+
 def test_collect_widget_section_save_result_runs_requested_saver():
     owner = object()
     descriptors = (
@@ -978,6 +1010,7 @@ def test_live_refresh_handlers_follow_runtime_descriptors():
 def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():
     descriptors = get_widget_stack_preview_descriptors()
     clock = next(item for item in descriptors if item.widget_id == "clock")
+    achievement = next(item for item in descriptors if item.widget_id == "achievement_pulse")
 
     assert clock.position_attr_name == "clock_position"
     assert clock.monitor_attr_name == "clock_monitor_combo"
@@ -986,6 +1019,7 @@ def test_stack_preview_descriptors_capture_live_widgets_tab_preview_contract():
         "display_mode",
         "show_timezone_label",
     }
+    assert achievement.family_enabled_attr_name == "steam_enabled"
 
 
 def test_collect_widget_stack_status_targets_reads_live_owner_values():

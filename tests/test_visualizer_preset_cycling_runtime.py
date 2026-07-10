@@ -307,9 +307,10 @@ def test_spotify_visualizer_handle_mouse_button_cycles_and_resets(qt_app, qtbot)
     widget._widget_manager = wm
     widget._reset_visualizer_state = MagicMock()
     widget._request_latency_probe = MagicMock()
+    active_mode = widget._vis_mode_str
 
     assert widget.handle_mouse_button(Qt.MouseButton.MiddleButton) is True
-    wm.cycle_visualizer_preset.assert_called_once_with("spectrum", 1)
+    wm.cycle_visualizer_preset.assert_called_once_with(active_mode, 1)
     widget._reset_visualizer_state.assert_called_once_with(
         clear_overlay=False,
         replay_cached=False,
@@ -327,9 +328,10 @@ def test_spotify_visualizer_handle_mouse_button_back_button_cycles_previous(qt_a
     widget._widget_manager = wm
     widget._reset_visualizer_state = MagicMock()
     widget._request_latency_probe = MagicMock()
+    active_mode = widget._vis_mode_str
 
     assert widget.handle_mouse_button(Qt.MouseButton.XButton1) is True
-    wm.cycle_visualizer_preset.assert_called_once_with("spectrum", -1)
+    wm.cycle_visualizer_preset.assert_called_once_with(active_mode, -1)
     widget._reset_visualizer_state.assert_called_once()
     widget._request_latency_probe.assert_called_once_with("preset_cycle")
 

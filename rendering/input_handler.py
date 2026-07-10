@@ -794,6 +794,7 @@ class InputHandler(QObject):
         imgur_widget=None,
         spotify_visualizer_widget=None,
         steam_widgets=(),
+        weather_widget=None,
     ) -> tuple:
         """
         Route clicks to interactive widgets in interaction mode.
@@ -892,6 +893,21 @@ class InputHandler(QObject):
                             break
                 except Exception:
                     logger.debug("[INPUT] Steam click routing failed", exc_info=True)
+
+        # Weather missing-location affordance uses the same centralized Settings route.
+        if not handled and weather_widget is not None:
+            try:
+                ww = weather_widget
+                if ww.isVisible() and ww.geometry().contains(pos):
+                    geom = ww.geometry()
+                    local_pos = QPoint(pos.x() - geom.x(), pos.y() - geom.y())
+                    target = ww.settings_action_at(local_pos) if hasattr(ww, "settings_action_at") else None
+                    if target and hasattr(ww, "handle_click") and ww.handle_click(local_pos):
+                        handled = True
+                        self._prime_settings_section("weather", bucket="source_layout")
+                        self.settings_requested.emit()
+            except Exception:
+                logger.debug("[INPUT] Weather click routing failed", exc_info=True)
         
         # Reddit widgets
         for rw in [reddit_widget, reddit2_widget]:
