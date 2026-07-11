@@ -124,7 +124,7 @@
         "sine_wave_dynamic_range_enabled": false,
         "sine_wave_effect": 1.0,
         "sine_wave_growth": 4.0,
-        "sine_wave_input_gain": 0.75,
+        "sine_wave_input_gain": 0.45,
         "sine_wave_kick_lane_gain": 1.0,
         "sine_wave_manual_floor": 0.12,
         "sine_wave_rainbow_enabled": false,
