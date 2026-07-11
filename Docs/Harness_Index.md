@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -153,6 +153,40 @@ python -m pytest `
   - Bubble oracle failures that only reflect stale expected values are re-baseline work, not permission to change Bubble feel.
   - `Oscilloscope` is now part of the accepted lock after its mode-owned waveform/ghost/glow pass; keep future changes mode-owned unless a shared seam is proven.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
+
+### Blob Mighty / Shaped architecture lock
+
+- Purpose: protect the preset-owned Blob subtype contract, canonical migration, isolated UI/runtime/shader ownership, subtype-boundary resets, Mighty organic behavior, Shaped authored-contour behavior, and shared reactive body paint.
+- Use when:
+  - changing `blob_type`, Blob defaults/model/snapshot/preset repair, or Blob curated payloads
+  - editing Blob Settings builders/binding
+  - editing Blob runtime config, overlay state, renderer dispatch, contour solvers, or shader programs
+  - investigating stale Shaped/Mighty state after startup, settings refresh, preset apply, or hot cycling
+- Focused command:
+```powershell
+python -m pytest `
+  tests/test_visualizer_blob_contract.py `
+  tests/test_blob_type_runtime.py `
+  tests/test_blob_unshaped_geometry.py `
+  tests/test_blob_shaper_plumbing.py `
+  tests/test_blob_shader_compile.py `
+  tests/test_visualizer_presets.py `
+  tests/test_visualizer_preset_cycling_runtime.py `
+  -q --tb=short
+```
+- Focused Blob UI/settings command:
+```powershell
+python -m pytest tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q --tb=short
+```
+- Schema/artifact checks:
+```powershell
+python tools/regenerate_defaults_snapshot_artifacts.py
+python tools/regenerate_visualizer_shipped_presets.py
+python tools/visualizer_preset_repair.py --audit-curated
+```
+- Notes:
+  - Run the current-good visualizer reactivity lock before and after any change that crosses shared audio/activation/render seams.
+  - Green automation proves the contract, not the final look. Under `-devblob`, validate Mighty and Shaped at startup and through curated/Custom hot switches; confirm `[SPOTIFY_VIS][BLOB][TYPE_RESET]` occurs only at real subtype boundaries, no fallback appears, both body fills visibly react, Mighty stays organic/bounded, and Shaped returns cleanly to its authored contour.
 
 ### Visualizer distribution harness
 - Purpose: inspect transition-random distribution or mode-selection skew over longer sessions.

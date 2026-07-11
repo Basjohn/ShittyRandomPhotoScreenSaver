@@ -9,7 +9,20 @@
         "blob_adaptive_sensitivity": false,
         "blob_agc_strength": 0.56,
         "blob_audio_block_size": 128,
+        "blob_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blob_bar_border_opacity": 1.0,
         "blob_bar_count": 30,
+        "blob_bar_fill_color": [
+          0,
+          0,
+          0,
+          130
+        ],
         "blob_color": [
           255,
           68,
@@ -62,22 +75,10 @@
         "blob_transient_mix_bass": 0.28,
         "blob_transient_mix_vocal": 0.2,
         "blob_transient_pulse_gain": 0.86,
+        "blob_type": "mighty",
         "blob_width": 1.02,
         "mode": "blob",
-        "monitor": "ALL",
-        "blob_bar_fill_color": [
-          0,
-          0,
-          0,
-          130
-        ],
-        "blob_bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "blob_bar_border_opacity": 1.0
+        "monitor": "ALL"
       }
     }
   },

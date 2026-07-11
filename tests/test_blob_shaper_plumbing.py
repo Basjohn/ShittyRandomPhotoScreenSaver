@@ -15,7 +15,7 @@ class TestBlobShaperModels:
     def test_dataclass_defaults(self):
         from core.settings.models import SpotifyVisualizerSettings
         s = SpotifyVisualizerSettings()
-        assert s.blob_shaper_enabled is False
+        assert s.blob_type == "mighty"
         assert s.blob_shaper_base_strength == 0.5
         assert s.blob_shaper_react_strength == 0.5
         assert s.blob_shaper_idle_motion == 0.18
@@ -30,7 +30,7 @@ class TestBlobShaperModels:
     def test_roundtrip_to_dict_from_mapping(self):
         from core.settings.models import SpotifyVisualizerSettings
         s = SpotifyVisualizerSettings(
-            blob_shaper_enabled=True,
+            blob_type="shaped",
             blob_shaper_base_strength=0.8,
             blob_shaper_react_strength=0.3,
             blob_shaper_idle_motion=0.12,
@@ -43,7 +43,8 @@ class TestBlobShaperModels:
         )
         d = s.to_dict()
         prefix = "widgets.spotify_visualizer"
-        assert d[f"{prefix}.blob_shaper_enabled"] is True
+        assert d[f"{prefix}.blob_type"] == "shaped"
+        assert f"{prefix}.blob_shaper_enabled" not in d
         assert d[f"{prefix}.blob_topology"] == "ring"
         assert d[f"{prefix}.blob_shaper_idle_motion"] == pytest.approx(0.12)
         assert d[f"{prefix}.blob_shaper_audio_motion"] == pytest.approx(1.65)
@@ -51,7 +52,7 @@ class TestBlobShaperModels:
 
         flat = {k.split(".", 2)[-1]: v for k, v in d.items() if k.startswith(prefix)}
         s2 = SpotifyVisualizerSettings.from_mapping(flat)
-        assert s2.blob_shaper_enabled is True
+        assert s2.blob_type == "shaped"
         assert s2.blob_shaper_idle_motion == pytest.approx(0.12)
         assert s2.blob_shaper_audio_motion == pytest.approx(1.65)
         assert s2.blob_topology == "ring"
@@ -60,6 +61,19 @@ class TestBlobShaperModels:
 
 class TestBlobShaperRenderer:
     """Verify renderer helper functions."""
+
+    @staticmethod
+    def _harmonic_amplitude(profile: list[float], harmonic: int) -> float:
+        mean = math.fsum(profile) / len(profile)
+        cosine = math.fsum(
+            (value - mean) * math.cos(math.tau * harmonic * idx / len(profile))
+            for idx, value in enumerate(profile)
+        ) * 2.0 / len(profile)
+        sine = math.fsum(
+            (value - mean) * math.sin(math.tau * harmonic * idx / len(profile))
+            for idx, value in enumerate(profile)
+        ) * 2.0 / len(profile)
+        return math.hypot(cosine, sine)
 
     @staticmethod
     def _simulate_runtime_profile_series(
@@ -74,6 +88,7 @@ class TestBlobShaperRenderer:
         overall_energy: float = 0.0,
         shaper_idle_motion: float = 0.18,
         shaper_audio_motion: float = 1.20,
+        base_strength: float = 1.0,
         react_strength: float = 1.0,
         playing: bool = True,
     ) -> list[list[float]]:
@@ -99,6 +114,7 @@ class TestBlobShaperRenderer:
                 mid=mid_energy,
                 high=high_energy,
                 overall=overall_energy,
+                base_strength=base_strength,
                 react_strength=react_strength,
                 shaper_idle_motion=shaper_idle_motion,
                 shaper_audio_motion=shaper_audio_motion,
@@ -224,7 +240,7 @@ class TestBlobShaperRenderer:
         driven_spread = max(driven_profile) - min(driven_profile)
         assert driven_spread > quiet_spread * 1.8
 
-    def test_unshaped_runtime_profile_stays_non_circular_but_bounded(self):
+    def test_mighty_runtime_profile_stays_non_circular_but_bounded(self):
         from widgets.spotify_visualizer.blob_math import solve_unshaped_blob_profile_step
 
         profile_bundle, _velocity = solve_unshaped_blob_profile_step(
@@ -259,7 +275,7 @@ class TestBlobShaperRenderer:
         assert max(solved_profile) <= 1.20
         assert min(solved_profile) >= 0.74
 
-    def test_unshaped_runtime_profile_solver_remembers_contour_instead_of_resetting_flat(self):
+    def test_mighty_runtime_profile_solver_remembers_contour_instead_of_resetting_flat(self):
         from widgets.spotify_visualizer.blob_math import solve_unshaped_blob_profile_step
 
         profile_bundle_1, velocity_1 = solve_unshaped_blob_profile_step(
@@ -330,20 +346,28 @@ class TestBlobShaperRenderer:
         assert weights[2] > 0.55
         assert max(abs(weights[i] - weights[(i + 1) % 32]) for i in range(32)) < 0.22
 
-    def test_blob_shader_uses_runtime_profile_for_unshaped_contour_and_not_scalar_motion_stack(self):
-        src = Path(
+    def test_blob_shader_uses_runtime_profile_for_mighty_contour_and_not_scalar_motion_stack(self):
+        shared_src = Path(
             r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob.frag"
         ).read_text(encoding="utf-8")
+        mighty_src = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob_mighty.frag"
+        ).read_text(encoding="utf-8")
+        shaped_src = Path(
+            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\blob_shaped.frag"
+        ).read_text(encoding="utf-8")
 
-        assert "Both Blob types now upload one solved runtime contour profile." in src
-        assert "float runtime_mult =" in src
-        assert "if (u_blob_shaper_enabled == 0)" in src
-        assert "sample_unshaped_contour(angle_frac, u_blob_runtime_profile)" in src
-        assert "float contour_authority =" in src
-        assert "float support_floor = (u_blob_shaper_enabled == 1)" in src
-        assert "float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;" in src
-        assert "float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);" in src
-        assert "float final_radius = (u_blob_shaper_enabled == 1)" in src
+        assert "#define BLOB_VARIANT_SHAPED 0" in mighty_src
+        assert "#define BLOB_VARIANT_SHAPED 1" in shaped_src
+        assert "Both Blob types now upload one solved runtime contour profile." in shared_src
+        assert "float runtime_mult =" in shared_src
+        assert "if (BLOB_VARIANT_SHAPED == 0)" in shared_src
+        assert "sample_unshaped_contour(angle_frac, u_blob_runtime_profile)" in shared_src
+        assert "float contour_authority =" in shared_src
+        assert "float support_floor = (BLOB_VARIANT_SHAPED == 1)" in shared_src
+        assert "float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;" in shared_src
+        assert "float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);" in shared_src
+        assert "float final_radius = (BLOB_VARIANT_SHAPED == 1)" in shared_src
 
     def test_runtime_energy_nodes_prefer_react_canvas_when_present(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -396,11 +420,15 @@ class TestBlobShaperRenderer:
         radius = _resolve_shaper_radius(1.0, 1.6, 0.04, playing=True)
         assert radius == pytest.approx(1.0)
 
-    def test_shaper_base_shape_stays_authoritative_even_if_base_strength_is_low(self):
+    def test_shaper_base_strength_scales_relief_but_never_reaches_raw_circle(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
 
-        radius = _resolve_shaper_radius(1.35, 1.9, 0.0, base_strength=0.0, playing=True)
-        assert radius == pytest.approx(1.35)
+        weak = _resolve_shaper_radius(1.35, 1.9, 0.0, base_strength=0.0, playing=True)
+        full = _resolve_shaper_radius(1.35, 1.9, 0.0, base_strength=1.0, playing=True)
+
+        assert weak == pytest.approx(1.077)
+        assert 1.0 < weak < full
+        assert full == pytest.approx(1.35)
 
     def test_shaper_drive_returns_to_base_shape_when_paused(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
@@ -540,6 +568,234 @@ class TestBlobShaperRenderer:
             playing=True,
         )
         assert max(abs(value) for value in residual) < 1e-6
+
+    def test_shaped_blob_base_strength_controls_authored_relief_without_flattening_it(self):
+        count = 64
+        base_profile = [
+            1.0
+            + math.cos(math.tau * idx / count) * 0.16
+            + math.sin(math.tau * 2.0 * idx / count) * 0.05
+            for idx in range(count)
+        ]
+        weights = [[0.0] * count for _ in range(5)]
+        times = [idx * 0.05 for idx in range(70)]
+
+        weak = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=base_profile,
+            weights=weights,
+            times=times,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=0.0,
+            base_strength=0.0,
+            playing=False,
+        )[-1]
+        full = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=base_profile,
+            weights=weights,
+            times=times,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=0.0,
+            base_strength=1.0,
+            playing=False,
+        )[-1]
+
+        weak_spread = max(weak) - min(weak)
+        full_spread = max(full) - min(full)
+        assert weak_spread > 0.06
+        assert full_spread > weak_spread * 3.0
+        assert abs(sum(weak) / count - 1.0) < 0.002
+        assert abs(sum(full) / count - 1.0) < 0.002
+
+    def test_shaped_blob_runtime_state_passes_base_strength_into_solver(self):
+        from types import SimpleNamespace
+        from widgets.spotify_visualizer.renderers.blob import _resolve_runtime_shaper_profile
+
+        count = 64
+        base_profile = [1.0 + math.cos(math.tau * idx / count) * 0.18 for idx in range(count)]
+        weights = [[0.0] * count for _ in range(5)]
+
+        def _run(base_strength: float) -> list[float]:
+            state = SimpleNamespace(
+                _last_update_ts=1.0,
+                _blob_shaper_solver_ts=0.95,
+                _blob_shaper_solver_seed=0.37,
+                _blob_shaper_base_strength=base_strength,
+                _blob_shaper_react_strength=1.0,
+                _blob_shaper_idle_motion=0.0,
+                _blob_shaper_audio_motion=0.0,
+                _playing=False,
+            )
+            profile: list[float] = []
+            for idx in range(60):
+                state._last_update_ts = 1.0 + idx * 0.05
+                profile = _resolve_runtime_shaper_profile(
+                    state,
+                    base_profile=base_profile,
+                    react_profile=base_profile,
+                    weights=weights,
+                    bass=0.0,
+                    mid=0.0,
+                    high=0.0,
+                    overall=0.0,
+                )
+            return profile
+
+        weak = _run(0.0)
+        full = _run(1.0)
+        assert max(weak) - min(weak) > 0.07
+        assert max(full) - min(full) > (max(weak) - min(weak)) * 3.0
+
+    def test_shaped_blob_idle_control_keeps_zero_gap_contour_alive_when_paused(self):
+        base_profile = [1.0] * 64
+        react_profile = [1.0] * 64
+        weights = [[0.0] * 64 for _ in range(5)]
+        times = [idx * 0.05 for idx in range(50)]
+
+        quiet_frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=0.0,
+            playing=False,
+        )
+        living_frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            shaper_idle_motion=0.8,
+            shaper_audio_motion=0.0,
+            playing=False,
+        )
+
+        quiet = quiet_frames[-1]
+        living = living_frames[-1]
+        temporal_delta = max(abs(a - b) for a, b in zip(living_frames[-10], living))
+        broad_detail = sum(self._harmonic_amplitude(living, harmonic) for harmonic in (1, 2, 3))
+        fine_detail = sum(self._harmonic_amplitude(living, harmonic) for harmonic in range(4, 10))
+        max_neighbor_step = max(
+            abs(living[idx] - living[(idx + 1) % len(living)])
+            for idx in range(len(living))
+        )
+
+        assert max(quiet) - min(quiet) < 1e-8
+        assert max(living) - min(living) > 0.03
+        assert temporal_delta > 0.001
+        assert broad_detail > fine_detail * 12.0
+        assert max_neighbor_step < 0.0045
+        assert abs(sum(living) / len(living) - 1.0) < 0.002
+
+    def test_shaped_blob_audio_control_mutates_zero_gap_contour_within_goal_envelope(self):
+        base_profile = [1.0] * 64
+        react_profile = [1.0] * 64
+        weights = [[0.0] * 64 for _ in range(5)]
+        times = [idx * 0.05 for idx in range(50)]
+
+        disabled_frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            bass_energy=0.80,
+            mid_energy=0.90,
+            high_energy=0.70,
+            overall_energy=0.85,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=0.0,
+            playing=True,
+        )
+        silent_frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            bass_energy=0.0,
+            mid_energy=0.0,
+            high_energy=0.0,
+            overall_energy=0.0,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=2.0,
+            playing=True,
+        )
+        music_frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            bass_energy=0.80,
+            mid_energy=0.90,
+            high_energy=0.70,
+            overall_energy=0.85,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=2.0,
+            playing=True,
+        )
+
+        disabled = disabled_frames[-1]
+        silent = silent_frames[-1]
+        music = music_frames[-1]
+        music_spread = max(music) - min(music)
+        temporal_delta = max(abs(a - b) for a, b in zip(music_frames[-10], music))
+        broad_detail = sum(self._harmonic_amplitude(music, harmonic) for harmonic in (1, 2, 3))
+        irregular_detail = sum(self._harmonic_amplitude(music, harmonic) for harmonic in range(4, 10))
+        mean = sum(music) / len(music)
+        outward_shoulder = mean + (max(music) - mean) * 0.65
+        rounded_outward_samples = sum(1 for value in music if value > outward_shoulder)
+        max_neighbor_step = max(
+            abs(music[idx] - music[(idx + 1) % len(music)])
+            for idx in range(len(music))
+        )
+
+        assert max(disabled) - min(disabled) < 1e-8
+        assert max(silent) - min(silent) < 1e-8
+        assert music_spread > 0.032
+        assert max(abs(value - 1.0) for value in music) < 0.06
+        assert temporal_delta > 0.006
+        assert irregular_detail > broad_detail * 0.45
+        assert rounded_outward_samples >= 4
+        assert max_neighbor_step < 0.012
+        assert abs(mean - 1.0) < 0.003
+
+    def test_shaped_blob_living_mutations_preserve_authored_goal_contour(self):
+        count = 64
+        base_profile = [
+            1.0
+            + math.cos(math.tau * idx / count) * 0.14
+            + math.sin(math.tau * 2.0 * idx / count) * 0.05
+            for idx in range(count)
+        ]
+        weights = [[0.0] * count for _ in range(5)]
+        frames = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=base_profile,
+            weights=weights,
+            times=[idx * 0.05 for idx in range(50)],
+            bass_energy=0.80,
+            mid_energy=0.90,
+            high_energy=0.70,
+            overall_energy=0.85,
+            shaper_idle_motion=0.25,
+            shaper_audio_motion=2.0,
+            playing=True,
+        )
+        runtime_profile = frames[-1]
+        base_mean = sum(base_profile) / count
+        runtime_mean = sum(runtime_profile) / count
+        covariance = sum(
+            (base - base_mean) * (runtime - runtime_mean)
+            for base, runtime in zip(base_profile, runtime_profile)
+        )
+        base_variance = sum((value - base_mean) ** 2 for value in base_profile)
+        runtime_variance = sum((value - runtime_mean) ** 2 for value in runtime_profile)
+        correlation = covariance / math.sqrt(base_variance * runtime_variance)
+
+        assert correlation > 0.99
+        assert max(abs(a - b) for a, b in zip(runtime_profile, base_profile)) < 0.04
+        assert max(runtime_profile) - min(runtime_profile) > 0.30
 
     def test_shaper_runtime_profile_moves_toward_reaction_shape_and_keeps_temporal_motion(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -865,18 +1121,31 @@ class TestBlobShaperRenderer:
         sample = _sample_profile_smooth([[0.0, 0.55], [0.0, 1.15], [0.5, 0.9]], 0.0)
         assert sample == pytest.approx(1.15, rel=1e-5)
 
-    def test_uniform_names_include_shaper(self):
+    def test_blob_type_uniform_union_includes_shaped_payload_without_runtime_selector(self):
         from widgets.spotify_visualizer.renderers.blob import get_uniform_names
         names = get_uniform_names()
         for u in (
+            "u_blob_runtime_profile",
+            "u_blob_ring_mode",
+            "u_blob_ring_thickness",
+        ):
+            assert u in names, f"Uniform {u} missing from get_uniform_names()"
+        for cpu_only_or_retired in (
+            "u_blob_width",
+            "u_blob_core_floor_bias",
+            "u_blob_reactive_deformation",
+            "u_blob_constant_wobble",
+            "u_blob_reactive_wobble",
+            "u_blob_stretch_tendency",
+            "u_blob_stretch_inner",
+            "u_blob_stretch_outer",
+            "u_blob_pockets",
+            "u_blob_pocket_mix",
             "u_blob_shaper_enabled",
             "u_blob_shaper_base_strength",
             "u_blob_shaper_react_strength",
-            "u_blob_ring_mode",
-            "u_blob_ring_thickness",
             "u_blob_base_profile",
             "u_blob_react_profile",
-            "u_blob_runtime_profile",
             "u_blob_energy_bass",
             "u_blob_energy_mid",
             "u_blob_energy_vocals",
@@ -887,12 +1156,11 @@ class TestBlobShaperRenderer:
             "u_blob_shaper_high_energy",
             "u_blob_shaper_overall_energy",
         ):
-            assert u in names, f"Uniform {u} missing from get_uniform_names()"
+            assert cpu_only_or_retired not in names
 
     def test_overlay_uniform_lookup_uses_array_element_zero_for_gl_arrays(self):
         from widgets.spotify_bars_gl_overlay import _uniform_lookup_name
 
-        assert _uniform_lookup_name("u_blob_base_profile") == "u_blob_base_profile[0]"
         assert _uniform_lookup_name("u_blob_runtime_profile") == "u_blob_runtime_profile[0]"
         assert _uniform_lookup_name("u_waveform") == "u_waveform[0]"
         assert _uniform_lookup_name("u_bars") == "u_bars[0]"
@@ -975,11 +1243,11 @@ class TestBlobShaperRenderer:
 class TestBlobShaperConfigApplier:
     """Verify config applier routes shaper keys to widget attributes."""
 
-    def test_blob_mode_contract_normalizer_zeros_unshaped_motion_for_shaper(self):
+    def test_blob_mode_contract_normalizer_zeros_mighty_motion_for_shaped(self):
         from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 
         normalized = normalize_blob_mode_contract_values(
-            blob_shaper_enabled=True,
+            blob_type="shaped",
             blob_reactive_deformation=1.6,
             blob_constant_wobble=0.8,
             blob_reactive_wobble=1.1,
@@ -989,6 +1257,7 @@ class TestBlobShaperConfigApplier:
         )
 
         assert normalized == {
+            "blob_type": "shaped",
             "blob_reactive_deformation": 0.0,
             "blob_constant_wobble": 0.0,
             "blob_reactive_wobble": 0.0,
@@ -1001,6 +1270,7 @@ class TestBlobShaperConfigApplier:
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
 
         widget = MagicMock()
+        widget._blob_type = "mighty"
         widget._blob_shaper_enabled = False
         widget._blob_reactive_deformation = 0.0
         widget._blob_constant_wobble = 0.0
@@ -1016,9 +1286,10 @@ class TestBlobShaperConfigApplier:
             "blob_stretch": 0.6,
             "blob_stretch_inner": 0.2,
             "blob_stretch_outer": 0.6,
-            "blob_shaper_enabled": True,
+            "blob_type": "shaped",
         })
 
+        assert widget._blob_type == "shaped"
         assert widget._blob_shaper_enabled is True
         assert widget._blob_reactive_deformation == pytest.approx(0.0)
         assert widget._blob_constant_wobble == pytest.approx(0.0)
@@ -1030,9 +1301,10 @@ class TestBlobShaperConfigApplier:
     def test_apply_shaper_kwargs(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
         widget = MagicMock()
+        widget._blob_type = "mighty"
         widget._blob_shaper_enabled = False
         apply_vis_mode_kwargs(widget, {
-            "blob_shaper_enabled": True,
+            "blob_type": "shaped",
             "blob_shaper_base_strength": 0.7,
             "blob_shaper_idle_motion": 0.16,
             "blob_shaper_audio_motion": 1.7,
@@ -1041,6 +1313,7 @@ class TestBlobShaperConfigApplier:
             "blob_shape_base_nodes": [[0.0, 0.5], [1.0, 1.5]],
             "blob_shape_energy_nodes": [{"type": "bass", "x": 0.5, "y": 0.5, "dir_x": 1.0, "dir_y": 0.0, "dir_len": 24.0}],
         })
+        assert widget._blob_type == "shaped"
         assert widget._blob_shaper_enabled is True
         assert widget._blob_shaper_base_strength == pytest.approx(0.7)
         assert widget._blob_shaper_idle_motion == pytest.approx(0.16)
@@ -1060,7 +1333,7 @@ class TestBlobShaperConfigApplier:
         from core.settings.models import SpotifyVisualizerSettings
         from rendering.spotify_widget_creators import apply_spotify_vis_model_config
         model = SpotifyVisualizerSettings(
-            blob_shaper_enabled=True,
+            blob_type="shaped",
             blob_shaper_base_strength=0.8,
             blob_shaper_react_strength=0.3,
             blob_shaper_idle_motion=0.12,
@@ -1079,7 +1352,8 @@ class TestBlobShaperConfigApplier:
         kw = kwargs.kwargs if kwargs.kwargs else {}
         if not kw:
             _, kw = kwargs
-        assert kw.get("blob_shaper_enabled") is True
+        assert kw.get("blob_type") == "shaped"
+        assert "blob_shaper_enabled" not in kw
         assert kw.get("blob_shaper_base_strength") == pytest.approx(0.8)
         assert kw.get("blob_shaper_idle_motion") == pytest.approx(0.12)
         assert kw.get("blob_shaper_audio_motion") == pytest.approx(1.65)
@@ -1094,13 +1368,13 @@ class TestBlobShaperConfigApplier:
         assert kw.get("blob_stretch_inner") == pytest.approx(0.0)
         assert kw.get("blob_stretch_outer") == pytest.approx(0.0)
 
-    def test_creator_preserves_explicit_unshaped_blob_runtime_contract(self):
+    def test_creator_preserves_explicit_mighty_blob_runtime_contract(self):
         from core.settings.models import SpotifyVisualizerSettings
         from rendering.spotify_widget_creators import apply_spotify_vis_model_config
 
         model = SpotifyVisualizerSettings(
             mode="blob",
-            blob_shaper_enabled=False,
+            blob_type="mighty",
             blob_reactive_deformation=0.72,
             blob_constant_wobble=0.34,
             blob_reactive_wobble=1.46,
@@ -1123,6 +1397,8 @@ class TestBlobShaperConfigApplier:
         if not kw:
             _, kw = kwargs
 
+        assert kw.get("blob_type") == "mighty"
+        assert "blob_shaper_enabled" not in kw
         assert kw.get("blob_reactive_deformation") == pytest.approx(0.72)
         assert kw.get("blob_constant_wobble") == pytest.approx(0.34)
         assert kw.get("blob_reactive_wobble") == pytest.approx(1.46)
@@ -1146,6 +1422,7 @@ class TestBlobShaperConfigApplier:
         widget._blob_inward_liquid_enabled = True
         widget._blob_inward_liquid_reactivity = 1.15
         widget._blob_inward_liquid_max_size = 0.31
+        widget._blob_type = "shaped"
         widget._blob_shaper_enabled = True
         widget._blob_shaper_base_strength = 0.8
         widget._blob_shaper_react_strength = 0.4
@@ -1163,7 +1440,8 @@ class TestBlobShaperConfigApplier:
         widget._blob_stretch_outer = 0.6
         extra = {}
         _append_blob_visual_extras(extra, widget)
-        assert extra["blob_shaper_enabled"] is True
+        assert extra["blob_type"] == "shaped"
+        assert "blob_shaper_enabled" not in extra
         assert extra["blob_inward_liquid_color"] is widget._blob_inward_liquid_color
         assert extra["blob_inward_liquid_enabled"] is True
         assert extra["blob_inward_liquid_reactivity"] == pytest.approx(1.15)
@@ -1172,14 +1450,17 @@ class TestBlobShaperConfigApplier:
         assert extra["blob_shaper_audio_motion"] == pytest.approx(1.55)
         assert extra["blob_topology"] == "ring"
         assert extra["blob_ring_thickness"] == 0.5
-        assert extra["blob_reactive_deformation"] == pytest.approx(0.0)
-        assert extra["blob_constant_wobble"] == pytest.approx(0.0)
-        assert extra["blob_reactive_wobble"] == pytest.approx(0.0)
-        assert extra["blob_stretch_tendency"] == pytest.approx(0.0)
-        assert extra["blob_stretch_inner"] == pytest.approx(0.0)
-        assert extra["blob_stretch_outer"] == pytest.approx(0.0)
+        for mighty_key in (
+            "blob_reactive_deformation",
+            "blob_constant_wobble",
+            "blob_reactive_wobble",
+            "blob_stretch_tendency",
+            "blob_stretch_inner",
+            "blob_stretch_outer",
+        ):
+            assert mighty_key not in extra
 
-    def test_blob_extras_preserve_unshaped_motion_controls_when_shaper_is_off(self):
+    def test_blob_extras_preserve_mighty_motion_controls(self):
         from widgets.spotify_visualizer.config_applier import _append_blob_visual_extras
 
         widget = MagicMock()
@@ -1199,6 +1480,7 @@ class TestBlobShaperConfigApplier:
         widget._blob_inward_liquid_reactivity = 1.33
         widget._blob_inward_liquid_max_size = 0.27
         widget._blob_glow_drive_mode = "bass"
+        widget._blob_type = "mighty"
         widget._blob_shaper_enabled = False
         widget._blob_reactive_deformation = 1.3
         widget._blob_constant_wobble = 0.9
@@ -1220,6 +1502,8 @@ class TestBlobShaperConfigApplier:
         extra = {}
         _append_blob_visual_extras(extra, widget)
 
+        assert extra["blob_type"] == "mighty"
+        assert "blob_shaper_enabled" not in extra
         assert extra["blob_reactive_deformation"] == pytest.approx(1.3)
         assert extra["blob_inward_liquid_enabled"] is True
         assert extra["blob_inward_liquid_reactivity"] == pytest.approx(1.33)
@@ -1229,6 +1513,18 @@ class TestBlobShaperConfigApplier:
         assert extra["blob_stretch_tendency"] == pytest.approx(0.52)
         assert extra["blob_stretch_inner"] == pytest.approx(0.0)
         assert extra["blob_stretch_outer"] == pytest.approx(0.52)
+        for shaped_key in (
+            "blob_shaper_base_strength",
+            "blob_shaper_react_strength",
+            "blob_shaper_idle_motion",
+            "blob_shaper_audio_motion",
+            "blob_topology",
+            "blob_ring_thickness",
+            "blob_shape_base_nodes",
+            "blob_shape_reaction_nodes",
+            "blob_shape_energy_nodes",
+        ):
+            assert shaped_key not in extra
 
     def test_apply_spotify_vis_model_config_carries_blob_inward_liquid_contract(self):
         from core.settings.models import SpotifyVisualizerSettings

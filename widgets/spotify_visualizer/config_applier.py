@@ -16,6 +16,10 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_gradient_direction,
     normalize_bubble_specular_direction,
 )
+from core.settings.visualizer_blob_contract import (
+    BLOB_TYPE_SHAPED,
+    normalize_blob_type,
+)
 
 logger = get_logger(__name__)
 
@@ -71,22 +75,28 @@ def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[st
 
 def normalize_blob_mode_contract_values(
     *,
-    blob_shaper_enabled: bool,
+    blob_type: str | None = None,
+    blob_shaper_enabled: bool | None = None,
     blob_reactive_deformation: float,
     blob_constant_wobble: float,
     blob_reactive_wobble: float,
     blob_stretch_tendency: float,
     blob_stretch_inner: float,
     blob_stretch_outer: float,
-) -> Dict[str, float]:
-    """Return Blob motion values normalized for shaped vs unshaped ownership.
+) -> Dict[str, Any]:
+    """Return Blob motion values normalized for shaped vs Mighty ownership.
 
-    Blob Shaper owns the contour solver and must not consume generic
-    unshaped freeform motion controls. Unshaped Blob, meanwhile, must never
+    Shaped Blob owns the authored contour solver and must not consume Mighty
+    freeform motion controls. Mighty Blob, meanwhile, must never
     revive inward denting through stale stretch-inner payloads.
     """
-    if blob_shaper_enabled:
+    resolved_type = normalize_blob_type(
+        blob_type,
+        legacy_shaper_enabled=blob_shaper_enabled,
+    )
+    if resolved_type == BLOB_TYPE_SHAPED:
         return {
+            'blob_type': resolved_type,
             'blob_reactive_deformation': 0.0,
             'blob_constant_wobble': 0.0,
             'blob_reactive_wobble': 0.0,
@@ -95,6 +105,7 @@ def normalize_blob_mode_contract_values(
             'blob_stretch_outer': 0.0,
         }
     return {
+        'blob_type': resolved_type,
         'blob_reactive_deformation': float(blob_reactive_deformation),
         'blob_constant_wobble': float(blob_constant_wobble),
         'blob_reactive_wobble': float(blob_reactive_wobble),
@@ -105,9 +116,10 @@ def normalize_blob_mode_contract_values(
 
 
 def _enforce_blob_mode_contract(widget: Any) -> None:
-    """Apply the shaped/unshaped Blob ownership fence to widget runtime state."""
+    """Apply the Shaped/Mighty Blob ownership fence to widget runtime state."""
     normalized = normalize_blob_mode_contract_values(
-        blob_shaper_enabled=bool(getattr(widget, '_blob_shaper_enabled', False)),
+        blob_type=getattr(widget, '_blob_type', None),
+        blob_shaper_enabled=getattr(widget, '_blob_shaper_enabled', None),
         blob_reactive_deformation=float(getattr(widget, '_blob_reactive_deformation', 0.0)),
         blob_constant_wobble=float(getattr(widget, '_blob_constant_wobble', 0.0)),
         blob_reactive_wobble=float(getattr(widget, '_blob_reactive_wobble', 0.0)),
@@ -115,6 +127,8 @@ def _enforce_blob_mode_contract(widget: Any) -> None:
         blob_stretch_inner=float(getattr(widget, '_blob_stretch_inner', 0.0)),
         blob_stretch_outer=float(getattr(widget, '_blob_stretch_outer', 0.0)),
     )
+    widget._blob_type = normalized['blob_type']
+    widget._blob_shaper_enabled = normalized['blob_type'] == BLOB_TYPE_SHAPED
     widget._blob_reactive_deformation = normalized['blob_reactive_deformation']
     widget._blob_constant_wobble = normalized['blob_constant_wobble']
     widget._blob_reactive_wobble = normalized['blob_reactive_wobble']
@@ -208,6 +222,12 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
 
 
     # --- Blob ---------------------------------------------------------
+    if 'blob_type' in kwargs or 'blob_shaper_enabled' in kwargs:
+        widget._blob_type = normalize_blob_type(
+            kwargs.get('blob_type'),
+            legacy_shaper_enabled=kwargs.get('blob_shaper_enabled'),
+        )
+        widget._blob_shaper_enabled = widget._blob_type == BLOB_TYPE_SHAPED
     if 'blob_color' in kwargs:
         c = _color_or_none(kwargs['blob_color'])
         if c is not None:
@@ -293,9 +313,7 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._blob_stretch_tendency = _blob_stretch
         widget._blob_stretch_inner = 0.0
         widget._blob_stretch_outer = _blob_stretch
-    # Blob Shaper
-    if 'blob_shaper_enabled' in kwargs:
-        widget._blob_shaper_enabled = bool(kwargs['blob_shaper_enabled'])
+    # Shaped Blob
     if 'blob_shaper_base_strength' in kwargs:
         widget._blob_shaper_base_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_base_strength'])))
     if 'blob_shaper_react_strength' in kwargs:
@@ -1083,9 +1101,12 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_glow_drive_mode'] = _normalize_blob_glow_drive_mode(
         getattr(widget, '_blob_glow_drive_mode', 'bass')
     )
-    _blob_shaper_enabled = getattr(widget, '_blob_shaper_enabled', False)
+    _blob_type = normalize_blob_type(
+        getattr(widget, '_blob_type', None),
+        legacy_shaper_enabled=getattr(widget, '_blob_shaper_enabled', None),
+    )
     normalized = normalize_blob_mode_contract_values(
-        blob_shaper_enabled=bool(_blob_shaper_enabled),
+        blob_type=_blob_type,
         blob_reactive_deformation=float(getattr(widget, '_blob_reactive_deformation', 0.0)),
         blob_constant_wobble=float(getattr(widget, '_blob_constant_wobble', 0.0)),
         blob_reactive_wobble=float(getattr(widget, '_blob_reactive_wobble', 0.0)),
@@ -1093,7 +1114,6 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
         blob_stretch_inner=float(getattr(widget, '_blob_stretch_inner', 0.0)),
         blob_stretch_outer=float(getattr(widget, '_blob_stretch_outer', 0.0)),
     )
-    extra['blob_reactive_deformation'] = normalized['blob_reactive_deformation']
     extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', getattr(widget, '_blob_pulse', 1.0))
     extra['blob_stage_gain'] = getattr(widget, '_blob_stage_gain', getattr(widget, '_blob_pulse', 1.0))
     extra['blob_core_scale'] = widget._blob_core_scale
@@ -1101,22 +1121,25 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_stage_bias'] = getattr(widget, '_blob_stage_bias', 0.0)
     extra['blob_stage2_release_ms'] = getattr(widget, '_blob_stage2_release_ms', 900.0)
     extra['blob_stage3_release_ms'] = getattr(widget, '_blob_stage3_release_ms', 1200.0)
-    extra['blob_constant_wobble'] = normalized['blob_constant_wobble']
-    extra['blob_reactive_wobble'] = normalized['blob_reactive_wobble']
-    extra['blob_stretch_tendency'] = normalized['blob_stretch_tendency']
-    extra['blob_stretch_inner'] = normalized['blob_stretch_inner']
-    extra['blob_stretch_outer'] = normalized['blob_stretch_outer']
-    # Blob Shaper
-    extra['blob_shaper_enabled'] = _blob_shaper_enabled
-    extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
-    extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
-    extra['blob_shaper_idle_motion'] = getattr(widget, '_blob_shaper_idle_motion', 0.18)
-    extra['blob_shaper_audio_motion'] = getattr(widget, '_blob_shaper_audio_motion', 1.20)
-    extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')
-    extra['blob_ring_thickness'] = getattr(widget, '_blob_ring_thickness', 0.3)
-    extra['blob_shape_base_nodes'] = getattr(widget, '_blob_shape_base_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
-    extra['blob_shape_reaction_nodes'] = getattr(widget, '_blob_shape_reaction_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
-    extra['blob_shape_energy_nodes'] = getattr(widget, '_blob_shape_energy_nodes', [])
+    # Blob subtype. The legacy boolean is intentionally not emitted.
+    extra['blob_type'] = _blob_type
+    if _blob_type == BLOB_TYPE_SHAPED:
+        extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
+        extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
+        extra['blob_shaper_idle_motion'] = getattr(widget, '_blob_shaper_idle_motion', 0.18)
+        extra['blob_shaper_audio_motion'] = getattr(widget, '_blob_shaper_audio_motion', 1.20)
+        extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')
+        extra['blob_ring_thickness'] = getattr(widget, '_blob_ring_thickness', 0.3)
+        extra['blob_shape_base_nodes'] = getattr(widget, '_blob_shape_base_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+        extra['blob_shape_reaction_nodes'] = getattr(widget, '_blob_shape_reaction_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
+        extra['blob_shape_energy_nodes'] = getattr(widget, '_blob_shape_energy_nodes', [])
+    else:
+        extra['blob_reactive_deformation'] = normalized['blob_reactive_deformation']
+        extra['blob_constant_wobble'] = normalized['blob_constant_wobble']
+        extra['blob_reactive_wobble'] = normalized['blob_reactive_wobble']
+        extra['blob_stretch_tendency'] = normalized['blob_stretch_tendency']
+        extra['blob_stretch_inner'] = normalized['blob_stretch_inner']
+        extra['blob_stretch_outer'] = normalized['blob_stretch_outer']
 
 
 def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:

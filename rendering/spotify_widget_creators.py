@@ -14,6 +14,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
+from core.settings.visualizer_blob_contract import normalize_blob_type
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor
 from rendering.widget_descriptors import (
@@ -543,9 +544,12 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
     spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
     spectrum_single_piece = spectrum_render_mode != "segment"
     spectrum_unique_colors = bool(getattr(model, "spectrum_unique_colors", True))
-    blob_shaper_enabled = bool(getattr(model, "blob_shaper_enabled", False))
+    blob_type = normalize_blob_type(
+        getattr(model, "blob_type", None),
+        legacy_shaper_enabled=getattr(model, "blob_shaper_enabled", None),
+    )
     blob_motion_contract = normalize_blob_mode_contract_values(
-        blob_shaper_enabled=blob_shaper_enabled,
+        blob_type=blob_type,
         blob_reactive_deformation=model.blob_reactive_deformation,
         blob_constant_wobble=model.blob_constant_wobble,
         blob_reactive_wobble=model.blob_reactive_wobble,
@@ -623,8 +627,8 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         blob_stretch_tendency=blob_motion_contract['blob_stretch_tendency'],
         blob_stretch_inner=blob_motion_contract['blob_stretch_inner'],
         blob_stretch_outer=blob_motion_contract['blob_stretch_outer'],
-        # Blob Shaper
-        blob_shaper_enabled=blob_shaper_enabled,
+        # Blob subtype / Shaped Blob
+        blob_type=blob_type,
         blob_shaper_base_strength=model.blob_shaper_base_strength,
         blob_shaper_react_strength=model.blob_shaper_react_strength,
         blob_shaper_idle_motion=model.blob_shaper_idle_motion,

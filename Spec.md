@@ -1,6 +1,6 @@
 # Spec
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 Canonical architecture and behavior contracts for SRPSS.
 
@@ -117,6 +117,7 @@ Active ids:
 ### 5.3 Shared seams
 - Mapping normalization: `visualizer_settings_snapshot.py`
 - Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
+- Blob subtype normalization / forward migration: `core/settings/visualizer_blob_contract.py`
 - Settings-model field-spec source of truth: `core/settings/models/_spotify_visualizer.py`; grouped build specs, serializer specs, defaults, and ordered build/serialize section merges must be updated together so `from_settings()`, `from_mapping()`, and `to_dict()` remain one contract instead of drifting per entry point
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Curated preset import/export transfer: `core/settings/visualizer_preset_transfer.py`; zip/folder imports replace the active curated tree, while loose JSON imports are parsed, canonicalized, and written to the inferred mode/slot.
@@ -171,6 +172,17 @@ Active ids:
 - Idle-reveal modes must have a meaningful paused startup presentation without depending on a prior live audio frame. When playback is genuinely non-playing, the shared beat engine should still provide a low-energy idle waveform/bar seed so first visible startup does not collapse into a dead zero frame.
 - Oscilloscope display response is mode-owned at the waveform consumption seam. Its live waveform conditioning, line-speed blending, ghost-ring delay, playback-boundary waveform reset, and transient-width accent must stay in Oscilloscope-owned helpers/render code and must not reopen shared audio, shared floor, or other accepted mode behavior unless an Oscilloscope oracle proves the shared source is wrong.
 - Visualizer latency warnings are activation- and playback-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation, and must not age paused/non-playing stale audio into normal latency errors. Explicit probe-triggered latency requests may still log before readiness or while paused so reset/transition investigations remain visible.
+
+### 5.3.1 Blob subtype contract
+- `blob` remains one stable dev-gated visualizer mode id, but it has two explicit preset-owned subtype values: `mighty` and `shaped`. `blob_type` is the only canonical persisted/runtime authority and defaults to `mighty`.
+- `normal`, `unshaped`, and the retired `blob_shaper_enabled` boolean are forward-migration inputs only. Canonical defaults, settings-model serialization, normalized snapshots, preset repair, curated presets, and runtime GPU payloads must not re-emit the aliases or boolean.
+- Blob preset/custom payloads use subtype replace semantics. Mighty payloads strip Shaped contour fields; Shaped payloads strip Mighty procedural-contour fields. Shared Body, Appearance, Layout, Glow, Ghost, and inward-liquid settings remain available to both subtypes.
+- Blob Settings UI keeps shared buckets in `ui/tabs/media/blob_builder.py`, Mighty-only controls in `blob_mighty_builder.py`, and Shaped-only controls in `blob_shaped_builder.py`. The high-level Blob Type selector shows and enables only the active subtype's creative controls.
+- Runtime shader dispatch resolves `blob_mighty` or `blob_shaped` from the canonical subtype before renderer upload. `renderers/blob_mighty.py` and `renderers/blob_shaped.py` own subtype-specific contour transport, `renderers/blob_common.py` owns neutral paint/energy/glow/inward-liquid transport, and the concrete `blob_mighty.frag` / `blob_shaped.frag` programs compile the shared `blob.frag` body with a fixed variant. A runtime shaper-selector uniform is not part of the canonical shader contract.
+- Mighty Blob owns the procedural organic contour: constant living wobble, music-reactive wobble and outward-biased tendrils, stable body mean, smooth angular/time continuity, and bounded inward give that must not reveal a raw circle or deep pinch.
+- Shaped Blob owns authored base/reaction/energy-node contours and filled/ring topology. Living wobble and music mutation may add bounded local deviation, but the solver must preserve authored contour identity and release cleanly toward the goal shape.
+- Both subtypes share reactive body paint. Live/stage/transient energy must remain visibly represented inside the fill independently of optional inward-liquid appearance.
+- A Blob subtype change is a renderer-state boundary even though the stable mode id remains `blob`. Before accepting the new subtype frame, reset both subtype solver/profile/target/velocity/timestamp families plus ghost/peak silhouette and pocket state so startup, settings refresh, preset apply, and hot cycling cannot inherit the previous subtype.
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.

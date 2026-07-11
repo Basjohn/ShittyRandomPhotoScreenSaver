@@ -17,6 +17,11 @@ from core.settings.visualizer_mode_registry import (
     get_setting_prefixes,
     VISUALIZER_MODE_IDS,
 )
+from core.settings.visualizer_blob_contract import (
+    DEFAULT_BLOB_TYPE,
+    migrate_blob_type_mapping,
+    normalize_blob_type,
+)
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
     resolve_all_preset_indices_from_getter,
@@ -113,7 +118,7 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
 }
 
 _BLOB_SHAPE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "blob_shaper_enabled": bool,
+    "blob_type": normalize_blob_type,
     "blob_shape_base_nodes": lambda value: value,
     "blob_shape_reaction_nodes": lambda value: value,
     "blob_shape_energy_nodes": list,
@@ -505,7 +510,6 @@ _SINE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
 }
 
 _BLOB_SHAPE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "blob_shaper_enabled": (False, bool),
     "blob_shape_base_nodes": ([[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]], list),
     "blob_shape_reaction_nodes": ([[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]], list),
     "blob_shape_energy_nodes": ([], list),
@@ -896,7 +900,12 @@ def _build_visualizer_bubble_kwargs(
 def _build_visualizer_blob_shape_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
-    return _build_read_value_map(read_value, _BLOB_SHAPE_BUILD_SPECS)
+    data = _build_read_value_map(read_value, _BLOB_SHAPE_BUILD_SPECS)
+    data["blob_type"] = normalize_blob_type(
+        read_value("blob_type", None),
+        legacy_shaper_enabled=read_value("blob_shaper_enabled", None),
+    )
+    return data
 
 
 def _build_visualizer_devcurve_kwargs(
@@ -1405,8 +1414,8 @@ class SpotifyVisualizerSettings:
     blob_ghost_alpha: float = 0.4
     blob_ghost_decay: float = 0.3
     sine_line_dim: bool = False
-    # Blob Shaper
-    blob_shaper_enabled: bool = False
+    # Blob subtype / Shaped contour authoring
+    blob_type: str = DEFAULT_BLOB_TYPE
     blob_shape_base_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
     blob_shape_reaction_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
     blob_shape_energy_nodes: List[Dict[str, Any]] = field(default_factory=list)
@@ -1522,6 +1531,7 @@ class SpotifyVisualizerSettings:
             setattr(self, opacity_attr, mode_opacity)
  
     def _apply_blob_defaults(self) -> None:
+        self.blob_type = normalize_blob_type(self.blob_type)
         self._apply_list_default("blob_color", [0, 180, 255, 230])
         self._apply_list_default("blob_glow_color", [0, 140, 255, 180])
         self._apply_list_default("blob_edge_color", [100, 220, 255, 230])
@@ -1642,7 +1652,8 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = strip_legacy_global_technical_keys(dict(data), prefix=prefix)
+        _raw = migrate_blob_type_mapping(dict(data), prefix=prefix)
+        _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)
         _mode = coerce_visualizer_mode_id(
             _raw.get("mode", _raw.get(f"{prefix}.mode", "bubble"))

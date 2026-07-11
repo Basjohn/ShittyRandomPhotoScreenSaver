@@ -9,14 +9,26 @@
         "blob_adaptive_sensitivity": false,
         "blob_agc_strength": 0.45,
         "blob_audio_block_size": 256,
+        "blob_bar_border_color": [
+          255,
+          255,
+          255,
+          255
+        ],
+        "blob_bar_border_opacity": 1.0,
         "blob_bar_count": 40,
+        "blob_bar_fill_color": [
+          255,
+          255,
+          255,
+          230
+        ],
         "blob_color": [
           243,
           243,
           243,
           230
         ],
-        "blob_constant_wobble": 0.15,
         "blob_dynamic_floor": true,
         "blob_dynamic_range_enabled": false,
         "blob_edge_color": [
@@ -52,9 +64,7 @@
         "blob_pulse_release_ms": 746,
         "blob_rainbow_enabled": true,
         "blob_rainbow_speed": 0.15,
-        "blob_reactive_deformation": 1.0,
         "blob_reactive_glow": true,
-        "blob_reactive_wobble": 2.25,
         "blob_ring_thickness": 0.3,
         "blob_sensitivity": 1.03,
         "blob_shape_base_nodes": [
@@ -205,32 +215,18 @@
         ],
         "blob_shaper_audio_motion": 1.85,
         "blob_shaper_base_strength": 1.0,
-        "blob_shaper_enabled": true,
         "blob_shaper_idle_motion": 0.5,
         "blob_shaper_react_strength": 1.0,
         "blob_size": 0.35,
-        "blob_stretch": 0.55,
         "blob_topology": "circle",
         "blob_transient_clamp": 2.35,
         "blob_transient_mix_bass": 0.3,
         "blob_transient_mix_vocal": 0.3,
         "blob_transient_pulse_gain": 1.0,
+        "blob_type": "shaped",
         "blob_width": 1.0,
         "mode": "blob",
-        "monitor": "ALL",
-        "blob_bar_fill_color": [
-          255,
-          255,
-          255,
-          230
-        ],
-        "blob_bar_border_color": [
-          255,
-          255,
-          255,
-          255
-        ],
-        "blob_bar_border_opacity": 1.0
+        "monitor": "ALL"
       }
     }
   },

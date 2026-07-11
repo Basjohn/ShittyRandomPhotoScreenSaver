@@ -8,8 +8,10 @@ from pathlib import Path
 import pytest
 
 from core.settings import visualizer_presets as vp
+from core.settings.visualizer_blob_contract import BLOB_SHAPED_ONLY_KEYS
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
+from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
 from tools import visualizer_preset_repair as repair
 from ui.tabs.widgets_tab import WidgetsTab
 
@@ -499,7 +501,7 @@ def test_sst_roundtrip_preserves_versioned_bubble_gradient_direction(tmp_path):
     assert round_tripped["bubble_gradient_semantics_version"] == 2
 
 
-def test_sst_roundtrip_preserves_blob_shaper_directional_nodes(tmp_path):
+def test_sst_roundtrip_preserves_shaped_blob_directional_nodes(tmp_path):
     def _make_manager(suffix: str) -> SettingsManager:
         base = tmp_path / suffix
         base.mkdir(parents=True, exist_ok=True)
@@ -526,7 +528,7 @@ def test_sst_roundtrip_preserves_blob_shaper_directional_nodes(tmp_path):
         "widgets.spotify_visualizer",
         {
             "mode": "blob",
-            "blob_shaper_enabled": True,
+            "blob_type": "shaped",
             "blob_topology": "ring",
             "blob_ring_thickness": 0.44,
             "blob_shape_base_nodes": [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]],
@@ -543,7 +545,8 @@ def test_sst_roundtrip_preserves_blob_shaper_directional_nodes(tmp_path):
 
     round_tripped = target_mgr.get("widgets.spotify_visualizer")
     assert round_tripped["mode"] == "blob"
-    assert round_tripped["blob_shaper_enabled"] is True
+    assert round_tripped["blob_type"] == "shaped"
+    assert "blob_shaper_enabled" not in round_tripped
     assert round_tripped["blob_topology"] == "ring"
     assert round_tripped["blob_ring_thickness"] == pytest.approx(0.44)
     assert round_tripped["blob_shape_base_nodes"] == [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]]
@@ -803,7 +806,7 @@ def test_blob_curated_payload_parser_preserves_directional_shaper_nodes():
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "blob",
-                    "blob_shaper_enabled": True,
+                    "blob_type": "shaped",
                     "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.0]],
                     "blob_shape_reaction_nodes": [[0.0, 1.2], [0.5, 0.8]],
                     "blob_shape_energy_nodes": energy_nodes,
@@ -843,7 +846,7 @@ def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_a
         blob_index = tab.vis_mode_combo.findData("blob")
         assert blob_index >= 0
         tab.vis_mode_combo.setCurrentIndex(blob_index)
-        tab.blob_shaper_enabled.setChecked(True)
+        tab.blob_type_combo.setCurrentIndex(1)
 
         base_nodes = [[0.0, 0.9], [0.5, 1.15], [1.0, 0.9]]
         react_nodes = [[0.0, 1.3], [0.5, 0.7], [1.0, 1.2]]
@@ -865,6 +868,8 @@ def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_a
         sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
 
         assert sv["mode"] == "blob"
+        assert sv["blob_type"] == "shaped"
+        assert "blob_shaper_enabled" not in sv
         assert sv["blob_shape_base_nodes"] == base_nodes
         assert sv["blob_shape_reaction_nodes"] == react_nodes
         assert sv["blob_shape_energy_nodes"] == energy_nodes
@@ -925,8 +930,8 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
             "use_raw_energy": True,
             f"{prefix}energy_boost": 1.33,
             f"{prefix}use_raw_energy": True,
-            "manual_floor": 0.22,
-            "input_gain": 0.81,
+            f"{prefix}manual_floor": 0.22,
+            f"{prefix}input_gain": 0.81,
             mode_key: mode_value,
         }
         manager.set("widgets", widgets_cfg)
@@ -1032,13 +1037,13 @@ def test_repair_tool_audit_flags_global_mirrors_and_osc_aliases():
     assert osc_report["deprecated_mode_alias_keys"] == ["osc_sensitivity"]
 
 
-def test_repair_tool_audit_flags_inactive_blob_shaper_payload():
+def test_repair_tool_audit_flags_inactive_shaped_blob_payload():
     payload = {
         "snapshot": {
             "widgets": {
                 "spotify_visualizer": {
                     "mode": "blob",
-                    "blob_shaper_enabled": False,
+                    "blob_type": "mighty",
                     "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 0.9]],
                     "blob_shaper_react_strength": 0.5,
                 }
@@ -1768,9 +1773,94 @@ def test_curated_blob_presets_do_not_ship_retired_blob_keys():
         assert not unexpected, f"{preset_path.name} ships retired blob keys: {sorted(unexpected)}"
 
 
-def test_curated_non_shaped_blob_presets_do_not_ship_blob_shaper_payload():
+def test_curated_mighty_blob_presets_do_not_ship_shaped_payload():
     blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
-    shaper_only_keys = {
+
+    for preset_path in sorted(blob_root.glob("*.json")):
+        payload = json.loads(preset_path.read_text(encoding="utf-8"))
+        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        assert sv.get("blob_type") in {"mighty", "shaped"}
+        assert "blob_shaper_enabled" not in sv
+        if sv["blob_type"] == "shaped":
+            continue
+        unexpected = BLOB_SHAPED_ONLY_KEYS.intersection(sv.keys())
+        assert not unexpected, (
+            f"{preset_path.name} ships Shaped-only payload while blob_type is mighty: "
+            f"{sorted(unexpected)}"
+        )
+
+
+def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_complete():
+    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
+    blob_root = presets_root / "blob"
+    paths = sorted(blob_root.glob("preset_*_temp_*.json"))
+
+    assert [path.name for path in paths] == [
+        "preset_5_temp_mighty_vocal_tendrils.json",
+        "preset_6_temp_mighty_rounded_choir.json",
+        "preset_7_temp_shaped_warp_garden.json",
+        "preset_8_temp_shaped_feather_tendrils.json",
+    ]
+
+    common_required = {
+        "mode",
+        "blob_type",
+        "blob_color",
+        "blob_edge_color",
+        "blob_outline_color",
+        "blob_glow_color",
+        "blob_pulse",
+        "blob_pulse_release_ms",
+        "blob_width",
+        "blob_size",
+        "blob_growth",
+        "blob_stage_gain",
+        "blob_core_scale",
+        "blob_core_floor_bias",
+        "blob_stage_bias",
+        "blob_reactive_glow",
+        "blob_glow_drive_mode",
+        "blob_glow_intensity",
+        "blob_glow_reactivity",
+        "blob_glow_max_size",
+        "blob_ghosting_enabled",
+        "blob_ghost_alpha",
+        "blob_ghost_decay",
+        "blob_inward_liquid_enabled",
+        "blob_inward_liquid_color",
+        "blob_inward_liquid_reactivity",
+        "blob_inward_liquid_max_size",
+        "blob_dynamic_floor",
+        "blob_manual_floor",
+        "blob_agc_strength",
+        "blob_input_gain",
+        "blob_kick_lane_gain",
+        "blob_transient_pulse_gain",
+        "blob_transient_clamp",
+        "blob_transient_mix_bass",
+        "blob_transient_mix_vocal",
+        "blob_audio_block_size",
+        "blob_adaptive_sensitivity",
+        "blob_sensitivity",
+        "blob_bar_count",
+        "blob_rainbow_enabled",
+        "blob_rainbow_speed",
+        "blob_bar_fill_color",
+        "blob_bar_border_color",
+        "blob_bar_border_opacity",
+    }
+    mighty_required = {
+        "blob_reactive_deformation",
+        "blob_constant_wobble",
+        "blob_reactive_wobble",
+        "blob_stretch",
+    }
+    derived_mighty_keys = {
+        "blob_stretch_tendency",
+        "blob_stretch_inner",
+        "blob_stretch_outer",
+    }
+    shaped_required = {
         "blob_shape_base_nodes",
         "blob_shape_reaction_nodes",
         "blob_shape_energy_nodes",
@@ -1782,22 +1872,70 @@ def test_curated_non_shaped_blob_presets_do_not_ship_blob_shaper_payload():
         "blob_ring_thickness",
     }
 
-    for preset_path in sorted(blob_root.glob("*.json")):
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        if sv.get("blob_shaper_enabled") is True:
-            continue
-        unexpected = shaper_only_keys.intersection(sv.keys())
-        assert not unexpected, (
-            f"{preset_path.name} ships Blob Shaper payload while blob_shaper_enabled is false: "
-            f"{sorted(unexpected)}"
+    type_counts = {"mighty": 0, "shaped": 0}
+    showcase_settings = []
+    for expected_index, path in enumerate(paths, start=4):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        settings = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        showcase_settings.append(settings)
+
+        assert payload["preset_index"] == expected_index
+        assert "TEMP" in payload["name"]
+        assert "TEMP" in payload["description"]
+        assert payload["mode"] == "blob"
+        assert payload["visualizer_preset_mode"] == "blob"
+        assert payload["visualizer_preset_override"] is True
+        assert settings["mode"] == "blob"
+        assert not (common_required - settings.keys()), (
+            f"{path.name} missing common Blob showcase fields: "
+            f"{sorted(common_required - settings.keys())}"
         )
 
+        blob_type = settings["blob_type"]
+        type_counts[blob_type] += 1
+        assert settings["blob_glow_drive_mode"] == "vocal"
+        assert settings["blob_transient_mix_vocal"] > settings["blob_transient_mix_bass"]
 
-def test_normalize_visualizer_mode_payload_strips_inactive_blob_shaper_payload():
+        if blob_type == "mighty":
+            assert not (mighty_required - settings.keys())
+            assert not BLOB_SHAPED_ONLY_KEYS.intersection(settings.keys())
+            assert settings["blob_constant_wobble"] >= 0.6
+            assert settings["blob_reactive_wobble"] >= 1.7
+            assert settings["blob_stretch"] >= 0.6
+            assert not derived_mighty_keys.intersection(settings.keys())
+            continue
+
+        assert blob_type == "shaped"
+        assert not (shaped_required - settings.keys())
+        assert not mighty_required.intersection(settings.keys())
+        assert settings["blob_shaper_idle_motion"] >= 0.4
+        assert settings["blob_shaper_audio_motion"] >= 1.2
+        assert settings["blob_shape_energy_nodes"]
+        assert all(
+            float(node["dir_len"]) <= 28.0 and float(node["strength"]) <= 0.85
+            for node in settings["blob_shape_energy_nodes"]
+        )
+
+    assert type_counts == {"mighty": 2, "shaped": 2}
+    assert [settings["blob_inward_liquid_enabled"] for settings in showcase_settings[:2]] == [
+        True,
+        False,
+    ]
+    assert [settings["blob_topology"] for settings in showcase_settings[2:]] == ["circle", "ring"]
+    all_blob_indices = sorted(
+        json.loads(path.read_text(encoding="utf-8"))["preset_index"]
+        for path in blob_root.glob("*.json")
+    )
+    assert all_blob_indices == list(range(8))
+
+    manifest_entries = load_curated_visualizer_preset_manifest(presets_root)
+    assert {f"blob/{path.name}" for path in paths}.issubset(manifest_entries)
+
+
+def test_normalize_visualizer_mode_payload_strips_mighty_shaped_payload():
     payload = {
         "mode": "blob",
-        "blob_shaper_enabled": False,
+        "blob_type": "mighty",
         "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.2]],
         "blob_shape_reaction_nodes": [[0.0, 1.0], [0.5, 0.8]],
         "blob_shape_energy_nodes": [{"type": "bass"}],
@@ -1813,19 +1951,10 @@ def test_normalize_visualizer_mode_payload_strips_inactive_blob_shaper_payload()
     normalized = vp.normalize_visualizer_mode_payload("blob", payload)
 
     assert normalized["mode"] == "blob"
+    assert normalized["blob_type"] == "mighty"
     assert normalized["blob_stretch"] == pytest.approx(0.44)
-    for key in (
-        "blob_shaper_enabled",
-        "blob_shape_base_nodes",
-        "blob_shape_reaction_nodes",
-        "blob_shape_energy_nodes",
-        "blob_shaper_base_strength",
-        "blob_shaper_react_strength",
-        "blob_shaper_idle_motion",
-        "blob_shaper_audio_motion",
-        "blob_topology",
-        "blob_ring_thickness",
-    ):
+    assert "blob_shaper_enabled" not in normalized
+    for key in BLOB_SHAPED_ONLY_KEYS:
         assert key not in normalized
 
 

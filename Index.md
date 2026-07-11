@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 Living map of the current SRPSS codebase.
 
@@ -73,6 +73,7 @@ Living map of the current SRPSS codebase.
 | Visualizer settings model | `core/settings/models/_spotify_visualizer.py` | Canonical grouped field-spec/default/build/serialize contract for visualizer settings; keeps `from_settings()`, `from_mapping()`, and `to_dict()` aligned through ordered section merges rather than entry-point-specific handwritten payloads |
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
 | Technical normalization / legacy migration contract | `core/settings/visualizer_settings_contract.py` | Migrates legacy shared technical inputs into canonical per-mode visualizer settings |
+| Blob subtype contract | `core/settings/visualizer_blob_contract.py` | Canonical `blob_type` ownership (`mighty` / `shaped`, default Mighty), forward migration from `normal` / `unshaped` and `blob_shaper_enabled`, plus symmetric stripping of inactive subtype payload fields |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files, including Steam credential/cache roots |
@@ -117,14 +118,16 @@ Living map of the current SRPSS codebase.
 | Oscilloscope display contract | `widgets/spotify_visualizer/oscilloscope_contract.py` | Mode-owned Oscilloscope waveform-consumption helpers for live PCM display conditioning, line-speed blend alpha, playback-boundary waveform reset support, ghost-ring delay/fill, and bounded transient-width display accent; intentionally outside shared audio/floor production |
 | Spectrum solid-bar display smoothing | `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` | Display-only solid Spectrum smoothing/easing: continuous display-state motion with small-zone chatter suppression, intentionally kept out of shared audio/floor logic |
 | Overlay diagnostics | `widgets/spotify_visualizer/overlay_diagnostics.py` | Passive overlay diagnostics for Glow, Blob, and Sine idle-state logging, extracted so diagnostic payload assembly stays outside render authority code |
+| Blob settings UI | `ui/tabs/media/blob_builder.py` / `blob_mighty_builder.py` / `blob_shaped_builder.py` | Shared Blob Body/Appearance/Layout/Glow/Ghost buckets plus high-level subtype selection and isolated Mighty procedural controls versus Shaped authored-contour controls |
 | Overlay common uniforms | `widgets/spotify_visualizer/overlay_uniforms.py` | Shared mode-neutral GL uniform upload and rainbow hue/logging prep, extracted so common transport stays outside mode-owned renderer math |
 | Overlay render dispatch | `widgets/spotify_visualizer/overlay_render_dispatch.py` | Mode-program resolution and renderer-owned uniform dispatch, extracted so the overlay shell no longer owns lazy mode-program compilation and renderer registry calls inline |
 | Overlay frame shell | `widgets/spotify_visualizer/overlay_frame_shell.py` | Shared backbuffer clear, fade gating, and stencil-wrapped render envelope for the overlay paint path |
 | Outer card geometry | `widgets/spotify_visualizer/card_geometry.py` | Canonical outer card geometry policy: mode/preset-owned preferred height, blob-width reduction, and media-relative placement, kept intentionally separate from stencil math for future custom layout/resize work |
 | Overlay stencil mask | `widgets/spotify_visualizer/overlay_mask.py` | Shared painted-card stencil uniform math for the GL overlay render path, preserving the rounded-rect border-inset clipping contract |
-| Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, and invisible-frame early return without touching first-frame shader authority |
+| Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, invisible-frame early return, and Blob subtype-boundary clearing of both solver/profile families plus ghost/peak/pocket state |
 | Overlay lifecycle bridge | `widgets/spotify_visualizer/media_bridge.py` / `widgets/spotify_visualizer/engine_lifecycle.py` | Runtime overlay clear/destroy policy: mode and preset resets preserve the GL overlay object where possible, while cleanup/teardown still destroys it |
-| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; engine config replay; shared GPU extras payload construction, including the reusable steady-state Spectrum extras dict |
+| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; Blob subtype ownership fencing and selected-subtype-only GPU extras; engine config replay; shared GPU extras payload construction, including the reusable steady-state Spectrum extras dict |
+| Blob renderers and programs | `widgets/spotify_visualizer/renderers/blob_common.py` / `blob_mighty.py` / `blob_shaped.py`; `widgets/spotify_visualizer/shaders/blob.frag` / `blob_mighty.frag` / `blob_shaped.frag` | Shared paint/energy transport with separate Mighty procedural-contour and Shaped authored-contour renderer owners; concrete shader programs use a compile-time subtype variant and keep inner body paint reactive in both paths |
 | Spectrum bar-field contract | `widgets/spotify_visualizer/renderers/spectrum.py` / `widgets/spotify_visualizer/shaders/spectrum.frag` | Shared Spectrum horizontal layout contract: CPU helper and shader agree on the same slightly left-biased bar field so runtime no longer freelances separate left/right spacing math |
 | Spline Curve (`devcurve`) runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | Spline Curve runtime curves, specular slots, idle/play specular alpha activity multiplier, and activation-aware visualizer latency logging |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |

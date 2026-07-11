@@ -4265,6 +4265,7 @@ class TestBlobSettingsBinding:
 
         class _Tab:
             def __init__(self):
+                self.blob_type_combo = _Combo()
                 self.blob_ghost_enabled = _Check()
                 self.blob_ghost_opacity = _Slider()
                 self.blob_ghost_opacity_label = _Label()
@@ -4308,6 +4309,8 @@ class TestBlobSettingsBinding:
         load_blob_mode_settings(
             tab,
             {
+                "blob_type": "shaped",
+                "blob_shaper_enabled": False,
                 "blob_ghosting_enabled": True,
                 "blob_ghost_alpha": 0.37,
                 "blob_ghost_decay": 0.44,
@@ -4328,6 +4331,7 @@ class TestBlobSettingsBinding:
         )
 
         assert tab.blob_ghost_enabled.checked is True
+        assert tab.blob_type_combo.index == 1
         assert tab.blob_ghost_opacity.value == 37
         assert tab.blob_ghost_opacity_label.text == "37%"
         assert tab.blob_ghost_decay_slider.value == 44
@@ -4361,6 +4365,59 @@ class TestBlobSettingsBinding:
             ("blob_inward_liquid_color_btn", "_blob_inward_liquid_color"),
         ]
 
+        load_blob_mode_settings(
+            tab,
+            {"blob_type": "shaped"},
+            sync_color_button=lambda *_args: None,
+        )
+        assert tab.blob_shaper_base_strength.value == 50
+        assert tab.blob_shaper_base_strength_label.text == "50%"
+
+    def test_load_blob_mode_settings_migrates_legacy_toggle_without_overriding_canonical_type(self):
+        from ui.tabs.media.blob_settings_binding import load_blob_mode_settings
+
+        class _Combo:
+            def __init__(self):
+                self.index = None
+                self.blocked = False
+                self.block_history = []
+
+            def setCurrentIndex(self, index):
+                self.index = index
+
+            def blockSignals(self, blocked):
+                previous = self.blocked
+                self.blocked = blocked
+                self.block_history.append(blocked)
+                return previous
+
+        class _Tab:
+            def __init__(self):
+                self.blob_type_combo = _Combo()
+                self.visibility_syncs = 0
+                self._update_blob_type_controls = self._sync
+
+            def _sync(self):
+                self.visibility_syncs += 1
+
+        tab = _Tab()
+        load_blob_mode_settings(
+            tab,
+            {"blob_shaper_enabled": True},
+            sync_color_button=lambda *_args: None,
+        )
+        assert tab.blob_type_combo.index == 1
+
+        load_blob_mode_settings(
+            tab,
+            {"blob_type": "normal", "blob_shaper_enabled": True},
+            sync_color_button=lambda *_args: None,
+        )
+        assert tab.blob_type_combo.index == 0
+        assert tab.blob_type_combo.blocked is False
+        assert tab.blob_type_combo.block_history == [True, False, True, False]
+        assert tab.visibility_syncs == 2
+
     def test_collect_blob_mode_settings_serializes_blob_owned_state(self):
         from ui.tabs.media.blob_settings_binding import collect_blob_mode_settings
 
@@ -4386,6 +4443,7 @@ class TestBlobSettingsBinding:
                 return self._index
 
         class _Tab:
+            blob_type_combo = _Combo(1)
             blob_ghost_enabled = _Check(True)
             blob_ghost_opacity = _Slider(45)
             blob_ghost_decay_slider = _Slider(38)
@@ -4415,8 +4473,11 @@ class TestBlobSettingsBinding:
             _blob_outline_color = QColor(100, 110, 120, 230)
             _blob_inward_liquid_color = QColor(130, 140, 150, 240)
 
-        payload = collect_blob_mode_settings(_Tab())
+        tab = _Tab()
+        payload = collect_blob_mode_settings(tab)
 
+        assert payload["blob_type"] == "shaped"
+        assert "blob_shaper_enabled" not in payload
         assert payload["blob_ghosting_enabled"] is True
         assert payload["blob_ghost_alpha"] == pytest.approx(0.45)
         assert payload["blob_ghost_decay"] == pytest.approx(0.38)
@@ -4431,12 +4492,25 @@ class TestBlobSettingsBinding:
         assert payload["blob_inward_liquid_reactivity"] == pytest.approx(1.42)
         assert payload["blob_inward_liquid_max_size"] == pytest.approx(0.29)
         assert payload["blob_inward_liquid_color"] == [130, 140, 150, 240]
-        assert payload["blob_reactive_wobble"] == pytest.approx(2.90)
-        assert payload["blob_stretch"] == pytest.approx(0.48)
+        assert "blob_reactive_deformation" not in payload
+        assert "blob_constant_wobble" not in payload
+        assert "blob_reactive_wobble" not in payload
+        assert "blob_stretch" not in payload
         assert payload["blob_shaper_base_strength"] == pytest.approx(0.64)
         assert payload["blob_shaper_idle_motion"] == pytest.approx(0.09)
         assert payload["blob_shaper_audio_motion"] == pytest.approx(1.55)
         assert payload["blob_growth"] == pytest.approx(2.75)
+
+        tab.blob_type_combo = _Combo(0)
+        mighty_payload = collect_blob_mode_settings(tab)
+        assert mighty_payload["blob_type"] == "mighty"
+        assert mighty_payload["blob_reactive_deformation"] == pytest.approx(0.88)
+        assert mighty_payload["blob_constant_wobble"] == pytest.approx(0.80)
+        assert mighty_payload["blob_reactive_wobble"] == pytest.approx(2.90)
+        assert mighty_payload["blob_stretch"] == pytest.approx(0.48)
+        assert "blob_shaper_base_strength" not in mighty_payload
+        assert "blob_shaper_idle_motion" not in mighty_payload
+        assert "blob_shaper_audio_motion" not in mighty_payload
 
 
 class TestOscilloscopeSettingsBinding:

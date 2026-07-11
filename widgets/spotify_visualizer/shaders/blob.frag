@@ -1,4 +1,9 @@
-#version 330 core
+// Shared Blob shader body. Concrete programs are blob_mighty.frag and
+// blob_shaped.frag, which define BLOB_VARIANT_SHAPED before including this
+// source.
+#ifndef BLOB_VARIANT_SHAPED
+#define BLOB_VARIANT_SHAPED 0
+#endif
 in vec2 v_uv;
 out vec4 fragColor;
 
@@ -12,10 +17,9 @@ uniform float u_bass_energy;
 uniform float u_mid_energy;
 uniform float u_high_energy;
 uniform float u_overall_energy;
-uniform float u_blob_shaper_bass_energy;
-uniform float u_blob_shaper_mid_energy;
-uniform float u_blob_shaper_high_energy;
-uniform float u_blob_shaper_overall_energy;
+uniform float u_transient_bass;
+uniform float u_transient_mid;
+uniform float u_transient_high;
 
 // Blob configuration
 uniform vec4 u_blob_color;
@@ -24,7 +28,6 @@ uniform vec4 u_blob_edge_color;
 uniform vec4 u_blob_outline_color;
 uniform vec4 u_blob_inward_liquid_color;
 uniform float u_blob_pulse;
-uniform float u_blob_width;  // (legacy, no longer used in shader — card width is widget-level)
 uniform float u_blob_size;   // 0.3..2.0  relative blob scale (default 1.0)
 uniform float u_blob_glow_intensity;  // 0..1  glow size/strength (default 0.5)
 uniform int u_blob_reactive_glow;  // 0 = static glow, 1 = energy-reactive
@@ -33,20 +36,10 @@ uniform float u_blob_inward_liquid_reactivity;  // 0..2 interior edge response s
 uniform float u_blob_inward_liquid_max_size;  // 0.05..0.45 max inward depth fraction
 uniform float u_blob_smoothed_energy;  // CPU-side smoothed energy (reduces flicker)
 uniform float u_blob_glow_energy;  // CPU-side smoothed glow drive (bass or vocal depending on mode)
-uniform float u_blob_reactive_deformation;  // 0..2 scales outward energy growth (default 1.0)
 uniform float u_blob_stage_gain;  // 0..2 multiplier for staged core sizing
 uniform float u_blob_core_scale;  // 0.25..2.5 post-stage scaling of the core radius
-uniform float u_blob_core_floor_bias; // 0..0.6 fraction of staged radius preserved during deformations
 uniform float u_blob_stage_bias;  // -0.60..0.60 shifts stage thresholds up/down before smoothing
-uniform float u_blob_constant_wobble;  // 0..2 base wobble amplitude (default 1.0)
-uniform float u_blob_reactive_wobble;  // 0..2 energy-driven wobble with vocal emphasis (default 1.0)
-uniform float u_blob_stretch_tendency; // 0..1 how much peak energy juts outward (default 0.35)
-uniform float u_blob_stretch_inner;  // 0..1 how deep inward dents can go (default 0.0 for non-shaped Blob)
-uniform float u_blob_stretch_outer;  // 0..1 how far outward protrusions extend (default 0.5)
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
-const int BLOB_POCKET_COUNT = 6;
-uniform vec4 u_blob_pockets[BLOB_POCKET_COUNT];    // angle_frac, amplitude, width, phase
-uniform vec4 u_blob_pocket_mix[BLOB_POCKET_COUNT]; // bass, mid, high, transient
 uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
@@ -58,22 +51,13 @@ uniform float u_blob_peak_overall;
 uniform float u_blob_glow_reactivity;  // 0..2 how strongly glow responds to energy (default 1.0)
 uniform float u_blob_glow_max_size;    // 0.1..3.0 maximum glow spread multiplier (default 1.0)
 
-// Blob Shaper
-uniform int u_blob_shaper_enabled;       // 0 = off, 1 = on
-uniform float u_blob_shaper_base_strength;   // 0..1 how strongly base profile shapes the blob
-uniform float u_blob_shaper_react_strength;  // 0..1 how strongly reaction profile limits deformation
+// Shaped Blob topology. Authored contour solving is CPU-owned; the shader
+// receives only the final runtime profile.
 uniform int u_blob_ring_mode;            // 0 = circle (filled), 1 = ring (hollow)
 uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fraction of radius
 
 const int SHAPER_N = 64;
-uniform float u_blob_base_profile[SHAPER_N];    // angular base radius multipliers
-uniform float u_blob_react_profile[SHAPER_N];   // angular reaction limit multipliers
 uniform float u_blob_runtime_profile[SHAPER_N]; // CPU-solved runtime contour multipliers
-uniform float u_blob_energy_bass[SHAPER_N];     // per-sector bass routing weight
-uniform float u_blob_energy_mid[SHAPER_N];      // per-sector mid routing weight
-uniform float u_blob_energy_vocals[SHAPER_N];   // per-sector vocal routing weight
-uniform float u_blob_energy_treble[SHAPER_N];   // per-sector treble routing weight
-uniform float u_blob_energy_transient[SHAPER_N]; // per-sector transient routing weight
 
 const float SHAPER_ANGLE_SMOOTH_STEP = 1.0 / float(SHAPER_N);
 
@@ -123,55 +107,6 @@ float sample_profile_gradient(float angle_frac, float profile[SHAPER_N]) {
     float prev = sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile);
     float next = sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile);
     return (next - prev) * 0.5;
-}
-
-float cyclic_diff_frac(float a, float b) {
-    float diff = abs(a - b);
-    return min(diff, 1.0 - diff);
-}
-
-float compute_blob_pocket_component(
-    float angle_frac,
-    float time_seconds,
-    float bass_energy,
-    float mid_energy,
-    float high_energy,
-    float overall_energy,
-    float smoothed_e)
-{
-    float total = 0.0;
-    for (int i = 0; i < BLOB_POCKET_COUNT; ++i) {
-        vec4 pocket = u_blob_pockets[i];
-        vec4 mixv = u_blob_pocket_mix[i];
-        float amplitude = pocket.y;
-        if (amplitude <= 0.001) {
-            continue;
-        }
-        float width = max(0.05, pocket.z);
-        float diff = cyclic_diff_frac(angle_frac, pocket.x);
-        float diff_norm = clamp(diff / max(width, 0.001), 0.0, 1.0);
-        float lobe = 1.0 - smoothstep(0.18, 1.0, diff_norm);
-        lobe *= lobe;
-        if (lobe <= 0.0) {
-            continue;
-        }
-        float drive = clamp(
-            bass_energy * mixv.x +
-            mid_energy * mixv.y +
-            high_energy * mixv.z +
-            smoothed_e * mixv.w +
-            overall_energy * 0.10,
-            0.0,
-            1.8
-        );
-        float pocket_age = max(0.0, time_seconds - pocket.w);
-        float attack_boost = 1.0 + 0.42 * exp(-pocket_age / 0.085);
-        float ripple_phase = pocket_age * 12.0 + diff_norm * 2.0 + float(i) * 0.7;
-        float ripple = 0.94 + 0.06 * sin(ripple_phase);
-        float shoulder_fill = 1.0 - diff_norm * 0.26;
-        total += amplitude * drive * lobe * ripple * attack_boost * shoulder_fill;
-    }
-    return total;
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -384,15 +319,6 @@ vec3 compute_stage_progress_values(
     return vec3(stage1_t, stage2_t, stage3_t);
 }
 
-float compute_stage_floor_fraction(float bias, vec3 stage_progress) {
-    float core_bias = clamp(bias, 0.0, 0.95);
-    float stage_floor = core_bias;
-    stage_floor += stage_progress.x * 0.05;
-    stage_floor += stage_progress.y * 0.08;
-    stage_floor += stage_progress.z * 0.12;
-    return clamp(stage_floor, 0.0, 0.9);
-}
-
 float compute_stage_offset(
     float blob_size,
     float bass_energy,
@@ -434,121 +360,20 @@ float compute_stage_offset(
     return offset * gain * scale;
 }
 
-float compute_unshaped_organic_base_mult(float angle_frac, float time_seconds, float smoothed_e, float overall_e) {
-    float angle = angle_frac * 6.2831853;
-    float slow_t = time_seconds * 0.12;
-    float drift = 0.60 + clamp(smoothed_e, 0.0, 1.0) * 0.28 + clamp(overall_e, 0.0, 1.0) * 0.12;
-
-    float shape = 1.0;
-    shape += cos(angle * 1.0 + slow_t * 0.41 + 0.70) * 0.054;
-    shape += cos(angle * 2.0 - slow_t * 0.29 + 1.85) * 0.031;
-    shape += cos(angle * 3.0 + slow_t * 0.23 + 3.05) * 0.017;
-    shape += cos(angle * 1.0 - slow_t * 0.17 + 2.45) * 0.016 * drift;
-
-    return clamp(shape, 0.88, 1.16);
-}
-
-vec2 compute_unshaped_motion_offsets(
-    float angle_frac,
-    float time_seconds,
-    float bass_energy,
-    float mid_energy,
-    float high_energy,
-    float overall_energy,
-    float smoothed_energy,
-    float reactive_deformation,
-    float constant_wobble,
-    float reactive_wobble,
-    float stretch_tendency,
-    float stretch_inner,
-    float stretch_outer,
-    float pocket_component)
-{
-    float angle = angle_frac * 6.2831853;
-    float e_bass = clamp(bass_energy, 0.0, 1.0);
-    float e_mid = clamp(mid_energy, 0.0, 1.0);
-    float e_high = clamp(high_energy, 0.0, 1.0);
-    float e_overall = clamp(overall_energy, 0.0, 1.0);
-    float se = clamp(smoothed_energy, 0.0, 1.0);
-    float rd = clamp(reactive_deformation, 0.0, 3.0);
-    float cw = clamp(constant_wobble, 0.0, 2.0);
-    float rw = clamp(reactive_wobble, 0.0, 3.0);
-    float st = clamp(stretch_tendency, 0.0, 1.0);
-    float s_inner = clamp(stretch_inner, 0.0, 1.0);
-    float s_outer = clamp(stretch_outer, 0.0, 1.0);
-
-    float base_mult = compute_unshaped_organic_base_mult(angle_frac, time_seconds, se, e_overall);
-    float base_bias = clamp((base_mult - 1.0) / 0.16, -1.0, 1.0);
-
-    float slow_sway = 0.0;
-    slow_sway += sin(angle * 1.0 + time_seconds * 0.20 + 0.25) * 0.020;
-    slow_sway += sin(angle * 2.0 - time_seconds * 0.34 + 1.05) * 0.011;
-    slow_sway += sin(angle * 3.0 + time_seconds * 0.27 + 2.10) * 0.005;
-    slow_sway *= 1.0 - abs(base_bias) * 0.18;
-
-    float reactive_mid = clamp(e_mid * 0.92 + e_overall * 0.08, 0.0, 1.0);
-    float reactive_high = clamp(e_high * 0.82 + e_mid * 0.12, 0.0, 1.0);
-    float vocal = clamp(e_mid * 1.02 + e_high * 0.18, 0.0, 1.0);
-
-    float reactive_sway = 0.0;
-    reactive_sway += sin(angle * 1.0 + time_seconds * 0.48 + 0.30) * 0.040 * vocal;
-    reactive_sway += sin(angle * 2.0 - time_seconds * 0.56 + 1.80) * 0.026 * reactive_mid;
-    reactive_sway += sin(angle * 3.0 + time_seconds * 0.44 + 2.55) * 0.010 * reactive_high;
-    reactive_sway += base_bias * vocal * 0.015;
-
-    float wobble_component = slow_sway * cw + reactive_sway * rw;
-
-    float pocket_pressure = clamp(pocket_component, 0.0, 1.8);
-    float pocket_soft = 1.0 - exp(-pocket_pressure * 0.92);
-    float pocket_shoulder = pocket_soft * (1.0 - pocket_soft * 0.24);
-
-    float stretch_component = 0.0;
-    if (st > 0.01) {
-        float vocal_impact = clamp(e_mid * 1.02 + e_high * 0.20 + se * 0.10, 0.0, 1.0);
-        float bass_support = clamp(e_bass * 0.18 + e_overall * 0.14, 0.0, 1.0);
-        float impact = clamp(vocal_impact * 0.84 + bass_support * 0.24, 0.0, 1.0);
-        float impact2 = impact * impact;
-        float impact3 = impact2 * impact;
-        float stretch = 0.0;
-        stretch += sin(angle * 1.0 + time_seconds * 0.16 + 0.95) * impact2 * 0.082;
-        stretch += sin(angle * 2.0 - time_seconds * 0.31 + 2.20) * impact3 * 0.058;
-        stretch += base_bias * impact2 * 0.046;
-        stretch += base_bias * max(0.0, vocal_impact - 0.18) * 0.024;
-        stretch += pocket_shoulder * 0.138;
-        stretch += pocket_soft * max(0.0, 0.35 - abs(base_bias)) * 0.022;
-        stretch_component = stretch * st;
-    }
-
-    wobble_component += pocket_shoulder * 0.010;
-    wobble_component += pocket_soft * base_bias * 0.008;
-
-    float rd_scale = rd <= 1.0 ? rd : 1.0 + (rd - 1.0) * (rd - 1.0) * (rd - 1.0) * 4.0 + (rd - 1.0) * 2.0;
-    wobble_component *= rd_scale;
-    stretch_component *= rd_scale;
-
-    if (stretch_component < 0.0) {
-        stretch_component *= 0.04 + s_inner * 0.48;
-    } else {
-        stretch_component *= 0.10 + s_outer * 0.90;
-    }
-
-    return vec2(stretch_component, wobble_component);
-}
-
 // 2D SDF organic blob with audio-reactive deformation.
 // Accepts per-band energies + smoothed so it can be called with current OR
 // peak energies (for ghost shape reconstruction).
 float blob_sdf_ex(vec2 p, float time,
                   float e_bass, float e_mid, float e_high, float e_overall,
                   float smoothed_e) {
-    float r = 0.285 * clamp(u_blob_size, 0.1, 2.5);
+    float r = 0.31 * clamp(u_blob_size, 0.1, 2.5);
     float pulse_amt = clamp(u_blob_pulse, 0.0, 2.0);
-    r += e_bass * e_bass * 0.016 * pulse_amt;
-    r += e_bass * 0.018 * pulse_amt;
+    r += e_bass * e_bass * 0.024 * pulse_amt;
+    r += e_bass * 0.028 * pulse_amt;
     float se = clamp(smoothed_e, 0.0, 1.0);
     float breath = max(e_bass, se * 0.82);
-    r += max(0.02, breath) * 0.007 * pulse_amt;
-    r -= (1.0 - se) * 0.010 * pulse_amt;
+    r += max(0.02, breath) * 0.010 * pulse_amt;
+    r -= (1.0 - se) * 0.012 * pulse_amt;
 
     float calm_r = r;
     vec3 stage_progress = vec3(0.0);
@@ -560,12 +385,12 @@ float blob_sdf_ex(vec2 p, float time,
         stage_progress
     ) * pulse_amt;
 
-    if (u_playing == 0 && u_blob_shaper_enabled == 0) {
+    if (u_playing == 0 && BLOB_VARIANT_SHAPED == 0) {
         r *= 0.45 + se * 0.25;
     }
 
     float staged_r = r;
-    if (u_blob_shaper_enabled == 0) {
+    if (BLOB_VARIANT_SHAPED == 0) {
         // Unshaped Blob should read as contour pressure first and scalar
         // breathing second. Keep some staged support, but stop letting the
         // stage ladder dominate the final silhouette.
@@ -579,14 +404,14 @@ float blob_sdf_ex(vec2 p, float time,
     // Shaper authors it from user contours; unshaped Blob authors it from the
     // procedural fluid solver on the CPU.
     float angle_frac = fract(angle / 6.2831853 + 0.25);
-    float runtime_mult = (u_blob_shaper_enabled == 1)
+    float runtime_mult = (BLOB_VARIANT_SHAPED == 1)
         ? (
             sample_profile(angle_frac, u_blob_runtime_profile) * 0.50 +
             sample_profile(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25 +
             sample_profile(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25
         )
         : sample_unshaped_contour(angle_frac, u_blob_runtime_profile);
-    if (u_blob_shaper_enabled == 0) {
+    if (BLOB_VARIANT_SHAPED == 0) {
         float contour_delta = runtime_mult - 1.0;
         float size_compensation = clamp(0.24 / max(calm_r, 0.001), 1.0, 2.2);
         float contour_authority = (
@@ -599,12 +424,12 @@ float blob_sdf_ex(vec2 p, float time,
         float signed_push = sign(contour_delta) * pow(abs(contour_delta), 0.88);
         runtime_mult = clamp(1.0 + signed_push * contour_authority, 0.42, 1.78);
     }
-    float support_floor = (u_blob_shaper_enabled == 1)
+    float support_floor = (BLOB_VARIANT_SHAPED == 1)
         ? mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0))
         : mix(0.48, 0.60, clamp(stage_progress.z * 0.55 + stage_progress.y * 0.22, 0.0, 1.0));
     float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;
     float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);
-    float final_radius = (u_blob_shaper_enabled == 1)
+    float final_radius = (BLOB_VARIANT_SHAPED == 1)
         ? max(staged_r * runtime_mult, staged_r * support_floor)
         : max(contour_radius, unshaped_support);
 
@@ -670,8 +495,9 @@ void main() {
     float d_glow = d_signed;
     float ring_thickness = 0.0;
 
-    // Ring topology — carve out interior to create a hollow ring.
-    // Works independently of shaper; ring_mode is set by topology combo.
+    // Shaped topology — carve out interior to create a hollow ring.
+    // Mighty never uploads ring authority, so its concrete program remains
+    // a filled organic body.
     if (u_blob_ring_mode == 1) {
         // Ring thickness is a fraction of the blob's visual radius (~0.44 * blob_size)
         float ring_r = 0.44 * clamp(u_blob_size, 0.1, 2.5);
@@ -800,23 +626,75 @@ void main() {
     float local_depth_main = max(-d_fill, 0.0);
     float normalized_depth = clamp(local_depth_main / max(local_radius, 0.0001), 0.0, 1.0);
     float surface_band = smoothstep(0.30, 0.04, normalized_depth) * smoothstep(-0.16, -0.003, d_fill);
-    vec2 highlight_axis = normalize(vec2(-0.46, 0.89));
+    // Body paint is a real music-reactive layer, not a nearly static white
+    // streak. Continuous energy brightens it, while transients accelerate and
+    // shift the liquid streak without changing contour geometry.
+    float paint_drive = clamp(
+        u_blob_smoothed_energy * 0.48 +
+        u_mid_energy * 0.28 +
+        u_high_energy * 0.14 +
+        u_transient_mid * 0.24 +
+        u_transient_high * 0.16,
+        0.0,
+        1.35
+    );
+    float paint_pulse = clamp(
+        u_bass_energy * 0.58 + u_transient_bass * 0.42,
+        0.0,
+        1.25
+    );
+    // Shaped Blob's outward mutations have their own pale, music-reactive
+    // tip light.  Broad authored bulges remain coloured normally; only local
+    // protrusions and tendril crests acquire this lighter identity.
+    float shaped_tendril_light = 0.0;
+    if (BLOB_VARIANT_SHAPED == 1) {
+        float shaped_local_profile = sample_profile(angle_frac_main, u_blob_runtime_profile);
+        float shaped_neighbor_profile = (
+            sample_profile(angle_frac_main - SHAPER_ANGLE_SMOOTH_STEP * 3.0, u_blob_runtime_profile) +
+            sample_profile(angle_frac_main + SHAPER_ANGLE_SMOOTH_STEP * 3.0, u_blob_runtime_profile)
+        ) * 0.5;
+        float shaped_tip_prominence = max(shaped_local_profile - shaped_neighbor_profile, 0.0);
+        float shaped_extension = max(shaped_local_profile - 1.0, 0.0);
+        float shaped_tendril_drive = clamp(
+            u_mid_energy * 0.42 +
+            u_high_energy * 0.24 +
+            u_overall_energy * 0.14 +
+            u_transient_mid * 0.30 +
+            u_transient_high * 0.18,
+            0.0,
+            1.35
+        );
+        shaped_tendril_light = clamp(
+            (shaped_tip_prominence * 5.2 + shaped_extension * 0.34) *
+            surface_band * (0.16 + shaped_tendril_drive * 0.84),
+            0.0,
+            0.74
+        );
+    }
+    float paint_phase = u_time * (0.16 + paint_drive * 0.82);
+    float paint_turn = sin(paint_phase * 0.43 + u_mid_energy * 1.7) * (0.08 + paint_drive * 0.14);
+    vec2 highlight_axis = normalize(vec2(-0.46 + paint_turn, 0.89 + paint_turn * 0.35));
     vec2 highlight_cross = vec2(-highlight_axis.y, highlight_axis.x);
     vec2 local_uv = uv / max(local_radius, 0.0001);
     float streak_main = dot(local_uv, highlight_axis);
     float streak_cross = dot(local_uv, highlight_cross);
     float streak_arc_a = exp(
-        -pow((streak_main - 0.12 - sin(u_time * 0.18) * 0.03 - profile_gradient * 1.8) / 0.15, 2.0)
+        -pow((streak_main - 0.12 - sin(paint_phase) * (0.025 + paint_drive * 0.035) - profile_gradient * 1.8) / 0.15, 2.0)
         -pow((streak_cross + 0.03) / 0.40, 2.0)
     );
     float streak_arc_b = exp(
-        -pow((streak_main + 0.01 + sin(u_time * 0.13 + 0.8) * 0.02 + profile_gradient * 1.1) / 0.12, 2.0)
+        -pow((streak_main + 0.01 + sin(paint_phase * 0.73 + 0.8) * (0.018 + paint_pulse * 0.028) + profile_gradient * 1.1) / 0.12, 2.0)
         -pow((streak_cross - 0.10) / 0.28, 2.0)
     );
     float streak_breakup =
-        0.78 + 0.22 * sin(u_time * 0.92 + angle_frac_main * 15.0 + normalized_depth * 4.0);
+        0.72 + 0.28 * sin(
+            u_time * (0.72 + paint_drive * 1.85) +
+            angle_frac_main * (15.0 + paint_pulse * 5.0) +
+            normalized_depth * 4.0
+        );
     float slime_highlight = clamp(
-        (streak_arc_a * 1.10 + streak_arc_b * 0.62) * streak_breakup * surface_band,
+        (streak_arc_a * 1.10 + streak_arc_b * 0.62) * streak_breakup * surface_band *
+        (0.54 + paint_drive * 0.92 + paint_pulse * 0.22),
         0.0,
         1.0
     );
@@ -877,9 +755,13 @@ void main() {
     if (d_fill < -0.02) {
         // Deep inside: mostly stable fill colour with a soft ooze highlight.
         float depth = clamp(-d_fill / 0.15, 0.0, 1.0);
-        float highlight_mask =
+        float core_reaction = clamp(0.20 + paint_drive * 0.42 + paint_pulse * 0.10, 0.20, 0.76);
+        float highlight_mask = clamp(
             (vector_specular * 0.88 + contour_line * 0.80 + inner_contour_line * 0.46 + vector_rim_line * 0.36) *
-            depth * (0.22 + u_blob_smoothed_energy * 0.10);
+            depth * core_reaction,
+            0.0,
+            0.88
+        );
         final_rgb = mix(blob_rgb, vec3(1.0), highlight_mask);
     } else if (d_fill < 0.0) {
         // Near edge: transition from fill to edge highlight colour
@@ -904,10 +786,16 @@ void main() {
 
     if (blob_total_alpha > 0.001) {
         float deep_fill = smoothstep(-0.22, -0.02, d_fill);
-        float highlight_mask =
+        float paint_reaction = clamp(0.12 + paint_drive * 0.34 + paint_pulse * 0.08, 0.12, 0.62);
+        float highlight_mask = clamp(
             (vector_specular * 0.72 + contour_line * 0.58 + inner_contour_line * 0.34 + vector_rim_line * 0.26) *
-            deep_fill * (0.14 + u_blob_smoothed_energy * 0.06);
+            deep_fill * paint_reaction,
+            0.0,
+            0.78
+        );
         final_rgb = mix(final_rgb, vec3(1.0), highlight_mask);
+        vec3 shaped_tendril_rgb = mix(edge_rgb, vec3(1.0), 0.76);
+        final_rgb = mix(final_rgb, shaped_tendril_rgb, shaped_tendril_light);
     }
 
     vec3 border_liquid_rgb = mix(inward_liquid_rgb, vec3(1.0), 0.16 + border_liquid_line * 0.42);

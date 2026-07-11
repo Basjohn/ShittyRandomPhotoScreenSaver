@@ -20,6 +20,7 @@ from core.settings.visualizer_presets import (
     resolve_visualizer_activation_payload,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
+from core.settings.visualizer_blob_contract import BLOB_TYPE_MIGHTY
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -189,6 +190,11 @@ class SpotifyVisualizerWidget(QWidget):
 
 
         # Blob settings
+        self._blob_type: str = BLOB_TYPE_MIGHTY
+        # Compatibility mirror only. Production persistence/runtime payloads
+        # use ``blob_type``; this remains derived for old callers during the
+        # forward-migration window.
+        self._blob_shaper_enabled: bool = False
         self._blob_color: QColor = QColor(0, 180, 255, 230)
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)

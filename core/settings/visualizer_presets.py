@@ -47,6 +47,7 @@ from core.settings.visualizer_settings_contract import (
     normalize_spectrum_render_mode,
     strip_legacy_global_technical_keys,
 )
+from core.settings.visualizer_blob_contract import migrate_blob_type_mapping
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
@@ -606,6 +607,7 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
     # them into modern presets; source-authoritative preset payloads should
     # carry only the current Blob contract.
     if mode == "blob":
+        settings = migrate_blob_type_mapping(settings)
         for retired_key in (
             "blob_pulse_cap",
             "blob_stage2_release_ms",

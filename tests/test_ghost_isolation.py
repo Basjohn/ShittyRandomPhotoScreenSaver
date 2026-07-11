@@ -21,6 +21,19 @@ from PySide6.QtGui import QColor
 ROOT = Path(__file__).resolve().parent.parent
 
 
+@pytest.fixture(autouse=True)
+def _enable_blob_gate_for_visualizer_contract_tests():
+    """This module exercises the dev-gated Blob runtime directly."""
+    from core.dev_gates import force_gate, is_blob_enabled
+
+    previous = is_blob_enabled()
+    force_gate(blob=True)
+    try:
+        yield
+    finally:
+        force_gate(blob=previous)
+
+
 # ===========================================================================
 # 1. Widget per-mode ghost attributes exist
 # ===========================================================================

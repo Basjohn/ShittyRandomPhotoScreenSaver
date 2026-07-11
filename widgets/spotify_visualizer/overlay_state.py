@@ -71,6 +71,55 @@ def reset_blob_state(overlay: Any) -> None:
     )
     overlay._blob_diag_last_ts = 0.0
     overlay._blob_diag_last_sig = None
+    reset_blob_variant_state(overlay)
+
+
+def reset_blob_variant_state(overlay: Any) -> None:
+    """Clear every contour/ghost cache owned by a Blob subtype.
+
+    A Blob type change is a real renderer boundary even though the stable
+    visualizer mode id remains ``blob``.  Neither solver may inherit the
+    other's contour, target, velocity, timestamp, peak silhouette, or pocket
+    history.
+    """
+    for attr in (
+        "_blob_unshaped_base_profile",
+        "_blob_unshaped_raw_target_profile",
+        "_blob_unshaped_runtime_target_profile",
+        "_blob_unshaped_runtime_profile",
+        "_blob_unshaped_runtime_velocity",
+        "_blob_shaper_runtime_target_profile",
+        "_blob_shaper_runtime_profile",
+        "_blob_shaper_runtime_velocity",
+    ):
+        setattr(overlay, attr, None)
+    for attr in (
+        "_blob_unshaped_solver_ts",
+        "_blob_shaper_solver_ts",
+        "_blob_runtime_diag_ts",
+    ):
+        setattr(overlay, attr, 0.0)
+    for attr in (
+        "_blob_unshaped_solver_seed",
+        "_blob_shaper_solver_seed",
+    ):
+        setattr(overlay, attr, None)
+    for attr in (
+        "_blob_stage_input_bass",
+        "_blob_stage_input_mid",
+        "_blob_stage_input_high",
+        "_blob_stage_input_overall",
+    ):
+        setattr(overlay, attr, None)
+    overlay._blob_peak_energy = 0.0
+    overlay._blob_peak_bass = 0.0
+    overlay._blob_peak_mid = 0.0
+    overlay._blob_peak_high = 0.0
+    overlay._blob_peak_overall = 0.0
+    overlay._blob_peak_hold_remaining = 0.0
+    overlay._blob_pocket_state = reset_blob_pocket_state(
+        getattr(overlay, "_blob_pocket_state", None)
+    )
 
 
 def reset_mode_state(overlay: Any, mode: str, *, reason: str) -> None:

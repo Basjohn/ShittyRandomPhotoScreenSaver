@@ -5,6 +5,10 @@ from copy import deepcopy
 from typing import Any, Dict, Mapping
 
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_blob_contract import (
+    migrate_blob_type_mapping,
+    strip_inactive_blob_shaped_payload,
+)
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     coerce_visualizer_mode_id,
@@ -47,22 +51,6 @@ _RETIRED_AUTHORED_GLOBAL_VISUAL_KEYS = frozenset(
         "ghost_decay",
     }
 )
-_BLOB_SHAPER_KEYS = frozenset(
-    {
-        "blob_shaper_enabled",
-        "blob_shape_base_nodes",
-        "blob_shape_reaction_nodes",
-        "blob_shape_energy_nodes",
-        "blob_shaper_base_strength",
-        "blob_shaper_react_strength",
-        "blob_shaper_idle_motion",
-        "blob_shaper_audio_motion",
-        "blob_topology",
-        "blob_ring_thickness",
-    }
-)
-
-
 def _forward_migrate_alias_keys(
     data: Mapping[str, Any],
     *,
@@ -157,24 +145,6 @@ def _resolve_per_mode_rainbow_mapping(
     return normalized
 
 
-def _strip_inactive_blob_shaper_payload(normalized: Dict[str, Any]) -> Dict[str, Any]:
-    """Drop Blob Shaper-only payload when shaped Blob is not enabled.
-
-    This keeps canonical snapshots/presets free of shaped-mode baggage so
-    non-shaped Blob cannot silently ferry authoring-only keys through
-    Move-to-Custom, custom backups, preset repair, or curated payload exports.
-    """
-    if str(normalized.get("mode", "")).strip().lower() != "blob":
-        return normalized
-    if bool(normalized.get("blob_shaper_enabled", False)):
-        return normalized
-
-    cleaned = dict(normalized)
-    for key in _BLOB_SHAPER_KEYS:
-        cleaned.pop(key, None)
-    return cleaned
-
-
 def normalize_visualizer_section_mapping(
     data: Mapping[str, Any] | None,
     *,
@@ -190,7 +160,8 @@ def normalize_visualizer_section_mapping(
     if not isinstance(data, Mapping):
         return {}
 
-    migrated = _forward_migrate_alias_keys(data, prefix=prefix)
+    migrated = migrate_blob_type_mapping(data, prefix=prefix)
+    migrated = _forward_migrate_alias_keys(migrated, prefix=prefix)
     migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
 
@@ -208,7 +179,7 @@ def normalize_visualizer_section_mapping(
             continue
         normalized[key[len(prefix_with_sep):]] = deepcopy(value)
     normalized = _resolve_per_mode_rainbow_mapping(migrated, normalized, prefix=prefix)
-    return _strip_inactive_blob_shaper_payload(normalized)
+    return strip_inactive_blob_shaped_payload(normalized, prefix=prefix)
 
 
 def normalize_visualizer_mode_payload(

@@ -1,0 +1,214 @@
+{
+  "description": "TEMP showcase: a lighter hollow-ring Shaped Blob with gentle contour wobble, fine vocal mutations, and short feather-like tendrils instead of heavy radial spikes.",
+  "mode": "blob",
+  "name": "Preset 8 (TEMP Shaped Feather Tendrils)",
+  "preset_index": 7,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "blob_adaptive_sensitivity": false,
+        "blob_agc_strength": 0.36,
+        "blob_audio_block_size": 256,
+        "blob_bar_border_color": [
+          255,
+          245,
+          202,
+          235
+        ],
+        "blob_bar_border_opacity": 0.88,
+        "blob_bar_count": 36,
+        "blob_bar_fill_color": [
+          255,
+          206,
+          111,
+          226
+        ],
+        "blob_color": [
+          255,
+          206,
+          111,
+          226
+        ],
+        "blob_core_floor_bias": 0.5,
+        "blob_core_scale": 0.96,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          255,
+          245,
+          202,
+          220
+        ],
+        "blob_ghost_alpha": 0.14,
+        "blob_ghost_decay": 0.52,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          72,
+          203,
+          185,
+          165
+        ],
+        "blob_glow_drive_mode": "vocal",
+        "blob_glow_intensity": 0.32,
+        "blob_glow_max_size": 0.74,
+        "blob_glow_reactivity": 0.92,
+        "blob_growth": 4.0,
+        "blob_input_gain": 0.62,
+        "blob_inward_liquid_color": [
+          255,
+          247,
+          218,
+          180
+        ],
+        "blob_inward_liquid_enabled": false,
+        "blob_inward_liquid_max_size": 0.16,
+        "blob_inward_liquid_reactivity": 0.9,
+        "blob_kick_lane_gain": 0.36,
+        "blob_manual_floor": 0.08,
+        "blob_outline_color": [
+          139,
+          105,
+          41,
+          175
+        ],
+        "blob_pulse": 0.42,
+        "blob_pulse_release_ms": 720,
+        "blob_rainbow_enabled": false,
+        "blob_rainbow_speed": 0.12,
+        "blob_reactive_glow": true,
+        "blob_ring_thickness": 0.28,
+        "blob_sensitivity": 0.6,
+        "blob_shape_base_nodes": [
+          [
+            0.0,
+            1.0
+          ],
+          [
+            0.1667,
+            0.96
+          ],
+          [
+            0.3333,
+            1.04
+          ],
+          [
+            0.5,
+            0.98
+          ],
+          [
+            0.6667,
+            1.03
+          ],
+          [
+            0.8333,
+            0.95
+          ]
+        ],
+        "blob_shape_energy_nodes": [
+          {
+            "canvas": "react",
+            "dir_len": 22.0,
+            "dir_x": 0.9239,
+            "dir_y": -0.3827,
+            "strength": 0.72,
+            "type": "vocals",
+            "x": 0.72,
+            "y": 0.38
+          },
+          {
+            "canvas": "react",
+            "dir_len": 22.0,
+            "dir_x": -0.9239,
+            "dir_y": -0.3827,
+            "strength": 0.72,
+            "type": "vocals",
+            "x": 0.28,
+            "y": 0.38
+          },
+          {
+            "canvas": "react",
+            "dir_len": 18.0,
+            "dir_x": 0.7071,
+            "dir_y": 0.7071,
+            "strength": 0.58,
+            "type": "vocals",
+            "x": 0.67,
+            "y": 0.68
+          },
+          {
+            "canvas": "react",
+            "dir_len": 18.0,
+            "dir_x": -0.7071,
+            "dir_y": 0.7071,
+            "strength": 0.58,
+            "type": "vocals",
+            "x": 0.33,
+            "y": 0.68
+          },
+          {
+            "canvas": "react",
+            "dir_len": 16.0,
+            "dir_x": 0.0,
+            "dir_y": -1.0,
+            "strength": 0.5,
+            "type": "treble",
+            "x": 0.5,
+            "y": 0.24
+          }
+        ],
+        "blob_shape_reaction_nodes": [
+          [
+            0.0,
+            1.26
+          ],
+          [
+            0.125,
+            1.08
+          ],
+          [
+            0.25,
+            1.4
+          ],
+          [
+            0.375,
+            1.12
+          ],
+          [
+            0.5,
+            1.32
+          ],
+          [
+            0.625,
+            1.1
+          ],
+          [
+            0.75,
+            1.42
+          ],
+          [
+            0.875,
+            1.14
+          ]
+        ],
+        "blob_shaper_audio_motion": 1.22,
+        "blob_shaper_base_strength": 0.72,
+        "blob_shaper_idle_motion": 0.45,
+        "blob_shaper_react_strength": 0.68,
+        "blob_size": 0.5,
+        "blob_stage_bias": -0.14,
+        "blob_stage_gain": 0.62,
+        "blob_topology": "ring",
+        "blob_transient_clamp": 1.28,
+        "blob_transient_mix_bass": 0.12,
+        "blob_transient_mix_vocal": 0.72,
+        "blob_transient_pulse_gain": 0.68,
+        "blob_type": "shaped",
+        "blob_width": 1.0,
+        "mode": "blob",
+        "monitor": "ALL"
+      }
+    }
+  },
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
+}

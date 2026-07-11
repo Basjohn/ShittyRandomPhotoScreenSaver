@@ -31,16 +31,56 @@ void main() {
 _ALL_SHADER_FILES: Dict[str, str] = {
     "spectrum": "spectrum.frag",
     "oscilloscope": "oscilloscope.frag",
-    "blob": "blob.frag",
+    "blob_mighty": "blob_mighty.frag",
+    "blob_shaped": "blob_shaped.frag",
     "sine_wave": "sine_wave.frag",
     "bubble": "bubble.frag",
     "devcurve": "devcurve.frag",
+}
+_SHADER_ALIASES: Dict[str, str] = {
+    # Stable visualizer mode id compatibility; concrete Blob runtime dispatch
+    # chooses Mighty or Shaped explicitly.
+    "blob": "blob_mighty",
 }
 
 
 def _active_shader_files() -> Dict[str, str]:
     """Return only shader files for modes that are not behind a closed dev gate."""
-    return {m: f for m, f in _ALL_SHADER_FILES.items() if is_mode_active(m)}
+    return {
+        mode: filename
+        for mode, filename in _ALL_SHADER_FILES.items()
+        if is_mode_active("blob" if mode.startswith("blob_") else mode)
+    }
+
+
+def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = ()) -> str:
+    """Load a shader and expand local ``#include`` directives.
+
+    Blob uses two tiny entry shaders with one shared paint/body source.  The
+    include expander stays deliberately local-only and rejects cycles.
+    """
+    resolved = path.resolve()
+    if resolved in include_stack:
+        chain = " -> ".join(item.name for item in (*include_stack, resolved))
+        raise RuntimeError(f"Shader include cycle: {chain}")
+    source = resolved.read_text(encoding="utf-8")
+    expanded: list[str] = []
+    for line in source.splitlines(keepends=True):
+        stripped = line.strip()
+        if not stripped.startswith("#include "):
+            expanded.append(line)
+            continue
+        token = stripped[len("#include "):].strip()
+        if len(token) < 3 or token[0] != '"' or token[-1] != '"':
+            raise RuntimeError(f"Invalid shader include in {resolved.name}: {line.strip()}")
+        include_name = token[1:-1]
+        include_path = (resolved.parent / include_name).resolve()
+        if include_path.parent != _SHADER_DIR.resolve():
+            raise RuntimeError(f"Shader include escapes source directory: {include_name}")
+        expanded.append(
+            _load_shader_source(include_path, include_stack=(*include_stack, resolved))
+        )
+    return "".join(expanded)
 
 
 def load_fragment_shader(vis_mode: str) -> str | None:
@@ -49,15 +89,16 @@ def load_fragment_shader(vis_mode: str) -> str | None:
     Returns ``None`` if the shader file does not exist or cannot be read,
     allowing the caller to skip compilation for that mode gracefully.
     """
+    shader_key = _SHADER_ALIASES.get(vis_mode, vis_mode)
     cache = _FRAGMENT_SHADER_CACHE
     if cache is not None:
-        cached = cache.get(vis_mode)
+        cached = cache.get(shader_key)
         if cached is not None:
             return cached
         # Cache may have been warmed while a dev-gated mode was inactive.
         # Fall through to direct file load so explicit requests still work.
 
-    filename = _ALL_SHADER_FILES.get(vis_mode)
+    filename = _ALL_SHADER_FILES.get(shader_key)
     if filename is None:
         logger.warning("[SHADER_LOADER] Unknown vis_mode: %s", vis_mode)
         return None
@@ -68,7 +109,7 @@ def load_fragment_shader(vis_mode: str) -> str | None:
         return None
 
     try:
-        source = path.read_text(encoding="utf-8")
+        source = _load_shader_source(path)
         logger.debug("[SHADER_LOADER] Loaded %s (%d chars)", filename, len(source))
         return source
     except Exception:

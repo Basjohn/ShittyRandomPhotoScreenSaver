@@ -15,6 +15,11 @@ from core.logging.logger import (
     is_viz_diagnostics_enabled,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
+from core.settings.visualizer_blob_contract import (
+    BLOB_TYPE_MIGHTY,
+    BLOB_TYPE_SHAPED,
+    normalize_blob_type,
+)
 from rendering.gl_format import apply_widget_surface_format
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from OpenGL import GL as gl
@@ -31,6 +36,7 @@ from widgets.spotify_visualizer.overlay_state import (
     apply_state_handoff,
     request_mode_reset as request_overlay_mode_reset,
     reset_blob_state as reset_overlay_blob_state,
+    reset_blob_variant_state,
     reset_mode_state as reset_overlay_mode_state,
 )
 from widgets.spotify_visualizer.overlay_mask import (
@@ -52,6 +58,7 @@ from widgets.spotify_visualizer.overlay_uniforms import (
 from widgets.spotify_visualizer.overlay_render_dispatch import (
     dispatch_mode_uniforms,
     resolve_mode_program,
+    resolve_render_program_key,
 )
 from widgets.spotify_visualizer.oscilloscope_contract import (
     advance_ghost_ring,
@@ -80,14 +87,7 @@ _ARRAY_UNIFORM_NAMES = {
     "u_bubbles_pos",
     "u_bubbles_extra",
     "u_bubbles_trail",
-    "u_blob_base_profile",
-    "u_blob_react_profile",
     "u_blob_runtime_profile",
-    "u_blob_energy_bass",
-    "u_blob_energy_mid",
-    "u_blob_energy_vocals",
-    "u_blob_energy_treble",
-    "u_blob_energy_transient",
     "u_blob_pockets",
     "u_blob_pocket_mix",
     "u_devcurve_curve_bass",
@@ -237,6 +237,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
 
         # Blob settings
+        self._blob_type: str = BLOB_TYPE_MIGHTY
         self._blob_color: QColor = QColor(0, 180, 255, 230)
         self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
         self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
@@ -265,7 +266,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency: float = 0.35
         self._blob_stretch_inner: float = 0.0
         self._blob_stretch_outer: float = 0.35
-        # Blob Shaper
+        # Compatibility mirror for legacy callers only; renderer authority is
+        # the canonical ``_blob_type`` value.
         self._blob_shaper_enabled: bool = False
         self._blob_shaper_base_strength: float = 0.5
         self._blob_shaper_react_strength: float = 0.5
@@ -757,8 +759,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         bubble_gradient_direction: str = "top",
         border_width_px: float = 0.0,
         transient_energy: TransientEnergyBands | None = None,
-        # Blob Shaper
-        blob_shaper_enabled: bool = False,
+        # Blob subtype / Shaped Blob
+        blob_type: str | None = None,
+        blob_shaper_enabled: bool | None = None,
         blob_shaper_base_strength: float = 0.5,
         blob_shaper_react_strength: float = 0.5,
         blob_shaper_idle_motion: float = 0.18,
@@ -798,6 +801,26 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             border_width_px=border_width_px,
         ):
             return
+        if self._vis_mode == "blob":
+            previous_blob_type = normalize_blob_type(
+                getattr(self, "_blob_type", BLOB_TYPE_MIGHTY)
+            )
+            if blob_type is None and blob_shaper_enabled is None:
+                resolved_blob_type = previous_blob_type
+            else:
+                resolved_blob_type = normalize_blob_type(
+                    blob_type,
+                    legacy_shaper_enabled=blob_shaper_enabled,
+                )
+            if resolved_blob_type != previous_blob_type:
+                reset_blob_variant_state(self)
+                logger.info(
+                    "[SPOTIFY_VIS][BLOB][TYPE_RESET] previous=%s current=%s",
+                    previous_blob_type,
+                    resolved_blob_type,
+                )
+            self._blob_type = resolved_blob_type
+            self._blob_shaper_enabled = resolved_blob_type == BLOB_TYPE_SHAPED
         self._perf_set_state_count += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
         osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
@@ -1297,8 +1320,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
         self._blob_stretch_inner = max(0.0, min(1.0, float(blob_stretch_inner)))
         self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
-        # Blob Shaper
-        self._blob_shaper_enabled = bool(blob_shaper_enabled)
+        # Shaped Blob. Type identity was resolved before frame processing so
+        # pockets/solvers cannot spend a frame under stale subtype authority.
+        self._blob_shaper_enabled = self._blob_type == BLOB_TYPE_SHAPED
         if not self._blob_shaper_enabled:
             # Non-shaped Blob should never carry inward dents, even if a stale
             # preset/export still forwards an old inner-stretch value.
@@ -2423,8 +2447,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             info = _gl.glGetShaderInfoLog(vs)
             raise RuntimeError(f"Vertex shader compile failed: {info}")
 
-        compile_order = prioritized_visualizer_compile_order(self._vis_mode, list(frag_sources.keys()))
-        active_mode = compile_order[0] if compile_order else self._vis_mode
+        startup_program_key = resolve_render_program_key(self, self._vis_mode)
+        compile_order = prioritized_visualizer_compile_order(startup_program_key, list(frag_sources.keys()))
+        active_mode = compile_order[0] if compile_order else startup_program_key
         if active_mode and active_mode in frag_sources:
             self._compile_gl_mode_program(active_mode, frag_sources[active_mode], vs, _gl)
 
@@ -2526,8 +2551,9 @@ void main() {
             self._gl_vbo_rid = None
 
         logger.info(
-            "[SPOTIFY_VIS] Startup shader ready: active_mode=%s compiled=%s pending=%s",
+            "[SPOTIFY_VIS] Startup shader ready: active_mode=%s program=%s compiled=%s pending=%s",
             self._vis_mode,
+            startup_program_key,
             ", ".join(sorted(self._gl_programs.keys())),
             ", ".join(mode for mode in compile_order[1:] if mode not in self._gl_programs),
         )
@@ -2611,14 +2637,8 @@ void main() {
                 "u_sine_line1_shift", "u_sine_line2_shift", "u_sine_line3_shift",
                 "u_sine_line4_shift", "u_sine_line5_shift", "u_sine_line6_shift",
                 "u_ghost_bass", "u_ghost_mid", "u_ghost_high",
-                "u_blob_shaper_enabled", "u_blob_shaper_base_strength",
-                "u_blob_shaper_react_strength",
                 "u_blob_ring_mode", "u_blob_ring_thickness",
-                "u_blob_base_profile", "u_blob_react_profile", "u_blob_runtime_profile",
-                "u_blob_energy_bass", "u_blob_energy_mid", "u_blob_energy_vocals",
-                "u_blob_energy_treble", "u_blob_energy_transient",
-                "u_blob_shaper_bass_energy", "u_blob_shaper_mid_energy",
-                "u_blob_shaper_high_energy", "u_blob_shaper_overall_energy",
+                "u_blob_runtime_profile",
             ):
                 uniforms[uname] = _gl.glGetUniformLocation(prog, _uniform_lookup_name(uname))
 
@@ -2822,7 +2842,7 @@ void main() {
             if prog is None:
                 return False
 
-            u = self._gl_uniforms.get(mode, {})
+            u = self._gl_uniforms.get(resolve_render_program_key(self, mode), {})
 
             _gl.glUseProgram(prog)
             _gl.glBindVertexArray(self._gl_vao)

@@ -24,6 +24,14 @@ from widgets.spotify_visualizer.renderers.blob import (
     get_uniform_names as blob_uniform_names,
     upload_uniforms as blob_upload,
 )
+from widgets.spotify_visualizer.renderers.blob_mighty import (
+    get_uniform_names as blob_mighty_uniform_names,
+    upload_uniforms as blob_mighty_upload,
+)
+from widgets.spotify_visualizer.renderers.blob_shaped import (
+    get_uniform_names as blob_shaped_uniform_names,
+    upload_uniforms as blob_shaped_upload,
+)
 from widgets.spotify_visualizer.renderers.sine_wave import (
     get_uniform_names as sine_wave_uniform_names,
     upload_uniforms as sine_wave_upload,
@@ -41,6 +49,8 @@ RENDERERS = {
     'spectrum': (spectrum_uniform_names, spectrum_upload),
     'oscilloscope': (oscilloscope_uniform_names, oscilloscope_upload),
     'blob': (blob_uniform_names, blob_upload),
+    'blob_mighty': (blob_mighty_uniform_names, blob_mighty_upload),
+    'blob_shaped': (blob_shaped_uniform_names, blob_shaped_upload),
     'sine_wave': (sine_wave_uniform_names, sine_wave_upload),
     'bubble': (bubble_uniform_names, bubble_upload),
     'devcurve': (devcurve_uniform_names, devcurve_upload),

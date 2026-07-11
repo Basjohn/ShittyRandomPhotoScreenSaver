@@ -19,7 +19,7 @@ except ModuleNotFoundError:  # pragma: no cover
 import uuid
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QToolButton
+from PySide6.QtWidgets import QLabel, QToolButton
 
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
@@ -1676,7 +1676,7 @@ def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, se
                     title = widget.property("bucketTitle")
                     if title:
                         normal_titles.append(title)
-            assert normal_titles == ["Body", "Appearance", "Shaper", "Layout", "Glow"]
+            assert normal_titles == ["Blob Type", "Body", "Appearance", "Layout", "Glow"]
 
             adv_layout = tab._blob_advanced.layout()
             adv_titles = []
@@ -1686,7 +1686,7 @@ def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, se
                     title = widget.property("bucketTitle")
                     if title:
                         adv_titles.append(title)
-            assert adv_titles == ["Motion", "Ghost"]
+            assert adv_titles == ["Ghost"]
         finally:
             tab.deleteLater()
 
@@ -1728,46 +1728,44 @@ def test_spectrum_builder_uses_explicit_bar_segment_render_mode_buttons(qt_app, 
         tab.deleteLater()
 
 
-def test_blob_builder_hides_redundant_controls_when_shaper_or_reactive_glow_are_disabled(
+def test_blob_builder_switches_dedicated_mighty_and_shaped_controls_by_blob_type(
     qt_app,
     settings_manager,
 ):
     with _blob_gate(True):
         tab = WidgetsTab(settings_manager)
         try:
-            tab._blob_adv_toggle.setChecked(True)
+            assert tab.blob_type_combo.itemText(0) == "Mighty Blob"
+            assert tab.blob_type_combo.itemText(1) == "Shaped Blob"
+            assert not hasattr(tab, "blob_shaper_enabled")
+
+            tab.blob_type_combo.setCurrentIndex(0)
             qt_app.processEvents()
 
-            assert tab._blob_shape_reactivity_row.isHidden() is False
-            assert tab._blob_idle_edge_motion_row.isHidden() is False
-            assert tab._blob_audio_edge_motion_row.isHidden() is False
-            assert tab._blob_stretch_row.isHidden() is False
+            assert tab._blob_mighty_container.isHidden() is False
+            assert tab._blob_mighty_container.isEnabled() is True
+            assert tab._blob_shaped_container.isHidden() is True
+            assert tab._blob_shaped_container.isEnabled() is False
 
-            tab.blob_shaper_enabled.setChecked(True)
+            tab.blob_type_combo.setCurrentIndex(1)
             qt_app.processEvents()
 
-            assert tab._blob_shape_reactivity_row.isHidden() is True
-            assert tab._blob_idle_edge_motion_row.isHidden() is True
-            assert tab._blob_audio_edge_motion_row.isHidden() is True
-            assert tab._blob_stretch_row.isHidden() is True
-            assert tab._blob_shape_reactivity_row.isEnabled() is False
-            assert tab._blob_idle_edge_motion_row.isEnabled() is False
-            assert tab._blob_audio_edge_motion_row.isEnabled() is False
-            assert tab._blob_stretch_row.isEnabled() is False
-            assert tab._blob_shaper_idle_motion_row.isHidden() is False
-            assert tab._blob_shaper_audio_motion_row.isHidden() is False
+            assert tab._blob_mighty_container.isHidden() is True
+            assert tab._blob_mighty_container.isEnabled() is False
+            assert tab._blob_shaped_container.isHidden() is False
+            assert tab._blob_shaped_container.isEnabled() is True
+            shaped_labels = {
+                label.text() for label in tab._blob_shaped_container.findChildren(QLabel)
+            }
+            assert "Authored Shape:" in shaped_labels
+            assert "Living Wobble:" in shaped_labels
+            assert "Music Mutation:" in shaped_labels
 
-            tab.blob_shaper_enabled.setChecked(False)
+            tab.blob_type_combo.setCurrentIndex(0)
             qt_app.processEvents()
 
-            assert tab._blob_shape_reactivity_row.isHidden() is False
-            assert tab._blob_idle_edge_motion_row.isHidden() is False
-            assert tab._blob_audio_edge_motion_row.isHidden() is False
-            assert tab._blob_stretch_row.isHidden() is False
-            assert tab._blob_shape_reactivity_row.isEnabled() is True
-            assert tab._blob_idle_edge_motion_row.isEnabled() is True
-            assert tab._blob_audio_edge_motion_row.isEnabled() is True
-            assert tab._blob_stretch_row.isEnabled() is True
+            assert tab._blob_mighty_container.isHidden() is False
+            assert tab._blob_shaped_container.isHidden() is True
 
             tab.blob_reactive_glow.setChecked(False)
             qt_app.processEvents()
@@ -1839,14 +1837,14 @@ def test_widgets_tab_curated_preset_apply_ignores_stale_custom_runtime_values(qt
         tab.deleteLater()
 
 
-def test_blob_builder_keeps_shared_shaped_controls_visible_when_shaper_is_enabled(
+def test_blob_builder_keeps_shared_controls_visible_when_shaped_blob_is_selected(
     qt_app,
     settings_manager,
 ):
     with _blob_gate(True):
         tab = WidgetsTab(settings_manager)
         try:
-            tab.blob_shaper_enabled.setChecked(True)
+            tab.blob_type_combo.setCurrentIndex(1)
             qt_app.processEvents()
 
             assert tab._blob_reactive_glow_row.isHidden() is False
@@ -1869,10 +1867,8 @@ def test_blob_builder_keeps_shared_shaped_controls_visible_when_shaper_is_enable
             tab.blob_topology_combo.setCurrentIndex(0)
             qt_app.processEvents()
             assert tab._blob_ring_thickness_row.isHidden() is True
-            assert tab._blob_shape_reactivity_row.isHidden() is True
-            assert tab._blob_idle_edge_motion_row.isHidden() is True
-            assert tab._blob_audio_edge_motion_row.isHidden() is True
-            assert tab._blob_stretch_row.isHidden() is True
+            assert tab._blob_mighty_container.isHidden() is True
+            assert tab._blob_shaped_container.isHidden() is False
         finally:
             tab.deleteLater()
 
@@ -1896,7 +1892,7 @@ def test_blob_builder_gates_inward_liquid_detail_rows_from_enable_toggle(
             assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
             assert tab._blob_inward_liquid_max_size_row.isHidden() is False
 
-            tab.blob_shaper_enabled.setChecked(True)
+            tab.blob_type_combo.setCurrentIndex(1)
             qt_app.processEvents()
 
             assert tab._blob_inward_liquid_enabled_row.isHidden() is False
@@ -1905,6 +1901,43 @@ def test_blob_builder_gates_inward_liquid_detail_rows_from_enable_toggle(
             assert tab._blob_inward_liquid_max_size_row.isHidden() is False
         finally:
             tab.deleteLater()
+
+
+def test_widgets_tab_blob_type_round_trip_saves_canonical_value_without_legacy_toggle(
+    qt_app,
+    settings_manager,
+):
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            widgets_cfg = settings_manager.get("widgets", {}) or {}
+            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
+            spotify_vis.update(
+                {
+                    "mode": "blob",
+                    "blob_type": "shaped",
+                    "blob_shaper_enabled": False,
+                    "blob_topology": "ring",
+                }
+            )
+            settings_manager.set("widgets", widgets_cfg)
+
+            tab._load_settings()
+            assert tab.blob_type_combo.currentIndex() == 1
+            assert tab._blob_mighty_container.isHidden() is True
+            assert tab._blob_shaped_container.isHidden() is False
+            assert tab.blob_topology_combo.currentIndex() == 1
+            assert tab._blob_ring_thickness_row.isHidden() is False
+
+            tab.blob_type_combo.setCurrentIndex(0)
+            tab._save_settings_now()
+
+            saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+            assert saved["blob_type"] == "mighty"
+            assert "blob_shaper_enabled" not in saved
+        finally:
+            tab.deleteLater()
+
 
 def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)

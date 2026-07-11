@@ -1,8 +1,8 @@
 """Blob Shaper contour runtime helpers.
 
-This module owns the authored-contour Blob path only. Keeping it separate from
-unshaped Blob makes it easier to improve shaped reactivity without dragging the
-procedural fluid body back toward shared compromise math.
+This module owns the Shaped Blob path only. Keeping it separate from Mighty
+Blob makes it easier to improve authored-contour reactivity without dragging
+the procedural fluid body back toward shared compromise math.
 """
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import time
 from typing import Sequence
 
 from widgets.spotify_visualizer.blob_shaper_solver import (
-    build_contour_residual_profile,
     solve_profile_step,
     slew_profile_toward_target,
 )
@@ -26,6 +25,7 @@ _SHAPER_OPPOSITE_DELTA_FACTOR = 0.22
 _SHAPER_OPPOSITE_BASE_CAP = 0.18
 _SHAPER_GAP_EXPONENT_SCALE = 0.85
 _SHAPER_GAP_EXPONENT_CAP = 1.25
+_SHAPER_MIN_BASE_PROFILE_STRENGTH = 0.22
 _SHAPER_ANGULAR_SMOOTH_OFFSETS = (0.0, -1.0 / _SHAPER_N, 1.0 / _SHAPER_N)
 _SHAPER_ANGULAR_SMOOTH_WEIGHTS = (0.5, 0.25, 0.25)
 
@@ -36,6 +36,16 @@ _ENERGY_TYPE_INDEX = {
     "treble": 3,
     "transient": 4,
 }
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, float(value)))
+
+
+def _centered_outward_lobe(phase: float) -> float:
+    """Return a rounded zero-mean lobe with a light outward bias."""
+
+    return max(0.0, math.sin(phase)) ** 2 - 0.25
 
 
 def _catmull_rom(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
@@ -284,13 +294,34 @@ def _sample_smoothed_shaper_energy(
     return total / max(1e-6, weight_total)
 
 
+def _resolve_shaper_base_radius(
+    base_radius: float,
+    *,
+    base_strength: float,
+    neutral_radius: float = 1.0,
+) -> float:
+    """Scale authored base relief while retaining a non-circular minimum."""
+
+    authored_base_mix = _SHAPER_MIN_BASE_PROFILE_STRENGTH + (
+        1.0 - _SHAPER_MIN_BASE_PROFILE_STRENGTH
+    ) * _clamp(base_strength, 0.0, 1.0)
+    neutral = max(0.0, float(neutral_radius))
+    return neutral + (float(base_radius) - neutral) * authored_base_mix
+
+
 def _resolve_shaper_targets(
     base_radius: float,
     react_radius: float,
     *,
+    base_strength: float = 1.0,
     react_strength: float = 1.0,
+    neutral_radius: float = 1.0,
 ) -> tuple[float, float, float]:
-    shaped_base = float(base_radius)
+    shaped_base = _resolve_shaper_base_radius(
+        base_radius,
+        base_strength=base_strength,
+        neutral_radius=neutral_radius,
+    )
     react_mix = max(0.0, min(1.0, float(react_strength)))
     shaped_react = shaped_base + (float(react_radius) - shaped_base) * react_mix
     react_delta = shaped_react - shaped_base
@@ -345,6 +376,7 @@ def _resolve_shaper_radius(
     *,
     base_strength: float = 1.0,
     react_strength: float = 1.0,
+    neutral_radius: float = 1.0,
     bass_energy: float = 0.0,
     overall_energy: float = 0.0,
     playing: bool,
@@ -352,7 +384,9 @@ def _resolve_shaper_radius(
     shaped_base, shaped_react, opposite_target = _resolve_shaper_targets(
         base_radius,
         react_radius,
+        base_strength=base_strength,
         react_strength=react_strength,
+        neutral_radius=neutral_radius,
     )
     signed_energy = _shape_shaper_energy_for_gap(
         signed_energy,
@@ -360,7 +394,6 @@ def _resolve_shaper_radius(
         react_radius=shaped_react,
     )
     drive = _remap_shaper_drive(signed_energy, playing=playing)
-    _ = float(base_strength)
     sign_mix_t = max(0.0, min(1.0, (drive + 0.20) / 0.40))
     sign_mix = sign_mix_t * sign_mix_t * (3.0 - 2.0 * sign_mix_t)
     react_target = shaped_react
@@ -383,6 +416,7 @@ def _resolve_shaper_radius_at_angle(
     mid: float,
     high: float,
     overall: float,
+    base_strength: float = 1.0,
     react_strength: float = 1.0,
     playing: bool,
 ) -> float:
@@ -402,6 +436,8 @@ def _resolve_shaper_radius_at_angle(
         base_radius,
         react_radius,
         signed_energy,
+        base_strength=base_strength,
+        neutral_radius=staged_radius,
         bass_energy=bass,
         overall_energy=overall,
         react_strength=react_strength,
@@ -409,25 +445,104 @@ def _resolve_shaper_radius_at_angle(
     )
 
 
-def _resolve_shaper_wobble_scales(
-    constant_wobble: float,
-    reactive_wobble: float,
-    signed_energy: float,
+def _build_shaped_motion_residual_profile(
     *,
+    sample_count: int,
+    time_value: float,
+    idle_motion: float,
+    audio_motion: float,
+    overall_energy: float,
+    vocal_energy: float,
+    high_energy: float,
     playing: bool,
-    overall_energy: float = 0.0,
-    mid_energy: float = 0.0,
-) -> tuple[float, float]:
-    drive = abs(_remap_shaper_drive(signed_energy, playing=playing))
-    overall_floor = max(0.0, min(1.0, float(overall_energy)))
-    vocal_floor = max(0.0, min(1.0, float(mid_energy)))
-    music_floor = (overall_floor * 0.22 + vocal_floor * 0.12) if playing else 0.0
-    music_floor = max(0.0, min(0.35, music_floor))
-    motion = max(drive, music_floor)
-    return (
-        float(constant_wobble) * (music_floor * 0.28 + motion * 0.32),
-        float(reactive_wobble) * (music_floor * 0.60 + motion * 0.90),
+    seed: float,
+) -> list[float]:
+    """Build Shaped Blob's living wobble plus bounded music mutations.
+
+    ``idle_motion`` owns broad, slow body warping that remains alive while
+    paused. ``audio_motion`` owns a separate energy-gated field of irregular
+    mutations plus lighter rounded outward tendrils. Both component fields are
+    centred before returning so their controls reshape rather than resize the
+    authored body.
+    """
+
+    count = max(0, int(sample_count))
+    if count <= 0:
+        return []
+
+    idle = _clamp(idle_motion, 0.0, 2.0)
+    audio = _clamp(audio_motion, 0.0, 3.0) if playing else 0.0
+    overall = _clamp(overall_energy, 0.0, 1.0)
+    vocal = _clamp(vocal_energy, 0.0, 1.0)
+    high = _clamp(high_energy, 0.0, 1.0)
+    energy = _clamp(overall * 0.46 + vocal * 0.39 + high * 0.15, 0.0, 1.0)
+
+    idle_amplitude = min(0.100, idle * 0.0825)
+    mutation_amplitude = min(0.160, audio * energy * 0.1155)
+    tendril_amplitude = min(
+        0.045,
+        audio * (overall * 0.00935 + vocal * 0.0121 + high * 0.0044),
     )
+    residual_profile: list[float] = []
+    for idx in range(count):
+        theta = (idx / count) * math.tau
+
+        # Living Wobble: intentionally low-order and slow. It should warp the
+        # whole authored body instead of reading as perimeter fizz.
+        living = 0.0
+        living += math.sin(theta + time_value * 0.21 + seed * 0.71) * 0.60
+        living += math.sin(theta * 2.0 - time_value * 0.16 + seed * 1.37) * 0.27
+        living += math.sin(theta * 3.0 + time_value * 0.29 - seed * 0.43) * 0.13
+
+        # Music Mutation: mixed frequencies move at deliberately incommensurate
+        # rates. A small angular phase warp keeps repeated music from settling
+        # into a regular star while neighbour smoothing rounds the result.
+        phase_warp = math.sin(theta * 2.0 - time_value * 0.29 + seed * 0.57) * 0.26
+        phase_warp += math.sin(theta * 5.0 + time_value * 0.17 - seed * 0.31) * 0.10
+        mutation = 0.0
+        mutation += math.sin(theta + time_value * 0.41 + seed * 1.13) * 0.20
+        mutation += math.sin(theta * 2.0 - time_value * 0.63 + seed * 0.47) * 0.18
+        mutation += math.sin(theta * 3.0 + time_value * 0.91 + phase_warp) * 0.22
+        mutation += math.sin(theta * 5.0 - time_value * 1.37 - phase_warp * 0.42) * 0.18
+        mutation += math.sin(theta * 7.0 + time_value * 1.83 + seed * 0.89) * (0.08 + high * 0.05)
+        mutation += math.sin(theta * 9.0 - time_value * 2.11 - seed * 1.31) * (high * 0.09)
+
+        # Rounded, sparse outward pulls remain subordinate to the irregular
+        # mutation field, so they read as light tendrils rather than spikes.
+        tendrils = 0.0
+        tendrils += _centered_outward_lobe(theta * 2.0 + time_value * 0.73 + seed * 0.37) * 0.55
+        tendrils += _centered_outward_lobe(theta * 3.0 - time_value * 0.47 + seed * 0.91) * 0.30
+        tendrils += _centered_outward_lobe(theta * 5.0 + time_value * 1.07 - seed * 0.53) * 0.15
+
+        residual_profile.append(
+            living * idle_amplitude
+            + mutation * mutation_amplitude
+            + tendrils * tendril_amplitude
+        )
+
+    residual_profile = _smooth_cyclic_series(residual_profile, passes=4)
+    mean = math.fsum(residual_profile) / count
+    return [value - mean for value in residual_profile]
+
+
+def _shaped_motion_allowance(
+    *,
+    idle_motion: float,
+    audio_motion: float,
+    bass: float,
+    mid: float,
+    high: float,
+    overall: float,
+    playing: bool,
+) -> float:
+    """Return a contour-space mutation budget independent of authored gap."""
+
+    idle_budget = min(0.090, _clamp(idle_motion, 0.0, 2.0) * 0.080)
+    energy = _clamp(overall * 0.46 + mid * 0.30 + bass * 0.14 + high * 0.10, 0.0, 1.0)
+    audio_budget = 0.0
+    if playing:
+        audio_budget = min(0.130, _clamp(audio_motion, 0.0, 3.0) * energy * 0.105)
+    return min(0.160, idle_budget + audio_budget)
 
 
 def _get_shaper_energy_bands(s) -> tuple[float, float, float, float]:
@@ -476,18 +591,33 @@ def _solve_runtime_shaper_profile_step(
     shaper_idle_motion: float,
     shaper_audio_motion: float,
     playing: bool,
+    base_strength: float = 1.0,
     seed: float = 0.0,
 ) -> tuple[list[float], list[float], list[float]]:
     count = min(len(base_profile), len(react_profile))
     if count <= 0:
         return ([], [], [])
 
+    motion_allowance = _shaped_motion_allowance(
+        idle_motion=shaper_idle_motion,
+        audio_motion=shaper_audio_motion,
+        bass=bass,
+        mid=mid,
+        high=high,
+        overall=overall,
+        playing=playing,
+    )
     target_profile: list[float] = []
+    resolved_base_profile: list[float] = []
     min_profile: list[float] = []
     max_profile: list[float] = []
     for idx in range(count):
         angle_frac = idx / count
-        base_mult = _sample_smoothed_linear_series(angle_frac, base_profile)
+        authored_base_mult = _sample_smoothed_linear_series(angle_frac, base_profile)
+        base_mult = _resolve_shaper_base_radius(
+            authored_base_mult,
+            base_strength=base_strength,
+        )
         react_mult = _sample_smoothed_linear_series(angle_frac, react_profile)
         target = _resolve_shaper_radius_at_angle(
             angle_frac,
@@ -499,6 +629,7 @@ def _solve_runtime_shaper_profile_step(
             mid=mid,
             high=high,
             overall=overall,
+            base_strength=base_strength,
             react_strength=react_strength,
             playing=playing,
         )
@@ -509,18 +640,24 @@ def _solve_runtime_shaper_profile_step(
             )
             target += (react_mult - target) * music_floor_mix
         gap = abs(react_mult - base_mult)
-        outward_allowance = min(0.10, gap * 0.12 + max(0.0, react_mult - base_mult) * 0.05)
-        inward_allowance = min(0.08, gap * 0.10 + max(0.0, base_mult - react_mult) * 0.04)
+        gap_outward_allowance = min(0.10, gap * 0.12 + max(0.0, react_mult - base_mult) * 0.05)
+        gap_inward_allowance = min(0.08, gap * 0.10 + max(0.0, base_mult - react_mult) * 0.04)
+        # A small authored base/react gap must not disable the living or music
+        # layers.  The motion controls own an independent, capped envelope;
+        # large authored gaps keep their existing wider reaction envelope.
+        outward_allowance = max(gap_outward_allowance, motion_allowance)
+        inward_allowance = max(gap_inward_allowance, motion_allowance * 0.84)
         min_profile.append(max(0.08, min(base_mult, react_mult) - inward_allowance))
         max_profile.append(max(base_mult, react_mult) + outward_allowance)
         target_profile.append(target)
+        resolved_base_profile.append(base_mult)
 
     vocal_energy = max(0.0, min(1.0, float(mid) * 0.78 + float(high) * 0.18 + float(overall) * 0.10))
-    residual_profile = build_contour_residual_profile(
+    residual_profile = _build_shaped_motion_residual_profile(
         sample_count=count,
         time_value=time_value,
-        idle_motion=float(shaper_idle_motion),
-        audio_motion=float(shaper_audio_motion),
+        idle_motion=shaper_idle_motion,
+        audio_motion=shaper_audio_motion,
         overall_energy=float(overall),
         vocal_energy=vocal_energy,
         high_energy=float(high),
@@ -534,7 +671,7 @@ def _solve_runtime_shaper_profile_step(
     target_profile = slew_profile_toward_target(
         previous_target=previous_target_profile,
         current_target=target_profile,
-        base_profile=base_profile,
+        base_profile=resolved_base_profile,
         dt=dt,
         attack_hz=15.5,
         release_hz=2.4 if playing else 1.8,
@@ -543,7 +680,7 @@ def _solve_runtime_shaper_profile_step(
     current_profile = list(previous_profile or ())
     current_velocity = list(previous_velocity or ())
     if len(current_profile) != count:
-        current_profile = list(base_profile[:count])
+        current_profile = list(resolved_base_profile)
     if len(current_velocity) != count:
         current_velocity = [0.0] * count
 
@@ -554,11 +691,17 @@ def _solve_runtime_shaper_profile_step(
         min_profile=min_profile,
         max_profile=max_profile,
         dt=dt,
-        stiffness=22.0 if playing else 15.0,
-        damping=11.0 if playing else 13.0,
-        neighbor_strength=14.0 if playing else 10.0,
-        smoothing_passes=4 if playing else 3,
+        stiffness=30.0 if playing else 15.0,
+        damping=9.5 if playing else 13.0,
+        neighbor_strength=22.0 if playing else 10.0,
+        smoothing_passes=5 if playing else 3,
     )
+    if playing:
+        angularly_smoothed = _smooth_cyclic_series(solved_profile, passes=3)
+        solved_profile = [
+            _clamp(angularly_smoothed[idx], min_profile[idx], max_profile[idx])
+            for idx in range(count)
+        ]
     return solved_profile, solved_velocity, target_profile
 
 
@@ -598,6 +741,7 @@ def _resolve_runtime_shaper_profile(
         mid=mid,
         high=high,
         overall=overall,
+        base_strength=float(getattr(s, "_blob_shaper_base_strength", 0.5)),
         react_strength=float(getattr(s, "_blob_shaper_react_strength", 1.0)),
         shaper_idle_motion=float(getattr(s, "_blob_shaper_idle_motion", 0.18)),
         shaper_audio_motion=float(getattr(s, "_blob_shaper_audio_motion", 1.20)),

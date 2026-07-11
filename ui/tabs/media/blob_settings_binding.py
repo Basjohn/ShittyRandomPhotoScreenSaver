@@ -7,6 +7,13 @@ from typing import Any, Callable
 from PySide6.QtGui import QColor
 
 from core.logging.logger import get_logger
+from core.settings.visualizer_blob_contract import (
+    BLOB_MIGHTY_ONLY_KEYS,
+    BLOB_SHAPED_ONLY_KEYS,
+    BLOB_TYPE_MIGHTY,
+    BLOB_TYPE_SHAPED,
+    normalize_blob_type,
+)
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 
 logger = get_logger(__name__)
@@ -28,6 +35,23 @@ def load_blob_mode_settings(
 ) -> None:
     """Load Blob-owned settings from the visualizer config into the tab."""
     config = spotify_vis_config if isinstance(spotify_vis_config, Mapping) else {}
+
+    blob_type = normalize_blob_type(
+        config.get("blob_type"),
+        legacy_shaper_enabled=config.get("blob_shaper_enabled"),
+    )
+    if hasattr(tab, "blob_type_combo"):
+        combo = tab.blob_type_combo
+        block_signals = getattr(combo, "blockSignals", None)
+        signals_were_blocked = block_signals(True) if callable(block_signals) else None
+        try:
+            combo.setCurrentIndex(1 if blob_type == BLOB_TYPE_SHAPED else 0)
+        finally:
+            if callable(block_signals):
+                block_signals(bool(signals_were_blocked))
+        update_type_controls = getattr(tab, "_update_blob_type_controls", None)
+        if callable(update_type_controls):
+            update_type_controls()
 
     if hasattr(tab, "blob_ghost_enabled"):
         tab.blob_ghost_enabled.setChecked(
@@ -130,13 +154,9 @@ def load_blob_mode_settings(
         tab.blob_growth.setValue(max(100, min(500, blob_growth)))
         tab.blob_growth_label.setText(f"{blob_growth / 100.0:.1f}x")
 
-    # --- Blob Shaper ---
-    if hasattr(tab, "blob_shaper_enabled"):
-        tab.blob_shaper_enabled.setChecked(
-            tab._config_bool("spotify_visualizer", config, "blob_shaper_enabled", False)
-        )
+    # --- Shaped Blob ---
     if hasattr(tab, "blob_shaper_base_strength"):
-        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_base_strength", 1.0) * 100)
+        val = int(tab._config_float("spotify_visualizer", config, "blob_shaper_base_strength", 0.5) * 100)
         tab.blob_shaper_base_strength.setValue(max(0, min(100, val)))
         tab.blob_shaper_base_strength_label.setText(f"{val}%")
     if hasattr(tab, "blob_shaper_react_strength"):
@@ -164,6 +184,9 @@ def load_blob_mode_settings(
         react_nodes = config.get("blob_shape_reaction_nodes", [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
         energy_nodes = config.get("blob_shape_energy_nodes", [])
         tab.blob_shape_editor.set_nodes(base_nodes, react_nodes, energy_nodes)
+    sync_ring_mode = getattr(tab, "_sync_blob_shaped_ring_mode", None)
+    if callable(sync_ring_mode):
+        sync_ring_mode()
 
 
 def _collect_blob_shape_editor(tab) -> dict[str, Any]:
@@ -181,7 +204,12 @@ def _collect_blob_shape_editor(tab) -> dict[str, Any]:
 
 def collect_blob_mode_settings(tab) -> dict[str, Any]:
     """Collect Blob-owned settings from the tab into a config mapping."""
-    return {
+    settings = {
+        "blob_type": (
+            BLOB_TYPE_SHAPED
+            if hasattr(tab, "blob_type_combo") and tab.blob_type_combo.currentIndex() == 1
+            else BLOB_TYPE_MIGHTY
+        ),
         "blob_ghosting_enabled": tab.blob_ghost_enabled.isChecked() if hasattr(tab, "blob_ghost_enabled") else False,
         "blob_ghost_alpha": (tab.blob_ghost_opacity.value() if hasattr(tab, "blob_ghost_opacity") else 40) / 100.0,
         "blob_ghost_decay": max(
@@ -229,8 +257,7 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         ) / 100.0,
         "blob_stretch": (tab.blob_stretch.value() if hasattr(tab, "blob_stretch") else 35) / 100.0,
         "blob_growth": (tab.blob_growth.value() if hasattr(tab, "blob_growth") else 250) / 100.0,
-        # Blob Shaper
-        "blob_shaper_enabled": tab.blob_shaper_enabled.isChecked() if hasattr(tab, "blob_shaper_enabled") else False,
+        # Shaped Blob
         "blob_shaper_base_strength": (
             tab.blob_shaper_base_strength.value() if hasattr(tab, "blob_shaper_base_strength") else 100
         ) / 100.0,
@@ -253,3 +280,11 @@ def collect_blob_mode_settings(tab) -> dict[str, Any]:
         ) / 100.0,
         **(_collect_blob_shape_editor(tab)),
     }
+    inactive_keys = (
+        BLOB_MIGHTY_ONLY_KEYS
+        if settings["blob_type"] == BLOB_TYPE_SHAPED
+        else BLOB_SHAPED_ONLY_KEYS
+    )
+    for key in inactive_keys:
+        settings.pop(key, None)
+    return settings

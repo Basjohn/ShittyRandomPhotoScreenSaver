@@ -1,0 +1,232 @@
+{
+  "description": "TEMP showcase: Shaped Blob contour warping with a strong living wobble, music mutations, and bounded directional blooms that return to the authored form.",
+  "mode": "blob",
+  "name": "Preset 7 (TEMP Shaped Warp Garden)",
+  "preset_index": 6,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "blob_adaptive_sensitivity": false,
+        "blob_agc_strength": 0.44,
+        "blob_audio_block_size": 256,
+        "blob_bar_border_color": [
+          199,
+          255,
+          229,
+          235
+        ],
+        "blob_bar_border_opacity": 0.92,
+        "blob_bar_count": 40,
+        "blob_bar_fill_color": [
+          62,
+          218,
+          171,
+          232
+        ],
+        "blob_color": [
+          62,
+          218,
+          171,
+          232
+        ],
+        "blob_core_floor_bias": 0.44,
+        "blob_core_scale": 0.94,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          199,
+          255,
+          229,
+          225
+        ],
+        "blob_ghost_alpha": 0.2,
+        "blob_ghost_decay": 0.42,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          102,
+          78,
+          255,
+          178
+        ],
+        "blob_glow_drive_mode": "vocal",
+        "blob_glow_intensity": 0.4,
+        "blob_glow_max_size": 0.9,
+        "blob_glow_reactivity": 1.18,
+        "blob_growth": 4.4,
+        "blob_input_gain": 0.7,
+        "blob_inward_liquid_color": [
+          182,
+          255,
+          229,
+          195
+        ],
+        "blob_inward_liquid_enabled": true,
+        "blob_inward_liquid_max_size": 0.2,
+        "blob_inward_liquid_reactivity": 1.28,
+        "blob_kick_lane_gain": 0.5,
+        "blob_manual_floor": 0.1,
+        "blob_outline_color": [
+          43,
+          105,
+          91,
+          190
+        ],
+        "blob_pulse": 0.52,
+        "blob_pulse_release_ms": 560,
+        "blob_rainbow_enabled": false,
+        "blob_rainbow_speed": 0.18,
+        "blob_reactive_glow": true,
+        "blob_ring_thickness": 0.3,
+        "blob_sensitivity": 0.68,
+        "blob_shape_base_nodes": [
+          [
+            0.0,
+            1.08
+          ],
+          [
+            0.125,
+            0.92
+          ],
+          [
+            0.25,
+            1.12
+          ],
+          [
+            0.375,
+            0.88
+          ],
+          [
+            0.5,
+            1.05
+          ],
+          [
+            0.625,
+            0.9
+          ],
+          [
+            0.75,
+            1.1
+          ],
+          [
+            0.875,
+            0.94
+          ]
+        ],
+        "blob_shape_energy_nodes": [
+          {
+            "canvas": "react",
+            "dir_len": 28.0,
+            "dir_x": 1.0,
+            "dir_y": 0.0,
+            "strength": 0.85,
+            "type": "vocals",
+            "x": 0.75,
+            "y": 0.5
+          },
+          {
+            "canvas": "react",
+            "dir_len": 28.0,
+            "dir_x": -1.0,
+            "dir_y": 0.0,
+            "strength": 0.85,
+            "type": "vocals",
+            "x": 0.25,
+            "y": 0.5
+          },
+          {
+            "canvas": "react",
+            "dir_len": 24.0,
+            "dir_x": 0.0,
+            "dir_y": -1.0,
+            "strength": 0.72,
+            "type": "mid",
+            "x": 0.5,
+            "y": 0.22
+          },
+          {
+            "canvas": "react",
+            "dir_len": 20.0,
+            "dir_x": 0.0,
+            "dir_y": 1.0,
+            "strength": 0.65,
+            "type": "bass",
+            "x": 0.5,
+            "y": 0.78
+          },
+          {
+            "canvas": "react",
+            "dir_len": 18.0,
+            "dir_x": 0.7071,
+            "dir_y": -0.7071,
+            "strength": 0.55,
+            "type": "transient",
+            "x": 0.68,
+            "y": 0.32
+          },
+          {
+            "canvas": "react",
+            "dir_len": 18.0,
+            "dir_x": -0.7071,
+            "dir_y": -0.7071,
+            "strength": 0.55,
+            "type": "transient",
+            "x": 0.32,
+            "y": 0.32
+          }
+        ],
+        "blob_shape_reaction_nodes": [
+          [
+            0.0,
+            1.45
+          ],
+          [
+            0.125,
+            1.1
+          ],
+          [
+            0.25,
+            1.62
+          ],
+          [
+            0.375,
+            1.2
+          ],
+          [
+            0.5,
+            1.55
+          ],
+          [
+            0.625,
+            1.08
+          ],
+          [
+            0.75,
+            1.7
+          ],
+          [
+            0.875,
+            1.16
+          ]
+        ],
+        "blob_shaper_audio_motion": 1.8,
+        "blob_shaper_base_strength": 0.82,
+        "blob_shaper_idle_motion": 0.68,
+        "blob_shaper_react_strength": 0.84,
+        "blob_size": 0.47,
+        "blob_stage_bias": -0.06,
+        "blob_stage_gain": 0.76,
+        "blob_topology": "circle",
+        "blob_transient_clamp": 1.42,
+        "blob_transient_mix_bass": 0.22,
+        "blob_transient_mix_vocal": 0.62,
+        "blob_transient_pulse_gain": 0.82,
+        "blob_type": "shaped",
+        "blob_width": 1.0,
+        "mode": "blob",
+        "monitor": "ALL"
+      }
+    }
+  },
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
+}

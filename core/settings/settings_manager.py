@@ -10,6 +10,12 @@ from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_blob_contract import (
+    BLOB_MIGHTY_ONLY_KEYS,
+    BLOB_SHAPED_ONLY_KEYS,
+    LEGACY_BLOB_SHAPER_KEY,
+    strip_inactive_blob_shaped_payload,
+)
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
@@ -17,10 +23,11 @@ from core.settings.visualizer_settings_contract import (
 )
 
 _WIDGET_DEFAULT_MERGE_SKIP_KEYS: dict[str, frozenset[str]] = {
-    # Migration/version markers must only be written when a section has been
-    # normalized from real persisted data. Injecting them during default-merges
-    # hides the difference between legacy payloads and already-migrated ones.
+    # Migration authorities/version markers must only be written when a section
+    # has been normalized from real persisted data. Injecting them during
+    # default-merges hides legacy state before its one-time migration runs.
     "spotify_visualizer": frozenset({
+        "blob_type",
         "bubble_gradient_semantics_version",
     }),
 }
@@ -35,7 +42,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 1
+    _VISUALIZER_SCHEMA_VERSION = 2
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -961,20 +968,27 @@ class SettingsManager(QObject):
             elif isinstance(widgets, Mapping):
                 vis_section = widgets.get('spotify_visualizer')  # type: ignore[index]
                 if isinstance(vis_section, Mapping):
-                    repaired_vis = strip_legacy_global_technical_keys(vis_section)
+                    repaired_vis = strip_inactive_blob_shaped_payload(vis_section)
+                    repaired_vis = strip_legacy_global_technical_keys(repaired_vis)
                     repaired_vis = strip_legacy_global_visual_keys(repaired_vis)
                     if dict(vis_section) != repaired_vis:
                         for key, old_value in dict(vis_section).items():
                             if key in repaired_vis:
                                 continue
-                            repairs[f'widgets.spotify_visualizer.{key}'] = (
-                                "Removed retired legacy global visualizer key"
-                            )
+                            if key == LEGACY_BLOB_SHAPER_KEY:
+                                reason = "Migrated retired Blob shaper boolean to blob_type"
+                            elif key in BLOB_SHAPED_ONLY_KEYS:
+                                reason = "Removed inactive Shaped Blob payload from Mighty Blob"
+                            elif key in BLOB_MIGHTY_ONLY_KEYS:
+                                reason = "Removed inactive Mighty Blob payload from Shaped Blob"
+                            else:
+                                reason = "Removed retired legacy global visualizer key"
+                            repairs[f'widgets.spotify_visualizer.{key}'] = reason
                         widgets_copy = dict(widgets)
                         widgets_copy['spotify_visualizer'] = repaired_vis
                         self._store_widgets_root_locked(widgets_copy)
                         widgets = widgets_copy
-                        repairs['widgets.spotify_visualizer'] = "Removed retired legacy global visualizer keys"
+                        repairs['widgets.spotify_visualizer'] = "Normalized retired visualizer keys"
                 clamp_repairs = self._clamp_visualizer_manual_floors(widgets)
                 if clamp_repairs:
                     repairs.update(clamp_repairs)

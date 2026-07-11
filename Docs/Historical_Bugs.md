@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -927,12 +927,14 @@ This is the long-term anti-regression record for the project, not an active task
     - optional `[SPOTIFY_VIS][FIRST_FRAME_PRIMER]` when overlay state is stale
     - `after_first_overlay_push` with current activation/generation
     - no `[SPOTIFY_VIS][PARITY]` warnings and no `FIRST_FRAME_GUARD` warnings
+- **Blob subtype hardening (2026-07-11):** the stable `blob` mode now contains explicit `mighty` / `shaped` renderer subtypes, which exposed a reset seam that ordinary mode-change detection cannot see. `blob_type` is now canonical, legacy aliases/`blob_shaper_enabled` migrate forward without re-emission, preset/custom payloads strip the inactive subtype's creative fields, and a type change clears both contour-solver families plus ghost/peak/pocket state before the new frame is accepted.
 - **Takeaways:**
   - Runtime state that can cause visual bleed must be cleared explicitly during mode transitions
   - Source tracking is valuable for diagnosing state bleed issues in logs
   - RENDER_STATE logging must be placed after state changes to capture the correct state
   - Do not rely on implicit clearing or ordering assumptions for critical visual state
   - First-visible activation parity needs a stronger bar than “no obvious reset leak”: hot activation, preset cycle, clean startup, and settings recreate should all converge on the same authoritative first-visible contract
+  - A stable visualizer mode may still contain renderer subtypes. If subtype identity changes without the mode id changing, treat it as an explicit reset boundary rather than assuming mode-reset hooks will fire.
 
 <a id="U-06"></a>
 ### [U-06] 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)

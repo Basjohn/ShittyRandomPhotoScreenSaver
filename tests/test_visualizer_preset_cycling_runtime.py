@@ -414,8 +414,8 @@ def test_runtime_cycle_purges_stale_mode_keys_on_preset_switch(settings_manager,
 
     Regression test for the call-site MERGE bug: apply_preset_to_config correctly
     CLEAR+APPLYs on its copy, but the caller used .update() which never removed
-    keys absent from the applied result. This caused custom-only keys like
-    blob_shaper_enabled to persist across preset switches.
+    keys absent from the applied result. This caused subtype-owned fields from
+    a Shaped Custom Blob to persist into Mighty curated presets.
     """
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
@@ -430,7 +430,8 @@ def test_runtime_cycle_purges_stale_mode_keys_on_preset_switch(settings_manager,
     spotify_cfg.update({
         "mode": "blob",
         "preset_blob": custom_index,
-        "blob_shaper_enabled": True,
+        "blob_type": "shaped",
+        "blob_shape_base_nodes": [[0.0, 0.8], [0.5, 1.2]],
         "blob_stretch": 0.5,
         "blob_color": [255, 0, 128, 255],
         "blob_some_custom_only_key": 42,
@@ -451,14 +452,12 @@ def test_runtime_cycle_purges_stale_mode_keys_on_preset_switch(settings_manager,
         "call-site merge bug is back"
     )
 
-    curated_has_shaper = "blob_shaper_enabled" in updated_vis
-    if curated_has_shaper:
-        pass
-    else:
-        assert "blob_shaper_enabled" not in updated_vis, (
-            "blob_shaper_enabled survived from Custom into a curated preset "
-            "that does not declare it — call-site merge bug is back"
-        )
+    assert updated_vis.get("blob_type") == "mighty"
+    assert "blob_shaper_enabled" not in updated_vis
+    assert "blob_shape_base_nodes" not in updated_vis, (
+        "Shaped Custom contour payload survived into a Mighty curated preset — "
+        "call-site replace semantics regressed"
+    )
 
 
 def test_runtime_cycle_custom_roundtrip_preserves_known_custom_keys(settings_manager, monkeypatch):

@@ -86,6 +86,7 @@ def maybe_log_oscilloscope_diagnostics(overlay: Any, logger: logging.Logger) -> 
         return
     now_diag = time.time()
     sig = (
+        str(getattr(overlay, "_blob_type", "mighty")),
         round(float(getattr(overlay, "_line_speed", 0.0)), 3),
         round(float(getattr(overlay, "_osc_last_waveform_blend_alpha", 0.0)), 3),
         int(len(getattr(overlay, "_ghost_waveform_ring", []) or [])),
@@ -189,13 +190,14 @@ def maybe_log_blob_diagnostics(
         return
     logger.debug(
         (
-            "[SPOTIFY_VIS][BLOB] dt=%.3f blob_dt=%.3f kick=%.2f/%.2f "
+            "[SPOTIFY_VIS][BLOB] type=%s dt=%.3f blob_dt=%.3f kick=%.2f/%.2f "
             "snare=%.2f/%.2f base=(%.3f,%.3f,%.3f,%.3f) "
             "trans=(%.3f,%.3f,%.3f) raw_live=(%.3f,%.3f,%.3f,%.3f) "
             "live=(%.3f,%.3f,%.3f,%.3f) smooth=%.3f->%.3f "
             "stage_raw=(%.2f,%.2f,%.2f) stage_filt=(%.2f,%.2f,%.2f) "
             "stage_prev=(%.2f,%.2f,%.2f) flags[hitch=%s energy=%s stage=%s hot=%s]"
         ),
+        str(getattr(overlay, "_blob_type", "mighty")),
         dt_seconds,
         blob_dt,
         kick_raw,

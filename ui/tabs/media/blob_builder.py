@@ -6,11 +6,16 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel,
     QCheckBox, QSlider, QWidget,
-    QToolButton,
 )
 from PySide6.QtCore import Qt
 
+from core.settings.visualizer_blob_contract import (
+    BLOB_TYPE_SHAPED,
+    normalize_blob_type,
+)
 from ui.styled_popup import ColorSwatchButton
+from ui.tabs.media.blob_mighty_builder import build_blob_mighty_controls
+from ui.tabs.media.blob_shaped_builder import build_blob_shaped_controls
 from ui.tabs.media.builder_scaffold import (
     add_builder_swatch_row,
     bind_color_button,
@@ -66,6 +71,15 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         )
         return row_widget, inner
 
+    _, type_bucket = build_collapsible_bucket(
+        tab,
+        normal_layout,
+        mode_key="blob",
+        bucket_key="type",
+        title="Blob Type",
+        helper_text="Mighty and Shaped Blob keep separate creative controls and preset ownership.",
+        default_expanded=True,
+    )
     _, body_bucket = build_collapsible_bucket(
         tab,
         normal_layout,
@@ -82,15 +96,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         bucket_key="appearance",
         title="Appearance",
         helper_text="Blob fill and edge colors still apply when hidden.",
-        default_expanded=True,
-    )
-    _, shaper_bucket = build_collapsible_bucket(
-        tab,
-        normal_layout,
-        mode_key="blob",
-        bucket_key="shaper",
-        title="Shaper",
-        helper_text="Blob Shaper controls still apply when hidden.",
         default_expanded=True,
     )
     _, layout_bucket = build_collapsible_bucket(
@@ -111,15 +116,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
         helper_text="Glow controls still apply when hidden.",
         default_expanded=True,
     )
-    _, motion_bucket = build_collapsible_bucket(
-        tab,
-        adv_layout,
-        mode_key="blob",
-        bucket_key="motion",
-        title="Motion",
-        helper_text="Motion controls still apply when hidden.",
-        default_expanded=True,
-    )
     _, ghost_bucket = build_collapsible_bucket(
         tab,
         adv_layout,
@@ -133,17 +129,45 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     def _body_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         return _make_aligned_row(body_bucket, label_text)
 
-    def _shaper_bucket_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
-        return _make_aligned_row(shaper_bucket, label_text)
-
     def _glow_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         return _make_aligned_row(glow_bucket, label_text)
 
-    def _motion_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
-        return _make_aligned_row(motion_bucket, label_text)
-
     def _ghost_bucket_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
         return _make_aligned_row(ghost_bucket, label_text)
+
+    type_row, type_row_layout = _make_aligned_row(type_bucket, "Blob Type:")
+    tab._blob_type_row = type_row
+    tab.blob_type_combo = StyledComboBox()
+    tab.blob_type_combo.addItems(["Mighty Blob", "Shaped Blob"])
+    default_blob_type = normalize_blob_type(
+        tab._default_str("spotify_visualizer", "blob_type", "mighty"),
+        legacy_shaper_enabled=tab._default_bool(
+            "spotify_visualizer",
+            "blob_shaper_enabled",
+            False,
+        ),
+    )
+    tab.blob_type_combo.setCurrentIndex(1 if default_blob_type == BLOB_TYPE_SHAPED else 0)
+    tab.blob_type_combo.setToolTip(
+        "Mighty Blob is the freeform organic body; Shaped Blob follows an authored contour."
+    )
+    bind_setting_signal(tab, tab.blob_type_combo.currentIndexChanged, auto_switch=True)
+    type_row_layout.addWidget(tab.blob_type_combo)
+    type_row_layout.addStretch()
+
+    build_blob_mighty_controls(tab, type_bucket, label_width=LABEL_WIDTH)
+    build_blob_shaped_controls(tab, type_bucket, label_width=LABEL_WIDTH)
+
+    def _update_blob_type_controls(*_args) -> None:
+        shaped = tab.blob_type_combo.currentIndex() == 1
+        tab._blob_mighty_container.setVisible(not shaped)
+        tab._blob_mighty_container.setEnabled(not shaped)
+        tab._blob_shaped_container.setVisible(shaped)
+        tab._blob_shaped_container.setEnabled(shaped)
+
+    tab._update_blob_type_controls = _update_blob_type_controls
+    tab.blob_type_combo.currentIndexChanged.connect(_update_blob_type_controls)
+    _update_blob_type_controls()
 
     pulse_widget, pulse_layout = _body_row("Body Response:")
     tab._blob_pulse_row = pulse_widget
@@ -301,149 +325,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     )
     inward_liquid_max_size_layout.addWidget(tab.blob_inward_liquid_max_size)
     inward_liquid_max_size_layout.addWidget(tab.blob_inward_liquid_max_size_label)
-
-    # === Blob Shaper Section ===
-    from ui.tabs.media.blob_shape_editor import BlobShapeEditor
-
-    shaper_toggle_row_w, shaper_toggle_row = _shaper_bucket_row("Enabled:")
-    tab.blob_shaper_enabled = QCheckBox("Blob Shaper")
-    tab.blob_shaper_enabled.setProperty("circleIndicator", True)
-    tab.blob_shaper_enabled.setChecked(
-        tab._default_bool('spotify_visualizer', 'blob_shaper_enabled', False)
-    )
-    tab.blob_shaper_enabled.setToolTip("Enable the Blob Shaper spatial routing system.")
-    bind_setting_signal(tab, tab.blob_shaper_enabled.toggled, auto_switch=True)
-    shaper_toggle_row.addWidget(tab.blob_shaper_enabled)
-    shaper_toggle_row.addStretch()
-
-    # Shaper container (gated on enabled state)
-    tab._blob_shaper_container = QWidget()
-    shaper_container_layout = QVBoxLayout(tab._blob_shaper_container)
-    shaper_container_layout.setContentsMargins(0, 0, 0, 0)
-    shaper_container_layout.setSpacing(4)
-
-    def _shaper_row(label_text: str) -> tuple[QWidget, QHBoxLayout]:
-        row_widget, inner, _ = shared_add_aligned_row_widget(
-            shaper_container_layout,
-            label_text,
-            label_width=LABEL_WIDTH,
-        )
-        return row_widget, inner
-
-    bs_row, bs_layout = _shaper_row("Base Strength:")
-    tab.blob_shaper_base_strength = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_shaper_base_strength.setMinimum(0)
-    tab.blob_shaper_base_strength.setMaximum(100)
-    bs_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_base_strength', 0.5) * 100)
-    tab.blob_shaper_base_strength.setValue(max(0, min(100, bs_val)))
-    tab.blob_shaper_base_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_shaper_base_strength.setTickInterval(10)
-    tab.blob_shaper_base_strength.setToolTip("How strongly the base shape profile modulates the blob radius.")
-    tab.blob_shaper_base_strength_label = QLabel(f"{bs_val}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_shaper_base_strength.valueChanged,
-        updater=lambda v: tab.blob_shaper_base_strength_label.setText(f"{v}%"),
-    )
-    bs_layout.addWidget(tab.blob_shaper_base_strength)
-    bs_layout.addWidget(tab.blob_shaper_base_strength_label)
-    bs_row.setVisible(False)
-    bs_row.setEnabled(False)
-
-    rs_row, rs_layout = _shaper_row("React Strength:")
-    tab.blob_shaper_react_strength = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_shaper_react_strength.setMinimum(0)
-    tab.blob_shaper_react_strength.setMaximum(100)
-    rs_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_react_strength', 0.5) * 100)
-    tab.blob_shaper_react_strength.setValue(max(0, min(100, rs_val)))
-    tab.blob_shaper_react_strength.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_shaper_react_strength.setTickInterval(10)
-    tab.blob_shaper_react_strength.setToolTip("How strongly the reaction profile limits deformation per-angle.")
-    tab.blob_shaper_react_strength_label = QLabel(f"{rs_val}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_shaper_react_strength.valueChanged,
-        updater=lambda v: tab.blob_shaper_react_strength_label.setText(f"{v}%"),
-    )
-    rs_layout.addWidget(tab.blob_shaper_react_strength)
-    rs_layout.addWidget(tab.blob_shaper_react_strength_label)
-
-    sim_row, sim_layout = _shaper_row("Idle Residual:")
-    tab._blob_shaper_idle_motion_row = sim_row
-    tab.blob_shaper_idle_motion = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_shaper_idle_motion.setMinimum(0)
-    tab.blob_shaper_idle_motion.setMaximum(200)
-    sim_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_idle_motion', 0.18) * 100)
-    tab.blob_shaper_idle_motion.setValue(max(0, min(200, sim_val)))
-    tab.blob_shaper_idle_motion.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_shaper_idle_motion.setTickInterval(25)
-    tab.blob_shaper_idle_motion.setToolTip(
-        "Always-on contour drift for shaped Blob only. Keeps authored silhouettes alive without stealing the idle budget from unshaped Blob."
-    )
-    tab.blob_shaper_idle_motion_label = QLabel(f"{sim_val}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_shaper_idle_motion.valueChanged,
-        updater=lambda v: tab.blob_shaper_idle_motion_label.setText(f"{v}%"),
-    )
-    sim_layout.addWidget(tab.blob_shaper_idle_motion)
-    sim_layout.addWidget(tab.blob_shaper_idle_motion_label)
-
-    sam_row, sam_layout = _shaper_row("Audio Residual:")
-    tab._blob_shaper_audio_motion_row = sam_row
-    tab.blob_shaper_audio_motion = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_shaper_audio_motion.setMinimum(0)
-    tab.blob_shaper_audio_motion.setMaximum(300)
-    sam_val = int(tab._default_float('spotify_visualizer', 'blob_shaper_audio_motion', 1.20) * 100)
-    tab.blob_shaper_audio_motion.setValue(max(0, min(300, sam_val)))
-    tab.blob_shaper_audio_motion.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_shaper_audio_motion.setTickInterval(25)
-    tab.blob_shaper_audio_motion.setToolTip(
-        "Energy-driven contour motion for shaped Blob only. This does not affect the freeform unshaped wobble system."
-    )
-    tab.blob_shaper_audio_motion_label = QLabel(f"{sam_val}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_shaper_audio_motion.valueChanged,
-        updater=lambda v: tab.blob_shaper_audio_motion_label.setText(f"{v}%"),
-    )
-    sam_layout.addWidget(tab.blob_shaper_audio_motion)
-    sam_layout.addWidget(tab.blob_shaper_audio_motion_label)
-
-    topo_row, topo_layout = _shaper_row("Topology:")
-    tab._blob_topology_row = topo_row
-    tab.blob_topology_combo = StyledComboBox()
-    tab.blob_topology_combo.addItems(["Circle (Filled)", "Ring (Hollow)"])
-    topo_default = tab._default_str('spotify_visualizer', 'blob_topology', 'circle')
-    tab.blob_topology_combo.setCurrentIndex(1 if str(topo_default).lower() == "ring" else 0)
-    tab.blob_topology_combo.setToolTip("Circle = filled blob, Ring = hollow ring shape.")
-    bind_setting_signal(tab, tab.blob_topology_combo.currentIndexChanged, auto_switch=True)
-    topo_layout.addWidget(tab.blob_topology_combo)
-
-    rt_row, rt_layout = _shaper_row("Ring Thickness:")
-    tab._blob_ring_thickness_row = rt_row
-    tab.blob_ring_thickness = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_ring_thickness.setMinimum(5)
-    tab.blob_ring_thickness.setMaximum(100)
-    rt_val = int(tab._default_float('spotify_visualizer', 'blob_ring_thickness', 0.3) * 100)
-    tab.blob_ring_thickness.setValue(max(5, min(100, rt_val)))
-    tab.blob_ring_thickness.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_ring_thickness.setTickInterval(10)
-    tab.blob_ring_thickness.setToolTip("Wall thickness of the ring as fraction of radius.")
-    tab.blob_ring_thickness_label = QLabel(f"{rt_val}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_ring_thickness.valueChanged,
-        updater=lambda v: tab.blob_ring_thickness_label.setText(f"{v}%"),
-    )
-    rt_layout.addWidget(tab.blob_ring_thickness)
-    rt_layout.addWidget(tab.blob_ring_thickness_label)
-
-    tab.blob_shape_editor = BlobShapeEditor()
-    bind_setting_signal(tab, tab.blob_shape_editor.nodes_changed, auto_switch=True)
-    shaper_container_layout.addWidget(tab.blob_shape_editor)
-
-    shaper_bucket.addWidget(tab._blob_shaper_container)
 
     reactive_glow_row_w, reactive_glow_row = _glow_row("Reactive Glow:")
     tab._blob_reactive_glow_row = reactive_glow_row_w
@@ -604,82 +485,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
     size_layout.addWidget(tab.blob_size)
     size_layout.addWidget(tab.blob_size_label)
 
-    rd_row, rd_layout = _motion_row("Shape Reactivity:")
-    tab._blob_shape_reactivity_row = rd_row
-    tab.blob_reactive_deformation = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_reactive_deformation.setMinimum(0)
-    tab.blob_reactive_deformation.setMaximum(300)
-    blob_rd_val = int(tab._default_float('spotify_visualizer', 'blob_reactive_deformation', 1.0) * 100)
-    tab.blob_reactive_deformation.setValue(max(0, min(300, blob_rd_val)))
-    tab.blob_reactive_deformation.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_reactive_deformation.setTickInterval(50)
-    tab.blob_reactive_deformation.setToolTip("Scales overall outward audio-driven deformation for unshaped Blob.")
-    tab.blob_reactive_deformation_label = QLabel(f"{tab.blob_reactive_deformation.value()}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_reactive_deformation.valueChanged,
-        updater=lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%"),
-    )
-    rd_layout.addWidget(tab.blob_reactive_deformation)
-    rd_layout.addWidget(tab.blob_reactive_deformation_label)
-
-    cw_row, cw_layout = _motion_row("Idle Edge Motion:")
-    tab._blob_idle_edge_motion_row = cw_row
-    tab.blob_constant_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_constant_wobble.setMinimum(0)
-    tab.blob_constant_wobble.setMaximum(200)
-    blob_cw_val = int(tab._default_float('spotify_visualizer', 'blob_constant_wobble', 1.0) * 100)
-    tab.blob_constant_wobble.setValue(max(0, min(200, blob_cw_val)))
-    tab.blob_constant_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_constant_wobble.setTickInterval(25)
-    tab.blob_constant_wobble.setToolTip("Subtle always-on edge wobble even when audio is calm.")
-    tab.blob_constant_wobble_label = QLabel(f"{tab.blob_constant_wobble.value()}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_constant_wobble.valueChanged,
-        updater=lambda v: tab.blob_constant_wobble_label.setText(f"{v}%"),
-    )
-    cw_layout.addWidget(tab.blob_constant_wobble)
-    cw_layout.addWidget(tab.blob_constant_wobble_label)
-
-    rw_row, rw_layout = _motion_row("Audio Edge Motion:")
-    tab._blob_audio_edge_motion_row = rw_row
-    tab.blob_reactive_wobble = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_reactive_wobble.setMinimum(0)
-    tab.blob_reactive_wobble.setMaximum(300)
-    blob_rw_val = int(tab._default_float('spotify_visualizer', 'blob_reactive_wobble', 1.0) * 100)
-    tab.blob_reactive_wobble.setValue(max(0, min(300, blob_rw_val)))
-    tab.blob_reactive_wobble.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_reactive_wobble.setTickInterval(25)
-    tab.blob_reactive_wobble.setToolTip("Energy-driven outline motion layered on top of the base silhouette.")
-    tab.blob_reactive_wobble_label = QLabel(f"{tab.blob_reactive_wobble.value()}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_reactive_wobble.valueChanged,
-        updater=lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%"),
-    )
-    rw_layout.addWidget(tab.blob_reactive_wobble)
-    rw_layout.addWidget(tab.blob_reactive_wobble_label)
-
-    st_row, st_layout = _motion_row("Stretch:")
-    tab._blob_stretch_row = st_row
-    tab.blob_stretch = NoWheelSlider(Qt.Orientation.Horizontal)
-    tab.blob_stretch.setMinimum(0)
-    tab.blob_stretch.setMaximum(100)
-    blob_st_val = int(tab._default_float('spotify_visualizer', 'blob_stretch', 0.35) * 100)
-    tab.blob_stretch.setValue(max(0, min(100, blob_st_val)))
-    tab.blob_stretch.setTickPosition(QSlider.TickPosition.TicksBelow)
-    tab.blob_stretch.setTickInterval(10)
-    tab.blob_stretch.setToolTip("How much audio can pull the unshaped blob into outward protrusions.")
-    tab.blob_stretch_label = QLabel(f"{tab.blob_stretch.value()}%")
-    bind_setting_signal(
-        tab,
-        tab.blob_stretch.valueChanged,
-        updater=lambda v: tab.blob_stretch_label.setText(f"{v}%"),
-    )
-    st_layout.addWidget(tab.blob_stretch)
-    st_layout.addWidget(tab.blob_stretch_label)
-
     ghost_toggle_row_w, ghost_toggle_row = _ghost_bucket_row("Ghosting:")
     tab.blob_ghost_enabled = QCheckBox("Enable Ghosting")
     tab.blob_ghost_enabled.setProperty("circleIndicator", True)
@@ -755,35 +560,6 @@ def build_blob_ui(tab: "WidgetsTab", parent_layout: QVBoxLayout) -> None:
 
     tab.blob_inward_liquid_enabled.stateChanged.connect(lambda _s: _update_blob_inward_liquid_vis())
     _update_blob_inward_liquid_vis()
-
-    # Ring mode sync: update editor canvases + thickness row visibility
-    def _sync_ring_mode():
-        is_ring = tab.blob_topology_combo.currentIndex() == 1
-        thickness = tab.blob_ring_thickness.value() / 100.0
-        rt_row.setVisible(is_ring)
-        tab.blob_shape_editor.set_ring_mode(is_ring, thickness)
-
-    tab.blob_topology_combo.currentIndexChanged.connect(_sync_ring_mode)
-    tab.blob_ring_thickness.valueChanged.connect(lambda _v: _sync_ring_mode())
-    _sync_ring_mode()
-
-    # Shaper container gating + hide conflicting shape controls
-    def _update_shaper_gating():
-        enabled = tab.blob_shaper_enabled.isChecked()
-        tab._blob_shaper_container.setVisible(enabled)
-        # Stretch and generic unshaped deformation conflict with authored shaper contours.
-        st_row.setVisible(not enabled)
-        rd_row.setVisible(not enabled)
-        cw_row.setVisible(not enabled)
-        rw_row.setVisible(not enabled)
-        st_row.setEnabled(not enabled)
-        rd_row.setEnabled(not enabled)
-        cw_row.setEnabled(not enabled)
-        rw_row.setEnabled(not enabled)
-
-    tab.blob_shaper_enabled.toggled.connect(_update_shaper_gating)
-    _update_shaper_gating()
-
 
 def build_blob_growth(tab: "WidgetsTab") -> None:
     """Append height growth slider to the blob advanced container."""

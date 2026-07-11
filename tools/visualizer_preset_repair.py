@@ -47,6 +47,14 @@ from core.settings.visualizer_settings_snapshot import (  # noqa: E402
     normalize_visualizer_mode_payload,
 )
 from core.settings.visualizer_settings_contract import LEGACY_GLOBAL_SHARED_VISUAL_KEYS  # noqa: E402
+from core.settings.visualizer_blob_contract import (  # noqa: E402
+    BLOB_MIGHTY_ONLY_KEYS,
+    BLOB_SHAPED_ONLY_KEYS,
+    BLOB_TYPE_SHAPED,
+    BLOB_TYPE_VALUES,
+    normalize_blob_type,
+    strip_inactive_blob_shaped_payload,
+)
 from core.visualizer_preset_manifest import regenerate_repo_shipped_visualizer_preset_artifacts  # noqa: E402
 
 _DEFAULTS_CACHE: Dict[str, Any] | None = None
@@ -65,6 +73,7 @@ _DEPRECATED_AUTHORED_GLOBAL_KEYS: Tuple[str, ...] = (
     "ghost_decay",
 )
 _DEPRECATED_MODE_ALIAS_KEYS: Dict[str, Tuple[str, ...]] = {
+    "blob": ("blob_shaper_enabled",),
     "oscilloscope": ("osc_sensitivity",),
 }
 _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
@@ -75,17 +84,8 @@ _DEPRECATED_BLOB_AUTHORED_KEYS: Tuple[str, ...] = (
     "blob_stretch_y_bias",
 )
 
-_BLOB_SHAPER_ONLY_KEYS: Tuple[str, ...] = (
-    "blob_shape_base_nodes",
-    "blob_shape_reaction_nodes",
-    "blob_shape_energy_nodes",
-    "blob_shaper_base_strength",
-    "blob_shaper_react_strength",
-    "blob_shaper_idle_motion",
-    "blob_shaper_audio_motion",
-    "blob_topology",
-    "blob_ring_thickness",
-)
+_BLOB_SHAPER_ONLY_KEYS: Tuple[str, ...] = tuple(sorted(BLOB_SHAPED_ONLY_KEYS))
+_BLOB_MIGHTY_ONLY_KEYS: Tuple[str, ...] = tuple(sorted(BLOB_MIGHTY_ONLY_KEYS))
 
 _BACKUP_ROOT = ROOT / "temp" / "visualizer_preset_backups"
 _UNDO_STATE_PATH = _BACKUP_ROOT / "undo_state.json"
@@ -243,6 +243,7 @@ def _strip_deprecated_curated_keys(mode: str, sanitized: Dict[str, Any]) -> None
         sanitized.pop(suffix, None)
         sanitized.pop(f"{prefix}{suffix}", None)
     if mode == "blob":
+        sanitized.pop("blob_shaper_enabled", None)
         for key in _DEPRECATED_BLOB_AUTHORED_KEYS:
             sanitized.pop(key, None)
 
@@ -339,6 +340,11 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
                 or "rainbow_per_bar" in original_section
             ) and "spectrum_unique_colors" in filtered:
                 migrated_keys.add("spectrum_unique_colors")
+        if mode == "blob" and (
+            "blob_shaper_enabled" in original_section
+            or str(original_section.get("blob_type", "")).strip().lower() not in BLOB_TYPE_VALUES
+        ) and "blob_type" in filtered:
+            migrated_keys.add("blob_type")
         if "rainbow_enabled" in original_section and f"{primary_prefix}rainbow_enabled" in filtered:
             migrated_keys.add(f"{primary_prefix}rainbow_enabled")
         if "rainbow_speed" in original_section and f"{primary_prefix}rainbow_speed" in filtered:
@@ -376,6 +382,8 @@ def _sanitize_settings(mode: str, payload: Mapping[str, Any]) -> Tuple[Dict[str,
         mode_key = f"{prefix}{suffix}"
         if mode_key in canonical_defaults:
             sanitized.setdefault(mode_key, deepcopy(canonical_defaults[mode_key]))
+    if mode == "blob":
+        sanitized = strip_inactive_blob_shaped_payload(sanitized)
 
     orig_keys = set(original_filtered.keys())
     new_keys = set(sanitized.keys())
@@ -403,6 +411,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         "deprecated_mode_alias_keys": [],
         "legacy_spectrum_linear_notch_family": False,
         "inactive_blob_shaper_payload": False,
+        "inactive_blob_mighty_payload": False,
         "top_level_visualizer_duplication": False,
     }
     prefixes = tuple(vp.MODE_KEY_PREFIXES.get(mode, (_canonical_mode_prefix(mode),)))  # type: ignore[attr-defined]
@@ -445,12 +454,26 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
                 issues["deprecated_global_keys"].append(key)
             if key in _DEPRECATED_MODE_ALIAS_KEYS.get(mode, ()):
                 issues["deprecated_mode_alias_keys"].append(key)
-        if (
-            mode == "blob"
-            and section.get("blob_shaper_enabled") is False
-            and any(key in section for key in _BLOB_SHAPER_ONLY_KEYS)
-        ):
-            issues["inactive_blob_shaper_payload"] = True
+        if mode == "blob":
+            raw_blob_type = section.get("blob_type")
+            if "blob_type" in section and str(raw_blob_type).strip().lower() not in BLOB_TYPE_VALUES:
+                issues["deprecated_mode_alias_keys"].append(
+                    f"blob_type={str(raw_blob_type).strip().lower() or '<empty>'}"
+                )
+            resolved_blob_type = normalize_blob_type(
+                raw_blob_type,
+                legacy_shaper_enabled=section.get("blob_shaper_enabled"),
+            )
+            if (
+                resolved_blob_type != BLOB_TYPE_SHAPED
+                and any(key in section for key in _BLOB_SHAPER_ONLY_KEYS)
+            ):
+                issues["inactive_blob_shaper_payload"] = True
+            if (
+                resolved_blob_type == BLOB_TYPE_SHAPED
+                and any(key in section for key in _BLOB_MIGHTY_ONLY_KEYS)
+            ):
+                issues["inactive_blob_mighty_payload"] = True
 
     issues["duplicate_prefixed_keys"] = sorted(set(issues["duplicate_prefixed_keys"]))
     issues["cross_mode_keys"] = sorted(set(issues["cross_mode_keys"]))
@@ -465,6 +488,7 @@ def audit_payload(mode: str, payload: Mapping[str, Any]) -> Dict[str, Any]:
         + len(issues["deprecated_mode_alias_keys"])
         + int(bool(issues["legacy_spectrum_linear_notch_family"]))
         + int(bool(issues["inactive_blob_shaper_payload"]))
+        + int(bool(issues["inactive_blob_mighty_payload"]))
         + int(bool(issues["has_custom_preset_backup"]))
         + int(bool(issues["top_level_visualizer_duplication"]))
     )

@@ -5,8 +5,9 @@ from PySide6.QtGui import QOffscreenSurface, QOpenGLContext, QSurfaceFormat
 
 
 @pytest.mark.qt
-def test_blob_fragment_shader_compiles(qt_app):
-    """Compile blob.frag inside a headless GL context to catch fallback-causing GLSL errors."""
+@pytest.mark.parametrize("shader_key", ["blob_mighty", "blob_shaped"])
+def test_blob_fragment_shader_compiles(qt_app, shader_key):
+    """Compile both concrete Blob programs in a headless GL context."""
 
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
@@ -37,8 +38,8 @@ def test_blob_fragment_shader_compiles(qt_app):
 
     from widgets.spotify_visualizer.shaders import load_fragment_shader
 
-    source = load_fragment_shader("blob")
-    assert source, "blob shader source missing"
+    source = load_fragment_shader(shader_key)
+    assert source, f"{shader_key} shader source missing"
 
     shader = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
     try:
@@ -48,7 +49,7 @@ def test_blob_fragment_shader_compiles(qt_app):
         log = gl.glGetShaderInfoLog(shader)
         if isinstance(log, bytes):
             log = log.decode("utf-8", errors="ignore")
-        assert status == gl.GL_TRUE, f"blob.frag failed to compile: {log.strip()}"
+        assert status == gl.GL_TRUE, f"{shader_key} failed to compile: {log.strip()}"
     finally:
         gl.glDeleteShader(shader)
         context.doneCurrent()
@@ -57,8 +58,9 @@ def test_blob_fragment_shader_compiles(qt_app):
 
 
 @pytest.mark.qt
-def test_blob_shader_program_links_with_shared_vertex_shader(qt_app):
-    """Link the real Blob GL program shape used by the overlay to catch fallback-causing link errors."""
+@pytest.mark.parametrize("shader_key", ["blob_mighty", "blob_shaped"])
+def test_blob_shader_program_links_with_shared_vertex_shader(qt_app, shader_key):
+    """Link both real Blob GL programs against the shared vertex shader."""
 
     fmt = QSurfaceFormat()
     fmt.setRenderableType(QSurfaceFormat.OpenGL)
@@ -90,8 +92,8 @@ def test_blob_shader_program_links_with_shared_vertex_shader(qt_app):
     from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
 
     vertex_source = SHARED_VERTEX_SHADER
-    fragment_source = load_fragment_shader("blob")
-    assert fragment_source, "blob shader source missing"
+    fragment_source = load_fragment_shader(shader_key)
+    assert fragment_source, f"{shader_key} shader source missing"
 
     vs = gl.glCreateShader(gl.GL_VERTEX_SHADER)
     fs = gl.glCreateShader(gl.GL_FRAGMENT_SHADER)
@@ -111,7 +113,7 @@ def test_blob_shader_program_links_with_shared_vertex_shader(qt_app):
         fs_log = gl.glGetShaderInfoLog(fs)
         if isinstance(fs_log, bytes):
             fs_log = fs_log.decode("utf-8", errors="ignore")
-        assert fs_status == gl.GL_TRUE, f"blob.frag failed to compile: {fs_log.strip()}"
+        assert fs_status == gl.GL_TRUE, f"{shader_key} failed to compile: {fs_log.strip()}"
 
         gl.glAttachShader(prog, vs)
         gl.glAttachShader(prog, fs)
@@ -120,7 +122,7 @@ def test_blob_shader_program_links_with_shared_vertex_shader(qt_app):
         link_log = gl.glGetProgramInfoLog(prog)
         if isinstance(link_log, bytes):
             link_log = link_log.decode("utf-8", errors="ignore")
-        assert link_status == gl.GL_TRUE, f"Blob shader program failed to link: {link_log.strip()}"
+        assert link_status == gl.GL_TRUE, f"{shader_key} program failed to link: {link_log.strip()}"
     finally:
         gl.glDeleteProgram(prog)
         gl.glDeleteShader(vs)

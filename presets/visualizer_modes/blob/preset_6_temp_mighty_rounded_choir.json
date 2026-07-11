@@ -1,0 +1,100 @@
+{
+  "description": "TEMP showcase: a calm, rounded Mighty Blob whose slow living body opens into broad choir-led tendrils without sharp radial spikes.",
+  "mode": "blob",
+  "name": "Preset 6 (TEMP Mighty Rounded Choir)",
+  "preset_index": 5,
+  "snapshot": {
+    "widgets": {
+      "spotify_visualizer": {
+        "blob_adaptive_sensitivity": false,
+        "blob_agc_strength": 0.38,
+        "blob_audio_block_size": 256,
+        "blob_bar_border_color": [
+          255,
+          229,
+          185,
+          235
+        ],
+        "blob_bar_border_opacity": 0.9,
+        "blob_bar_count": 36,
+        "blob_bar_fill_color": [
+          193,
+          129,
+          255,
+          230
+        ],
+        "blob_color": [
+          193,
+          129,
+          255,
+          230
+        ],
+        "blob_constant_wobble": 0.82,
+        "blob_core_floor_bias": 0.48,
+        "blob_core_scale": 0.98,
+        "blob_dynamic_floor": true,
+        "blob_dynamic_range_enabled": false,
+        "blob_edge_color": [
+          255,
+          229,
+          185,
+          225
+        ],
+        "blob_ghost_alpha": 0.18,
+        "blob_ghost_decay": 0.48,
+        "blob_ghosting_enabled": true,
+        "blob_glow_color": [
+          168,
+          91,
+          255,
+          172
+        ],
+        "blob_glow_drive_mode": "vocal",
+        "blob_glow_intensity": 0.36,
+        "blob_glow_max_size": 0.82,
+        "blob_glow_reactivity": 1.05,
+        "blob_growth": 4.2,
+        "blob_input_gain": 0.66,
+        "blob_inward_liquid_color": [
+          255,
+          222,
+          196,
+          195
+        ],
+        "blob_inward_liquid_enabled": false,
+        "blob_inward_liquid_max_size": 0.18,
+        "blob_inward_liquid_reactivity": 1.15,
+        "blob_kick_lane_gain": 0.42,
+        "blob_manual_floor": 0.09,
+        "blob_outline_color": [
+          92,
+          45,
+          145,
+          185
+        ],
+        "blob_pulse": 0.46,
+        "blob_pulse_release_ms": 680,
+        "blob_rainbow_enabled": false,
+        "blob_rainbow_speed": 0.12,
+        "blob_reactive_deformation": 0.78,
+        "blob_reactive_glow": true,
+        "blob_reactive_wobble": 1.72,
+        "blob_sensitivity": 0.64,
+        "blob_size": 0.5,
+        "blob_stage_bias": -0.12,
+        "blob_stage_gain": 0.72,
+        "blob_stretch": 0.62,
+        "blob_transient_clamp": 1.32,
+        "blob_transient_mix_bass": 0.1,
+        "blob_transient_mix_vocal": 0.78,
+        "blob_transient_pulse_gain": 0.72,
+        "blob_type": "mighty",
+        "blob_width": 1.0,
+        "mode": "blob",
+        "monitor": "ALL"
+      }
+    }
+  },
+  "visualizer_preset_mode": "blob",
+  "visualizer_preset_override": true
+}
