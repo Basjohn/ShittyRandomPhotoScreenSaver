@@ -11,6 +11,7 @@ from widgets.spotify_visualizer.blob_math import (
     compute_unshaped_motion_offsets,
     compute_unshaped_organic_base_multiplier,
     compute_unshaped_radius_multiplier,
+    compute_stage_floor_fraction,
     solve_unshaped_blob_profile_step,
 )
 
@@ -305,6 +306,63 @@ def test_mighty_blob_pocket_reactions_still_locally_enrich_radius() -> None:
     assert pocketed > plain + 0.012
 
 
+def test_mighty_core_floor_bias_materially_preserves_the_organic_base() -> None:
+    common = dict(
+        time_seconds=5.2,
+        bass_energy=0.82,
+        mid_energy=0.94,
+        high_energy=0.72,
+        overall_energy=0.84,
+        smoothed_energy=0.80,
+        reactive_deformation=1.20,
+        constant_wobble=0.80,
+        reactive_wobble=2.00,
+        stretch_tendency=0.75,
+        stretch_inner=0.0,
+        stretch_outer=0.75,
+        stage1_t=0.80,
+        stage2_t=0.50,
+        stage3_t=0.20,
+    )
+    open_floor = [
+        compute_unshaped_radius_multiplier(
+            angle_frac=idx / 128.0,
+            core_floor_bias=0.0,
+            **common,
+        )
+        for idx in range(128)
+    ]
+    protected_floor = [
+        compute_unshaped_radius_multiplier(
+            angle_frac=idx / 128.0,
+            core_floor_bias=0.42,
+            **common,
+        )
+        for idx in range(128)
+    ]
+
+    assert compute_stage_floor_fraction(
+        core_floor_bias=0.42,
+        stage1_t=0.80,
+        stage2_t=0.50,
+        stage3_t=0.20,
+    ) > compute_stage_floor_fraction(
+        core_floor_bias=0.0,
+        stage1_t=0.80,
+        stage2_t=0.50,
+        stage3_t=0.20,
+    ) + 0.08
+    assert min(protected_floor) > min(open_floor) + 0.025
+    assert max(
+        protected - open_value
+        for protected, open_value in zip(protected_floor, open_floor)
+    ) > 0.06
+    # The control braces inward valleys; it does not resize outward tendrils
+    # or replace the living contour with a circular support radius.
+    assert max(protected_floor) == pytest.approx(max(open_floor), abs=0.002)
+    assert max(protected_floor) - min(protected_floor) > 0.30
+
+
 def test_mighty_blob_prefers_broad_body_motion_with_bounded_reactive_detail() -> None:
     common = dict(
         sample_count=64,
@@ -420,7 +478,7 @@ def test_mighty_blob_keeps_body_mean_stable_while_tendrils_extend_outward() -> N
 
 def test_mighty_blob_sustained_phrase_breathes_in_place_instead_of_orbiting() -> None:
     common = dict(
-        sample_count=64,
+        sample_count=128,
         bass_energy=1.30,
         mid_energy=1.05,
         high_energy=1.10,
@@ -439,10 +497,26 @@ def test_mighty_blob_sustained_phrase_breathes_in_place_instead_of_orbiting() ->
         playing=True,
         seed=0.3,
     )
-    profiles = [
-        build_unshaped_blob_target_profile(time_seconds=time_value, **common)[2]
-        for time_value in (2.0, 2.4, 3.2, 3.6)
-    ]
+    profile: list[float] | None = None
+    velocity: list[float] | None = None
+    target: list[float] | None = None
+    captured: dict[float, list[float]] = {}
+    capture_times = (2.0, 2.4, 3.2, 3.6)
+    for step in range(33):
+        time_value = 2.0 + step * 0.05
+        bundle, velocity = solve_unshaped_blob_profile_step(
+            previous_profile=profile,
+            previous_velocity=velocity,
+            previous_target_profile=target,
+            time_seconds=time_value,
+            dt=0.05,
+            **common,
+        )
+        _base, _raw, target, profile = bundle
+        for capture_time in capture_times:
+            if abs(time_value - capture_time) < 1e-9:
+                captured[capture_time] = list(profile)
+    profiles = [captured[time_value] for time_value in capture_times]
 
     def _mse(left: list[float], right: list[float], shift: int = 0) -> float:
         return math.fsum(
@@ -507,3 +581,132 @@ def test_mighty_blob_hot_live_range_remains_dynamic_above_one() -> None:
     deltas = [abs(left - right) for left, right in zip(moderate, hot)]
     assert max(deltas) > 0.04
     assert math.fsum(deltas) / len(deltas) > 0.015
+
+
+def test_mighty_near_max_controls_retain_target_motion_through_solver() -> None:
+    """Guard the live failure where a strong target became a muted runtime curve."""
+
+    common = dict(
+        sample_count=128,
+        time_seconds=6.2,
+        reactive_deformation=1.52,
+        constant_wobble=0.82,
+        reactive_wobble=2.82,
+        stretch_tendency=0.94,
+        stretch_inner=0.0,
+        stretch_outer=0.94,
+        core_floor_bias=0.42,
+        stage1_t=1.0,
+        stage2_t=1.0,
+        stage3_t=1.0,
+        playing=True,
+        seed=0.37,
+    )
+    quiet_energy = dict(
+        bass_energy=0.70,
+        mid_energy=0.52,
+        high_energy=0.65,
+        overall_energy=0.73,
+        smoothed_energy=0.86,
+    )
+    hot_energy = dict(
+        bass_energy=1.40,
+        mid_energy=1.10,
+        high_energy=1.20,
+        overall_energy=1.25,
+        smoothed_energy=1.30,
+    )
+
+    def _settled(
+        energy: dict[str, float],
+    ) -> tuple[list[float], list[float], list[float]]:
+        profile: list[float] | None = None
+        velocity: list[float] | None = None
+        target: list[float] | None = None
+        for _ in range(240):
+            bundle, velocity = solve_unshaped_blob_profile_step(
+                previous_profile=profile,
+                previous_velocity=velocity,
+                previous_target_profile=target,
+                dt=1.0 / 60.0,
+                **common,
+                **energy,
+            )
+            _base, _raw, target, profile = bundle
+        assert target is not None
+        assert profile is not None
+        assert velocity is not None
+        return target, profile, velocity
+
+    quiet_target, quiet_runtime, quiet_velocity = _settled(quiet_energy)
+    hot_target, hot_runtime, _hot_velocity = _settled(hot_energy)
+
+    def _rms_delta(left: list[float], right: list[float]) -> float:
+        return math.sqrt(
+            math.fsum((a - b) ** 2 for a, b in zip(left, right)) / len(left)
+        )
+
+    target_audio_delta = _rms_delta(quiet_target, hot_target)
+    runtime_audio_delta = _rms_delta(quiet_runtime, hot_runtime)
+    hot_target_error = _rms_delta(hot_target, hot_runtime)
+    max_runtime_audio_delta = max(
+        abs(quiet - hot) for quiet, hot in zip(quiet_runtime, hot_runtime)
+    )
+
+    # Target containment plus per-sample solver bounds are the only fit.  A
+    # second tanh fit or angle-varying hard floor loses 20-60% here and makes
+    # the stress vector look like scalar size motion instead of contour work.
+    assert target_audio_delta > 0.08
+    assert runtime_audio_delta > target_audio_delta * 0.95
+    assert hot_target_error < 0.002
+    assert max_runtime_audio_delta > 0.18
+    assert max(hot_runtime) - min(hot_runtime) > 0.50
+    assert min(hot_runtime) >= 0.84
+    assert max(hot_runtime) <= 1.58
+
+    no_stretch = build_unshaped_blob_target_profile(
+        **{**common, "stretch_tendency": 0.0, "stretch_outer": 0.0},
+        **hot_energy,
+    )[2]
+    assert max(
+        stretched - plain for stretched, plain in zip(hot_target, no_stretch)
+    ) > 0.15
+
+    profile = list(quiet_runtime)
+    velocity = list(quiet_velocity)
+    previous_target = list(quiet_target)
+    attack_progress: list[float] = []
+    for _ in range(30):
+        bundle, velocity = solve_unshaped_blob_profile_step(
+            previous_profile=profile,
+            previous_velocity=velocity,
+            previous_target_profile=previous_target,
+            dt=1.0 / 60.0,
+            **common,
+            **hot_energy,
+        )
+        _base, _raw, previous_target, profile = bundle
+        attack_progress.append(_rms_delta(quiet_runtime, profile) / runtime_audio_delta)
+
+    # The stress response must be plainly visible within a third of a second,
+    # but it must not snap on the first few frames or overshoot without bound.
+    assert attack_progress[4] < 0.20
+    assert attack_progress[19] > 0.85
+    assert max(attack_progress) < 1.25
+
+    release_remaining: list[float] = []
+    for _ in range(30):
+        bundle, velocity = solve_unshaped_blob_profile_step(
+            previous_profile=profile,
+            previous_velocity=velocity,
+            previous_target_profile=previous_target,
+            dt=1.0 / 60.0,
+            **common,
+            **quiet_energy,
+        )
+        _base, _raw, previous_target, profile = bundle
+        release_remaining.append(_rms_delta(quiet_runtime, profile) / runtime_audio_delta)
+
+    assert release_remaining[0] > 0.80
+    assert release_remaining[29] < 0.15
+    assert max(release_remaining) < 1.25

@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -13,33 +13,34 @@ This is the long-term anti-regression record for the project, not an active task
 3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
-1. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)](#R-35)
-2. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)](#R-34)
-3. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-4. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-5. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-6. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-7. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-8. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-9. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-10. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-11. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-12. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-13. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-14. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-15. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-16. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-17. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-18. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-19. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-20. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-21. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-22. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-23. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-24. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-25. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-26. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-27. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+2. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)](#R-35)
+3. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)](#R-34)
+4. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+5. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+6. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+7. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+8. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+9. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+10. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+11. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+12. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+13. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+14. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+15. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+16. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+17. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+18. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+19. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+20. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+21. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+22. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+23. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+24. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+25. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+26. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+27. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+28. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -61,6 +62,39 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="R-36"></a>
+### [R-36] 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure pattern:** Mighty no longer exposed the earlier full circular core after its first repair, but maximum or near-maximum contour controls still produced mostly whole-body size changes. Wobble was barely perceptible, Stretch did not read as a growing tendril, and earlier deformations could look like rotating radial cuts. Shaped reached its authored goal and then appeared almost static apart from glow; mutation, warping, fixed-angle wobble, and lighter tendrils were not materially visible.
+- **Forensic boundary:** current logs showed healthy Blob input throughout the failure. Live bands repeatedly occupied roughly `0.5..1.5`, kicks/snares/transients fired, the active concrete shader matched source, and there was no shader fallback, shared-audio starvation, or subtype bleed. The failure was therefore kept entirely Blob-owned; shared audio and the other visualizer modes were not retuned.
+- **Mighty root causes:**
+  - scalar pulse coefficients could move the complete radius by far more pixels than the contour, making a functioning profile look like a size-only reaction
+  - the Blob-local energy compressor collapsed much of the useful `0.5..1.5` live range, while autonomous phase breathing accounted for too much of the remaining motion
+  - target rounding, slew, spring smoothing, and shader sampling formed a multi-stage attenuation stack
+  - inward and outward containment were coupled, so one protected inward valley reduced every outward tendril
+  - the solved contour was passed through nonlinear containment a second time on every frame, erasing more than half of quiet-to-hot transfer
+  - an angle-varying hard solver floor rebuilt from the living base then clipped dozens of samples, producing flat/cut shoulder junctions even though the target was already safe
+- **Shaped root causes:** the authored reaction goal saturated too early, unconditional goal-floor mixing made it nearly static during sustained audio, residual mutation authority was sub-pixel after solver smoothing, and some transient routes consumed continuous pressure rather than the actual Blob transient envelopes.
+- **Settings-authority contributors:** subtype sliders could leave a curated preset authoritative instead of switching to Custom, and the typed visualizer setter serialized dotted keys one at a time with `blob_type` late. Normalization could therefore strip the incoming subtype values before the type flip completed, making valid edits appear dead or reset.
+- **Final fixes:**
+  - both concrete Blob programs now consume one 128-sample CPU-solved profile directly; Mighty has no post-profile amplifier or circular support floor
+  - Mighty uses a wider Blob-local energy mapping, fixed/slow-sway organic tendrils that grow and relax at anchored sites, reduced scalar pulse authority, one-time target rounding, independent containment authority, faster target/spring response, no post-solver re-fit, and a global `0.84` solver safety floor instead of the angle-varying clamp
+  - Shaped uses anchored amplitude-breathing warps, stronger bounded mutation beyond the authored goal, real transient envelopes, lighter music-driven tendril tips, responsive release, and zero-shift-dominant motion rather than traveling deformation phases
+  - subtype controls switch curated authority to Custom before saving, and visualizer settings are written as one normalized section so the new `blob_type` and its owned values commit atomically
+  - subtype state, shader programs, presets, settings, and diagnostic profiles remain Blob-owned; no shared audio contract changed
+- **Measurable closure evidence:**
+  - a high-authority 128-sample Mighty stress vector retains `99.89%` of quiet-to-hot target motion through the settled runtime solver; the representative contour moves about `16.96 px RMS / 36.49 px max` on a 940 px inner card, isolated Stretch reaches about `21.77 px`, and the scalar pulse delta is about `33.99 px` rather than overwhelming contour motion by an order of magnitude
+  - Mighty attack reaches `90%` in about `0.32 s`, release returns to `10%` in about `0.42 s`, every tested temporal pair prefers circular shift `0/128`, and the idle/quiet contour remains materially non-circular
+  - representative 128-sample Shaped authored cases mutate beyond their no-motion goal by more than `0.075` profile units (at least `13.5 px` at a 180 px contour radius), move at fixed angles over time, remain bounded, and preserve their authored goal identity
+- **Regression bars:** `tests/test_blob_unshaped_geometry.py`, `tests/test_blob_shaper_plumbing.py`, `tests/test_blob_pockets.py`, `tests/test_blob_intensity_reserve.py`, `tests/test_blob_inward_liquid.py`, `tests/test_blob_type_runtime.py`, `tests/test_blob_shader_compile.py`, `tests/test_visualizer_reactivity_quality.py`, `tests/test_visualizer_overlay_kwargs.py`, `tests/test_overlay_render_dispatch.py`, `tests/test_startup_shader_warmup.py`, `tests/test_settings_manager.py -k blob`, `tests/test_widgets_tab.py -k blob`, and `tests/test_visualizer_settings_plumbing.py -k blob`.
+- **Keep-closed rule:** measure target-to-runtime transfer, fixed-angle motion, pixel-scale mutation, and circular-shift preference. Helper variance or a large static profile spread is not sufficient. Do not lock the temporary showcase presets' exact creative JSON as the behavior contract; use synthetic controls/nodes that reproduce the failure shape, while preset tests remain responsible for schema and slot integrity.
+- **Runtime validation target:** under `-devblob`, confirm Mighty visibly grows and releases rounded tendrils without a circular center or cut-like shoulders, and confirm Shaped visibly mutates around—then returns to—its authored goal. Check startup, settings round-trip, hot subtype switches, curated payloads, and Custom. A clean result must not add shared-mode reactivity drift or first-frame poison.
 
 <a id="R-35"></a>
 ### [R-35] 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)
@@ -901,6 +935,12 @@ This is the long-term anti-regression record for the project, not an active task
   - First non-zero display bars have `display_source_generation` and `display_source_activation` matching current `engine_generation` and `engine_activation`
   - Overlay generation/activation match engine generation/activation
   - No stale activation detected
+- **2026-07-11 Bubble/Spectrum settings-roundtrip sanity recheck:**
+  - Bubble loaded identical `Preset 1 (Deep Sea)` technical values before entering Settings and after the settings rebuild, received fresh generation/activation ownership, created a new simulation, and returned to comparable visible drift/reactivity. The one weak post-settings sample followed an explicit paused interval and the normal roughly 1.5-second playback-resume ramp; it was not poisoned state.
+  - Spectrum hot activation and post-settings recreation both cleared runtime bars before accepting fresh frames. Their first visible measurements were close (`0.823/0.648` versus `0.808/0.620`), and floor/AGC settling was likewise equivalent (`0.430/0.040 -> 0.536/0.999` versus `0.430/0.036 -> 0.534/1.000`).
+  - No `FIRST_FRAME_GUARD`, `PARITY`, technical replay miss, shader fallback, stale-frame warning, or asymmetric cadence collapse appeared in these passes.
+  - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summary lines can continue after switching to Spectrum or Blob because the diagnostics dictionary is not immediately cleared/gated. In the audited logs no Bubble simulation, drift, or dispatch continued; these lines are stale telemetry only and must not be classified as cross-mode runtime poison without corresponding Bubble execution evidence.
+  - `[FIRST_FRAME_PRIMER]` with stale overlay generation/activation is the guard doing its job before the first authoritative push. Treat it as poison only if current generation/activation authority fails to replace the stale payload, or if it is accompanied by a guard/parity/stale-commit failure.
 - **Keep-closed checks:**
   - Targeted tests:
     - `tests/test_spotify_visualizer_widget.py -k "first_frame_guard or before_first_overlay_push_logs_once_per_source_signature or runtime_switch_paths_reset_all_bleed_state_for_all_modes or mode_switch_synthetic_audio_matches_fresh_worker_after_reset or widget_manager_preset_cycle_discards_real_engine_bleed_state or mode_switch_discards_stale_audio_buffer_before_next_frame"`
@@ -965,7 +1005,7 @@ This is the long-term anti-regression record for the project, not an active task
 - 04/15 Status: Bubble is fine, Blob issues appear to be different at the moment. Keep as partial until sign off that Blob is perfect.
 - **Current symptom family:** Bubble and Blob have repeatedly fallen into two opposite but related failure states:
   - shared smoothed/post-AGC pressure makes them feel dead, flattened, and visually stuck in hold-like states
-  - rescuing them with hotter pre-AGC/raw pressure through the old downstream math flips the failure mode into Bubble max-size pinning / jerky speed and non-shaped Blob blowout / judder
+  - rescuing them with hotter pre-AGC/raw pressure through the old downstream math flips the failure mode into Bubble max-size pinning / jerky speed and Mighty Blob (historically called non-shaped Blob) blowout / judder
 - **Newly confirmed sub-trap (2026-04-10):** even after separating continuous support from burst/stage math, stale scheduler events could still be replayed as if they were fresh accents every frame:
   - Bubble was polling `peek_latest("snare")` / `peek_latest("vocal_swell")` inside `BubbleSimulation`, which let one recent event keep re-authorizing burst / overdrive
   - Blob handoff was also using `peek_latest(...)` when building the live overlay payload, which let the same scheduled event keep heating stage/event lanes across multiple frames
@@ -1087,7 +1127,7 @@ This is the long-term anti-regression record for the project, not an active task
   - splitting Bubble startup handling by axis family; the user explicitly rejected “horizontal gets one boot rule, vertical gets another” as a product direction because both families exhibit the same startup defect
   - allowing big-bubble grouping logic to drift toward “everything can overlap a bit” uniformity. That erased an older healthy visual rule: big bubbles should largely avoid other big bubbles, while smalls are the permissive cluster/noise layer
 - **Intended solution direction:** preserve the hit readability gained from pre-AGC routing, but solve the root signal-contract mismatch with bounded attack/release, plateau protection, ceiling control, and consume-once event ownership in the downstream math / handoff seam.
-- **Validation needed:** Bubble should remain lively without living at max big-bubble size, giant specular sizing, overdrive hold for seconds at a time, or visible refill-wave pile-ups, and non-shaped Blob should stay reactive/organic without constant hot-state blowout, 24/7 max-glow behavior, or inward pinches severe enough to read as a geometric failure.
+- **Validation needed:** Bubble should remain lively without living at max big-bubble size, giant specular sizing, overdrive hold for seconds at a time, or visible refill-wave pile-ups, and Mighty Blob (historically called non-shaped Blob) should stay reactive/organic without constant hot-state blowout, 24/7 max-glow behavior, or inward pinches severe enough to read as a geometric failure.
 - **Loop-avoidance lessons to preserve:**
   - when Bubble or Blob regress, first identify whether the failure is continuous-path contract, stale event reuse, refill cadence, or geometry floor. Do not throw all four into one tuning bucket.
   - do not call the issue solved merely because one half of the opposite-failure pair disappeared.

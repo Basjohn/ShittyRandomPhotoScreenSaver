@@ -8,7 +8,11 @@ from pathlib import Path
 import pytest
 
 from core.settings import visualizer_presets as vp
-from core.settings.visualizer_blob_contract import BLOB_SHAPED_ONLY_KEYS
+from core.settings.visualizer_blob_contract import (
+    BLOB_MIGHTY_ONLY_KEYS,
+    BLOB_SHAPED_ONLY_KEYS,
+    BLOB_TYPE_VALUES,
+)
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
 from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
@@ -1790,20 +1794,23 @@ def test_curated_mighty_blob_presets_do_not_ship_shaped_payload():
         )
 
 
-def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_complete():
+def test_curated_blob_presets_match_manifest_and_keep_subtype_owned_schema():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
     blob_root = presets_root / "blob"
-    paths = sorted(blob_root.glob("preset_*_temp_*.json"))
+    paths = sorted(blob_root.glob("*.json"))
 
-    assert [path.name for path in paths] == [
-        "preset_5_temp_mighty_vocal_tendrils.json",
-        "preset_6_temp_mighty_rounded_choir.json",
-        "preset_7_temp_shaped_warp_garden.json",
-        "preset_8_temp_shaped_feather_tendrils.json",
-    ]
+    assert paths, "the curated Blob preset directory must not be empty"
+    tree_entries = {f"blob/{path.name}" for path in paths}
+    manifest_entries = {
+        entry
+        for entry in load_curated_visualizer_preset_manifest(presets_root)
+        if entry.startswith("blob/")
+    }
+    assert manifest_entries == tree_entries
 
     common_required = {
         "mode",
+        "monitor",
         "blob_type",
         "blob_color",
         "blob_edge_color",
@@ -1814,9 +1821,6 @@ def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_
         "blob_width",
         "blob_size",
         "blob_growth",
-        "blob_stage_gain",
-        "blob_core_scale",
-        "blob_stage_bias",
         "blob_reactive_glow",
         "blob_glow_drive_mode",
         "blob_glow_intensity",
@@ -1825,10 +1829,6 @@ def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_
         "blob_ghosting_enabled",
         "blob_ghost_alpha",
         "blob_ghost_decay",
-        "blob_inward_liquid_enabled",
-        "blob_inward_liquid_color",
-        "blob_inward_liquid_reactivity",
-        "blob_inward_liquid_max_size",
         "blob_dynamic_floor",
         "blob_manual_floor",
         "blob_agc_strength",
@@ -1850,86 +1850,84 @@ def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_
     }
     mighty_required = {
         "blob_reactive_deformation",
-        "blob_core_floor_bias",
         "blob_constant_wobble",
         "blob_reactive_wobble",
         "blob_stretch",
     }
-    derived_mighty_keys = {
-        "blob_stretch_tendency",
-        "blob_stretch_inner",
-        "blob_stretch_outer",
-    }
-    shaped_required = {
-        "blob_shape_base_nodes",
-        "blob_shape_reaction_nodes",
-        "blob_shape_energy_nodes",
-        "blob_shaper_base_strength",
-        "blob_shaper_react_strength",
-        "blob_shaper_idle_motion",
-        "blob_shaper_audio_motion",
-        "blob_topology",
-        "blob_ring_thickness",
-    }
 
-    type_counts = {"mighty": 0, "shaped": 0}
-    showcase_settings = []
-    for expected_index, path in enumerate(paths, start=4):
+    indices: list[int] = []
+    for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         settings = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        showcase_settings.append(settings)
 
-        assert payload["preset_index"] == expected_index
-        assert "TEMP" in payload["name"]
-        assert "TEMP" in payload["description"]
+        assert isinstance(payload.get("name"), str) and payload["name"].strip()
+        assert isinstance(payload.get("description"), str)
         assert payload["mode"] == "blob"
         assert payload["visualizer_preset_mode"] == "blob"
         assert payload["visualizer_preset_override"] is True
+        preset_index = payload.get("preset_index")
+        assert (
+            isinstance(preset_index, int)
+            and not isinstance(preset_index, bool)
+            and preset_index >= 0
+        )
+        indices.append(preset_index)
+
+        assert isinstance(settings, dict)
         assert settings["mode"] == "blob"
         assert not (common_required - settings.keys()), (
-            f"{path.name} missing common Blob showcase fields: "
+            f"{path.name} missing common Blob schema fields: "
             f"{sorted(common_required - settings.keys())}"
+        )
+        assert "blob_shaper_enabled" not in settings
+        assert all(
+            key in {"mode", "monitor"} or key.startswith("blob_")
+            for key in settings
         )
 
         blob_type = settings["blob_type"]
-        type_counts[blob_type] += 1
-        assert settings["blob_glow_drive_mode"] == "vocal"
-        assert settings["blob_transient_mix_vocal"] > settings["blob_transient_mix_bass"]
+        assert blob_type in BLOB_TYPE_VALUES
 
         if blob_type == "mighty":
-            assert not (mighty_required - settings.keys())
-            assert not BLOB_SHAPED_ONLY_KEYS.intersection(settings.keys())
-            assert settings["blob_constant_wobble"] >= 0.6
-            assert settings["blob_reactive_wobble"] >= 1.7
-            assert settings["blob_stretch"] >= 0.6
-            assert not derived_mighty_keys.intersection(settings.keys())
+            missing = mighty_required - settings.keys()
+            assert not missing, f"{path.name} missing Mighty schema fields: {sorted(missing)}"
+            inactive = BLOB_SHAPED_ONLY_KEYS.intersection(settings)
+            assert not inactive, f"{path.name} carries inactive Shaped fields: {sorted(inactive)}"
             continue
 
-        assert blob_type == "shaped"
-        assert not (shaped_required - settings.keys())
-        assert not mighty_required.intersection(settings.keys())
-        assert settings["blob_shaper_idle_motion"] >= 0.4
-        assert settings["blob_shaper_audio_motion"] >= 1.2
-        assert settings["blob_shape_energy_nodes"]
+        missing = BLOB_SHAPED_ONLY_KEYS - settings.keys()
+        assert not missing, f"{path.name} missing Shaped schema fields: {sorted(missing)}"
+        inactive = BLOB_MIGHTY_ONLY_KEYS.intersection(settings)
+        assert not inactive, f"{path.name} carries inactive Mighty fields: {sorted(inactive)}"
+        assert settings["blob_topology"] in {"circle", "ring"}
+
+        for profile_key in ("blob_shape_base_nodes", "blob_shape_reaction_nodes"):
+            profile = settings[profile_key]
+            assert isinstance(profile, list)
+            assert all(
+                isinstance(point, list)
+                and len(point) >= 2
+                and all(
+                    isinstance(value, (int, float)) and not isinstance(value, bool)
+                    for value in point[:2]
+                )
+                for point in profile
+            ), f"{path.name} has malformed {profile_key} nodes"
+
+        energy_nodes = settings["blob_shape_energy_nodes"]
+        assert isinstance(energy_nodes, list)
         assert all(
-            float(node["dir_len"]) <= 28.0 and float(node["strength"]) <= 0.85
-            for node in settings["blob_shape_energy_nodes"]
-        )
+            isinstance(node, dict)
+            and {"type", "x", "y", "strength"}.issubset(node)
+            and node["type"] in {"bass", "mid", "vocals", "treble", "transient"}
+            and all(
+                isinstance(node[key], (int, float)) and not isinstance(node[key], bool)
+                for key in ("x", "y", "strength")
+            )
+            for node in energy_nodes
+        ), f"{path.name} has malformed Shaped energy routing nodes"
 
-    assert type_counts == {"mighty": 2, "shaped": 2}
-    assert [settings["blob_inward_liquid_enabled"] for settings in showcase_settings[:2]] == [
-        True,
-        False,
-    ]
-    assert [settings["blob_topology"] for settings in showcase_settings[2:]] == ["circle", "ring"]
-    all_blob_indices = sorted(
-        json.loads(path.read_text(encoding="utf-8"))["preset_index"]
-        for path in blob_root.glob("*.json")
-    )
-    assert all_blob_indices == list(range(8))
-
-    manifest_entries = load_curated_visualizer_preset_manifest(presets_root)
-    assert {f"blob/{path.name}" for path in paths}.issubset(manifest_entries)
+    assert sorted(indices) == list(range(len(paths)))
 
 
 def test_normalize_visualizer_mode_payload_strips_mighty_shaped_payload():

@@ -439,13 +439,6 @@ def build_unshaped_blob_target_profile(
     high = max(0.0, float(high_energy))
     overall = max(0.0, float(overall_energy))
     smoothed = max(0.0, float(smoothed_energy))
-    stage_floor = compute_stage_floor_fraction(
-        core_floor_bias=core_floor_bias,
-        stage1_t=stage1_t,
-        stage2_t=stage2_t,
-        stage3_t=stage3_t,
-    )
-
     base_profile: list[float] = []
     target_profile: list[float] = []
     for idx in range(count):
@@ -509,7 +502,11 @@ def build_unshaped_blob_target_profile(
     # Give the solved contour more authority over the silhouette while keeping
     # it card-contained.  Mighty has a hard ~0.84 inward limit and a larger
     # outward reserve for musical tendrils.
-    min_allowed = max(0.84, stage_floor * 0.92)
+    # Core Floor already follows the living organic base inside
+    # ``compute_unshaped_radius_multiplier``.  Keep containment's absolute
+    # safety floor global so increasing the control can never expose a second
+    # constant-radius circle beneath that organic floor.
+    min_allowed = 0.84
     max_allowed = min(1.58, 1.34 + stage1_t * 0.060 + stage2_t * 0.080 + stage3_t * 0.100)
     bounded = _fit_profile_inside_containment(
         target_profile,
@@ -596,13 +593,13 @@ def solve_unshaped_blob_profile_step(
     if len(current_velocity) != count:
         current_velocity = [0.0] * count
 
-    stage_floor = compute_stage_floor_fraction(
-        core_floor_bias=core_floor_bias,
-        stage1_t=stage1_t,
-        stage2_t=stage2_t,
-        stage3_t=stage3_t,
-    )
-    min_profile = [max(0.84, base_profile[idx] * max(0.84, stage_floor)) for idx in range(count)]
+    # Core-floor bias has already been applied through the differentiable
+    # organic floor while constructing each target sample.  Rebuilding an
+    # angle-varying hard floor from ``base_profile`` here clipped the solved
+    # curve at dozens of samples and created cut-like shoulder junctions.
+    # The global safety floor is sufficient because target containment has
+    # already bounded every sample and the solver clamps against this list.
+    min_profile = [0.84] * count
     max_profile = [min(1.58, max(base_profile[idx] + 0.58, target_profile[idx] + 0.22)) for idx in range(count)]
     solved_profile, solved_velocity = solve_profile_step(
         current_profile=current_profile,
@@ -616,12 +613,11 @@ def solve_unshaped_blob_profile_step(
         neighbor_strength=3.0 if playing else 4.0,
         smoothing_passes=0,
     )
-    solved_profile = _fit_profile_inside_containment(
-        solved_profile,
-        min_allowed=min(min_profile),
-        max_allowed=max(max_profile),
-        center=1.0,
-    )
+    # The target has already passed through Mighty containment and the solver
+    # clamps every sample to its own safe interval.  Re-fitting the solved
+    # contour through tanh here compounded on every frame: it erased more than
+    # half of quiet-to-hot motion and turned protected inward regions into
+    # near-constant-radius arcs.  Keep the spring result authoritative.
     return (base_profile, raw_target_profile, target_profile, solved_profile), solved_velocity
 
 
@@ -882,13 +878,23 @@ def compute_stage_floor_fraction(
     stage2_t: float,
     stage3_t: float,
 ) -> float:
-    """Return the preserved radius fraction enforced by the core floor clamp."""
+    """Return the organic-base fraction preserved by Mighty Core Floor.
 
-    bias = _clamp(core_floor_bias, 0.0, 0.95)
-    bias += stage1_t * 0.05
-    bias += stage2_t * 0.08
-    bias += stage3_t * 0.12
-    return _clamp(bias, 0.0, 0.9)
+    The exposed range is ``0..0.6``.  Treating that value as the fraction
+    directly left ordinary presets below Mighty's absolute ``0.84`` safety
+    floor, so the control was effectively inert.  Map it into the useful
+    organic range instead: zero keeps the existing safety behavior, while
+    higher values progressively retain more of the angle-varying living base.
+    Stage support adds a small intensity-dependent brace without ever
+    becoming a constant circular floor.
+    """
+
+    bias = _clamp(core_floor_bias, 0.0, 0.6)
+    preserved = 0.80 + bias * 0.20
+    preserved += _clamp(stage1_t, 0.0, 1.0) * 0.01
+    preserved += _clamp(stage2_t, 0.0, 1.0) * 0.02
+    preserved += _clamp(stage3_t, 0.0, 1.0) * 0.03
+    return _clamp(preserved, 0.80, 0.96)
 
 
 def compute_stage_offset(
@@ -929,9 +935,9 @@ def compute_stage_offset(
     # not read as "a big pulse that happens to wobble"; stage is support, not
     # the main silhouette author.
     stage_unit = base_size * 0.11 + 0.012
-    stage1_amt = stage_unit * 0.70
-    stage2_amt = stage_unit * 1.52
-    stage3_amt = stage_unit * 2.70
+    stage1_amt = stage_unit * 0.58
+    stage2_amt = stage_unit * 1.22
+    stage3_amt = stage_unit * 2.10
 
     offset = stage1_t * stage1_amt
     offset += stage2_t * max(0.0, stage2_amt - stage1_amt)

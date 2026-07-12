@@ -1,6 +1,6 @@
 {
   "mode": "blob",
-  "name": "Preset 5 (Temp Mighty Vocal Tendrils)",
+  "name": "Preset 5 (TEMP Mighty Vocal Tendrils)",
   "preset_index": 4,
   "visualizer_preset_override": true,
   "visualizer_preset_mode": "blob",
@@ -48,9 +48,6 @@
         "blob_core_scale": 0.96,
         "blob_core_floor_bias": 0.42,
         "blob_stage_bias": -0.08,
-        "blob_stretch_tendency": 0.74,
-        "blob_stretch_inner": 0.0,
-        "blob_stretch_outer": 0.74,
         "blob_glow_reactivity": 0.87,
         "blob_glow_max_size": 0.95,
         "blob_ghosting_enabled": true,
@@ -99,5 +96,5 @@
       }
     }
   },
-  "description": "Saved from current Settings state."
+  "description": "TEMP showcase: the user-tuned high-authority Mighty stress case, with broad grow-and-release tendrils, strong vocal contour wobble, and deliberately secondary whole-body pulse."
 }

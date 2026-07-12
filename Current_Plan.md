@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-10
+Last updated: 2026-07-12
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -15,16 +15,6 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Before touching shared visualizer/audio/activation/render/transition seams, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`.
 
 ## Active Tasks
-
-### Blob Mighty / Shaped Architecture Split, Dev-Gated
-
-- [ ] Establish one explicit, preset-owned Blob type contract (`mighty` / `shaped`) with forward migration from the legacy shaper toggle and `normal` / `unshaped` aliases, plus clean replace semantics across defaults, model, snapshot normalization, curated/custom presets, import/export, startup, and hot preset switching.
-- [ ] Split Blob settings construction and binding into shared appearance/layout controls plus dedicated Mighty Blob and Shaped Blob custom builders; expose the Blob type as the high-level choice and show only the selected type's controls.
-- [ ] Split Blob runtime ownership into dedicated Mighty and Shaped render paths and shaders while keeping shared audio, activation, overlay cadence, and healthy visualizer modes neutral and unchanged.
-- [ ] Rebuild Mighty Blob around the older organic contract: constant living wobble plus music-reactive wobble/tendril extension, bounded inward motion that never reveals a raw circle or deep pinch, smooth release, and visibly reactive inner paint.
-- [ ] Rebuild Shaped Blob around authored-contour fidelity plus bounded music-reactive wobble, local deviations, and moderate mutations that return cleanly to the goal shape.
-- [ ] Reset subtype-owned solver/profile/ghost state at activation and Blob-type boundaries so startup, settings refresh, curated preset apply, custom preset apply, and runtime cycling cannot inherit the other Blob type's state.
-- [ ] Add preset/model/UI/runtime/shader regressions and authored synthetic-audio oracles for both Blob types; run the pre/post current-good visualizer lock, focused Blob suite, preset audit, defaults parity, and documentation drift pass.
 
 ### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
 

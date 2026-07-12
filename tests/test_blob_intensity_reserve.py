@@ -6,10 +6,13 @@ predictable and monotonic.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from widgets.spotify_visualizer.blob_math import (
     compute_blob_radius_preview,
+    compute_stage_offset,
     compute_stage_progress,
     compute_unshaped_radius_multiplier,
 )
@@ -44,11 +47,11 @@ def _baseline_radius(**overrides: float) -> float:
     pulse = max(0.0, params["blob_pulse"])
     se = max(0.0, min(1.0, params["smoothed_energy"]))
     r = 0.31 * blob_size
-    r += bass * bass * 0.024 * pulse
-    r += bass * 0.028 * pulse
+    r += bass * bass * 0.008 * pulse
+    r += bass * 0.009 * pulse
     breath = max(bass, se * 0.82)
-    r += max(0.02, breath) * 0.010 * pulse
-    r -= (1.0 - se) * 0.012 * pulse
+    r += max(0.02, breath) * 0.004 * pulse
+    r -= (1.0 - se) * 0.004 * pulse
     return r
 
 
@@ -82,6 +85,33 @@ def test_stage_gain_scales_linearly() -> None:
     delta_b = _radius(stage_gain=1.6, **params) - baseline
     assert delta_a > 0.0
     assert delta_b == pytest.approx(delta_a * 2.0, rel=1e-6)
+
+
+def test_stage_preview_uses_the_same_restrained_ladder_as_blob_shader() -> None:
+    stage_unit = 1.0 * 0.11 + 0.012
+    cpu_offset = compute_stage_offset(
+        blob_size=1.0,
+        bass_energy=1.0,
+        mid_energy=1.0,
+        high_energy=1.0,
+        overall_energy=1.0,
+        stage_gain=1.0,
+        core_scale=1.0,
+        smoothed_energy=1.0,
+        stage_progress_override=(1.0, 1.0, 1.0),
+    )
+    assert cpu_offset == pytest.approx(stage_unit * 2.10)
+
+    shader_source = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_visualizer"
+        / "shaders"
+        / "blob.frag"
+    ).read_text(encoding="utf-8")
+    assert "float stage1_amt = stage_unit * 0.58;" in shader_source
+    assert "float stage2_amt = stage_unit * 1.22;" in shader_source
+    assert "float stage3_amt = stage_unit * 2.10;" in shader_source
 
 
 def test_core_scale_multiplies_all_stages() -> None:

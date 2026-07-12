@@ -1,7 +1,6 @@
 """Regression tests for Blob Shaper plumbing — persistence, runtime, renderer."""
 from __future__ import annotations
 
-import json
 import math
 from pathlib import Path
 import pytest
@@ -1059,51 +1058,191 @@ class TestBlobShaperRenderer:
         assert max(solved) - min(solved) > 0.12
 
     @pytest.mark.parametrize(
-        "preset_glob,min_mutation,min_temporal",
+        "case",
         (
-            ("preset_7_temp_shaped_*.json", 0.085, 0.035),
-            ("preset_8_temp_shaped_*.json", 0.060, 0.024),
+            pytest.param(
+                {
+                    "base_nodes": [
+                        [0.00, 1.04],
+                        [0.14, 0.90],
+                        [0.29, 1.14],
+                        [0.43, 0.87],
+                        [0.58, 1.08],
+                        [0.72, 0.93],
+                        [0.86, 1.12],
+                    ],
+                    "reaction_nodes": [
+                        [0.00, 1.46],
+                        [0.14, 1.15],
+                        [0.29, 1.58],
+                        [0.43, 1.04],
+                        [0.58, 1.64],
+                        [0.72, 1.18],
+                        [0.86, 1.52],
+                    ],
+                    "energy_nodes": [
+                        {
+                            "canvas": "react",
+                            "type": "vocals",
+                            "x": 0.77,
+                            "y": 0.50,
+                            "strength": 0.86,
+                            "dir_x": 1.0,
+                            "dir_y": 0.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "vocals",
+                            "x": 0.23,
+                            "y": 0.50,
+                            "strength": 0.82,
+                            "dir_x": -1.0,
+                            "dir_y": 0.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "mid",
+                            "x": 0.50,
+                            "y": 0.21,
+                            "strength": 0.74,
+                            "dir_x": 0.0,
+                            "dir_y": -1.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "bass",
+                            "x": 0.50,
+                            "y": 0.80,
+                            "strength": 0.66,
+                            "dir_x": 0.0,
+                            "dir_y": 1.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "transient",
+                            "x": 0.70,
+                            "y": 0.31,
+                            "strength": 0.58,
+                            "dir_x": 0.71,
+                            "dir_y": -0.71,
+                        },
+                    ],
+                    "energies": (0.80, 0.90, 0.65, 0.82, 0.62),
+                    "base_strength": 0.82,
+                    "react_strength": 0.84,
+                    "idle_motion": 0.68,
+                    "audio_motion": 1.80,
+                    "min_mutation": 0.085,
+                    "min_temporal": 0.035,
+                },
+                id="broad-vocal-canopy",
+            ),
+            pytest.param(
+                {
+                    "base_nodes": [
+                        [0.000, 1.03],
+                        [0.125, 0.91],
+                        [0.250, 1.10],
+                        [0.375, 0.96],
+                        [0.500, 1.06],
+                        [0.625, 0.89],
+                        [0.750, 1.12],
+                        [0.875, 0.95],
+                    ],
+                    "reaction_nodes": [
+                        [0.000, 0.76],
+                        [0.125, 1.28],
+                        [0.250, 0.80],
+                        [0.375, 1.34],
+                        [0.500, 0.74],
+                        [0.625, 1.24],
+                        [0.750, 0.82],
+                        [0.875, 1.31],
+                    ],
+                    "energy_nodes": [
+                        {
+                            "canvas": "react",
+                            "type": "bass",
+                            "x": 0.50,
+                            "y": 0.20,
+                            "strength": 0.78,
+                            "dir_x": 0.0,
+                            "dir_y": 1.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "vocals",
+                            "x": 0.80,
+                            "y": 0.50,
+                            "strength": 0.82,
+                            "dir_x": -1.0,
+                            "dir_y": 0.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "treble",
+                            "x": 0.50,
+                            "y": 0.80,
+                            "strength": 0.70,
+                            "dir_x": 0.0,
+                            "dir_y": -1.0,
+                        },
+                        {
+                            "canvas": "react",
+                            "type": "transient",
+                            "x": 0.20,
+                            "y": 0.50,
+                            "strength": 0.75,
+                            "dir_x": 1.0,
+                            "dir_y": 0.0,
+                        },
+                    ],
+                    "energies": (0.90, 0.72, 0.88, 0.84, 0.95),
+                    "base_strength": 0.76,
+                    "react_strength": 0.74,
+                    "idle_motion": 0.50,
+                    "audio_motion": 1.45,
+                    "min_mutation": 0.075,
+                    "min_temporal": 0.030,
+                },
+                id="alternating-inward-bays",
+            ),
         ),
     )
-    def test_temp_shaped_presets_add_pixel_scale_motion_beyond_authored_goal(
+    def test_synthetic_shaped_authored_cases_add_pixel_scale_motion_beyond_goal(
         self,
-        preset_glob: str,
-        min_mutation: float,
-        min_temporal: float,
+        case: dict[str, object],
     ):
         from widgets.spotify_visualizer.renderers.blob import (
             _build_energy_routing,
             _resample_nodes,
         )
 
-        preset_dir = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
-        preset_path = next(preset_dir.glob(preset_glob))
-        config = json.loads(preset_path.read_text(encoding="utf-8"))["snapshot"]["widgets"][
-            "spotify_visualizer"
-        ]
         count = 128
-        base_profile = _resample_nodes(config["blob_shape_base_nodes"], count)
-        react_profile = _resample_nodes(config["blob_shape_reaction_nodes"], count)
+        base_profile = _resample_nodes(case["base_nodes"], count)
+        react_profile = _resample_nodes(case["reaction_nodes"], count)
         weights = _build_energy_routing(
-            config["blob_shape_energy_nodes"],
+            case["energy_nodes"],
             count,
             base_profile=base_profile,
             react_profile=react_profile,
         )
+        bass, mid, high, overall, transient = case["energies"]
         times = [(idx + 1) * 0.05 for idx in range(120)]
         active = self._simulate_runtime_profile_series(
             base_profile=base_profile,
             react_profile=react_profile,
             weights=weights,
             times=times,
-            bass_energy=0.80,
-            mid_energy=0.90,
-            high_energy=0.65,
-            overall_energy=0.82,
-            shaper_idle_motion=config["blob_shaper_idle_motion"],
-            shaper_audio_motion=config["blob_shaper_audio_motion"],
-            base_strength=config["blob_shaper_base_strength"],
-            react_strength=config["blob_shaper_react_strength"],
+            bass_energy=bass,
+            mid_energy=mid,
+            high_energy=high,
+            overall_energy=overall,
+            transient_energy=transient,
+            shaper_idle_motion=case["idle_motion"],
+            shaper_audio_motion=case["audio_motion"],
+            base_strength=case["base_strength"],
+            react_strength=case["react_strength"],
             playing=True,
         )
         authored_goal_only = self._simulate_runtime_profile_series(
@@ -1111,14 +1250,15 @@ class TestBlobShaperRenderer:
             react_profile=react_profile,
             weights=weights,
             times=times,
-            bass_energy=0.80,
-            mid_energy=0.90,
-            high_energy=0.65,
-            overall_energy=0.82,
+            bass_energy=bass,
+            mid_energy=mid,
+            high_energy=high,
+            overall_energy=overall,
+            transient_energy=transient,
             shaper_idle_motion=0.0,
             shaper_audio_motion=0.0,
-            base_strength=config["blob_shaper_base_strength"],
-            react_strength=config["blob_shaper_react_strength"],
+            base_strength=case["base_strength"],
+            react_strength=case["react_strength"],
             playing=True,
         )
 
@@ -1139,10 +1279,10 @@ class TestBlobShaperRenderer:
             for idx in range(count)
         )
 
-        # The mutation alone represents at least 11 px at a representative
+        # The weaker case must still move at least 13.5 px at a representative
         # 180 px contour radius, independently of reaching the authored goal.
-        assert min_mutation < mutation_beyond_goal < 0.16
-        assert temporal_delta > min_temporal
+        assert case["min_mutation"] < mutation_beyond_goal < 0.16
+        assert temporal_delta > case["min_temporal"]
         assert fixed_angle_range > 0.018
         assert min(runtime_profile) > 0.08
         assert max(runtime_profile) < 1.95

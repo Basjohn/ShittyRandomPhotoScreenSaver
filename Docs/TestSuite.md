@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-07-11
+Last updated: 2026-07-12
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -30,10 +30,21 @@ python -m pytest `
   tests/test_blob_type_runtime.py `
   tests/test_blob_unshaped_geometry.py `
   tests/test_blob_shaper_plumbing.py `
+  tests/test_blob_pockets.py `
+  tests/test_blob_intensity_reserve.py `
+  tests/test_blob_inward_liquid.py `
   tests/test_blob_shader_compile.py `
+  tests/test_visualizer_reactivity_quality.py `
+  tests/test_visualizer_overlay_kwargs.py `
+  tests/test_overlay_render_dispatch.py `
+  tests/test_startup_shader_warmup.py `
   tests/test_visualizer_presets.py `
   tests/test_visualizer_preset_cycling_runtime.py `
   -q --tb=short
+```
+- Blob settings-authority slice:
+```powershell
+python -m pytest tests/test_settings_manager.py tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q --tb=short
 ```
 
 ## 3. High-Value Regression Areas
@@ -88,11 +99,19 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_blob_type_runtime.py`
   Mighty/Shaped renderer-program selection, subtype ownership fencing, selected-subtype-only GPU extras, full subtype-boundary state reset, and shared reactive inner-paint shader contract.
 - `tests/test_blob_unshaped_geometry.py`
-  Mighty organic contour continuity, non-circular idle shape, rich harmonics, outward-biased tendrils, stable body mean, and bounded local pocket response.
+  Mighty 128-sample organic contour continuity, non-circular idle shape, rich harmonics, outward-biased anchored tendrils, stable body mean, bounded local pocket response, hot-range dynamics above `1.0`, zero-shift-dominant growth/relaxation, and high-authority target-to-settled solver transfer without repeated containment or angle-varying floor attenuation.
 - `tests/test_blob_shaper_plumbing.py`
-  Shaped authored-contour/routing/solver behavior, bounded living/music mutation and release, Mighty/Shaped config transport fences, ring behavior, and renderer uniform ownership.
+  Shaped authored-contour/routing/solver behavior, 128-sample pixel-scale mutation beyond the authored no-motion goal, fixed-angle living/music motion, bounded neighbor steps and release, zero-shift-dominant growth rather than orbiting, Mighty/Shaped config transport fences, ring behavior, and renderer uniform ownership.
+- `tests/test_blob_pockets.py`
+  Mighty fixed-family pocket anchors, attack/decay, stable slot reuse, and rounded local event growth rather than successive-hit orbiting.
+- `tests/test_blob_intensity_reserve.py`
+  Blob intensity/stage reserve, bounded means, and pressure headroom without scalar-size saturation replacing contour work.
+- `tests/test_blob_inward_liquid.py`
+  Blob-owned inward-liquid geometry/reactivity and its isolation from the main contour contract.
 - `tests/test_blob_shader_compile.py`
   Headless compile and link bars for both concrete Blob shader programs.
+- `tests/test_settings_manager.py`, `tests/test_widgets_tab.py`, `tests/test_visualizer_settings_plumbing.py`
+  Blob subtype changes commit `blob_type` and owned values atomically, subtype sliders leave curated authority for Custom before save, and the visible Settings controls round-trip through the runtime bridge instead of appearing to accept edits that normalization later strips.
 - `tests/test_gmail_oauth.py`
   Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
@@ -190,6 +209,9 @@ When changing visualizer settings/contracts, include tests for:
 - Blob changes must prove that only `mighty` / `shaped` serialize, legacy `normal` / `unshaped` / `blob_shaper_enabled` migrate without re-emission, and preset/custom normalization removes the inactive subtype's creative fields while retaining shared appearance fields.
 - Blob runtime changes must prove distinct `blob_mighty` / `blob_shaped` dispatch, selected-subtype-only GPU payloads, reset of both subtype solver/profile/ghost/pocket families at type boundaries, and successful compile/link of both concrete shader programs.
 - Blob behavior bars must keep Mighty smoothly organic and outward-biased without raw-circle/deep-pinch regressions, keep Shaped mutations bounded around the authored goal with smooth release, and assert shared body-fill paint reactivity independently from the optional inward-liquid effect.
+- **Mighty measurable contour oracle** (`tests/test_blob_unshaped_geometry.py`): use 128 samples and synthetic quiet/hot fixed-phase inputs. Assert meaningful pixel-scale contour and Stretch motion, at least `95%` target-to-settled audio-delta transfer, a non-circular idle profile, bounded attack/release, and circular shift `0` as the best explanation for sustained motion. This specifically guards repeated post-solver containment, angle-varying hard floors, multi-pass attenuation stacks, and scalar-pulse domination.
+- **Shaped measurable goal-mutation oracle** (`tests/test_blob_shaper_plumbing.py`): build synthetic authored base/reaction contours and energy nodes, then compare active runtime against the same authored goal with living/audio motion disabled. Assert mutation beyond goal at representative pixel scale, fixed-angle temporal range, bounded neighbor steps, clean release, and zero-shift-dominant motion. Merely reaching a large authored goal or changing glow is not reactivity.
+- **Poison-log interpretation** (`tests/test_spotify_visualizer_widget.py`, `tests/test_spotify_visualizer_mode_transition.py`, `tests/test_ghost_isolation.py`): `[FIRST_FRAME_PRIMER]` alone means stale overlay ownership was detected before the authoritative first push. It becomes failure evidence only when current generation/activation does not replace it or guard/parity/technical-replay/fallback/stale-commit checks fail. Likewise, cached `[PERF][SPOTIFY_VIS][BUBBLE]` lines after a mode switch are telemetry-only unless Bubble simulation, drift, or dispatch also continues.
 - **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
 - **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that mode/preset-owned growth still drives preferred outer height, blob-width reduction stays media-relative, and top/bottom anchor placement remains correct independently of stencil-shell behavior.
 - **CUSTOM adaptive visualizer sizing** (`tests/test_custom_layout_manager.py`, `tests/test_widget_manager.py`, `tests/test_visualizer_card_geometry.py`): validates that visualizer CUSTOM edit shells use a maximum-envelope footprint for safe alignment, saved CUSTOM payload stores width/height scales, and runtime re-resolves the live mode/preset card size instead of freezing the first captured CUSTOM rect dimensions.
@@ -218,6 +240,7 @@ When changing Gmail widget OAuth/backend, include tests for:
 - Clean up Qt objects/timers in teardown paths.
 - Prefer focused assertions over broad brittle snapshots.
 - Avoid locking tests to artistic preset content unless explicitly intentional.
+- Do not copy temporary Blob showcase preset names or exact creative JSON into behavior tests. Use synthetic controls/nodes that encode the measurable failure shape; keep exact preset assertions limited to schema, subtype ownership, slot/manifest integrity, and intentional migration behavior.
 
 ## 6. Runtime Validation Rule
 For bugs with user-visible rendering/startup/focus behavior:

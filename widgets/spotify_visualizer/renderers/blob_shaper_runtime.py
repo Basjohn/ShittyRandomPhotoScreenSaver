@@ -588,10 +588,12 @@ def _build_shaped_motion_residual_profile(
         )
 
         # Mid/high energy owns a faster standing outline ripple.  This is the
-        # vocal contour wobble, not a colour/glow proxy.
+        # vocal contour wobble, not a colour/glow proxy.  Keep it below the
+        # authored H1/H2 silhouette and below a one-sample corner at the
+        # 128-point transport resolution.
         vocal_wobble = (
-            math.sin(theta * 4.0 + seed * 0.89 + music_sway * 0.30) * 0.62 * vocal_breaths[0]
-            + math.sin(theta * 6.0 - seed * 0.53 - music_sway * 0.20) * 0.38 * vocal_breaths[1]
+            math.sin(theta * 4.0 + seed * 0.89 + music_sway * 0.30) * 0.527 * vocal_breaths[0]
+            + math.sin(theta * 6.0 - seed * 0.53 - music_sway * 0.20) * 0.323 * vocal_breaths[1]
         )
 
         # Three sparse cosine-squared pulls have broad shoulders and rounded
