@@ -233,6 +233,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
+                reuse_fresh=not force,
             )
             refresh_results.append(recent_result)
             if not recent_result.ok:
@@ -255,6 +256,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
+                reuse_fresh=not force,
             ))
             refresh_results.append(_fetch_and_cache(
                 profile_key=profile_key,
@@ -266,6 +268,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
+                reuse_fresh=not force,
             ))
         snapshot = load_achievement_pulse_cache_snapshot(
             profile_key=profile_key,
@@ -287,6 +290,49 @@ def refresh_achievement_pulse_cache(
 
 
 def _fetch_and_cache(
+    *,
+    profile_key: str,
+    cache_key: str,
+    source_id: SteamSourceId,
+    credential: SteamCredentialPayload,
+    profile: str | None,
+    root: Path | None,
+    opener,
+    now: float,
+    appid: int | None = None,
+    reuse_fresh: bool = True,
+) -> SteamResult:
+    from core.steam.cache import get_steam_source_refresh_lock
+
+    with get_steam_source_refresh_lock(profile_key, cache_key):
+        cache_path = cache_path_for_profile_key(
+            profile_key,
+            cache_key,
+            profile=profile,
+            root=root,
+        )
+        cached = read_cache_record(cache_path)
+        if (
+            reuse_fresh
+            and cached.ok
+            and cached.fetched_at is not None
+            and 0.0 <= now - cached.fetched_at < _REFRESH_FRESH_WINDOW_SECONDS
+        ):
+            return cached
+        return _fetch_and_cache_unlocked(
+            profile_key=profile_key,
+            cache_key=cache_key,
+            source_id=source_id,
+            credential=credential,
+            profile=profile,
+            root=root,
+            opener=opener,
+            now=now,
+            appid=appid,
+        )
+
+
+def _fetch_and_cache_unlocked(
     *,
     profile_key: str,
     cache_key: str,
@@ -325,9 +371,6 @@ def _fetch_and_cache(
     result = _refresh_coordinator.complete(handle, fetch_json(endpoint, opener=opener))
     _refresh_backoff.record_result(request_key, result, now=now)
     if result.ok:
-        cached = read_cache_record(cache_path)
-        if cached.ok and cached.source_id == result.source_id and cached.payload == result.payload:
-            return result
         write_success_result(path=cache_path, cache_key=cache_key, result=result, fetched_at=now)
     return result
 

@@ -8,13 +8,13 @@ _POCKET_COUNT = 6
 _KICK_SLOTS = (0, 1)
 _SNARE_SLOTS = (2, 3)
 _HIGH_SLOTS = (4, 5)
-# Each family owns two stable, opposing growth sites.  The old four-angle
-# cursor made every successive hit relocate the deformation, which read as a
-# fixed fan rotating around the body.  Reusing the same site lets its amplitude
-# attack and decay visibly: hits grow a rounded lobe, then the lobe relaxes.
-_KICK_ANGLES = (0.17, 0.67)
-_SNARE_ANGLES = (0.31, 0.81)
-_HIGH_ANGLES = (0.47, 0.97)
+# Each family owns two simultaneous slots but draws new growth sites from a
+# non-monotonic low-discrepancy sequence.  This makes hits birth and retire
+# local lobes instead of scaling the same two silhouettes forever, without a
+# clockwise cursor that would read as whole-body rotation.
+_KICK_ANGLES = (0.17, 0.63, 0.39, 0.88, 0.06, 0.54)
+_SNARE_ANGLES = (0.31, 0.79, 0.53, 0.12, 0.93, 0.42)
+_HIGH_ANGLES = (0.47, 0.97, 0.22, 0.71, 0.36, 0.84)
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:
@@ -138,6 +138,12 @@ def _spawn_pocket(
         pocket.transient_mix = 0.44
         pocket.release_s = 0.26
         state.high_cooldown = 0.018
+
+    # Width variation is deterministic per newly selected site.  It changes
+    # the local lobe vocabulary while preserving the broad kick > snare > high
+    # hierarchy and the zero-slope raised-cosine shoulders downstream.
+    width_variation = 0.96 + ((angle * 13.0) % 1.0) * 0.22
+    pocket.width *= width_variation
 
 
 def advance_blob_pocket_state(

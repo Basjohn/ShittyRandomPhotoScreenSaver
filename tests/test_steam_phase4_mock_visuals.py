@@ -18,6 +18,9 @@ from widgets.steam_components import (
     STEAM_CARD_AUTHORED_SIZE,
     SteamCardField,
     _draw_bottom_right_outside_shadow,
+    achievement_capsule_geometry,
+    achievement_field_rail_count,
+    achievement_pulse_authored_size,
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
     layout_steam_card,
@@ -35,6 +38,24 @@ def _assert_inside(outer: QRectF, inner: QRectF) -> None:
         return
     expanded = QRectF(outer).adjusted(-0.75, -0.75, 0.75, 0.75)
     assert expanded.contains(inner), f"{inner} escaped {outer}"
+
+
+def _achievement_target(*, artwork_shape: str = "wide", field_count: int = 5) -> QRectF:
+    capsule_height, capsule_gap = achievement_capsule_geometry(
+        font_family="Inter",
+        capsule_font_size=12,
+    )
+    size = achievement_pulse_authored_size(
+        show_artwork=True,
+        artwork_shape=artwork_shape,
+        field_rail_count=achievement_field_rail_count(
+            field_count,
+            double_capsules=False,
+        ),
+        capsule_height=capsule_height,
+        capsule_gap=capsule_gap,
+    )
+    return QRectF(0, 0, size.width(), size.height())
 
 
 def _render_to_pixmap(
@@ -129,7 +150,7 @@ def test_steam_layout_rects_stay_inside_target_for_phase4_matrix() -> None:
 def test_steam_header_layout_reserves_room_for_long_card_titles() -> None:
     layout = layout_steam_card(
         build_mock_steam_view_model("achievement_pulse"),
-        QRectF(0, 0, ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(), ACHIEVEMENT_PULSE_AUTHORED_SIZE.height()),
+        _achievement_target(),
     )
 
     assert layout.header_rect.width() >= 250.0
@@ -156,18 +177,8 @@ def test_achievement_pulse_authored_layout_keeps_all_data_regions_separate() -> 
 
 def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -> None:
     model = build_mock_steam_view_model("achievement_pulse")
-    wide_target = QRectF(
-        0,
-        0,
-        ACHIEVEMENT_PULSE_AUTHORED_SIZE.width(),
-        ACHIEVEMENT_PULSE_AUTHORED_SIZE.height(),
-    )
-    square_target = QRectF(
-        0,
-        0,
-        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.width(),
-        ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.height(),
-    )
+    wide_target = _achievement_target(artwork_shape="wide")
+    square_target = _achievement_target(artwork_shape="square")
 
     wide = layout_steam_card(model, wide_target, artwork_shape="wide")
     square = layout_steam_card(model, square_target, artwork_shape="square")
@@ -384,7 +395,7 @@ def test_latest_achievement_artwork_uses_dead_space_without_reflow() -> None:
         build_mock_steam_view_model("achievement_pulse"),
         latest_unlock_icon_url="https://steamcdn-a.akamaihd.net/latest.jpg",
     )
-    target = QRectF(0, 0, 540, 318)
+    target = _achievement_target(artwork_shape="square")
 
     square = layout_steam_card(
         model,

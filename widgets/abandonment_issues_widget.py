@@ -282,6 +282,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 selection=self._abandonment_selection,
                 force=force,
                 rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
+                recent_fresh_seconds=self._refresh_minutes * 60,
             )
             profile_key = derive_profile_cache_key(credential.profile_identifier)
             return outcome, self._prepare_presentation(

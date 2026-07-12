@@ -1,12 +1,12 @@
 # Steam Data Feasibility
 
-Last updated: 2026-07-10
+Last updated: 2026-07-12
 
-This document records the supported-source pass for the Steam widget family. Achievement Pulse is the first normally visible card; the document remains the source gate for unfinished card concepts.
+This document records the supported-source pass for the Steam widget family. Achievement Pulse and Abandonment Issues are normally visible, disabled-by-default cards; this document remains the source gate for Steam Journey and Friend Pulse.
 
 ## Rules
 
-- Achievement Pulse and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Journey, Abandonment Issues, and Friend Pulse prototypes; `steam_progress` remains its compatibility key.
+- Achievement Pulse, Abandonment Issues, and Steam Settings are visible without a development flag. `--devsteam` exposes only Steam Journey and Friend Pulse prototypes; `steam_progress` remains Steam Journey's compatibility key.
 - User Steam API keys/profile identifiers are credentials, not settings.
 - Publisher-key endpoints are excluded from client runtime, even if they would solve a product problem.
 - Unknown/private/unavailable data is a first-class state. Do not infer dates, ownership, friends, or progress from absence.
@@ -26,11 +26,11 @@ This document records the supported-source pass for the Steam widget family. Ach
 | Capability | Source | Status | Usable fields | Privacy / failure behavior | Card impact |
 |---|---|---|---|---|---|
 | Recently played games | `IPlayerService/GetRecentlyPlayedGames/v1` | Conditional | app id, recent playtime, ordered recent app list | Requires user key and profile id; response depends on account visibility and Steam behavior | Achievement Pulse may use this for dynamic recent selection after fixture/live validation |
-| Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional | app id, title/icon when appinfo is included, playtime forever | Returns owned games only when owned-game details are visible to caller | Library index foundation; cannot fabricate missing apps |
+| Owned library | `IPlayerService/GetOwnedGames/v1` | Conditional; locally proven | app id, title/icon when appinfo is included, playtime forever, `rtime_last_played` when returned | Returns owned games only when owned-game details are visible to caller. Valve's method page does not promise the response field list, so runtime validation remains required | Library index and Abandonment candidate foundation; cannot fabricate missing apps or dates |
 | Per-app achievements | `ISteamUserStats/GetPlayerAchievements/v1` + `GetSchemaForGame/v2` | Conditional | achievement list, unlock state/time, schema totals/names, achieved/unachieved icon URLs when supplied | Requires user key, profile id, app id; per-app availability and icon fields may vary | Achievement Pulse uses schema display names and may add the primary achieved icon without making artwork authoritative |
 | Friends | `ISteamUser/GetFriendList/v1` + `GetPlayerSummaries/v2` | Conditional | relationship list, persona/avatar/current game summary | Private friends list returns unauthorized; unavailable must not become “everyone offline” | Friend Pulse can proceed only with privacy-aware empty states |
-| App news | `ISteamNews/GetNewsForApp/v2` | Conditional | app id, headline/blurb/date/feed/url | Public app-specific endpoint; not personalized and not library-wide | Steam Journey may use only bounded watched/focus-app scans |
-| General per-game last played | None proven | Unavailable | none | `GetRecentlyPlayedGames` is recent-only; `GetOwnedGames` does not prove a general reliable timestamp in this pass | Abandonment Issues remains blocked from smart last-played claims |
+| App news | `ISteamNews/GetNewsForApp/v2` | Transport/schema proven; product use conditional | app id, stable item id, title/body, date, feed metadata, tags, URL | Public app-specific endpoint; not personalized and not library-wide | Steam Journey may use only bounded watched/focus-app scans after its classifier/noise gate |
+| General per-game last played | `IPlayerService/GetOwnedGames/v1` `rtime_last_played` | Conditional; locally proven | Unix timestamp plus explicit verified/unknown provenance | A redacted controlled-account probe found the field on every returned owned row and a positive timestamp on every played row. Missing, zero, non-numeric, or future values remain unknown; account privacy/unavailability is not “never played” | Abandonment Issues may make smart age claims only for individually verified rows |
 | Single-game playtime | `IPlayerService/GetSingleGamePlaytime/v1` | Unavailable | app playtime only for associated app key | Requires Web API key associated with that app | Not a general client feature |
 | Publisher app ownership / authed news | publisher-only endpoints | Excluded | none | Requires publisher key and secure server, never direct clients | Must not be called or exposed as fallback |
 
@@ -52,21 +52,26 @@ This document records the supported-source pass for the Steam widget family. Ach
 
 ### Abandonment Issues
 
-- Blocked for smart last-played behavior until a reliable general last-played source is proven.
-- A future cache-observation mode could show “not observed recently” only if the copy clearly avoids claiming Steam last-played dates.
+- Proceeds through the implemented cache-first path without `--devsteam`; the card remains disabled by default until the user enables it.
+- Smart candidates must be owned, exceed the configured meaningful-play threshold, have an individually verified `rtime_last_played`, exceed the configured inactivity threshold, not appear in the bounded recent list, and not be in Never Show.
+- Missing, zero, malformed, or future timestamps are excluded rather than estimated. Pinned games with unknown provenance render an honest unavailable state instead of a fabricated age or substitute game.
+- Profile-private selection, exposure cooldowns, and rotation state are shared across displays. Rotation reads cache only and cannot cause provider work.
+- Guilt Desaturater is optional presentation only: it prepares bucketed local artwork off the UI thread and never changes eligibility or source meaning.
 
 ### Steam Journey
 
-- Partially viable only as a bounded app-news/focus-app pulse.
-- It must not scan the whole library frequently by default and must not pretend public app news is personalized progress.
+- The public app-news transport and stable item/date/url/feed fields are proven for a bounded app-specific request.
+- Production remains blocked on the editorial classifier, candidate budget, history/dismissal policy, and noise/failure fixtures. It must not scan the whole library frequently by default or pretend public app news is personalized progress.
 
 ## Implementation Consequences
 
 - `core/steam/backend.py` owns endpoint metadata, source status, redaction, source exclusion, and fixture-safe transport.
 - `core/steam/models.py` owns frozen result/source/view data types.
 - `core/steam/cache.py` owns versioned atomic cache envelopes. Failed/private/invalid responses must not freshen cache.
+- Source refreshes are process-coordinated by opaque profile/cache identity. A successful response authoritatively freshens its source record even when byte-equivalent; immediate followers reuse that fresh record, while unchanged visible models avoid repaint/artwork churn.
 - `core/steam/request_policy.py`, `profile_state.py`, `assets.py`, `events.py`, and `mock_backend.py` complete the Phase 2 non-UI foundation: coalescing, stale-generation drops, bounded backoff, account-private policy state, validated asset cache, narrow data-ready publication, and fixture-only backend injection.
 - `core/steam/achievement_pulse.py`, `achievement_pulse_cache.py`, and the Steam card widget/components own the first real card path and current family baseline: cache resolution before first reveal, refresh only after fade, immediate multi-display follower suppression after a successful source batch, up to five latest unlock labels, optional measured-text-adjacent primary schema-icon flair, second-recent-game presentation, validated wide header/portrait library artwork, header-aligned bounded square sizing, collision-free whole-rail compositions, compact or default-on all-field double capsules with independent font-driven growth, alpha-capable capsule styling, and presentation-only GUI preferences that never become source authority.
+- `core/steam/abandonment_issues.py`, `abandonment_cache.py`, `widgets/steam_abandonment_components.py`, and `widgets/abandonment_issues_widget.py` own the second production card: strict timestamp provenance, meaningful-play/age/recent/Never Show eligibility, profile-shared cooldown rotation, worker-prepared optional desaturation, a distinct archival ledger composition, and sparse manager-owned content crossfades.
 - Tests must use injected fake openers and fixtures; no live Steam requests in the suite.
 
 ## Primary Source Links

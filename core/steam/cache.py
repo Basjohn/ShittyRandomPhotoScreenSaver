@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -16,6 +17,8 @@ from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 logger = get_logger(__name__)
 
 STEAM_CACHE_SCHEMA_VERSION = 1
+_source_refresh_locks: dict[tuple[str, str], threading.RLock] = {}
+_source_refresh_locks_guard = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -170,6 +173,18 @@ def read_cache_record(path: Path) -> SteamResult:
             message="Steam cache file was corrupt.",
             from_cache=True,
         )
+
+
+def get_steam_source_refresh_lock(profile_key: str, cache_key: str) -> threading.RLock:
+    """Return a process-shared lock for one opaque-profile cache source."""
+
+    identity = (_safe_cache_name(profile_key), _safe_cache_name(cache_key))
+    with _source_refresh_locks_guard:
+        lock = _source_refresh_locks.get(identity)
+        if lock is None:
+            lock = threading.RLock()
+            _source_refresh_locks[identity] = lock
+        return lock
 
 
 def _safe_cache_name(cache_key: str) -> str:

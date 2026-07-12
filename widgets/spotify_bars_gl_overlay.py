@@ -32,6 +32,9 @@ from widgets.spotify_visualizer.blob_pockets import (
 from widgets.spotify_visualizer.blob_math import (
     compute_stage_progress,
 )
+from widgets.spotify_visualizer.renderers.blob_runtime_update import (
+    advance_blob_runtime_profile,
+)
 from widgets.spotify_visualizer.overlay_state import (
     apply_state_handoff,
     request_mode_reset as request_overlay_mode_reset,
@@ -857,7 +860,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Update accumulated time for animated modes
         dt_seconds = 0.0
-        now_ts = time.time()
+        now_ts = time.monotonic()
         if self._last_time_ts > 0.0:
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp
@@ -1077,7 +1080,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._blob_pocket_state = advance_blob_pocket_state(
                 getattr(self, "_blob_pocket_state", None),
                 dt=blob_dt_seconds if blob_dt_seconds > 0.0 else dt_seconds,
-                time_seconds=now_ts,
+                time_seconds=float(self._accumulated_time),
                 playing=playing,
                 shaper_enabled=bool(getattr(self, "_blob_shaper_enabled", False)),
                 kick_raw=blob_kick_raw,
@@ -1713,6 +1716,19 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self._fade = 1.0
         self._playing = bool(playing)
+        if self._vis_mode == "blob":
+            # The coherent set_state snapshot owns Blob contour advancement.
+            # GL paints only upload this cached profile; solving on every paint
+            # made motion cadence depend on compositor pressure and cost
+            # several UI-thread milliseconds per paint.
+            self._blob_runtime_time = float(self._accumulated_time)
+            try:
+                advance_blob_runtime_profile(self)
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to advance cached Blob profile",
+                    exc_info=True,
+                )
         maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
         _geom_start = time.time()

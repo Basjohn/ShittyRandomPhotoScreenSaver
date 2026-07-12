@@ -82,6 +82,7 @@ def reset_blob_variant_state(overlay: Any) -> None:
     other's contour, target, velocity, timestamp, peak silhouette, or pocket
     history.
     """
+    overlay._blob_variant_epoch = int(getattr(overlay, "_blob_variant_epoch", 0) or 0) + 1
     for attr in (
         "_blob_unshaped_base_profile",
         "_blob_unshaped_raw_target_profile",
@@ -93,6 +94,11 @@ def reset_blob_variant_state(overlay: Any) -> None:
         "_blob_shaper_runtime_velocity",
         "_blob_runtime_diag_profile",
         "_blob_profile_transport_sig",
+        "_blob_profile_generation_type",
+        "_blob_shaper_geometry_signature",
+        "_blob_shaper_cached_base_profile",
+        "_blob_shaper_cached_reaction_profile",
+        "_blob_shaper_cached_energy_weights",
     ):
         setattr(overlay, attr, None)
     for attr in (
@@ -106,6 +112,11 @@ def reset_blob_variant_state(overlay: Any) -> None:
         "_blob_shaper_solver_seed",
     ):
         setattr(overlay, attr, None)
+    overlay._blob_profile_generation = 0
+    overlay._blob_profile_compute_ms = 0.0
+    overlay._blob_profile_compute_count = 0
+    overlay._blob_shaper_geometry_build_count = 0
+    overlay._blob_runtime_time = 0.0
     for attr in (
         "_blob_stage_input_bass",
         "_blob_stage_input_mid",

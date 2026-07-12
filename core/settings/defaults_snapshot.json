@@ -365,6 +365,14 @@
     },
     "widgets": {
         "abandonment_issues": {
+            "accent_color": [
+                222,
+                157,
+                88,
+                225
+            ],
+            "artwork_shape": "square",
+            "artwork_size": 140,
             "bg_color": [
                 35,
                 35,
@@ -388,12 +396,25 @@
             "enabled": false,
             "font_family": "Inter",
             "font_size": 14,
+            "guilt_desaturater": false,
+            "guilt_desaturation_strength": 55,
             "margin": 30,
+            "minimum_inactivity_weeks": 12,
+            "minimum_playtime_hours": 2,
             "monitor": "ALL",
+            "never_show_appids": [],
+            "pinned_appid": null,
             "position": "Bottom Right",
-            "preferred_height": 180,
-            "preferred_width": 420,
-            "show_background": true
+            "preferred_height": 300,
+            "preferred_width": 560,
+            "rotation_interval_minutes": 30,
+            "selection_mode": "smart_rotation",
+            "show_artwork": true,
+            "show_background": true,
+            "show_pinned": false,
+            "show_playtime": true,
+            "show_queue": true,
+            "show_source": false
         },
         "achievement_pulse": {
             "artwork_shape": "square",

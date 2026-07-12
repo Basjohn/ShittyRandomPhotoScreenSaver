@@ -1,7 +1,7 @@
 # SRPSS Steam Widget Family — Architecture-Safe Implementation Plan
 
-**Status:** Achievement Pulse promoted; Steam Journey, Abandonment Issues, and Friend Pulse remain dev-gated
-**Date:** 2026-07-10
+**Status:** Achievement Pulse and Abandonment Issues promoted; Steam Journey and Friend Pulse remain dev-gated
+**Date:** 2026-07-12
 **Scope:** Four independently enabled Steam overlay cards: **Steam Journey**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.
 **Repository target:** `Basjohn/ShittyRandomPhotoScreenSaver`  
 **Supersedes:** Draft 0.1 Steam Subwidgets proposal
@@ -41,7 +41,7 @@ The four cards remain:
 | Artwork shape is a fixed visual preset. | Artwork variants have authored alignment rails and safe user bounds. Achievement Pulse square artwork shares the wide/header top-right rails and allows 140-190 authored pixels, default 140; the layout reserves the maximum envelope so size changes do not reflow other content. |
 | A polished mock is enough to define the remaining cards. | Achievement Pulse is now the engineering baseline, not a family-wide skin. Future cards inherit settings, painter safety, measurement, cache-first, multi-display, and validation lessons while deliberately establishing different silhouettes and content primitives. |
 | Steam Journey can promise a general owned-library update feed. | It ships only after a documented, supported data source is proven against a real test account. No authenticated Store scraping, personalised Calendar dependency, cookies, or undocumented feed may become a fallback. |
-| Abandonment Issues can infer absence from playtime or Recent Games. | It may show a last-played age only when the source provenance says the timestamp is reliable for that app/profile. Unknown is a real state, not a value to estimate. |
+| Abandonment Issues can infer absence from playtime or Recent Games. | Smart selection now uses only a valid positive non-future `GetOwnedGames.rtime_last_played` row with explicit verified provenance. Playtime and Recent Games are eligibility/filter inputs, never timestamp substitutes. Unknown remains a real excluded state. |
 | Offline friends can always be shown desaturated. | Offline avatars are only meaningful in the explicit presentation/filter modes that include them. The default card remains “currently playing / observed game-change” content and does not silently turn unavailable friend data into an offline roster. |
 
 ---
@@ -474,7 +474,7 @@ Requirements:
 - Profile change, disconnect, widget teardown, and settings restart invalidate the old generation.
 - A late result from an old profile/generation is dropped before cache write and before `EventSystem` publication.
 - Results are applied only on the UI owner thread.
-- A valid result is compared to the existing resolved visible model. Identical visible data means no cache rewrite and no unnecessary repaint.
+- A valid result freshens its source cache timestamp once, then is compared to the existing resolved visible model. Identical visible data means no prepared-asset invalidation or unnecessary repaint.
 - Manual refresh may bypass ordinary freshness suppression but must still deduplicate with an already active fetch.
 
 ### 5.5 Refresh policy
@@ -1047,7 +1047,7 @@ Defaults must remain single-source through the base mapping, Normal/MC profile o
 - Paint only consumes an immutable view model and already prepared assets.
 - A valid cache model is applied before an online refresh is requested. Connection-status probing must not blank, disconnect, or replace valid content.
 - Steam refresh cadence has a five-minute minimum and ten-minute default unless a source-specific policy is deliberately slower.
-- Same-payload refreshes do not rewrite cache records, invalidate prepared artwork, or repaint unchanged visible models.
+- Successful same-payload refreshes freshen the authoritative source timestamp once, but do not invalidate prepared artwork or repaint unchanged visible models. Immediate cross-display/card followers reuse the fresh source record.
 - Profile data and semantic rotation are shared across displays; geometry, DPR paint caches, and the current applied view remain instance-local.
 - A refresh generation, selected app ID, field visibility, artwork variant/size, DPR, colours, family/capsule font inputs, and double-capsule mode all participate in the relevant model/paint cache authority.
 - Constructors, Settings preview, and `paintEvent` perform no credential access, provider request, cache scan, image decode, or source artwork scaling.
@@ -1055,7 +1055,7 @@ Defaults must remain single-source through the base mapping, Normal/MC profile o
 
 #### Required inheritance for future Steam cards
 
-Steam Journey, Abandonment Issues, and Friend Pulse must reuse or extend the following baseline rather than recreating it:
+Steam Journey and Friend Pulse must reuse or extend the production baseline established by Achievement Pulse and Abandonment Issues rather than recreating it:
 
 - shared Steam header/logo treatment and painter-owned frame/shadows;
 - family font and text-colour controls;
@@ -1063,7 +1063,7 @@ Steam Journey, Abandonment Issues, and Friend Pulse must reuse or extend the fol
 - alpha-capable capsule fill/border controls, compact/all-field-double modes, and measured capsule-font growth where capsules exist;
 - authored-layout ownership followed by uniform `Custom` scaling;
 - descriptor/defaults/settings/factory/runtime parity;
-- cache-first startup, unchanged-model suppression, shared refresh policy, and generation safety;
+- cache-first startup, unchanged-model suppression, source-key refresh coordination, shared refresh policy, and generation safety;
 - central input/secure URL routing;
 - deterministic fixture view models and runtime-shaped geometry/render tests.
 
@@ -1108,7 +1108,7 @@ Do not:
 - [ ] Multi-display instances share provider data but not geometry/DPR pixmaps.
 - [ ] Settings opening remains lazy/provider-inert and load/reset/import signal-safe.
 - [ ] Cache-first startup has no connect-required flash when valid content exists.
-- [ ] Same-model refresh causes no cache churn or unnecessary repaint.
+- [ ] Same-model refresh freshens each successful source record only once and causes no unnecessary repaint or prepared-asset churn.
 - [ ] Credential, SteamID, friend/private cache, URLs with secret queries, and real account data are absent from fixtures, screenshots, logs, exports, and Git.
 - [ ] Focused model, geometry, raster, descriptor, settings, lifecycle, and security tests pass before the dev gate is removed.
 
@@ -1394,34 +1394,34 @@ It records evidence from controlled, non-secret test runs and becomes the author
 
 ### 10.1 Required discovery tasks
 
-- [ ] Confirm the intended Steam identity + user-key credential configuration without copying Gmail OAuth code or publisher-key assumptions.
-- [ ] Verify strict DPAPI storage and failure behavior.
+- [x] Confirm the intended Steam identity + user-key credential configuration without copying Gmail OAuth code or publisher-key assumptions.
+- [x] Verify strict DPAPI storage and failure behavior.
 - [ ] Capture sanitized, local fixture payloads for:
-  - [ ] owned library;
-  - [ ] recent games;
-  - [ ] achievement-rich selected game;
+  - [x] owned library;
+  - [x] recent games;
+  - [x] achievement-rich selected game;
   - [ ] global rarity response, if available;
   - [ ] friend list and batched player/current-game state;
   - [ ] proposed Progress/news source.
 - [ ] Verify privacy and no-data branches for every source.
-- [ ] Prove last-played source coverage before Abandonment Issues is enabled.
-- [ ] Verify artwork/avatar sources, dimensions, cache semantics, and malformed-image protections.
+- [x] Prove last-played source coverage before Abandonment Issues is enabled.
+- [x] Verify production-card artwork sources, dimensions, cache semantics, and malformed-image protections; friend avatars remain Phase 8 work.
 - [ ] Measure request batch limits, practical latency, and rate-limit behavior.
 - [ ] Validate cache-first startup from a real frozen or script launch without repository cwd dependence.
-- [ ] Confirm that data fields are labelled `confirmed`, `conditional`, `unavailable`, or `excluded`.
+- [x] Confirm that data fields are labelled `confirmed`, `conditional`, `unavailable`, or `excluded`.
 
 ### 10.2 Proof matrix template
 
 | Capability | Source proven? | Fields proven | Privacy/empty behavior | Cache TTL | Feature decision |
 |---|---|---|---|---:|---|
-| Owned library | Pending | `appid`, title, playtime, last-played provenance | Pending | 24 h | Required foundation |
-| Recent games | Pending | ordered recent app IDs, playtime | Pending | 15 min | Required for dynamic Achievement/Progress |
-| Per-app achievements | Pending | counts, icons, unlocks, dates | Pending | 30 min | Required for Achievement Pulse |
-| Global rarity | Pending | percentage/availability | Pending | 24 h or source-defined | Optional field only |
-| Friends | Pending | identity/status/current game | Pending | 15 min | Required for Friend Pulse |
-| Per-game last played | Pending | timestamp + confidence | Pending | source-defined | Hard gate for smart Abandonment |
-| News/update events | Pending | fingerprint/date/category/headline | Pending | 6 h | Hard gate for Steam Journey |
-| Artwork/avatar | Pending | supported variants/URL policy | Pending | on demand | Shared visual asset path |
+| Owned library | Conditional; controlled-account probe complete | `appid`, title, playtime, `rtime_last_played` with per-row provenance | Private/unavailable stays unavailable | 24 h | Production foundation |
+| Recent games | Conditional; fixture/live path complete | ordered recent app IDs, playtime | Empty/private stays literal | Shared 10-minute default, 5-minute minimum | Production Achievement selection and Abandonment exclusion |
+| Per-app achievements | Conditional; fixture/live path complete | counts, schema names/icons, unlocks, dates | Per-app empty/unavailable stays literal | Shared 10-minute default, 5-minute minimum | Production Achievement Pulse |
+| Global rarity | Not promoted | none required by current card | Absence is not zero rarity | n/a | Optional future field only |
+| Friends | Conditional endpoint only | identity/status/current game | Private response must not become offline | Pending | Required for Friend Pulse |
+| Per-game last played | Conditional; controlled-account probe complete | positive non-future Unix timestamp + verified/unknown confidence | Missing/zero/malformed/future is unknown | Owned-library 24 h | Production smart Abandonment |
+| News/update events | Transport/schema proven; classifier pending | stable item id, date, title/body, feed/tags/url | Public app-specific only, not personalized | Pending bounded policy | Steam Journey implementation gate |
+| Artwork/avatar | Production game/achievement art proven; friend avatars pending | validated allowlisted HTTPS assets, signatures, local prepared variants | Missing/invalid removes art only | on demand | Shared visual asset path |
 
 Nothing in the product documentation should move from “conditional” to “available” without this evidence.
 
@@ -1435,25 +1435,25 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 - [x] Read current `Spec.md`, `Index.md`, `Current_Plan.md`, `Docs/Guardrails.md`, `Docs/TestSuite.md`, `Docs/Harness_Index.md`, and descriptor/service-widget contracts before edits.
 - [x] Keep this Steam plan aligned with the current descriptor/settings/service-widget architecture.
-- [x] Implement a central named `--devsteam` visibility gate, initially for the full family and now retained only for the unfinished Steam Journey, Friend Pulse, and Abandonment Issues prototypes after Achievement Pulse promotion.
+- [x] Implement a central named `--devsteam` visibility gate, initially for the full family and now retained only for the unfinished Steam Journey and Friend Pulse prototypes after Achievement Pulse and Abandonment Issues promotion.
 - [x] Extend descriptor activation with a central named dev-gate seam so Steam does not use environment-variable activation.
 - [x] Implement `--steam` as the Steam sidecar diagnostics flag, routed to `screensaver_steam.log`.
 - [x] Ensure `--devsteam` and `--steam` are ignored by screensaver mode parsing.
 - [x] Add bars proving Steam sidecar routing, central named-gate behavior, and parser filtering.
 
-**Gate:** Complete and narrowed after promotion. Steam Settings and Achievement Pulse are public; no unfinished Steam card descriptor, settings bucket, factory, or runtime card appears without `--devsteam`.
+**Gate:** Complete and narrowed after promotion. Steam Settings, Achievement Pulse, and Abandonment Issues are public; no unfinished Steam Journey or Friend Pulse descriptor, settings bucket, factory, or runtime card appears without `--devsteam`.
 
 ## Phase 0B — Source discovery and evidence gate
 
 - [x] Add `Docs/Steam_Data_Feasibility.md`.
 - [x] Confirm no existing Steam integration in source and document any discovered collision.
 - [x] Decide exact supported provider endpoints/source contracts through official-source evidence and fixture-safe code metadata.
-- [ ] Produce synthetic, sanitized fixtures before real UI coding.
+- [x] Produce synthetic, sanitized fixtures before real UI coding.
 - [x] Decide source confidence/no-data matrix.
-- [x] Confirm Abandonment last-played viability is not proven; smart Abandonment remains blocked.
-- [x] Confirm Progress source viability is partial only: bounded public app-news/focus-app pulse, not a personalized whole-library feed.
+- [x] Prove `GetOwnedGames.rtime_last_played` coverage in a redacted controlled-account capability probe and retain strict per-row unknown handling.
+- [x] Prove Steam Journey's bounded public app-news transport/schema viability while keeping editorial classification and whole-library request policy gated.
 
-**Gate:** Foundation source contract is explicit. Achievement Pulse may proceed only if library/recent/achievement data is proven. Abandonment and Progress remain blocked if their source gates are incomplete.
+**Gate:** Foundation source contract is explicit. Achievement Pulse and Abandonment Issues have source-proven production paths. Steam Journey has a proven transport/schema but remains gated on classifier/noise/request-budget evidence; Friend Pulse remains gated on privacy fixtures and policy.
 
 ## Phase 1 — Security and storage foundation
 
@@ -1570,16 +1570,18 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 **Gate:** Achievement Pulse can paint real cache first, refresh without private timers or UI pressure, and preserve unavailable/private states without blank flashes or substitute games.
 
-## Phase 7 — Abandonment Issues, only after timestamp proof
+## Phase 7 — Abandonment Issues, after timestamp proof
 
-- [ ] Implement last-played confidence/provenance handling.
-- [ ] Implement candidate eligibility/score/cooldowns/pin/Never Show.
-- [ ] Implement cache-only rotation.
-- [ ] Implement Guilt Desaturater via bucketed prepared art assets.
-- [ ] Implement settings and display fields.
-- [ ] Validate unavailable-source branch remains honest.
+- [x] Implement last-played confidence/provenance handling.
+- [x] Implement candidate eligibility/score/cooldowns/pin/Never Show.
+- [x] Implement cache-only rotation shared by profile rather than display.
+- [x] Implement Guilt Desaturater via bucketed worker-prepared art assets.
+- [x] Implement settings, cache-only library picker, display fields, and distinct archival visual composition.
+- [x] Validate unavailable/invalid/future timestamp branches remain honest.
+- [x] Add sparse manager-owned fade-out/commit/fade-in for live game/title/art changes, with stable header/chrome and no private timer or effect.
+- [ ] Complete compiled multi-display, frozen-build, long-idle, transition, `--noupdates`, and Custom-geometry runtime validation.
 
-**Gate:** Smart Abandonment cannot display an inferred date. No-op if reliable timestamp source is absent.
+**Gate:** Automated implementation gate complete and card promoted disabled-by-default. Smart Abandonment cannot display an inferred date and resolves an honest unavailable state if reliable timestamp rows are absent. Remaining compiled/manual bars are release validation, not permission to weaken provenance.
 
 ## Phase 8 — Friend Pulse
 
@@ -1597,6 +1599,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 ## Phase 9 — Steam Journey, only after event source proof
 
+- [x] Prove the public app-news transport/schema and stable event identity/date/url/feed fields with a bounded redacted capability probe.
 - [ ] Implement source adapter and source-provenance/fingerprint model.
 - [ ] Implement Focus Library candidate pool.
 - [ ] Implement source classification/filter/scoring/history/dismissal.
@@ -1617,7 +1620,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [ ] Verify non-repository cwd / packaged asset resolution.
 - [ ] Verify DPAPI storage, disconnect, import/export redaction, and cache purge manually.
 - [ ] Run multi-monitor Custom/edit-mode/stacking passes.
-- [ ] Run the Achievement Pulse long idle/perf pass with `--steam --perf --cache --set --geo --life`; add `--devsteam` only for a separate unfinished-prototype pass.
+- [ ] Run the Achievement Pulse and Abandonment Issues long idle/perf pass with `--steam --perf --cache --set --geo --life`; add `--devsteam` only for a separate Steam Journey/Friend Pulse prototype pass.
 - [ ] Update `Spec.md`, `Index.md`, `Docs/TestSuite.md`, `Docs/Contracts.md`, and this plan only where the implemented contract differs from the proposal.
 - [ ] Add a concise Current Plan entry only when work is actually selected; do not turn Current Plan into a historical changelog.
 
@@ -1713,7 +1716,7 @@ Required bars:
 - [x] schema display names replace internal achievement IDs;
 - [x] one-to-five newest unlock ordering and unprefixed presentation;
 - [x] Previous derives from the second current recent-game entry;
-- [x] unchanged payload retains cache timestamp and visible fingerprint;
+- [x] unchanged successful payload freshens source timestamps while retaining the visible fingerprint and suppressing repaint;
 - [x] unauthorized refresh preserves valid cache and marks connection attention;
 - [x] Settings/defaults/factory/runtime parity for artwork, font, fields, capsule alpha, and double-capsule controls;
 - [x] bounded Square artwork and fixed-below-art `Unlocked` geometry at minimum/default/maximum size;
@@ -1721,15 +1724,17 @@ Required bars:
 - [ ] local index autocomplete never calls network, if autocomplete is promoted beyond direct Custom app ID;
 - [ ] any future ring/rarity/date/tile mode has its own deterministic model, settings, geometry, and render bars before implementation.
 
-`tests/test_abandonment_issues_widget.py`
+`tests/test_steam_abandonment_issues.py`
 
-- [ ] missing/unknown timestamp exclusion;
-- [ ] verified timestamp eligibility;
-- [ ] 2-hour/12-week default boundary behavior;
-- [ ] cooldown/pin/Never Show;
-- [ ] cache-only rotation;
-- [ ] Guilt Desaturater bucket/clamp behavior;
-- [ ] no achievement sweep side effect.
+- [x] missing/zero/future timestamp exclusion;
+- [x] verified timestamp eligibility;
+- [x] meaningful-play/inactivity boundary behavior;
+- [x] cooldown/pin/Never Show and profile-shared selection;
+- [x] cache-only rotation;
+- [x] Guilt Desaturater bucket/clamp and worker-prepared asset behavior;
+- [x] owned/recent refresh preservation and shared-source reuse with Achievement Pulse;
+- [x] authored large-art layout, deterministic render, cache-before-first-fade, and sparse transition updates;
+- [x] no achievement sweep side effect.
 
 `tests/test_friend_pulse_widget.py`
 
@@ -1808,7 +1813,7 @@ Assert:
 
 Use existing diagnostic flags rather than always-on logging:
 
-Use `--devsteam` only when the pass intentionally includes Steam Journey, Friend Pulse, or Abandonment Issues.
+Use `--devsteam` only when the pass intentionally includes Steam Journey or Friend Pulse.
 
 ```text
 --steam
@@ -1824,7 +1829,7 @@ Look for:
 - no per-frame service work;
 - no repaint/update rescue loop;
 - no duplicate request submission across cards/displays;
-- no cache rewrite for unchanged visible model;
+- one source-record freshness write per successful provider response, with no unchanged-model repaint or prepared-art invalidation;
 - no transition-time spinner churn;
 - bounded asset/cache work;
 - card paint budget comparable to other framed overlay cards;
@@ -1876,7 +1881,7 @@ Look for:
 ### Product
 
 - [ ] Achievement Pulse is useful first and has literal Custom selection.
-- [ ] Abandonment Issues refuses to invent last-played history.
+- [x] Abandonment Issues refuses to invent last-played history.
 - [ ] Friend Pulse is social but bounded and privacy-aware.
 - [ ] Steam Journey stays a curated, source-proven library journey rather than a patch ticker.
 - [ ] Every card can be disabled, positioned, Custom-positioned, reset, and tested independently.

@@ -22,6 +22,7 @@ from core.steam.abandonment_issues import (
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
     RECENT_GAMES_CACHE_KEY,
+    refresh_achievement_pulse_cache,
 )
 from core.steam.assets import (
     abandonment_desaturation_bucket,
@@ -33,8 +34,15 @@ from core.steam.cache import (
     read_cache_record,
     write_cache_record,
 )
-from core.steam.credentials import SteamCredentialPayload, derive_profile_cache_key
+from core.steam.credentials import (
+    SteamCredentialPayload,
+    derive_profile_cache_key,
+    write_credential_metadata,
+)
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
+from core.threading.manager import TaskResult
+from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
+from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_components import (
     abandonment_authored_size,
     build_abandonment_view_model,
@@ -225,6 +233,137 @@ def test_abandonment_refresh_uses_owned_and_recent_sources_and_persists_success(
     assert owned_cache.fetched_at == NOW
 
 
+def test_abandonment_reuses_daily_library_but_manual_refreshes_both_sources(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fixture_api_key_source_ttl_123456",
+        profile_identifier="76561198000000011",
+    )
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    for cache_key, source_id, payload, age in (
+        (
+            OWNED_GAMES_CACHE_KEY,
+            SteamSourceId.OWNED_GAMES,
+            _fixture("owned_games_last_played.json"),
+            30 * 60,
+        ),
+        (
+            RECENT_GAMES_CACHE_KEY,
+            SteamSourceId.RECENTLY_PLAYED,
+            _fixture("recent_games_for_abandonment.json"),
+            11 * 60,
+        ),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - age,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    requests: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._data = json.dumps(payload).encode("utf-8")
+
+        def read(self, _limit: int) -> bytes:
+            return self._data
+
+    def _opener(request, _timeout):
+        requests.append(request.full_url)
+        if "GetOwnedGames" in request.full_url:
+            return _Response(_fixture("owned_games_last_played.json"))
+        if "GetRecentlyPlayedGames" in request.full_url:
+            return _Response(_fixture("recent_games_for_abandonment.json"))
+        raise AssertionError(request.full_url)
+
+    refresh_abandonment_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW,
+    )
+    assert sum("GetOwnedGames" in url for url in requests) == 0
+    assert sum("GetRecentlyPlayedGames" in url for url in requests) == 1
+
+    refresh_abandonment_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW + 1,
+        force=True,
+    )
+    assert sum("GetOwnedGames" in url for url in requests) == 1
+    assert sum("GetRecentlyPlayedGames" in url for url in requests) == 2
+
+
+def test_abandonment_and_achievement_share_fresh_recent_games_source(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fixture_api_key_shared_source_123456",
+        profile_identifier="76561198000000012",
+    )
+    requests: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._data = json.dumps(payload).encode("utf-8")
+
+        def read(self, _limit: int) -> bytes:
+            return self._data
+
+    def _opener(request, _timeout):
+        requests.append(request.full_url)
+        if "GetOwnedGames" in request.full_url:
+            return _Response(_fixture("owned_games_last_played.json"))
+        if "GetRecentlyPlayedGames" in request.full_url:
+            return _Response(_fixture("recent_games_for_abandonment.json"))
+        if "GetPlayerAchievements" in request.full_url:
+            return _Response(
+                {
+                    "playerstats": {
+                        "gameName": "Archive Candidate",
+                        "achievements": [{"name": "FIRST", "achieved": 1}],
+                    }
+                }
+            )
+        if "GetSchemaForGame" in request.full_url:
+            return _Response(
+                {
+                    "game": {
+                        "availableGameStats": {
+                            "achievements": [
+                                {"name": "FIRST", "displayName": "First Visit"}
+                            ]
+                        }
+                    }
+                }
+            )
+        raise AssertionError(request.full_url)
+
+    refresh_abandonment_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW,
+    )
+    refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW,
+    )
+
+    recent_requests = [url for url in requests if "GetRecentlyPlayedGames" in url]
+    assert len(recent_requests) == 1
+
+
 def test_abandonment_failed_refresh_preserves_valid_cached_library(tmp_path) -> None:
     credential = SteamCredentialPayload(
         api_key="fixture_api_key_654321",
@@ -362,6 +501,67 @@ def test_abandonment_renderer_produces_nonempty_archival_card(qt_app) -> None:
 
     assert not layout.art_rect.isNull()
     assert any(image.pixelColor(x, y).alpha() > 0 for x, y in ((30, 30), (40, 100), (250, 180)))
+
+
+def test_abandonment_widget_applies_cache_before_first_coordinated_fade(
+    qt_app,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    from core.settings import storage_paths
+    from core.steam import abandonment_cache
+
+    storage_paths.reset_module_cache()
+    monkeypatch.setattr(abandonment_cache.time, "time", lambda: NOW)
+    credential = SteamCredentialPayload(
+        api_key="fixture_api_key_111222",
+        profile_identifier="76561198000000004",
+    )
+    write_credential_metadata(credential)
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, _fixture("recent_games_for_abandonment.json")),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key),
+        )
+
+    class _InlineThreadManager:
+        def submit_io_task(self, func, *, task_id, callback):
+            callback(TaskResult(success=True, result=func(), task_id=task_id))
+            return task_id
+
+    faded_models: list[tuple[str, str]] = []
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=False,
+    )
+    try:
+        widget.set_thread_manager(_InlineThreadManager())
+        monkeypatch.setattr(
+            widget,
+            "_request_coordinated_fade",
+            lambda: faded_models.append((widget._view_model.state, widget._view_model.title)),
+        )
+        widget._activate_impl()
+        qt_app.processEvents()
+
+        assert widget._view_model.state == "content"
+        assert widget._view_model.appid is not None
+        assert faded_models == [("content", widget._view_model.title)]
+    finally:
+        widget.cleanup()
+        storage_paths.reset_module_cache()
 
 
 def test_steam_content_transition_commits_at_hidden_midpoint_with_sparse_updates(qt_app, monkeypatch) -> None:

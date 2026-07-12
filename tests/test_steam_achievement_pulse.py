@@ -469,7 +469,7 @@ def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tm
     assert first.resolved.ok is True
     assert second.resolved.ok is True
     assert manual.resolved.ok is True
-    assert manual.cache_age_seconds == 50
+    assert manual.cache_age_seconds == 0
     assert len(requests) == 6
     assert achievement_schema_cache_key_for_app(111) in {
         path.stem for path in tmp_path.rglob("*.json")
@@ -551,8 +551,8 @@ def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follow
 
     assert first.resolved.ok is True
     assert follower.resolved.ok is True
-    assert first.cache_age_seconds == 9_000.0
-    assert follower.cache_age_seconds == 9_001.0
+    assert first.cache_age_seconds == 0.0
+    assert follower.cache_age_seconds == 1.0
     assert len(requests) == 3
 
 

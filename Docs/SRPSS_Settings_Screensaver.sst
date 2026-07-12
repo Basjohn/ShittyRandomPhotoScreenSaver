@@ -1,11 +1,11 @@
 {
   "application": "Screensaver",
   "metadata": {
-    "last_migration_completed": "2026-07-10T21:48:46.147069Z",
+    "last_migration_completed": "2026-07-12T19:57:10.770334Z",
     "legacy_profile": "Screensaver",
-    "migrated_at": "2026-07-10T21:48:46.145550Z",
+    "migrated_at": "2026-07-12T19:57:10.766830Z",
     "migrated_from": "qsettings",
-    "visualizer_schema_version": 1
+    "visualizer_schema_version": 2
   },
   "profile": "Screensaver",
   "settings_version": 2,
@@ -331,6 +331,14 @@
     },
     "widgets": {
       "abandonment_issues": {
+        "accent_color": [
+          222,
+          157,
+          88,
+          225
+        ],
+        "artwork_shape": "square",
+        "artwork_size": 140,
         "bg_color": [
           35,
           35,
@@ -354,12 +362,25 @@
         "enabled": false,
         "font_family": "Inter",
         "font_size": 14,
+        "guilt_desaturater": false,
+        "guilt_desaturation_strength": 55,
         "margin": 30,
+        "minimum_inactivity_weeks": 12,
+        "minimum_playtime_hours": 2,
         "monitor": "ALL",
+        "never_show_appids": [],
+        "pinned_appid": null,
         "position": "Bottom Right",
-        "preferred_height": 180,
-        "preferred_width": 420,
-        "show_background": true
+        "preferred_height": 300,
+        "preferred_width": 560,
+        "rotation_interval_minutes": 30,
+        "selection_mode": "smart_rotation",
+        "show_artwork": true,
+        "show_background": true,
+        "show_pinned": false,
+        "show_playtime": true,
+        "show_queue": true,
+        "show_source": false
       },
       "achievement_pulse": {
         "artwork_shape": "square",
@@ -941,7 +962,6 @@
         ],
         "blob_shaper_audio_motion": 1.2,
         "blob_shaper_base_strength": 0.5,
-        "blob_shaper_enabled": false,
         "blob_shaper_idle_motion": 0.18,
         "blob_shaper_react_strength": 0.5,
         "blob_size": 0.45,
@@ -956,6 +976,7 @@
         "blob_transient_mix_bass": 0.5,
         "blob_transient_mix_vocal": 0.35,
         "blob_transient_pulse_gain": 1.0,
+        "blob_type": "mighty",
         "blob_width": 1.0,
         "bubble_adaptive_sensitivity": false,
         "bubble_agc_strength": 0.0,

@@ -328,7 +328,6 @@ def render_abandonment_card(
             header_font=header_font,
             text_color=color,
         )
-        _draw_archive_tab(painter, layout, model, accent=accent, color=color, font_family=font_family, font_size=font_size)
         if layout.info_rect is not None:
             painter.setBrush(QColor(240, 144, 45, 230))
             painter.setPen(QPen(QColor(255, 230, 180, 220), max(1.0, scale)))
@@ -343,6 +342,15 @@ def render_abandonment_card(
             )
 
         painter.setOpacity(max(0.0, min(1.0, float(content_opacity))))
+        _draw_archive_tab(
+            painter,
+            layout,
+            model,
+            accent=accent,
+            color=color,
+            font_family=font_family,
+            font_size=font_size,
+        )
         if model.state == "connect_required":
             prompt_font = QFont(font_family, max(10, int(font_size * scale * 1.12)), QFont.Weight.Bold)
             _draw_underlined_text(

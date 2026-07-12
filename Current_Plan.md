@@ -16,6 +16,14 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
+### Blob Dynamic Morphology And Active-Mode Performance, Dev-Gated
+
+- [ ] Use the 2026-07-12 live Blob/profile/performance logs to quantify the repeated-silhouette failure, vocal/tendril response, active-mode render cost, and any first-frame/type bleed without changing shared audio or another visualizer mode.
+- [ ] Replace Mighty’s fixed recognizable basis with rounded Blob-owned mutations whose lobe count, width, reach, and local anchor family alter over time and musical events; keep vocal outline wobble independently visible, make tendrils grow/retract instead of orbit, and never reveal a circular support body or sharp radial cut.
+- [ ] Give Shaped equivalent dynamic life beyond its authored goal through topology-preserving warps, local mutations, light tendrils, and vocal/transient contour wobble that return cleanly without merely scaling the same silhouette.
+- [ ] Remove or cache redundant per-paint Blob contour work so Blob-active cadence and application responsiveness remain comparable to healthy visualizer modes, including multi-display/runtime refresh paths.
+- [ ] Add final-profile sequence oracles that reject repeated silhouettes and size-only motion, measure vocal/event correlation plus morphology change at fixed angles, and pair them with Blob-focused perf bars, startup/settings/type-boundary checks, curated/Custom smoke coverage, and the unchanged current-good visualizer lock.
+
 ### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
 
 - [ ] In a fresh compiled run without `--devsteam`, verify saved identity/API-key status stays green on every Steam Settings reopen and cached Achievement Pulse content appears before the coordinated fade without a connect-required flash.

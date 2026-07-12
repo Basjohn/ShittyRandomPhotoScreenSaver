@@ -51,16 +51,17 @@ def _steam_settings_module():
     return importlib.import_module("ui.tabs.widgets_tab_steam")
 
 
-def test_achievement_pulse_descriptors_are_public_while_unfinished_cards_stay_gated() -> None:
+def test_promoted_steam_card_descriptors_are_public_while_unfinished_cards_stay_gated() -> None:
     prior = _with_steam_gate(False)
     try:
-        unfinished = set(STEAM_WIDGET_IDS) - {"achievement_pulse"}
+        promoted = {"achievement_pulse", "abandonment_issues"}
+        unfinished = set(STEAM_WIDGET_IDS) - promoted
         factory_ids = {descriptor.settings_key for descriptor in get_factory_widget_descriptors()}
         runtime_ids = {descriptor.widget_id for descriptor in get_widget_runtime_descriptors()}
         preview_ids = {descriptor.widget_id for descriptor in get_widget_stack_preview_descriptors()}
         custom_ids = {descriptor.widget_id for descriptor in get_widget_custom_position_option_descriptors()}
 
-        assert "achievement_pulse" in factory_ids & runtime_ids & preview_ids & custom_ids
+        assert promoted.issubset(factory_ids & runtime_ids & preview_ids & custom_ids)
         assert "steam" in {descriptor.section_id for descriptor in get_widget_settings_section_descriptors()}
         assert not unfinished.intersection(factory_ids)
         steam_factories = [
@@ -120,7 +121,10 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
         assert card["enabled"] is False
         assert str(card["monitor"]) in {"ALL", "1", "2", "3"}
         assert card["show_background"] is True
-        expected_size = (540, 290) if widget_id == "achievement_pulse" else (420, 180)
+        expected_size = {
+            "achievement_pulse": (540, 290),
+            "abandonment_issues": (560, 300),
+        }.get(widget_id, (420, 180))
         assert (card["preferred_width"], card["preferred_height"]) == expected_size
     achievement = widgets["achievement_pulse"]
     assert isinstance(achievement["show_artwork"], bool)
@@ -144,6 +148,13 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert 140 <= achievement["square_artwork_size"] <= 190
     assert 8 <= achievement["capsule_font_size"] <= 32
     assert "double_capsule_long_data" not in achievement
+    abandonment = widgets["abandonment_issues"]
+    assert abandonment["selection_mode"] == "smart_rotation"
+    assert abandonment["minimum_playtime_hours"] == 2
+    assert abandonment["minimum_inactivity_weeks"] == 12
+    assert abandonment["rotation_interval_minutes"] >= 5
+    assert abandonment["guilt_desaturater"] is False
+    assert len(abandonment["accent_color"]) == 4
 
 
 def test_lazy_widgets_tab_does_not_import_steam_settings_section_on_general_open(
@@ -202,6 +213,23 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.achievement_pulse_show_source.setChecked(False)
             tab.achievement_pulse_capsule_fill_color_btn.color_changed.emit(QColor(12, 34, 56, 78))
             tab.achievement_pulse_capsule_border_color_btn.color_changed.emit(QColor(90, 87, 65, 43))
+            tab.abandonment_issues_selection_mode.setCurrentIndex(1)
+            tab.abandonment_issues_pinned_game.addItem("Fixture Game", 101)
+            tab.abandonment_issues_pinned_game.setCurrentIndex(
+                tab.abandonment_issues_pinned_game.count() - 1
+            )
+            tab.abandonment_issues_minimum_playtime_hours.setValue(6)
+            tab.abandonment_issues_minimum_inactivity_weeks.setValue(24)
+            tab.abandonment_issues_rotation_interval_minutes.setValue(45)
+            tab.abandonment_issues_never_show_appids.setText("440, 570; 440")
+            tab.abandonment_issues_artwork_shape.setCurrentIndex(1)
+            tab.abandonment_issues_artwork_size.setValue(175)
+            tab.abandonment_issues_guilt_desaturater.setChecked(True)
+            tab.abandonment_issues_guilt_desaturation_strength.setValue(65)
+            tab.abandonment_issues_show_queue.setChecked(False)
+            tab.abandonment_issues_accent_color_btn.color_changed.emit(
+                QColor(180, 110, 55, 170)
+            )
 
             preview = build_widget_stack_preview_config(tab)
             assert preview["steam_progress"]["enabled"] is False
@@ -235,6 +263,19 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert achievement_payload["show_source"] is False
             assert achievement_payload["capsule_fill_color"] == [12, 34, 56, 78]
             assert achievement_payload["capsule_border_color"] == [90, 87, 65, 43]
+            abandonment_payload = collect_widget_section_save_result(tab, "steam")[3]
+            assert abandonment_payload["selection_mode"] == "pinned_game"
+            assert abandonment_payload["pinned_appid"] == 101
+            assert abandonment_payload["minimum_playtime_hours"] == 6
+            assert abandonment_payload["minimum_inactivity_weeks"] == 24
+            assert abandonment_payload["rotation_interval_minutes"] == 45
+            assert abandonment_payload["never_show_appids"] == [440, 570]
+            assert abandonment_payload["artwork_shape"] == "wide"
+            assert abandonment_payload["artwork_size"] == 175
+            assert abandonment_payload["guilt_desaturater"] is True
+            assert abandonment_payload["guilt_desaturation_strength"] == 65
+            assert abandonment_payload["show_queue"] is False
+            assert abandonment_payload["accent_color"] == [180, 110, 55, 170]
         finally:
             tab.deleteLater()
     finally:
@@ -294,14 +335,15 @@ def test_steam_settings_section_uses_standard_collapsible_buckets(qt_app, settin
         _restore_steam_gate(prior)
 
 
-def test_unfinished_steam_card_buckets_are_hidden_without_dev_gate(qt_app, settings_manager) -> None:
+def test_only_unfinished_steam_card_buckets_are_hidden_without_dev_gate(qt_app, settings_manager) -> None:
     prior = _with_steam_gate(False)
     try:
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
-            achievement = _find_toggle(tab._steam_container, "Achievement Pulse")
-            assert achievement is not None and achievement.isHidden() is False
-            for label in ("Steam Journey", "Abandonment Issues", "Friend Pulse"):
+            for label in ("Achievement Pulse", "Abandonment Issues"):
+                promoted = _find_toggle(tab._steam_container, label)
+                assert promoted is not None and promoted.isHidden() is False
+            for label in ("Steam Journey", "Friend Pulse"):
                 toggle = _find_toggle(tab._steam_container, label)
                 assert toggle is not None and toggle.isHidden() is True
         finally:
@@ -488,7 +530,7 @@ def test_steam_connection_bucket_opens_from_persisted_target_state(qt_app, setti
         _restore_steam_gate(prior)
 
 
-def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
+def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
     qt_app,
     settings_manager,
 ) -> None:
@@ -496,8 +538,8 @@ def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
     try:
         public_registry = WidgetFactoryRegistry(settings_manager)
         assert public_registry.get_factory("achievement_pulse") is not None
+        assert public_registry.get_factory("abandonment_issues") is not None
         assert public_registry.get_factory("steam_progress") is None
-        assert public_registry.get_factory("abandonment_issues") is None
         assert public_registry.get_factory("friend_pulse") is None
     finally:
         _restore_steam_gate(prior)
@@ -558,6 +600,39 @@ def test_achievement_factory_is_public_while_unfinished_factories_are_dev_gated(
             assert getattr(achievement_widget, "_achievement_capsule_fill_color").getRgb() == (12, 34, 56, 78)
             assert getattr(achievement_widget, "_achievement_capsule_border_color").getRgb() == (90, 87, 65, 43)
             achievement_widget.deleteLater()
+
+            abandonment_widget = registry.create_widget(
+                "abandonment_issues",
+                parent,
+                {
+                    "enabled": True,
+                    "position": "Bottom Right",
+                    "selection_mode": "pinned_game",
+                    "pinned_appid": 101,
+                    "minimum_playtime_hours": 6,
+                    "minimum_inactivity_weeks": 24,
+                    "rotation_interval_minutes": 45,
+                    "never_show_appids": [440, 570],
+                    "show_artwork": True,
+                    "artwork_shape": "square",
+                    "artwork_size": 175,
+                    "accent_color": [180, 110, 55, 170],
+                    "guilt_desaturater": True,
+                    "guilt_desaturation_strength": 65,
+                    "preferred_width": 420,
+                    "preferred_height": 180,
+                },
+            )
+            assert abandonment_widget is not None
+            assert abandonment_widget.objectName() == "abandonment_issues_overlay"
+            assert getattr(abandonment_widget, "_abandonment_selection").mode == "pinned_game"
+            assert getattr(abandonment_widget, "_abandonment_selection").pinned_appid == 101
+            assert getattr(abandonment_widget, "_abandonment_artwork_size") == 175
+            assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
+            assert getattr(abandonment_widget, "_abandonment_accent_color").getRgb() == (180, 110, 55, 170)
+            assert abandonment_widget.minimumWidth() >= 560
+            assert abandonment_widget.minimumHeight() > 300
+            abandonment_widget.deleteLater()
         finally:
             parent.deleteLater()
     finally:

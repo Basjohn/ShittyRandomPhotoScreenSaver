@@ -42,6 +42,8 @@ ABANDONMENT_ROTATION_STATE_KEY = "abandonment_issues"
 ABANDONMENT_COOLDOWN_PREFIX = "abandonment_issues:"
 DEFAULT_ROTATION_INTERVAL_MINUTES = 30
 _DISPLAY_FOLLOWER_FRESH_SECONDS = 60.0
+DEFAULT_OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
+DEFAULT_RECENT_GAMES_FRESH_SECONDS = 10.0 * 60.0
 _request_coordinator = SteamRequestCoordinator()
 _request_backoff = SteamBackoffPolicy()
 _profile_locks: dict[str, threading.RLock] = {}
@@ -201,6 +203,8 @@ def refresh_abandonment_cache(
     now: float | None = None,
     force: bool = False,
     rotation_interval_minutes: int = DEFAULT_ROTATION_INTERVAL_MINUTES,
+    owned_fresh_seconds: float = DEFAULT_OWNED_GAMES_FRESH_SECONDS,
+    recent_fresh_seconds: float = DEFAULT_RECENT_GAMES_FRESH_SECONDS,
 ) -> AbandonmentRefreshOutcome:
     """Refresh owned/recent sources through the shared cache boundary."""
 
@@ -219,6 +223,7 @@ def refresh_abandonment_cache(
                 opener=opener,
                 now=reference_now,
                 force=force,
+                fresh_seconds=owned_fresh_seconds,
                 include_appinfo=True,
                 include_played_free_games=True,
             ),
@@ -232,6 +237,7 @@ def refresh_abandonment_cache(
                 opener=opener,
                 now=reference_now,
                 force=force,
+                fresh_seconds=recent_fresh_seconds,
                 count=20,
             ),
         ]
@@ -263,6 +269,39 @@ def _fetch_and_cache(
     opener,
     now: float,
     force: bool,
+    fresh_seconds: float,
+    **params: Any,
+) -> SteamResult:
+    from core.steam.cache import get_steam_source_refresh_lock
+
+    with get_steam_source_refresh_lock(profile_key, cache_key):
+        return _fetch_and_cache_unlocked(
+            profile_key=profile_key,
+            cache_key=cache_key,
+            source_id=source_id,
+            credential=credential,
+            profile=profile,
+            root=root,
+            opener=opener,
+            now=now,
+            force=force,
+            fresh_seconds=fresh_seconds,
+            **params,
+        )
+
+
+def _fetch_and_cache_unlocked(
+    *,
+    profile_key: str,
+    cache_key: str,
+    source_id: SteamSourceId,
+    credential: SteamCredentialPayload,
+    profile: str | None,
+    root: Path | None,
+    opener,
+    now: float,
+    force: bool,
+    fresh_seconds: float,
     **params: Any,
 ) -> SteamResult:
     from core.steam.backend import build_endpoint, fetch_json
@@ -274,11 +313,12 @@ def _fetch_and_cache(
         root=root,
     )
     cached = read_cache_record(cache_path)
+    freshness_window = max(_DISPLAY_FOLLOWER_FRESH_SECONDS, float(fresh_seconds))
     if (
         not force
         and cached.ok
         and cached.fetched_at is not None
-        and 0.0 <= now - cached.fetched_at < _DISPLAY_FOLLOWER_FRESH_SECONDS
+        and 0.0 <= now - cached.fetched_at < freshness_window
     ):
         return cached
 

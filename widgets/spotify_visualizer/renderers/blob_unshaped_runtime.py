@@ -27,16 +27,22 @@ def _resolve_runtime_unshaped_profile(
     high: float,
     overall: float,
 ) -> list[float]:
-    current_ts = float(getattr(s, "_last_update_ts", 0.0) or 0.0)
-    if current_ts <= 0.0:
+    runtime_ts = getattr(s, "_blob_runtime_time", None)
+    if runtime_ts is None:
         current_ts = time.monotonic()
+    else:
+        current_ts = max(0.0, float(runtime_ts))
     previous_ts = float(getattr(s, "_blob_unshaped_solver_ts", 0.0) or 0.0)
     dt = current_ts - previous_ts if previous_ts > 0.0 else (1.0 / 60.0)
     dt = max(1.0 / 240.0, min(0.05, dt))
 
     seed = getattr(s, "_blob_unshaped_solver_seed", None)
     if seed is None:
-        seed = ((id(s) % 8191) / 8191.0) * math.tau
+        epoch = int(getattr(s, "_blob_variant_epoch", 0) or 0)
+        seed = (
+            ((id(s) % 8191) / 8191.0) * math.tau
+            + epoch * 2.399963229728653
+        ) % math.tau
         setattr(s, "_blob_unshaped_solver_seed", seed)
 
     stage1_t, stage2_t, stage3_t = compute_stage_progress(

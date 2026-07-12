@@ -304,8 +304,12 @@ class SteamCardWidget(BaseOverlayWidget):
             try:
                 commit()
                 self._content_transition_key = transition_key
-            finally:
-                self._content_opacity = 0.0
+            except Exception:
+                logger.warning("[STEAM] Content transition commit failed", exc_info=True)
+                self._content_opacity = 1.0
+                self.update()
+                return
+            self._content_opacity = 0.0
             self._start_content_fade_in()
 
         try:
