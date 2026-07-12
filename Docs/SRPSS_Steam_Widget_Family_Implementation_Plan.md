@@ -1141,15 +1141,15 @@ Do not:
 
 ### Product statement
 
-Abandonment Issues deliberately re-surfaces a game that had meaningful play and has been untouched long enough to feel forgotten, not a 12-minute bounce.
+Abandonment Issues deliberately re-surfaces a game that received a real start and has been untouched long enough to feel forgotten, not a one-minute accidental launch or a likely completed favourite.
 
 The voice should feel affectionate or wry, never punitive.
 
 ### Last-played provenance gate
 
-This card is conditional on verified per-game last-played provenance.
+Smart selection is conditional on verified per-game last-played provenance. A 2026-07-12 redacted controlled-account capability probe found `GetOwnedGames.rtime_last_played` on every returned owned row and a positive timestamp on every played row. Valve's method documentation does not enumerate that response field, so the implementation validates every row rather than treating the probe as an unconditional API guarantee.
 
-Before enabling smart selection, discovery must prove:
+The completed discovery pass checked:
 
 - source field;
 - coverage across owned games;
@@ -1158,70 +1158,66 @@ Before enabling smart selection, discovery must prove:
 - freshness;
 - whether a null/missing date means unknown rather than never played.
 
-Every normalized last-played value carries a confidence/provenance marker:
+Every normalized last-played value carries one of two explicit confidence markers:
 
 ```text
-VERIFIED
-CACHED_PREVIOUSLY_VERIFIED
-UNKNOWN
-UNAVAILABLE
+verified
+unknown
 ```
 
-Only `VERIFIED` and appropriately retained `CACHED_PREVIOUSLY_VERIFIED` values may be used for an age sentence or smart inactivity score.
+Only `verified` values may be used for an age sentence or smart inactivity score. A successful source cache preserves that provenance across offline starts; missing, zero, non-numeric, and future values normalize to `unknown`.
 
-If the source cannot cover the feature responsibly, ship neither a guessed date nor a deceptive fallback. The card remains deferred, or supports only explicitly pinned games with an unqualified “Previous play history unavailable” state.
+If the source cannot cover a row responsibly, the card shows neither a guessed date nor a substitute game. Explicitly pinned unknown rows use the unqualified “Previous play history unavailable” state.
 
 ### Candidate selection
 
 Default eligibility:
 
 - owned game;
-- playtime above canonical default, initially 2 hours;
+- non-empty display title;
+- playtime above the canonical accidental-launch floor, initially 15 minutes;
 - reliable last-played value;
 - last played beyond canonical default, initially 12 weeks;
 - absent from current recent-game source;
 - outside card cooldown;
 - not `Never Show`.
 
-Score:
+Ranking tiers, before within-tier inactivity/playtime score:
 
-1. historical playtime;
-2. inactivity duration;
-3. exposure cooldown;
-4. pin state;
-5. optional known completion context from an already cached achievement snapshot only;
-6. exclusion/dismissal state.
+1. at least 26 weeks inactive, under 2 hours played, and 0-2 unlocked achievements in an existing cache snapshot;
+2. at least 26 weeks inactive and under 2 hours played with unknown achievement count;
+3. remaining 26-week candidates ordered through higher-unlock, higher-playtime, and finally all-cached-achievements-unlocked bands;
+4. equivalent 12-26-week bands only after the older pool;
+5. exposure cooldown and Never Show continue to control repetition/exclusion.
 
-Do not trigger achievement scans just to learn whether every game is complete.
+Higher playtime and higher unlock counts are deprioritized, not forbidden. “All cached achievements unlocked” is a ranking hint only and cannot be displayed or documented as proof that the game was completed. Probe at most 12 exact Achievement Pulse cache paths on worker IO, prioritizing current/pinned identity before the shortlist; unknown remains neutral. Do not enumerate achievement caches or trigger achievement scans.
 
 ### Rotation
 
 - Smart rotation advances from existing qualified cache candidates only.
-- Default visual rotation is slow and canonical; it must not send a request merely because the card changes.
+- Default visual rotation is 30 minutes (5-minute configurable minimum); it must not send a request merely because the card changes.
 - Semantic rotation cursor is profile-level so `monitor: ALL` does not show different games on different monitors by accident.
+- A ranking-policy setting/version change reselects once immediately; ordinary cache reloads retain the current game and cooldowns prevent preference evidence from snapping back to a recently shown title.
 - Pinning disables smart selection for that card, but does not mutate the shared library index.
 
 ### Display
 
-Default composition:
+Implemented default composition:
 
 - Steam header;
 - large artwork;
 - title;
-- total hours;
 - reliable last-played age;
-- restrained optional line such as “A world left behind.”
+- affectionate age-derived subtitle;
+- warm archive tab and double-line `LAST VISIT` stamp;
+- bottom ledger rows rather than Achievement Pulse capsules.
 
 Optional fields:
 
-- total hours;
-- last-played age;
-- subtitle;
-- first/last seen by SRPSS;
-- candidate source;
-- completion context only when already known;
-- pinned marker;
-- queue position.
+- total playtime;
+- queue position;
+- cache source label;
+- selection/pinned mode.
 
 ### Guilt Desaturater
 
@@ -1238,21 +1234,28 @@ Optional fields:
 ### Settings
 
 - selection mode: Smart Rotation / Pinned Game;
-- minimum playtime;
-- minimum inactivity;
+- accidental-launch floor in minutes;
+- preferred playtime ceiling;
+- preferred maximum cached unlock count;
+- minimum and preferred inactivity thresholds;
 - rotation interval;
 - Guilt Desaturater;
 - Never Show editor;
 - local-library pin picker;
+- artwork visibility, portrait/wide shape, bounded portrait size, and alpha-capable warm accent;
 - display fields;
-- manual refresh.
+- explicit manual Steam-library refresh.
 
 ### Acceptance conditions
 
-- Brief bounces fail default eligibility.
+- Sessions below 15 minutes fail default eligibility; 15-119-minute starts are preferred rather than excluded.
+- Six-month-old candidates outrank 12-26-week candidates when available; Steam purchase date is not inferred.
+- Cached 0-2-unlock evidence may improve rank and all-unlocked evidence may demote, but unknown stays neutral and no achievement request/sweep is added.
 - No age appears without reliable source provenance.
 - Missing source/data does not turn into a false date.
 - Guilt Desaturater is off by default and changes only artwork saturation.
+- Owned-library automatic refresh is capped at once per 24 hours; recent-game freshness follows the shared 10-minute default/5-minute minimum. Explicit manual refresh may bypass both without bypassing in-flight coordination/backoff.
+- Live game/title/art changes fade out, commit together while hidden, and fade in through the shared `AnimationManager`; the stable header/chrome does not move and no private high-frequency timer or graphics effect is introduced.
 
 ---
 
@@ -1574,6 +1577,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 
 - [x] Implement last-played confidence/provenance handling.
 - [x] Implement candidate eligibility/score/cooldowns/pin/Never Show.
+- [x] Prefer old short starts with bounded cache-only achievement evidence and policy-aware reranking without completion claims.
 - [x] Implement cache-only rotation shared by profile rather than display.
 - [x] Implement Guilt Desaturater via bucketed worker-prepared art assets.
 - [x] Implement settings, cache-only library picker, display fields, and distinct archival visual composition.
@@ -1728,7 +1732,7 @@ Required bars:
 
 - [x] missing/zero/future timestamp exclusion;
 - [x] verified timestamp eligibility;
-- [x] meaningful-play/inactivity boundary behavior;
+- [x] 15-minute eligibility plus 2-hour/2-unlock/26-week ranking tiers and likely-complete demotion;
 - [x] cooldown/pin/Never Show and profile-shared selection;
 - [x] cache-only rotation;
 - [x] Guilt Desaturater bucket/clamp and worker-prepared asset behavior;
@@ -1905,16 +1909,15 @@ Before merge:
 
 ---
 
-## 15. Recommended first implementation slice
+## 15. Recommended next implementation slices
 
-The safest first user-visible slice is:
+Achievement Pulse and Abandonment Issues now prove the secure cache-first, dynamic Custom-card, source-provenance, shared-profile rotation, and sparse live-content-transition contracts. The remaining sequence is:
 
-1. strict Steam credential store and redaction tests;
-2. normalized local library/recent-game cache with synthetic fixtures;
-3. descriptor/factory/settings skeleton for all four disabled cards;
-4. mock render harness and shared Steam card painting helpers;
-5. **Achievement Pulse only**, beginning with Most Recent + Custom app ID;
-6. cache-first, transition-safe real provider hookup for that one card;
-7. validate frozen build, Custom geometry, export redaction, and multi-monitor behavior.
+1. complete Abandonment Issues frozen-build, Custom geometry, transition, long-idle, and multi-display runtime validation;
+2. build Steam Journey's bounded app-news adapter plus deterministic source/failure fixtures;
+3. prove its editorial classifier rejects routine/noisy patch-ticker material before adding the one-item chronological card;
+4. add watched/focus-library history, dismissal, and request-budget policy before optional broader coverage;
+5. implement Friend Pulse only after private/partial friend fixtures and first-observation semantics are locked;
+6. retain `--devsteam` for Steam Journey and Friend Pulse until each card independently passes source, privacy, visual, Custom, lifecycle, and perf gates.
 
-That slice proves the two highest-risk family contracts—secure service data and dynamic Custom cards—before Friend Pulse privacy, Abandonment timestamp provenance, or Steam Journey editorial/news classification are allowed to multiply the surface area.
+This order uses the now-proven public app-news transport without treating transport success as product-quality classification, and it keeps the privacy-heavier social card behind its own evidence gate.

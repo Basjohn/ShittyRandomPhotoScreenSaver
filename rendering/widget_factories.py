@@ -1118,14 +1118,25 @@ class SteamCardFactory(WidgetFactory):
                         pinned_appid=_coerce_optional_appid(config.get("pinned_appid")),
                         minimum_playtime_minutes=max(
                             0,
-                            int(config.get("minimum_playtime_hours", 2)),
-                        )
-                        * 60,
+                            int(config.get("minimum_playtime_minutes", 15)),
+                        ),
+                        preferred_max_playtime_minutes=max(
+                            1,
+                            int(config.get("preferred_max_playtime_hours", 2)),
+                        ) * 60,
+                        preferred_max_unlocked_achievements=max(
+                            0,
+                            int(config.get("preferred_max_unlocked_achievements", 2)),
+                        ),
                         minimum_inactivity_days=max(
                             0,
                             int(config.get("minimum_inactivity_weeks", 12)),
                         )
                         * 7,
+                        preferred_minimum_inactivity_days=max(
+                            0,
+                            int(config.get("preferred_minimum_inactivity_weeks", 26)),
+                        ) * 7,
                         never_show_appids=parse_appid_list(config.get("never_show_appids", ())),
                     ),
                     field_visibility={

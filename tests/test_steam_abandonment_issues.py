@@ -8,10 +8,13 @@ from PySide6.QtCore import QRectF
 from PySide6.QtGui import QColor, QImage, QPainter
 
 from core.steam.abandonment_cache import (
+    MAX_CACHED_ACHIEVEMENT_PROBES,
+    _load_cached_achievement_progress,
     load_abandonment_cache_snapshot,
     refresh_abandonment_cache,
 )
 from core.steam.abandonment_issues import (
+    AbandonmentAchievementProgress,
     AbandonmentSelection,
     LAST_PLAYED_UNKNOWN,
     build_abandonment_candidates,
@@ -22,6 +25,7 @@ from core.steam.abandonment_issues import (
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
     RECENT_GAMES_CACHE_KEY,
+    achievement_cache_key_for_app,
     refresh_achievement_pulse_cache,
 )
 from core.steam.assets import (
@@ -41,7 +45,7 @@ from core.steam.credentials import (
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.threading.manager import TaskResult
-from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
+from widgets.abandonment_issues_widget import AbandonmentIssuesWidget, _prepare_cover_image
 from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_components import (
     abandonment_authored_size,
@@ -92,12 +96,51 @@ def test_abandonment_smart_candidates_require_meaningful_play_and_verified_age()
         now=NOW,
     )
 
-    assert {candidate.appid for candidate in candidates} == {101, 106, 107}
+    assert {candidate.appid for candidate in candidates} == {101, 102, 106}
+    assert [candidate.appid for candidate in candidates] == [102, 101, 106]
     assert all(candidate.last_played_confidence == "verified" for candidate in candidates)
-    assert 102 not in {candidate.appid for candidate in candidates}
     assert 103 not in {candidate.appid for candidate in candidates}
     assert 104 not in {candidate.appid for candidate in candidates}
     assert 105 not in {candidate.appid for candidate in candidates}
+    assert 107 not in {candidate.appid for candidate in candidates}
+
+
+def test_abandonment_prefers_old_short_low_unlock_games_without_forbidding_others() -> None:
+    old_timestamp = NOW - 400 * 24 * 60 * 60
+    younger_timestamp = NOW - 100 * 24 * 60 * 60
+    owned = SteamResult(
+        status=SteamResultStatus.SUCCESS,
+        source_id=SteamSourceId.OWNED_GAMES,
+        payload={
+            "response": {
+                "games": [
+                    {"appid": 1, "name": "Short Low", "playtime_forever": 90, "rtime_last_played": old_timestamp},
+                    {"appid": 2, "name": "Short High", "playtime_forever": 90, "rtime_last_played": old_timestamp},
+                    {"appid": 3, "name": "Long Low", "playtime_forever": 600, "rtime_last_played": old_timestamp},
+                    {"appid": 4, "name": "Likely Complete", "playtime_forever": 600, "rtime_last_played": old_timestamp},
+                    {"appid": 5, "name": "Too Recent To Prefer", "playtime_forever": 90, "rtime_last_played": younger_timestamp},
+                    {"appid": 6, "name": "Accidental Launch", "playtime_forever": 10, "rtime_last_played": old_timestamp},
+                ]
+            }
+        },
+    )
+    progress = {
+        1: AbandonmentAchievementProgress(unlocked_count=1, total_count=20),
+        2: AbandonmentAchievementProgress(unlocked_count=6, total_count=20),
+        3: AbandonmentAchievementProgress(unlocked_count=1, total_count=20),
+        4: AbandonmentAchievementProgress(unlocked_count=20, total_count=20),
+        5: AbandonmentAchievementProgress(unlocked_count=1, total_count=20),
+    }
+
+    candidates = build_abandonment_candidates(
+        owned_result=owned,
+        recent_result=None,
+        achievement_progress_by_appid=progress,
+        now=NOW,
+    )
+
+    assert [candidate.appid for candidate in candidates] == [1, 2, 3, 4, 5]
+    assert [candidate.preference_tier for candidate in candidates] == [0, 2, 3, 6, 10]
 
 
 def test_abandonment_never_show_and_pinned_unknown_history_remain_honest() -> None:
@@ -189,6 +232,120 @@ def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_pat
     assert advanced.resolved.appid != first.resolved.appid
     state_payload = json.loads((tmp_path / "profile_state.json").read_text(encoding="utf-8"))
     assert state_payload["rotations"]["abandonment_issues"]["appid"] == advanced.resolved.appid
+
+
+def test_abandonment_reranks_once_when_preference_policy_changes(tmp_path) -> None:
+    profile_key = derive_profile_cache_key("76561198000000020")
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, _fixture("recent_games_for_abandonment.json")),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    high_playtime_policy = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        selection=AbandonmentSelection(preferred_max_playtime_minutes=30),
+        root=tmp_path,
+        now=NOW,
+    )
+    short_start_policy = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        selection=AbandonmentSelection(),
+        root=tmp_path,
+        now=NOW + 1,
+    )
+
+    assert high_playtime_policy.resolved.appid == 101
+    assert short_start_policy.resolved.appid == 102
+
+
+def test_abandonment_uses_bounded_cached_achievement_signal_without_provider_work(tmp_path) -> None:
+    profile_key = derive_profile_cache_key("76561198000000021")
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, _fixture("recent_games_for_abandonment.json")),
+        (
+            achievement_cache_key_for_app(102),
+            SteamSourceId.PLAYER_ACHIEVEMENTS,
+            {
+                "playerstats": {
+                    "achievements": [
+                        {"name": "ONE", "achieved": 1},
+                        {"name": "TWO", "achieved": 1},
+                    ]
+                }
+            },
+        ),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    snapshot = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW,
+    )
+
+    assert snapshot.resolved.appid == 101
+
+
+def test_abandonment_achievement_hint_probe_has_a_hard_exact_path_cap(tmp_path) -> None:
+    old_timestamp = NOW - 400 * 24 * 60 * 60
+    owned = SteamResult(
+        status=SteamResultStatus.SUCCESS,
+        source_id=SteamSourceId.OWNED_GAMES,
+        payload={
+            "response": {
+                "games": [
+                    {
+                        "appid": appid,
+                        "name": f"Candidate {appid}",
+                        "playtime_forever": 90,
+                        "rtime_last_played": old_timestamp,
+                    }
+                    for appid in range(1, 31)
+                ]
+            }
+        },
+    )
+    candidates = build_abandonment_candidates(
+        owned_result=owned,
+        recent_result=None,
+        now=NOW,
+    )
+    reads: list[Path] = []
+
+    def _read(path: Path) -> SteamResult:
+        reads.append(path)
+        return SteamResult(status=SteamResultStatus.CACHE_MISS, from_cache=True)
+
+    progress = _load_cached_achievement_progress(
+        profile_key=derive_profile_cache_key("76561198000000022"),
+        candidates=candidates,
+        preferred_appids=(30, None),
+        profile=None,
+        root=tmp_path,
+        read_record=_read,
+    )
+
+    assert progress == {}
+    assert len(reads) == MAX_CACHED_ACHIEVEMENT_PROBES
+    assert achievement_cache_key_for_app(30) in reads[0].stem
 
 
 def test_abandonment_refresh_uses_owned_and_recent_sources_and_persists_success(tmp_path) -> None:
@@ -357,7 +514,7 @@ def test_abandonment_and_achievement_share_fresh_recent_games_source(tmp_path) -
         credential=credential,
         root=tmp_path,
         opener=_opener,
-        now=NOW,
+        now=NOW + 5 * 60,
     )
 
     recent_requests = [url for url in requests if "GetRecentlyPlayedGames" in url]
@@ -440,6 +597,9 @@ def test_guilt_desaturater_is_smooth_capped_and_prepared_outside_paint(tmp_path)
         cache_dir=tmp_path,
         desaturation_percent=later,
     ) == prepared
+    cover = _prepare_cover_image(prepared, target_width=40, target_height=56)
+    assert (cover.width(), cover.height()) == (40, 56)
+    assert not hasattr(AbandonmentIssuesWidget, "_scaled_artwork_for")
 
 
 def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt_app) -> None:

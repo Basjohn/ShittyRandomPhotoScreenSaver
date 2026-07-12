@@ -99,6 +99,8 @@ def reset_blob_variant_state(overlay: Any) -> None:
         "_blob_shaper_cached_base_profile",
         "_blob_shaper_cached_reaction_profile",
         "_blob_shaper_cached_energy_weights",
+        "_blob_tendril_geometry",
+        "_blob_tendril_motion",
     ):
         setattr(overlay, attr, None)
     for attr in (
@@ -115,7 +117,14 @@ def reset_blob_variant_state(overlay: Any) -> None:
     overlay._blob_profile_generation = 0
     overlay._blob_profile_compute_ms = 0.0
     overlay._blob_profile_compute_count = 0
+    overlay._blob_profile_compute_total_ms = 0.0
+    overlay._blob_profile_compute_max_ms = 0.0
+    overlay._blob_profile_advance_request_count = 0
+    overlay._blob_profile_skip_count = 0
+    overlay._blob_profile_wall_ts = 0.0
     overlay._blob_shaper_geometry_build_count = 0
+    overlay._blob_tendril_active_count = 0
+    overlay._blob_tendril_max_reach = 0.0
     overlay._blob_runtime_time = 0.0
     for attr in (
         "_blob_stage_input_bass",

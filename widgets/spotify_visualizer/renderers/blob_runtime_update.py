@@ -8,6 +8,7 @@ cached CPU profile update for both concrete Blob subtypes.
 """
 from __future__ import annotations
 
+import math
 import time
 from typing import Any, Sequence
 
@@ -17,6 +18,10 @@ from core.settings.visualizer_blob_contract import (
     normalize_blob_type,
 )
 from widgets.spotify_visualizer.blob_pockets import build_blob_pocket_uniform_payload
+from widgets.spotify_visualizer.blob_tendril_runtime import (
+    TENDRIL_COUNT,
+    build_blob_tendril_payload,
+)
 from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
     _build_energy_routing,
     _get_shaper_energy_bands,
@@ -28,6 +33,21 @@ from widgets.spotify_visualizer.renderers.blob_unshaped_runtime import (
 )
 
 PROFILE_SIZE = 128
+PROFILE_MAX_HZ = 45.0
+_PROFILE_MIN_INTERVAL = 1.0 / PROFILE_MAX_HZ
+_MIGHTY_COLD_PROFILE = tuple(
+    1.0
+    + math.cos(math.tau * idx / PROFILE_SIZE + 0.65) * 0.072
+    + math.cos(math.tau * 2.0 * idx / PROFILE_SIZE + 2.10) * 0.038
+    + math.cos(math.tau * 3.0 * idx / PROFILE_SIZE + 4.20) * 0.018
+    for idx in range(PROFILE_SIZE)
+)
+_SHAPED_COLD_PROFILE = tuple(
+    1.0
+    + math.cos(math.tau * idx / PROFILE_SIZE + 0.20) * 0.045
+    + math.cos(math.tau * 2.0 * idx / PROFILE_SIZE + 2.70) * 0.024
+    for idx in range(PROFILE_SIZE)
+)
 
 
 def _freeze_signature(value: Any) -> Any:
@@ -101,20 +121,62 @@ def _shaped_geometry(
             int(getattr(state, "_blob_shaper_geometry_build_count", 0) or 0) + 1,
         )
     return (
-        list(getattr(state, "_blob_shaper_cached_base_profile")),
-        list(getattr(state, "_blob_shaper_cached_reaction_profile")),
-        list(getattr(state, "_blob_shaper_cached_energy_weights")),
+        getattr(state, "_blob_shaper_cached_base_profile"),
+        getattr(state, "_blob_shaper_cached_reaction_profile"),
+        getattr(state, "_blob_shaper_cached_energy_weights"),
     )
 
 
-def advance_blob_runtime_profile(state: Any) -> list[float]:
-    """Advance the selected Blob subtype once for the current state snapshot."""
+def _runtime_profile_attr(blob_type: str) -> str:
+    return (
+        "_blob_shaper_runtime_profile"
+        if blob_type == BLOB_TYPE_SHAPED
+        else "_blob_unshaped_runtime_profile"
+    )
 
-    started = time.perf_counter()
+
+def advance_blob_runtime_profile(state: Any, *, force: bool = False) -> list[float]:
+    """Advance the selected Blob subtype at a bounded contour cadence.
+
+    Audio snapshots can arrive at roughly 90 Hz and compositor paints may be
+    even more frequent. A 128-sample spring solve at that cadence multiplied
+    poorly across displays. Forty-five contour updates per second retain fluid
+    motion while cutting the Blob-only UI-thread budget roughly in half.
+    """
+
     blob_type = normalize_blob_type(
         getattr(state, "_blob_type", None),
         legacy_shaper_enabled=getattr(state, "_blob_shaper_enabled", None),
     )
+    setattr(
+        state,
+        "_blob_profile_advance_request_count",
+        int(getattr(state, "_blob_profile_advance_request_count", 0) or 0) + 1,
+    )
+    profile_attr = _runtime_profile_attr(blob_type)
+    existing: Sequence[float] | None = getattr(state, profile_attr, None)
+    generation_type = getattr(state, "_blob_profile_generation_type", None)
+    wall_ts = time.monotonic()
+    previous_wall_ts = float(getattr(state, "_blob_profile_wall_ts", 0.0) or 0.0)
+    cache_valid = (
+        existing is not None
+        and len(existing) == PROFILE_SIZE
+        and generation_type == blob_type
+    )
+    if (
+        not force
+        and cache_valid
+        and previous_wall_ts > 0.0
+        and wall_ts - previous_wall_ts < _PROFILE_MIN_INTERVAL
+    ):
+        setattr(
+            state,
+            "_blob_profile_skip_count",
+            int(getattr(state, "_blob_profile_skip_count", 0) or 0) + 1,
+        )
+        return existing if isinstance(existing, list) else list(existing)
+
+    started = time.perf_counter()
     if blob_type == BLOB_TYPE_SHAPED:
         base_profile, reaction_profile, energy_weights = _shaped_geometry(state)
         bass, mid, high, overall = _get_shaper_energy_bands(state)
@@ -143,35 +205,77 @@ def advance_blob_runtime_profile(state: Any) -> list[float]:
             overall=overall,
         )
 
+    tendril_geometry, tendril_motion = build_blob_tendril_payload(
+        state,
+        blob_type=blob_type,
+        profile=profile,
+    )
+    setattr(state, "_blob_tendril_geometry", tendril_geometry)
+    setattr(state, "_blob_tendril_motion", tendril_motion)
+    active_tendrils = sum(
+        1
+        for idx in range(TENDRIL_COUNT)
+        if float(tendril_geometry[idx * 4 + 1]) > 0.002
+    )
+    setattr(state, "_blob_tendril_active_count", active_tendrils)
+    setattr(
+        state,
+        "_blob_tendril_max_reach",
+        max(
+            (float(tendril_geometry[idx * 4 + 1]) for idx in range(TENDRIL_COUNT)),
+            default=0.0,
+        ),
+    )
+
     generation = int(getattr(state, "_blob_profile_generation", 0) or 0) + 1
     setattr(state, "_blob_profile_generation", generation)
     setattr(state, "_blob_profile_generation_type", blob_type)
-    setattr(state, "_blob_profile_compute_ms", (time.perf_counter() - started) * 1000.0)
+    compute_ms = (time.perf_counter() - started) * 1000.0
+    setattr(state, "_blob_profile_compute_ms", compute_ms)
+    setattr(
+        state,
+        "_blob_profile_compute_total_ms",
+        float(getattr(state, "_blob_profile_compute_total_ms", 0.0) or 0.0) + compute_ms,
+    )
+    setattr(
+        state,
+        "_blob_profile_compute_max_ms",
+        max(float(getattr(state, "_blob_profile_compute_max_ms", 0.0) or 0.0), compute_ms),
+    )
     setattr(
         state,
         "_blob_profile_compute_count",
         int(getattr(state, "_blob_profile_compute_count", 0) or 0) + 1,
     )
-    return list(profile)
+    setattr(state, "_blob_profile_wall_ts", wall_ts)
+    return profile if isinstance(profile, list) else list(profile)
 
 
 def cached_blob_runtime_profile(state: Any, blob_type: str) -> list[float]:
     """Return the set-state profile, with a one-shot cold/prewarm fallback."""
 
-    attr = (
-        "_blob_shaper_runtime_profile"
-        if blob_type == BLOB_TYPE_SHAPED
-        else "_blob_unshaped_runtime_profile"
-    )
+    attr = _runtime_profile_attr(blob_type)
     profile: Sequence[float] | None = getattr(state, attr, None)
     generation_type = getattr(state, "_blob_profile_generation_type", None)
     if profile is None or len(profile) != PROFILE_SIZE or generation_type != blob_type:
-        profile = advance_blob_runtime_profile(state)
-    return [float(value) for value in profile]
+        # Paint is deliberately read-only. The state handoff owns expensive
+        # contour generation; a failed/cold handoff gets a bounded, visibly
+        # non-circular one-frame fallback instead of solving once per paint.
+        if blob_type == BLOB_TYPE_SHAPED:
+            authored = getattr(state, "_blob_shaper_cached_base_profile", None)
+            profile = (
+                authored
+                if authored is not None and len(authored) == PROFILE_SIZE
+                else _SHAPED_COLD_PROFILE
+            )
+        else:
+            profile = _MIGHTY_COLD_PROFILE
+    return profile if isinstance(profile, list) else list(profile)
 
 
 __all__ = [
     "PROFILE_SIZE",
+    "PROFILE_MAX_HZ",
     "advance_blob_runtime_profile",
     "cached_blob_runtime_profile",
 ]

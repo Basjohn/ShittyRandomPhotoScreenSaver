@@ -150,8 +150,11 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert "double_capsule_long_data" not in achievement
     abandonment = widgets["abandonment_issues"]
     assert abandonment["selection_mode"] == "smart_rotation"
-    assert abandonment["minimum_playtime_hours"] == 2
+    assert abandonment["minimum_playtime_minutes"] == 15
+    assert abandonment["preferred_max_playtime_hours"] == 2
+    assert abandonment["preferred_max_unlocked_achievements"] == 2
     assert abandonment["minimum_inactivity_weeks"] == 12
+    assert abandonment["preferred_minimum_inactivity_weeks"] == 26
     assert abandonment["rotation_interval_minutes"] >= 5
     assert abandonment["guilt_desaturater"] is False
     assert len(abandonment["accent_color"]) == 4
@@ -218,8 +221,11 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_pinned_game.setCurrentIndex(
                 tab.abandonment_issues_pinned_game.count() - 1
             )
-            tab.abandonment_issues_minimum_playtime_hours.setValue(6)
+            tab.abandonment_issues_minimum_playtime_minutes.setValue(20)
+            tab.abandonment_issues_preferred_max_playtime_hours.setValue(6)
+            tab.abandonment_issues_preferred_max_unlocked_achievements.setValue(1)
             tab.abandonment_issues_minimum_inactivity_weeks.setValue(24)
+            tab.abandonment_issues_preferred_minimum_inactivity_weeks.setValue(52)
             tab.abandonment_issues_rotation_interval_minutes.setValue(45)
             tab.abandonment_issues_never_show_appids.setText("440, 570; 440")
             tab.abandonment_issues_artwork_shape.setCurrentIndex(1)
@@ -266,8 +272,12 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             abandonment_payload = collect_widget_section_save_result(tab, "steam")[3]
             assert abandonment_payload["selection_mode"] == "pinned_game"
             assert abandonment_payload["pinned_appid"] == 101
-            assert abandonment_payload["minimum_playtime_hours"] == 6
+            assert "minimum_playtime_hours" not in abandonment_payload
+            assert abandonment_payload["minimum_playtime_minutes"] == 20
+            assert abandonment_payload["preferred_max_playtime_hours"] == 6
+            assert abandonment_payload["preferred_max_unlocked_achievements"] == 1
             assert abandonment_payload["minimum_inactivity_weeks"] == 24
+            assert abandonment_payload["preferred_minimum_inactivity_weeks"] == 52
             assert abandonment_payload["rotation_interval_minutes"] == 45
             assert abandonment_payload["never_show_appids"] == [440, 570]
             assert abandonment_payload["artwork_shape"] == "wide"
@@ -609,8 +619,11 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
                     "position": "Bottom Right",
                     "selection_mode": "pinned_game",
                     "pinned_appid": 101,
-                    "minimum_playtime_hours": 6,
+                    "minimum_playtime_minutes": 20,
+                    "preferred_max_playtime_hours": 6,
+                    "preferred_max_unlocked_achievements": 1,
                     "minimum_inactivity_weeks": 24,
+                    "preferred_minimum_inactivity_weeks": 52,
                     "rotation_interval_minutes": 45,
                     "never_show_appids": [440, 570],
                     "show_artwork": True,
@@ -627,6 +640,10 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert abandonment_widget.objectName() == "abandonment_issues_overlay"
             assert getattr(abandonment_widget, "_abandonment_selection").mode == "pinned_game"
             assert getattr(abandonment_widget, "_abandonment_selection").pinned_appid == 101
+            assert getattr(abandonment_widget, "_abandonment_selection").minimum_playtime_minutes == 20
+            assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_playtime_minutes == 360
+            assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_unlocked_achievements == 1
+            assert getattr(abandonment_widget, "_abandonment_selection").preferred_minimum_inactivity_days == 364
             assert getattr(abandonment_widget, "_abandonment_artwork_size") == 175
             assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
             assert getattr(abandonment_widget, "_abandonment_accent_color").getRgb() == (180, 110, 55, 170)

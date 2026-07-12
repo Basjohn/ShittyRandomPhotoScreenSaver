@@ -14,8 +14,8 @@ This is the long-term anti-regression record for the project, not an active task
 
 ### Recent Resolutions
 1. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-2. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)](#R-35)
-3. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)](#R-34)
+2. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+3. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
 4. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
 5. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
 6. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
@@ -97,32 +97,34 @@ This is the long-term anti-regression record for the project, not an active task
 - **Runtime validation target:** under `-devblob`, confirm Mighty visibly grows and releases rounded tendrils without a circular center or cut-like shoulders, and confirm Shaped visibly mutates around—then returns to—its authored goal. Check startup, settings round-trip, hot subtype switches, curated payloads, and Custom. A clean result must not add shared-mode reactivity drift or first-frame poison.
 
 <a id="R-35"></a>
-### [R-35] 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Resolved In Code, Runtime Validation Pending)
+### [R-35] 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure pattern:** `Enable Steam Widget` could be off while a card such as Achievement Pulse still appeared. The settings shell disappeared, but card-level `enabled` remained sufficient to create the overlay.
 - **Root cause:** the top-level Steam flag was documented and implemented as UI-only. Descriptor setup and the Steam factory checked only environment/card gates, so runtime creation and fade-expected truth ignored the family flag.
 - **Fix:** Steam factory descriptors now declare a base `steam.enabled` gate. Setup applies it before expected-overlay registration or factory creation, and the factory repeats the check as a defensive direct-call boundary. The UI hides all subordinate settings and now groups card controls into Layout, Appearance, and Content buckets. Card-level choices remain persisted while the family is off.
 - **Bars:** `tests/test_steam_phase3_settings_descriptors.py` proves descriptor metadata, hidden subordinate controls, retained card payloads, no created card, no expected overlay, and direct-factory refusal while the master is disabled.
 - **Runtime validation target:** in a compiled normal run, turning the family off must remove every Steam card on all displays; reopening Steam settings should show only the master. Re-enabling must restore the previously selected card choices without a fade stall.
+- **Validation:** user-observed runtime behavior was accepted on 2026-07-12; the latest reviewed multi-display logs contained no Steam master/fade-expected regression or compositor loss.
 
 <a id="R-34"></a>
-### [R-34] 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Resolved In Code, Runtime Validation Pending)
+### [R-34] 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure pattern:** with no Weather location, the card was visually squashed and offered no route to configure it. Logs showed lifecycle activation failing, setup falling back to legacy `start()`, and legacy start logging the same missing-location error.
 - **Root cause:** blank location was treated as an activation exception. The fallback then called `setText()` on the QLabel-backed overlay despite the real content living in child layouts, bypassing normal card geometry and creating two divergent lifecycle branches.
 - **Fix:** blank location is now a successful provider-inert state. It renders a minimum-height `Weather location required` / `Open Weather Settings` composition, joins the normal fade, submits no ThreadManager/provider/timer work, and routes only the action-label hit area through centralized input to Weather's `source_layout` bucket.
 - **Bars:** `tests/test_weather_widget.py` proves initialize/activate and legacy start are thread/timer inert, spacing is retained, action hit-testing emits the narrow target, and central navigation primes the Weather section/bucket.
 - **Runtime validation target:** start a compiled run with Weather enabled and location blank; the inert card should be comfortably spaced, its link should open Weather Location settings, and logs must contain neither lifecycle fallback nor missing-location fetch errors.
+- **Validation:** user-observed spacing/navigation behavior was accepted on 2026-07-12; the latest reviewed logs contained no blank-location lifecycle fallback or missing-location fetch error.
 
 <a id="R-33"></a>
 ### [R-33] 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)

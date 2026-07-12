@@ -752,8 +752,17 @@ def _current_abandonment_selection(tab: "WidgetsTab") -> AbandonmentSelection:
     return AbandonmentSelection(
         mode=str(tab.abandonment_issues_selection_mode.currentData() or "smart_rotation"),
         pinned_appid=int(pinned_data) if pinned_data else None,
-        minimum_playtime_minutes=int(tab.abandonment_issues_minimum_playtime_hours.value()) * 60,
+        minimum_playtime_minutes=int(tab.abandonment_issues_minimum_playtime_minutes.value()),
+        preferred_max_playtime_minutes=(
+            int(tab.abandonment_issues_preferred_max_playtime_hours.value()) * 60
+        ),
+        preferred_max_unlocked_achievements=int(
+            tab.abandonment_issues_preferred_max_unlocked_achievements.value()
+        ),
         minimum_inactivity_days=int(tab.abandonment_issues_minimum_inactivity_weeks.value()) * 7,
+        preferred_minimum_inactivity_days=(
+            int(tab.abandonment_issues_preferred_minimum_inactivity_weeks.value()) * 7
+        ),
         never_show_appids=parse_appid_list(tab.abandonment_issues_never_show_appids.text()),
     )
 
@@ -1186,18 +1195,48 @@ def _build_card_group(
         pinned_row.addWidget(pinned_game)
         pinned_row.addStretch()
 
-        playtime_row = _aligned_row(content_layout, "Minimum Playtime:")
+        playtime_row = _aligned_row(content_layout, "Ignore Sessions Under:")
         minimum_playtime = QSpinBox()
-        minimum_playtime.setRange(0, 10_000)
-        minimum_playtime.setSuffix(" h")
-        minimum_playtime.setValue(tab._default_int(key, "minimum_playtime_hours", 2))
+        minimum_playtime.setRange(0, 120)
+        minimum_playtime.setSuffix(" min")
+        minimum_playtime.setValue(tab._default_int(key, "minimum_playtime_minutes", 15))
         minimum_playtime.setToolTip(
-            "Only Smart Rotation games with at least this much total playtime qualify."
+            "Filter accidental launches while still allowing genuinely forgotten short starts."
         )
         minimum_playtime.valueChanged.connect(tab._save_settings)
-        tab.abandonment_issues_minimum_playtime_hours = minimum_playtime
+        tab.abandonment_issues_minimum_playtime_minutes = minimum_playtime
         playtime_row.addWidget(minimum_playtime)
         playtime_row.addStretch()
+
+        preferred_playtime_row = _aligned_row(content_layout, "Prefer Playtime Under:")
+        preferred_playtime = QSpinBox()
+        preferred_playtime.setRange(1, 1_000)
+        preferred_playtime.setSuffix(" h")
+        preferred_playtime.setValue(
+            tab._default_int(key, "preferred_max_playtime_hours", 2)
+        )
+        preferred_playtime.setToolTip(
+            "Rank shorter starts first without forbidding games above this playtime."
+        )
+        preferred_playtime.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_preferred_max_playtime_hours = preferred_playtime
+        preferred_playtime_row.addWidget(preferred_playtime)
+        preferred_playtime_row.addStretch()
+
+        preferred_unlocks_row = _aligned_row(content_layout, "Prefer At Most:")
+        preferred_unlocks = QSpinBox()
+        preferred_unlocks.setRange(0, 100)
+        preferred_unlocks.setSuffix(" cached unlocks")
+        preferred_unlocks.setValue(
+            tab._default_int(key, "preferred_max_unlocked_achievements", 2)
+        )
+        preferred_unlocks.setToolTip(
+            "Use only existing local Achievement Pulse cache. Unknown counts stay neutral; this never requests achievements."
+        )
+        preferred_unlocks.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_preferred_max_unlocked_achievements = preferred_unlocks
+        preferred_unlocks_row.addWidget(preferred_unlocks)
+        preferred_unlocks_row.addStretch()
 
         inactivity_row = _aligned_row(content_layout, "Minimum Inactivity:")
         minimum_inactivity = QSpinBox()
@@ -1211,6 +1250,21 @@ def _build_card_group(
         tab.abandonment_issues_minimum_inactivity_weeks = minimum_inactivity
         inactivity_row.addWidget(minimum_inactivity)
         inactivity_row.addStretch()
+
+        preferred_inactivity_row = _aligned_row(content_layout, "Prefer Inactive For:")
+        preferred_inactivity = QSpinBox()
+        preferred_inactivity.setRange(1, 1_000)
+        preferred_inactivity.setSuffix(" weeks")
+        preferred_inactivity.setValue(
+            tab._default_int(key, "preferred_minimum_inactivity_weeks", 26)
+        )
+        preferred_inactivity.setToolTip(
+            "Rank games with verified last-played age beyond this point first. Steam purchase date is not available."
+        )
+        preferred_inactivity.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_preferred_minimum_inactivity_weeks = preferred_inactivity
+        preferred_inactivity_row.addWidget(preferred_inactivity)
+        preferred_inactivity_row.addStretch()
 
         rotation_row = _aligned_row(content_layout, "Rotation Interval:")
         rotation_interval = QSpinBox()
@@ -1658,8 +1712,23 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 tab._abandonment_pending_pinned_appid,
             )
             for setting_key, attr_name, fallback in (
-                ("minimum_playtime_hours", "abandonment_issues_minimum_playtime_hours", 2),
+                ("minimum_playtime_minutes", "abandonment_issues_minimum_playtime_minutes", 15),
+                (
+                    "preferred_max_playtime_hours",
+                    "abandonment_issues_preferred_max_playtime_hours",
+                    2,
+                ),
+                (
+                    "preferred_max_unlocked_achievements",
+                    "abandonment_issues_preferred_max_unlocked_achievements",
+                    2,
+                ),
                 ("minimum_inactivity_weeks", "abandonment_issues_minimum_inactivity_weeks", 12),
+                (
+                    "preferred_minimum_inactivity_weeks",
+                    "abandonment_issues_preferred_minimum_inactivity_weeks",
+                    26,
+                ),
                 ("rotation_interval_minutes", "abandonment_issues_rotation_interval_minutes", 30),
                 ("artwork_size", "abandonment_issues_artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT),
                 ("guilt_desaturation_strength", "abandonment_issues_guilt_desaturation_strength", 55),
@@ -1750,11 +1819,21 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         )
         pinned_data = tab.abandonment_issues_pinned_game.currentData()
         payload["pinned_appid"] = int(pinned_data) if pinned_data else None
-        payload["minimum_playtime_hours"] = int(
-            tab.abandonment_issues_minimum_playtime_hours.value()
+        payload.pop("minimum_playtime_hours", None)
+        payload["minimum_playtime_minutes"] = int(
+            tab.abandonment_issues_minimum_playtime_minutes.value()
+        )
+        payload["preferred_max_playtime_hours"] = int(
+            tab.abandonment_issues_preferred_max_playtime_hours.value()
+        )
+        payload["preferred_max_unlocked_achievements"] = int(
+            tab.abandonment_issues_preferred_max_unlocked_achievements.value()
         )
         payload["minimum_inactivity_weeks"] = int(
             tab.abandonment_issues_minimum_inactivity_weeks.value()
+        )
+        payload["preferred_minimum_inactivity_weeks"] = int(
+            tab.abandonment_issues_preferred_minimum_inactivity_weeks.value()
         )
         payload["rotation_interval_minutes"] = int(
             tab.abandonment_issues_rotation_interval_minutes.value()

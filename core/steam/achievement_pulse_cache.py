@@ -34,6 +34,7 @@ OWNED_GAMES_CACHE_KEY = "achievement_pulse_owned_games"
 ACHIEVEMENTS_CACHE_KEY_PREFIX = "achievement_pulse_achievements_"
 ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX = "achievement_pulse_schema_"
 _REFRESH_FRESH_WINDOW_SECONDS = 60.0
+DEFAULT_SOURCE_FRESH_SECONDS = 10.0 * 60.0
 _refresh_coordinator = SteamRequestCoordinator()
 _refresh_backoff = SteamBackoffPolicy()
 _refresh_locks: dict[str, threading.Lock] = {}
@@ -185,6 +186,7 @@ def refresh_achievement_pulse_cache(
     opener=None,
     now: float | None = None,
     force: bool = False,
+    source_fresh_seconds: float = DEFAULT_SOURCE_FRESH_SECONDS,
 ) -> AchievementPulseRefreshOutcome:
     """Refresh the selected app through the cache boundary without owning scheduling.
 
@@ -202,6 +204,10 @@ def refresh_achievement_pulse_cache(
     )
     lock = _refresh_lock_for(profile_key)
     with lock:
+        source_fresh_window = max(
+            _REFRESH_FRESH_WINDOW_SECONDS,
+            float(source_fresh_seconds),
+        )
         existing = load_achievement_pulse_cache_snapshot(
             profile_key=profile_key,
             selection=selection,
@@ -214,7 +220,7 @@ def refresh_achievement_pulse_cache(
             and (
                 (
                     existing.cache_age_seconds is not None
-                    and existing.cache_age_seconds < _REFRESH_FRESH_WINDOW_SECONDS
+                    and existing.cache_age_seconds < source_fresh_window
                 )
                 or _has_recent_success(refresh_identity, now=reference_now)
             )
@@ -233,7 +239,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
-                reuse_fresh=not force,
+                fresh_seconds=0.0 if force else source_fresh_window,
             )
             refresh_results.append(recent_result)
             if not recent_result.ok:
@@ -256,7 +262,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
-                reuse_fresh=not force,
+                fresh_seconds=0.0 if force else source_fresh_window,
             ))
             refresh_results.append(_fetch_and_cache(
                 profile_key=profile_key,
@@ -268,7 +274,7 @@ def refresh_achievement_pulse_cache(
                 root=root,
                 opener=opener,
                 now=reference_now,
-                reuse_fresh=not force,
+                fresh_seconds=0.0 if force else source_fresh_window,
             ))
         snapshot = load_achievement_pulse_cache_snapshot(
             profile_key=profile_key,
@@ -300,7 +306,7 @@ def _fetch_and_cache(
     opener,
     now: float,
     appid: int | None = None,
-    reuse_fresh: bool = True,
+    fresh_seconds: float = DEFAULT_SOURCE_FRESH_SECONDS,
 ) -> SteamResult:
     from core.steam.cache import get_steam_source_refresh_lock
 
@@ -313,10 +319,10 @@ def _fetch_and_cache(
         )
         cached = read_cache_record(cache_path)
         if (
-            reuse_fresh
+            fresh_seconds > 0.0
             and cached.ok
             and cached.fetched_at is not None
-            and 0.0 <= now - cached.fetched_at < _REFRESH_FRESH_WINDOW_SECONDS
+            and 0.0 <= now - cached.fetched_at < float(fresh_seconds)
         ):
             return cached
         return _fetch_and_cache_unlocked(

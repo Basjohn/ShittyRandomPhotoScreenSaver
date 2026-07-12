@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
@@ -15,6 +16,7 @@ from widgets.steam_abandonment_components import (
     ABANDONMENT_ACCENT_RGBA,
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     AbandonmentCardLayout,
+    abandonment_artwork_dimensions,
     abandonment_authored_size,
     build_abandonment_view_model,
     layout_abandonment_card,
@@ -26,6 +28,38 @@ from widgets.steam_components import SteamCardViewModel
 
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class _AbandonmentPreparedPresentation:
+    model: SteamCardViewModel
+    artwork: QImage
+    artwork_identity: str
+    desaturation_bucket: int
+
+
+def _prepare_cover_image(
+    source_path: Path | None,
+    *,
+    target_width: int,
+    target_height: int,
+) -> QImage:
+    """Decode, smooth-scale, and crop artwork in the caller's worker job."""
+
+    if source_path is None or target_width <= 0 or target_height <= 0:
+        return QImage()
+    image = QImage(str(source_path))
+    if image.isNull():
+        return QImage()
+    scaled = image.scaled(
+        int(target_width),
+        int(target_height),
+        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+    crop_x = max(0, (scaled.width() - int(target_width)) // 2)
+    crop_y = max(0, (scaled.height() - int(target_height)) // 2)
+    return scaled.copy(crop_x, crop_y, int(target_width), int(target_height))
 
 
 class AbandonmentIssuesWidget(SteamCardWidget):
@@ -71,8 +105,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         )
         self._abandonment_show_connection_info_icon = bool(show_connection_info_icon)
         self._abandonment_artwork = QImage()
-        self._abandonment_scaled_artwork = QImage()
-        self._abandonment_scaled_artwork_key: tuple[int, int, int, float] | None = None
         self._abandonment_rotation_timer: OverlayTimerHandle | None = None
         super().__init__(
             parent=parent,
@@ -164,6 +196,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_cache_load_started = True
         self._abandonment_start_fade_after_cache_load = bool(start_fade_after_load)
         generation = self._next_abandonment_generation()
+        artwork_target = self._capture_artwork_prepare_target()
 
         def _load_snapshot():
             from core.steam.abandonment_cache import load_abandonment_cache_snapshot
@@ -184,6 +217,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                     snapshot,
                     profile_key=metadata.profile_cache_key,
                     allow_asset_network=False,
+                    artwork_target=artwork_target,
                 ),
             )
 
@@ -240,6 +274,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             return False
         self._abandonment_refresh_in_progress = True
         generation = self._next_abandonment_generation()
+        artwork_target = self._capture_artwork_prepare_target()
 
         def _refresh_snapshot():
             from core.steam.abandonment_cache import (
@@ -273,6 +308,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                     snapshot,
                     profile_key=metadata.profile_cache_key,
                     allow_asset_network=False,
+                    artwork_target=artwork_target,
                     connection_needs_attention=True,
                 )
             if credential is None:
@@ -289,6 +325,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 outcome.snapshot,
                 profile_key=profile_key,
                 allow_asset_network=outcome.snapshot.resolved.ok,
+                artwork_target=artwork_target,
                 connection_needs_attention=outcome.connection_needs_attention,
             )
 
@@ -360,6 +397,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             return False
         self._abandonment_rotation_in_progress = True
         generation = self._next_abandonment_generation()
+        artwork_target = self._capture_artwork_prepare_target()
 
         def _rotate_snapshot():
             from core.steam.abandonment_cache import load_abandonment_cache_snapshot
@@ -378,6 +416,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 snapshot,
                 profile_key=metadata.profile_cache_key,
                 allow_asset_network=False,
+                artwork_target=artwork_target,
             )
 
         def _finished(task_result) -> None:
@@ -411,8 +450,9 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         *,
         profile_key: str,
         allow_asset_network: bool,
+        artwork_target: tuple[int, int],
         connection_needs_attention: bool = False,
-    ) -> tuple[SteamCardViewModel, str, int]:
+    ) -> _AbandonmentPreparedPresentation:
         from core.settings.storage_paths import get_steam_cache_dir
         from core.steam.assets import (
             SteamAssetRecord,
@@ -462,11 +502,21 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                     cache_dir=asset_dir,
                     desaturation_percent=bucket,
                 )
-        return model, str(asset_path or ""), bucket
+        artwork_identity = str(asset_path or "")
+        return _AbandonmentPreparedPresentation(
+            model=model,
+            artwork=_prepare_cover_image(
+                asset_path,
+                target_width=artwork_target[0],
+                target_height=artwork_target[1],
+            ),
+            artwork_identity=artwork_identity,
+            desaturation_bucket=bucket,
+        )
 
     def _apply_prepared_presentation(
         self,
-        presentation: tuple[SteamCardViewModel, str, int],
+        presentation: _AbandonmentPreparedPresentation,
         *,
         animate: bool,
     ) -> None:
@@ -504,19 +554,21 @@ class AbandonmentIssuesWidget(SteamCardWidget):
 
     def _commit_prepared_presentation(
         self,
-        presentation: tuple[SteamCardViewModel, str, int],
+        presentation: _AbandonmentPreparedPresentation,
         *,
         animate: bool,
     ) -> None:
-        model, asset_path, bucket = presentation
-        image = QImage(asset_path) if asset_path else QImage()
-        transition_key = (model.state, model.appid, asset_path, bucket)
+        model = presentation.model
+        transition_key = (
+            model.state,
+            model.appid,
+            presentation.artwork_identity,
+            presentation.desaturation_bucket,
+        )
 
         def _commit() -> None:
             self._view_model = model
-            self._abandonment_artwork = image
-            self._abandonment_scaled_artwork = QImage()
-            self._abandonment_scaled_artwork_key = None
+            self._abandonment_artwork = QImage(presentation.artwork)
             self._has_displayed_valid_data = True
 
         self.apply_content_transition(transition_key, _commit, animate=animate)
@@ -526,28 +578,29 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_generation = generation
         return generation
 
-    def _scaled_artwork_for(self, rect: QRectF, dpr: float) -> QImage:
-        if self._abandonment_artwork.isNull() or rect.isNull():
-            return QImage()
-        scale_dpr = max(1.0, float(dpr))
-        target_w = max(1, int(round(rect.width() * scale_dpr)))
-        target_h = max(1, int(round(rect.height() * scale_dpr)))
-        key = (int(self._abandonment_artwork.cacheKey()), target_w, target_h, scale_dpr)
-        if key == self._abandonment_scaled_artwork_key and not self._abandonment_scaled_artwork.isNull():
-            return self._abandonment_scaled_artwork
-        scaled = self._abandonment_artwork.scaled(
-            target_w,
-            target_h,
-            Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-            Qt.TransformationMode.SmoothTransformation,
+    def _capture_artwork_prepare_target(self) -> tuple[int, int]:
+        """Capture logical geometry/DPR on UI before worker image preparation."""
+
+        dimensions = abandonment_artwork_dimensions(
+            show_artwork=self._abandonment_show_artwork,
+            artwork_shape=self._abandonment_artwork_shape,
+            artwork_size=self._abandonment_artwork_size,
         )
-        crop_x = max(0, (scaled.width() - target_w) // 2)
-        crop_y = max(0, (scaled.height() - target_h) // 2)
-        prepared = scaled.copy(crop_x, crop_y, target_w, target_h)
-        prepared.setDevicePixelRatio(scale_dpr)
-        self._abandonment_scaled_artwork = prepared
-        self._abandonment_scaled_artwork_key = key
-        return prepared
+        if dimensions.isEmpty():
+            return 0, 0
+        authored = self._authored_content_size()
+        shrink_r, shrink_b = self.painted_frame_shadow_card_shrink()
+        target_width = max(1.0, float(self.width() - shrink_r))
+        target_height = max(1.0, float(self.height() - shrink_b))
+        layout_scale = max(
+            0.05,
+            min(target_width / authored.width(), target_height / authored.height()),
+        )
+        dpr = max(1.0, float(self.devicePixelRatioF()))
+        return (
+            max(1, int(round(dimensions.width() * layout_scale * dpr))),
+            max(1, int(round(dimensions.height() * layout_scale * dpr))),
+        )
 
     def _paint_before_native_text(self) -> None:
         painter = None
@@ -567,7 +620,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 artwork_shape=self._abandonment_artwork_shape,
                 artwork_size=self._abandonment_artwork_size,
             )
-            artwork = self._scaled_artwork_for(layout.art_rect, self.devicePixelRatioF())
             self._last_layout = render_abandonment_card(
                 painter,
                 self._view_model,
@@ -576,7 +628,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 font_size=self.get_font_size(),
                 text_color=self.get_text_color(),
                 logo_pixmap=self._steam_logo,
-                artwork_image=artwork,
+                artwork_image=self._abandonment_artwork,
                 show_artwork=self._abandonment_show_artwork,
                 artwork_shape=self._abandonment_artwork_shape,
                 artwork_size=self._abandonment_artwork_size,

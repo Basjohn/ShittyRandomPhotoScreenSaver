@@ -86,8 +86,8 @@ def _organic_angular_tendril(
     """Return a Shaped tendril with a broad root and rounded narrow tip."""
 
     shoulder = _rounded_angular_lobe(angle_frac, center_frac, half_width)
-    tip = _rounded_angular_lobe(angle_frac, center_frac, half_width * 0.54)
-    return shoulder * 0.38 + tip * 0.62
+    tip = _rounded_angular_lobe(angle_frac, center_frac, half_width * 0.68)
+    return shoulder * 0.58 + tip * 0.42
 
 
 def _catmull_rom(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
@@ -125,6 +125,35 @@ def _smooth_cyclic_series(values: Sequence[float], passes: int = _SHAPER_ROUTING
             smoothed.append(prev * 0.2 + cur * 0.6 + nxt * 0.2)
             prev, cur = cur, nxt
         out = smoothed
+    return out
+
+
+def _limit_cyclic_series_slope(
+    values: Sequence[float],
+    *,
+    max_step: float,
+    iterations: int = 10,
+) -> list[float]:
+    """Project only over-steep contour shoulders into a rounded slope budget."""
+
+    out = [float(value) for value in values]
+    if len(out) < 3:
+        return out
+    limit = max(1e-5, float(max_step))
+    for _ in range(max(1, int(iterations))):
+        changed = False
+        for idx in range(len(out)):
+            next_idx = (idx + 1) % len(out)
+            delta = out[next_idx] - out[idx]
+            if abs(delta) <= limit:
+                continue
+            excess = (abs(delta) - limit) * 0.5
+            direction = 1.0 if delta > 0.0 else -1.0
+            out[idx] += direction * excess
+            out[next_idx] -= direction * excess
+            changed = True
+        if not changed:
+            break
     return out
 
 
@@ -297,20 +326,7 @@ def _sample_routed_shaper_energy(
         float(high) * _sample_smoothed_linear_series(angle_frac, channels[3]),
         float(transient) * _sample_smoothed_linear_series(angle_frac, channels[4]),
     )
-    positives = [c for c in contributions if c > 0.0]
-    negatives = [-c for c in contributions if c < 0.0]
-    strongest_outward = max(positives, default=0.0)
-    strongest_inward = max(negatives, default=0.0)
-    smooth_outward = max(strongest_outward, min(1.0, sum(positives) * 0.72))
-    smooth_inward = max(strongest_inward, min(1.0, sum(negatives) * 0.72))
-    if max(smooth_outward, smooth_inward) < 1e-6:
-        return 0.0
-    dominant = smooth_outward if smooth_outward >= smooth_inward else -smooth_inward
-    net = smooth_outward - smooth_inward
-    signed = max(-1.0, min(1.0, dominant * 0.94 + net * 0.06))
-    if abs(signed) < 1e-6:
-        signed = dominant if abs(dominant) >= abs(net) else net
-    return signed
+    return _combine_routed_energy(contributions)
 
 
 def _sample_smoothed_shaper_energy(
@@ -337,6 +353,78 @@ def _sample_smoothed_shaper_energy(
         ) * weight
         weight_total += weight
     return total / max(1e-6, weight_total)
+
+
+def _combine_routed_energy(contributions: Sequence[float]) -> float:
+    """Combine signed routing lanes without repeatedly sampling their arrays."""
+
+    positives = [float(value) for value in contributions if value > 0.0]
+    negatives = [-float(value) for value in contributions if value < 0.0]
+    strongest_outward = max(positives, default=0.0)
+    strongest_inward = max(negatives, default=0.0)
+    smooth_outward = max(strongest_outward, min(1.0, math.fsum(positives) * 0.72))
+    smooth_inward = max(strongest_inward, min(1.0, math.fsum(negatives) * 0.72))
+    if max(smooth_outward, smooth_inward) < 1e-6:
+        return 0.0
+    dominant = smooth_outward if smooth_outward >= smooth_inward else -smooth_inward
+    net = smooth_outward - smooth_inward
+    signed = _clamp(dominant * 0.94 + net * 0.06, -1.0, 1.0)
+    if abs(signed) < 1e-6:
+        signed = dominant if abs(dominant) >= abs(net) else net
+    return signed
+
+
+def _sample_grid_smoothed(values: Sequence[float], count: int) -> list[float]:
+    """Sample a cyclic series once at the solver grid's smoothing kernel."""
+
+    if count <= 0:
+        return []
+    return [
+        _sample_smoothed_linear_series(idx / count, values)
+        for idx in range(count)
+    ]
+
+
+def _build_shaper_signed_energy_profile(
+    weights: Sequence[Sequence[float]],
+    *,
+    sample_count: int,
+    bass: float,
+    mid: float,
+    high: float,
+    transient: float,
+) -> list[float]:
+    """Resolve authored routing once per sample instead of once per helper layer.
+
+    The previous angle helper nested a three-tap contour sample around five
+    three-tap routing samples, then repeated the whole operation for the outer
+    smoothing kernel.  At the fixed 128-sample transport grid this produces
+    the same field much more cheaply by smoothing each lane once, combining
+    it, and smoothing the signed result once.
+    """
+
+    count = max(0, int(sample_count))
+    channels = list(weights[:5])
+    channels += [()] * max(0, 5 - len(channels))
+    sampled = [_sample_grid_smoothed(channel, count) for channel in channels]
+    routed = [
+        _combine_routed_energy(
+            (
+                float(bass) * sampled[0][idx],
+                float(mid) * sampled[1][idx],
+                float(mid) * sampled[2][idx],
+                float(high) * sampled[3][idx],
+                float(transient) * sampled[4][idx],
+            )
+        )
+        for idx in range(count)
+    ]
+    return [
+        routed[(idx - 1) % count] * 0.25
+        + routed[idx] * 0.50
+        + routed[(idx + 1) % count] * 0.25
+        for idx in range(count)
+    ]
 
 
 def _resolve_shaper_base_radius(
@@ -529,19 +617,29 @@ def _build_shaped_motion_residual_profile(
     transient = _compress_shaper_energy(transient_energy)
     energy = _clamp(overall * 0.40 + vocal * 0.34 + high * 0.12 + transient * 0.14, 0.0, 1.0)
 
-    idle_amplitude = min(0.105, idle * 0.090)
-    mutation_amplitude = min(0.220, audio * energy * 0.165)
-    vocal_amplitude = min(0.135, audio * (vocal * 0.086 + high * 0.030))
+    idle_amplitude = min(0.125, idle * 0.105)
+    mutation_amplitude = min(0.305, audio * energy * 0.265)
+    vocal_amplitude = min(0.235, audio * (vocal * 0.148 + high * 0.052))
     tendril_amplitude = min(
-        0.160,
-        audio * (overall * 0.018 + vocal * 0.055 + high * 0.018 + transient * 0.045),
+        0.325,
+        audio * (overall * 0.043 + vocal * 0.112 + high * 0.034 + transient * 0.102),
     )
 
-    # The contour anchors stay put.  Only their strength and a very small
-    # angular sway change, so a listener sees lobes grow and relax instead of
-    # watching one frozen deformation orbit around the authored shape.
-    idle_sway = math.sin(time_value * 0.17 + seed * 0.61) * 0.055
-    music_sway = math.sin(time_value * 0.31 - seed * 0.47) * 0.075
+    # Each broad harmonic has its own bounded phase and amplitude trajectory.
+    # A single shared phase merely rotates an authored silhouette; independent
+    # paths change the relationship, count, and reach of its local features.
+    idle_phases = (
+        seed * 0.61 + math.sin(time_value * 0.19 + seed * 0.37) * 0.62,
+        seed * 1.17 + 1.30 + math.sin(time_value * 0.27 + 1.10) * 0.82,
+        -seed * 0.43 + 2.80 + math.sin(time_value * 0.39 + 2.40) * 0.96,
+    )
+    mutation_phases = (
+        seed * 0.83 + 0.40 + math.sin(time_value * 0.47 + 0.20) * 0.78,
+        seed * 1.31 + 1.90 + math.sin(time_value * 0.63 + 1.70) * 0.94,
+        -seed * 0.57 + 3.30 + math.sin(time_value * 0.81 + 3.10) * 1.06,
+        seed * 1.67 + 0.90 + math.sin(time_value * 1.07 + 4.20) * 0.88,
+        -seed * 1.09 + 2.60 + math.sin(time_value * 1.31 + 2.20) * 0.72,
+    )
     living_breaths = (
         _standing_breath(time_value, 0.47, seed * 0.83 + 0.20, 0.42),
         _standing_breath(time_value, 0.63, seed * 1.31 + 1.70, 0.40),
@@ -555,13 +653,31 @@ def _build_shaped_motion_residual_profile(
         _standing_breath(time_value, 3.11, seed * 0.39 + 3.40, 0.10),
     )
     vocal_breaths = (
-        _standing_breath(time_value, 3.73, seed * 1.19 + 0.80, 0.08),
-        _standing_breath(time_value, 4.67, seed * 0.73 + 2.80, 0.06),
+        _standing_breath(time_value, 2.73, seed * 1.19 + 0.80, 0.18),
+        _standing_breath(time_value, 3.67, seed * 0.73 + 2.80, 0.14),
+        _standing_breath(time_value, 4.43, seed * 1.43 + 4.10, 0.10),
     )
     tendril_breaths = (
-        _standing_breath(time_value, 2.03, seed * 1.07 + 0.30, 0.02),
-        _standing_breath(time_value, 2.71, seed * 0.67 + 2.30, 0.02),
-        _standing_breath(time_value, 3.29, seed * 1.61 + 4.70, 0.01),
+        _standing_breath(time_value, 1.13, seed * 1.07 + 0.30, 0.02),
+        _standing_breath(time_value, 1.47, seed * 0.67 + 2.30, 0.02),
+        _standing_breath(time_value, 1.83, seed * 1.61 + 4.70, 0.01),
+        _standing_breath(time_value, 2.29, seed * 0.49 + 1.40, 0.00),
+    )
+    tendril_centers = (
+        0.08 + (seed * 0.013) % 0.07 + math.sin(time_value * 0.23 + seed) * 0.038,
+        0.40 + (seed * 0.017) % 0.08 + math.sin(time_value * 0.19 + seed * 1.7) * 0.046,
+        0.70 + (seed * 0.011) % 0.07 + math.sin(time_value * 0.31 - seed * 0.8) * 0.034,
+        0.89 + (seed * 0.019) % 0.05 + math.sin(time_value * 0.41 + seed * 0.4) * 0.026,
+    )
+    mutation_lobe_gates = (
+        _standing_breath(time_value, 0.91, seed * 0.53 + 0.60, 0.04),
+        _standing_breath(time_value, 1.21, seed * 1.41 + 2.70, 0.03),
+        _standing_breath(time_value, 1.57, seed * 0.79 + 4.40, 0.02),
+    )
+    mutation_lobe_centers = (
+        0.20 + math.sin(time_value * 0.29 + seed) * 0.030,
+        0.56 + math.sin(time_value * 0.37 + 2.10 - seed * 0.2) * 0.038,
+        0.82 + math.sin(time_value * 0.43 + 4.20 + seed * 0.3) * 0.026,
     )
     residual_profile: list[float] = []
     for idx in range(count):
@@ -571,20 +687,38 @@ def _build_shaped_motion_residual_profile(
         # breathing amplitudes.  A tiny common sway prevents mechanical
         # stillness without turning the field into rotational motion.
         living = (
-            math.sin(theta + seed * 0.71 + idle_sway) * 0.54 * living_breaths[0]
-            + math.sin(theta * 2.0 + seed * 1.37 - idle_sway * 0.7) * 0.30 * living_breaths[1]
-            + math.sin(theta * 3.0 - seed * 0.43 + idle_sway * 0.45) * 0.16 * living_breaths[2]
+            math.sin(theta + idle_phases[0]) * 0.50 * living_breaths[0]
+            + math.sin(theta * 2.0 + idle_phases[1]) * 0.31 * living_breaths[1]
+            + math.sin(theta * 3.0 + idle_phases[2]) * 0.19 * living_breaths[2]
         )
 
         # Music mutation remains anchored as well.  Independent envelopes
         # make fixed sections of the contour push, recede, and change detail;
         # the harmonic mix is intentionally irregular but still rounded.
         mutation = (
-            math.sin(theta + seed * 1.13 + music_sway) * 0.25 * mutation_breaths[0]
-            + math.sin(theta * 2.0 + seed * 0.47 - music_sway * 0.8) * 0.24 * mutation_breaths[1]
-            + math.sin(theta * 3.0 - seed * 0.81 + music_sway * 0.55) * 0.25 * mutation_breaths[2]
-            + math.sin(theta * 5.0 + seed * 1.67 - music_sway * 0.35) * 0.17 * mutation_breaths[3]
-            + math.sin(theta * 7.0 - seed * 1.31 + music_sway * 0.22) * 0.09 * mutation_breaths[4]
+            math.sin(theta + mutation_phases[0]) * 0.22 * mutation_breaths[0]
+            + math.sin(theta * 2.0 + mutation_phases[1]) * 0.23 * mutation_breaths[1]
+            + math.sin(theta * 3.0 + mutation_phases[2]) * 0.24 * mutation_breaths[2]
+            + math.sin(theta * 5.0 + mutation_phases[3]) * 0.19 * mutation_breaths[3]
+            + math.sin(theta * 7.0 + mutation_phases[4]) * 0.12 * mutation_breaths[4]
+        )
+        angle_frac = idx / count
+        mutation += (
+            _organic_angular_tendril(
+                angle_frac,
+                mutation_lobe_centers[0],
+                0.105 + mutation_lobe_gates[0] * 0.030,
+            ) * 0.34 * mutation_lobe_gates[0]
+            - _organic_angular_tendril(
+                angle_frac,
+                mutation_lobe_centers[1],
+                0.130 + mutation_lobe_gates[1] * 0.025,
+            ) * 0.27 * mutation_lobe_gates[1]
+            + _organic_angular_tendril(
+                angle_frac,
+                mutation_lobe_centers[2],
+                0.085 + mutation_lobe_gates[2] * 0.025,
+            ) * 0.24 * mutation_lobe_gates[2]
         )
 
         # Mid/high energy owns a faster standing outline ripple.  This is the
@@ -592,43 +726,68 @@ def _build_shaped_motion_residual_profile(
         # authored H1/H2 silhouette and below a one-sample corner at the
         # 128-point transport resolution.
         vocal_wobble = (
-            math.sin(theta * 4.0 + seed * 0.89 + music_sway * 0.30) * 0.527 * vocal_breaths[0]
-            + math.sin(theta * 6.0 - seed * 0.53 - music_sway * 0.20) * 0.323 * vocal_breaths[1]
+            math.sin(
+                theta * 4.0
+                + seed * 0.89
+                + math.sin(time_value * 1.73 + seed * 0.31) * 1.24
+            ) * 0.46 * vocal_breaths[0]
+            + math.sin(
+                theta * 6.0
+                - seed * 0.53
+                + math.sin(time_value * 2.17 + 1.90) * 1.38
+            ) * 0.34 * vocal_breaths[1]
+            + math.sin(
+                theta * 9.0
+                + seed * 1.27
+                + math.sin(time_value * 2.83 + 3.70) * 1.06
+            ) * 0.20 * vocal_breaths[2]
         )
 
-        # Three sparse cosine-squared pulls have broad shoulders and rounded
-        # tips.  Their centres only sway a few degrees; their amplitudes do the
-        # obvious musical growing and shrinking.
-        angle_frac = idx / count
+        # Sparse cosine-squared pulls are born and retired on independent
+        # envelopes. Their anchor families remain bounded, while widths and
+        # lengths breathe, so they read as gel extensions rather than spikes
+        # orbiting a fixed goal shape.
         tendrils = (
             _organic_angular_tendril(
                 angle_frac,
-                0.10 + (seed * 0.013) % 0.07 + math.sin(time_value * 0.23 + seed) * 0.010,
-                0.105,
-            ) * 0.47 * tendril_breaths[0]
+                tendril_centers[0],
+                0.070 + tendril_breaths[0] * 0.040,
+            ) * 0.39 * tendril_breaths[0]
             + _organic_angular_tendril(
                 angle_frac,
-                0.48 + (seed * 0.017) % 0.08 + math.sin(time_value * 0.19 + seed * 1.7) * 0.012,
-                0.090,
-            ) * 0.33 * tendril_breaths[1]
+                tendril_centers[1],
+                0.060 + tendril_breaths[1] * 0.038,
+            ) * 0.29 * tendril_breaths[1]
             + _organic_angular_tendril(
                 angle_frac,
-                0.77 + (seed * 0.011) % 0.06 + math.sin(time_value * 0.27 - seed * 0.8) * 0.009,
-                0.075,
-            ) * 0.20 * tendril_breaths[2]
+                tendril_centers[2],
+                0.052 + tendril_breaths[2] * 0.034,
+            ) * 0.21 * tendril_breaths[2]
+            + _organic_angular_tendril(
+                angle_frac,
+                tendril_centers[3],
+                0.044 + tendril_breaths[3] * 0.030,
+            ) * 0.18 * tendril_breaths[3] * max(transient, vocal * 0.42)
         )
 
         residual_profile.append(
             living * idle_amplitude
             + mutation * mutation_amplitude
             + vocal_wobble * vocal_amplitude
-            + tendrils * tendril_amplitude
+            # Profile-space tendrils are root pressure only; curved 2D limbs
+            # own the visible reach in the Blob shader.
+            + tendrils * tendril_amplitude * 0.42
         )
 
     # The analytic fields are smooth by construction. Two one-time passes
     # remove sample-grid shoulders while retaining the authored controls'
     # amplitude; there is no longer any every-frame solver/shader averaging.
-    residual_profile = _smooth_cyclic_series(residual_profile, passes=2)
+    residual_profile = _smooth_cyclic_series(residual_profile, passes=4)
+    residual_profile = _limit_cyclic_series_slope(
+        residual_profile,
+        max_step=1.85 / count,
+    )
+    residual_profile = _smooth_cyclic_series(residual_profile, passes=3)
     mean = math.fsum(residual_profile) / count
     return [value - mean for value in residual_profile]
 
@@ -658,8 +817,8 @@ def _shaped_motion_allowance(
     )
     audio_budget = 0.0
     if playing:
-        audio_budget = min(0.250, _clamp(audio_motion, 0.0, 3.0) * energy * 0.185)
-    return min(0.320, idle_budget + audio_budget)
+        audio_budget = min(0.315, _clamp(audio_motion, 0.0, 3.0) * energy * 0.235)
+    return min(0.380, idle_budget + audio_budget)
 
 
 def _get_shaper_energy_bands(s) -> tuple[float, float, float, float]:
@@ -791,31 +950,36 @@ def _solve_runtime_shaper_profile_step(
         transient=transient,
         playing=playing,
     )
+    smoothed_base_profile = _sample_grid_smoothed(base_profile, count)
+    smoothed_react_profile = _sample_grid_smoothed(react_profile, count)
+    signed_energy_profile = _build_shaper_signed_energy_profile(
+        weights,
+        sample_count=count,
+        bass=drive_bass,
+        mid=drive_mid,
+        high=drive_high,
+        transient=drive_transient,
+    )
     target_profile: list[float] = []
     resolved_base_profile: list[float] = []
     min_profile: list[float] = []
     max_profile: list[float] = []
     for idx in range(count):
-        angle_frac = idx / count
-        authored_base_mult = _sample_smoothed_linear_series(angle_frac, base_profile)
+        authored_base_mult = smoothed_base_profile[idx]
         base_mult = _resolve_shaper_base_radius(
             authored_base_mult,
             base_strength=base_strength,
         )
-        react_mult = _sample_smoothed_linear_series(angle_frac, react_profile)
-        target = _resolve_shaper_radius_at_angle(
-            angle_frac,
-            base_profile=base_profile,
-            react_profile=react_profile,
-            weights=weights,
-            staged_radius=1.0,
-            bass=drive_bass,
-            mid=drive_mid,
-            high=drive_high,
-            overall=drive_overall,
-            transient=drive_transient,
+        react_mult = smoothed_react_profile[idx]
+        target = _resolve_shaper_radius(
+            authored_base_mult,
+            react_mult,
             base_strength=base_strength,
+            neutral_radius=1.0,
+            bass_energy=drive_bass,
+            overall_energy=drive_overall,
             react_strength=react_strength,
+            signed_energy=signed_energy_profile[idx],
             playing=playing,
         )
         gap = abs(react_mult - base_mult)
@@ -826,8 +990,8 @@ def _solve_runtime_shaper_profile_step(
         # large authored gaps keep their existing wider reaction envelope.
         outward_allowance = max(gap_outward_allowance, motion_allowance)
         inward_allowance = max(gap_inward_allowance, motion_allowance * 0.84)
-        min_profile.append(max(0.08, min(base_mult, react_mult) - inward_allowance))
-        max_profile.append(max(base_mult, react_mult) + outward_allowance)
+        min_profile.append(max(0.12, min(base_mult, react_mult) - inward_allowance))
+        max_profile.append(min(1.95, max(base_mult, react_mult) + outward_allowance))
         target_profile.append(target)
         resolved_base_profile.append(base_mult)
 

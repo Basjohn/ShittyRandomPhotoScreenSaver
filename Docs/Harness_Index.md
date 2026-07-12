@@ -64,6 +64,30 @@ python tools/winprobe_observer.py
 ```
 - See also: `Docs/Historical_Bugs.md` entry `R-18`.
 
+## Steam Widgets
+
+### Production Steam source / cache / visual lock
+- Purpose: protect Achievement Pulse and Abandonment Issues source provenance, successful-only cache authority, cross-card/display request reuse, cache-before-fade lifecycle, worker-prepared assets, sparse content transitions, settings/default parity, and deterministic authored geometry.
+- Use when editing `core/steam/`, either production Steam widget, Steam descriptors/factories/settings, shared Steam painting, or Steam refresh/transition policy.
+- Typical command:
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+python -m pytest `
+  tests/test_steam_backend.py `
+  tests/test_steam_cache.py `
+  tests/test_steam_request_policy.py `
+  tests/test_steam_profile_assets_events.py `
+  tests/test_steam_achievement_pulse.py `
+  tests/test_steam_abandonment_issues.py `
+  tests/test_steam_phase3_settings_descriptors.py `
+  tests/test_steam_phase4_mock_visuals.py `
+  -q
+```
+- Notes:
+  - Tests use synthetic fixtures and injected openers only; no test may contact Steam or contain real account data.
+  - Offscreen raster bars require bundled font registration for representative typography. They prove geometry and paint safety, not final frozen-build/multi-display appearance.
+  - Runtime validation should use `--steam --perf --cache --set --geo --life`; add `--devsteam` only when intentionally testing Journey/Friend prototypes.
+
 ## Secure-Desktop / Link Handoff
 
 ### Reddit helper scheduled-task smoke test

@@ -1,6 +1,6 @@
 # Future Cleanup
 
-Last updated: 2026-07-03
+Last updated: 2026-07-12
 
 ## Priority Guidance
 
@@ -13,6 +13,9 @@ Low-priority cleanup items discovered during unrelated work. These are not activ
 
 ## Backlog
 
+- [ ] Correlate the 2026-07-12 transition/visualizer DT and paint-gap spikes (reaching roughly 100-180 ms) plus the later single Spectrum reveal-watchdog expiry before changing shared cadence. The reviewed windows showed healthy display first-frame commits and no Steam/compositor failure, so use `--perf --viz --life` ownership evidence to distinguish event-loop delivery pressure from a named active-mode/startup phase rather than adding UI refresh pressure.
+- [ ] Review image-pipeline `scaled-miss` worker-fallback telemetry. Worker preparation is the correct recovery route, but repeated normal cache misses should not look like exceptional fallback noise; change level/copy only after confirming no decode/prescale churn or source-size instability.
+- [ ] Reclassify successful Reddit cache telemetry currently emitted at `WARNING` if fresh logs confirm it is ordinary success. Preserve warnings for stale/failure/fallback authority changes rather than muting the underlying provider/cadence guards.
 - [ ] Reconcile likely-stale Media/Visualizers descriptor tests in [tests/test_widget_descriptors.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/tests/test_widget_descriptors.py). Three expectations still assume older Media/Visualizers coupling: `media.loader_guard_attrs == ("media_enabled", "vis_enabled_checkbox")`, mutual lazy dependencies between `media` and `visualizers`, and programmatic Visualizers hydration materializing Media first. Current [rendering/widget_descriptors.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/rendering/widget_descriptors.py) has Media and Visualizers split more cleanly (`media` only guards on `media_enabled`; Visualizers depends programmatically on Defaults only). High likelihood: stale tests after intentional settings-section split. Before deleting/changing assertions, verify Media/Visualizers settings persistence, bucket state, scroll state, and runtime visualizer enablement still work when opening either section lazily.
 - [ ] Decide whether `Docs/SRPSS_Settings_Screensaver.sst` and `Docs/SRPSS_Settings_Screensaver_MC.sst` are meant to be canonical examples or historical exports; regenerate or relabel them so stale defaults do not mislead future work.
 - [ ] Classify and either track or retire the `Imgur` overlay-raise TODO in [widgets/imgur/widget.py](F:/Programming/Apps/ShittyRandomPhotoScreenSaver/widgets/imgur/widget.py).

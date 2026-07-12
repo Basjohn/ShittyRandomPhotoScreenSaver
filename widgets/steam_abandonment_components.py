@@ -81,6 +81,25 @@ def abandonment_authored_size(
     return QSizeF(ABANDONMENT_AUTHORED_SIZE)
 
 
+def abandonment_artwork_dimensions(
+    *,
+    show_artwork: bool,
+    artwork_shape: str,
+    artwork_size: int,
+) -> QSizeF:
+    """Return the authored artwork target shared by layout and worker prep."""
+
+    if not show_artwork:
+        return QSizeF()
+    resolved_size = normalize_abandonment_artwork_size(artwork_size)
+    if str(artwork_shape).strip().lower() == "square":
+        return QSizeF(float(resolved_size), resolved_size * 1.4)
+    return QSizeF(
+        min(238.0, resolved_size * 1.45),
+        max(78.0, resolved_size * 0.66),
+    )
+
+
 def format_abandonment_age(inactivity_days: int | None) -> str:
     """Format only a source-proven inactivity interval."""
 
@@ -219,16 +238,20 @@ def layout_abandonment_card(
     logo = QRectF(30.0, 20.0, 30.0, 30.0)
     header_text = QRectF(68.0, 17.0, 254.0, 36.0)
     archive_tab = QRectF(407.0, 19.0, 135.0, 30.0)
-    resolved_size = normalize_abandonment_artwork_size(artwork_size)
     shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    art_size = abandonment_artwork_dimensions(
+        show_artwork=show_artwork,
+        artwork_shape=shape,
+        artwork_size=artwork_size,
+    )
     if not show_artwork:
         art = QRectF()
         text_left = 24.0
     elif shape == "square":
-        art = QRectF(22.0, 76.0, float(resolved_size), resolved_size * 1.4)
+        art = QRectF(22.0, 76.0, art_size.width(), art_size.height())
         text_left = art.right() + 24.0
     else:
-        art = QRectF(22.0, 82.0, min(238.0, resolved_size * 1.45), max(78.0, resolved_size * 0.66))
+        art = QRectF(22.0, 82.0, art_size.width(), art_size.height())
         text_left = art.right() + 24.0
     text_right = 538.0
     text_width = max(150.0, text_right - text_left)

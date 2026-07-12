@@ -24,22 +24,12 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Remove or cache redundant per-paint Blob contour work so Blob-active cadence and application responsiveness remain comparable to healthy visualizer modes, including multi-display/runtime refresh paths.
 - [ ] Add final-profile sequence oracles that reject repeated silhouettes and size-only motion, measure vocal/event correlation plus morphology change at fixed angles, and pair them with Blob-focused perf bars, startup/settings/type-boundary checks, curated/Custom smoke coverage, and the unchanged current-good visualizer lock.
 
-### Steam Achievement Pulse Promotion; Prototype Cards Dev-Gated
+### Steam Abandonment Issues Production Runtime Bar
 
-- [ ] In a fresh compiled run without `--devsteam`, verify saved identity/API-key status stays green on every Steam Settings reopen and cached Achievement Pulse content appears before the coordinated fade without a connect-required flash.
-- [ ] Validate wide artwork plus the 140px-default/190px-maximum header-aligned square cover-filled portrait artwork with Unlocked centered below it, artwork-off mode, font-family changes, one-to-five unprefixed latest unlocks, the optional framed 40px primary achievement icon immediately after the primary achievement text without moving other elements, cached bracketed names beside recent-game choices without selection-signal churn, Previous-field toggling, compact capsules versus default-on all-field double capsules (`PREVIOUSLY` for Previous), independent capsule-font growth, alpha-capable capsule fill/border swatches, and bottom-anchored whole-rail fields at authored size plus narrow/tall multi-monitor `Custom` geometry.
-- [ ] In a compiled multi-display run, turn the Steam family master off and confirm all cards disappear, all subordinate settings stay hidden, fade coordination does not wait for Steam, and re-enabling restores the previously saved per-card choices.
-- [ ] Validate the 5-minute minimum/10-minute default freshness window against a real Steam account, `--noupdates`, transitions, manual refresh, and an unauthorized/stale-cache branch without exposing credentials in logs; confirm a multi-display `--steam` startup emits one provider batch per profile/cache namespace/selection rather than one batch per overlay.
-- [ ] In a separate `--devsteam` run, confirm only Steam Journey, Friend Pulse, and Abandonment Issues become visible and remain disabled/provider-inert by default.
-
-### Defaults Foundry Canonical Authority Validation
-
-- [ ] In the visible Foundry, verify RGBA leaves open the application alpha swatch, `font_family` leaves open a font chooser, Normal rows identify as Canonical/Pending Base, and MC rows identify inherited versus MC-only values without clipping or editor-row styling regressions.
-- [ ] Import a disposable exported SST/`settings_v2.json` into each selected profile, confirm the preview excludes credentials/source lists/weather identity/machine-local paths/CUSTOM geometry/layout slots and string tooltips identify valid text domains, then hash both installed profile JSON files before and after Save and Regenerate to verify they remain byte-identical while Normal rewrites only the canonical base and MC remains a compact differential; use Undo Most Recent and Regenerate to restore both sources/artifacts.
-
-### Weather Blank-Location Inert State Validation
-
-- [ ] In a compiled run with Weather enabled and location blank, verify the card remains normally spaced, `Open Weather Settings` opens the Weather source bucket, no provider/timer work starts, and no lifecycle fallback or missing-location error appears.
+- [ ] In a fresh compiled run without `--devsteam`, enable Abandonment Issues and verify cached content appears before the first coordinated fade, Smart/Pinned/unknown-history states remain honest, cached library names populate without provider work, and explicit Refresh Steam Library gives gentle success/failure feedback.
+- [ ] Run multi-display and long-idle passes with `--steam --perf --cache --set --geo --life`: confirm one shared owned-library request per 24-hour source window, recent games follow the shared freshness window, 30-minute rotation is cache-only/profile-synchronized, 15-minute/2-hour/2-unlock/26-week ranking changes rotate through several cached games without completion claims, and game/title/art changes use the sparse fade without a repaint burst, UI-thread stall, or DT spike.
+- [ ] Validate portrait/wide/art-off, minimum/default/maximum portrait size, Guilt off/on/max, RGBA accent, every optional ledger-field combination, large fonts, high DPR, and narrow/tall multi-monitor `Custom` geometry without overlap, reflow, clipping, or committed-rect mutation.
+- [ ] Exercise `--noupdates`, offline, unauthorized-with-valid-cache, disconnect, settings restart, frozen build, and non-repository cwd; cache must remain authoritative, failed sources must not freshen it, teardown must leave no Steam timer/task/resource warnings, and credentials/account data must remain absent from logs/exports/repo artifacts.
 
 ## Watchlist
 
@@ -53,7 +43,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
 - [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.
 - [ ] Media metadata preservation during live visualizer preset churn: if it reopens, first suspect partial same-track playback snapshots during visualizer-only settings writes.
-- [ ] Steam Journey, Friend Pulse, and Abandonment Issues remain production-hidden until each is explicitly promoted beyond `--devsteam`.
+- [ ] Steam Journey and Friend Pulse remain production-hidden until each is explicitly promoted beyond `--devsteam`; Journey's next gate is editorial classification/noise/request-budget evidence, not transport discovery.
 
 ## Deferred / Not Active
 

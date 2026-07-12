@@ -1,6 +1,7 @@
 """Cache-first provider adapter for Steam Abandonment Issues."""
 from __future__ import annotations
 
+import hashlib
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -10,13 +11,19 @@ from typing import Any
 
 from core.settings.storage_paths import get_steam_cache_dir
 from core.steam.abandonment_issues import (
+    AbandonmentAchievementProgress,
+    AbandonmentCandidate,
     AbandonmentResolved,
     AbandonmentSelection,
+    achievement_progress_from_result,
+    build_abandonment_candidates,
+    parse_appid_list,
     resolve_abandonment_issues,
 )
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
     RECENT_GAMES_CACHE_KEY,
+    achievement_cache_key_for_app,
 )
 from core.steam.cache import (
     cache_path_for_profile_key,
@@ -44,6 +51,7 @@ DEFAULT_ROTATION_INTERVAL_MINUTES = 30
 _DISPLAY_FOLLOWER_FRESH_SECONDS = 60.0
 DEFAULT_OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
 DEFAULT_RECENT_GAMES_FRESH_SECONDS = 10.0 * 60.0
+MAX_CACHED_ACHIEVEMENT_PROBES = 12
 _request_coordinator = SteamRequestCoordinator()
 _request_backoff = SteamBackoffPolicy()
 _profile_locks: dict[str, threading.RLock] = {}
@@ -142,12 +150,30 @@ def load_abandonment_cache_snapshot(
             rotation = {}
         current_appid = _positive_int(rotation.get("appid"))
         changed_at = _float_or_zero(rotation.get("changed_at"))
+        policy_signature = _selection_policy_signature(selection)
+        if rotation.get("policy_signature") != policy_signature:
+            current_appid = None
+            changed_at = 0.0
         rotation_seconds = max(5, int(rotation_interval_minutes)) * 60
         rotation_due = bool(
             advance_rotation
             and (changed_at <= 0.0 or reference_now - changed_at >= rotation_seconds)
         )
         exposures = _exposure_timestamps(state.cooldowns)
+        base_candidates = build_abandonment_candidates(
+            owned_result=owned_result,
+            recent_result=recent_result,
+            selection=selection,
+            now=reference_now,
+        )
+        achievement_progress = _load_cached_achievement_progress(
+            profile_key=profile_key,
+            candidates=base_candidates,
+            preferred_appids=(current_appid, _positive_int(selection.pinned_appid)),
+            profile=profile,
+            root=root,
+            read_record=read_record,
+        )
         resolved = resolve_abandonment_issues(
             owned_result=owned_result,
             recent_result=recent_result,
@@ -156,6 +182,7 @@ def load_abandonment_cache_snapshot(
             current_appid=current_appid,
             advance_rotation=rotation_due,
             exposure_timestamps=exposures,
+            achievement_progress_by_appid=achievement_progress,
         )
 
         if selection.mode != "pinned_game" and resolved.ok:
@@ -165,6 +192,7 @@ def load_abandonment_cache_snapshot(
                 rotations[ABANDONMENT_ROTATION_STATE_KEY] = {
                     "appid": resolved.appid,
                     "changed_at": reference_now,
+                    "policy_signature": policy_signature,
                 }
                 cooldowns = dict(state.cooldowns)
                 if selected_changed or changed_at <= 0.0:
@@ -360,6 +388,55 @@ def _profile_state_path(
     cache_root = root or get_steam_cache_dir(profile=profile, profile_key=profile_key)
     cache_root.mkdir(parents=True, exist_ok=True)
     return cache_root / "profile_state.json"
+
+
+def _load_cached_achievement_progress(
+    *,
+    profile_key: str,
+    candidates: tuple[AbandonmentCandidate, ...],
+    preferred_appids: tuple[int | None, ...],
+    profile: str | None,
+    root: Path | None,
+    read_record: Callable[[Path], SteamResult],
+) -> dict[int, AbandonmentAchievementProgress]:
+    """Probe a bounded shortlist of exact cache paths without source work."""
+
+    appids: list[int] = []
+    for appid in (*preferred_appids, *(candidate.appid for candidate in candidates)):
+        resolved_appid = _positive_int(appid)
+        if resolved_appid is None or resolved_appid in appids:
+            continue
+        appids.append(resolved_appid)
+        if len(appids) >= MAX_CACHED_ACHIEVEMENT_PROBES:
+            break
+
+    progress_by_appid: dict[int, AbandonmentAchievementProgress] = {}
+    for appid in appids:
+        result = read_record(
+            cache_path_for_profile_key(
+                profile_key,
+                achievement_cache_key_for_app(appid),
+                profile=profile,
+                root=root,
+            )
+        )
+        progress = achievement_progress_from_result(result)
+        if progress is not None:
+            progress_by_appid[appid] = progress
+    return progress_by_appid
+
+
+def _selection_policy_signature(selection: AbandonmentSelection) -> str:
+    values = (
+        "ranking-v2",
+        str(max(0, int(selection.minimum_playtime_minutes))),
+        str(max(1, int(selection.preferred_max_playtime_minutes))),
+        str(max(0, int(selection.preferred_max_unlocked_achievements))),
+        str(max(0, int(selection.minimum_inactivity_days))),
+        str(max(0, int(selection.preferred_minimum_inactivity_days))),
+        ",".join(str(appid) for appid in parse_appid_list(selection.never_show_appids)),
+    )
+    return hashlib.sha256("|".join(values).encode("ascii", errors="ignore")).hexdigest()[:16]
 
 
 def _profile_lock_for(profile_key: str) -> threading.RLock:

@@ -58,6 +58,16 @@ uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fra
 const int SHAPER_N = 128;
 uniform float u_blob_runtime_profile[SHAPER_N]; // CPU-solved runtime contour multipliers
 
+// True 2D goo limbs. The CPU owns their musical birth/release envelopes and
+// bounded anchor families; the GPU owns curved, tapered distance geometry.
+// This is deliberately Blob-local and is absent from every other visualizer.
+const int BLOB_TENDRIL_N = 12;
+uniform int u_blob_tendril_count;
+// angle fraction, reach, root radius, tip radius
+uniform vec4 u_blob_tendril_geometry[BLOB_TENDRIL_N];
+// bend, hook, activity, pale-tip drive (negative w marks an inward groove)
+uniform vec4 u_blob_tendril_motion[BLOB_TENDRIL_N];
+
 const float SHAPER_ANGLE_SMOOTH_STEP = 1.0 / float(SHAPER_N);
 
 float sample_profile(float angle_frac, float profile[SHAPER_N]) {
@@ -92,6 +102,214 @@ float sample_profile_gradient(float angle_frac, float profile[SHAPER_N]) {
     float prev = sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile);
     float next = sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile);
     return (next - prev) * 0.5;
+}
+
+float smooth_min_blob(float a, float b, float softness) {
+    float k = max(softness, 0.0001);
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float smooth_max_blob(float a, float b, float softness) {
+    return -smooth_min_blob(-a, -b, softness);
+}
+
+float sd_tapered_segment(vec2 p, vec2 a, vec2 b, float radius_a, float radius_b) {
+    vec2 pa = p - a;
+    vec2 ba = b - a;
+    float denom = max(dot(ba, ba), 0.000001);
+    float h = clamp(dot(pa, ba) / denom, 0.0, 1.0);
+    return length(pa - ba * h) - mix(radius_a, radius_b, h);
+}
+
+float resolved_profile_radius(
+    float angle_frac,
+    float calm_radius,
+    float staged_radius,
+    vec3 stage_progress)
+{
+    float runtime_mult = sample_profile(fract(angle_frac), u_blob_runtime_profile);
+    float contour_radius = calm_radius * runtime_mult + max(staged_radius - calm_radius, 0.0) * 0.18;
+    if (BLOB_VARIANT_SHAPED == 0) {
+        return contour_radius;
+    }
+    float shaped_support_floor = mix(
+        0.52,
+        0.60,
+        clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0)
+    );
+    return max(staged_radius * runtime_mult, staged_radius * shaped_support_floor);
+}
+
+float blob_tendril_sdf(
+    vec2 p,
+    float calm_radius,
+    float staged_radius,
+    vec3 stage_progress)
+{
+    float result = 1000.0;
+    for (int idx = 0; idx < BLOB_TENDRIL_N; ++idx) {
+        if (idx >= u_blob_tendril_count) {
+            break;
+        }
+        vec4 geometry = u_blob_tendril_geometry[idx];
+        vec4 motion = u_blob_tendril_motion[idx];
+        float reach = max(geometry.y, 0.0);
+        float activity = clamp(motion.z, 0.0, 1.25);
+        if (reach <= 0.0015 || activity <= 0.015 || motion.w < 0.0) {
+            continue;
+        }
+
+        float angle = (fract(geometry.x) - 0.25) * 6.2831853;
+        vec2 direction = vec2(cos(angle), sin(angle));
+        vec2 tangent = vec2(-direction.y, direction.x);
+        float anchor_radius = resolved_profile_radius(
+            geometry.x,
+            calm_radius,
+            staged_radius,
+            stage_progress
+        );
+        float root_radius = clamp(geometry.z, 0.008, 0.075);
+        float tip_radius = clamp(geometry.w, 0.006, root_radius);
+
+        // The root begins safely inside the living radial body. Two tapered
+        // segments then bend independently and terminate in a true round cap;
+        // smooth union removes the old radial-fan shoulder completely.
+        vec2 p0 = direction * max(calm_radius * 0.58, anchor_radius - root_radius * 0.72);
+        vec2 p1 = direction * (anchor_radius + reach * 0.43)
+            + tangent * motion.x * reach * 0.62;
+        vec2 p2 = direction * (anchor_radius + reach)
+            + tangent * (motion.x * 0.34 + motion.y * 0.78) * reach;
+        float mid_radius = mix(root_radius, tip_radius, 0.52) * (0.96 + activity * 0.05);
+        float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
+        float second = sd_tapered_segment(p, p1, p2, mid_radius, tip_radius);
+        float limb = smooth_min_blob(first, second, min(0.014, mid_radius * 0.48));
+        result = smooth_min_blob(result, limb, min(0.016, root_radius * 0.52));
+    }
+    return result;
+}
+
+float blob_groove_sdf(
+    vec2 p,
+    float calm_radius,
+    float staged_radius,
+    vec3 stage_progress)
+{
+    float result = 1000.0;
+    for (int idx = 0; idx < BLOB_TENDRIL_N; ++idx) {
+        if (idx >= u_blob_tendril_count) {
+            break;
+        }
+        vec4 geometry = u_blob_tendril_geometry[idx];
+        vec4 motion = u_blob_tendril_motion[idx];
+        float reach = max(geometry.y, 0.0);
+        float activity = clamp(motion.z, 0.0, 1.25);
+        if (reach <= 0.0015 || activity <= 0.015 || motion.w >= 0.0) {
+            continue;
+        }
+
+        float angle = (fract(geometry.x) - 0.25) * 6.2831853;
+        vec2 direction = vec2(cos(angle), sin(angle));
+        vec2 tangent = vec2(-direction.y, direction.x);
+        float anchor_radius = resolved_profile_radius(
+            geometry.x,
+            calm_radius,
+            staged_radius,
+            stage_progress
+        );
+        float root_radius = clamp(geometry.z * 1.10, 0.010, 0.078);
+        float inner_radius = clamp(max(geometry.w, root_radius * 0.62), 0.008, root_radius);
+        float core_guard = calm_radius * 0.46;
+        if (BLOB_VARIANT_SHAPED == 1 && u_blob_ring_mode == 1) {
+            core_guard = calm_radius * 0.06;
+        }
+        float inward_end = max(core_guard, anchor_radius - reach * 0.92);
+        vec2 p0 = direction * (anchor_radius + root_radius * 1.20);
+        vec2 p1 = direction * (anchor_radius - reach * 0.38)
+            + tangent * motion.x * reach * 0.48;
+        vec2 p2 = direction * inward_end
+            + tangent * (motion.x * 0.28 + motion.y * 0.68) * reach;
+        float mid_radius = mix(root_radius, inner_radius, 0.48);
+        float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
+        float second = sd_tapered_segment(p, p1, p2, mid_radius, inner_radius);
+        float channel = smooth_min_blob(first, second, min(0.014, mid_radius * 0.46));
+        result = smooth_min_blob(result, channel, min(0.016, root_radius * 0.50));
+    }
+    return result;
+}
+
+void blob_detail_sdfs(
+    vec2 p,
+    float calm_radius,
+    float staged_radius,
+    vec3 stage_progress,
+    out float limb_result,
+    out float groove_result)
+{
+    limb_result = 1000.0;
+    groove_result = 1000.0;
+    for (int idx = 0; idx < BLOB_TENDRIL_N; ++idx) {
+        if (idx >= u_blob_tendril_count) {
+            break;
+        }
+        vec4 geometry = u_blob_tendril_geometry[idx];
+        vec4 motion = u_blob_tendril_motion[idx];
+        float reach = max(geometry.y, 0.0);
+        float activity = clamp(motion.z, 0.0, 1.25);
+        if (reach <= 0.0015 || activity <= 0.015) {
+            continue;
+        }
+        float angle = (fract(geometry.x) - 0.25) * 6.2831853;
+        vec2 direction = vec2(cos(angle), sin(angle));
+        vec2 tangent = vec2(-direction.y, direction.x);
+        float anchor_radius = resolved_profile_radius(
+            geometry.x,
+            calm_radius,
+            staged_radius,
+            stage_progress
+        );
+
+        if (motion.w >= 0.0) {
+            float root_radius = clamp(geometry.z, 0.008, 0.075);
+            float tip_radius = clamp(geometry.w, 0.006, root_radius);
+            vec2 p0 = direction * max(calm_radius * 0.58, anchor_radius - root_radius * 0.72);
+            vec2 p1 = direction * (anchor_radius + reach * 0.43)
+                + tangent * motion.x * reach * 0.62;
+            vec2 p2 = direction * (anchor_radius + reach)
+                + tangent * (motion.x * 0.34 + motion.y * 0.78) * reach;
+            float mid_radius = mix(root_radius, tip_radius, 0.52) * (0.96 + activity * 0.05);
+            float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
+            float second = sd_tapered_segment(p, p1, p2, mid_radius, tip_radius);
+            float limb = smooth_min_blob(first, second, min(0.014, mid_radius * 0.48));
+            limb_result = smooth_min_blob(
+                limb_result,
+                limb,
+                min(0.016, root_radius * 0.52)
+            );
+        } else {
+            float root_radius = clamp(geometry.z * 1.10, 0.010, 0.078);
+            float inner_radius = clamp(max(geometry.w, root_radius * 0.62), 0.008, root_radius);
+            float core_guard = calm_radius * 0.46;
+            if (BLOB_VARIANT_SHAPED == 1 && u_blob_ring_mode == 1) {
+                core_guard = calm_radius * 0.06;
+            }
+            float inward_end = max(core_guard, anchor_radius - reach * 0.92);
+            vec2 p0 = direction * (anchor_radius + root_radius * 1.20);
+            vec2 p1 = direction * (anchor_radius - reach * 0.38)
+                + tangent * motion.x * reach * 0.48;
+            vec2 p2 = direction * inward_end
+                + tangent * (motion.x * 0.28 + motion.y * 0.68) * reach;
+            float mid_radius = mix(root_radius, inner_radius, 0.48);
+            float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
+            float second = sd_tapered_segment(p, p1, p2, mid_radius, inner_radius);
+            float channel = smooth_min_blob(first, second, min(0.014, mid_radius * 0.46));
+            groove_result = smooth_min_blob(
+                groove_result,
+                channel,
+                min(0.016, root_radius * 0.50)
+            );
+        }
+    }
 }
 
 // Apply Taste The Rainbow hue shift to a vec3 while preserving luminance.
@@ -388,21 +606,28 @@ float blob_sdf_ex(vec2 p, float time,
     // Shaper authors it from user contours; unshaped Blob authors it from the
     // procedural fluid solver on the CPU.
     float angle_frac = fract(angle / 6.2831853 + 0.25);
-    float runtime_mult = sample_profile(angle_frac, u_blob_runtime_profile);
-    // The CPU profile is already the fully solved silhouette.  Mighty in
-    // particular must reach the SDF verbatim: post-profile amplification or
-    // clipping turns rounded lobes into radial fans and flat-cut tips.
-    float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;
-    float shaped_support_floor = mix(
-        0.52,
-        0.60,
-        clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0)
+    // The CPU profile remains the living body and vocal contour. Curved GPU
+    // limbs are then smooth-unioned in true 2D, allowing bends, hooks, narrow
+    // necks, and deep gaps that no one-radius-per-angle profile can express.
+    float final_radius = resolved_profile_radius(
+        angle_frac,
+        calm_r,
+        staged_r,
+        stage_progress
     );
-    float final_radius = (BLOB_VARIANT_SHAPED == 1)
-        ? max(staged_r * runtime_mult, staged_r * shaped_support_floor)
-        : contour_radius;
-
-    return dist - final_radius;
+    float body_sdf = dist - final_radius;
+    float tendril_sdf;
+    float groove_sdf;
+    blob_detail_sdfs(
+        p,
+        calm_r,
+        staged_r,
+        stage_progress,
+        tendril_sdf,
+        groove_sdf
+    );
+    float goo_sdf = smooth_min_blob(body_sdf, tendril_sdf, 0.012);
+    return smooth_max_blob(goo_sdf, -groove_sdf, 0.010);
 }
 
 // Convenience wrapper using current uniforms.

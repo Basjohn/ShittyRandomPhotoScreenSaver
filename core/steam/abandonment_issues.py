@@ -14,8 +14,11 @@ from core.steam.models import SteamResult, SteamResultStatus
 
 LAST_PLAYED_VERIFIED = "verified"
 LAST_PLAYED_UNKNOWN = "unknown"
-DEFAULT_MINIMUM_PLAYTIME_MINUTES = 2 * 60
+DEFAULT_MINIMUM_PLAYTIME_MINUTES = 15
+DEFAULT_PREFERRED_MAX_PLAYTIME_MINUTES = 2 * 60
+DEFAULT_PREFERRED_MAX_UNLOCKED_ACHIEVEMENTS = 2
 DEFAULT_MINIMUM_INACTIVITY_DAYS = 12 * 7
+DEFAULT_PREFERRED_MINIMUM_INACTIVITY_DAYS = 26 * 7
 DEFAULT_EXPOSURE_COOLDOWN_DAYS = 7
 MINIMUM_REASONABLE_STEAM_TIMESTAMP = 946_684_800  # 2000-01-01 UTC
 MAXIMUM_FUTURE_SKEW_SECONDS = 24 * 60 * 60
@@ -28,8 +31,23 @@ class AbandonmentSelection:
     mode: str = "smart_rotation"
     pinned_appid: int | None = None
     minimum_playtime_minutes: int = DEFAULT_MINIMUM_PLAYTIME_MINUTES
+    preferred_max_playtime_minutes: int = DEFAULT_PREFERRED_MAX_PLAYTIME_MINUTES
+    preferred_max_unlocked_achievements: int = DEFAULT_PREFERRED_MAX_UNLOCKED_ACHIEVEMENTS
     minimum_inactivity_days: int = DEFAULT_MINIMUM_INACTIVITY_DAYS
+    preferred_minimum_inactivity_days: int = DEFAULT_PREFERRED_MINIMUM_INACTIVITY_DAYS
     never_show_appids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class AbandonmentAchievementProgress:
+    """Optional cache-only ranking evidence from one achievement snapshot."""
+
+    unlocked_count: int
+    total_count: int
+
+    @property
+    def likely_complete(self) -> bool:
+        return self.total_count > 0 and self.unlocked_count >= self.total_count
 
 
 @dataclass(frozen=True)
@@ -42,6 +60,9 @@ class AbandonmentCandidate:
     last_played_at: float
     last_played_confidence: str
     inactivity_days: int
+    preference_tier: int
+    unlocked_achievement_count: int | None
+    total_achievement_count: int | None
     score: float
 
 
@@ -62,6 +83,8 @@ class AbandonmentResolved:
     pinned: bool = False
     source_label: str = "Cache"
     unavailable_reason: str = ""
+    unlocked_achievement_count: int | None = None
+    total_achievement_count: int | None = None
 
     @property
     def ok(self) -> bool:
@@ -99,6 +122,7 @@ def build_abandonment_candidates(
     recent_result: SteamResult | None,
     selection: AbandonmentSelection = AbandonmentSelection(),
     now: float,
+    achievement_progress_by_appid: Mapping[int, AbandonmentAchievementProgress] | None = None,
 ) -> tuple[AbandonmentCandidate, ...]:
     """Return smart-rotation candidates sorted by meaningful rediscovery score."""
 
@@ -111,9 +135,19 @@ def build_abandonment_candidates(
     candidates: list[AbandonmentCandidate] = []
     for row in _game_rows(owned_result):
         appid = _coerce_positive_int(row.get("appid"))
-        if appid is None or appid in recent_appids or appid in never_show:
+        if (
+            appid is None
+            or appid in recent_appids
+            or appid in never_show
+            or not _has_game_title(row)
+        ):
             continue
-        candidate = _candidate_from_row(row, now=now)
+        candidate = _candidate_from_row(
+            row,
+            now=now,
+            selection=selection,
+            achievement_progress=(achievement_progress_by_appid or {}).get(appid),
+        )
         if candidate is None:
             continue
         if candidate.playtime_minutes < max(0, int(selection.minimum_playtime_minutes)):
@@ -121,7 +155,17 @@ def build_abandonment_candidates(
         if candidate.inactivity_days < max(0, int(selection.minimum_inactivity_days)):
             continue
         candidates.append(candidate)
-    return tuple(sorted(candidates, key=lambda item: (-item.score, item.title.casefold(), item.appid)))
+    return tuple(
+        sorted(
+            candidates,
+            key=lambda item: (
+                item.preference_tier,
+                -item.score,
+                item.title.casefold(),
+                item.appid,
+            ),
+        )
+    )
 
 
 def resolve_abandonment_issues(
@@ -134,6 +178,7 @@ def resolve_abandonment_issues(
     advance_rotation: bool = False,
     exposure_timestamps: Mapping[int, float] | None = None,
     exposure_cooldown_days: int = DEFAULT_EXPOSURE_COOLDOWN_DAYS,
+    achievement_progress_by_appid: Mapping[int, AbandonmentAchievementProgress] | None = None,
 ) -> AbandonmentResolved:
     """Resolve one truthful game without inventing missing play history."""
 
@@ -143,6 +188,7 @@ def resolve_abandonment_issues(
             owned_result=owned_result,
             selection=selection,
             now=now,
+            achievement_progress_by_appid=achievement_progress_by_appid,
         )
 
     candidates = build_abandonment_candidates(
@@ -150,6 +196,7 @@ def resolve_abandonment_issues(
         recent_result=recent_result,
         selection=selection,
         now=now,
+        achievement_progress_by_appid=achievement_progress_by_appid,
     )
     if not candidates:
         return AbandonmentResolved(
@@ -165,7 +212,22 @@ def resolve_abandonment_issues(
         (candidate for candidate in candidates if candidate.appid == _coerce_positive_int(current_appid)),
         None,
     )
-    if current is not None and not advance_rotation:
+    cooldown_seconds = max(0, int(exposure_cooldown_days)) * 24 * 60 * 60
+    exposures = exposure_timestamps or {}
+    better_unexposed_candidate = bool(
+        current is not None
+        and any(
+            candidate.preference_tier < current.preference_tier
+            and not _is_on_cooldown(
+                candidate.appid,
+                exposures,
+                now=now,
+                cooldown_seconds=cooldown_seconds,
+            )
+            for candidate in candidates
+        )
+    )
+    if current is not None and not advance_rotation and not better_unexposed_candidate:
         queue_position = candidates.index(current) + 1
         return _resolved_from_candidate(
             current,
@@ -176,8 +238,6 @@ def resolve_abandonment_issues(
             pinned=False,
         )
 
-    cooldown_seconds = max(0, int(exposure_cooldown_days)) * 24 * 60 * 60
-    exposures = exposure_timestamps or {}
     available = tuple(
         candidate
         for candidate in candidates
@@ -186,7 +246,9 @@ def resolve_abandonment_issues(
     rotation_pool = available or candidates
     selected = _select_rotation_candidate(
         candidates=rotation_pool,
-        current_appid=_coerce_positive_int(current_appid),
+        current_appid=(
+            None if better_unexposed_candidate else _coerce_positive_int(current_appid)
+        ),
         advance=bool(advance_rotation),
     )
     queue_position = next(
@@ -208,6 +270,7 @@ def _resolve_pinned(
     owned_result: SteamResult | None,
     selection: AbandonmentSelection,
     now: float,
+    achievement_progress_by_appid: Mapping[int, AbandonmentAchievementProgress] | None,
 ) -> AbandonmentResolved:
     appid = _coerce_positive_int(selection.pinned_appid)
     if appid is None:
@@ -248,7 +311,12 @@ def _resolve_pinned(
             source_label=_source_label(owned_result),
             unavailable_reason="The pinned game is not available in the cached owned library.",
         )
-    candidate = _candidate_from_row(row, now=now)
+    candidate = _candidate_from_row(
+        row,
+        now=now,
+        selection=selection,
+        achievement_progress=(achievement_progress_by_appid or {}).get(appid),
+    )
     if candidate is None:
         title = _game_title(row, appid)
         return AbandonmentResolved(
@@ -271,16 +339,26 @@ def _resolve_pinned(
     )
 
 
-def _candidate_from_row(row: Mapping[str, Any], *, now: float) -> AbandonmentCandidate | None:
+def _candidate_from_row(
+    row: Mapping[str, Any],
+    *,
+    now: float,
+    selection: AbandonmentSelection,
+    achievement_progress: AbandonmentAchievementProgress | None,
+) -> AbandonmentCandidate | None:
     appid = _coerce_positive_int(row.get("appid"))
     playtime = _coerce_non_negative_int(row.get("playtime_forever"))
     last_played = _coerce_timestamp(row.get("rtime_last_played"), now=now)
     if appid is None or playtime is None or last_played is None:
         return None
     inactivity_days = max(0, int((float(now) - last_played) // (24 * 60 * 60)))
-    hours = playtime / 60.0
-    inactivity_weeks = inactivity_days / 7.0
-    score = inactivity_weeks * 1.2 + math.log2(hours + 1.0) * 12.0
+    preference_tier = _preference_tier(
+        playtime_minutes=playtime,
+        inactivity_days=inactivity_days,
+        achievement_progress=achievement_progress,
+        selection=selection,
+    )
+    score = math.log2(inactivity_days + 2.0) * 10.0 + math.log2(playtime + 1.0) * 1.5
     return AbandonmentCandidate(
         appid=appid,
         title=_game_title(row, appid),
@@ -288,6 +366,13 @@ def _candidate_from_row(row: Mapping[str, Any], *, now: float) -> AbandonmentCan
         last_played_at=last_played,
         last_played_confidence=LAST_PLAYED_VERIFIED,
         inactivity_days=inactivity_days,
+        preference_tier=preference_tier,
+        unlocked_achievement_count=(
+            achievement_progress.unlocked_count if achievement_progress is not None else None
+        ),
+        total_achievement_count=(
+            achievement_progress.total_count if achievement_progress is not None else None
+        ),
         score=score,
     )
 
@@ -314,7 +399,56 @@ def _resolved_from_candidate(
         selection_mode=mode,
         pinned=pinned,
         source_label=source_label,
+        unlocked_achievement_count=candidate.unlocked_achievement_count,
+        total_achievement_count=candidate.total_achievement_count,
     )
+
+
+def achievement_progress_from_result(
+    result: SteamResult | None,
+) -> AbandonmentAchievementProgress | None:
+    """Extract non-authoritative ranking evidence from an existing cache result."""
+
+    if result is None or not result.ok or not isinstance(result.payload, Mapping):
+        return None
+    playerstats = result.payload.get("playerstats")
+    if not isinstance(playerstats, Mapping):
+        return None
+    rows = playerstats.get("achievements")
+    if not isinstance(rows, list):
+        return None
+    valid_rows = tuple(row for row in rows if isinstance(row, Mapping))
+    unlocked = sum(1 for row in valid_rows if _coerce_non_negative_int(row.get("achieved")) == 1)
+    return AbandonmentAchievementProgress(
+        unlocked_count=unlocked,
+        total_count=len(valid_rows),
+    )
+
+
+def _preference_tier(
+    *,
+    playtime_minutes: int,
+    inactivity_days: int,
+    achievement_progress: AbandonmentAchievementProgress | None,
+    selection: AbandonmentSelection,
+) -> int:
+    age_offset = (
+        0
+        if inactivity_days >= max(0, int(selection.preferred_minimum_inactivity_days))
+        else 10
+    )
+    if achievement_progress is not None and achievement_progress.likely_complete:
+        return age_offset + 6
+    low_playtime = playtime_minutes < max(1, int(selection.preferred_max_playtime_minutes))
+    if achievement_progress is None:
+        return age_offset + (1 if low_playtime else 4)
+    low_unlocks = (
+        achievement_progress.unlocked_count
+        <= max(0, int(selection.preferred_max_unlocked_achievements))
+    )
+    if low_playtime:
+        return age_offset + (0 if low_unlocks else 2)
+    return age_offset + (3 if low_unlocks else 5)
 
 
 def _select_rotation_candidate(
@@ -366,6 +500,11 @@ def _game_title(row: Mapping[str, Any], appid: int) -> str:
     if isinstance(value, str) and value.strip():
         return " ".join(value.split())
     return f"App {appid}"
+
+
+def _has_game_title(row: Mapping[str, Any]) -> bool:
+    value = row.get("name")
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _coerce_positive_int(value: object) -> int | None:

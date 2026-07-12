@@ -9,8 +9,10 @@ from __future__ import annotations
 from widgets.spotify_visualizer.renderers.gl_helpers import (
     set1f as _set1f,
     set1i as _set1i,
+    set4fv as _set4fv,
     set_color4 as _set_color4,
 )
+from widgets.spotify_visualizer.blob_tendril_runtime import TENDRIL_COUNT
 
 
 def get_common_uniform_names() -> list[str]:
@@ -39,6 +41,9 @@ def get_common_uniform_names() -> list[str]:
         "u_blob_stage_bias",
         "u_blob_stage_progress_override",
         "u_blob_runtime_profile",
+        "u_blob_tendril_count",
+        "u_blob_tendril_geometry",
+        "u_blob_tendril_motion",
         "u_blob_inward_liquid_enabled",
         "u_blob_inward_liquid_reactivity",
         "u_blob_inward_liquid_max_size",
@@ -88,6 +93,19 @@ def upload_common_uniforms(gl, u: dict, s) -> tuple[float, float, float, float]:
     _set1f(gl, u, "u_blob_stage_gain", s._blob_stage_gain)
     _set1f(gl, u, "u_blob_core_scale", s._blob_core_scale)
     _set1f(gl, u, "u_blob_stage_bias", s._blob_stage_bias)
+
+    tendril_geometry = getattr(s, "_blob_tendril_geometry", None)
+    tendril_motion = getattr(s, "_blob_tendril_motion", None)
+    tendril_ready = (
+        tendril_geometry is not None
+        and tendril_motion is not None
+        and len(tendril_geometry) >= TENDRIL_COUNT * 4
+        and len(tendril_motion) >= TENDRIL_COUNT * 4
+    )
+    _set1i(gl, u, "u_blob_tendril_count", TENDRIL_COUNT if tendril_ready else 0)
+    if tendril_ready:
+        _set4fv(gl, u, "u_blob_tendril_geometry", tendril_geometry, TENDRIL_COUNT)
+        _set4fv(gl, u, "u_blob_tendril_motion", tendril_motion, TENDRIL_COUNT)
 
     loc = u.get("u_blob_stage_progress_override", -1)
     if loc >= 0:
@@ -142,13 +160,18 @@ def upload_common_uniforms(gl, u: dict, s) -> tuple[float, float, float, float]:
 def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]) -> None:
     """Emit low-rate Blob contour diagnostics with temporal evidence."""
     try:
-        current_ts = float(getattr(s, "_last_update_ts", 0.0) or 0.0)
-        if current_ts <= 0.0:
+        runtime_ts = getattr(s, "_blob_runtime_time", None)
+        if runtime_ts is None:
             import time as _time
 
             current_ts = _time.monotonic()
+        else:
+            current_ts = max(0.0, float(runtime_ts))
+        previous_profile = getattr(s, "_blob_runtime_diag_profile", None)
         previous_ts = float(getattr(s, "_blob_runtime_diag_ts", 0.0) or 0.0)
-        if current_ts - previous_ts < 0.75 or not profile:
+        if not profile or (
+            previous_profile is not None and current_ts - previous_ts < 0.75
+        ):
             return
         profile_min = min(float(value) for value in profile)
         profile_max = max(float(value) for value in profile)
@@ -174,8 +197,8 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             ) ** 0.5
             target_spread = target_max - target_min
             transfer_ratio = profile_rms / max(target_rms, 1e-6)
-        previous_profile = getattr(s, "_blob_runtime_diag_profile", None)
         rms_delta = 0.0
+        centered_rms_delta = 0.0
         max_delta = 0.0
         mean_delta = 0.0
         if previous_profile is not None and len(previous_profile) == len(profile):
@@ -188,6 +211,45 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             mean_delta = profile_mean - (
                 sum(float(value) for value in previous_profile) / len(previous_profile)
             )
+            centered_rms_delta = (
+                sum((delta - mean_delta) ** 2 for delta in deltas) / len(deltas)
+            ) ** 0.5
+
+        # Describe contour language rather than spread alone. Spread can stay
+        # large while one frozen silhouette only rotates or scales. Peak count,
+        # high-detail RMS, and mean-removed temporal change expose that failure.
+        smooth_profile = [
+            sum(
+                float(profile[(idx + offset) % len(profile)])
+                for offset in (-2, -1, 0, 1, 2)
+            ) / 5.0
+            for idx in range(len(profile))
+        ]
+        prominence = max(0.004, profile_rms * 0.10)
+        peak_indices = [
+            idx
+            for idx, value in enumerate(smooth_profile)
+            if value > smooth_profile[(idx - 1) % len(profile)]
+            and value >= smooth_profile[(idx + 1) % len(profile)]
+            and value > profile_mean + prominence
+        ]
+        strongest_anchors = sorted(
+            peak_indices,
+            key=lambda idx: smooth_profile[idx],
+            reverse=True,
+        )[:4]
+        detail_profile = [
+            float(profile[idx])
+            - sum(
+                float(profile[(idx + offset) % len(profile)])
+                for offset in range(-4, 5)
+            ) / 9.0
+            for idx in range(len(profile))
+        ]
+        detail_rms = (
+            sum(value * value for value in detail_profile) / len(detail_profile)
+        ) ** 0.5
+        morphology_ratio = centered_rms_delta / max(rms_delta, 1e-6)
         transient = getattr(s, "_transient_energy", None)
         transient_peak = max(
             float(getattr(transient, "bass_transient", 0.0) if transient else 0.0),
@@ -223,7 +285,12 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             "%s=(%.2f,%.2f,%.2f,%.2f) "
             "min=%.3f max=%.3f spread=%.3f avg=%.3f "
             "target_spread=%.3f transfer=%.2f rms_delta=%.4f "
-            "max_delta=%.4f mean_delta=%+.4f est_px(span=%.1f,rms_delta=%.1f)",
+            "centered_delta=%.4f morph_ratio=%.2f max_delta=%.4f mean_delta=%+.4f "
+            "peaks=%d anchors=%s detail_rms=%.4f "
+            "solve_ms(last=%.2f,avg=%.2f,max=%.2f) generation=%d "
+            "cadence(requests=%d,computed=%d,skipped=%d) geometry_builds=%d "
+            "tendrils(active=%d,max_reach=%.3f) "
+            "est_px(span=%.1f,centered_delta=%.1f)",
             blob_type,
             len(profile),
             bool(getattr(s, "_playing", False)),
@@ -245,10 +312,26 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             target_spread,
             transfer_ratio,
             rms_delta,
+            centered_rms_delta,
+            morphology_ratio,
             max_delta,
             mean_delta,
+            len(peak_indices),
+            strongest_anchors,
+            detail_rms,
+            float(getattr(s, "_blob_profile_compute_ms", 0.0) or 0.0),
+            float(getattr(s, "_blob_profile_compute_total_ms", 0.0) or 0.0)
+            / max(1, int(getattr(s, "_blob_profile_compute_count", 0) or 0)),
+            float(getattr(s, "_blob_profile_compute_max_ms", 0.0) or 0.0),
+            int(getattr(s, "_blob_profile_generation", 0) or 0),
+            int(getattr(s, "_blob_profile_advance_request_count", 0) or 0),
+            int(getattr(s, "_blob_profile_compute_count", 0) or 0),
+            int(getattr(s, "_blob_profile_skip_count", 0) or 0),
+            int(getattr(s, "_blob_shaper_geometry_build_count", 0) or 0),
+            int(getattr(s, "_blob_tendril_active_count", 0) or 0),
+            float(getattr(s, "_blob_tendril_max_reach", 0.0) or 0.0),
             (profile_max - profile_min) * base_radius_px,
-            rms_delta * base_radius_px,
+            centered_rms_delta * base_radius_px,
         )
         setattr(s, "_blob_runtime_diag_profile", list(profile))
         setattr(s, "_blob_runtime_diag_ts", current_ts)

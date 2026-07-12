@@ -58,8 +58,8 @@ def _organic_tendril_lobe(angle: float, center: float, half_width: float) -> flo
     """Return a rounded tendril with a broad root and narrower gel tip."""
 
     shoulder = _rounded_outward_lobe(angle, center, half_width)
-    tip = _rounded_outward_lobe(angle, center, half_width * 0.72)
-    return shoulder * 0.62 + tip * 0.38
+    tip = _rounded_outward_lobe(angle, center, half_width * 0.62)
+    return shoulder * 0.40 + tip * 0.60
 
 
 def _smooth_cyclic_profile(values: Sequence[float], *, passes: int = 3) -> list[float]:
@@ -110,6 +110,34 @@ def _limit_cyclic_profile_slope(
         if not changed:
             break
     return out
+
+
+def _limit_cyclic_profile_curvature(
+    values: Sequence[float],
+    *,
+    max_curvature: float,
+    iterations: int = 8,
+) -> list[float]:
+    """Round only angular corners while retaining long-limb amplitude."""
+
+    out = [float(value) for value in values]
+    if len(out) < 3:
+        return out
+    limit = max(1e-6, float(max_curvature))
+    original_mean = math.fsum(out) / len(out)
+    for _ in range(max(1, int(iterations))):
+        changed = False
+        for idx in range(len(out)):
+            curvature = out[idx - 1] - 2.0 * out[idx] + out[(idx + 1) % len(out)]
+            if abs(curvature) <= limit:
+                continue
+            excess = abs(curvature) - limit
+            out[idx] += math.copysign(excess * 0.5, curvature)
+            changed = True
+        if not changed:
+            break
+    mean_shift = original_mean - math.fsum(out) / len(out)
+    return [value + mean_shift for value in out]
 
 
 def _smooth_max(a: float, b: float, softness: float = 0.014) -> float:
@@ -166,10 +194,32 @@ def compute_unshaped_organic_base_multiplier(
         angle * 2.0 + 0.25 + math.sin(morph_t * 0.43 + 2.20) * 0.55
     ) * 0.015 * drift
 
+    # Local gel lobes keep idle Mighty visibly amoebic instead of merely oval.
+    # Their bounded anchors and opposing envelopes change the body's local
+    # topology without rotating one permanent template around the centre.
+    idle_lobe_a = 0.5 + 0.5 * math.sin(morph_t * 0.31 + 0.40 + morph_seed * 0.19)
+    idle_lobe_b = 0.5 + 0.5 * math.sin(morph_t * 0.43 + 2.60 - morph_seed * 0.13)
+    idle_valley = 0.5 + 0.5 * math.sin(morph_t * 0.37 + 4.10 + morph_seed * 0.11)
+    shape += _organic_tendril_lobe(
+        angle,
+        0.75 + math.sin(morph_t * 0.17 + morph_seed) * 0.28,
+        0.72 + idle_lobe_a * 0.14,
+    ) * (0.025 + idle_lobe_a * 0.034)
+    shape += _organic_tendril_lobe(
+        angle,
+        4.35 + math.sin(morph_t * 0.23 + 2.20 - morph_seed * 0.2) * 0.32,
+        0.62 + idle_lobe_b * 0.15,
+    ) * (0.018 + idle_lobe_b * 0.030)
+    shape -= _rounded_outward_lobe(
+        angle,
+        2.55 + math.sin(morph_t * 0.21 + 1.20) * 0.25,
+        0.82 + idle_valley * 0.12,
+    ) * (0.018 + idle_valley * 0.025)
+
     # The living body is always present, even when every reactive control is
     # zero.  That prevents a configuration or playback transition from
     # exposing the raw circular SDF underneath Mighty.
-    return _clamp(shape, 0.88, 1.16)
+    return _clamp(shape, 0.86, 1.18)
 
 
 def compute_unshaped_motion_offsets(
@@ -249,29 +299,35 @@ def compute_unshaped_motion_offsets(
         + 0.62
         + math.sin(time_value * 0.57 + morph_seed * 0.31) * 0.92
         + vocal * 0.28
-    ) * 0.103 * vocal * vocal_pulse
+    ) * 0.070 * vocal * vocal_pulse
     reactive_field += math.sin(
         angle * 3.0
         + 2.10
         + math.sin(time_value * 0.73 + 1.40 - morph_seed * 0.19) * 1.04
         - reactive_mid * 0.22
-    ) * 0.083 * reactive_mid * mid_pulse
+    ) * 0.064 * reactive_mid * mid_pulse
     reactive_field += math.sin(
         angle * 4.0 + 1.18 + math.sin(time_value * 0.97 + 2.30) * 0.88
-    ) * 0.062 * vocal * vocal * (0.62 + vocal_pulse * 0.38)
+    ) * 0.055 * vocal * vocal * (0.62 + vocal_pulse * 0.38)
 
     # This faster band-limited ripple is the visible vocal contour wobble.
     # It changes sign and phase at fixed angles while the broader body/tendril
     # field remains rounded and coherent.
     reactive_field += math.sin(
-        angle * 5.0 + 2.85 + time_value * 1.21 + morph_seed * 0.27
-    ) * 0.043 * vocal * (0.52 + mid_pulse * 0.48)
+        angle * 5.0
+        + 2.85
+        + math.sin(time_value * 1.21 + morph_seed * 0.27) * 1.18
+    ) * 0.095 * vocal * (0.52 + mid_pulse * 0.48)
     reactive_field += math.sin(
-        angle * 7.0 + 0.15 - time_value * 1.57 + morph_seed * 0.43
-    ) * 0.031 * vocal * high_pulse
+        angle * 7.0
+        + 0.15
+        + math.sin(time_value * 1.57 + 2.10 + morph_seed * 0.43) * 1.06
+    ) * 0.070 * vocal * high_pulse
     reactive_field += math.sin(
-        angle * 9.0 + 1.70 + time_value * 1.91 - morph_seed * 0.21
-    ) * 0.017 * reactive_high * high_pulse
+        angle * 9.0
+        + 1.70
+        + math.sin(time_value * 1.91 + 4.20 - morph_seed * 0.21) * 0.86
+    ) * 0.038 * reactive_high * high_pulse
 
     pocket_pressure = _clamp(pocket_component, 0.0, 1.8)
     pocket_soft = 1.0 - math.exp(-pocket_pressure * 0.92)
@@ -288,59 +344,59 @@ def compute_unshaped_motion_offsets(
         # Rounded cosine-squared bulges have zero-slope shoulders. Their
         # centers only sway slightly; energy changes their length, so a hit
         # reads as a tendril growing and relaxing rather than orbiting.
-        vocal_breath = 0.14 + 0.86 * _smoothstep(
-            0.12,
-            0.88,
+        vocal_breath = 0.03 + 0.97 * _smoothstep(
+            0.28,
+            0.82,
             0.5 + 0.5 * math.sin(time_value * 0.83 + 0.4 + morph_seed * 0.17),
         )
-        bass_breath = 0.16 + 0.84 * _smoothstep(
-            0.10,
-            0.90,
+        bass_breath = 0.04 + 0.96 * _smoothstep(
+            0.24,
+            0.84,
             0.5 + 0.5 * math.sin(time_value * 0.61 + 2.0 - morph_seed * 0.11),
         )
-        mid_breath = 0.12 + 0.88 * _smoothstep(
-            0.12,
-            0.88,
+        mid_breath = 0.02 + 0.98 * _smoothstep(
+            0.30,
+            0.80,
             0.5 + 0.5 * math.sin(time_value * 1.07 + 1.25),
         )
-        high_breath = 0.10 + 0.90 * _smoothstep(
-            0.14,
-            0.86,
+        high_breath = 0.01 + 0.99 * _smoothstep(
+            0.32,
+            0.78,
             0.5 + 0.5 * math.sin(time_value * 1.39 + 2.70),
         )
         tendrils = 0.0
         tendrils += _organic_tendril_lobe(
             angle,
             0.55 + math.sin(time_value * 0.37 + morph_seed) * 0.34,
-            0.62 + vocal_breath * 0.18,
-        ) * body_drive * 0.480 * vocal_breath
+            0.28 + vocal_breath * 0.09,
+        ) * body_drive * 0.720 * vocal_breath
         tendrils += _organic_tendril_lobe(
             angle,
             3.76 + math.sin(time_value * 0.29 + 2.1 - morph_seed * 0.2) * 0.42,
-            0.66 + bass_breath * 0.20,
-        ) * bass_drive * 0.385 * bass_breath
+            0.31 + bass_breath * 0.10,
+        ) * bass_drive * 0.620 * bass_breath
         tendrils += _organic_tendril_lobe(
             angle,
             2.08 + math.sin(time_value * 0.53 + 4.0) * 0.31,
-            0.48 + mid_breath * 0.17,
-        ) * mid_drive * 0.350 * mid_breath
+            0.26 + mid_breath * 0.09,
+        ) * mid_drive * 0.550 * mid_breath
         tendrils += _organic_tendril_lobe(
             angle,
             5.25 + math.sin(time_value * 0.71 + 1.2) * 0.37,
-            0.40 + high_breath * 0.15,
-        ) * high_drive * 0.270 * high_breath
+            0.23 + high_breath * 0.08,
+        ) * high_drive * 0.430 * high_breath
         # A smaller vocal bud appears and retires on its own cadence, changing
         # lobe count instead of leaving four permanent protrusions.
-        bud_breath = 0.08 + 0.92 * _smoothstep(
-            0.20,
-            0.90,
+        bud_breath = 0.01 + 0.99 * _smoothstep(
+            0.34,
+            0.78,
             0.5 + 0.5 * math.sin(time_value * 1.19 + 3.4 + morph_seed * 0.3),
         )
         tendrils += _organic_tendril_lobe(
             angle,
             1.34 + math.sin(time_value * 0.47 + 5.1) * 0.29,
-            0.48 + bud_breath * 0.14,
-        ) * _smoothstep(0.08, 0.66, vocal) * 0.210 * bud_breath
+            0.21 + bud_breath * 0.07,
+        ) * _smoothstep(0.08, 0.66, vocal) * 0.360 * bud_breath
 
         # The authored inward control adds only a much smaller, independently
         # centred counter-lobe.  Even at maximum it cannot recreate the old
@@ -365,7 +421,10 @@ def compute_unshaped_motion_offsets(
     rd_scale = rd if rd <= 1.0 else 1.0 + (rd - 1.0) * 0.75
     wobble_component = constant_field * cw + reactive_field * rw * rd_scale
     wobble_component += pocket_shoulder * 0.018 * rd_scale
-    stretch_component *= rd_scale
+    # The radial lane now forms only the soft root pressure beneath the true
+    # curved GPU limbs. Letting it carry full reach recreates the star/fan
+    # silhouette the 2D tendril representation was introduced to remove.
+    stretch_component *= rd_scale * 0.38
 
     return (stretch_component, wobble_component)
 
@@ -654,8 +713,13 @@ def build_unshaped_blob_target_profile(
     )
     bounded = _limit_cyclic_profile_slope(
         bounded,
-        max_step=4.8 / count,
+        max_step=5.0 / count,
     )
+    bounded = _limit_cyclic_profile_curvature(
+        bounded,
+        max_curvature=0.0135,
+    )
+    bounded = _smooth_cyclic_profile(bounded, passes=2)
     return (base_profile, target_profile, bounded)
 
 

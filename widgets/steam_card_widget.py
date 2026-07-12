@@ -594,6 +594,7 @@ class SteamCardWidget(BaseOverlayWidget):
                 credential=credential,
                 selection=self._achievement_selection,
                 force=force,
+                source_fresh_seconds=self._refresh_minutes * 60,
             )
 
         def _finished(task_result) -> None:

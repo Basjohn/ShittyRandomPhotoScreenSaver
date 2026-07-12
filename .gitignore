@@ -38,6 +38,7 @@ ENV/
 /tmp_dbg_settings/
 /tmp_dbg_appdata/
 /tests_tmp_appdata/
+/tests_tmp_localappdata/
 /tmp
 
 # Coverage and test artifacts
