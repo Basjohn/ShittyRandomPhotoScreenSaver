@@ -41,6 +41,10 @@ def _blob_widget_stub(blob_type: str) -> SimpleNamespace:
         _blob_inward_liquid_reactivity=1.25,
         _blob_inward_liquid_max_size=0.3,
         _blob_glow_drive_mode="vocal",
+        _transient_pulse_gain=1.8,
+        _transient_clamp=1.25,
+        _blob_transient_mix_bass=0.42,
+        _blob_transient_mix_vocal=0.76,
         _blob_reactive_deformation=1.2,
         _blob_pulse_cap=0.9,
         _blob_stage_gain=0.75,
@@ -124,6 +128,10 @@ def test_gpu_payload_contains_only_the_selected_blob_subtype_controls():
     assert "blob_shaper_enabled" not in mighty_extra
     assert "blob_constant_wobble" in mighty_extra
     assert "blob_shape_base_nodes" not in mighty_extra
+    assert mighty_extra["transient_pulse_gain"] == pytest.approx(1.8)
+    assert mighty_extra["transient_clamp"] == pytest.approx(1.25)
+    assert mighty_extra["blob_transient_mix_bass"] == pytest.approx(0.42)
+    assert mighty_extra["blob_transient_mix_vocal"] == pytest.approx(0.76)
 
     shaped_extra: dict = {}
     _append_blob_visual_extras(shaped_extra, _blob_widget_stub(BLOB_TYPE_SHAPED))
@@ -132,6 +140,7 @@ def test_gpu_payload_contains_only_the_selected_blob_subtype_controls():
     assert "blob_shape_base_nodes" in shaped_extra
     assert "blob_constant_wobble" not in shaped_extra
     assert shaped_extra["blob_inward_liquid_enabled"] is True
+    assert shaped_extra["transient_pulse_gain"] == pytest.approx(1.8)
 
 
 def test_blob_variant_reset_clears_both_solver_families_and_ghost_shape():
@@ -142,6 +151,8 @@ def test_blob_variant_reset_clears_both_solver_families_and_ghost_shape():
         _blob_shaper_runtime_profile=[0.8],
         _blob_shaper_runtime_velocity=[-0.1],
         _blob_shaper_runtime_target_profile=[0.9],
+        _blob_runtime_diag_profile=[1.4],
+        _blob_profile_transport_sig=("mighty", 7, 128),
         _blob_peak_energy=1.0,
         _blob_peak_bass=0.9,
         _blob_peak_mid=0.8,
@@ -153,6 +164,8 @@ def test_blob_variant_reset_clears_both_solver_families_and_ghost_shape():
     reset_blob_variant_state(state)
     assert state._blob_unshaped_runtime_profile is None
     assert state._blob_shaper_runtime_profile is None
+    assert state._blob_runtime_diag_profile is None
+    assert state._blob_profile_transport_sig is None
     assert state._blob_peak_energy == 0.0
     assert state._blob_peak_overall == 0.0
     assert state._blob_stage_input_bass is None
@@ -188,6 +201,35 @@ def test_overlay_type_switch_resets_before_accepting_shaped_state(qt_app, monkey
     assert overlay._blob_shaper_enabled is True
     assert overlay._blob_unshaped_runtime_profile is None
     assert overlay._blob_peak_energy == 0.0
+    overlay.deleteLater()
+
+
+@pytest.mark.qt
+def test_blob_overlay_transient_controls_change_real_blob_event_pressure(qt_app):
+    from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+    from widgets.spotify_visualizer.energy_bands import EnergyBands
+    from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
+
+    overlay = SpotifyBarsGLOverlay(None)
+    overlay._transient_energy = TransientEnergyBands(
+        bass_transient=0.80,
+        mid_transient=0.60,
+        high_transient=0.40,
+    )
+    overlay._blob_transient_mix_bass = 0.50
+    overlay._blob_transient_mix_vocal = 0.75
+    overlay._transient_clamp = 1.5
+
+    overlay._transient_pulse_gain = 0.0
+    overlay._compute_blob_live_bands(EnergyBands())
+    assert overlay._blob_diag_transient_bass == 0.0
+    assert overlay._blob_diag_transient_mid == 0.0
+
+    overlay._transient_pulse_gain = 2.0
+    overlay._compute_blob_live_bands(EnergyBands())
+    assert overlay._blob_diag_transient_bass == pytest.approx(0.80)
+    assert overlay._blob_diag_transient_mid == pytest.approx(0.90)
+    assert overlay._blob_diag_transient_high == pytest.approx(0.18)
     overlay.deleteLater()
 
 

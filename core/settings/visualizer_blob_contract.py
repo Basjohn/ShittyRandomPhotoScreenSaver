@@ -46,6 +46,7 @@ BLOB_SHAPED_ONLY_KEYS: frozenset[str] = frozenset(
 BLOB_MIGHTY_ONLY_KEYS: frozenset[str] = frozenset(
     {
         "blob_reactive_deformation",
+        "blob_core_floor_bias",
         "blob_constant_wobble",
         "blob_reactive_wobble",
         "blob_stretch",

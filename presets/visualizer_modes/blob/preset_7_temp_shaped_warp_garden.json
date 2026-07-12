@@ -29,7 +29,6 @@
           171,
           232
         ],
-        "blob_core_floor_bias": 0.44,
         "blob_core_scale": 0.94,
         "blob_dynamic_floor": true,
         "blob_dynamic_range_enabled": false,

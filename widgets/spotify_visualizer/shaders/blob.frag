@@ -40,7 +40,6 @@ uniform float u_blob_stage_gain;  // 0..2 multiplier for staged core sizing
 uniform float u_blob_core_scale;  // 0.25..2.5 post-stage scaling of the core radius
 uniform float u_blob_stage_bias;  // -0.60..0.60 shifts stage thresholds up/down before smoothing
 uniform vec3 u_blob_stage_progress_override;  // (-1,-1,-1) when unused
-uniform int u_playing;                 // 1 = audio playing, 0 = stopped
 uniform float u_rainbow_hue_offset;    // 0..1 hue rotation (0 = disabled)
 uniform float u_ghost_alpha;           // 0 = no ghost, >0 = ghost outline intensity
 uniform float u_blob_peak_energy;      // CPU-tracked peak energy for ghost outline
@@ -56,7 +55,7 @@ uniform float u_blob_glow_max_size;    // 0.1..3.0 maximum glow spread multiplie
 uniform int u_blob_ring_mode;            // 0 = circle (filled), 1 = ring (hollow)
 uniform float u_blob_ring_thickness;     // 0.05..1.0 ring wall thickness as fraction of radius
 
-const int SHAPER_N = 64;
+const int SHAPER_N = 128;
 uniform float u_blob_runtime_profile[SHAPER_N]; // CPU-solved runtime contour multipliers
 
 const float SHAPER_ANGLE_SMOOTH_STEP = 1.0 / float(SHAPER_N);
@@ -87,20 +86,6 @@ float sample_linear_series(float angle_frac, float profile[SHAPER_N]) {
     int i1 = (i0 + 1) % SHAPER_N;
     float t = fract(idx_f);
     return mix(profile[i0], profile[i1], t);
-}
-
-float sample_smoothed_linear_series(float angle_frac, float profile[SHAPER_N]) {
-    return
-        sample_linear_series(angle_frac, profile) * 0.50 +
-        sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25 +
-        sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, profile) * 0.25;
-}
-
-float sample_unshaped_contour(float angle_frac, float profile[SHAPER_N]) {
-    return
-        sample_linear_series(angle_frac, profile) * 0.78 +
-        sample_linear_series(angle_frac - SHAPER_ANGLE_SMOOTH_STEP * 0.5, profile) * 0.11 +
-        sample_linear_series(angle_frac + SHAPER_ANGLE_SMOOTH_STEP * 0.5, profile) * 0.11;
 }
 
 float sample_profile_gradient(float angle_frac, float profile[SHAPER_N]) {
@@ -368,12 +353,15 @@ float blob_sdf_ex(vec2 p, float time,
                   float smoothed_e) {
     float r = 0.31 * clamp(u_blob_size, 0.1, 2.5);
     float pulse_amt = clamp(u_blob_pulse, 0.0, 2.0);
-    r += e_bass * e_bass * 0.024 * pulse_amt;
-    r += e_bass * 0.028 * pulse_amt;
+    // Whole-body pulse is deliberately secondary to contour motion.  The old
+    // coefficients could move the radius by ~90 px while tendrils moved only
+    // a few pixels, making every control look like a size slider.
+    r += e_bass * e_bass * 0.008 * pulse_amt;
+    r += e_bass * 0.009 * pulse_amt;
     float se = clamp(smoothed_e, 0.0, 1.0);
     float breath = max(e_bass, se * 0.82);
-    r += max(0.02, breath) * 0.010 * pulse_amt;
-    r -= (1.0 - se) * 0.012 * pulse_amt;
+    r += max(0.02, breath) * 0.004 * pulse_amt;
+    r -= (1.0 - se) * 0.004 * pulse_amt;
 
     float calm_r = r;
     vec3 stage_progress = vec3(0.0);
@@ -384,10 +372,6 @@ float blob_sdf_ex(vec2 p, float time,
         u_blob_core_scale,
         stage_progress
     ) * pulse_amt;
-
-    if (u_playing == 0 && BLOB_VARIANT_SHAPED == 0) {
-        r *= 0.45 + se * 0.25;
-    }
 
     float staged_r = r;
     if (BLOB_VARIANT_SHAPED == 0) {
@@ -404,34 +388,19 @@ float blob_sdf_ex(vec2 p, float time,
     // Shaper authors it from user contours; unshaped Blob authors it from the
     // procedural fluid solver on the CPU.
     float angle_frac = fract(angle / 6.2831853 + 0.25);
-    float runtime_mult = (BLOB_VARIANT_SHAPED == 1)
-        ? (
-            sample_profile(angle_frac, u_blob_runtime_profile) * 0.50 +
-            sample_profile(angle_frac - SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25 +
-            sample_profile(angle_frac + SHAPER_ANGLE_SMOOTH_STEP, u_blob_runtime_profile) * 0.25
-        )
-        : sample_unshaped_contour(angle_frac, u_blob_runtime_profile);
-    if (BLOB_VARIANT_SHAPED == 0) {
-        float contour_delta = runtime_mult - 1.0;
-        float size_compensation = clamp(0.24 / max(calm_r, 0.001), 1.0, 2.2);
-        float contour_authority = (
-            4.80
-            + clamp(smoothed_e, 0.0, 1.0) * 0.70
-            + stage_progress.x * 0.48
-            + stage_progress.y * 0.30
-            + stage_progress.z * 0.24
-        ) * size_compensation;
-        float signed_push = sign(contour_delta) * pow(abs(contour_delta), 0.88);
-        runtime_mult = clamp(1.0 + signed_push * contour_authority, 0.42, 1.78);
-    }
-    float support_floor = (BLOB_VARIANT_SHAPED == 1)
-        ? mix(0.52, 0.60, clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0))
-        : mix(0.48, 0.60, clamp(stage_progress.z * 0.55 + stage_progress.y * 0.22, 0.0, 1.0));
+    float runtime_mult = sample_profile(angle_frac, u_blob_runtime_profile);
+    // The CPU profile is already the fully solved silhouette.  Mighty in
+    // particular must reach the SDF verbatim: post-profile amplification or
+    // clipping turns rounded lobes into radial fans and flat-cut tips.
     float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;
-    float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);
+    float shaped_support_floor = mix(
+        0.52,
+        0.60,
+        clamp(stage_progress.z * 0.65 + stage_progress.y * 0.20, 0.0, 1.0)
+    );
     float final_radius = (BLOB_VARIANT_SHAPED == 1)
-        ? max(staged_r * runtime_mult, staged_r * support_floor)
-        : max(contour_radius, unshaped_support);
+        ? max(staged_r * runtime_mult, staged_r * shaped_support_floor)
+        : contour_radius;
 
     return dist - final_radius;
 }

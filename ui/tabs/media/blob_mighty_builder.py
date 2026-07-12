@@ -54,6 +54,7 @@ def build_blob_mighty_controls(
         tab,
         tab.blob_reactive_deformation.valueChanged,
         updater=lambda v: tab.blob_reactive_deformation_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     rd_layout.addWidget(tab.blob_reactive_deformation)
     rd_layout.addWidget(tab.blob_reactive_deformation_label)
@@ -75,6 +76,7 @@ def build_blob_mighty_controls(
         tab,
         tab.blob_constant_wobble.valueChanged,
         updater=lambda v: tab.blob_constant_wobble_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     wobble_layout.addWidget(tab.blob_constant_wobble)
     wobble_layout.addWidget(tab.blob_constant_wobble_label)
@@ -96,6 +98,7 @@ def build_blob_mighty_controls(
         tab,
         tab.blob_reactive_wobble.valueChanged,
         updater=lambda v: tab.blob_reactive_wobble_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     music_layout.addWidget(tab.blob_reactive_wobble)
     music_layout.addWidget(tab.blob_reactive_wobble_label)
@@ -117,6 +120,7 @@ def build_blob_mighty_controls(
         tab,
         tab.blob_stretch.valueChanged,
         updater=lambda v: tab.blob_stretch_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     stretch_layout.addWidget(tab.blob_stretch)
     stretch_layout.addWidget(tab.blob_stretch_label)

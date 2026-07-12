@@ -571,8 +571,22 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
         startup_mode = str(getattr(vis, "_vis_mode_str", "") or "").strip().lower()
         if startup_mode:
             setattr(overlay, "_vis_mode", startup_mode)
+        if startup_mode == "blob":
+            # Blob has two concrete shader programs.  Seed the resolved subtype
+            # before the GL context compiles its first program so a Shaped cold
+            # start never transiently prewarms Mighty under stale defaults.
+            from core.settings.visualizer_blob_contract import normalize_blob_type
+
+            setattr(
+                overlay,
+                "_blob_type",
+                normalize_blob_type(
+                    getattr(vis, "_blob_type", None),
+                    legacy_shaper_enabled=getattr(vis, "_blob_shaper_enabled", None),
+                ),
+            )
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to seed overlay startup mode before prewarm", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to seed overlay startup mode/type before prewarm", exc_info=True)
 
     try:
         from widgets.spotify_visualizer.shaders import preload_fragment_shaders

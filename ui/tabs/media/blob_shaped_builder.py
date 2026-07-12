@@ -55,6 +55,7 @@ def build_blob_shaped_controls(
         tab,
         tab.blob_shaper_base_strength.valueChanged,
         updater=lambda v: tab.blob_shaper_base_strength_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     base_layout.addWidget(tab.blob_shaper_base_strength)
     base_layout.addWidget(tab.blob_shaper_base_strength_label)
@@ -74,6 +75,7 @@ def build_blob_shaped_controls(
         tab,
         tab.blob_shaper_react_strength.valueChanged,
         updater=lambda v: tab.blob_shaper_react_strength_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     reaction_layout.addWidget(tab.blob_shaper_react_strength)
     reaction_layout.addWidget(tab.blob_shaper_react_strength_label)
@@ -95,6 +97,7 @@ def build_blob_shaped_controls(
         tab,
         tab.blob_shaper_idle_motion.valueChanged,
         updater=lambda v: tab.blob_shaper_idle_motion_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     living_layout.addWidget(tab.blob_shaper_idle_motion)
     living_layout.addWidget(tab.blob_shaper_idle_motion_label)
@@ -116,6 +119,7 @@ def build_blob_shaped_controls(
         tab,
         tab.blob_shaper_audio_motion.valueChanged,
         updater=lambda v: tab.blob_shaper_audio_motion_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     mutation_layout.addWidget(tab.blob_shaper_audio_motion)
     mutation_layout.addWidget(tab.blob_shaper_audio_motion_label)
@@ -145,6 +149,7 @@ def build_blob_shaped_controls(
         tab,
         tab.blob_ring_thickness.valueChanged,
         updater=lambda v: tab.blob_ring_thickness_label.setText(f"{v}%"),
+        auto_switch=True,
     )
     ring_layout.addWidget(tab.blob_ring_thickness)
     ring_layout.addWidget(tab.blob_ring_thickness_label)

@@ -1939,6 +1939,49 @@ def test_widgets_tab_blob_type_round_trip_saves_canonical_value_without_legacy_t
             tab.deleteLater()
 
 
+@pytest.mark.parametrize(
+    ("curated_index", "blob_type", "control_attr", "ui_value", "setting_key", "saved_value"),
+    [
+        (0, "mighty", "blob_reactive_deformation", 137, "blob_reactive_deformation", 1.37),
+        (2, "shaped", "blob_shaper_audio_motion", 173, "blob_shaper_audio_motion", 1.73),
+    ],
+)
+def test_blob_subtype_slider_edit_moves_curated_preset_to_custom_and_persists(
+    qt_app,
+    settings_manager,
+    curated_index,
+    blob_type,
+    control_attr,
+    ui_value,
+    setting_key,
+    saved_value,
+):
+    with _blob_gate(True):
+        tab = WidgetsTab(settings_manager)
+        try:
+            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("blob"))
+            slider = tab._blob_preset_slider
+            slider.set_preset_index(curated_index)
+            tab._on_visualizer_preset_changed("blob", curated_index)
+            qt_app.processEvents()
+
+            assert slider.preset_index() == curated_index
+            assert ("shaped" if tab.blob_type_combo.currentIndex() == 1 else "mighty") == blob_type
+
+            getattr(tab, control_attr).setValue(ui_value)
+            qt_app.processEvents()
+
+            assert slider.preset_index() == slider.custom_index()
+
+            tab._save_settings_now()
+            saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
+            assert saved["preset_blob"] == slider.custom_index()
+            assert saved["blob_type"] == blob_type
+            assert saved[setting_key] == pytest.approx(saved_value)
+        finally:
+            tab.deleteLater()
+
+
 def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:

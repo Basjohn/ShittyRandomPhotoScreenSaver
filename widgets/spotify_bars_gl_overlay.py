@@ -329,6 +329,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._osc_transient_width_mix: float = 0.35
         self._blob_transient_mix_bass: float = 0.5
         self._blob_transient_mix_vocal: float = 0.35
+        self._transient_pulse_gain: float = 1.0
         self._transient_clamp: float = 1.5
         self._blob_pulse_cap: float = 1.0
         self._blob_pulse_release_ms: float = 220.0
@@ -773,6 +774,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         blob_shape_energy_nodes: list | None = None,
         blob_kick_event_strength: float = 0.0,
         blob_snare_event_strength: float = 0.0,
+        transient_pulse_gain: float = 1.0,
+        transient_clamp: float = 1.5,
+        blob_transient_mix_bass: float = 0.5,
+        blob_transient_mix_vocal: float = 0.35,
         line_kick_event_strength: float = 0.0,
         line_snare_event_strength: float = 0.0,
         floor_snapshot: dict | None = None,
@@ -1320,6 +1325,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._blob_stretch_tendency = max(0.0, min(1.0, float(blob_stretch_tendency)))
         self._blob_stretch_inner = max(0.0, min(1.0, float(blob_stretch_inner)))
         self._blob_stretch_outer = max(0.0, min(1.0, float(blob_stretch_outer)))
+        self._transient_pulse_gain = max(0.0, min(3.0, float(transient_pulse_gain)))
+        self._transient_clamp = max(0.0, min(3.0, float(transient_clamp)))
+        self._blob_transient_mix_bass = max(0.0, min(1.0, float(blob_transient_mix_bass)))
+        self._blob_transient_mix_vocal = max(0.0, min(1.0, float(blob_transient_mix_vocal)))
         # Shaped Blob. Type identity was resolved before frame processing so
         # pockets/solvers cannot spend a frame under stale subtype authority.
         self._blob_shaper_enabled = self._blob_type == BLOB_TYPE_SHAPED
@@ -2155,6 +2164,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         clamp_raw = getattr(self, '_transient_clamp', 1.5)
         clamp_max = float(1.5 if clamp_raw is None else clamp_raw)
+        gain_raw = getattr(self, '_transient_pulse_gain', 1.0)
+        transient_gain = max(0.0, min(3.0, float(1.0 if gain_raw is None else gain_raw)))
         transient_bass = 0.0
         transient_mid = 0.0
         transient_high = 0.0
@@ -2167,9 +2178,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             bass_transient_raw = getattr(transient, 'bass_transient', 0.0)
             mid_transient_raw = getattr(transient, 'mid_transient', 0.0)
             high_transient_raw = getattr(transient, 'high_transient', 0.0)
-            transient_bass = float(0.0 if bass_transient_raw is None else bass_transient_raw) * bass_mix
-            transient_mid = float(0.0 if mid_transient_raw is None else mid_transient_raw) * vocal_mix
-            transient_high = float(0.0 if high_transient_raw is None else high_transient_raw) * max(0.10, vocal_mix * 0.30)
+            transient_bass = min(
+                clamp_max,
+                float(0.0 if bass_transient_raw is None else bass_transient_raw)
+                * bass_mix
+                * transient_gain,
+            )
+            transient_mid = min(
+                clamp_max,
+                float(0.0 if mid_transient_raw is None else mid_transient_raw)
+                * vocal_mix
+                * transient_gain,
+            )
+            transient_high = min(
+                clamp_max,
+                float(0.0 if high_transient_raw is None else high_transient_raw)
+                * max(0.10, vocal_mix * 0.30)
+                * transient_gain,
+            )
 
         kick_gain_raw = getattr(self, '_kick_lane_gain', 1.0)
         kick_gain = max(0.0, min(2.0, float(1.0 if kick_gain_raw is None else kick_gain_raw)))

@@ -45,6 +45,41 @@ def test_prewarm_spotify_visualizer_overlay_primes_shader_cache_before_overlay(m
     ]
 
 
+def test_prewarm_spotify_visualizer_overlay_seeds_shaped_type_before_gl_compile(monkeypatch):
+    calls: list[object] = []
+
+    class _FakeVisualizer:
+        _vis_mode_str = "blob"
+        _blob_type = "shaped"
+        _blob_shaper_enabled = True
+
+        def geometry(self) -> QRect:
+            return QRect(4, 8, 300, 180)
+
+    class _FakeOverlay:
+        _vis_mode = "spectrum"
+        _blob_type = "mighty"
+
+        def prewarm_context(self, _geom: QRect) -> None:
+            calls.append((self._vis_mode, self._blob_type))
+
+    overlay = _FakeOverlay()
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.shaders.preload_fragment_shaders",
+        lambda: {"blob_shaped": "frag"},
+    )
+    monkeypatch.setattr(
+        display_image_ops,
+        "_ensure_spotify_bars_overlay",
+        lambda _widget: overlay,
+    )
+
+    widget = SimpleNamespace(spotify_visualizer_widget=_FakeVisualizer())
+
+    assert display_image_ops.prewarm_spotify_visualizer_overlay(widget) is True
+    assert calls == [("blob", "shaped")]
+
+
 def test_ensure_spotify_bars_overlay_seeds_ctor_mode_from_visualizer(monkeypatch):
     calls: list[object] = []
 

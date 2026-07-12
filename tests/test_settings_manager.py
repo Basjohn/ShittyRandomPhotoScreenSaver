@@ -10,7 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from core.settings.models import SpotifyVisualizerSettings
 from core.settings.settings_manager import SettingsManager
+from core.settings.visualizer_blob_contract import (
+    BLOB_MIGHTY_ONLY_KEYS,
+    BLOB_SHAPED_ONLY_KEYS,
+)
+from core.settings.visualizer_presets import get_custom_preset_index
 
 
 def _make_manager(tmp_path: Path, *, base_dir: Path | None = None) -> SettingsManager:
@@ -99,6 +105,207 @@ class TestSettingsManagerBasics:
         persisted = reloaded.get_widgets_map()["spotify_visualizer"]
         assert persisted["position"] == "Custom"
         assert persisted["monitor"] == "1"
+
+
+class TestSpotifyVisualizerTypedPersistence:
+    def test_default_merge_does_not_reintroduce_inactive_blob_family(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        manager = _make_manager(tmp_path)
+        manager.set_widgets_map(
+            {
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "blob_type": "shaped",
+                    "blob_shaper_audio_motion": 2.2,
+                }
+            }
+        )
+
+        manager._ensure_widgets_defaults(
+            {
+                "spotify_visualizer": {
+                    "mode": "spectrum",
+                    "blob_type": "mighty",
+                    "blob_constant_wobble": 1.0,
+                    "blob_reactive_wobble": 1.0,
+                    "blob_shaper_idle_motion": 0.18,
+                    "blob_shaper_audio_motion": 1.2,
+                }
+            }
+        )
+
+        section = manager.get_widgets_map()["spotify_visualizer"]
+        assert section["blob_type"] == "shaped"
+        assert section["blob_shaper_idle_motion"] == 0.18
+        assert section["blob_shaper_audio_motion"] == 2.2
+        assert BLOB_MIGHTY_ONLY_KEYS.isdisjoint(section)
+
+    def test_shaped_to_mighty_save_preserves_mighty_values_atomically(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage_root = tmp_path / "settings"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        custom_index = get_custom_preset_index("blob")
+        unrelated_widget = {"enabled": True, "sentinel": "keep-clock"}
+        manager.set_widgets_map(
+            {
+                "clock": unrelated_widget,
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "preset_blob": custom_index,
+                    "blob_type": "shaped",
+                    "blob_shaper_idle_motion": 0.91,
+                    "blob_shaper_audio_motion": 2.73,
+                },
+            }
+        )
+
+        model = SpotifyVisualizerSettings(
+            mode="blob",
+            preset_blob=custom_index,
+            blob_type="mighty",
+            blob_reactive_deformation=1.84,
+            blob_constant_wobble=2.37,
+            blob_reactive_wobble=2.63,
+            blob_stretch=0.79,
+            blob_stretch_tendency=0.61,
+            blob_stretch_inner=0.27,
+            blob_stretch_outer=0.73,
+            # The inactive family is deliberately non-default: normalization
+            # must remove it rather than ferrying dormant Shaped authority.
+            blob_shaper_idle_motion=0.88,
+            blob_shaper_audio_motion=2.91,
+            blob_topology="ring",
+            blob_ring_thickness=0.17,
+        )
+
+        manager.set_spotify_visualizer_settings(model)
+
+        persisted = manager.get_widgets_map()
+        visualizer = persisted["spotify_visualizer"]
+        assert persisted["clock"] == unrelated_widget
+        assert visualizer["blob_type"] == "mighty"
+        assert visualizer["blob_reactive_deformation"] == 1.84
+        assert visualizer["blob_constant_wobble"] == 2.37
+        assert visualizer["blob_reactive_wobble"] == 2.63
+        assert visualizer["blob_stretch"] == 0.79
+        assert visualizer["blob_stretch_tendency"] == 0.61
+        assert visualizer["blob_stretch_inner"] == 0.27
+        assert visualizer["blob_stretch_outer"] == 0.73
+        assert BLOB_SHAPED_ONLY_KEYS.isdisjoint(visualizer)
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        reloaded_widgets = reloaded.get_widgets_map()
+        reloaded_model = reloaded.get_spotify_visualizer_settings()
+        assert reloaded_widgets["clock"]["enabled"] is True
+        assert reloaded_widgets["clock"]["sentinel"] == "keep-clock"
+        assert BLOB_SHAPED_ONLY_KEYS.isdisjoint(
+            reloaded_widgets["spotify_visualizer"]
+        )
+        assert reloaded_model.blob_type == "mighty"
+        assert reloaded_model.blob_constant_wobble == 2.37
+        assert reloaded_model.blob_reactive_wobble == 2.63
+        assert reloaded_model.blob_stretch == 0.79
+
+    def test_mighty_to_shaped_save_preserves_shaped_values_atomically(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        storage_root = tmp_path / "settings"
+        app_name = f"TestApp_{uuid.uuid4().hex}"
+        manager = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        custom_index = get_custom_preset_index("blob")
+        unrelated_widget = {"enabled": False, "sentinel": "keep-weather"}
+        manager.set_widgets_map(
+            {
+                "weather": unrelated_widget,
+                "spotify_visualizer": {
+                    "mode": "blob",
+                    "preset_blob": custom_index,
+                    "blob_type": "mighty",
+                    "blob_constant_wobble": 2.12,
+                    "blob_reactive_wobble": 2.42,
+                },
+            }
+        )
+        base_nodes = [[0.0, 0.82], [0.23, 1.31], [0.51, 0.76], [0.79, 1.18]]
+        reaction_nodes = [[0.0, 1.16], [0.23, 0.71], [0.51, 1.28], [0.79, 0.88]]
+        energy_nodes = [
+            {"t": 0.18, "gain": 1.42, "band": "vocals"},
+            {"t": 0.66, "gain": 0.73, "band": "highs"},
+        ]
+        model = SpotifyVisualizerSettings(
+            mode="blob",
+            preset_blob=custom_index,
+            blob_type="shaped",
+            blob_shape_base_nodes=base_nodes,
+            blob_shape_reaction_nodes=reaction_nodes,
+            blob_shape_energy_nodes=energy_nodes,
+            blob_shaper_base_strength=0.83,
+            blob_shaper_react_strength=0.91,
+            blob_shaper_idle_motion=0.77,
+            blob_shaper_audio_motion=2.44,
+            blob_topology="ring",
+            blob_ring_thickness=0.19,
+            # The inactive family is deliberately non-default and must not
+            # survive the canonical Shaped snapshot.
+            blob_reactive_deformation=1.93,
+            blob_constant_wobble=2.29,
+            blob_reactive_wobble=2.67,
+            blob_stretch=0.84,
+        )
+
+        manager.set_spotify_visualizer_settings(model)
+
+        persisted = manager.get_widgets_map()
+        visualizer = persisted["spotify_visualizer"]
+        assert persisted["weather"] == unrelated_widget
+        assert visualizer["blob_type"] == "shaped"
+        assert visualizer["blob_shape_base_nodes"] == base_nodes
+        assert visualizer["blob_shape_reaction_nodes"] == reaction_nodes
+        assert visualizer["blob_shape_energy_nodes"] == energy_nodes
+        assert visualizer["blob_shaper_base_strength"] == 0.83
+        assert visualizer["blob_shaper_react_strength"] == 0.91
+        assert visualizer["blob_shaper_idle_motion"] == 0.77
+        assert visualizer["blob_shaper_audio_motion"] == 2.44
+        assert visualizer["blob_topology"] == "ring"
+        assert visualizer["blob_ring_thickness"] == 0.19
+        assert BLOB_MIGHTY_ONLY_KEYS.isdisjoint(visualizer)
+
+        reloaded = SettingsManager(
+            organization="TestOrg",
+            application=app_name,
+            storage_base_dir=storage_root,
+        )
+        reloaded_widgets = reloaded.get_widgets_map()
+        reloaded_model = reloaded.get_spotify_visualizer_settings()
+        assert reloaded_widgets["weather"]["enabled"] is False
+        assert reloaded_widgets["weather"]["sentinel"] == "keep-weather"
+        assert BLOB_MIGHTY_ONLY_KEYS.isdisjoint(
+            reloaded_widgets["spotify_visualizer"]
+        )
+        assert reloaded_model.blob_type == "shaped"
+        assert reloaded_model.blob_shape_base_nodes == base_nodes
+        assert reloaded_model.blob_shape_reaction_nodes == reaction_nodes
+        assert reloaded_model.blob_shape_energy_nodes == energy_nodes
+        assert reloaded_model.blob_shaper_idle_motion == 0.77
+        assert reloaded_model.blob_shaper_audio_motion == 2.44
 
 
 class TestSettingsManagerTypeConversion:

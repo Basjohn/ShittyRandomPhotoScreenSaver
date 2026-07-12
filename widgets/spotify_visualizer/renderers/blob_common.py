@@ -15,7 +15,6 @@ from widgets.spotify_visualizer.renderers.gl_helpers import (
 
 def get_common_uniform_names() -> list[str]:
     return [
-        "u_playing",
         "u_ghost_alpha",
         "u_blob_color",
         "u_blob_glow_color",
@@ -55,8 +54,6 @@ def get_common_uniform_names() -> list[str]:
 
 def upload_common_uniforms(gl, u: dict, s) -> tuple[float, float, float, float]:
     """Upload subtype-neutral Blob state and return live band values."""
-    _set1i(gl, u, "u_playing", 1 if s._playing else 0)
-
     loc = u.get("u_ghost_alpha", -1)
     if loc >= 0:
         try:
@@ -143,7 +140,7 @@ def upload_common_uniforms(gl, u: dict, s) -> tuple[float, float, float, float]:
 
 
 def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]) -> None:
-    """Emit the existing low-rate profile diagnostic with subtype identity."""
+    """Emit low-rate Blob contour diagnostics with temporal evidence."""
     try:
         current_ts = float(getattr(s, "_last_update_ts", 0.0) or 0.0)
         if current_ts <= 0.0:
@@ -155,15 +152,105 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             return
         profile_min = min(float(value) for value in profile)
         profile_max = max(float(value) for value in profile)
+        profile_mean = sum(float(value) for value in profile) / len(profile)
+        profile_rms = (
+            sum((float(value) - profile_mean) ** 2 for value in profile) / len(profile)
+        ) ** 0.5
+        target_attr = (
+            "_blob_shaper_runtime_target_profile"
+            if blob_type == "shaped"
+            else "_blob_unshaped_runtime_target_profile"
+        )
+        target_profile = getattr(s, target_attr, None)
+        target_spread = 0.0
+        transfer_ratio = 0.0
+        if target_profile is not None and len(target_profile) == len(profile):
+            target_min = min(float(value) for value in target_profile)
+            target_max = max(float(value) for value in target_profile)
+            target_mean = sum(float(value) for value in target_profile) / len(target_profile)
+            target_rms = (
+                sum((float(value) - target_mean) ** 2 for value in target_profile)
+                / len(target_profile)
+            ) ** 0.5
+            target_spread = target_max - target_min
+            transfer_ratio = profile_rms / max(target_rms, 1e-6)
+        previous_profile = getattr(s, "_blob_runtime_diag_profile", None)
+        rms_delta = 0.0
+        max_delta = 0.0
+        mean_delta = 0.0
+        if previous_profile is not None and len(previous_profile) == len(profile):
+            deltas = [
+                float(profile[idx]) - float(previous_profile[idx])
+                for idx in range(len(profile))
+            ]
+            rms_delta = (sum(delta * delta for delta in deltas) / len(deltas)) ** 0.5
+            max_delta = max(abs(delta) for delta in deltas)
+            mean_delta = profile_mean - (
+                sum(float(value) for value in previous_profile) / len(previous_profile)
+            )
+        transient = getattr(s, "_transient_energy", None)
+        transient_peak = max(
+            float(getattr(transient, "bass_transient", 0.0) if transient else 0.0),
+            float(getattr(transient, "mid_transient", 0.0) if transient else 0.0),
+            float(getattr(transient, "high_transient", 0.0) if transient else 0.0),
+            float(getattr(s, "_blob_kick_event_envelope", 0.0) or 0.0),
+            float(getattr(s, "_blob_snare_event_envelope", 0.0) or 0.0),
+        )
+        if blob_type == "shaped":
+            control_label = "shaped(base,react,idle,music)"
+            controls = (
+                float(getattr(s, "_blob_shaper_base_strength", 0.0) or 0.0),
+                float(getattr(s, "_blob_shaper_react_strength", 0.0) or 0.0),
+                float(getattr(s, "_blob_shaper_idle_motion", 0.0) or 0.0),
+                float(getattr(s, "_blob_shaper_audio_motion", 0.0) or 0.0),
+            )
+        else:
+            control_label = "mighty(shape,idle,music,stretch)"
+            controls = (
+                float(getattr(s, "_blob_reactive_deformation", 0.0) or 0.0),
+                float(getattr(s, "_blob_constant_wobble", 0.0) or 0.0),
+                float(getattr(s, "_blob_reactive_wobble", 0.0) or 0.0),
+                float(getattr(s, "_blob_stretch_tendency", 0.0) or 0.0),
+            )
+        height_getter = getattr(s, "height", None)
+        height_px = float(height_getter()) if callable(height_getter) else 0.0
+        base_radius_px = max(0.0, height_px - 12.0) * 0.31 * float(
+            getattr(s, "_blob_size", 1.0) or 1.0
+        )
         logger.debug(
-            "[SPOTIFY_VIS][BLOB_PROFILE] type=%s liquid=%s min=%.3f max=%.3f spread=%.3f avg=%.3f",
+            "[SPOTIFY_VIS][BLOB_PROFILE] type=%s samples=%d playing=%s liquid=%s "
+            "bands=(%.3f,%.3f,%.3f,%.3f) transient=%.3f "
+            "%s=(%.2f,%.2f,%.2f,%.2f) "
+            "min=%.3f max=%.3f spread=%.3f avg=%.3f "
+            "target_spread=%.3f transfer=%.2f rms_delta=%.4f "
+            "max_delta=%.4f mean_delta=%+.4f est_px(span=%.1f,rms_delta=%.1f)",
             blob_type,
+            len(profile),
+            bool(getattr(s, "_playing", False)),
             bool(getattr(s, "_blob_inward_liquid_enabled", False)),
+            float(getattr(s, "_blob_live_bass_energy", 0.0) or 0.0),
+            float(getattr(s, "_blob_live_mid_energy", 0.0) or 0.0),
+            float(getattr(s, "_blob_live_high_energy", 0.0) or 0.0),
+            float(getattr(s, "_blob_live_overall_energy", 0.0) or 0.0),
+            transient_peak,
+            control_label,
+            controls[0],
+            controls[1],
+            controls[2],
+            controls[3],
             profile_min,
             profile_max,
             profile_max - profile_min,
-            sum(float(value) for value in profile) / len(profile),
+            profile_mean,
+            target_spread,
+            transfer_ratio,
+            rms_delta,
+            max_delta,
+            mean_delta,
+            (profile_max - profile_min) * base_radius_px,
+            rms_delta * base_radius_px,
         )
+        setattr(s, "_blob_runtime_diag_profile", list(profile))
         setattr(s, "_blob_runtime_diag_ts", current_ts)
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to log Blob runtime profile", exc_info=True)

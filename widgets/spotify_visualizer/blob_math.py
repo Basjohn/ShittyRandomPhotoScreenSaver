@@ -9,7 +9,6 @@ import math
 from typing import Sequence
 
 from widgets.spotify_visualizer.blob_shaper_solver import (
-    build_contour_residual_profile,
     solve_profile_step,
     slew_profile_toward_target,
 )
@@ -26,16 +25,65 @@ def _smoothstep(edge0: float, edge1: float, x: float) -> float:
     return t * t * (3.0 - 2.0 * t)
 
 
-def _centered_outward_lobe(phase: float) -> float:
-    """Return a zero-mean half-wave lobe with a 3:1 outward bias."""
+def _compress_blob_energy(value: float) -> float:
+    """Compress hot Blob-local energy without flattening everything at 1.0.
 
-    return max(0.0, math.sin(phase)) ** 2 - 0.25
+    Live diagnostics routinely show healthy per-band values in the 0.8..1.4
+    range. Hard clamping that range made the contour spend whole passages at
+    one fixed amplitude, leaving only phase travel visible. This soft knee is
+    deliberately Blob-owned; shared audio remains untouched.
+    """
+
+    raw = max(0.0, float(value))
+    scaled = raw * 0.72
+    if scaled <= 0.90:
+        return scaled
+    # Preserve the very useful 0.5..1.5 live range almost linearly, then bend
+    # only genuinely hot values into a bounded ceiling.
+    return min(1.18, 0.90 + 0.30 * (1.0 - math.exp(-(scaled - 0.90) / 0.30)))
 
 
-def _centered_inward_lobe(phase: float) -> float:
-    """Return the zero-mean inward counterpart to an outward lobe."""
+def _rounded_outward_lobe(angle: float, center: float, half_width: float) -> float:
+    """Return a compact cosine-squared bulge with zero-slope shoulders."""
 
-    return 0.25 - max(0.0, -math.sin(phase)) ** 2
+    width = max(0.08, float(half_width))
+    diff = abs(math.atan2(math.sin(angle - center), math.cos(angle - center)))
+    if diff >= width:
+        return 0.0
+    t = diff / width
+    return (0.5 + 0.5 * math.cos(math.pi * t)) ** 2
+
+
+def _organic_tendril_lobe(angle: float, center: float, half_width: float) -> float:
+    """Return a rounded tendril with a broad root and narrower gel tip."""
+
+    shoulder = _rounded_outward_lobe(angle, center, half_width)
+    tip = _rounded_outward_lobe(angle, center, half_width * 0.54)
+    return shoulder * 0.38 + tip * 0.62
+
+
+def _smooth_cyclic_profile(values: Sequence[float], *, passes: int = 3) -> list[float]:
+    """Round angular shoulders without changing the profile's cyclic seam."""
+
+    out = [float(value) for value in values]
+    if len(out) < 3:
+        return out
+    for _ in range(max(0, int(passes))):
+        out = [
+            out[idx] * 0.52
+            + out[(idx - 1) % len(out)] * 0.24
+            + out[(idx + 1) % len(out)] * 0.24
+            for idx in range(len(out))
+        ]
+    return out
+
+
+def _smooth_max(a: float, b: float, softness: float = 0.014) -> float:
+    """Differentiable max used to keep containment from drawing hard cuts."""
+
+    delta = float(a) - float(b)
+    soft = max(1e-6, float(softness))
+    return 0.5 * (float(a) + float(b) + math.sqrt(delta * delta + soft * soft))
 
 
 def compute_unshaped_organic_base_multiplier(
@@ -95,20 +143,19 @@ def compute_unshaped_motion_offsets(
 ) -> tuple[float, float]:
     """Return Mighty Blob tendril and wobble offsets in radius units.
 
-    This restores the varied 3.0-era harmonic vocabulary while keeping the
-    current contour solver in charge of temporal and neighbour smoothing.
-    Tendrils use centred half-wave lobes: their angular mean is zero, their
-    outward crest is three times their inward compensation, and they therefore
-    add expressive reach without inflating the whole body.
+    Broad standing fields and rounded local lobes deliberately avoid the old
+    phase-travelling radial-fan vocabulary.  The profile builder recentres the
+    resulting body before containment, so outward reach does not silently
+    inflate its mean radius.
     """
 
     angle = (float(angle_frac) % 1.0) * math.tau
     time_value = float(time_seconds)
-    e_bass = _clamp(bass_energy, 0.0, 1.0)
-    e_mid = _clamp(mid_energy, 0.0, 1.0)
-    e_high = _clamp(high_energy, 0.0, 1.0)
-    e_overall = _clamp(overall_energy, 0.0, 1.0)
-    se = _clamp(smoothed_energy, 0.0, 1.0)
+    e_bass = _compress_blob_energy(bass_energy)
+    e_mid = _compress_blob_energy(mid_energy)
+    e_high = _compress_blob_energy(high_energy)
+    e_overall = _compress_blob_energy(overall_energy)
+    se = _compress_blob_energy(smoothed_energy)
     rd = _clamp(reactive_deformation, 0.0, 3.0)
     cw = _clamp(constant_wobble, 0.0, 2.0)
     rw = _clamp(reactive_wobble, 0.0, 3.0)
@@ -116,31 +163,31 @@ def compute_unshaped_motion_offsets(
     s_inner = _clamp(stretch_inner, 0.0, 1.0)
     s_outer = _clamp(stretch_outer, 0.0, 1.0)
 
-    # Constant living wobble.  Frequencies, relative weights, and phase speeds
-    # deliberately mirror the richer 3.0 contour (b8c9fcf): broad 1/2/3 lobes
-    # carry the body while 5/7 keep the perimeter visibly alive.
+    # Constant living wobble uses standing waves whose amplitudes breathe.
+    # Linear phase travel made a fixed deformation rotate around the blob;
+    # these anchored lobes instead swell, shrink, and trade dominance.
     constant_field = 0.0
-    constant_field += math.sin(angle * 1.0 + time_value * 0.20) * 0.040
-    constant_field += math.sin(angle * 2.0 + time_value * 0.40) * 0.035
-    constant_field += math.sin(angle * 3.0 + time_value * 1.50) * 0.030
-    constant_field += math.sin(angle * 5.0 - time_value * 2.30) * 0.020
-    constant_field += math.sin(angle * 7.0 + time_value * 3.10) * 0.012
+    constant_field += math.sin(angle + 0.35) * 0.052 * (0.76 + 0.24 * math.sin(time_value * 0.43 + 0.2))
+    constant_field += math.sin(angle * 2.0 + 1.40) * 0.042 * (0.72 + 0.28 * math.sin(time_value * 0.61 + 1.1))
+    constant_field += math.sin(angle * 3.0 + 2.65) * 0.026 * (0.70 + 0.30 * math.sin(time_value * 0.79 + 2.0))
+    constant_field += math.sin(angle * 5.0 + 0.90) * 0.012 * (0.68 + 0.32 * math.sin(time_value * 1.07 + 0.6))
 
     reactive_mid = _clamp(e_mid * 0.92 + e_overall * 0.08, 0.0, 1.0)
     reactive_high = _clamp(e_high * 0.82 + e_mid * 0.12, 0.0, 1.0)
     vocal = _clamp(e_mid * 1.02 + e_high * 0.18, 0.0, 1.0)
 
-    # Music-reactive wobble restores the 3/5/7/11 detail and the broad 2/4
-    # vocal lobes.  Every term is periodic, so the profile remains seam-safe.
+    # Music-reactive outline wobble is also spatially anchored. Vocal energy
+    # changes its amplitude while small standing-wave pulses keep the contour
+    # visibly flexing even through sustained notes.
+    vocal_pulse = 0.78 + 0.22 * math.sin(time_value * 1.83 + 0.45)
+    mid_pulse = 0.78 + 0.22 * math.sin(time_value * 1.31 + 1.75)
+    high_pulse = 0.82 + 0.18 * math.sin(time_value * 2.17 + 2.30)
     reactive_field = 0.0
-    reactive_field += math.sin(angle * 3.0 + time_value * 1.50) * 0.055 * reactive_mid
-    reactive_field += math.sin(angle * 5.0 - time_value * 2.30) * 0.040 * reactive_mid
-    reactive_field += math.sin(angle * 7.0 + time_value * 3.10) * 0.025 * reactive_high
-    reactive_field += math.sin(angle * 11.0 - time_value * 4.70) * 0.015 * reactive_high
-    reactive_field += math.sin(angle * 2.0 + time_value * 0.90) * 0.065 * vocal
-    reactive_field += math.sin(angle * 4.0 - time_value * 1.10) * 0.045 * vocal * vocal
-
-    wobble_component = constant_field * cw + reactive_field * rw
+    reactive_field += math.sin(angle * 2.0 + 0.62) * 0.125 * vocal * vocal_pulse
+    reactive_field += math.sin(angle * 3.0 + 2.10) * 0.084 * reactive_mid * mid_pulse
+    reactive_field += math.sin(angle * 4.0 + 1.18) * 0.071 * vocal * vocal * (1.0 - vocal_pulse * 0.35)
+    reactive_field += math.sin(angle * 5.0 + 2.85) * 0.047 * reactive_mid * (0.55 + mid_pulse * 0.45)
+    reactive_field += math.sin(angle * 7.0 + 0.15) * 0.026 * reactive_high * high_pulse
 
     pocket_pressure = _clamp(pocket_component, 0.0, 1.8)
     pocket_soft = 1.0 - math.exp(-pocket_pressure * 0.92)
@@ -152,36 +199,39 @@ def compute_unshaped_motion_offsets(
         peak2 = peak * peak
         peak3 = peak2 * peak
 
-        # A centred half-wave-squared lobe has an exact angular mean of zero:
-        # max(sin(x), 0)^2 averages 0.25 over a full turn.  Its positive crest
-        # reaches 0.75 after centring while the broad compensation is only
-        # -0.25, which is the outward-biased tendril language Mighty needs.
+        # Rounded cosine-squared bulges have zero-slope shoulders. Their
+        # centers only sway slightly; energy changes their length, so a hit
+        # reads as a tendril growing and relaxing rather than orbiting.
+        center_sway = math.sin(time_value * 0.31) * 0.09
+        vocal_breath = 0.08 + 0.92 * (0.5 + 0.5 * math.sin(time_value * 1.11 + 0.4))
+        bass_breath = 0.12 + 0.88 * (0.5 + 0.5 * math.sin(time_value * 0.83 + 2.0))
+        mid_breath = 0.08 + 0.92 * (0.5 + 0.5 * math.sin(time_value * 1.47 + 1.25))
+        high_breath = 0.05 + 0.95 * (0.5 + 0.5 * math.sin(time_value * 2.09 + 2.70))
         tendrils = 0.0
-        tendrils += _centered_outward_lobe(angle * 2.0 + time_value * 0.70) * peak3 * 0.180
-        tendrils += _centered_outward_lobe(angle * 1.0 + time_value * 0.15) * peak2 * 0.120
-        tendrils += _centered_outward_lobe(angle * 3.0 - time_value * 1.30) * e_bass * e_bass * 0.140
-        tendrils += _centered_outward_lobe(angle * 5.0 + time_value * 2.10) * e_mid * e_mid * 0.090
-        tendrils += _centered_outward_lobe(angle * 7.0 - time_value * 0.50) * e_mid * e_mid * 0.070
-        tendrils += _centered_outward_lobe(angle * 9.0 + time_value * 3.30) * e_high * 0.050
+        tendrils += _organic_tendril_lobe(angle, 0.55 + center_sway, 0.72) * peak3 * 0.360 * vocal_breath
+        tendrils += _organic_tendril_lobe(angle, 3.76 - center_sway * 0.65, 0.78) * peak2 * 0.285 * bass_breath
+        tendrils += _organic_tendril_lobe(angle, 2.08 + center_sway * 0.35, 0.58) * e_mid * e_mid * 0.265 * mid_breath
+        tendrils += _organic_tendril_lobe(angle, 5.25 - center_sway * 0.45, 0.48) * e_high * 0.175 * high_breath
 
         # The authored inward control adds only a much smaller, independently
         # centred counter-lobe.  Even at maximum it cannot recreate the old
         # deep radial pinch family.
         inward_detail = 0.0
-        inward_detail += _centered_inward_lobe(angle * 2.0 + time_value * 0.70) * peak3 * 0.060
-        inward_detail += _centered_inward_lobe(angle * 5.0 + time_value * 2.10) * e_mid * e_mid * 0.040
-        inward_detail += _centered_inward_lobe(angle * 9.0 + time_value * 3.30) * e_high * 0.022
+        inward_detail += math.sin(angle * 2.0 + 2.30) * peak3 * 0.025
+        inward_detail += math.sin(angle * 3.0 + 0.45) * e_mid * e_mid * 0.018
 
         outer_gain = 0.42 + s_outer * 1.38
         inner_gain = s_inner * 0.34
         stretch_component = (tendrils * outer_gain + inward_detail * inner_gain) * st
-        stretch_component += pocket_shoulder * (0.080 + s_outer * 0.180) * st
-        stretch_component += pocket_soft * 0.024 * st
+        stretch_component += pocket_shoulder * (0.055 + s_outer * 0.105) * st
+        stretch_component += pocket_soft * 0.014 * st
 
-    wobble_component += pocket_shoulder * 0.024
-
-    rd_scale = rd if rd <= 1.0 else 1.0 + (rd - 1.0) ** 3 * 4.0 + (rd - 1.0) * 2.0
-    wobble_component *= rd_scale
+    # Shape Reactivity scales music motion only. Idle Edge Motion remains a
+    # useful independent control, and the old cubic >1 boost can no longer
+    # slam the profile into containment caps.
+    rd_scale = rd if rd <= 1.0 else 1.0 + (rd - 1.0) * 0.75
+    wobble_component = constant_field * cw + reactive_field * rw * rd_scale
+    wobble_component += pocket_shoulder * 0.018 * rd_scale
     stretch_component *= rd_scale
 
     return (stretch_component, wobble_component)
@@ -239,12 +289,10 @@ def compute_unshaped_radius_multiplier(
         stage3_t=stage3_t,
     )
     contour_floor = max(0.84, body_mult * max(0.84, stage_floor))
-    stretch_floor = min(contour_floor - body_mult, 0.0)
-    stretch_component = max(stretch_component, stretch_floor)
-    core_mult = body_mult + stretch_component
-    # This floor follows the living body rather than collapsing to one scalar
-    # circle.  It permits a slight inward flex but never the old deep pinch.
-    final_mult = max(core_mult + wobble_component, contour_floor)
+    candidate = body_mult + stretch_component + wobble_component
+    # A differentiable organic floor avoids the hard max junctions that drew
+    # cut-like shoulders. The floor follows the living base, never a circle.
+    final_mult = _smooth_max(candidate, contour_floor)
     return max(0.84, final_mult)
 
 
@@ -274,11 +322,14 @@ def compute_blob_pocket_component(
 
     angle = float(angle_frac) % 1.0
     time_value = float(time_seconds)
-    bass = _clamp(bass_energy, 0.0, 1.0)
-    mid = _clamp(mid_energy, 0.0, 1.0)
-    high = _clamp(high_energy, 0.0, 1.0)
-    overall = _clamp(overall_energy, 0.0, 1.0)
-    smoothed = _clamp(smoothed_energy, 0.0, 1.0)
+    # Preserve the healthy >1.0 Blob-local live range seen in diagnostics;
+    # the motion helper applies its own soft-knee compression. Hard clipping
+    # here was what made sustained passages look phase-animated but static.
+    bass = max(0.0, float(bass_energy))
+    mid = max(0.0, float(mid_energy))
+    high = max(0.0, float(high_energy))
+    overall = max(0.0, float(overall_energy))
+    smoothed = max(0.0, float(smoothed_energy))
 
     total = 0.0
     for idx, pocket in enumerate(pockets):
@@ -329,17 +380,21 @@ def _fit_profile_inside_containment(
         return []
     min_allowed = min(float(min_allowed), float(center))
     max_allowed = max(float(max_allowed), float(center))
-    peak_above = max(max(float(v) - center, 0.0) for v in profile)
-    peak_below = max(max(center - float(v), 0.0) for v in profile)
     above_cap = max_allowed - center
     below_cap = center - min_allowed
-    scale = 1.0
-    if peak_above > 1e-6:
-        scale = min(scale, above_cap / peak_above)
-    if peak_below > 1e-6:
-        scale = min(scale, below_cap / peak_below)
-    scale = _clamp(scale, 0.0, 1.0)
-    return [_clamp(center + (float(v) - center) * scale, min_allowed, max_allowed) for v in profile]
+    # Inward safety and outward expression are independent authorities.
+    # A single shared scale let the protected inward floor suppress every
+    # outward tendril whenever one valley approached containment.  Smooth
+    # tanh shoulders also avoid drawing exact-radius plateaus at either bound.
+    fitted: list[float] = []
+    for value in profile:
+        delta = float(value) - center
+        if delta >= 0.0:
+            mapped = above_cap * math.tanh(delta / max(above_cap, 1e-6))
+        else:
+            mapped = -below_cap * math.tanh((-delta) / max(below_cap, 1e-6))
+        fitted.append(_clamp(center + mapped, min_allowed, max_allowed))
+    return fitted
 
 
 def build_unshaped_blob_target_profile(
@@ -376,28 +431,19 @@ def build_unshaped_blob_target_profile(
         return ([], [], [])
 
     time_value = float(time_seconds)
-    bass = _clamp(bass_energy, 0.0, 1.0)
-    mid = _clamp(mid_energy, 0.0, 1.0)
-    high = _clamp(high_energy, 0.0, 1.0)
-    overall = _clamp(overall_energy, 0.0, 1.0)
-    smoothed = _clamp(smoothed_energy, 0.0, 1.0)
+    # Keep the healthy >1.0 live range until the subtype-owned soft knee in
+    # ``compute_unshaped_motion_offsets``.  Hard clipping here was flattening
+    # loud passages into one constant-amplitude profile.
+    bass = max(0.0, float(bass_energy))
+    mid = max(0.0, float(mid_energy))
+    high = max(0.0, float(high_energy))
+    overall = max(0.0, float(overall_energy))
+    smoothed = max(0.0, float(smoothed_energy))
     stage_floor = compute_stage_floor_fraction(
         core_floor_bias=core_floor_bias,
         stage1_t=stage1_t,
         stage2_t=stage2_t,
         stage3_t=stage3_t,
-    )
-
-    residual = build_contour_residual_profile(
-        sample_count=count,
-        time_value=time_value,
-        idle_motion=0.42,
-        audio_motion=1.05,
-        overall_energy=overall,
-        vocal_energy=_clamp(mid * 0.82 + high * 0.18, 0.0, 1.0),
-        high_energy=high,
-        playing=playing,
-        seed=seed + 0.41,
     )
 
     base_profile: list[float] = []
@@ -442,7 +488,14 @@ def build_unshaped_blob_target_profile(
             pocket_component=pocket_component,
         )
         base_profile.append(base_mult)
-        target_profile.append(final_mult + residual[idx])
+        target_profile.append(final_mult)
+
+    # Profile-space rounding is authoritative. This prevents a single hot
+    # pocket/tendril sample from becoming a radial knife edge in the SDF.
+    # Analytic standing waves and cosine-squared lobes are already smooth.
+    # Two one-time passes remove sample-grid shoulders without the former
+    # every-frame attenuation stack that erased tendrils.
+    target_profile = _smooth_cyclic_profile(target_profile, passes=2)
 
     # Harmonics and centred tendril lobes should redistribute the body rather
     # than silently resize it.  Re-centering before containment also cancels
@@ -457,7 +510,7 @@ def build_unshaped_blob_target_profile(
     # it card-contained.  Mighty has a hard ~0.84 inward limit and a larger
     # outward reserve for musical tendrils.
     min_allowed = max(0.84, stage_floor * 0.92)
-    max_allowed = min(1.42, 1.22 + stage1_t * 0.060 + stage2_t * 0.080 + stage3_t * 0.100)
+    max_allowed = min(1.58, 1.34 + stage1_t * 0.060 + stage2_t * 0.080 + stage3_t * 0.100)
     bounded = _fit_profile_inside_containment(
         target_profile,
         min_allowed=min_allowed,
@@ -529,13 +582,17 @@ def solve_unshaped_blob_profile_step(
         current_target=bounded_target_profile,
         base_profile=base_profile,
         dt=dt,
-        attack_hz=13.5 if playing else 8.0,
-        release_hz=3.2 if playing else 2.2,
+        attack_hz=30.0 if playing else 10.0,
+        release_hz=8.0 if playing else 3.0,
     )
     current_profile = list(previous_profile or ())
     current_velocity = list(previous_velocity or ())
     if len(current_profile) != count:
-        current_profile = list(base_profile)
+        # A fresh activation must reflect the current, bounded audio contour on
+        # its first visible frame.  Seeding from the calm base made every type
+        # reset briefly look static/circular even though healthy audio was
+        # already available; the fade owns any visual softening needed here.
+        current_profile = list(target_profile)
     if len(current_velocity) != count:
         current_velocity = [0.0] * count
 
@@ -546,7 +603,7 @@ def solve_unshaped_blob_profile_step(
         stage3_t=stage3_t,
     )
     min_profile = [max(0.84, base_profile[idx] * max(0.84, stage_floor)) for idx in range(count)]
-    max_profile = [min(1.42, max(base_profile[idx] + 0.38, target_profile[idx] + 0.24)) for idx in range(count)]
+    max_profile = [min(1.58, max(base_profile[idx] + 0.58, target_profile[idx] + 0.22)) for idx in range(count)]
     solved_profile, solved_velocity = solve_profile_step(
         current_profile=current_profile,
         current_velocity=current_velocity,
@@ -554,10 +611,10 @@ def solve_unshaped_blob_profile_step(
         min_profile=min_profile,
         max_profile=max_profile,
         dt=dt,
-        stiffness=19.0 if playing else 13.0,
-        damping=7.2 if playing else 10.8,
-        neighbor_strength=12.6 if playing else 9.8,
-        smoothing_passes=2 if playing else 2,
+        stiffness=55.0 if playing else 18.0,
+        damping=8.0 if playing else 10.0,
+        neighbor_strength=3.0 if playing else 4.0,
+        smoothing_passes=0,
     )
     solved_profile = _fit_profile_inside_containment(
         solved_profile,
@@ -903,12 +960,12 @@ def compute_blob_radius_preview(
     # Mighty/Shaped share a readable body baseline; contour motion still owns
     # the silhouette, while this scalar lane provides restrained breathing.
     r = 0.31 * blob_size
-    r += bass * bass * 0.024 * blob_pulse
-    r += bass * 0.028 * blob_pulse
+    r += bass * bass * 0.008 * blob_pulse
+    r += bass * 0.009 * blob_pulse
     se = _clamp(smoothed_energy, 0.0, 1.0)
     breath = max(bass, se * 0.82)
-    r += max(0.02, breath) * 0.010 * blob_pulse
-    r -= (1.0 - se) * 0.012 * blob_pulse
+    r += max(0.02, breath) * 0.004 * blob_pulse
+    r -= (1.0 - se) * 0.004 * blob_pulse
     r += compute_stage_offset(
         blob_size=blob_size,
         bass_energy=bass,

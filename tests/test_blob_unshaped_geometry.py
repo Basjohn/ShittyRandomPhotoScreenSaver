@@ -113,12 +113,12 @@ def test_mighty_blob_organic_base_wrap_stays_smooth_as_time_drifts() -> None:
         assert abs(just_left - just_right) < 0.004
 
 
-def test_mighty_blob_solver_smooths_rich_harmonics_under_strong_motion() -> None:
+def test_mighty_blob_solver_keeps_strong_motion_rounded_without_radial_cuts() -> None:
     profile_bundle, _velocity = solve_unshaped_blob_profile_step(
         previous_profile=None,
         previous_velocity=None,
         previous_target_profile=None,
-        sample_count=64,
+        sample_count=128,
         time_seconds=11.0,
         dt=0.016,
         bass_energy=0.74,
@@ -145,16 +145,21 @@ def test_mighty_blob_solver_smooths_rich_harmonics_under_strong_motion() -> None
         abs(samples[idx] - samples[(idx + 1) % len(samples)])
         for idx in range(len(samples))
     )
+    max_curvature = max(
+        abs(samples[(idx - 1) % len(samples)] - 2.0 * samples[idx] + samples[(idx + 1) % len(samples)])
+        for idx in range(len(samples))
+    )
 
-    assert max_step < 0.032
+    assert max_step < 0.040
+    assert max_curvature < 0.015
     assert min(samples) >= 0.84
-    assert max(samples) > 1.15
+    assert max(samples) - min(samples) > 0.24
 
 
-def test_mighty_blob_music_tendrils_are_outward_biased_and_zero_mean() -> None:
+def test_mighty_blob_music_tendrils_have_broad_zero_slope_shoulders() -> None:
     offsets = [
         compute_unshaped_motion_offsets(
-            angle_frac=idx / 96.0,
+            angle_frac=idx / 128.0,
             time_seconds=6.2,
             bass_energy=0.42,
             mid_energy=0.88,
@@ -168,17 +173,26 @@ def test_mighty_blob_music_tendrils_are_outward_biased_and_zero_mean() -> None:
             stretch_inner=0.0,
             stretch_outer=0.55,
         )[0]
-        for idx in range(96)
+        for idx in range(128)
     ]
 
-    assert abs(math.fsum(offsets) / len(offsets)) < 1e-6
-    assert max(offsets) > 0.08
-    assert max(offsets) > abs(min(offsets)) * 1.5
+    # The local tendril lane is intentionally outward-only; the complete
+    # profile is re-centred later so this does not inflate the whole body.
+    assert min(offsets) >= 0.0
+    assert max(offsets) > 0.04
     peak_index = max(range(len(offsets)), key=offsets.__getitem__)
     peak = offsets[peak_index]
     assert offsets[(peak_index - 1) % len(offsets)] > peak * 0.84
     assert offsets[(peak_index + 1) % len(offsets)] > peak * 0.84
-    assert sum(value > peak * 0.70 for value in offsets) >= 5
+    assert sum(value > peak * 0.70 for value in offsets) >= 8
+    assert max(
+        abs(offsets[idx] - offsets[(idx + 1) % len(offsets)])
+        for idx in range(len(offsets))
+    ) < 0.015
+    assert max(
+        abs(offsets[(idx - 1) % len(offsets)] - 2.0 * offsets[idx] + offsets[(idx + 1) % len(offsets)])
+        for idx in range(len(offsets))
+    ) < 0.008
 
 
 def test_mighty_blob_mid_vocals_drive_visible_outline_wobble() -> None:
@@ -291,7 +305,7 @@ def test_mighty_blob_pocket_reactions_still_locally_enrich_radius() -> None:
     assert pocketed > plain + 0.012
 
 
-def test_mighty_blob_restores_rich_constant_and_reactive_harmonics() -> None:
+def test_mighty_blob_prefers_broad_body_motion_with_bounded_reactive_detail() -> None:
     common = dict(
         sample_count=64,
         time_seconds=7.2,
@@ -325,11 +339,16 @@ def test_mighty_blob_restores_rich_constant_and_reactive_harmonics() -> None:
         **common,
     )
 
-    constant_detail = _harmonic_amplitude(calm, 5) + _harmonic_amplitude(calm, 7)
-    reactive_detail = sum(_harmonic_amplitude(hot, harmonic) for harmonic in (4, 5, 7, 9, 11))
+    broad_idle = sum(_harmonic_amplitude(calm, harmonic) for harmonic in (1, 2, 3))
+    reactive_detail = sum(_harmonic_amplitude(hot, harmonic) for harmonic in (4, 5, 7))
+    phrase_delta_rms = math.sqrt(
+        math.fsum((hot[idx] - calm[idx]) ** 2 for idx in range(len(hot))) / len(hot)
+    )
 
-    assert constant_detail > 0.025
-    assert reactive_detail > 0.10
+    assert broad_idle > 0.13
+    assert reactive_detail > 0.035
+    assert reactive_detail < broad_idle
+    assert phrase_delta_rms > 0.055
 
 
 def test_mighty_blob_keeps_body_mean_stable_while_tendrils_extend_outward() -> None:
@@ -397,3 +416,94 @@ def test_mighty_blob_keeps_body_mean_stable_while_tendrils_extend_outward() -> N
     assert math.fsum(hot) / len(hot) == pytest.approx(math.fsum(base) / len(base), abs=0.006)
     assert min(hot) >= 0.84
     assert max(hot_offsets) > max(calm_offsets) + 0.12
+
+
+def test_mighty_blob_sustained_phrase_breathes_in_place_instead_of_orbiting() -> None:
+    common = dict(
+        sample_count=64,
+        bass_energy=1.30,
+        mid_energy=1.05,
+        high_energy=1.10,
+        overall_energy=1.25,
+        smoothed_energy=1.20,
+        reactive_deformation=0.92,
+        constant_wobble=0.62,
+        reactive_wobble=2.15,
+        stretch_tendency=0.74,
+        stretch_inner=0.0,
+        stretch_outer=0.74,
+        core_floor_bias=0.42,
+        stage1_t=0.80,
+        stage2_t=0.55,
+        stage3_t=0.30,
+        playing=True,
+        seed=0.3,
+    )
+    profiles = [
+        build_unshaped_blob_target_profile(time_seconds=time_value, **common)[2]
+        for time_value in (2.0, 2.4, 3.2, 3.6)
+    ]
+
+    def _mse(left: list[float], right: list[float], shift: int = 0) -> float:
+        return math.fsum(
+            (left[idx] - right[(idx + shift) % len(right)]) ** 2
+            for idx in range(len(left))
+        ) / len(left)
+
+    for previous, current in zip(profiles, profiles[1:]):
+        zero_shift_error = _mse(previous, current)
+        best_orbit_error = min(
+            _mse(previous, current, shift)
+            for shift in range(-8, 9)
+            if shift != 0
+        )
+        # A tiny centre sway is allowed, but a circular shift must not explain
+        # the motion materially better than the same anchored contour.
+        assert best_orbit_error >= zero_shift_error * 0.75
+
+    spreads = [max(profile) - min(profile) for profile in profiles]
+    fixed_angle_motion = max(
+        max(profile[idx] for profile in profiles) - min(profile[idx] for profile in profiles)
+        for idx in range(len(profiles[0]))
+    )
+    assert max(spreads) - min(spreads) > 0.03
+    assert fixed_angle_motion > 0.08
+
+
+def test_mighty_blob_hot_live_range_remains_dynamic_above_one() -> None:
+    common = dict(
+        sample_count=64,
+        time_seconds=3.2,
+        reactive_deformation=0.92,
+        constant_wobble=0.62,
+        reactive_wobble=2.15,
+        stretch_tendency=0.74,
+        stretch_inner=0.0,
+        stretch_outer=0.74,
+        core_floor_bias=0.42,
+        stage1_t=0.80,
+        stage2_t=0.55,
+        stage3_t=0.30,
+        playing=True,
+        seed=0.3,
+    )
+    moderate = build_unshaped_blob_target_profile(
+        bass_energy=0.80,
+        mid_energy=0.68,
+        high_energy=0.56,
+        overall_energy=0.72,
+        smoothed_energy=0.70,
+        **common,
+    )[2]
+    hot = build_unshaped_blob_target_profile(
+        bass_energy=1.40,
+        mid_energy=1.19,
+        high_energy=0.98,
+        overall_energy=1.26,
+        smoothed_energy=1.23,
+        **common,
+    )[2]
+
+    deltas = [abs(left - right) for left, right in zip(moderate, hot)]
+    assert max(deltas) > 0.04
+    assert math.fsum(deltas) / len(deltas) > 0.015

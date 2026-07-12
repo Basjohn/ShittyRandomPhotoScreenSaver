@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 
-def test_blob_pockets_rotate_across_family_slots_for_rapid_hits() -> None:
+def test_blob_pockets_alternate_across_two_anchored_family_sites() -> None:
     from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
 
     state = make_blob_pocket_state()
@@ -199,7 +199,7 @@ def test_blob_pockets_cooldown_prevents_same_frame_slot_spam() -> None:
     assert state.kick_cursor == cursor_after_first
 
 
-def test_blob_pockets_can_rotate_on_fresh_rapid_alternating_hits() -> None:
+def test_blob_pockets_can_fill_both_anchored_sites_on_fresh_rapid_hits() -> None:
     from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
 
     state = make_blob_pocket_state()
@@ -238,6 +238,39 @@ def test_blob_pockets_can_rotate_on_fresh_rapid_alternating_hits() -> None:
     )
 
     assert state.kick_cursor > cursor_after_first
+    assert state.pockets[0].amplitude > 0.0
+    assert state.pockets[1].amplitude > 0.0
+
+
+def test_blob_pocket_family_reuses_sites_instead_of_orbiting_around_body() -> None:
+    from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
+
+    state = make_blob_pocket_state()
+    first_cycle: tuple[float, float] | None = None
+    for hit_index in range(4):
+        state = advance_blob_pocket_state(
+            state,
+            dt=0.060,
+            time_seconds=8.0 + hit_index * 0.060,
+            playing=True,
+            shaper_enabled=False,
+            kick_raw=0.90,
+            snare_raw=0.0,
+            bass_transient=0.94,
+            mid_transient=0.0,
+            high_transient=0.0,
+            bass_energy=0.76,
+            mid_energy=0.08,
+            high_energy=0.02,
+            overall_energy=0.48,
+        )
+        if hit_index == 1:
+            first_cycle = (state.pockets[0].angle_frac, state.pockets[1].angle_frac)
+
+    assert first_cycle is not None
+    assert state.kick_cursor == 4
+    assert state.pockets[0].angle_frac == pytest.approx(first_cycle[0])
+    assert state.pockets[1].angle_frac == pytest.approx(first_cycle[1])
     assert state.pockets[0].amplitude > 0.0
     assert state.pockets[1].amplitude > 0.0
 

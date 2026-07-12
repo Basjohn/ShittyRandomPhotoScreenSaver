@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import time
+from numbers import Real
 from typing import Sequence
 
 from widgets.spotify_visualizer.blob_shaper_solver import (
@@ -15,16 +16,16 @@ from widgets.spotify_visualizer.blob_shaper_solver import (
     slew_profile_toward_target,
 )
 
-_SHAPER_N = 64
-_SHAPER_REST_DEADZONE = 0.16
-_SHAPER_DRIVE_GAIN = 3.2
+_SHAPER_N = 128
+_SHAPER_REST_DEADZONE = 0.06
+_SHAPER_DRIVE_GAIN = 1.35
 _SHAPER_ROUTING_PRIMARY_SPREAD = 0.22
 _SHAPER_ROUTING_SECONDARY_SPREAD = 0.38
 _SHAPER_ROUTING_SMOOTH_PASSES = 3
 _SHAPER_OPPOSITE_DELTA_FACTOR = 0.22
 _SHAPER_OPPOSITE_BASE_CAP = 0.18
-_SHAPER_GAP_EXPONENT_SCALE = 0.85
-_SHAPER_GAP_EXPONENT_CAP = 1.25
+_SHAPER_GAP_EXPONENT_SCALE = 0.35
+_SHAPER_GAP_EXPONENT_CAP = 0.70
 _SHAPER_MIN_BASE_PROFILE_STRENGTH = 0.22
 _SHAPER_ANGULAR_SMOOTH_OFFSETS = (0.0, -1.0 / _SHAPER_N, 1.0 / _SHAPER_N)
 _SHAPER_ANGULAR_SMOOTH_WEIGHTS = (0.5, 0.25, 0.25)
@@ -42,10 +43,51 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, float(value)))
 
 
-def _centered_outward_lobe(phase: float) -> float:
-    """Return a rounded zero-mean lobe with a light outward bias."""
+def _compress_shaper_energy(value: float) -> float:
+    """Soft-compress hot live energy without throwing away values above one.
 
-    return max(0.0, math.sin(phase)) ** 2 - 0.25
+    Blob's stage inputs regularly exceed ``1.0`` on real material.  A hard
+    clamp made different vocal and transient levels indistinguishable, while
+    the previous drive gain then pinned most authored reactions at their goal.
+    This local knee keeps the shared audio contract untouched and preserves a
+    useful response across both quiet and hot Shaped input.
+    """
+
+    raw = max(0.0, min(4.0, float(value)))
+    scaled = raw * 0.68
+    if scaled <= 0.88:
+        return scaled
+    return min(1.14, 0.88 + 0.28 * (1.0 - math.exp(-(scaled - 0.88) / 0.28)))
+
+
+def _standing_breath(time_value: float, rate: float, phase: float, floor: float) -> float:
+    """Return an amplitude envelope for an angularly anchored deformation."""
+
+    pulse = 0.5 + 0.5 * math.sin(time_value * rate + phase)
+    return _clamp(floor, 0.0, 1.0) + (1.0 - _clamp(floor, 0.0, 1.0)) * pulse
+
+
+def _rounded_angular_lobe(angle_frac: float, center_frac: float, half_width: float) -> float:
+    """Return a cosine-squared tendril with zero-slope shoulders and tip."""
+
+    diff = abs((float(angle_frac) - float(center_frac)) % 1.0)
+    diff = min(diff, 1.0 - diff)
+    width = max(1e-4, float(half_width))
+    if diff >= width:
+        return 0.0
+    return math.cos((diff / width) * math.pi * 0.5) ** 2
+
+
+def _organic_angular_tendril(
+    angle_frac: float,
+    center_frac: float,
+    half_width: float,
+) -> float:
+    """Return a Shaped tendril with a broad root and rounded narrow tip."""
+
+    shoulder = _rounded_angular_lobe(angle_frac, center_frac, half_width)
+    tip = _rounded_angular_lobe(angle_frac, center_frac, half_width * 0.54)
+    return shoulder * 0.38 + tip * 0.62
 
 
 def _catmull_rom(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
@@ -244,6 +286,7 @@ def _sample_routed_shaper_energy(
     mid: float,
     high: float,
     overall: float,
+    transient: float = 0.0,
 ) -> float:
     channels = list(weights[:5])
     channels += [()] * max(0, 5 - len(channels))
@@ -252,7 +295,7 @@ def _sample_routed_shaper_energy(
         float(mid) * _sample_smoothed_linear_series(angle_frac, channels[1]),
         float(mid) * _sample_smoothed_linear_series(angle_frac, channels[2]),
         float(high) * _sample_smoothed_linear_series(angle_frac, channels[3]),
-        float(overall) * _sample_smoothed_linear_series(angle_frac, channels[4]),
+        float(transient) * _sample_smoothed_linear_series(angle_frac, channels[4]),
     )
     positives = [c for c in contributions if c > 0.0]
     negatives = [-c for c in contributions if c < 0.0]
@@ -278,6 +321,7 @@ def _sample_smoothed_shaper_energy(
     mid: float,
     high: float,
     overall: float,
+    transient: float = 0.0,
 ) -> float:
     total = 0.0
     weight_total = 0.0
@@ -289,6 +333,7 @@ def _sample_smoothed_shaper_energy(
             mid=mid,
             high=high,
             overall=overall,
+            transient=transient,
         ) * weight
         weight_total += weight
     return total / max(1e-6, weight_total)
@@ -365,7 +410,10 @@ def _remap_shaper_drive(signed_energy: float, *, playing: bool) -> float:
         return 0.0
     t = (magnitude - _SHAPER_REST_DEADZONE) / max(1e-6, 1.0 - _SHAPER_REST_DEADZONE)
     t = max(0.0, min(1.0, t))
-    eased = 1.0 - (1.0 - t) * (1.0 - t)
+    # Smoothstep preserves useful distinction through the middle of the live
+    # range.  The old ease-out curve plus 3.2x gain reached the authored goal
+    # on nearly every music frame and made Shaped look static.
+    eased = t * t * (3.0 - 2.0 * t)
     return math.copysign(eased, float(signed_energy))
 
 
@@ -419,6 +467,7 @@ def _resolve_shaper_radius_at_angle(
     base_strength: float = 1.0,
     react_strength: float = 1.0,
     playing: bool,
+    transient: float = 0.0,
 ) -> float:
     base_mult = _sample_smoothed_linear_series(angle_frac, base_profile)
     react_mult = _sample_smoothed_linear_series(angle_frac, react_profile)
@@ -431,6 +480,7 @@ def _resolve_shaper_radius_at_angle(
         mid=mid,
         high=high,
         overall=overall,
+        transient=transient,
     )
     return _resolve_shaper_radius(
         base_radius,
@@ -454,6 +504,7 @@ def _build_shaped_motion_residual_profile(
     overall_energy: float,
     vocal_energy: float,
     high_energy: float,
+    transient_energy: float,
     playing: bool,
     seed: float,
 ) -> list[float]:
@@ -472,55 +523,110 @@ def _build_shaped_motion_residual_profile(
 
     idle = _clamp(idle_motion, 0.0, 2.0)
     audio = _clamp(audio_motion, 0.0, 3.0) if playing else 0.0
-    overall = _clamp(overall_energy, 0.0, 1.0)
-    vocal = _clamp(vocal_energy, 0.0, 1.0)
-    high = _clamp(high_energy, 0.0, 1.0)
-    energy = _clamp(overall * 0.46 + vocal * 0.39 + high * 0.15, 0.0, 1.0)
+    overall = _compress_shaper_energy(overall_energy)
+    vocal = _compress_shaper_energy(vocal_energy)
+    high = _compress_shaper_energy(high_energy)
+    transient = _compress_shaper_energy(transient_energy)
+    energy = _clamp(overall * 0.40 + vocal * 0.34 + high * 0.12 + transient * 0.14, 0.0, 1.0)
 
-    idle_amplitude = min(0.100, idle * 0.0825)
-    mutation_amplitude = min(0.160, audio * energy * 0.1155)
+    idle_amplitude = min(0.105, idle * 0.090)
+    mutation_amplitude = min(0.220, audio * energy * 0.165)
+    vocal_amplitude = min(0.135, audio * (vocal * 0.086 + high * 0.030))
     tendril_amplitude = min(
-        0.045,
-        audio * (overall * 0.00935 + vocal * 0.0121 + high * 0.0044),
+        0.160,
+        audio * (overall * 0.018 + vocal * 0.055 + high * 0.018 + transient * 0.045),
+    )
+
+    # The contour anchors stay put.  Only their strength and a very small
+    # angular sway change, so a listener sees lobes grow and relax instead of
+    # watching one frozen deformation orbit around the authored shape.
+    idle_sway = math.sin(time_value * 0.17 + seed * 0.61) * 0.055
+    music_sway = math.sin(time_value * 0.31 - seed * 0.47) * 0.075
+    living_breaths = (
+        _standing_breath(time_value, 0.47, seed * 0.83 + 0.20, 0.42),
+        _standing_breath(time_value, 0.63, seed * 1.31 + 1.70, 0.40),
+        _standing_breath(time_value, 0.79, seed * 0.57 + 3.10, 0.36),
+    )
+    mutation_breaths = (
+        _standing_breath(time_value, 1.17, seed * 0.91 + 0.40, 0.20),
+        _standing_breath(time_value, 1.53, seed * 1.43 + 2.00, 0.18),
+        _standing_breath(time_value, 1.91, seed * 0.69 + 4.10, 0.16),
+        _standing_breath(time_value, 2.47, seed * 1.77 + 1.10, 0.12),
+        _standing_breath(time_value, 3.11, seed * 0.39 + 3.40, 0.10),
+    )
+    vocal_breaths = (
+        _standing_breath(time_value, 3.73, seed * 1.19 + 0.80, 0.08),
+        _standing_breath(time_value, 4.67, seed * 0.73 + 2.80, 0.06),
+    )
+    tendril_breaths = (
+        _standing_breath(time_value, 2.03, seed * 1.07 + 0.30, 0.02),
+        _standing_breath(time_value, 2.71, seed * 0.67 + 2.30, 0.02),
+        _standing_breath(time_value, 3.29, seed * 1.61 + 4.70, 0.01),
     )
     residual_profile: list[float] = []
     for idx in range(count):
         theta = (idx / count) * math.tau
 
-        # Living Wobble: intentionally low-order and slow. It should warp the
-        # whole authored body instead of reading as perimeter fizz.
-        living = 0.0
-        living += math.sin(theta + time_value * 0.21 + seed * 0.71) * 0.60
-        living += math.sin(theta * 2.0 - time_value * 0.16 + seed * 1.37) * 0.27
-        living += math.sin(theta * 3.0 + time_value * 0.29 - seed * 0.43) * 0.13
+        # Broad idle warp: low-order standing fields with independently
+        # breathing amplitudes.  A tiny common sway prevents mechanical
+        # stillness without turning the field into rotational motion.
+        living = (
+            math.sin(theta + seed * 0.71 + idle_sway) * 0.54 * living_breaths[0]
+            + math.sin(theta * 2.0 + seed * 1.37 - idle_sway * 0.7) * 0.30 * living_breaths[1]
+            + math.sin(theta * 3.0 - seed * 0.43 + idle_sway * 0.45) * 0.16 * living_breaths[2]
+        )
 
-        # Music Mutation: mixed frequencies move at deliberately incommensurate
-        # rates. A small angular phase warp keeps repeated music from settling
-        # into a regular star while neighbour smoothing rounds the result.
-        phase_warp = math.sin(theta * 2.0 - time_value * 0.29 + seed * 0.57) * 0.26
-        phase_warp += math.sin(theta * 5.0 + time_value * 0.17 - seed * 0.31) * 0.10
-        mutation = 0.0
-        mutation += math.sin(theta + time_value * 0.41 + seed * 1.13) * 0.20
-        mutation += math.sin(theta * 2.0 - time_value * 0.63 + seed * 0.47) * 0.18
-        mutation += math.sin(theta * 3.0 + time_value * 0.91 + phase_warp) * 0.22
-        mutation += math.sin(theta * 5.0 - time_value * 1.37 - phase_warp * 0.42) * 0.18
-        mutation += math.sin(theta * 7.0 + time_value * 1.83 + seed * 0.89) * (0.08 + high * 0.05)
-        mutation += math.sin(theta * 9.0 - time_value * 2.11 - seed * 1.31) * (high * 0.09)
+        # Music mutation remains anchored as well.  Independent envelopes
+        # make fixed sections of the contour push, recede, and change detail;
+        # the harmonic mix is intentionally irregular but still rounded.
+        mutation = (
+            math.sin(theta + seed * 1.13 + music_sway) * 0.25 * mutation_breaths[0]
+            + math.sin(theta * 2.0 + seed * 0.47 - music_sway * 0.8) * 0.24 * mutation_breaths[1]
+            + math.sin(theta * 3.0 - seed * 0.81 + music_sway * 0.55) * 0.25 * mutation_breaths[2]
+            + math.sin(theta * 5.0 + seed * 1.67 - music_sway * 0.35) * 0.17 * mutation_breaths[3]
+            + math.sin(theta * 7.0 - seed * 1.31 + music_sway * 0.22) * 0.09 * mutation_breaths[4]
+        )
 
-        # Rounded, sparse outward pulls remain subordinate to the irregular
-        # mutation field, so they read as light tendrils rather than spikes.
-        tendrils = 0.0
-        tendrils += _centered_outward_lobe(theta * 2.0 + time_value * 0.73 + seed * 0.37) * 0.55
-        tendrils += _centered_outward_lobe(theta * 3.0 - time_value * 0.47 + seed * 0.91) * 0.30
-        tendrils += _centered_outward_lobe(theta * 5.0 + time_value * 1.07 - seed * 0.53) * 0.15
+        # Mid/high energy owns a faster standing outline ripple.  This is the
+        # vocal contour wobble, not a colour/glow proxy.
+        vocal_wobble = (
+            math.sin(theta * 4.0 + seed * 0.89 + music_sway * 0.30) * 0.62 * vocal_breaths[0]
+            + math.sin(theta * 6.0 - seed * 0.53 - music_sway * 0.20) * 0.38 * vocal_breaths[1]
+        )
+
+        # Three sparse cosine-squared pulls have broad shoulders and rounded
+        # tips.  Their centres only sway a few degrees; their amplitudes do the
+        # obvious musical growing and shrinking.
+        angle_frac = idx / count
+        tendrils = (
+            _organic_angular_tendril(
+                angle_frac,
+                0.10 + (seed * 0.013) % 0.07 + math.sin(time_value * 0.23 + seed) * 0.010,
+                0.105,
+            ) * 0.47 * tendril_breaths[0]
+            + _organic_angular_tendril(
+                angle_frac,
+                0.48 + (seed * 0.017) % 0.08 + math.sin(time_value * 0.19 + seed * 1.7) * 0.012,
+                0.090,
+            ) * 0.33 * tendril_breaths[1]
+            + _organic_angular_tendril(
+                angle_frac,
+                0.77 + (seed * 0.011) % 0.06 + math.sin(time_value * 0.27 - seed * 0.8) * 0.009,
+                0.075,
+            ) * 0.20 * tendril_breaths[2]
+        )
 
         residual_profile.append(
             living * idle_amplitude
             + mutation * mutation_amplitude
+            + vocal_wobble * vocal_amplitude
             + tendrils * tendril_amplitude
         )
 
-    residual_profile = _smooth_cyclic_series(residual_profile, passes=4)
+    # The analytic fields are smooth by construction. Two one-time passes
+    # remove sample-grid shoulders while retaining the authored controls'
+    # amplitude; there is no longer any every-frame solver/shader averaging.
+    residual_profile = _smooth_cyclic_series(residual_profile, passes=2)
     mean = math.fsum(residual_profile) / count
     return [value - mean for value in residual_profile]
 
@@ -533,16 +639,25 @@ def _shaped_motion_allowance(
     mid: float,
     high: float,
     overall: float,
+    transient: float,
     playing: bool,
 ) -> float:
     """Return a contour-space mutation budget independent of authored gap."""
 
-    idle_budget = min(0.090, _clamp(idle_motion, 0.0, 2.0) * 0.080)
-    energy = _clamp(overall * 0.46 + mid * 0.30 + bass * 0.14 + high * 0.10, 0.0, 1.0)
+    idle_budget = min(0.125, _clamp(idle_motion, 0.0, 2.0) * 0.105)
+    energy = _clamp(
+        _compress_shaper_energy(overall) * 0.40
+        + _compress_shaper_energy(mid) * 0.26
+        + _compress_shaper_energy(bass) * 0.12
+        + _compress_shaper_energy(high) * 0.09
+        + _compress_shaper_energy(transient) * 0.13,
+        0.0,
+        1.0,
+    )
     audio_budget = 0.0
     if playing:
-        audio_budget = min(0.130, _clamp(audio_motion, 0.0, 3.0) * energy * 0.105)
-    return min(0.160, idle_budget + audio_budget)
+        audio_budget = min(0.250, _clamp(audio_motion, 0.0, 3.0) * energy * 0.185)
+    return min(0.320, idle_budget + audio_budget)
 
 
 def _get_shaper_energy_bands(s) -> tuple[float, float, float, float]:
@@ -573,6 +688,63 @@ def _get_shaper_energy_bands(s) -> tuple[float, float, float, float]:
     )
 
 
+def _get_shaper_transient_energy(s) -> float:
+    """Read Blob's existing transient envelope for authored transient nodes.
+
+    Continuous ``overall`` energy must never impersonate an onset.  Prefer the
+    already mode-mixed diagnostic envelopes produced by Blob's live-band
+    helper, with a direct transient-bus fallback for synthetic/runtime tests
+    and the first frame before those diagnostics exist.
+    """
+
+    def _numeric(value, fallback: float = 0.0) -> float:
+        if not isinstance(value, Real):
+            return float(fallback)
+        numeric = float(value)
+        return numeric if math.isfinite(numeric) else float(fallback)
+
+    mixed_values = (
+        getattr(s, "_blob_diag_transient_bass", None),
+        getattr(s, "_blob_diag_transient_mid", None),
+        getattr(s, "_blob_diag_transient_high", None),
+    )
+    envelope = 0.0
+    pre_scaled_overlay_envelope = False
+    if any(isinstance(value, Real) for value in mixed_values):
+        envelope = max(0.0, *(_numeric(value) for value in mixed_values))
+        pre_scaled_overlay_envelope = True
+    else:
+        transient = getattr(s, "_transient_energy", None)
+        if transient is None or not any(
+            isinstance(getattr(transient, attr, None), Real)
+            for attr in ("bass_transient", "mid_transient", "high_transient", "onset_strength")
+        ):
+            return 0.0
+        bass_mix_raw = getattr(s, "_blob_transient_mix_bass", 0.5)
+        vocal_mix_raw = getattr(s, "_blob_transient_mix_vocal", 0.35)
+        bass_mix = _clamp(_numeric(bass_mix_raw, 0.5), 0.0, 1.0)
+        vocal_mix = _clamp(_numeric(vocal_mix_raw, 0.35), 0.0, 1.0)
+        bass_value = max(0.0, _numeric(getattr(transient, "bass_transient", 0.0))) * bass_mix
+        mid_value = max(0.0, _numeric(getattr(transient, "mid_transient", 0.0))) * vocal_mix
+        high_value = max(0.0, _numeric(getattr(transient, "high_transient", 0.0))) * max(
+            0.10,
+            vocal_mix * 0.30,
+        )
+        onset_value = 0.0
+        if getattr(transient, "onset_detected", False) is True:
+            onset_value = max(0.0, _numeric(getattr(transient, "onset_strength", 0.0))) * max(
+                bass_mix,
+                vocal_mix,
+            )
+        envelope = max(bass_value, mid_value, high_value, onset_value)
+
+    gain_raw = getattr(s, "_transient_pulse_gain", 1.0)
+    clamp_raw = getattr(s, "_transient_clamp", 1.5)
+    gain = _clamp(_numeric(gain_raw, 1.0), 0.0, 3.0)
+    clamp_max = _clamp(_numeric(clamp_raw, 1.5), 0.0, 3.0)
+    return min(clamp_max, envelope if pre_scaled_overlay_envelope else envelope * gain)
+
+
 def _solve_runtime_shaper_profile_step(
     *,
     base_profile: Sequence[float],
@@ -593,10 +765,19 @@ def _solve_runtime_shaper_profile_step(
     playing: bool,
     base_strength: float = 1.0,
     seed: float = 0.0,
+    transient: float = 0.0,
 ) -> tuple[list[float], list[float], list[float]]:
     count = min(len(base_profile), len(react_profile))
     if count <= 0:
         return ([], [], [])
+
+    # Keep compression entirely inside Shaped Blob.  Shared audio and the
+    # values used by every other visualizer remain byte-for-byte untouched.
+    drive_bass = _compress_shaper_energy(bass)
+    drive_mid = _compress_shaper_energy(mid)
+    drive_high = _compress_shaper_energy(high)
+    drive_overall = _compress_shaper_energy(overall)
+    drive_transient = _compress_shaper_energy(transient)
 
     motion_allowance = _shaped_motion_allowance(
         idle_motion=shaper_idle_motion,
@@ -605,6 +786,7 @@ def _solve_runtime_shaper_profile_step(
         mid=mid,
         high=high,
         overall=overall,
+        transient=transient,
         playing=playing,
     )
     target_profile: list[float] = []
@@ -625,20 +807,15 @@ def _solve_runtime_shaper_profile_step(
             react_profile=react_profile,
             weights=weights,
             staged_radius=1.0,
-            bass=bass,
-            mid=mid,
-            high=high,
-            overall=overall,
+            bass=drive_bass,
+            mid=drive_mid,
+            high=drive_high,
+            overall=drive_overall,
+            transient=drive_transient,
             base_strength=base_strength,
             react_strength=react_strength,
             playing=playing,
         )
-        if playing:
-            music_floor_mix = max(
-                0.0,
-                min(0.28, float(overall) * 0.10 + float(mid) * 0.08 + float(bass) * 0.04),
-            )
-            target += (react_mult - target) * music_floor_mix
         gap = abs(react_mult - base_mult)
         gap_outward_allowance = min(0.10, gap * 0.12 + max(0.0, react_mult - base_mult) * 0.05)
         gap_inward_allowance = min(0.08, gap * 0.10 + max(0.0, base_mult - react_mult) * 0.04)
@@ -652,7 +829,7 @@ def _solve_runtime_shaper_profile_step(
         target_profile.append(target)
         resolved_base_profile.append(base_mult)
 
-    vocal_energy = max(0.0, min(1.0, float(mid) * 0.78 + float(high) * 0.18 + float(overall) * 0.10))
+    vocal_energy = max(0.0, float(mid) * 0.78 + float(high) * 0.18 + float(overall) * 0.10)
     residual_profile = _build_shaped_motion_residual_profile(
         sample_count=count,
         time_value=time_value,
@@ -661,6 +838,7 @@ def _solve_runtime_shaper_profile_step(
         overall_energy=float(overall),
         vocal_energy=vocal_energy,
         high_energy=float(high),
+        transient_energy=float(transient),
         playing=playing,
         seed=seed,
     )
@@ -673,14 +851,18 @@ def _solve_runtime_shaper_profile_step(
         current_target=target_profile,
         base_profile=resolved_base_profile,
         dt=dt,
-        attack_hz=15.5,
-        release_hz=2.4 if playing else 1.8,
+        attack_hz=22.0,
+        release_hz=7.0 if playing else 3.8,
     )
 
     current_profile = list(previous_profile or ())
     current_velocity = list(previous_velocity or ())
     if len(current_profile) != count:
-        current_profile = list(resolved_base_profile)
+        # A fresh Shaped activation must start from this activation's bounded
+        # target, not one static base-only frame.  Variant resets already
+        # guarantee there is no prior contour to release from, and the outer
+        # startup fade owns visual softening.
+        current_profile = list(target_profile)
     if len(current_velocity) != count:
         current_velocity = [0.0] * count
 
@@ -691,17 +873,11 @@ def _solve_runtime_shaper_profile_step(
         min_profile=min_profile,
         max_profile=max_profile,
         dt=dt,
-        stiffness=30.0 if playing else 15.0,
-        damping=9.5 if playing else 13.0,
-        neighbor_strength=22.0 if playing else 10.0,
-        smoothing_passes=5 if playing else 3,
+        stiffness=55.0 if playing else 24.0,
+        damping=8.0 if playing else 10.0,
+        neighbor_strength=3.0 if playing else 4.0,
+        smoothing_passes=0,
     )
-    if playing:
-        angularly_smoothed = _smooth_cyclic_series(solved_profile, passes=3)
-        solved_profile = [
-            _clamp(angularly_smoothed[idx], min_profile[idx], max_profile[idx])
-            for idx in range(count)
-        ]
     return solved_profile, solved_velocity, target_profile
 
 
@@ -728,6 +904,7 @@ def _resolve_runtime_shaper_profile(
         seed = ((id(s) % 10007) / 10007.0) * math.tau
         setattr(s, "_blob_shaper_solver_seed", seed)
 
+    transient = _get_shaper_transient_energy(s)
     solved_profile, solved_velocity, target_profile = _solve_runtime_shaper_profile_step(
         base_profile=base_profile,
         react_profile=react_profile,
@@ -741,6 +918,7 @@ def _resolve_runtime_shaper_profile(
         mid=mid,
         high=high,
         overall=overall,
+        transient=transient,
         base_strength=float(getattr(s, "_blob_shaper_base_strength", 0.5)),
         react_strength=float(getattr(s, "_blob_shaper_react_strength", 1.0)),
         shaper_idle_motion=float(getattr(s, "_blob_shaper_idle_motion", 0.18)),

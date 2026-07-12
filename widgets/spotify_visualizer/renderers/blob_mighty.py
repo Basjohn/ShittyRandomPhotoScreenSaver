@@ -17,7 +17,7 @@ from widgets.spotify_visualizer.renderers.gl_helpers import (
 )
 
 logger = get_logger(__name__)
-_PROFILE_SIZE = 64
+_PROFILE_SIZE = 128
 
 
 def get_uniform_names() -> list[str]:
@@ -42,5 +42,14 @@ def upload_uniforms(gl, uniforms: dict, state) -> bool:
         overall=overall,
     )
     _set1fv(gl, uniforms, "u_blob_runtime_profile", profile, _PROFILE_SIZE)
+    transport_sig = (BLOB_TYPE_MIGHTY, uniforms.get("u_blob_runtime_profile", -1), _PROFILE_SIZE)
+    if getattr(state, "_blob_profile_transport_sig", None) != transport_sig:
+        logger.info(
+            "[SPOTIFY_VIS][BLOB][PROFILE_TRANSPORT] type=%s uniform_loc=%s samples=%d",
+            BLOB_TYPE_MIGHTY,
+            transport_sig[1],
+            _PROFILE_SIZE,
+        )
+        setattr(state, "_blob_profile_transport_sig", transport_sig)
     maybe_log_runtime_profile(logger, state, blob_type=BLOB_TYPE_MIGHTY, profile=profile)
     return True

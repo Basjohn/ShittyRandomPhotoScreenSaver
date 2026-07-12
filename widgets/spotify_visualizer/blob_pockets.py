@@ -8,9 +8,13 @@ _POCKET_COUNT = 6
 _KICK_SLOTS = (0, 1)
 _SNARE_SLOTS = (2, 3)
 _HIGH_SLOTS = (4, 5)
-_KICK_ANGLES = (0.17, 0.33, 0.67, 0.83)
-_SNARE_ANGLES = (0.08, 0.25, 0.58, 0.75)
-_HIGH_ANGLES = (0.02, 0.42, 0.52, 0.92)
+# Each family owns two stable, opposing growth sites.  The old four-angle
+# cursor made every successive hit relocate the deformation, which read as a
+# fixed fan rotating around the body.  Reusing the same site lets its amplitude
+# attack and decay visibly: hits grow a rounded lobe, then the lobe relaxes.
+_KICK_ANGLES = (0.17, 0.67)
+_SNARE_ANGLES = (0.31, 0.81)
+_HIGH_ANGLES = (0.47, 0.97)
 
 
 def _clamp(value: float, lo: float, hi: float) -> float:

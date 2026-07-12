@@ -91,6 +91,8 @@ def reset_blob_variant_state(overlay: Any) -> None:
         "_blob_shaper_runtime_target_profile",
         "_blob_shaper_runtime_profile",
         "_blob_shaper_runtime_velocity",
+        "_blob_runtime_diag_profile",
+        "_blob_profile_transport_sig",
     ):
         setattr(overlay, attr, None)
     for attr in (

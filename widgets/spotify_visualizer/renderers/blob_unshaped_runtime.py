@@ -14,7 +14,7 @@ from widgets.spotify_visualizer.blob_math import (
     solve_unshaped_blob_profile_step,
 )
 
-_SHAPER_N = 64
+_SHAPER_N = 128
 
 
 def _resolve_runtime_unshaped_profile(

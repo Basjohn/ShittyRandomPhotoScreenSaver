@@ -1101,6 +1101,25 @@ def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['blob_glow_drive_mode'] = _normalize_blob_glow_drive_mode(
         getattr(widget, '_blob_glow_drive_mode', 'bass')
     )
+    # Blob owns these mode-specific transient controls. Transport them with
+    # every frame so live preset edits cannot leave the GL overlay on stale
+    # technical values.
+    extra['transient_pulse_gain'] = max(
+        0.0,
+        min(3.0, float(getattr(widget, '_transient_pulse_gain', 1.0))),
+    )
+    extra['transient_clamp'] = max(
+        0.0,
+        min(3.0, float(getattr(widget, '_transient_clamp', 1.5))),
+    )
+    extra['blob_transient_mix_bass'] = max(
+        0.0,
+        min(1.0, float(getattr(widget, '_blob_transient_mix_bass', 0.5))),
+    )
+    extra['blob_transient_mix_vocal'] = max(
+        0.0,
+        min(1.0, float(getattr(widget, '_blob_transient_mix_vocal', 0.35))),
+    )
     _blob_type = normalize_blob_type(
         getattr(widget, '_blob_type', None),
         legacy_shaper_enabled=getattr(widget, '_blob_shaper_enabled', None),
@@ -1326,6 +1345,7 @@ def replay_engine_config(widget: Any, engine: Any) -> None:
         try:
             overlay._blob_transient_mix_bass = blob_transient_mix_bass
             overlay._blob_transient_mix_vocal = blob_transient_mix_vocal
+            overlay._transient_pulse_gain = transient_pulse_gain
             overlay._transient_clamp = transient_clamp
             overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix
             overlay._osc_transient_width_mix = osc_transient_width_mix

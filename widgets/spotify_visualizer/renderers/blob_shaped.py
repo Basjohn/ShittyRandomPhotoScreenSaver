@@ -21,7 +21,7 @@ from widgets.spotify_visualizer.renderers.gl_helpers import (
 )
 
 logger = get_logger(__name__)
-_PROFILE_SIZE = 64
+_PROFILE_SIZE = 128
 _logged_shape_signature: tuple | None = None
 
 
@@ -70,6 +70,15 @@ def upload_uniforms(gl, uniforms: dict, state) -> bool:
         overall=overall,
     )
     _set1fv(gl, uniforms, "u_blob_runtime_profile", runtime_profile, _PROFILE_SIZE)
+    transport_sig = (BLOB_TYPE_SHAPED, uniforms.get("u_blob_runtime_profile", -1), _PROFILE_SIZE)
+    if getattr(state, "_blob_profile_transport_sig", None) != transport_sig:
+        logger.info(
+            "[SPOTIFY_VIS][BLOB][PROFILE_TRANSPORT] type=%s uniform_loc=%s samples=%d",
+            BLOB_TYPE_SHAPED,
+            transport_sig[1],
+            _PROFILE_SIZE,
+        )
+        setattr(state, "_blob_profile_transport_sig", transport_sig)
 
     global _logged_shape_signature
     signature = (ring_enabled, round(ring_thickness, 3), len(energy_nodes))

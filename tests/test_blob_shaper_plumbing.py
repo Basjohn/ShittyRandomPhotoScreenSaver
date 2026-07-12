@@ -1,6 +1,7 @@
 """Regression tests for Blob Shaper plumbing — persistence, runtime, renderer."""
 from __future__ import annotations
 
+import json
 import math
 from pathlib import Path
 import pytest
@@ -86,6 +87,7 @@ class TestBlobShaperRenderer:
         mid_energy: float = 0.0,
         high_energy: float = 0.0,
         overall_energy: float = 0.0,
+        transient_energy: float = 0.0,
         shaper_idle_motion: float = 0.18,
         shaper_audio_motion: float = 1.20,
         base_strength: float = 1.0,
@@ -114,6 +116,7 @@ class TestBlobShaperRenderer:
                 mid=mid_energy,
                 high=high_energy,
                 overall=overall_energy,
+                transient=transient_energy,
                 base_strength=base_strength,
                 react_strength=react_strength,
                 shaper_idle_motion=shaper_idle_motion,
@@ -362,12 +365,24 @@ class TestBlobShaperRenderer:
         assert "Both Blob types now upload one solved runtime contour profile." in shared_src
         assert "float runtime_mult =" in shared_src
         assert "if (BLOB_VARIANT_SHAPED == 0)" in shared_src
-        assert "sample_unshaped_contour(angle_frac, u_blob_runtime_profile)" in shared_src
-        assert "float contour_authority =" in shared_src
-        assert "float support_floor = (BLOB_VARIANT_SHAPED == 1)" in shared_src
+        assert "float runtime_mult = sample_profile(angle_frac, u_blob_runtime_profile);" in shared_src
+        assert "const int SHAPER_N = 128;" in shared_src
+        assert "sample_unshaped_contour" not in shared_src
+        assert "sample_smoothed_linear_series" not in shared_src
         assert "float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;" in shared_src
-        assert "float unshaped_support = max(calm_r * support_floor, staged_r * 0.28);" in shared_src
+        assert "float shaped_support_floor = mix(" in shared_src
         assert "float final_radius = (BLOB_VARIANT_SHAPED == 1)" in shared_src
+        assert ": contour_radius;" in shared_src
+
+        # Never reintroduce the exact two-part failure seen at runtime: a
+        # nonlinear profile amplifier makes radial fans, then a Mighty max()
+        # support floor reveals a perfect centre circle between those fans.
+        assert "contour_authority" not in shared_src
+        assert "contour_visibility" not in shared_src
+        assert "contour_delta" not in shared_src
+        assert "pow(abs(contour_delta)" not in shared_src
+        assert "unshaped_support" not in shared_src
+        assert "max(contour_radius" not in shared_src
 
     def test_runtime_energy_nodes_prefer_react_canvas_when_present(self):
         from widgets.spotify_visualizer.renderers.blob import _build_energy_routing
@@ -475,7 +490,21 @@ class TestBlobShaperRenderer:
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius
 
         radius = _resolve_shaper_radius(1.0, 1.5, 0.20, playing=True)
-        assert radius > 1.17
+        # Moderate input must move, but it must not pin most of the authored
+        # reaction gap before the music has room to grow.
+        assert 1.015 < radius < 1.10
+
+    def test_shaped_local_energy_knee_preserves_hot_live_dynamics_without_runaway(self):
+        from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
+            _compress_shaper_energy,
+        )
+
+        moderate = _compress_shaper_energy(0.80)
+        hot = _compress_shaper_energy(1.40)
+        extreme = _compress_shaper_energy(4.0)
+
+        assert 0.50 < moderate < hot < extreme <= 1.14
+        assert hot - moderate > 0.12
 
     def test_larger_authored_gap_needs_more_energy_to_reach_same_fraction_of_target(self):
         from widgets.spotify_visualizer.renderers.blob import _resolve_shaper_radius, _resolve_shaper_targets
@@ -683,16 +712,17 @@ class TestBlobShaperRenderer:
         )
 
         assert max(quiet) - min(quiet) < 1e-8
-        assert max(living) - min(living) > 0.03
+        assert max(living) - min(living) > 0.06
         assert temporal_delta > 0.001
         assert broad_detail > fine_detail * 12.0
-        assert max_neighbor_step < 0.0045
+        assert max_neighbor_step < 0.008
         assert abs(sum(living) / len(living) - 1.0) < 0.002
 
     def test_shaped_blob_audio_control_mutates_zero_gap_contour_within_goal_envelope(self):
-        base_profile = [1.0] * 64
-        react_profile = [1.0] * 64
-        weights = [[0.0] * 64 for _ in range(5)]
+        count = 128
+        base_profile = [1.0] * count
+        react_profile = [1.0] * count
+        weights = [[0.0] * count for _ in range(5)]
         times = [idx * 0.05 for idx in range(50)]
 
         disabled_frames = self._simulate_runtime_profile_series(
@@ -752,16 +782,374 @@ class TestBlobShaperRenderer:
 
         assert max(disabled) - min(disabled) < 1e-8
         assert max(silent) - min(silent) < 1e-8
-        assert music_spread > 0.032
-        assert max(abs(value - 1.0) for value in music) < 0.06
-        assert temporal_delta > 0.006
+        max_deviation = max(abs(value - 1.0) for value in music)
+        assert music_spread > 0.13
+        # Roughly 22-40 px at a representative 180 px contour radius: clearly
+        # visible, but still inside the bounded Shaped mutation allowance.
+        assert 0.12 < max_deviation < 0.22
+        assert temporal_delta > 0.035
         assert irregular_detail > broad_detail * 0.45
         assert rounded_outward_samples >= 4
-        assert max_neighbor_step < 0.012
+        assert max_neighbor_step < 0.034
         assert abs(mean - 1.0) < 0.003
 
-    def test_shaped_blob_living_mutations_preserve_authored_goal_contour(self):
+    def test_shaped_blob_mutations_breathe_at_fixed_anchors_instead_of_orbiting(self):
+        from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
+            _build_shaped_motion_residual_profile,
+        )
+
+        kwargs = {
+            "sample_count": 64,
+            "idle_motion": 0.68,
+            "audio_motion": 1.8,
+            "overall_energy": 0.85,
+            "vocal_energy": 0.90,
+            "high_energy": 0.65,
+            "transient_energy": 0.0,
+            "playing": True,
+            "seed": 0.37,
+        }
+        earlier = _build_shaped_motion_residual_profile(time_value=2.0, **kwargs)
+        later = _build_shaped_motion_residual_profile(time_value=3.0, **kwargs)
+
+        def _rms_delta(left: list[float], right: list[float]) -> float:
+            return math.sqrt(
+                math.fsum((a - b) ** 2 for a, b in zip(left, right)) / len(left)
+            )
+
+        shifted_deltas = {
+            shift: _rms_delta(
+                earlier,
+                [later[(idx + shift) % len(later)] for idx in range(len(later))],
+            )
+            for shift in range(-8, 9)
+        }
+        best_shift = min(shifted_deltas, key=shifted_deltas.get)
+
+        assert best_shift == 0
+        assert max(abs(a - b) for a, b in zip(earlier, later)) > 0.055
+        assert max(earlier) - min(earlier) > 0.16
+        assert max(later) - min(later) > 0.14
+
+    def test_shaped_blob_vocal_energy_creates_material_standing_contour_wobble(self):
+        from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
+            _build_shaped_motion_residual_profile,
+        )
+
+        common = {
+            "sample_count": 64,
+            "time_value": 2.7,
+            "idle_motion": 0.20,
+            "audio_motion": 1.8,
+            "transient_energy": 0.0,
+            "playing": True,
+            "seed": 0.37,
+        }
+        vocal = _build_shaped_motion_residual_profile(
+            overall_energy=0.45,
+            vocal_energy=1.10,
+            high_energy=0.60,
+            **common,
+        )
+        overall_only = _build_shaped_motion_residual_profile(
+            overall_energy=0.90,
+            vocal_energy=0.10,
+            high_energy=0.10,
+            **common,
+        )
+
+        vocal_outline_detail = sum(
+            self._harmonic_amplitude(vocal, harmonic) for harmonic in (4, 6)
+        )
+        overall_outline_detail = sum(
+            self._harmonic_amplitude(overall_only, harmonic) for harmonic in (4, 6)
+        )
+        assert max(vocal) - min(vocal) > (max(overall_only) - min(overall_only)) * 1.45
+        assert vocal_outline_detail > overall_outline_detail * 3.0
+
+    def test_shaped_transient_nodes_use_event_envelope_not_continuous_overall(self):
+        from types import SimpleNamespace
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _sample_routed_shaper_energy,
+        )
+        from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
+            _get_shaper_transient_energy,
+        )
+
+        count = 128
+        weights = _build_energy_routing(
+            [
+                {
+                    "type": "transient",
+                    "x": 0.5,
+                    "y": 0.0,
+                    "strength": 1.0,
+                    "dir_x": 0.0,
+                    "dir_y": -1.0,
+                }
+            ],
+            count,
+            base_profile=[1.0] * count,
+            react_profile=[1.5] * count,
+        )
+        overall_only = _sample_routed_shaper_energy(
+            0.0,
+            weights,
+            bass=0.0,
+            mid=0.0,
+            high=0.0,
+            overall=1.2,
+            transient=0.0,
+        )
+        onset = _sample_routed_shaper_energy(
+            0.0,
+            weights,
+            bass=0.0,
+            mid=0.0,
+            high=0.0,
+            overall=0.0,
+            transient=1.0,
+        )
+
+        assert overall_only == pytest.approx(0.0)
+        assert onset > 0.90
+        state = SimpleNamespace(
+            _transient_energy=SimpleNamespace(
+                bass_transient=0.0,
+                mid_transient=0.82,
+                high_transient=0.0,
+                onset_detected=True,
+                onset_strength=0.82,
+            ),
+            _blob_transient_mix_bass=0.5,
+            _blob_transient_mix_vocal=1.0,
+        )
+        assert _get_shaper_transient_energy(state) == pytest.approx(0.82)
+        state._transient_pulse_gain = 0.0
+        assert _get_shaper_transient_energy(state) == pytest.approx(0.0)
+
+    def test_shaped_authored_phrase_has_quiet_vocal_transient_and_clean_release(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _solve_runtime_shaper_profile_step,
+        )
+
+        count = 128
+        base_profile = [1.0] * count
+        react_profile = [1.38] * count
+        weights = _build_energy_routing(
+            [
+                {
+                    "type": "vocals",
+                    "x": 0.5,
+                    "y": 0.0,
+                    "strength": 1.0,
+                    "dir_x": 0.0,
+                    "dir_y": -1.0,
+                },
+                {
+                    "type": "transient",
+                    "x": 1.0,
+                    "y": 0.5,
+                    "strength": 1.0,
+                    "dir_x": 1.0,
+                    "dir_y": 0.0,
+                },
+            ],
+            count,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+        profile = list(base_profile)
+        velocity = [0.0] * count
+        target = list(base_profile)
+        time_value = 0.0
+
+        def _run_phase(
+            frame_count: int,
+            *,
+            bass: float,
+            mid: float,
+            high: float,
+            overall: float,
+            transient: float,
+        ) -> list[float]:
+            nonlocal profile, velocity, target, time_value
+            for _ in range(frame_count):
+                time_value += 0.05
+                profile, velocity, target = _solve_runtime_shaper_profile_step(
+                    base_profile=base_profile,
+                    react_profile=react_profile,
+                    weights=weights,
+                    previous_profile=profile,
+                    previous_velocity=velocity,
+                    previous_target_profile=target,
+                    dt=0.05,
+                    time_value=time_value,
+                    bass=bass,
+                    mid=mid,
+                    high=high,
+                    overall=overall,
+                    transient=transient,
+                    base_strength=1.0,
+                    react_strength=0.9,
+                    shaper_idle_motion=0.0,
+                    shaper_audio_motion=1.8,
+                    playing=True,
+                    seed=0.37,
+                )
+            return list(profile)
+
+        quiet = _run_phase(30, bass=0.0, mid=0.0, high=0.0, overall=0.0, transient=0.0)
+        vocal = _run_phase(30, bass=0.10, mid=1.10, high=0.60, overall=0.50, transient=0.0)
+        onset = _run_phase(12, bass=0.10, mid=1.10, high=0.60, overall=0.50, transient=1.30)
+        released = _run_phase(70, bass=0.0, mid=0.0, high=0.0, overall=0.0, transient=0.0)
+
+        assert max(abs(value - 1.0) for value in quiet) < 1e-8
+        assert vocal[0] - quiet[0] > 0.25
+        assert max(onset[idx] - vocal[idx] for idx in range(count)) > 0.25
+        assert max(abs(value - 1.0) for value in released) < 0.002
+
+    def test_shaped_fresh_activation_uses_current_bounded_audio_target(self):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _solve_runtime_shaper_profile_step,
+        )
+
         count = 64
+        base = [1.0] * count
+        react = [1.34 + math.sin(math.tau * idx / count) * 0.08 for idx in range(count)]
+        weights = _build_energy_routing(
+            [{"type": "vocals", "x": 0.5, "y": 0.0, "strength": 1.0}],
+            count,
+            base_profile=base,
+            react_profile=react,
+        )
+        solved, _velocity, target = _solve_runtime_shaper_profile_step(
+            base_profile=base,
+            react_profile=react,
+            weights=weights,
+            previous_profile=None,
+            previous_velocity=None,
+            previous_target_profile=None,
+            dt=1.0 / 60.0,
+            time_value=2.0,
+            bass=0.1,
+            mid=1.1,
+            high=0.5,
+            overall=0.65,
+            transient=0.0,
+            base_strength=1.0,
+            react_strength=0.9,
+            shaper_idle_motion=0.6,
+            shaper_audio_motion=1.8,
+            playing=True,
+            seed=0.37,
+        )
+
+        target_distance = math.sqrt(
+            math.fsum((value - goal) ** 2 for value, goal in zip(solved, target)) / count
+        )
+        base_distance = math.sqrt(
+            math.fsum((value - 1.0) ** 2 for value in solved) / count
+        )
+        assert target_distance < 0.012
+        assert base_distance > 0.13
+        assert max(solved) - min(solved) > 0.12
+
+    @pytest.mark.parametrize(
+        "preset_glob,min_mutation,min_temporal",
+        (
+            ("preset_7_temp_shaped_*.json", 0.085, 0.035),
+            ("preset_8_temp_shaped_*.json", 0.060, 0.024),
+        ),
+    )
+    def test_temp_shaped_presets_add_pixel_scale_motion_beyond_authored_goal(
+        self,
+        preset_glob: str,
+        min_mutation: float,
+        min_temporal: float,
+    ):
+        from widgets.spotify_visualizer.renderers.blob import (
+            _build_energy_routing,
+            _resample_nodes,
+        )
+
+        preset_dir = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
+        preset_path = next(preset_dir.glob(preset_glob))
+        config = json.loads(preset_path.read_text(encoding="utf-8"))["snapshot"]["widgets"][
+            "spotify_visualizer"
+        ]
+        count = 128
+        base_profile = _resample_nodes(config["blob_shape_base_nodes"], count)
+        react_profile = _resample_nodes(config["blob_shape_reaction_nodes"], count)
+        weights = _build_energy_routing(
+            config["blob_shape_energy_nodes"],
+            count,
+            base_profile=base_profile,
+            react_profile=react_profile,
+        )
+        times = [(idx + 1) * 0.05 for idx in range(120)]
+        active = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            bass_energy=0.80,
+            mid_energy=0.90,
+            high_energy=0.65,
+            overall_energy=0.82,
+            shaper_idle_motion=config["blob_shaper_idle_motion"],
+            shaper_audio_motion=config["blob_shaper_audio_motion"],
+            base_strength=config["blob_shaper_base_strength"],
+            react_strength=config["blob_shaper_react_strength"],
+            playing=True,
+        )
+        authored_goal_only = self._simulate_runtime_profile_series(
+            base_profile=base_profile,
+            react_profile=react_profile,
+            weights=weights,
+            times=times,
+            bass_energy=0.80,
+            mid_energy=0.90,
+            high_energy=0.65,
+            overall_energy=0.82,
+            shaper_idle_motion=0.0,
+            shaper_audio_motion=0.0,
+            base_strength=config["blob_shaper_base_strength"],
+            react_strength=config["blob_shaper_react_strength"],
+            playing=True,
+        )
+
+        runtime_profile = active[-1]
+        mutation_beyond_goal = max(
+            abs(active_value - goal_value)
+            for active_value, goal_value in zip(runtime_profile, authored_goal_only[-1])
+        )
+        temporal_delta = max(
+            abs(current - earlier)
+            for current, earlier in zip(runtime_profile, active[-20])
+        )
+        fixed_angle_range = max(frame[8] for frame in active[-40:]) - min(
+            frame[8] for frame in active[-40:]
+        )
+        max_neighbor_step = max(
+            abs(runtime_profile[idx] - runtime_profile[(idx + 1) % count])
+            for idx in range(count)
+        )
+
+        # The mutation alone represents at least 11 px at a representative
+        # 180 px contour radius, independently of reaching the authored goal.
+        assert min_mutation < mutation_beyond_goal < 0.16
+        assert temporal_delta > min_temporal
+        assert fixed_angle_range > 0.018
+        assert min(runtime_profile) > 0.08
+        assert max(runtime_profile) < 1.95
+        assert max_neighbor_step < 0.09
+
+    def test_shaped_blob_living_mutations_preserve_authored_goal_contour(self):
+        count = 128
         base_profile = [
             1.0
             + math.cos(math.tau * idx / count) * 0.14
@@ -793,8 +1181,11 @@ class TestBlobShaperRenderer:
         runtime_variance = sum((value - runtime_mean) ** 2 for value in runtime_profile)
         correlation = covariance / math.sqrt(base_variance * runtime_variance)
 
-        assert correlation > 0.99
-        assert max(abs(a - b) for a, b in zip(runtime_profile, base_profile)) < 0.04
+        max_mutation = max(abs(a - b) for a, b in zip(runtime_profile, base_profile))
+        # Preserve the authored topology without allowing it to dominate so
+        # completely that music mutations become visually inert.
+        assert 0.88 < correlation < 0.985
+        assert 0.12 < max_mutation < 0.22
         assert max(runtime_profile) - min(runtime_profile) > 0.30
 
     def test_shaper_runtime_profile_moves_toward_reaction_shape_and_keeps_temporal_motion(self):
@@ -872,7 +1263,7 @@ class TestBlobShaperRenderer:
                 seed=0.37,
             )
         peak = profile[0]
-        assert peak > 1.30
+        assert peak > 1.27
 
         releases = []
         for _ in range(8):
@@ -907,15 +1298,16 @@ class TestBlobShaperRenderer:
 
         base_nodes = [[0.0, 1.0], [0.16, 0.98], [0.34, 1.02], [0.56, 1.0], [0.80, 1.01]]
         react_nodes = [[0.0, 0.62], [0.12, 1.28], [0.34, 0.72], [0.56, 1.18], [0.78, 0.68]]
-        base_profile = _resample_nodes(base_nodes, 64)
-        react_profile = _resample_nodes(react_nodes, 64)
+        count = 128
+        base_profile = _resample_nodes(base_nodes, count)
+        react_profile = _resample_nodes(react_nodes, count)
         weights = _build_energy_routing(
             [
                 {"type": "bass", "x": 0.85, "y": 0.50, "strength": 1.0, "dir_x": -1.0, "dir_y": 0.0},
                 {"type": "vocals", "x": 0.50, "y": 0.20, "strength": 1.0, "dir_x": 0.0, "dir_y": 1.0},
                 {"type": "mid", "x": 0.22, "y": 0.54, "strength": 1.0, "dir_x": 1.0, "dir_y": 0.0},
             ],
-            64,
+            count,
             base_profile=base_profile,
             react_profile=react_profile,
         )
@@ -934,7 +1326,10 @@ class TestBlobShaperRenderer:
             playing=True,
         )
         runtime_profile = frames[-1]
-        max_neighbor_jump = max(abs(runtime_profile[i] - runtime_profile[(i + 1) % 64]) for i in range(64))
+        max_neighbor_jump = max(
+            abs(runtime_profile[i] - runtime_profile[(i + 1) % count])
+            for i in range(count)
+        )
         assert max_neighbor_jump < 0.09
 
     def test_routed_shaper_energy_series_stays_angularly_smooth_without_blade_cut(self):

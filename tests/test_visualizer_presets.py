@@ -1816,7 +1816,6 @@ def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_
         "blob_growth",
         "blob_stage_gain",
         "blob_core_scale",
-        "blob_core_floor_bias",
         "blob_stage_bias",
         "blob_reactive_glow",
         "blob_glow_drive_mode",
@@ -1851,6 +1850,7 @@ def test_temp_blob_showcase_presets_are_tail_slots_and_keep_type_owned_payloads_
     }
     mighty_required = {
         "blob_reactive_deformation",
+        "blob_core_floor_bias",
         "blob_constant_wobble",
         "blob_reactive_wobble",
         "blob_stretch",

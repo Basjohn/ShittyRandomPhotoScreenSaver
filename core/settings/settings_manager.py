@@ -13,7 +13,9 @@ from core.settings.models import SpotifyVisualizerSettings
 from core.settings.visualizer_blob_contract import (
     BLOB_MIGHTY_ONLY_KEYS,
     BLOB_SHAPED_ONLY_KEYS,
+    BLOB_TYPE_SHAPED,
     LEGACY_BLOB_SHAPER_KEY,
+    normalize_blob_type,
     strip_inactive_blob_shaped_payload,
 )
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
@@ -446,6 +448,23 @@ class SettingsManager(QObject):
                     # a mapping type that is not a plain dict.
                     section_dict = dict(existing_section)
                     skip_keys = _WIDGET_DEFAULT_MERGE_SKIP_KEYS.get(section_name, frozenset())
+                    if (
+                        section_name == "spotify_visualizer"
+                        and str(section_dict.get("mode", "")).strip().lower() == "blob"
+                    ):
+                        resolved_blob_type = normalize_blob_type(
+                            section_dict.get("blob_type"),
+                            legacy_shaper_enabled=section_dict.get(LEGACY_BLOB_SHAPER_KEY),
+                        )
+                        inactive_blob_keys = (
+                            BLOB_MIGHTY_ONLY_KEYS
+                            if resolved_blob_type == BLOB_TYPE_SHAPED
+                            else BLOB_SHAPED_ONLY_KEYS
+                        )
+                        # Missing inactive subtype fields are intentional, not
+                        # absent defaults.  Re-adding them here causes every
+                        # startup to repair and rewrite the same Blob payload.
+                        skip_keys = frozenset((*skip_keys, *inactive_blob_keys))
                     for k, v in section_defaults.items():
                         if k in skip_keys and k not in section_dict:
                             continue
@@ -802,8 +821,32 @@ class SettingsManager(QObject):
         return SpotifyVisualizerSettings.from_settings(self)
 
     def set_spotify_visualizer_settings(self, model: SpotifyVisualizerSettings) -> None:
-        """Persist Spotify visualizer settings from a typed model."""
-        self.set_many(model.to_dict())
+        """Persist one typed visualizer snapshot as an atomic widgets-root write.
+
+        Blob subtype normalization depends on ``blob_type`` and its subtype
+        fields being present in the same input mapping.  Writing the model's
+        dotted keys one at a time lets the currently persisted subtype strip
+        fields for the incoming subtype before ``blob_type`` itself is saved.
+        Build the complete section first, then normalize and persist it through
+        one widgets-root transaction while preserving every sibling widget.
+        """
+        prefix = "widgets.spotify_visualizer."
+        visualizer_section = {
+            key[len(prefix):]: value
+            for key, value in model.to_dict().items()
+            if key.startswith(prefix)
+        }
+
+        with self._lock:
+            stored_widgets = self._settings.value("widgets", {})
+            widgets = dict(stored_widgets) if isinstance(stored_widgets, Mapping) else {}
+            widgets["spotify_visualizer"] = visualizer_section
+            widgets = self._store_widgets_root_locked(widgets)
+            self._invalidate_cache_for_key_locked("widgets")
+            self._settings.sync()
+
+        self.settings_changed.emit("widgets", widgets)
+        logger.debug("Spotify visualizer settings persisted as one normalized widgets root")
 
     def reset_visualizers_to_defaults(self) -> None:
         """Reset only the spotify visualizer settings to canonical defaults."""
