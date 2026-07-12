@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QRectF
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QPainter
 
 from core.steam.abandonment_cache import (
     MAX_CACHED_ACHIEVEMENT_PROBES,
@@ -48,7 +48,12 @@ from core.threading.manager import TaskResult
 from widgets.abandonment_issues_widget import AbandonmentIssuesWidget, _prepare_cover_image
 from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_components import (
+    ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
+    ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE,
+    _fit_wrapped_font,
+    _rediscovery_message_for_bucket,
     abandonment_authored_size,
+    abandonment_rediscovery_message,
     build_abandonment_view_model,
     layout_abandonment_card,
     render_abandonment_card,
@@ -627,6 +632,80 @@ def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt
     assert not layout.art_rect.intersects(layout.title_rect)
     assert not layout.art_rect.intersects(layout.age_stamp_rect)
     assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
+
+
+def test_abandonment_rediscovery_messages_use_exact_stable_60_40_buckets() -> None:
+    expected_alternates = (
+        "You Don't Even Remember Buying This One Do You?",
+        "Was The Sale Really THAT Good?",
+        "Your Mother Was Right About You.",
+        "I Mean, We All Make Bad Decisions Sometimes...",
+        "It's Not Like The Game Has Feelings Or Anything.",
+        "Your Library Looks On Judgingly As You Force Feed It",
+        "This One Hid Behind 7 Proxies.",
+        "You Could - And Do - Play Worse.",
+        "That Bundle Sure Seems Silly Now Doesn't It?",
+        "If They Remake This Will You Buy And Ignore That Too?",
+    )
+    messages = tuple(_rediscovery_message_for_bucket(bucket) for bucket in range(100))
+
+    assert ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE == "Long Forgotten"
+    assert ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES == expected_alternates
+    assert messages.count(ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE) == 60
+    assert all(messages.count(message) == 4 for message in expected_alternates)
+    assert abandonment_rediscovery_message(101, "Fixture Game") == abandonment_rediscovery_message(
+        101,
+        "Fixture Game",
+    )
+
+
+def test_abandonment_longest_rediscovery_message_fits_narrow_wide_art_rail(qt_app) -> None:
+    resolved = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+    )
+    model = build_abandonment_view_model(resolved)
+    authored = abandonment_authored_size(
+        show_artwork=True,
+        artwork_shape="wide",
+        artwork_size=180,
+    )
+    layout = layout_abandonment_card(
+        model,
+        QRectF(0, 0, authored.width(), authored.height()),
+        show_artwork=True,
+        artwork_shape="wide",
+        artwork_size=180,
+    )
+    base_font = QFont("Inter", 12, QFont.Weight.DemiBold)
+    longest = max(
+        ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
+        key=lambda text: QFontMetricsF(base_font).horizontalAdvance(text),
+    )
+    fitted = _fit_wrapped_font(base_font, longest, layout.subtitle_rect)
+    bounds = QFontMetricsF(fitted).boundingRect(
+        QRectF(0, 0, layout.subtitle_rect.width() - 2.0, 10_000.0),
+        int(Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap),
+        longest,
+    )
+
+    assert fitted.pointSize() >= 6
+    assert bounds.height() <= layout.subtitle_rect.height() - 2.0
+
+
+def test_abandonment_rediscovery_message_can_be_hidden() -> None:
+    resolved = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+    )
+
+    assert build_abandonment_view_model(resolved).subtitle
+    assert build_abandonment_view_model(
+        resolved,
+        show_rediscovery_message=False,
+    ).subtitle == ""
 
 
 def test_abandonment_renderer_produces_nonempty_archival_card(qt_app) -> None:

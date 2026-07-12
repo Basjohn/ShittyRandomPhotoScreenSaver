@@ -1,6 +1,7 @@
 """Distinct archival presentation for Steam Abandonment Issues."""
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Mapping
 
@@ -18,6 +19,7 @@ from PySide6.QtGui import (
 )
 
 from core.steam.abandonment_issues import AbandonmentResolved, LAST_PLAYED_VERIFIED
+from widgets.shadow_utils import draw_text_rect_with_shadow
 from widgets.steam_components import (
     STEAM_SETTINGS_TARGET,
     SteamCardField,
@@ -36,6 +38,21 @@ ABANDONMENT_ARTWORK_SIZE_MIN = 110
 ABANDONMENT_ARTWORK_SIZE_DEFAULT = 140
 ABANDONMENT_ARTWORK_SIZE_MAX = 180
 ABANDONMENT_ACCENT_RGBA = (222, 157, 88, 225)
+ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE = "Long Forgotten"
+ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES: tuple[str, ...] = (
+    "You Don't Even Remember Buying This One Do You?",
+    "Was The Sale Really THAT Good?",
+    "Your Mother Was Right About You.",
+    "I Mean, We All Make Bad Decisions Sometimes...",
+    "It's Not Like The Game Has Feelings Or Anything.",
+    "Your Library Looks On Judgingly As You Force Feed It",
+    "This One Hid Behind 7 Proxies.",
+    "You Could - And Do - Play Worse.",
+    "That Bundle Sure Seems Silly Now Doesn't It?",
+    "If They Remake This Will You Buy And Ignore That Too?",
+)
+_ABANDONMENT_PRIMARY_MESSAGE_BUCKETS = 60
+_ABANDONMENT_MESSAGE_BUCKET_COUNT = 100
 
 
 @dataclass(frozen=True)
@@ -124,6 +141,7 @@ def build_abandonment_view_model(
     cache_age_seconds: float | None = None,
     connection_needs_attention: bool = False,
     show_connection_info_icon: bool = True,
+    show_rediscovery_message: bool = True,
     field_visibility: Mapping[str, bool] | None = None,
 ) -> SteamCardViewModel:
     """Map a pure source resolution into archival card copy."""
@@ -165,7 +183,11 @@ def build_abandonment_view_model(
             appid=resolved.appid,
             header="Abandonment Issues",
             title=resolved.title,
-            subtitle=_rediscovery_subtitle(resolved.inactivity_days),
+            subtitle=(
+                abandonment_rediscovery_message(resolved.appid, resolved.title)
+                if show_rediscovery_message
+                else ""
+            ),
             metric_label="Last Visit",
             metric_value=format_abandonment_age(resolved.inactivity_days),
             status=(
@@ -402,13 +424,28 @@ def render_abandonment_card(
             color=color,
             font=QFont(font_family, max(11, int(font_size * scale * 1.45)), QFont.Weight.Bold),
         )
-        _draw_elided_text(
-            painter,
-            layout.subtitle_rect,
+        subtitle_font = _fit_wrapped_font(
+            QFont(font_family, max(7, int(font_size * scale * 0.88)), QFont.Weight.DemiBold),
             model.subtitle,
-            color=muted,
-            font=QFont(font_family, max(7, int(font_size * scale * 0.88)), QFont.Weight.DemiBold),
+            layout.subtitle_rect,
         )
+        painter.save()
+        try:
+            painter.setFont(subtitle_font)
+            painter.setPen(muted)
+            draw_text_rect_with_shadow(
+                painter,
+                layout.subtitle_rect.toAlignedRect(),
+                int(
+                    Qt.AlignmentFlag.AlignLeft
+                    | Qt.AlignmentFlag.AlignVCenter
+                    | Qt.TextFlag.TextWordWrap
+                ),
+                model.subtitle,
+                font_size=max(1, subtitle_font.pointSize()),
+            )
+        finally:
+            painter.restore()
         _draw_age_stamp(painter, layout, model, accent=accent, color=color, font_family=font_family, font_size=font_size)
         _draw_ledger_fields(painter, layout, model, accent=accent, color=color, muted=muted, font_family=font_family, font_size=font_size)
 
@@ -588,6 +625,20 @@ def _fit_font(font: QFont, text: str, width: float) -> QFont:
     return fitted
 
 
+def _fit_wrapped_font(font: QFont, text: str, rect: QRectF) -> QFont:
+    fitted = QFont(font)
+    minimum = 6
+    flags = int(Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWordWrap)
+    measure_rect = QRectF(0.0, 0.0, max(1.0, rect.width() - 2.0), 10_000.0)
+    available_height = max(1.0, rect.height() - 2.0)
+    while fitted.pointSize() > minimum:
+        bounds = QFontMetricsF(fitted).boundingRect(measure_rect, flags, text)
+        if bounds.height() <= available_height:
+            break
+        fitted.setPointSize(fitted.pointSize() - 1)
+    return fitted
+
+
 def _format_playtime(minutes: int | None) -> str:
     if minutes is None:
         return "Unknown"
@@ -599,12 +650,24 @@ def _format_playtime(minutes: int | None) -> str:
     return f"{int(round(hours))}h"
 
 
-def _rediscovery_subtitle(inactivity_days: int | None) -> str:
-    days = max(0, int(inactivity_days or 0))
-    if days < 180:
-        return "A familiar world waiting patiently on the shelf."
-    if days < 365:
-        return "A world left behind, but not forgotten."
-    if days < 730:
-        return "Still patiently gathering dust."
-    return "Long archived. Perhaps due a gentle return."
+def abandonment_rediscovery_message(appid: int | None, title: str) -> str:
+    """Choose stable per-game copy without repaint-time randomness."""
+
+    identity = str(appid) if appid is not None else str(title).strip().casefold()
+    digest = hashlib.sha256(f"abandonment:{identity}".encode("utf-8")).digest()
+    bucket = int.from_bytes(digest[:4], "big") % _ABANDONMENT_MESSAGE_BUCKET_COUNT
+    return _rediscovery_message_for_bucket(bucket)
+
+
+def _rediscovery_message_for_bucket(bucket: int) -> str:
+    normalized = int(bucket) % _ABANDONMENT_MESSAGE_BUCKET_COUNT
+    if normalized < _ABANDONMENT_PRIMARY_MESSAGE_BUCKETS:
+        return ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE
+    alternate_bucket_width = (
+        _ABANDONMENT_MESSAGE_BUCKET_COUNT - _ABANDONMENT_PRIMARY_MESSAGE_BUCKETS
+    ) // len(ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES)
+    alternate_index = min(
+        len(ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES) - 1,
+        (normalized - _ABANDONMENT_PRIMARY_MESSAGE_BUCKETS) // alternate_bucket_width,
+    )
+    return ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES[alternate_index]

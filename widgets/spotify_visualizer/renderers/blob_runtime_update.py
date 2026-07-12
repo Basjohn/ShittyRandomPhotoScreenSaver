@@ -33,8 +33,8 @@ from widgets.spotify_visualizer.renderers.blob_unshaped_runtime import (
 )
 
 PROFILE_SIZE = 128
-PROFILE_MAX_HZ = 45.0
-_PROFILE_MIN_INTERVAL = 1.0 / PROFILE_MAX_HZ
+PROFILE_MAX_HZ = 30.0
+_PROFILE_MIN_INTERVAL = 1.0 / PROFILE_MAX_HZ - 1e-5
 _MIGHTY_COLD_PROFILE = tuple(
     1.0
     + math.cos(math.tau * idx / PROFILE_SIZE + 0.65) * 0.072

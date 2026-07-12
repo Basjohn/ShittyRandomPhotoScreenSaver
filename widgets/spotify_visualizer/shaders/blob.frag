@@ -67,6 +67,7 @@ uniform int u_blob_tendril_count;
 uniform vec4 u_blob_tendril_geometry[BLOB_TENDRIL_N];
 // bend, hook, activity, pale-tip drive (negative w marks an inward groove)
 uniform vec4 u_blob_tendril_motion[BLOB_TENDRIL_N];
+uniform float u_blob_vocal_wobble_strength;
 
 const float SHAPER_ANGLE_SMOOTH_STEP = 1.0 / float(SHAPER_N);
 
@@ -615,6 +616,22 @@ float blob_sdf_ex(vec2 p, float time,
         staged_r,
         stage_progress
     );
+    // Per-paint vocal contour wobble stays analytically smooth and visibly
+    // independent from glow, scalar pulse, and the slower CPU morphology
+    // cadence. Bounded phase modulation flexes fixed angles instead of
+    // rotating one ripple around the body.
+    float vocal_drive = clamp(e_mid * 0.84 + e_high * 0.30, 0.0, 1.25);
+    float vocal_gate = smoothstep(0.06, 0.78, vocal_drive);
+    float vocal_strength = clamp(u_blob_vocal_wobble_strength, 0.0, 1.25);
+    float vocal_ripple =
+        sin(angle * 7.0 + sin(time * 2.13 + 0.60) * 1.18) * 0.58 +
+        sin(angle * 11.0 + sin(time * 2.87 + 2.40) * 0.92) * 0.28 +
+        sin(angle * 5.0 + sin(time * 1.61 + 4.10) * 1.34) * 0.14;
+    float vocal_wobble = vocal_ripple
+        * vocal_gate
+        * (0.003 + vocal_gate * 0.009)
+        * vocal_strength;
+    final_radius += vocal_wobble;
     float body_sdf = dist - final_radius;
     float tendril_sdf;
     float groove_sdf;

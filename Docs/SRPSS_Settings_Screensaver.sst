@@ -1,9 +1,9 @@
 {
   "application": "Screensaver",
   "metadata": {
-    "last_migration_completed": "2026-07-12T20:51:20.993144Z",
+    "last_migration_completed": "2026-07-12T21:12:46.044477Z",
     "legacy_profile": "Screensaver",
-    "migrated_at": "2026-07-12T20:51:20.990181Z",
+    "migrated_at": "2026-07-12T21:12:46.041496Z",
     "migrated_from": "qsettings",
     "visualizer_schema_version": 2
   },
@@ -383,6 +383,7 @@
         "show_pinned": false,
         "show_playtime": true,
         "show_queue": true,
+        "show_rediscovery_message": true,
         "show_source": false
       },
       "achievement_pulse": {

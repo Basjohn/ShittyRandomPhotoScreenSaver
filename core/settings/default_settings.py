@@ -543,6 +543,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                     'show_pinned': False,
                                     'show_playtime': True,
                                     'show_queue': True,
+                                    'show_rediscovery_message': True,
                                     'show_source': False},
              'achievement_pulse': {'artwork_shape': 'square',
                                    'bg_color': [35, 35, 35, 255],

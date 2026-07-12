@@ -12,7 +12,11 @@ from widgets.spotify_visualizer.renderers.gl_helpers import (
     set4fv as _set4fv,
     set_color4 as _set_color4,
 )
-from widgets.spotify_visualizer.blob_tendril_runtime import TENDRIL_COUNT
+from core.settings.visualizer_blob_contract import normalize_blob_type
+from widgets.spotify_visualizer.blob_tendril_runtime import (
+    TENDRIL_COUNT,
+    gpu_vocal_wobble_strength,
+)
 
 
 def get_common_uniform_names() -> list[str]:
@@ -44,6 +48,7 @@ def get_common_uniform_names() -> list[str]:
         "u_blob_tendril_count",
         "u_blob_tendril_geometry",
         "u_blob_tendril_motion",
+        "u_blob_vocal_wobble_strength",
         "u_blob_inward_liquid_enabled",
         "u_blob_inward_liquid_reactivity",
         "u_blob_inward_liquid_max_size",
@@ -106,6 +111,16 @@ def upload_common_uniforms(gl, u: dict, s) -> tuple[float, float, float, float]:
     if tendril_ready:
         _set4fv(gl, u, "u_blob_tendril_geometry", tendril_geometry, TENDRIL_COUNT)
         _set4fv(gl, u, "u_blob_tendril_motion", tendril_motion, TENDRIL_COUNT)
+    blob_type = normalize_blob_type(
+        getattr(s, "_blob_type", None),
+        legacy_shaper_enabled=getattr(s, "_blob_shaper_enabled", None),
+    )
+    _set1f(
+        gl,
+        u,
+        "u_blob_vocal_wobble_strength",
+        gpu_vocal_wobble_strength(s, blob_type=blob_type),
+    )
 
     loc = u.get("u_blob_stage_progress_override", -1)
     if loc >= 0:

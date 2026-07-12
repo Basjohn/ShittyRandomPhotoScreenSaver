@@ -14,7 +14,26 @@ from widgets.spotify_visualizer.blob_math import (
     solve_unshaped_blob_profile_step,
 )
 
-_SHAPER_N = 128
+_MIGHTY_SOLVER_N = 64
+_TRANSPORT_N = 128
+
+
+def _resample_cyclic_profile(values: Sequence[float], count: int) -> list[float]:
+    """Linearly resample an already smooth cyclic solver profile for transport."""
+
+    source = [float(value) for value in values]
+    if not source or count <= 0:
+        return []
+    if len(source) == count:
+        return source
+    result: list[float] = []
+    for idx in range(count):
+        source_pos = idx * len(source) / count
+        left = int(math.floor(source_pos)) % len(source)
+        right = (left + 1) % len(source)
+        t = source_pos - math.floor(source_pos)
+        result.append(source[left] + (source[right] - source[left]) * t)
+    return result
 
 
 def _resolve_runtime_unshaped_profile(
@@ -61,10 +80,10 @@ def _resolve_runtime_unshaped_profile(
             stage3_t = float(override[2])
 
     profile_bundle, solved_velocity = solve_unshaped_blob_profile_step(
-        previous_profile=getattr(s, "_blob_unshaped_runtime_profile", None),
-        previous_velocity=getattr(s, "_blob_unshaped_runtime_velocity", None),
-        previous_target_profile=getattr(s, "_blob_unshaped_runtime_target_profile", None),
-        sample_count=_SHAPER_N,
+        previous_profile=getattr(s, "_blob_unshaped_solver_profile", None),
+        previous_velocity=getattr(s, "_blob_unshaped_solver_velocity", None),
+        previous_target_profile=getattr(s, "_blob_unshaped_solver_target_profile", None),
+        sample_count=_MIGHTY_SOLVER_N,
         time_seconds=current_ts,
         dt=dt,
         bass_energy=bass,
@@ -88,10 +107,17 @@ def _resolve_runtime_unshaped_profile(
         seed=float(seed),
     )
     base_profile, raw_target_profile, target_profile, solved_profile = profile_bundle
-    setattr(s, "_blob_unshaped_base_profile", list(base_profile))
-    setattr(s, "_blob_unshaped_raw_target_profile", list(raw_target_profile))
-    setattr(s, "_blob_unshaped_runtime_target_profile", list(target_profile))
-    setattr(s, "_blob_unshaped_runtime_profile", list(solved_profile))
-    setattr(s, "_blob_unshaped_runtime_velocity", list(solved_velocity))
+    transport_base = _resample_cyclic_profile(base_profile, _TRANSPORT_N)
+    transport_raw_target = _resample_cyclic_profile(raw_target_profile, _TRANSPORT_N)
+    transport_target = _resample_cyclic_profile(target_profile, _TRANSPORT_N)
+    transport_profile = _resample_cyclic_profile(solved_profile, _TRANSPORT_N)
+    setattr(s, "_blob_unshaped_solver_profile", list(solved_profile))
+    setattr(s, "_blob_unshaped_solver_velocity", list(solved_velocity))
+    setattr(s, "_blob_unshaped_solver_target_profile", list(target_profile))
+    setattr(s, "_blob_unshaped_base_profile", transport_base)
+    setattr(s, "_blob_unshaped_raw_target_profile", transport_raw_target)
+    setattr(s, "_blob_unshaped_runtime_target_profile", transport_target)
+    setattr(s, "_blob_unshaped_runtime_profile", transport_profile)
+    setattr(s, "_blob_unshaped_runtime_velocity", _resample_cyclic_profile(solved_velocity, _TRANSPORT_N))
     setattr(s, "_blob_unshaped_solver_ts", current_ts)
-    return list(solved_profile)
+    return transport_profile

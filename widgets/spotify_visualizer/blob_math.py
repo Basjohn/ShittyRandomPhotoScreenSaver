@@ -317,17 +317,17 @@ def compute_unshaped_motion_offsets(
         angle * 5.0
         + 2.85
         + math.sin(time_value * 1.21 + morph_seed * 0.27) * 1.18
-    ) * 0.095 * vocal * (0.52 + mid_pulse * 0.48)
+    ) * 0.112 * vocal * (0.52 + mid_pulse * 0.48)
     reactive_field += math.sin(
         angle * 7.0
         + 0.15
         + math.sin(time_value * 1.57 + 2.10 + morph_seed * 0.43) * 1.06
-    ) * 0.070 * vocal * high_pulse
+    ) * 0.083 * vocal * high_pulse
     reactive_field += math.sin(
         angle * 9.0
         + 1.70
         + math.sin(time_value * 1.91 + 4.20 - morph_seed * 0.21) * 0.86
-    ) * 0.038 * reactive_high * high_pulse
+    ) * 0.046 * reactive_high * high_pulse
 
     pocket_pressure = _clamp(pocket_component, 0.0, 1.8)
     pocket_soft = 1.0 - math.exp(-pocket_pressure * 0.92)
@@ -713,11 +713,11 @@ def build_unshaped_blob_target_profile(
     )
     bounded = _limit_cyclic_profile_slope(
         bounded,
-        max_step=5.0 / count,
+        max_step=4.9 / count,
     )
     bounded = _limit_cyclic_profile_curvature(
         bounded,
-        max_curvature=0.0135,
+        max_curvature=min(0.045, 0.0135 * (128.0 / count) ** 2.0),
     )
     bounded = _smooth_cyclic_profile(bounded, passes=2)
     return (base_profile, target_profile, bounded)

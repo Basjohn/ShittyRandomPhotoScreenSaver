@@ -83,6 +83,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         rotation_interval_minutes: int = 30,
         refresh_minutes: int = 10,
         show_connection_info_icon: bool = True,
+        show_rediscovery_message: bool = True,
     ) -> None:
         self._abandonment_selection = selection
         self._abandonment_field_visibility = dict(field_visibility or {})
@@ -104,6 +105,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             min(24 * 60, int(rotation_interval_minutes)),
         )
         self._abandonment_show_connection_info_icon = bool(show_connection_info_icon)
+        self._abandonment_show_rediscovery_message = bool(show_rediscovery_message)
         self._abandonment_artwork = QImage()
         self._abandonment_rotation_timer: OverlayTimerHandle | None = None
         super().__init__(
@@ -467,6 +469,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             cache_age_seconds=snapshot.cache_age_seconds,
             connection_needs_attention=connection_needs_attention,
             show_connection_info_icon=self._abandonment_show_connection_info_icon,
+            show_rediscovery_message=self._abandonment_show_rediscovery_message,
             field_visibility=self._abandonment_field_visibility,
         )
         asset_path: Path | None = None

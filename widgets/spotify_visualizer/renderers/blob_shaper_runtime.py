@@ -785,9 +785,9 @@ def _build_shaped_motion_residual_profile(
     residual_profile = _smooth_cyclic_series(residual_profile, passes=4)
     residual_profile = _limit_cyclic_series_slope(
         residual_profile,
-        max_step=1.85 / count,
+        max_step=1.58 / count,
     )
-    residual_profile = _smooth_cyclic_series(residual_profile, passes=3)
+    residual_profile = _smooth_cyclic_series(residual_profile, passes=4)
     mean = math.fsum(residual_profile) / count
     return [value - mean for value in residual_profile]
 

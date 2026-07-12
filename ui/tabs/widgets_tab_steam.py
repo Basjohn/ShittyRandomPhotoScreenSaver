@@ -1311,6 +1311,18 @@ def _build_card_group(
         refresh_row.addWidget(refresh_status, 1)
         content_layout.addLayout(refresh_row)
 
+        show_message = QCheckBox("Show Rediscovery Message")
+        show_message.setProperty("circleIndicator", True)
+        show_message.setToolTip(
+            "Show the stable per-game rediscovery line beneath the game title."
+        )
+        show_message.setChecked(
+            tab._default_bool(key, "show_rediscovery_message", True)
+        )
+        show_message.stateChanged.connect(tab._save_settings)
+        tab.abandonment_issues_show_rediscovery_message = show_message
+        content_layout.addWidget(show_message)
+
         fields_label = QLabel("Displayed Ledger Fields:")
         fields_label.setStyleSheet(INFO_LABEL_STYLE)
         content_layout.addWidget(fields_label)
@@ -1769,6 +1781,14 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             tab.abandonment_issues_guilt_desaturater.setChecked(
                 bool(config.get("guilt_desaturater", tab._default_bool(key, "guilt_desaturater", False)))
             )
+            tab.abandonment_issues_show_rediscovery_message.setChecked(
+                bool(
+                    config.get(
+                        "show_rediscovery_message",
+                        tab._default_bool(key, "show_rediscovery_message", True),
+                    )
+                )
+            )
             for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
                 fallback = _ABANDONMENT_FIELD_DEFAULTS[field_id]
                 getattr(tab, f"abandonment_issues_show_{field_id}").setChecked(
@@ -1858,6 +1878,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         )
         payload["guilt_desaturation_strength"] = int(
             tab.abandonment_issues_guilt_desaturation_strength.value()
+        )
+        payload["show_rediscovery_message"] = bool(
+            tab.abandonment_issues_show_rediscovery_message.isChecked()
         )
         for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
             payload[f"show_{field_id}"] = bool(

@@ -652,6 +652,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "abandonment_issues_accent_color_btn",
             "abandonment_issues_guilt_desaturater",
             "abandonment_issues_guilt_desaturation_strength",
+            "abandonment_issues_show_rediscovery_message",
             "abandonment_issues_show_playtime",
             "abandonment_issues_show_queue",
             "abandonment_issues_show_source",

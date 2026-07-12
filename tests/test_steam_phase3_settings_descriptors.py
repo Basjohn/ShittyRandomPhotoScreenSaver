@@ -157,6 +157,7 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert abandonment["preferred_minimum_inactivity_weeks"] == 26
     assert abandonment["rotation_interval_minutes"] >= 5
     assert abandonment["guilt_desaturater"] is False
+    assert abandonment["show_rediscovery_message"] is True
     assert len(abandonment["accent_color"]) == 4
 
 
@@ -232,6 +233,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_artwork_size.setValue(175)
             tab.abandonment_issues_guilt_desaturater.setChecked(True)
             tab.abandonment_issues_guilt_desaturation_strength.setValue(65)
+            tab.abandonment_issues_show_rediscovery_message.setChecked(False)
             tab.abandonment_issues_show_queue.setChecked(False)
             tab.abandonment_issues_accent_color_btn.color_changed.emit(
                 QColor(180, 110, 55, 170)
@@ -284,6 +286,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert abandonment_payload["artwork_size"] == 175
             assert abandonment_payload["guilt_desaturater"] is True
             assert abandonment_payload["guilt_desaturation_strength"] == 65
+            assert abandonment_payload["show_rediscovery_message"] is False
             assert abandonment_payload["show_queue"] is False
             assert abandonment_payload["accent_color"] == [180, 110, 55, 170]
         finally:
@@ -632,6 +635,7 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
                     "accent_color": [180, 110, 55, 170],
                     "guilt_desaturater": True,
                     "guilt_desaturation_strength": 65,
+                    "show_rediscovery_message": False,
                     "preferred_width": 420,
                     "preferred_height": 180,
                 },
@@ -646,6 +650,7 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert getattr(abandonment_widget, "_abandonment_selection").preferred_minimum_inactivity_days == 364
             assert getattr(abandonment_widget, "_abandonment_artwork_size") == 175
             assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
+            assert getattr(abandonment_widget, "_abandonment_show_rediscovery_message") is False
             assert getattr(abandonment_widget, "_abandonment_accent_color").getRgb() == (180, 110, 55, 170)
             assert abandonment_widget.minimumWidth() >= 560
             assert abandonment_widget.minimumHeight() > 300

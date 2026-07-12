@@ -1146,6 +1146,10 @@ class SteamCardFactory(WidgetFactory):
                         )
                         for field_id, default_value in abandonment_field_defaults.items()
                     },
+                    show_rediscovery_message=SettingsManager.to_bool(
+                        config.get("show_rediscovery_message", True),
+                        True,
+                    ),
                     show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
                     artwork_shape=str(config.get("artwork_shape", "square") or "square"),
                     artwork_size=int(config.get("artwork_size", 140)),

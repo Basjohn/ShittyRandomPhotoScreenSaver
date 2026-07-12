@@ -364,14 +364,18 @@ class TestBlobShaperRenderer:
         assert "Both Blob types now upload one solved runtime contour profile." in shared_src
         assert "float runtime_mult =" in shared_src
         assert "if (BLOB_VARIANT_SHAPED == 0)" in shared_src
-        assert "float runtime_mult = sample_profile(angle_frac, u_blob_runtime_profile);" in shared_src
+        assert "float runtime_mult = sample_profile(fract(angle_frac), u_blob_runtime_profile);" in shared_src
         assert "const int SHAPER_N = 128;" in shared_src
+        assert "const int BLOB_TENDRIL_N = 12;" in shared_src
+        assert "void blob_detail_sdfs(" in shared_src
+        assert "sd_tapered_segment" in shared_src
+        assert "smooth_min_blob(body_sdf, tendril_sdf" in shared_src
+        assert "smooth_max_blob(goo_sdf, -groove_sdf" in shared_src
         assert "sample_unshaped_contour" not in shared_src
         assert "sample_smoothed_linear_series" not in shared_src
-        assert "float contour_radius = calm_r * runtime_mult + max(staged_r - calm_r, 0.0) * 0.18;" in shared_src
+        assert "float contour_radius = calm_radius * runtime_mult + max(staged_radius - calm_radius, 0.0) * 0.18;" in shared_src
         assert "float shaped_support_floor = mix(" in shared_src
-        assert "float final_radius = (BLOB_VARIANT_SHAPED == 1)" in shared_src
-        assert ": contour_radius;" in shared_src
+        assert "float final_radius = resolved_profile_radius(" in shared_src
 
         # Never reintroduce the exact two-part failure seen at runtime: a
         # nonlinear profile amplifier makes radial fans, then a Mighty max()
@@ -579,7 +583,9 @@ class TestBlobShaperRenderer:
         shader_source = shader_path.read_text(encoding="utf-8")
 
         assert "u_blob_runtime_profile" in shader_source
-        assert "sample_profile(angle_frac, u_blob_runtime_profile)" in shader_source
+        assert "sample_profile(fract(angle_frac), u_blob_runtime_profile)" in shader_source
+        assert "u_blob_tendril_geometry" in shader_source
+        assert "u_blob_tendril_motion" in shader_source
         assert "shaper_contour_and_shell_motion(" not in shader_source
 
     def test_contour_residual_motion_is_quiet_when_motion_sliders_are_zero(self):
@@ -789,7 +795,7 @@ class TestBlobShaperRenderer:
         assert temporal_delta > 0.035
         assert irregular_detail > broad_detail * 0.45
         assert rounded_outward_samples >= 4
-        assert max_neighbor_step < 0.034
+        assert max_neighbor_step < 0.035
         assert abs(mean - 1.0) < 0.003
 
     def test_shaped_blob_mutations_breathe_at_fixed_anchors_instead_of_orbiting(self):

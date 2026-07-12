@@ -242,11 +242,11 @@ def test_blob_pockets_can_fill_both_anchored_sites_on_fresh_rapid_hits() -> None
     assert state.pockets[1].amplitude > 0.0
 
 
-def test_blob_pocket_family_reuses_sites_instead_of_orbiting_around_body() -> None:
+def test_blob_pocket_family_mutates_sites_without_a_clockwise_orbit() -> None:
     from widgets.spotify_visualizer.blob_pockets import advance_blob_pocket_state, make_blob_pocket_state
 
     state = make_blob_pocket_state()
-    first_cycle: tuple[float, float] | None = None
+    spawned_angles: list[float] = []
     for hit_index in range(4):
         state = advance_blob_pocket_state(
             state,
@@ -264,13 +264,17 @@ def test_blob_pocket_family_reuses_sites_instead_of_orbiting_around_body() -> No
             high_energy=0.02,
             overall_energy=0.48,
         )
-        if hit_index == 1:
-            first_cycle = (state.pockets[0].angle_frac, state.pockets[1].angle_frac)
+        spawned_angles.append(state.pockets[hit_index % 2].angle_frac)
 
-    assert first_cycle is not None
     assert state.kick_cursor == 4
-    assert state.pockets[0].angle_frac == pytest.approx(first_cycle[0])
-    assert state.pockets[1].angle_frac == pytest.approx(first_cycle[1])
+    assert len(set(spawned_angles)) == 4
+    wrapped_steps = [
+        (spawned_angles[idx + 1] - spawned_angles[idx]) % 1.0
+        for idx in range(len(spawned_angles) - 1)
+    ]
+    # A fixed angular cursor would produce one repeated positive step. The
+    # low-discrepancy family instead births recognisably different sites.
+    assert max(wrapped_steps) - min(wrapped_steps) > 0.15
     assert state.pockets[0].amplitude > 0.0
     assert state.pockets[1].amplitude > 0.0
 

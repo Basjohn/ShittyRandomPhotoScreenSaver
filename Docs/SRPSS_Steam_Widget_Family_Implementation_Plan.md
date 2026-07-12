@@ -1208,9 +1208,17 @@ Implemented default composition:
 - large artwork;
 - title;
 - reliable last-played age;
-- affectionate age-derived subtitle;
+- optional stable rediscovery message;
 - warm archive tab and double-line `LAST VISIT` stamp;
 - bottom ledger rows rather than Achievement Pulse capsules.
+
+Rediscovery-message contract:
+
+- default on, with a dedicated Content toggle that removes the line without hiding functional unavailable/connect messaging;
+- deterministic from stable game identity so repaints, settings rebuilds, and `monitor: ALL` cannot change the wording for the same game;
+- exact 100-bucket weighting: `Long Forgotten` owns 60 buckets, while each of ten authored title-case alternatives owns four buckets;
+- copy selection is pure model work and adds no timer, repaint loop, provider work, or UI-thread cadence pressure;
+- long alternatives fit the existing authored subtitle rail by shrinking within the established font floor rather than moving artwork, title, age stamp, or ledger rows.
 
 Optional fields:
 
@@ -1580,7 +1588,7 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Prefer old short starts with bounded cache-only achievement evidence and policy-aware reranking without completion claims.
 - [x] Implement cache-only rotation shared by profile rather than display.
 - [x] Implement Guilt Desaturater via bucketed worker-prepared art assets.
-- [x] Implement settings, cache-only library picker, display fields, and distinct archival visual composition.
+- [x] Implement settings, cache-only library picker, display fields, deterministic 60/40 optional rediscovery copy, and distinct archival visual composition.
 - [x] Validate unavailable/invalid/future timestamp branches remain honest.
 - [x] Add sparse manager-owned fade-out/commit/fade-in for live game/title/art changes, with stable header/chrome and no private timer or effect.
 - [ ] Complete compiled multi-display, frozen-build, long-idle, transition, `--noupdates`, and Custom-geometry runtime validation.

@@ -248,4 +248,20 @@ def build_blob_tendril_payload(
     return _mighty_payload(state, profile=profile, time_value=time_value, seed=seed)
 
 
-__all__ = ["TENDRIL_COUNT", "build_blob_tendril_payload"]
+def gpu_vocal_wobble_strength(state: Any, *, blob_type: str) -> float:
+    """Map the subtype's exposed motion controls to per-paint contour wobble."""
+
+    if blob_type == BLOB_TYPE_SHAPED:
+        audio_motion = _clamp(getattr(state, "_blob_shaper_audio_motion", 1.20), 0.0, 3.0)
+        react = _clamp(getattr(state, "_blob_shaper_react_strength", 0.5), 0.0, 1.0)
+        return _clamp((audio_motion / 2.40) * (0.70 + react * 0.30), 0.0, 1.25)
+    reactive = _clamp(getattr(state, "_blob_reactive_wobble", 1.0), 0.0, 3.0)
+    shape = _clamp(getattr(state, "_blob_reactive_deformation", 1.0), 0.0, 3.0)
+    return _clamp((reactive / 2.40) * (0.55 + min(shape, 2.0) * 0.30), 0.0, 1.25)
+
+
+__all__ = [
+    "TENDRIL_COUNT",
+    "build_blob_tendril_payload",
+    "gpu_vocal_wobble_strength",
+]
