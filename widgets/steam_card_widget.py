@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -128,6 +129,11 @@ class SteamCardWidget(BaseOverlayWidget):
         self._achievement_latest_artwork = QImage()
         self._achievement_scaled_latest_artwork_cache = QImage()
         self._achievement_scaled_latest_artwork_cache_key: tuple[int, int, int, float] | None = None
+        self._content_opacity = 1.0
+        self._content_transition_key: object | None = None
+        self._content_transition_animation_id: str | None = None
+        self._content_transition_generation = 0
+        self._pending_content_transition: tuple[object, Callable[[], None]] | None = None
         self._defer_visibility_for_fade_sync = True
         self._view_model: SteamCardViewModel = initial_view_model or build_mock_steam_view_model(definition.widget_id)
         self._last_layout: SteamCardLayout | None = None
@@ -227,6 +233,161 @@ class SteamCardWidget(BaseOverlayWidget):
         self._view_model = view_model
         self._grow_to_authored_content_size()
         self.update()
+
+    def content_opacity(self) -> float:
+        """Return painter-owned payload opacity for card-specific renderers."""
+
+        return max(0.0, min(1.0, float(self._content_opacity)))
+
+    def apply_content_transition(
+        self,
+        transition_key: object,
+        commit: Callable[[], None],
+        *,
+        animate: bool = True,
+    ) -> None:
+        """Fade changing card payloads out, commit once hidden, then fade in."""
+
+        if not callable(commit):
+            raise TypeError("Steam content transition commit must be callable")
+        if transition_key == self._content_transition_key:
+            commit()
+            self.update()
+            return
+        should_animate = bool(
+            animate
+            and getattr(self, "_has_displayed_valid_data", False)
+            and getattr(self, "_has_faded_in", False)
+            and self.isVisible()
+        )
+        if not should_animate:
+            self._cancel_content_transition()
+            commit()
+            self._content_transition_key = transition_key
+            self._content_opacity = 1.0
+            self.update()
+            return
+
+        self._pending_content_transition = (transition_key, commit)
+        if self._content_transition_animation_id is None:
+            self._start_content_fade_out()
+
+    def _start_content_fade_out(self) -> None:
+        from core.animation.animator import AnimationManager
+        from core.animation.types import EasingCurve
+
+        self._content_transition_generation += 1
+        generation = self._content_transition_generation
+        start_opacity = self.content_opacity()
+
+        def _on_tick(progress: float) -> None:
+            if generation != self._content_transition_generation:
+                return
+            quantized = round(max(0.0, min(1.0, float(progress))) * 7.0) / 7.0
+            next_opacity = start_opacity * (1.0 - quantized)
+            if abs(next_opacity - self._content_opacity) < 0.001:
+                return
+            self._content_opacity = next_opacity
+            self.update()
+
+        def _on_complete() -> None:
+            if generation != self._content_transition_generation:
+                return
+            self._content_transition_animation_id = None
+            pending = self._pending_content_transition
+            self._pending_content_transition = None
+            if pending is None:
+                self._content_opacity = 1.0
+                self.update()
+                return
+            transition_key, commit = pending
+            try:
+                commit()
+                self._content_transition_key = transition_key
+            finally:
+                self._content_opacity = 0.0
+            self._start_content_fade_in()
+
+        try:
+            manager = AnimationManager.get_or_create_app_shared()
+            self._content_transition_animation_id = manager.animate_custom(
+                duration=0.28,
+                update_callback=_on_tick,
+                on_complete=_on_complete,
+                easing=EasingCurve.CUBIC_IN_OUT,
+            )
+        except Exception:
+            logger.debug("[STEAM] Content fade-out unavailable; committing immediately", exc_info=True)
+            self._content_transition_animation_id = None
+            pending = self._pending_content_transition
+            self._pending_content_transition = None
+            if pending is not None:
+                transition_key, commit = pending
+                commit()
+                self._content_transition_key = transition_key
+            self._content_opacity = 1.0
+            self.update()
+
+    def _start_content_fade_in(self) -> None:
+        from core.animation.animator import AnimationManager
+        from core.animation.types import EasingCurve
+
+        generation = self._content_transition_generation
+
+        def _on_tick(progress: float) -> None:
+            if generation != self._content_transition_generation:
+                return
+            next_opacity = round(max(0.0, min(1.0, float(progress))) * 10.0) / 10.0
+            if abs(next_opacity - self._content_opacity) < 0.001:
+                return
+            self._content_opacity = next_opacity
+            self.update()
+
+        def _on_complete() -> None:
+            if generation != self._content_transition_generation:
+                return
+            self._content_transition_animation_id = None
+            self._content_opacity = 1.0
+            self.update()
+            if self._pending_content_transition is not None:
+                self._start_content_fade_out()
+
+        try:
+            manager = AnimationManager.get_or_create_app_shared()
+            self._content_transition_animation_id = manager.animate_custom(
+                duration=0.42,
+                update_callback=_on_tick,
+                on_complete=_on_complete,
+                easing=EasingCurve.CUBIC_IN_OUT,
+            )
+        except Exception:
+            logger.debug("[STEAM] Content fade-in unavailable; revealing immediately", exc_info=True)
+            self._content_transition_animation_id = None
+            self._content_opacity = 1.0
+            self.update()
+
+    def _cancel_content_transition(self) -> None:
+        animation_id = self._content_transition_animation_id
+        self._content_transition_generation += 1
+        self._content_transition_animation_id = None
+        self._pending_content_transition = None
+        self._content_opacity = 1.0
+        if not animation_id:
+            return
+        try:
+            from core.animation.animator import AnimationManager
+
+            manager = AnimationManager.get_app_shared()
+            if manager is not None:
+                manager.cancel_animation(animation_id)
+        except Exception:
+            logger.debug("[STEAM] Could not cancel content transition", exc_info=True)
+
+    def _deactivate_impl(self) -> None:
+        self._cancel_content_transition()
+
+    def _cleanup_impl(self) -> None:
+        self._cancel_content_transition()
 
     def set_achievement_selection(self, selection: AchievementPulseSelection) -> None:
         """Set persisted non-secret app selection before an activation refresh."""

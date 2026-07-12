@@ -1,0 +1,12 @@
+{
+  "response": {
+    "total_count": 1,
+    "games": [
+      {
+        "appid": 103,
+        "name": "Recently Revisited",
+        "playtime_forever": 3000
+      }
+    ]
+  }
+}

@@ -12,6 +12,7 @@ This decomposition improves:
 """
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Mapping, Optional, TYPE_CHECKING
 
@@ -1044,12 +1045,15 @@ class SteamCardFactory(WidgetFactory):
         """Create one Steam card with normal overlay styling."""
         from core.dev_gates import is_steam_enabled
         from core.settings.models import WidgetPosition, coerce_widget_position
+        from core.steam.abandonment_issues import AbandonmentSelection, parse_appid_list
         from core.steam.achievement_pulse import AchievementPulseSelection
         from widgets.base_overlay_widget import OverlayPosition
+        from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
         from widgets.steam_components import achievement_pulse_authored_size
+        from widgets.steam_abandonment_components import abandonment_authored_size
 
-        if self._widget_name != "achievement_pulse" and not is_steam_enabled():
+        if self._widget_name not in {"achievement_pulse", "abandonment_issues"} and not is_steam_enabled():
             return None
         shared_steam_settings = steam_settings if isinstance(steam_settings, Mapping) else {}
         if not SettingsManager.to_bool(shared_steam_settings.get("enabled", True), True):
@@ -1097,42 +1101,99 @@ class SteamCardFactory(WidgetFactory):
                 "source": False,
                 "selected": False,
             }
-            widget = SteamCardWidget(
-                parent=parent,
-                definition=definition,
-                position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
-                initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
-                achievement_selection=AchievementPulseSelection(
-                    mode=str(config.get("selection_mode", "most_recent") or "most_recent"),
-                    custom_appid=_coerce_optional_appid(config.get("custom_appid")),
-                ),
-                achievement_field_visibility={
-                    field_id: SettingsManager.to_bool(
-                        config.get(f"show_{field_id}", default_value),
-                        default_value,
-                    )
-                    for field_id, default_value in field_defaults.items()
-                },
-                achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
-                achievement_show_latest_artwork=SettingsManager.to_bool(
-                    config.get("show_latest_achievement_artwork", True),
-                    True,
-                ),
-                achievement_show_artwork=achievement_show_artwork,
-                achievement_artwork_shape=achievement_artwork_shape,
-                achievement_square_artwork_size=int(config.get("square_artwork_size", 140)),
-                achievement_double_capsules=SettingsManager.to_bool(
-                    config.get(
-                        "double_capsules",
-                        config.get("double_capsule_long_data", True),
+            if definition.widget_id == "abandonment_issues":
+                abandonment_field_defaults = {
+                    "playtime": True,
+                    "queue": True,
+                    "source": False,
+                    "pinned": False,
+                }
+                widget = AbandonmentIssuesWidget(
+                    parent=parent,
+                    definition=definition,
+                    position=position_map.get(widget_position, OverlayPosition.BOTTOM_RIGHT),
+                    initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
+                    selection=AbandonmentSelection(
+                        mode=str(config.get("selection_mode", "smart_rotation") or "smart_rotation"),
+                        pinned_appid=_coerce_optional_appid(config.get("pinned_appid")),
+                        minimum_playtime_minutes=max(
+                            0,
+                            int(config.get("minimum_playtime_hours", 2)),
+                        )
+                        * 60,
+                        minimum_inactivity_days=max(
+                            0,
+                            int(config.get("minimum_inactivity_weeks", 12)),
+                        )
+                        * 7,
+                        never_show_appids=parse_appid_list(config.get("never_show_appids", ())),
                     ),
-                    True,
-                ),
-                achievement_capsule_font_size=int(config.get("capsule_font_size", 12)),
-                achievement_capsule_fill_color=achievement_capsule_fill,
-                achievement_capsule_border_color=achievement_capsule_border,
-                refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
-            )
+                    field_visibility={
+                        field_id: SettingsManager.to_bool(
+                            config.get(f"show_{field_id}", default_value),
+                            default_value,
+                        )
+                        for field_id, default_value in abandonment_field_defaults.items()
+                    },
+                    show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
+                    artwork_shape=str(config.get("artwork_shape", "square") or "square"),
+                    artwork_size=int(config.get("artwork_size", 140)),
+                    accent_color=parse_color_to_qcolor(
+                        config.get("accent_color", [222, 157, 88, 225])
+                    ),
+                    guilt_desaturater=SettingsManager.to_bool(
+                        config.get("guilt_desaturater", False),
+                        False,
+                    ),
+                    guilt_desaturation_strength=int(
+                        config.get("guilt_desaturation_strength", 55)
+                    ),
+                    rotation_interval_minutes=int(
+                        config.get("rotation_interval_minutes", 30)
+                    ),
+                    refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
+                    show_connection_info_icon=SettingsManager.to_bool(
+                        shared_steam_settings.get("show_connection_info_icon", True),
+                        True,
+                    ),
+                )
+            else:
+                widget = SteamCardWidget(
+                    parent=parent,
+                    definition=definition,
+                    position=position_map.get(widget_position, OverlayPosition.TOP_RIGHT),
+                    initial_view_model=SteamCardWidget.connect_required_model(definition.widget_id),
+                    achievement_selection=AchievementPulseSelection(
+                        mode=str(config.get("selection_mode", "most_recent") or "most_recent"),
+                        custom_appid=_coerce_optional_appid(config.get("custom_appid")),
+                    ),
+                    achievement_field_visibility={
+                        field_id: SettingsManager.to_bool(
+                            config.get(f"show_{field_id}", default_value),
+                            default_value,
+                        )
+                        for field_id, default_value in field_defaults.items()
+                    },
+                    achievement_latest_unlock_count=int(config.get("latest_unlock_count", 1)),
+                    achievement_show_latest_artwork=SettingsManager.to_bool(
+                        config.get("show_latest_achievement_artwork", True),
+                        True,
+                    ),
+                    achievement_show_artwork=achievement_show_artwork,
+                    achievement_artwork_shape=achievement_artwork_shape,
+                    achievement_square_artwork_size=int(config.get("square_artwork_size", 140)),
+                    achievement_double_capsules=SettingsManager.to_bool(
+                        config.get(
+                            "double_capsules",
+                            config.get("double_capsule_long_data", True),
+                        ),
+                        True,
+                    ),
+                    achievement_capsule_font_size=int(config.get("capsule_font_size", 12)),
+                    achievement_capsule_fill_color=achievement_capsule_fill,
+                    achievement_capsule_border_color=achievement_capsule_border,
+                    refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
+                )
 
             if hasattr(widget, "set_font_family"):
                 widget.set_font_family(str(config.get("font_family", "Inter") or "Inter"))
@@ -1172,6 +1233,14 @@ class SteamCardFactory(WidgetFactory):
                     )
                     width = int(authored_size.width())
                     height = int(authored_size.height())
+                elif definition.widget_id == "abandonment_issues" and (width, height) == (420, 180):
+                    authored_size = abandonment_authored_size(
+                        show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
+                        artwork_shape=str(config.get("artwork_shape", "square") or "square"),
+                        artwork_size=int(config.get("artwork_size", 140)),
+                    )
+                    width = int(math.ceil(authored_size.width()))
+                    height = int(math.ceil(authored_size.height()))
                 width = max(width, widget.minimumWidth())
                 height = max(height, widget.minimumHeight())
                 widget.setMinimumSize(width, height)
@@ -1227,9 +1296,9 @@ class WidgetFactoryRegistry:
         try:
             from core.dev_gates import is_steam_enabled
 
-            widget_names = ["achievement_pulse"]
+            widget_names = ["achievement_pulse", "abandonment_issues"]
             if is_steam_enabled():
-                widget_names.extend(("steam_progress", "abandonment_issues", "friend_pulse"))
+                widget_names.extend(("steam_progress", "friend_pulse"))
             for widget_name in widget_names:
                 self.register(
                     SteamCardFactory(

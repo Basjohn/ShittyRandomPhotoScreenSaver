@@ -14,6 +14,7 @@ from PySide6.QtGui import QColor, QFont, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QComboBox,
     QDialog,
     QFrame,
     QGraphicsDropShadowEffect,
@@ -29,6 +30,12 @@ from PySide6.QtWidgets import (
 
 from core.dev_gates import is_steam_enabled
 from core.resources.manager import ResourceManager
+from core.steam.abandonment_cache import load_owned_game_choices_from_cache
+from core.steam.abandonment_issues import (
+    AbandonmentSelection,
+    format_appid_list,
+    parse_appid_list,
+)
 from core.steam.achievement_pulse_cache import load_recent_game_titles_from_cache
 from core.steam.backend import validate_connection
 from core.steam.credentials import (
@@ -61,6 +68,12 @@ from widgets.steam_components import (
     ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
     ACHIEVEMENT_SQUARE_ARTWORK_MIN,
+)
+from widgets.steam_abandonment_components import (
+    ABANDONMENT_ACCENT_RGBA,
+    ABANDONMENT_ARTWORK_SIZE_DEFAULT,
+    ABANDONMENT_ARTWORK_SIZE_MAX,
+    ABANDONMENT_ARTWORK_SIZE_MIN,
 )
 
 if TYPE_CHECKING:
@@ -102,6 +115,26 @@ _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
 )
 _ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
 _ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
+_ABANDONMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("Smart Rotation", "smart_rotation"),
+    ("Pinned Game", "pinned_game"),
+)
+_ABANDONMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
+    ("Portrait", "square"),
+    ("Wide", "wide"),
+)
+_ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("playtime", "Show total playtime"),
+    ("queue", "Show shelf position"),
+    ("source", "Show source"),
+    ("pinned", "Show selection mode"),
+)
+_ABANDONMENT_FIELD_DEFAULTS = {
+    "playtime": True,
+    "queue": True,
+    "source": False,
+    "pinned": False,
+}
 
 
 def _coerce_rgba_color(value: object, fallback: tuple[int, int, int, int]) -> QColor:
@@ -130,6 +163,11 @@ def _rgba_payload(color: QColor) -> list[int]:
 
 def _set_achievement_capsule_color(tab: "WidgetsTab", attr_name: str, color: QColor) -> None:
     setattr(tab, attr_name, QColor(color))
+    tab._save_settings()
+
+
+def _set_abandonment_accent_color(tab: "WidgetsTab", color: QColor) -> None:
+    tab._abandonment_accent_color = QColor(color)
     tab._save_settings()
 
 
@@ -613,6 +651,171 @@ def _hydrate_achievement_selection_titles(tab: "WidgetsTab") -> None:
         _apply_achievement_selection_titles(tab, ())
 
 
+def _set_abandonment_pinned_appid(combo: StyledComboBox, appid: int | None) -> None:
+    for index in range(combo.count()):
+        if combo.itemData(index) == appid:
+            combo.setCurrentIndex(index)
+            return
+    if appid:
+        combo.addItem(f"App {appid}", appid)
+        combo.setCurrentIndex(combo.count() - 1)
+    else:
+        combo.setCurrentIndex(0)
+
+
+def _apply_abandonment_library_choices(
+    tab: "WidgetsTab",
+    choices: tuple[tuple[int, str], ...],
+) -> None:
+    combo = getattr(tab, "abandonment_issues_pinned_game", None)
+    if combo is None:
+        return
+    selected = combo.currentData()
+    if not selected:
+        selected = getattr(tab, "_abandonment_pending_pinned_appid", None)
+    blocker = QSignalBlocker(combo)
+    try:
+        combo.clear()
+        combo.addItem("Not set", None)
+        for appid, title in choices:
+            combo.addItem(title, appid)
+        _set_abandonment_pinned_appid(combo, int(selected) if selected else None)
+    finally:
+        del blocker
+
+
+def _hydrate_abandonment_library_choices(tab: "WidgetsTab") -> None:
+    """Populate the pin picker from one bounded cache read only."""
+
+    generation = int(getattr(tab, "_steam_library_choices_generation", 0)) + 1
+    tab._steam_library_choices_generation = generation
+    settings = getattr(tab, "_settings", None)
+    profile = settings.get_application_name() if settings is not None else None
+
+    def _read_choices() -> tuple[tuple[int, str], ...]:
+        metadata = read_credential_metadata(profile=profile)
+        if metadata is None:
+            return ()
+        return load_owned_game_choices_from_cache(
+            profile_key=metadata.profile_cache_key,
+            profile=profile,
+        )
+
+    def _finished(task_result) -> None:
+        def _apply_result() -> None:
+            if getattr(tab, "_steam_library_choices_generation", None) != generation:
+                return
+            choices = task_result.result if task_result.success else ()
+            _apply_abandonment_library_choices(tab, tuple(choices or ()))
+
+        ThreadManager.run_on_ui_thread(_apply_result)
+
+    try:
+        _get_steam_thread_manager(tab).submit_io_task(
+            _read_choices,
+            task_id=f"steam_abandonment_library_choices_{generation}",
+            callback=_finished,
+        )
+    except Exception:
+        _apply_abandonment_library_choices(tab, ())
+
+
+def _update_abandonment_controls(tab: "WidgetsTab") -> None:
+    mode = getattr(tab, "abandonment_issues_selection_mode", None)
+    pinned = getattr(tab, "abandonment_issues_pinned_game", None)
+    rotation = getattr(tab, "abandonment_issues_rotation_interval_minutes", None)
+    show_artwork = getattr(tab, "abandonment_issues_show_artwork", None)
+    shape = getattr(tab, "abandonment_issues_artwork_shape", None)
+    artwork_size = getattr(tab, "abandonment_issues_artwork_size", None)
+    guilt = getattr(tab, "abandonment_issues_guilt_desaturater", None)
+    guilt_strength = getattr(tab, "abandonment_issues_guilt_desaturation_strength", None)
+    pinned_mode = mode is not None and str(mode.currentData() or "") == "pinned_game"
+    if pinned is not None:
+        pinned.setEnabled(pinned_mode)
+    if rotation is not None:
+        rotation.setEnabled(not pinned_mode)
+    artwork_enabled = bool(show_artwork is not None and show_artwork.isChecked())
+    if shape is not None:
+        shape.setEnabled(artwork_enabled)
+    if artwork_size is not None:
+        artwork_size.setEnabled(artwork_enabled)
+    if guilt is not None:
+        guilt.setEnabled(artwork_enabled)
+    if guilt_strength is not None:
+        guilt_strength.setEnabled(
+            artwork_enabled and guilt is not None and guilt.isChecked()
+        )
+
+
+def _current_abandonment_selection(tab: "WidgetsTab") -> AbandonmentSelection:
+    pinned_data = tab.abandonment_issues_pinned_game.currentData()
+    return AbandonmentSelection(
+        mode=str(tab.abandonment_issues_selection_mode.currentData() or "smart_rotation"),
+        pinned_appid=int(pinned_data) if pinned_data else None,
+        minimum_playtime_minutes=int(tab.abandonment_issues_minimum_playtime_hours.value()) * 60,
+        minimum_inactivity_days=int(tab.abandonment_issues_minimum_inactivity_weeks.value()) * 7,
+        never_show_appids=parse_appid_list(tab.abandonment_issues_never_show_appids.text()),
+    )
+
+
+def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
+    """Run an explicit user-requested library refresh on the shared IO manager."""
+
+    button = tab.abandonment_issues_refresh_btn
+    status = tab.abandonment_issues_refresh_status
+    button.setEnabled(False)
+    status.setText("Refreshing the Steam library...")
+    status.setStyleSheet(STATUS_LABEL_STYLE)
+    generation = int(getattr(tab, "_steam_abandonment_refresh_generation", 0)) + 1
+    tab._steam_abandonment_refresh_generation = generation
+    selection = _current_abandonment_selection(tab)
+    rotation_minutes = int(tab.abandonment_issues_rotation_interval_minutes.value())
+
+    def _refresh():
+        from core.steam.abandonment_cache import refresh_abandonment_cache
+        from core.steam.credentials import SteamCredentialError, load_credentials
+
+        try:
+            credential = load_credentials()
+        except SteamCredentialError:
+            return None
+        if credential is None:
+            return None
+        return refresh_abandonment_cache(
+            credential=credential,
+            selection=selection,
+            force=True,
+            rotation_interval_minutes=rotation_minutes,
+        )
+
+    def _finished(task_result) -> None:
+        def _apply_result() -> None:
+            if getattr(tab, "_steam_abandonment_refresh_generation", None) != generation:
+                return
+            button.setEnabled(True)
+            outcome = task_result.result if task_result.success else None
+            if outcome is not None and outcome.snapshot.owned_result.ok:
+                status.setText("Steam library refreshed successfully.")
+                status.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #72d696;")
+                _hydrate_abandonment_library_choices(tab)
+                return
+            status.setText("Library refresh needs a working Steam connection or visible game details.")
+            status.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #efad5a;")
+
+        ThreadManager.run_on_ui_thread(_apply_result)
+
+    try:
+        _get_steam_thread_manager(tab).submit_io_task(
+            _refresh,
+            task_id=f"steam_abandonment_manual_refresh_{generation}",
+            callback=_finished,
+        )
+    except Exception:
+        button.setEnabled(True)
+        status.setText("Could not start the Steam library refresh.")
+        status.setStyleSheet(f"{STATUS_LABEL_STYLE} color: #ed7777;")
+
+
 def _set_combo_data(combo: StyledComboBox, value: str) -> None:
     for index in range(combo.count()):
         if combo.itemData(index) == value:
@@ -742,7 +945,7 @@ def _build_card_group(
         "appearance",
         "Appearance",
     )
-    if key == "achievement_pulse":
+    if key in {"achievement_pulse", "abandonment_issues"}:
         content_toggle, content_body, content_layout = _build_card_subbucket(
             tab,
             card_layout,
@@ -944,6 +1147,212 @@ def _build_card_group(
 
         _finalize_bucket_body(content_toggle, content_body)
 
+    elif key == "abandonment_issues":
+        selection_row = _aligned_row(content_layout, "Selection:")
+        selection_mode = StyledComboBox()
+        for label_text, mode in _ABANDONMENT_SELECTION_OPTIONS:
+            selection_mode.addItem(label_text, mode)
+        _set_combo_data(
+            selection_mode,
+            str(tab._widget_default(key, "selection_mode", "smart_rotation")),
+        )
+        selection_mode.currentIndexChanged.connect(tab._save_settings)
+        selection_mode.currentIndexChanged.connect(
+            lambda _index: _update_abandonment_controls(tab)
+        )
+        tab.abandonment_issues_selection_mode = selection_mode
+        selection_row.addWidget(selection_mode)
+        selection_row.addStretch()
+
+        pinned_row = _aligned_row(content_layout, "Pinned Game:")
+        pinned_game = StyledComboBox()
+        pinned_game.setEditable(True)
+        pinned_game.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        pinned_game.setMinimumWidth(260)
+        pinned_game.addItem("Not set", None)
+        pinned_game.completer().setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        pinned_game.completer().setFilterMode(Qt.MatchFlag.MatchContains)
+        pending_pinned = tab._widget_default(key, "pinned_appid", None)
+        try:
+            tab._abandonment_pending_pinned_appid = int(pending_pinned) if pending_pinned else None
+        except (TypeError, ValueError):
+            tab._abandonment_pending_pinned_appid = None
+        _set_abandonment_pinned_appid(
+            pinned_game,
+            tab._abandonment_pending_pinned_appid,
+        )
+        pinned_game.currentIndexChanged.connect(tab._save_settings)
+        tab.abandonment_issues_pinned_game = pinned_game
+        pinned_row.addWidget(pinned_game)
+        pinned_row.addStretch()
+
+        playtime_row = _aligned_row(content_layout, "Minimum Playtime:")
+        minimum_playtime = QSpinBox()
+        minimum_playtime.setRange(0, 10_000)
+        minimum_playtime.setSuffix(" h")
+        minimum_playtime.setValue(tab._default_int(key, "minimum_playtime_hours", 2))
+        minimum_playtime.setToolTip(
+            "Only Smart Rotation games with at least this much total playtime qualify."
+        )
+        minimum_playtime.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_minimum_playtime_hours = minimum_playtime
+        playtime_row.addWidget(minimum_playtime)
+        playtime_row.addStretch()
+
+        inactivity_row = _aligned_row(content_layout, "Minimum Inactivity:")
+        minimum_inactivity = QSpinBox()
+        minimum_inactivity.setRange(1, 1_000)
+        minimum_inactivity.setSuffix(" weeks")
+        minimum_inactivity.setValue(tab._default_int(key, "minimum_inactivity_weeks", 12))
+        minimum_inactivity.setToolTip(
+            "Only source-verified last-played timestamps older than this threshold qualify."
+        )
+        minimum_inactivity.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_minimum_inactivity_weeks = minimum_inactivity
+        inactivity_row.addWidget(minimum_inactivity)
+        inactivity_row.addStretch()
+
+        rotation_row = _aligned_row(content_layout, "Rotation Interval:")
+        rotation_interval = QSpinBox()
+        rotation_interval.setRange(5, 24 * 60)
+        rotation_interval.setSuffix(" min")
+        rotation_interval.setValue(tab._default_int(key, "rotation_interval_minutes", 30))
+        rotation_interval.setToolTip(
+            "How slowly Smart Rotation advances through already cached candidates. Rotation never requests Steam data."
+        )
+        rotation_interval.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_rotation_interval_minutes = rotation_interval
+        rotation_row.addWidget(rotation_interval)
+        rotation_row.addStretch()
+
+        never_row = _aligned_row(content_layout, "Never Show App IDs:")
+        never_show = QLineEdit()
+        never_show.setPlaceholderText("Example: 440, 570, 730")
+        never_show.setMinimumWidth(260)
+        never_show.setToolTip(
+            "Valid text is a comma, semicolon, space, or line-separated list of positive Steam app IDs."
+        )
+        never_show.setText(
+            format_appid_list(
+                parse_appid_list(tab._widget_default(key, "never_show_appids", ()))
+            )
+        )
+        never_show.editingFinished.connect(tab._save_settings)
+        tab.abandonment_issues_never_show_appids = never_show
+        never_row.addWidget(never_show)
+        never_row.addStretch()
+
+        refresh_row = QHBoxLayout()
+        refresh_button = QPushButton("Refresh Steam Library")
+        refresh_button.setToolTip(
+            "Explicitly refresh owned and recent games through the shared Steam request policy."
+        )
+        refresh_button.clicked.connect(lambda: _on_abandonment_manual_refresh(tab))
+        refresh_status = QLabel("")
+        refresh_status.setStyleSheet(STATUS_LABEL_STYLE)
+        refresh_status.setWordWrap(True)
+        tab.abandonment_issues_refresh_btn = refresh_button
+        tab.abandonment_issues_refresh_status = refresh_status
+        refresh_row.addWidget(refresh_button)
+        refresh_row.addWidget(refresh_status, 1)
+        content_layout.addLayout(refresh_row)
+
+        fields_label = QLabel("Displayed Ledger Fields:")
+        fields_label.setStyleSheet(INFO_LABEL_STYLE)
+        content_layout.addWidget(fields_label)
+        for field_id, label_text in _ABANDONMENT_FIELD_OPTIONS:
+            field_toggle = QCheckBox(label_text)
+            field_toggle.setProperty("circleIndicator", True)
+            fallback = _ABANDONMENT_FIELD_DEFAULTS[field_id]
+            field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
+            field_toggle.stateChanged.connect(tab._save_settings)
+            setattr(tab, f"abandonment_issues_show_{field_id}", field_toggle)
+            content_layout.addWidget(field_toggle)
+
+        artwork_row = _aligned_row(appearance_layout, "Artwork:")
+        show_artwork = QCheckBox("Show Archived Artwork")
+        show_artwork.setProperty("circleIndicator", True)
+        show_artwork.setChecked(tab._default_bool(key, "show_artwork", True))
+        show_artwork.stateChanged.connect(tab._save_settings)
+        show_artwork.stateChanged.connect(lambda _state: _update_abandonment_controls(tab))
+        tab.abandonment_issues_show_artwork = show_artwork
+        artwork_row.addWidget(show_artwork)
+        artwork_row.addStretch()
+
+        shape_row = _aligned_row(appearance_layout, "Artwork Shape:")
+        artwork_shape = StyledComboBox()
+        for shape_label, shape_value in _ABANDONMENT_ARTWORK_SHAPES:
+            artwork_shape.addItem(shape_label, shape_value)
+        _set_combo_data(
+            artwork_shape,
+            str(tab._widget_default(key, "artwork_shape", "square")),
+        )
+        artwork_shape.currentIndexChanged.connect(tab._save_settings)
+        tab.abandonment_issues_artwork_shape = artwork_shape
+        shape_row.addWidget(artwork_shape)
+        shape_row.addStretch()
+
+        artwork_size_row = _aligned_row(appearance_layout, "Artwork Size:")
+        artwork_size = QSpinBox()
+        artwork_size.setRange(
+            ABANDONMENT_ARTWORK_SIZE_MIN,
+            ABANDONMENT_ARTWORK_SIZE_MAX,
+        )
+        artwork_size.setValue(
+            tab._default_int(key, "artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT)
+        )
+        artwork_size.setSuffix(" px")
+        artwork_size.setToolTip(
+            "Portrait covers grow the authored card height as needed so artwork never clips."
+        )
+        artwork_size.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_artwork_size = artwork_size
+        artwork_size_row.addWidget(artwork_size)
+        artwork_size_row.addStretch()
+
+        accent_row = _aligned_row(appearance_layout, "Archive Accent:")
+        tab._abandonment_accent_color = _coerce_rgba_color(
+            tab._widget_default(key, "accent_color", ABANDONMENT_ACCENT_RGBA),
+            ABANDONMENT_ACCENT_RGBA,
+        )
+        accent_button = ColorSwatchButton(
+            tab._abandonment_accent_color,
+            title="Choose Abandonment Archive Accent",
+            show_alpha=True,
+        )
+        accent_button.color_changed.connect(
+            lambda color: _set_abandonment_accent_color(tab, color)
+        )
+        tab.abandonment_issues_accent_color_btn = accent_button
+        accent_row.addWidget(accent_button)
+        accent_row.addStretch()
+
+        guilt_row = _aligned_row(appearance_layout, "Guilt Desaturater:")
+        guilt = QCheckBox("Desaturate older artwork")
+        guilt.setProperty("circleIndicator", True)
+        guilt.setChecked(tab._default_bool(key, "guilt_desaturater", False))
+        guilt.setToolTip(
+            "Apply a smooth capped artwork-only desaturation curve from verified inactivity."
+        )
+        guilt.stateChanged.connect(tab._save_settings)
+        guilt.stateChanged.connect(lambda _state: _update_abandonment_controls(tab))
+        tab.abandonment_issues_guilt_desaturater = guilt
+        guilt_row.addWidget(guilt)
+        guilt_row.addStretch()
+
+        guilt_strength_row = _aligned_row(appearance_layout, "Maximum Desaturation:")
+        guilt_strength = QSpinBox()
+        guilt_strength.setRange(0, 100)
+        guilt_strength.setSuffix(" %")
+        guilt_strength.setValue(tab._default_int(key, "guilt_desaturation_strength", 55))
+        guilt_strength.valueChanged.connect(tab._save_settings)
+        tab.abandonment_issues_guilt_desaturation_strength = guilt_strength
+        guilt_strength_row.addWidget(guilt_strength)
+        guilt_strength_row.addStretch()
+
+        _update_abandonment_controls(tab)
+        _finalize_bucket_body(content_toggle, content_body)
+
     _finalize_bucket_body(appearance_toggle, appearance_body)
 
     status = QLabel("")
@@ -990,9 +1399,9 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     connection_layout.setSpacing(12)
 
     info = QLabel(
-        "Achievement Pulse is available normally; unfinished Steam Journey, Abandonment Issues, and Friend Pulse "
+        "Achievement Pulse and Abandonment Issues are available normally; unfinished Steam Journey and Friend Pulse "
         "remain hidden unless --devsteam is used. Opening this section reads encrypted-storage availability and "
-        "one cached recent-games record only; it never decrypts credentials or contacts Steam."
+        "bounded cached game records only; it never decrypts credentials or contacts Steam."
     )
     info.setWordWrap(True)
     info.setStyleSheet(INFO_LABEL_STYLE)
@@ -1075,9 +1484,10 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
             key,
             label,
             fallback_position,
-            visible=key == "achievement_pulse" or show_unfinished_cards,
+            visible=key in {"achievement_pulse", "abandonment_issues"} or show_unfinished_cards,
         )
     _hydrate_achievement_selection_titles(tab)
+    _hydrate_abandonment_library_choices(tab)
 
     root.addWidget(tab._steam_controls_container)
     tab.steam_enabled.stateChanged.connect(lambda _state: _update_steam_enabled_visibility(tab))
@@ -1233,9 +1643,74 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                 )
             _update_achievement_artwork_controls(tab)
             _update_achievement_latest_controls(tab)
+        elif key == "abandonment_issues":
+            _set_combo_data(
+                tab.abandonment_issues_selection_mode,
+                str(config.get("selection_mode", tab._default_str(key, "selection_mode", "smart_rotation"))),
+            )
+            pinned_value = config.get("pinned_appid", tab._widget_default(key, "pinned_appid", None))
+            try:
+                tab._abandonment_pending_pinned_appid = int(pinned_value) if pinned_value else None
+            except (TypeError, ValueError):
+                tab._abandonment_pending_pinned_appid = None
+            _set_abandonment_pinned_appid(
+                tab.abandonment_issues_pinned_game,
+                tab._abandonment_pending_pinned_appid,
+            )
+            for setting_key, attr_name, fallback in (
+                ("minimum_playtime_hours", "abandonment_issues_minimum_playtime_hours", 2),
+                ("minimum_inactivity_weeks", "abandonment_issues_minimum_inactivity_weeks", 12),
+                ("rotation_interval_minutes", "abandonment_issues_rotation_interval_minutes", 30),
+                ("artwork_size", "abandonment_issues_artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT),
+                ("guilt_desaturation_strength", "abandonment_issues_guilt_desaturation_strength", 55),
+            ):
+                try:
+                    getattr(tab, attr_name).setValue(
+                        int(config.get(setting_key, tab._default_int(key, setting_key, fallback)))
+                    )
+                except (TypeError, ValueError):
+                    getattr(tab, attr_name).setValue(fallback)
+            tab.abandonment_issues_never_show_appids.setText(
+                format_appid_list(
+                    parse_appid_list(
+                        config.get(
+                            "never_show_appids",
+                            tab._widget_default(key, "never_show_appids", ()),
+                        )
+                    )
+                )
+            )
+            tab.abandonment_issues_show_artwork.setChecked(
+                bool(config.get("show_artwork", tab._default_bool(key, "show_artwork", True)))
+            )
+            _set_combo_data(
+                tab.abandonment_issues_artwork_shape,
+                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "square"))),
+            )
+            tab._abandonment_accent_color = _coerce_rgba_color(
+                config.get(
+                    "accent_color",
+                    tab._widget_default(key, "accent_color", ABANDONMENT_ACCENT_RGBA),
+                ),
+                ABANDONMENT_ACCENT_RGBA,
+            )
+            tab.abandonment_issues_accent_color_btn.set_color(
+                tab._abandonment_accent_color
+            )
+            tab.abandonment_issues_guilt_desaturater.setChecked(
+                bool(config.get("guilt_desaturater", tab._default_bool(key, "guilt_desaturater", False)))
+            )
+            for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
+                fallback = _ABANDONMENT_FIELD_DEFAULTS[field_id]
+                getattr(tab, f"abandonment_issues_show_{field_id}").setChecked(
+                    bool(config.get(f"show_{field_id}", tab._default_bool(key, f"show_{field_id}", fallback)))
+                )
+            tab.abandonment_issues_refresh_status.clear()
+            _update_abandonment_controls(tab)
 
     _update_steam_enabled_visibility(tab)
     _hydrate_saved_connection_status(tab)
+    _hydrate_abandonment_library_choices(tab)
 
 
 def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
@@ -1269,6 +1744,46 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["latest_unlock_count"] = int(tab.achievement_pulse_latest_unlock_count.value())
         for field_id, _label_text in _ACHIEVEMENT_FIELD_OPTIONS:
             payload[f"show_{field_id}"] = bool(getattr(tab, f"achievement_pulse_show_{field_id}").isChecked())
+    elif key == "abandonment_issues":
+        payload["selection_mode"] = str(
+            tab.abandonment_issues_selection_mode.currentData() or "smart_rotation"
+        )
+        pinned_data = tab.abandonment_issues_pinned_game.currentData()
+        payload["pinned_appid"] = int(pinned_data) if pinned_data else None
+        payload["minimum_playtime_hours"] = int(
+            tab.abandonment_issues_minimum_playtime_hours.value()
+        )
+        payload["minimum_inactivity_weeks"] = int(
+            tab.abandonment_issues_minimum_inactivity_weeks.value()
+        )
+        payload["rotation_interval_minutes"] = int(
+            tab.abandonment_issues_rotation_interval_minutes.value()
+        )
+        normalized_never_show = parse_appid_list(
+            tab.abandonment_issues_never_show_appids.text()
+        )
+        payload["never_show_appids"] = list(normalized_never_show)
+        tab.abandonment_issues_never_show_appids.setText(
+            format_appid_list(normalized_never_show)
+        )
+        payload["show_artwork"] = bool(
+            tab.abandonment_issues_show_artwork.isChecked()
+        )
+        payload["artwork_shape"] = str(
+            tab.abandonment_issues_artwork_shape.currentData() or "square"
+        )
+        payload["artwork_size"] = int(tab.abandonment_issues_artwork_size.value())
+        payload["accent_color"] = _rgba_payload(tab._abandonment_accent_color)
+        payload["guilt_desaturater"] = bool(
+            tab.abandonment_issues_guilt_desaturater.isChecked()
+        )
+        payload["guilt_desaturation_strength"] = int(
+            tab.abandonment_issues_guilt_desaturation_strength.value()
+        )
+        for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
+            payload[f"show_{field_id}"] = bool(
+                getattr(tab, f"abandonment_issues_show_{field_id}").isChecked()
+            )
     return payload
 
 

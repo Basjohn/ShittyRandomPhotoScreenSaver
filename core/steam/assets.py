@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -52,6 +53,25 @@ def find_cached_asset(cache_dir: Path, url: str) -> Path | None:
     return None
 
 
+def steam_app_artwork_url(appid: int, artwork_shape: str) -> str:
+    """Return the allowlisted public artwork URL for one Steam app."""
+
+    safe_appid = max(1, int(appid))
+    shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    return _STEAM_APP_ARTWORK_URLS[shape].format(appid=safe_appid)
+
+
+def find_cached_steam_app_artwork(
+    *,
+    cache_dir: Path,
+    appid: int,
+    artwork_shape: str,
+) -> Path | None:
+    """Return cached app artwork without allowing a rotation to cause network IO."""
+
+    return find_cached_asset(cache_dir, steam_app_artwork_url(appid, artwork_shape))
+
+
 def fetch_steam_app_header(
     *,
     cache_dir: Path,
@@ -77,9 +97,7 @@ def fetch_steam_app_artwork(
 ) -> SteamAssetRecord | SteamResult:
     """Load the public header or portrait library capsule for one app."""
 
-    safe_appid = max(1, int(appid))
-    shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
-    url = _STEAM_APP_ARTWORK_URLS[shape].format(appid=safe_appid)
+    url = steam_app_artwork_url(appid, artwork_shape)
     cached = find_cached_asset(cache_dir, url)
     if cached is not None:
         return SteamAssetRecord(
@@ -93,6 +111,70 @@ def fetch_steam_app_artwork(
         url=url,
         fetcher=fetcher or _default_fetch_asset,
     )
+
+
+def abandonment_desaturation_bucket(
+    *,
+    inactivity_days: int | None,
+    enabled: bool,
+    maximum_percent: int,
+    threshold_days: int,
+) -> int:
+    """Return a smooth capped 5% artwork-only desaturation bucket."""
+
+    if not enabled or inactivity_days is None:
+        return 0
+    maximum = max(0, min(100, int(maximum_percent)))
+    excess_days = max(0, int(inactivity_days) - max(0, int(threshold_days)))
+    if maximum <= 0 or excess_days <= 0:
+        return 0
+    strength = maximum * (1.0 - math.exp(-excess_days / 240.0))
+    return max(0, min(maximum, int(round(strength / 5.0) * 5)))
+
+
+def prepare_desaturated_steam_artwork(
+    *,
+    source_path: Path,
+    cache_dir: Path,
+    desaturation_percent: int,
+) -> Path:
+    """Prepare one cached artwork transform outside paint and return its path."""
+
+    strength = max(0, min(100, int(desaturation_percent)))
+    if strength <= 0:
+        return source_path
+    source_stat = source_path.stat()
+    identity = (
+        f"{source_path.name}:{source_stat.st_size}:{source_stat.st_mtime_ns}:"
+        f"desaturation:{strength}"
+    )
+    fingerprint = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    output_path = cache_dir / f"{fingerprint}.png"
+    if output_path.is_file() and output_path.stat().st_size > 0:
+        return output_path
+
+    from PIL import Image, ImageEnhance
+
+    tmp_path = output_path.with_name(f"{output_path.name}.tmp")
+    try:
+        with Image.open(source_path) as image:
+            prepared = ImageEnhance.Color(image.convert("RGBA")).enhance(1.0 - strength / 100.0)
+            prepared.save(tmp_path, format="PNG", optimize=True)
+        tmp_path.replace(output_path)
+        return output_path
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        logger.warning(
+            "[STEAM] Could not prepare abandonment artwork source_hash=%s strength=%s",
+            hashlib.sha256(source_path.name.encode("utf-8")).hexdigest()[:12],
+            strength,
+            exc_info=True,
+        )
+        return source_path
 
 
 def fetch_steam_achievement_icon(

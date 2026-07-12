@@ -1,0 +1,48 @@
+{
+  "response": {
+    "game_count": 7,
+    "games": [
+      {
+        "appid": 101,
+        "name": "The Long Archive",
+        "playtime_forever": 6000,
+        "rtime_last_played": 1900000000
+      },
+      {
+        "appid": 102,
+        "name": "Brief Bounce",
+        "playtime_forever": 60,
+        "rtime_last_played": 1900000000
+      },
+      {
+        "appid": 103,
+        "name": "Recently Revisited",
+        "playtime_forever": 3000,
+        "rtime_last_played": 1950000000
+      },
+      {
+        "appid": 104,
+        "name": "Unknown History",
+        "playtime_forever": 1200,
+        "rtime_last_played": 0
+      },
+      {
+        "appid": 105,
+        "name": "Impossible Future",
+        "playtime_forever": 900,
+        "rtime_last_played": 2000100000
+      },
+      {
+        "appid": 106,
+        "name": "Quiet Return",
+        "playtime_forever": 240,
+        "rtime_last_played": 1992000000
+      },
+      {
+        "appid": 107,
+        "playtime_forever": 500,
+        "rtime_last_played": 1800000000
+      }
+    ]
+  }
+}
