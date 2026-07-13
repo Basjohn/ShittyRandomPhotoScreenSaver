@@ -13,13 +13,13 @@ import time
 from typing import Any, Sequence
 
 from core.settings.visualizer_blob_contract import (
-    BLOB_TYPE_MIGHTY,
     BLOB_TYPE_SHAPED,
     normalize_blob_type,
 )
 from widgets.spotify_visualizer.blob_pockets import build_blob_pocket_uniform_payload
 from widgets.spotify_visualizer.blob_tendril_runtime import (
     TENDRIL_COUNT,
+    advance_blob_tendril_state,
     build_blob_tendril_payload,
 )
 from widgets.spotify_visualizer.renderers.blob_shaper_runtime import (
@@ -135,13 +135,77 @@ def _runtime_profile_attr(blob_type: str) -> str:
     )
 
 
+def _advance_tendril_transport(
+    state: Any,
+    *,
+    blob_type: str,
+    profile: Sequence[float],
+) -> None:
+    """Advance cheap Blob-only display geometry at every state handoff."""
+
+    started = time.perf_counter()
+    target_geometry, target_motion = build_blob_tendril_payload(
+        state,
+        blob_type=blob_type,
+        profile=profile,
+    )
+    target_active_tendrils = sum(
+        1
+        for idx in range(TENDRIL_COUNT)
+        if float(target_geometry[idx * 4 + 1]) > 0.002
+    )
+    setattr(state, "_blob_tendril_target_active_count", target_active_tendrils)
+    tendril_geometry, _tendril_motion = advance_blob_tendril_state(
+        state,
+        blob_type=blob_type,
+        target_geometry=target_geometry,
+        target_motion=target_motion,
+    )
+    active_tendrils = sum(
+        1
+        for idx in range(TENDRIL_COUNT)
+        if float(tendril_geometry[idx * 4 + 1]) > 0.002
+    )
+    setattr(state, "_blob_tendril_active_count", active_tendrils)
+    setattr(
+        state,
+        "_blob_tendril_max_reach",
+        max(
+            (float(tendril_geometry[idx * 4 + 1]) for idx in range(TENDRIL_COUNT)),
+            default=0.0,
+        ),
+    )
+    transport_ms = (time.perf_counter() - started) * 1000.0
+    setattr(state, "_blob_tendril_transport_ms", transport_ms)
+    setattr(
+        state,
+        "_blob_tendril_transport_total_ms",
+        float(getattr(state, "_blob_tendril_transport_total_ms", 0.0) or 0.0)
+        + transport_ms,
+    )
+    setattr(
+        state,
+        "_blob_tendril_transport_max_ms",
+        max(
+            float(getattr(state, "_blob_tendril_transport_max_ms", 0.0) or 0.0),
+            transport_ms,
+        ),
+    )
+    setattr(
+        state,
+        "_blob_tendril_transport_count",
+        int(getattr(state, "_blob_tendril_transport_count", 0) or 0) + 1,
+    )
+
+
 def advance_blob_runtime_profile(state: Any, *, force: bool = False) -> list[float]:
     """Advance the selected Blob subtype at a bounded contour cadence.
 
     Audio snapshots can arrive at roughly 90 Hz and compositor paints may be
     even more frequent. A 128-sample spring solve at that cadence multiplied
-    poorly across displays. Forty-five contour updates per second retain fluid
-    motion while cutting the Blob-only UI-thread budget roughly in half.
+    poorly across displays. Thirty contour solves per second retain fluid body
+    motion; the much cheaper tendril display transport still advances on every
+    coherent state handoff so its visual easing does not become stair-stepped.
     """
 
     blob_type = normalize_blob_type(
@@ -174,7 +238,13 @@ def advance_blob_runtime_profile(state: Any, *, force: bool = False) -> list[flo
             "_blob_profile_skip_count",
             int(getattr(state, "_blob_profile_skip_count", 0) or 0) + 1,
         )
-        return existing if isinstance(existing, list) else list(existing)
+        cached_profile = existing if isinstance(existing, list) else list(existing)
+        _advance_tendril_transport(
+            state,
+            blob_type=blob_type,
+            profile=cached_profile,
+        )
+        return cached_profile
 
     started = time.perf_counter()
     if blob_type == BLOB_TYPE_SHAPED:
@@ -205,26 +275,10 @@ def advance_blob_runtime_profile(state: Any, *, force: bool = False) -> list[flo
             overall=overall,
         )
 
-    tendril_geometry, tendril_motion = build_blob_tendril_payload(
+    _advance_tendril_transport(
         state,
         blob_type=blob_type,
         profile=profile,
-    )
-    setattr(state, "_blob_tendril_geometry", tendril_geometry)
-    setattr(state, "_blob_tendril_motion", tendril_motion)
-    active_tendrils = sum(
-        1
-        for idx in range(TENDRIL_COUNT)
-        if float(tendril_geometry[idx * 4 + 1]) > 0.002
-    )
-    setattr(state, "_blob_tendril_active_count", active_tendrils)
-    setattr(
-        state,
-        "_blob_tendril_max_reach",
-        max(
-            (float(tendril_geometry[idx * 4 + 1]) for idx in range(TENDRIL_COUNT)),
-            default=0.0,
-        ),
     )
 
     generation = int(getattr(state, "_blob_profile_generation", 0) or 0) + 1

@@ -927,6 +927,7 @@ def _solve_runtime_shaper_profile_step(
     base_strength: float = 1.0,
     seed: float = 0.0,
     transient: float = 0.0,
+    filled_topology: bool = False,
 ) -> tuple[list[float], list[float], list[float]]:
     count = min(len(base_profile), len(react_profile))
     if count <= 0:
@@ -1012,6 +1013,41 @@ def _solve_runtime_shaper_profile_step(
         max(min_profile[idx], min(max_profile[idx], target_profile[idx] + residual_profile[idx]))
         for idx in range(count)
     ]
+    if filled_topology:
+        # Filled silhouettes cannot use the ring's effectively unbounded
+        # negative space to separate very deep and very tall authored lobes.
+        # Keep the goal recognisable, but softly compress only its scalar
+        # inflation and extreme centered range. Ring deliberately retains the
+        # wider mutation budget that makes its hollow topology successful.
+        base_mean = math.fsum(resolved_base_profile) / count
+        target_mean = math.fsum(target_profile) / count
+        stable_mean = _clamp(
+            target_mean,
+            max(0.72, base_mean - 0.14),
+            max(1.18, base_mean + 0.18),
+        )
+        centered_limit = 0.41
+        target_profile = [
+            stable_mean
+            + math.tanh((value - target_mean) / centered_limit) * centered_limit
+            for value in target_profile
+        ]
+        filled_max = min(1.70, stable_mean + 0.45)
+        filled_min = min(filled_max, max(0.62, stable_mean - 0.45))
+        # Clamp both sides through the same monotonic interval. Authored Filled
+        # contours can legitimately exceed the visual cap; independently
+        # raising the low side and lowering the high side inverted the solver
+        # interval for those samples and let the nominal low bound exceed 1.70.
+        min_profile = [
+            _clamp(value, filled_min, filled_max) for value in min_profile
+        ]
+        max_profile = [
+            _clamp(value, filled_min, filled_max) for value in max_profile
+        ]
+        target_profile = [
+            _clamp(target_profile[idx], min_profile[idx], max_profile[idx])
+            for idx in range(count)
+        ]
     target_profile = slew_profile_toward_target(
         previous_target=previous_target_profile,
         current_target=target_profile,
@@ -1020,6 +1056,11 @@ def _solve_runtime_shaper_profile_step(
         attack_hz=22.0,
         release_hz=7.0 if playing else 3.8,
     )
+    if filled_topology:
+        target_profile = [
+            _clamp(target_profile[idx], min_profile[idx], max_profile[idx])
+            for idx in range(count)
+        ]
 
     current_profile = list(previous_profile or ())
     current_velocity = list(previous_velocity or ())
@@ -1077,6 +1118,14 @@ def _resolve_runtime_shaper_profile(
         setattr(s, "_blob_shaper_solver_seed", seed)
 
     transient = _get_shaper_transient_energy(s)
+    filled_topology = getattr(s, "_blob_topology", "circle") != "ring"
+    topology_signature = "filled" if filled_topology else "ring"
+    if getattr(s, "_blob_shaper_runtime_topology", None) != topology_signature:
+        setattr(s, "_blob_shaper_runtime_profile", None)
+        setattr(s, "_blob_shaper_runtime_velocity", None)
+        setattr(s, "_blob_shaper_runtime_target_profile", None)
+        dt = 1.0 / 60.0
+
     solved_profile, solved_velocity, target_profile = _solve_runtime_shaper_profile_step(
         base_profile=base_profile,
         react_profile=react_profile,
@@ -1097,9 +1146,11 @@ def _resolve_runtime_shaper_profile(
         shaper_audio_motion=float(getattr(s, "_blob_shaper_audio_motion", 1.20)),
         playing=bool(getattr(s, "_playing", False)),
         seed=float(seed),
+        filled_topology=filled_topology,
     )
     setattr(s, "_blob_shaper_runtime_profile", solved_profile)
     setattr(s, "_blob_shaper_runtime_velocity", solved_velocity)
     setattr(s, "_blob_shaper_runtime_target_profile", target_profile)
+    setattr(s, "_blob_shaper_runtime_topology", topology_signature)
     setattr(s, "_blob_shaper_solver_ts", current_ts)
     return solved_profile

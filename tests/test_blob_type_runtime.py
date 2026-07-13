@@ -151,6 +151,12 @@ def test_blob_variant_reset_clears_both_solver_families_and_ghost_shape():
         _blob_shaper_runtime_profile=[0.8],
         _blob_shaper_runtime_velocity=[-0.1],
         _blob_shaper_runtime_target_profile=[0.9],
+        _blob_shaper_runtime_topology="ring",
+        _blob_tendril_geometry=[0.1] * 48,
+        _blob_tendril_motion=[0.2] * 48,
+        _blob_tendril_target_geometry=[0.3] * 48,
+        _blob_tendril_target_motion=[0.4] * 48,
+        _blob_tendril_transport_type="mighty",
         _blob_runtime_diag_profile=[1.4],
         _blob_profile_transport_sig=("mighty", 7, 128),
         _blob_peak_energy=1.0,
@@ -164,6 +170,10 @@ def test_blob_variant_reset_clears_both_solver_families_and_ghost_shape():
     reset_blob_variant_state(state)
     assert state._blob_unshaped_runtime_profile is None
     assert state._blob_shaper_runtime_profile is None
+    assert state._blob_shaper_runtime_topology is None
+    assert state._blob_tendril_geometry is None
+    assert state._blob_tendril_target_geometry is None
+    assert state._blob_tendril_transport_type is None
     assert state._blob_runtime_diag_profile is None
     assert state._blob_profile_transport_sig is None
     assert state._blob_peak_energy == 0.0

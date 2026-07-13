@@ -304,7 +304,8 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             "peaks=%d anchors=%s detail_rms=%.4f "
             "solve_ms(last=%.2f,avg=%.2f,max=%.2f) generation=%d "
             "cadence(requests=%d,computed=%d,skipped=%d) geometry_builds=%d "
-            "tendrils(active=%d,max_reach=%.3f) "
+            "tendrils(active=%d,target_active=%d,reach=%.3f,target=%.3f,step=(%.4f,%.4f),"
+            "transport_ms=(%.3f,%.3f,%.3f)) vocal_gpu=%.2f "
             "est_px(span=%.1f,centered_delta=%.1f)",
             blob_type,
             len(profile),
@@ -344,7 +345,16 @@ def maybe_log_runtime_profile(logger, s, *, blob_type: str, profile: list[float]
             int(getattr(s, "_blob_profile_skip_count", 0) or 0),
             int(getattr(s, "_blob_shaper_geometry_build_count", 0) or 0),
             int(getattr(s, "_blob_tendril_active_count", 0) or 0),
+            int(getattr(s, "_blob_tendril_target_active_count", 0) or 0),
             float(getattr(s, "_blob_tendril_max_reach", 0.0) or 0.0),
+            float(getattr(s, "_blob_tendril_target_max_reach", 0.0) or 0.0),
+            float(getattr(s, "_blob_tendril_max_step_reach", 0.0) or 0.0),
+            float(getattr(s, "_blob_tendril_max_step_angle", 0.0) or 0.0),
+            float(getattr(s, "_blob_tendril_transport_ms", 0.0) or 0.0),
+            float(getattr(s, "_blob_tendril_transport_total_ms", 0.0) or 0.0)
+            / max(1, int(getattr(s, "_blob_tendril_transport_count", 0) or 0)),
+            float(getattr(s, "_blob_tendril_transport_max_ms", 0.0) or 0.0),
+            gpu_vocal_wobble_strength(s, blob_type=blob_type),
             (profile_max - profile_min) * base_radius_px,
             centered_rms_delta * base_radius_px,
         )

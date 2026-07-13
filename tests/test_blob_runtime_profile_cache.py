@@ -109,6 +109,10 @@ def test_profile_cadence_caps_ninety_hz_handoffs_near_thirty_hz(monkeypatch) -> 
     assert 28 <= state._blob_profile_compute_count <= 31
     assert state._blob_profile_skip_count >= 59
     assert state._blob_profile_generation == state._blob_profile_compute_count
+    # The expensive contour remains capped, while the cheap displayed-geometry
+    # morph follows every coherent state handoff instead of stepping at 30 Hz.
+    assert state._blob_tendril_transport_count == 90
+    assert state._blob_tendril_transport_max_ms > 0.0
 
 
 def test_shaped_static_geometry_builds_once_until_authored_nodes_change() -> None:

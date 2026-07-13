@@ -282,3 +282,85 @@ def test_vocals_materially_wobble_shaped_final_contour_not_only_glow() -> None:
 
     assert vocal_detail > 0.017
     assert vocal_detail > quiet_detail * 2.4
+
+
+def test_shaped_filled_softly_bounds_extremes_without_flattening_ring() -> None:
+    count = 128
+    base = [1.0 + math.sin(math.tau * idx / count) * 0.50 for idx in range(count)]
+    reaction = [
+        1.35
+        + math.sin(math.tau * 2.0 * idx / count + 0.3) * 0.70
+        for idx in range(count)
+    ]
+    weights = [
+        [1.0 if idx < count // 2 else -1.0 for idx in range(count)],
+        *([[0.0] * count] * 4),
+    ]
+
+    def _run(*, filled: bool) -> list[float]:
+        profile = velocity = target = None
+        for frame in range(60):
+            profile, velocity, target = _solve_runtime_shaper_profile_step(
+                base_profile=base,
+                react_profile=reaction,
+                weights=weights,
+                previous_profile=profile,
+                previous_velocity=velocity,
+                previous_target_profile=target,
+                dt=1.0 / 45.0,
+                time_value=frame / 45.0,
+                bass=1.0,
+                mid=1.0,
+                high=1.0,
+                overall=1.0,
+                transient=0.50,
+                react_strength=1.0,
+                shaper_idle_motion=0.50,
+                shaper_audio_motion=1.85,
+                playing=True,
+                base_strength=1.0,
+                seed=0.37,
+                filled_topology=filled,
+            )
+        return list(profile)
+
+    ring = _run(filled=False)
+    filled = _run(filled=True)
+    filled_mean = math.fsum(filled) / count
+
+    assert min(filled) > 0.61
+    assert max(filled) < 1.66
+    assert filled_mean < 1.21
+    assert max(filled) - min(filled) > 0.55
+    assert max(ring) - min(ring) > max(filled) - min(filled) + 0.50
+
+
+def test_shaped_filled_high_authored_radii_cannot_invert_solver_bounds() -> None:
+    count = 128
+    profile, velocity, target = _solve_runtime_shaper_profile_step(
+        base_profile=[2.274] * count,
+        react_profile=[3.763] * count,
+        weights=[[0.0] * count for _ in range(5)],
+        previous_profile=None,
+        previous_velocity=None,
+        previous_target_profile=None,
+        dt=1.0 / 45.0,
+        time_value=1.0,
+        bass=1.0,
+        mid=1.0,
+        high=1.0,
+        overall=1.0,
+        transient=0.5,
+        react_strength=1.0,
+        shaper_idle_motion=0.5,
+        shaper_audio_motion=1.85,
+        playing=True,
+        base_strength=1.0,
+        seed=0.37,
+        filled_topology=True,
+    )
+
+    assert len(profile) == len(velocity) == len(target) == count
+    assert min(profile) >= 0.62
+    assert max(profile) <= 1.70
+    assert max(target) <= 1.70

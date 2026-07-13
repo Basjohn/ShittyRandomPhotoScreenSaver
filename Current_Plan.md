@@ -18,11 +18,11 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ### Blob Dynamic Morphology And Active-Mode Performance, Dev-Gated
 
-- [ ] Use the 2026-07-12 live Blob/profile/performance logs to quantify the repeated-silhouette failure, vocal/tendril response, active-mode render cost, and any first-frame/type bleed without changing shared audio or another visualizer mode.
-- [ ] Replace Mighty’s fixed recognizable basis with rounded Blob-owned mutations whose lobe count, width, reach, and local anchor family alter over time and musical events; keep vocal outline wobble independently visible, make tendrils grow/retract instead of orbit, and never reveal a circular support body or sharp radial cut.
-- [ ] Give Shaped equivalent dynamic life beyond its authored goal through topology-preserving warps, local mutations, light tendrils, and vocal/transient contour wobble that return cleanly without merely scaling the same silhouette.
-- [ ] Remove or cache redundant per-paint Blob contour work so Blob-active cadence and application responsiveness remain comparable to healthy visualizer modes, including multi-display/runtime refresh paths.
-- [ ] Add final-profile sequence oracles that reject repeated silhouettes and size-only motion, measure vocal/event correlation plus morphology change at fixed angles, and pair them with Blob-focused perf bars, startup/settings/type-boundary checks, curated/Custom smoke coverage, and the unchanged current-good visualizer lock.
+- [ ] Run a fresh `-devblob --viz --perf` pass through temporary presets 5-8 and Custom: Mighty must show one-to-three broad lifecycle limbs that visibly grow, hold, retract to zero, and reappear at new hidden-retargeted sites without a fixed splat, orbit, flicker, circular fallback, or sharp groove; vocal contour motion must remain independently visible.
+- [ ] In the same pass, verify Shaped Filled retains its authored goal inside the filled-only soft bounds while still mutating, and Shaped Ring keeps the wider negative-space warps, light migrating tendrils, and vocal/transient contour wobble that made Ring the stronger live reference.
+- [ ] Confirm fresh `[BLOB_PROFILE]` transport telemetry stays near the bounded 30 Hz contour cadence while tendril display transport follows every coherent handoff, target/display lane counts remain sparse, per-step reach/angle deltas stay bounded, and Blob-active paint/tick cadence remains comparable to healthy modes on all displays.
+- [ ] Exercise startup, settings close, subtype switches, preset cycling, and reset: require current-generation authority after any expected primer, no Mighty/Shaped geometry inheritance, no fallback/first-frame poison, and unchanged Bubble/Spectrum/shared-audio behavior.
+- [ ] After the live visual gate passes, rerun the Blob architecture/UI/preset locks plus the current-good visualizer lock, then prune this task instead of retaining implementation history here.
 
 ### Steam Abandonment Issues Production Runtime Bar
 

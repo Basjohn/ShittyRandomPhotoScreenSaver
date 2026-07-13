@@ -1,5 +1,5 @@
 {
-  "description": "TEMP showcase: a lighter hollow-ring Shaped Blob with gentle contour wobble, fine vocal mutations, and short feather-like tendrils instead of heavy radial spikes.",
+  "description": "TEMP showcase: a hollow-ring Shaped Blob with pronounced contour wobble, migrating vocal mutations, and light rounded tendrils instead of a fixed goal silhouette.",
   "mode": "blob",
   "name": "Preset 8 (TEMP Shaped Feather Tendrils)",
   "preset_index": 7,
@@ -189,10 +189,10 @@
             1.14
           ]
         ],
-        "blob_shaper_audio_motion": 1.22,
+        "blob_shaper_audio_motion": 1.75,
         "blob_shaper_base_strength": 0.72,
-        "blob_shaper_idle_motion": 0.45,
-        "blob_shaper_react_strength": 0.68,
+        "blob_shaper_idle_motion": 0.55,
+        "blob_shaper_react_strength": 0.78,
         "blob_size": 0.5,
         "blob_stage_bias": -0.14,
         "blob_stage_gain": 0.62,

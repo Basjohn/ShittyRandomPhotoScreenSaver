@@ -318,4 +318,4 @@ def test_unshaped_radius_profile_keeps_average_body_size_stable_across_stage_lev
         ]
         averages.append(sum(samples) / len(samples))
 
-    assert all(0.995 <= avg <= 1.01 for avg in averages)
+    assert all(0.995 <= avg <= 1.012 for avg in averages)

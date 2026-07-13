@@ -142,103 +142,6 @@ float resolved_profile_radius(
     return max(staged_radius * runtime_mult, staged_radius * shaped_support_floor);
 }
 
-float blob_tendril_sdf(
-    vec2 p,
-    float calm_radius,
-    float staged_radius,
-    vec3 stage_progress)
-{
-    float result = 1000.0;
-    for (int idx = 0; idx < BLOB_TENDRIL_N; ++idx) {
-        if (idx >= u_blob_tendril_count) {
-            break;
-        }
-        vec4 geometry = u_blob_tendril_geometry[idx];
-        vec4 motion = u_blob_tendril_motion[idx];
-        float reach = max(geometry.y, 0.0);
-        float activity = clamp(motion.z, 0.0, 1.25);
-        if (reach <= 0.0015 || activity <= 0.015 || motion.w < 0.0) {
-            continue;
-        }
-
-        float angle = (fract(geometry.x) - 0.25) * 6.2831853;
-        vec2 direction = vec2(cos(angle), sin(angle));
-        vec2 tangent = vec2(-direction.y, direction.x);
-        float anchor_radius = resolved_profile_radius(
-            geometry.x,
-            calm_radius,
-            staged_radius,
-            stage_progress
-        );
-        float root_radius = clamp(geometry.z, 0.008, 0.075);
-        float tip_radius = clamp(geometry.w, 0.006, root_radius);
-
-        // The root begins safely inside the living radial body. Two tapered
-        // segments then bend independently and terminate in a true round cap;
-        // smooth union removes the old radial-fan shoulder completely.
-        vec2 p0 = direction * max(calm_radius * 0.58, anchor_radius - root_radius * 0.72);
-        vec2 p1 = direction * (anchor_radius + reach * 0.43)
-            + tangent * motion.x * reach * 0.62;
-        vec2 p2 = direction * (anchor_radius + reach)
-            + tangent * (motion.x * 0.34 + motion.y * 0.78) * reach;
-        float mid_radius = mix(root_radius, tip_radius, 0.52) * (0.96 + activity * 0.05);
-        float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
-        float second = sd_tapered_segment(p, p1, p2, mid_radius, tip_radius);
-        float limb = smooth_min_blob(first, second, min(0.014, mid_radius * 0.48));
-        result = smooth_min_blob(result, limb, min(0.016, root_radius * 0.52));
-    }
-    return result;
-}
-
-float blob_groove_sdf(
-    vec2 p,
-    float calm_radius,
-    float staged_radius,
-    vec3 stage_progress)
-{
-    float result = 1000.0;
-    for (int idx = 0; idx < BLOB_TENDRIL_N; ++idx) {
-        if (idx >= u_blob_tendril_count) {
-            break;
-        }
-        vec4 geometry = u_blob_tendril_geometry[idx];
-        vec4 motion = u_blob_tendril_motion[idx];
-        float reach = max(geometry.y, 0.0);
-        float activity = clamp(motion.z, 0.0, 1.25);
-        if (reach <= 0.0015 || activity <= 0.015 || motion.w >= 0.0) {
-            continue;
-        }
-
-        float angle = (fract(geometry.x) - 0.25) * 6.2831853;
-        vec2 direction = vec2(cos(angle), sin(angle));
-        vec2 tangent = vec2(-direction.y, direction.x);
-        float anchor_radius = resolved_profile_radius(
-            geometry.x,
-            calm_radius,
-            staged_radius,
-            stage_progress
-        );
-        float root_radius = clamp(geometry.z * 1.10, 0.010, 0.078);
-        float inner_radius = clamp(max(geometry.w, root_radius * 0.62), 0.008, root_radius);
-        float core_guard = calm_radius * 0.46;
-        if (BLOB_VARIANT_SHAPED == 1 && u_blob_ring_mode == 1) {
-            core_guard = calm_radius * 0.06;
-        }
-        float inward_end = max(core_guard, anchor_radius - reach * 0.92);
-        vec2 p0 = direction * (anchor_radius + root_radius * 1.20);
-        vec2 p1 = direction * (anchor_radius - reach * 0.38)
-            + tangent * motion.x * reach * 0.48;
-        vec2 p2 = direction * inward_end
-            + tangent * (motion.x * 0.28 + motion.y * 0.68) * reach;
-        float mid_radius = mix(root_radius, inner_radius, 0.48);
-        float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
-        float second = sd_tapered_segment(p, p1, p2, mid_radius, inner_radius);
-        float channel = smooth_min_blob(first, second, min(0.014, mid_radius * 0.46));
-        result = smooth_min_blob(result, channel, min(0.016, root_radius * 0.50));
-    }
-    return result;
-}
-
 void blob_detail_sdfs(
     vec2 p,
     float calm_radius,
@@ -274,18 +177,27 @@ void blob_detail_sdfs(
             float root_radius = clamp(geometry.z, 0.008, 0.075);
             float tip_radius = clamp(geometry.w, 0.006, root_radius);
             vec2 p0 = direction * max(calm_radius * 0.58, anchor_radius - root_radius * 0.72);
-            vec2 p1 = direction * (anchor_radius + reach * 0.43)
-                + tangent * motion.x * reach * 0.62;
-            vec2 p2 = direction * (anchor_radius + reach)
-                + tangent * (motion.x * 0.34 + motion.y * 0.78) * reach;
-            float mid_radius = mix(root_radius, tip_radius, 0.52) * (0.96 + activity * 0.05);
-            float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
-            float second = sd_tapered_segment(p, p1, p2, mid_radius, tip_radius);
-            float limb = smooth_min_blob(first, second, min(0.014, mid_radius * 0.48));
+            // Three overlapping tapered capsules approximate one flowing
+            // curve.  Shared bend authority across adjacent control points
+            // removes the angular elbow left by the former two-segment path.
+            vec2 p1 = direction * (anchor_radius + reach * 0.30)
+                + tangent * motion.x * reach * 0.38;
+            vec2 p2 = direction * (anchor_radius + reach * 0.66)
+                + tangent * (motion.x * 0.58 + motion.y * 0.18) * reach;
+            vec2 p3 = direction * (anchor_radius + reach)
+                + tangent * (motion.x * 0.46 + motion.y * 0.56) * reach;
+            float radius1 = mix(root_radius, tip_radius, 0.32) * (0.97 + activity * 0.04);
+            float radius2 = mix(root_radius, tip_radius, 0.68) * (0.97 + activity * 0.03);
+            float first = sd_tapered_segment(p, p0, p1, root_radius, radius1);
+            float second = sd_tapered_segment(p, p1, p2, radius1, radius2);
+            float third = sd_tapered_segment(p, p2, p3, radius2, tip_radius);
+            float join_softness = min(0.020, min(radius1, radius2) * 0.70);
+            float limb = smooth_min_blob(first, second, join_softness);
+            limb = smooth_min_blob(limb, third, join_softness);
             limb_result = smooth_min_blob(
                 limb_result,
                 limb,
-                min(0.016, root_radius * 0.52)
+                min(0.020, root_radius * 0.62)
             );
         } else {
             float root_radius = clamp(geometry.z * 1.10, 0.010, 0.078);
@@ -296,18 +208,24 @@ void blob_detail_sdfs(
             }
             float inward_end = max(core_guard, anchor_radius - reach * 0.92);
             vec2 p0 = direction * (anchor_radius + root_radius * 1.20);
-            vec2 p1 = direction * (anchor_radius - reach * 0.38)
-                + tangent * motion.x * reach * 0.48;
-            vec2 p2 = direction * inward_end
-                + tangent * (motion.x * 0.28 + motion.y * 0.68) * reach;
-            float mid_radius = mix(root_radius, inner_radius, 0.48);
-            float first = sd_tapered_segment(p, p0, p1, root_radius, mid_radius);
-            float second = sd_tapered_segment(p, p1, p2, mid_radius, inner_radius);
-            float channel = smooth_min_blob(first, second, min(0.014, mid_radius * 0.46));
+            vec2 p1 = direction * (anchor_radius - reach * 0.27)
+                + tangent * motion.x * reach * 0.30;
+            vec2 p2 = direction * (anchor_radius - reach * 0.62)
+                + tangent * (motion.x * 0.46 + motion.y * 0.18) * reach;
+            vec2 p3 = direction * inward_end
+                + tangent * (motion.x * 0.38 + motion.y * 0.50) * reach;
+            float radius1 = mix(root_radius, inner_radius, 0.34);
+            float radius2 = mix(root_radius, inner_radius, 0.70);
+            float first = sd_tapered_segment(p, p0, p1, root_radius, radius1);
+            float second = sd_tapered_segment(p, p1, p2, radius1, radius2);
+            float third = sd_tapered_segment(p, p2, p3, radius2, inner_radius);
+            float join_softness = min(0.020, min(radius1, radius2) * 0.66);
+            float channel = smooth_min_blob(first, second, join_softness);
+            channel = smooth_min_blob(channel, third, join_softness);
             groove_result = smooth_min_blob(
                 groove_result,
                 channel,
-                min(0.016, root_radius * 0.50)
+                min(0.021, root_radius * 0.64)
             );
         }
     }
@@ -643,8 +561,8 @@ float blob_sdf_ex(vec2 p, float time,
         tendril_sdf,
         groove_sdf
     );
-    float goo_sdf = smooth_min_blob(body_sdf, tendril_sdf, 0.012);
-    return smooth_max_blob(goo_sdf, -groove_sdf, 0.010);
+    float goo_sdf = smooth_min_blob(body_sdf, tendril_sdf, 0.015);
+    return smooth_max_blob(goo_sdf, -groove_sdf, 0.013);
 }
 
 // Convenience wrapper using current uniforms.

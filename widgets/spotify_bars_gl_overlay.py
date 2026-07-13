@@ -860,7 +860,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         # Update accumulated time for animated modes
         dt_seconds = 0.0
-        now_ts = time.monotonic()
+        now_ts = time.time()
         if self._last_time_ts > 0.0:
             dt = now_ts - self._last_time_ts
             if 0.0 < dt < 1.0:  # sanity clamp

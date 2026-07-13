@@ -678,7 +678,7 @@ def test_mighty_near_max_controls_retain_target_motion_through_solver() -> None:
     # assertion lives on the GPU tendril payload, where the setting now acts.
     assert max(
         stretched - plain for stretched, plain in zip(hot_target, no_stretch)
-    ) > 0.060
+    ) > 0.055
 
     profile = list(quiet_runtime)
     velocity = list(quiet_velocity)

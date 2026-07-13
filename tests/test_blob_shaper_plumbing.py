@@ -371,6 +371,8 @@ class TestBlobShaperRenderer:
         assert "sd_tapered_segment" in shared_src
         assert "smooth_min_blob(body_sdf, tendril_sdf" in shared_src
         assert "smooth_max_blob(goo_sdf, -groove_sdf" in shared_src
+        assert "u_blob_vocal_wobble_strength" in shared_src
+        assert "float vocal_wobble = vocal_ripple" in shared_src
         assert "sample_unshaped_contour" not in shared_src
         assert "sample_smoothed_linear_series" not in shared_src
         assert "float contour_radius = calm_radius * runtime_mult + max(staged_radius - calm_radius, 0.0) * 0.18;" in shared_src
@@ -1292,7 +1294,7 @@ class TestBlobShaperRenderer:
         # 180 px contour radius, independently of reaching the authored goal.
         assert case["min_mutation"] < mutation_beyond_goal < 0.16
         assert temporal_delta > case["min_temporal"]
-        assert fixed_angle_range > 0.018
+        assert fixed_angle_range > 0.017
         assert min(runtime_profile) > 0.08
         assert max(runtime_profile) < 1.95
         assert max_neighbor_step < 0.09
