@@ -120,7 +120,7 @@ _TEXT_OPTIONS_BY_PATH: dict[tuple[str, ...], tuple[str, ...]] = {
         "cursor_dark",
     ),
     ("sources", "mode"): ("folders",),
-    ("widgets", "achievement_pulse", "artwork_shape"): ("wide", "square"),
+    ("widgets", "achievement_pulse", "artwork_shape"): ("wide", "square", "portrait"),
     ("widgets", "achievement_pulse", "selection_mode"): (
         "most_recent",
         "recent_2",

@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Mapping
 
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt
@@ -21,7 +23,6 @@ from PySide6.QtGui import (
 from core.steam.abandonment_issues import AbandonmentResolved, LAST_PLAYED_VERIFIED
 from widgets.shadow_utils import draw_text_rect_with_shadow
 from widgets.steam_components import (
-    STEAM_SETTINGS_TARGET,
     SteamCardField,
     SteamCardViewModel,
     _cover_source_rect,
@@ -38,6 +39,17 @@ ABANDONMENT_ARTWORK_SIZE_MIN = 110
 ABANDONMENT_ARTWORK_SIZE_DEFAULT = 140
 ABANDONMENT_ARTWORK_SIZE_MAX = 180
 ABANDONMENT_ACCENT_RGBA = (222, 157, 88, 225)
+ABANDONMENT_FIELD_DEFAULTS: dict[str, bool] = {
+    "playtime": True,
+    "achievements": True,
+    "last_unlock": True,
+    "last_played": True,
+    "archive_class": True,
+    "queue": False,
+    "source": False,
+    "pinned": False,
+}
+ABANDONMENT_LEDGER_ROW_HEIGHT = 31.0
 ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE = "Long Forgotten"
 ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES: tuple[str, ...] = (
     "You Don't Even Remember Buying This One Do You?",
@@ -88,14 +100,33 @@ def abandonment_authored_size(
     show_artwork: bool,
     artwork_shape: str,
     artwork_size: int,
+    field_count: int = 4,
 ) -> QSizeF:
-    """Grow the authored canvas when a taller portrait cover needs it."""
+    """Grow the canvas for portrait artwork and every enabled ledger row."""
 
     resolved_size = normalize_abandonment_artwork_size(artwork_size)
+    field_rows = max(0, (max(0, int(field_count)) + 1) // 2)
+    ledger_height = ABANDONMENT_AUTHORED_SIZE.height() + (
+        max(0, field_rows - 2) * ABANDONMENT_LEDGER_ROW_HEIGHT
+    )
     if show_artwork and str(artwork_shape).strip().lower() == "square":
         required_height = 76.0 + resolved_size * 1.4 + 22.0
-        return QSizeF(ABANDONMENT_AUTHORED_SIZE.width(), max(ABANDONMENT_AUTHORED_SIZE.height(), required_height))
-    return QSizeF(ABANDONMENT_AUTHORED_SIZE)
+        return QSizeF(
+            ABANDONMENT_AUTHORED_SIZE.width(),
+            max(ledger_height, required_height),
+        )
+    return QSizeF(ABANDONMENT_AUTHORED_SIZE.width(), ledger_height)
+
+
+def abandonment_field_slot_count(field_visibility: Mapping[str, bool] | None) -> int:
+    """Return stable layout slots from settings, even before evidence is loaded."""
+
+    visibility = field_visibility or {}
+    return sum(
+        1
+        for field_id, default in ABANDONMENT_FIELD_DEFAULTS.items()
+        if bool(visibility.get(field_id, default))
+    )
 
 
 def abandonment_artwork_dimensions(
@@ -135,6 +166,38 @@ def format_abandonment_age(inactivity_days: int | None) -> str:
     return f"{years:.1f} YEARS AGO" if years < 10 else f"{int(round(years))} YEARS AGO"
 
 
+def format_abandonment_last_played(
+    timestamp: float | None,
+    confidence: str,
+) -> str | None:
+    """Return an exact UTC calendar date only for verified source evidence."""
+
+    if confidence != LAST_PLAYED_VERIFIED or timestamp is None:
+        return None
+    try:
+        value = float(timestamp)
+        if not math.isfinite(value) or value <= 0:
+            return None
+        return datetime.fromtimestamp(value, tz=timezone.utc).strftime("%d/%m/%Y")
+    except (OSError, OverflowError, ValueError):
+        return None
+
+
+def abandonment_archive_class(resolved: AbandonmentResolved) -> str | None:
+    """Describe engagement depth without claiming that a game was abandoned."""
+
+    if not resolved.ok or resolved.playtime_minutes is None:
+        return None
+    if resolved.playtime_minutes < 2 * 60:
+        if (
+            resolved.unlocked_achievement_count is not None
+            and resolved.unlocked_achievement_count <= 2
+        ):
+            return "Barely Started"
+        return "Short Start"
+    return "Deep Archive"
+
+
 def build_abandonment_view_model(
     resolved: AbandonmentResolved,
     *,
@@ -151,30 +214,74 @@ def build_abandonment_view_model(
     def _enabled(field_id: str, default: bool) -> bool:
         return bool(visibility.get(field_id, default))
 
+    achievement_value = (
+        f"{resolved.unlocked_achievement_count} / {resolved.total_achievement_count}"
+        if resolved.unlocked_achievement_count is not None
+        and resolved.total_achievement_count is not None
+        else None
+    )
+    last_unlock_value = None
+    if resolved.unlocked_achievement_count == 0:
+        last_unlock_value = "No Unlocks"
+    elif resolved.latest_unlock_age_days is not None:
+        last_unlock_value = format_abandonment_age(resolved.latest_unlock_age_days)
+    last_played_value = format_abandonment_last_played(
+        resolved.last_played_at,
+        resolved.last_played_confidence,
+    )
+    archive_class_value = abandonment_archive_class(resolved)
     fields = (
         SteamCardField(
             "playtime",
             "Played",
             _format_playtime(resolved.playtime_minutes),
-            _enabled("playtime", True),
+            _enabled("playtime", ABANDONMENT_FIELD_DEFAULTS["playtime"]),
+        ),
+        SteamCardField(
+            "achievements",
+            "Achievements",
+            achievement_value or "",
+            _enabled("achievements", ABANDONMENT_FIELD_DEFAULTS["achievements"])
+            and achievement_value is not None,
+        ),
+        SteamCardField(
+            "last_unlock",
+            "Last Unlock",
+            last_unlock_value or "",
+            _enabled("last_unlock", ABANDONMENT_FIELD_DEFAULTS["last_unlock"])
+            and last_unlock_value is not None,
+        ),
+        SteamCardField(
+            "last_played",
+            "Last Played",
+            last_played_value or "",
+            _enabled("last_played", ABANDONMENT_FIELD_DEFAULTS["last_played"])
+            and last_played_value is not None,
+        ),
+        SteamCardField(
+            "archive_class",
+            "Archive Class",
+            archive_class_value or "",
+            _enabled("archive_class", ABANDONMENT_FIELD_DEFAULTS["archive_class"])
+            and archive_class_value is not None,
         ),
         SteamCardField(
             "queue",
             "Shelf",
             f"{resolved.queue_position} of {resolved.queue_count}" if resolved.queue_count else "Empty",
-            _enabled("queue", True),
+            _enabled("queue", ABANDONMENT_FIELD_DEFAULTS["queue"]),
         ),
         SteamCardField(
             "source",
             "Source",
             resolved.source_label,
-            _enabled("source", False),
+            _enabled("source", ABANDONMENT_FIELD_DEFAULTS["source"]),
         ),
         SteamCardField(
             "pinned",
             "Selection",
             "Pinned" if resolved.pinned else "Smart Rotation",
-            _enabled("pinned", False),
+            _enabled("pinned", ABANDONMENT_FIELD_DEFAULTS["pinned"]),
         ),
     )
     if resolved.ok:
@@ -231,14 +338,21 @@ def layout_abandonment_card(
     show_artwork: bool = True,
     artwork_shape: str = "square",
     artwork_size: int = ABANDONMENT_ARTWORK_SIZE_DEFAULT,
+    field_slot_count: int | None = None,
 ) -> AbandonmentCardLayout:
     """Resolve one uniformly scaling archival card composition."""
 
     target = QRectF(target_rect)
+    enabled_fields = tuple(field for field in model.fields if field.enabled)
+    reserved_field_count = max(
+        len(enabled_fields),
+        max(0, int(field_slot_count)) if field_slot_count is not None else 0,
+    )
     authored_size = abandonment_authored_size(
         show_artwork=show_artwork,
         artwork_shape=artwork_shape,
         artwork_size=artwork_size,
+        field_count=reserved_field_count,
     )
     authored_w = authored_size.width()
     authored_h = authored_size.height()
@@ -281,10 +395,9 @@ def layout_abandonment_card(
     subtitle = QRectF(text_left, 119.0, text_width, 34.0)
     age_stamp = QRectF(text_left, 160.0, min(300.0, text_width), 54.0)
 
-    enabled_fields = tuple(field for field in model.fields if field.enabled)
     field_rects: list[tuple[str, QRectF]] = []
     field_width = max(110.0, (text_width - 12.0) * 0.5)
-    for index, card_field in enumerate(enabled_fields[:4]):
+    for index, card_field in enumerate(enabled_fields):
         row, column = divmod(index, 2)
         field_rects.append(
             (
@@ -292,7 +405,7 @@ def layout_abandonment_card(
                 _map(
                     QRectF(
                         text_left + column * (field_width + 12.0),
-                        226.0 + row * 31.0,
+                        226.0 + row * ABANDONMENT_LEDGER_ROW_HEIGHT,
                         field_width,
                         25.0,
                     )
@@ -342,6 +455,7 @@ def render_abandonment_card(
     artwork_size: int,
     accent_color: QColor,
     content_opacity: float = 1.0,
+    field_slot_count: int | None = None,
 ) -> AbandonmentCardLayout:
     """Paint the archival file-card identity while leaving the header stable."""
 
@@ -351,6 +465,7 @@ def render_abandonment_card(
         show_artwork=show_artwork,
         artwork_shape=artwork_shape,
         artwork_size=artwork_size,
+        field_slot_count=field_slot_count,
     )
     scale = layout.scale
     color = QColor(text_color)
@@ -603,16 +718,37 @@ def _draw_ledger_fields(
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(accent.red(), accent.green(), accent.blue(), 195))
         painter.drawEllipse(QRectF(rect.x(), rect.center().y() - dot_size / 2.0, dot_size, dot_size))
-        label_rect = rect.adjusted(9.0 * layout.scale, 0.0, -rect.width() * 0.47, 0.0)
-        value_rect = QRectF(label_rect.right(), rect.y(), rect.right() - label_rect.right(), rect.height())
         field_font = QFont(font_family, max(6, int(font_size * layout.scale * 0.68)), QFont.Weight.DemiBold)
-        _draw_elided_text(painter, label_rect, card_field.label.upper(), color=muted, font=field_font)
+        label_text = card_field.label.upper()
+        value_text = str(card_field.value).upper()
+        metrics = QFontMetricsF(field_font)
+        label_need = max(1.0, metrics.horizontalAdvance(label_text))
+        value_need = max(1.0, metrics.horizontalAdvance(value_text))
+        content_left = rect.x() + 9.0 * layout.scale
+        gap = max(2.0, 4.0 * layout.scale)
+        available = max(2.0, rect.right() - content_left - gap)
+        label_ratio = max(0.42, min(0.66, label_need / (label_need + value_need)))
+        label_width = available * label_ratio
+        label_rect = QRectF(content_left, rect.y(), label_width, rect.height())
+        value_rect = QRectF(
+            label_rect.right() + gap,
+            rect.y(),
+            max(1.0, rect.right() - label_rect.right() - gap),
+            rect.height(),
+        )
+        _draw_elided_text(
+            painter,
+            label_rect,
+            label_text,
+            color=muted,
+            font=_fit_font(field_font, label_text, label_rect.width()),
+        )
         _draw_elided_text(
             painter,
             value_rect,
-            str(card_field.value).upper(),
+            value_text,
             color=color,
-            font=_fit_font(field_font, str(card_field.value).upper(), value_rect.width()),
+            font=_fit_font(field_font, value_text, value_rect.width()),
             flags=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
 

@@ -103,6 +103,44 @@ def test_recent_game_titles_load_from_one_opaque_profile_cache_record(tmp_path) 
     )
 
 
+def test_recent_game_titles_load_exact_achievement_records_for_unlock_order(tmp_path) -> None:
+    profile_key = "profile_1234567890abcdef12345678"
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=RECENT_GAMES_CACHE_KEY,
+            source_id=SteamSourceId.RECENTLY_PLAYED,
+            payload=_recent_result().payload,
+            fetched_at=1_000.0,
+        ),
+        cache_path_for_profile_key(profile_key, RECENT_GAMES_CACHE_KEY, root=tmp_path),
+    )
+    for appid, game_name, unlocktime in (
+        (111, "Hollow Knight", 100),
+        (222, "Celeste", 200),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=achievement_cache_key_for_app(appid),
+                source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+                payload=_achievements(
+                    game_name,
+                    [{"name": "A", "achieved": 1, "unlocktime": unlocktime}],
+                ).payload,
+                fetched_at=1_000.0,
+            ),
+            cache_path_for_profile_key(
+                profile_key,
+                achievement_cache_key_for_app(appid),
+                root=tmp_path,
+            ),
+        )
+
+    assert load_recent_game_titles_from_cache(profile_key=profile_key, root=tmp_path) == (
+        "Celeste",
+        "Hollow Knight",
+    )
+
+
 def test_achievement_pulse_resolves_recent_selection_from_cache_records_only() -> None:
     resolved = resolve_achievement_pulse(
         recent_result=_recent_result(),
@@ -133,6 +171,38 @@ def test_achievement_pulse_resolves_recent_selection_from_cache_records_only() -
     assert model.metric_value == "2/3"
     assert model.latest_unlocks == ("Late Win",)
     assert model.enabled_field_ids == ("total", "playtime", "previous")
+
+
+def test_achievement_pulse_recent_ordinals_follow_newest_unlock_not_recent_play() -> None:
+    achievement_results = {
+        111: _achievements(
+            "Hollow Knight",
+            [{"apiname": "OLDER", "name": "Older", "achieved": 1, "unlocktime": 100}],
+        ),
+        222: _achievements(
+            "Celeste",
+            [{"apiname": "NEWER", "name": "Newer", "achieved": 1, "unlocktime": 200}],
+        ),
+    }
+
+    newest = resolve_achievement_pulse(
+        recent_result=_recent_result(),
+        achievement_results=achievement_results,
+    )
+    previous = resolve_achievement_pulse(
+        recent_result=_recent_result(),
+        achievement_results=achievement_results,
+        selection=AchievementPulseSelection(mode="recent_2"),
+    )
+
+    assert newest.appid == 222
+    assert newest.title == "Celeste"
+    assert newest.previous_game_title == "Hollow Knight"
+    assert previous.appid == 111
+    assert recent_game_titles(
+        _recent_result(),
+        achievement_results=achievement_results,
+    ) == ("Celeste", "Hollow Knight")
 
 
 def test_achievement_pulse_uses_schema_display_name_instead_of_internal_id() -> None:
@@ -230,6 +300,10 @@ def test_achievement_pulse_resolves_recent_2_without_substituting_games() -> Non
     resolved = resolve_achievement_pulse(
         recent_result=_recent_result(),
         achievement_results={
+            111: _achievements(
+                "Hollow Knight",
+                [{"apiname": "B", "name": "Latest", "achieved": 1, "unlocktime": 10}],
+            ),
             222: _achievements("Celeste", [{"apiname": "A", "name": "Climb", "achieved": 1, "unlocktime": 5}])
         },
         selection=AchievementPulseSelection(mode="recent_2"),
@@ -420,6 +494,121 @@ def test_achievement_pulse_cache_snapshot_keeps_custom_unavailable_literal(tmp_p
     assert "unavailable" in snapshot.resolved.unavailable_reason.lower()
 
 
+def test_achievement_pulse_freshness_ignores_unrelated_stale_library_cache(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_relevant_freshness_123456",
+        profile_identifier="76561198000000022",
+    )
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    now = 10_000.0
+
+    def _write(cache_key: str, source_id: SteamSourceId, payload: dict, fetched_at: float) -> None:
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=fetched_at,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    _write(
+        RECENT_GAMES_CACHE_KEY,
+        SteamSourceId.RECENTLY_PLAYED,
+        {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+        now - 10,
+    )
+    _write(
+        OWNED_GAMES_CACHE_KEY,
+        SteamSourceId.OWNED_GAMES,
+        {"response": {"games": [{"appid": 111, "name": "Hollow Knight"}]}},
+        now - 9_000,
+    )
+    _write(
+        achievement_cache_key_for_app(111),
+        SteamSourceId.PLAYER_ACHIEVEMENTS,
+        {
+            "playerstats": {
+                "gameName": "Hollow Knight",
+                "achievements": [
+                    {"name": "START", "achieved": 1, "unlocktime": 100}
+                ],
+            }
+        },
+        now - 10,
+    )
+    _write(
+        achievement_schema_cache_key_for_app(111),
+        SteamSourceId.ACHIEVEMENT_SCHEMA,
+        {
+            "game": {
+                "availableGameStats": {
+                    "achievements": [{"name": "START", "displayName": "First Step"}]
+                }
+            }
+        },
+        now - 10,
+    )
+
+    snapshot = load_achievement_pulse_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=now,
+    )
+    assert snapshot.cache_age_seconds == 10
+    assert snapshot.candidate_cache_complete is True
+
+    def _unexpected_opener(_request, _timeout: float):
+        raise AssertionError("fresh Pulse sources must not be fetched for a stale library cache")
+
+    outcome = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_unexpected_opener,
+        now=now,
+    )
+    assert outcome.snapshot.resolved.ok is True
+
+
+def test_achievement_pulse_fresh_empty_recent_result_is_complete(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_empty_recent_123456",
+        profile_identifier="76561198000000022",
+    )
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    now = 10_000.0
+    cache_key = RECENT_GAMES_CACHE_KEY
+    write_cache_record(
+        SteamCacheRecord(
+            cache_key=cache_key,
+            source_id=SteamSourceId.RECENTLY_PLAYED,
+            payload={"response": {"games": []}},
+            fetched_at=now - 10,
+        ),
+        cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+    )
+
+    snapshot = load_achievement_pulse_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=now,
+    )
+    assert snapshot.candidate_cache_complete is True
+    assert snapshot.cache_age_seconds == 10
+
+    def _unexpected_opener(_request, _timeout: float):
+        raise AssertionError("a fresh successful empty recent result must not be polled")
+
+    outcome = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_unexpected_opener,
+        now=now,
+    )
+    assert outcome.snapshot.resolved.ok is False
+
+
 def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tmp_path) -> None:
     credential = SteamCredentialPayload(
         api_key="fake_steam_api_key_123456",
@@ -474,6 +663,62 @@ def test_achievement_pulse_refresh_writes_cache_and_coalesces_fresh_followers(tm
     assert achievement_schema_cache_key_for_app(111) in {
         path.stem for path in tmp_path.rglob("*.json")
     }
+
+
+def test_achievement_refresh_probes_recent_candidates_before_selecting_schema(tmp_path) -> None:
+    credential = SteamCredentialPayload(
+        api_key="fake_steam_api_key_candidate_order_123456",
+        profile_identifier="76561198000000022",
+    )
+    requests: list[str] = []
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: bytes) -> None:
+            self._payload = payload
+
+        def read(self, _limit: int) -> bytes:
+            return self._payload
+
+    def _opener(request, _timeout: float):
+        url = request.full_url
+        requests.append(url)
+        if "GetRecentlyPlayedGames" in url:
+            return _Response(
+                b'{"response":{"games":['
+                b'{"appid":111,"name":"Hollow Knight"},'
+                b'{"appid":222,"name":"Celeste"}]}}'
+            )
+        if "GetPlayerAchievements" in url and "appid=111" in url:
+            return _Response(
+                b'{"playerstats":{"gameName":"Hollow Knight",'
+                b'"achievements":[{"name":"OLD","achieved":1,"unlocktime":100}]}}'
+            )
+        if "GetPlayerAchievements" in url and "appid=222" in url:
+            return _Response(
+                b'{"playerstats":{"gameName":"Celeste",'
+                b'"achievements":[{"name":"NEW","achieved":1,"unlocktime":200}]}}'
+            )
+        if "GetSchemaForGame" in url and "appid=222" in url:
+            return _Response(
+                b'{"game":{"availableGameStats":{"achievements":['
+                b'{"name":"NEW","displayName":"Newest"}]}}}'
+            )
+        raise AssertionError(url)
+
+    outcome = refresh_achievement_pulse_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=10_000.0,
+    )
+
+    assert outcome.resolved.appid == 222
+    assert outcome.resolved.previous_game_title == "Hollow Knight"
+    assert outcome.resolved.latest_achievement == "Newest"
+    assert sum("GetPlayerAchievements" in url for url in requests) == 2
+    assert sum("GetSchemaForGame" in url for url in requests) == 1
 
 
 def test_achievement_pulse_unchanged_success_suppresses_immediate_display_follower(tmp_path) -> None:

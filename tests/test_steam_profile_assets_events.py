@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from core.events.event_system import EventSystem
 from core.steam.assets import (
     SteamAssetRecord,
@@ -107,13 +109,17 @@ def test_steam_app_header_reuses_the_validated_cached_file(tmp_path: Path) -> No
     assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/header.jpg"]
 
 
-def test_square_steam_artwork_uses_the_portrait_library_capsule(tmp_path: Path) -> None:
+@pytest.mark.parametrize("artwork_shape", ("square", "portrait"))
+def test_compact_steam_artwork_uses_the_portrait_library_capsule(
+    tmp_path: Path,
+    artwork_shape: str,
+) -> None:
     calls: list[str] = []
 
     asset = fetch_steam_app_artwork(
         cache_dir=tmp_path,
         appid=1086940,
-        artwork_shape="square",
+        artwork_shape=artwork_shape,
         fetcher=lambda url: calls.append(url) or b"\xff\xd8\xfffake-jpeg",
     )
 

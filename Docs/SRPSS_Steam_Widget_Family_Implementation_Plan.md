@@ -1,7 +1,7 @@
 # SRPSS Steam Widget Family — Architecture-Safe Implementation Plan
 
 **Status:** Achievement Pulse and Abandonment Issues promoted; Steam Journey and Friend Pulse remain dev-gated
-**Date:** 2026-07-12
+**Date:** 2026-07-14
 **Scope:** Four independently enabled Steam overlay cards: **Steam Journey**, **Achievement Pulse**, **Abandonment Issues**, and **Friend Pulse**.
 **Repository target:** `Basjohn/ShittyRandomPhotoScreenSaver`  
 **Supersedes:** Draft 0.1 Steam Subwidgets proposal
@@ -38,7 +38,7 @@ The four cards remain:
 | All cards can simply carry their own “local selection history.” | Semantic selection, cooldowns, dismissals, and rotations are **profile-level family state**, shared across displays. A runtime overlay instance owns only geometry, DPR-specific paint cache, and current applied view state. This prevents duplicate fetches and monitor-by-monitor drift. |
 | A fifth enabled field always creates a second rail. | Authored card layout decides whether enabled fields use a first rail, second rail, or compact authored presentation. `Custom` geometry only scales/moves the already-authored card and its elements; it must not decide how many enabled fields are shown, hide lower-priority content, or take outer-size authority back. |
 | Every label/value pair must fit one capsule. | Compact capsules remain the default, but the shared visual grammar may measure a value before layout. When enabled and the compact value region would elide, the field reserves the same column on the next whole rail for a fitted full-width value capsule. |
-| Artwork shape is a fixed visual preset. | Artwork variants have authored alignment rails and safe user bounds. Achievement Pulse square artwork shares the wide/header top-right rails and allows 140-190 authored pixels, default 140; the layout reserves the maximum envelope so size changes do not reflow other content. |
+| Artwork shape is a fixed visual preset. | Artwork variants have authored alignment rails and safe user bounds. Achievement Pulse offers Wide, Square, and default Portrait art. Compact art shares the wide/header top-right rails, allows 140-190 authored pixels in width, and grows only the authored vertical envelope so size changes cannot clip or reflow upper content. |
 | A polished mock is enough to define the remaining cards. | Achievement Pulse is now the engineering baseline, not a family-wide skin. Future cards inherit settings, painter safety, measurement, cache-first, multi-display, and validation lessons while deliberately establishing different silhouettes and content primitives. |
 | Steam Journey can promise a general owned-library update feed. | It ships only after a documented, supported data source is proven against a real test account. No authenticated Store scraping, personalised Calendar dependency, cookies, or undocumented feed may become a fallback. |
 | Abandonment Issues can infer absence from playtime or Recent Games. | Smart selection now uses only a valid positive non-future `GetOwnedGames.rtime_last_played` row with explicit verified provenance. Playtime and Recent Games are eligibility/filter inputs, never timestamp substitutes. Unknown remains a real excluded state. |
@@ -487,7 +487,7 @@ Initial category defaults, all canonical settings/defaults rather than UI litera
 |---|---:|---|
 | Account/library index | 24 hours | At least one enabled Steam card needs library/title resolution. |
 | Recent games | Shared Steam window: 10-minute default, 5-minute minimum | Achievement Pulse dynamic mode, Steam Journey focus pool, or Abandonment exclusion needs it. |
-| One selected achievement snapshot | Shared Steam window: 10-minute default, 5-minute minimum | Achievement Pulse has a resolvable eligible app. |
+| Up to five candidate achievement snapshots plus selected schema | Shared Steam window: 10-minute default, 5-minute minimum | Achievement Pulse dynamic selection uses recent-play rows as a bounded candidate set; Custom needs only its literal app snapshot/schema. |
 | Friend snapshot | Shared Steam window: 10-minute default, 5-minute minimum | Friend Pulse is enabled and configured. |
 | Journey candidate feed | 6 hours | Steam Journey is enabled and a validated supported source exists. |
 | Artwork/avatar | On demand | Referenced item is selected/visible and valid local asset is absent or stale. |
@@ -818,7 +818,7 @@ Rules:
 - Deduplicate by `appid`.
 - Hard cap the candidate pool. Start with a configurable default in the 30–50 range, then tune from actual rate/budget evidence.
 - Broad Library is optional, off by default, and rotates small batches only after the source is proven.
-- A card may use cached candidates; rotation alone never causes a fetch.
+- A card may use cached candidates; rotation alone never causes a semantic/provider fetch. A production card may hydrate only the selected app's missing allowlisted public artwork through its existing IO preparation job when automatic updates are allowed.
 
 ### Classification and scoring
 
@@ -904,11 +904,13 @@ Achievement Pulse follows one game at a time. It makes progress legible and sati
 
 | Mode | Persisted authority | Resolution |
 |---|---|---|
-| Most Recent | mode only | First eligible current recent-game entry |
-| Recent #2–#5 | mode + ordinal | Live position in ordered recent-game snapshot |
+| Most Recent | mode only | Candidate with the newest known positive achievement unlock timestamp |
+| Recent #2–#5 | mode + ordinal | Live ordinal in the same achievement-recency-ranked candidate snapshot |
 | Custom | `appid` | Exact selected owned app, retained after it leaves recent games |
 
 `Custom` persists an app ID, never a temporary title string or ordinal snapshot.
+
+Steam does not expose an account-wide achievement activity feed to this client path. Dynamic modes therefore use at most the first five recent-play rows as a bounded candidate source, read/fetch their exact per-app achievement records through the existing cache/coalescing/backoff worker path, and rank candidates with positive unlock timestamps newest-first. Candidates with missing or zero timestamp evidence remain in stable recent-play order behind timestamped candidates rather than being invented as newer. After resolution, only the selected app's schema is required. This is a bounded candidate probe, not a library-wide achievement scan.
 
 ### Library autocomplete
 
@@ -928,7 +930,7 @@ Dynamic modes default to `Skip games with unavailable achievements = on`.
 
 - If no eligible current recent game exists, the card keeps valid cached content where appropriate or stays hidden with no fade.
 - Custom remains literal. A Custom game with unavailable achievement data shows a concise Settings status / runtime unavailable view only if it has valid title/art context; it must not silently substitute another game.
-- Achievement snapshots are per selected app only. There is no library-wide achievement sweep.
+- Achievement snapshots are per literal Custom app or the five bounded dynamic candidates only. There is no library-wide achievement sweep.
 
 ### Display
 
@@ -937,11 +939,11 @@ The promoted card is a typographic progress summary rather than the earlier ring
 - Steam logo + `Achievement Pulse` in the shared framed header;
 - game title as the strongest text outside the header;
 - one to five latest unlock names, with no `Latest:` prefix and no rendered numbering;
-- optional Wide or Square game artwork;
+- optional Wide, Square, or Portrait game artwork;
 - `Unlocked: X/Y` centred directly below the artwork;
 - supporting capsules for `Total`, `Playtime`, `Previous`, `Source`, and `Selected`.
 
-`Previous` means the second entry in the current normalized recent-games snapshot. It is useful context, not a second selected game. `Source` is optional and off by default because a healthy cache-first system should not make routine cache reuse look exceptional.
+`Previous` means the second entry in the current achievement-recency-ranked candidate snapshot. It is useful context, not a second selected game. `Source` is optional and off by default because a healthy cache-first system should not make routine cache reuse look exceptional.
 
 Future achievement-specific extensions such as a progress ring, rarity, unlock dates, or a featured achievement tile remain optional discovery work. They are not part of the family baseline and must not displace or destabilize the promoted composition merely to match an old mock.
 
@@ -951,8 +953,8 @@ Future achievement-specific extensions such as a progress ring, rarity, unlock d
 - Custom local-library picker;
 - skip-unavailable dynamic mode;
 - artwork visibility;
-- artwork shape: Wide / Square;
-- bounded Square artwork size;
+- artwork shape: Wide / Square / Portrait;
+- bounded Square/Portrait artwork width;
 - latest-unlock visibility and count from 1 through 5;
 - widget-family font and base size;
 - supporting field visibility;
@@ -972,6 +974,8 @@ Achievement Pulse is the current engineering and customization standard for this
 |---|---:|---|
 | Artwork hidden or Wide | `540 x 290` | Uses the compact card envelope. |
 | Square artwork | `540 x 318` | Reserves the portrait art + `Unlocked` envelope without pushing the card into a top-to-bottom composition. |
+| Portrait artwork, 140 default | `540 x 334` | Uses a 1.4 height ratio (`140 x 196`) and preserves a measured gap from `Unlocked` to the first capsule rail. |
+| Portrait artwork, larger width | measured from art height + `Unlocked` + capsule block | Grows vertically only; title/latest/art anchors and capsule columns do not rearrange. |
 | Additional capsule rail | measured capsule height + gap | Grows by whole authored rails; larger capsule fonts increase both capsule and authored-card height without moving upper content. |
 
 The painter lays out in authored coordinates and then applies one uniform scale into the target rectangle. `Custom` may move and scale the completed card, but it may not alter field count, artwork shape, rail assignment, typography hierarchy, or visibility according to incidental target dimensions. Extra target space is letterboxed/centred by the standard layout rather than used as a reflow trigger.
@@ -980,9 +984,10 @@ The painter lays out in authored coordinates and then applies one uniform scale 
 
 - Wide art is `180 x 86`, aligned to the header's top rail at authored `y = 14` and the common right rail at `x = 522`. Its artwork border uses the header's stroke weight so the visible top silhouette does not sit one pixel low at scaled sizes.
 - Square art is user-adjustable from `140` through `190` authored pixels, default `140`.
-- Every Square size keeps the same header-aligned top and right rails. The title width is derived from the selected art's left edge, while the overall Square canvas reserves the safe maximum envelope.
+- Portrait art uses the same adjustable width and Steam portrait-library source, with a fixed 1.4 authored height ratio. Portrait at `140 x 196` is the fresh-install default.
+- Every Square/Portrait size keeps the same header-aligned top and right rails. The title width is derived from the selected art's left edge; Portrait grows the authored height from its actual art/metric/capsule occupancy instead of reserving a clipped or rearranged fixed box.
 - `Unlocked` stays centred directly below the artwork with a six-pixel authored gap. Artwork sizing may not move it beside the image, place it over a capsule, or trigger a top-to-bottom card rearrangement.
-- Artwork uses a cover crop inside the rounded well rather than a distorted stretch or an unfilled letterbox. The portrait source is preferred for Square mode when available.
+- Artwork uses a cover crop inside the rounded well rather than a distorted stretch or an unfilled letterbox. Square and Portrait use the validated portrait-library source and reuse the same cached asset URL.
 - Prepared artwork is cached by source identity, target dimensions, and DPR. A size or DPR change must not reuse a lower-resolution prepared pixmap.
 - Disabling artwork releases the full title/content width without leaving an invisible artwork reservation.
 - Artwork, artwork well, card frame, header, capsules, and text use painter-owned shadows. Steam cards do not add widget-level `QGraphicsDropShadowEffect` instances.
@@ -1025,8 +1030,8 @@ Turning the option off restores compact label/value capsules without changing fi
 | Preference | Achievement Pulse default |
 |---|---|
 | Artwork | On |
-| Artwork shape | Square |
-| Square artwork size | `140` |
+| Artwork shape | Portrait |
+| Square/Portrait artwork width | `140` |
 | Latest unlocks | On, `5` |
 | Font | `Inter`, `15 pt` base |
 | Total | On |
@@ -1038,7 +1043,7 @@ Turning the option off restores compact label/value capsules without changing fi
 | Capsule font | `12 pt` |
 | Capsule fill | `[199, 213, 224, 38]` RGBA |
 | Capsule border | `[227, 243, 255, 200]` RGBA |
-| Authored preferred size | `540 x 290`; Square selects its safe `540 x 318` envelope |
+| Authored preferred size | Portrait `540 x 334`; Wide/art-off uses `540 x 290`, Square uses `540 x 318` |
 
 Defaults must remain single-source through the base mapping, Normal/MC profile overlays, `defaults.py`, generated snapshots, descriptor signal blocking, settings load/save, factory construction, and runtime widget state. A control is not complete until all of those seams and their round-trip tests agree.
 
@@ -1051,7 +1056,7 @@ Defaults must remain single-source through the base mapping, Normal/MC profile o
 - Profile data and semantic rotation are shared across displays; geometry, DPR paint caches, and the current applied view remain instance-local.
 - A refresh generation, selected app ID, field visibility, artwork variant/size, DPR, colours, family/capsule font inputs, and double-capsule mode all participate in the relevant model/paint cache authority.
 - Constructors, Settings preview, and `paintEvent` perform no credential access, provider request, cache scan, image decode, or source artwork scaling.
-- Opening the Steam section may submit one bounded recent-games cache-record read through shared IO so Most Recent / Recent #2-#5 labels can include cached names in parentheses. It may not enumerate cache directories or change the persisted mode value while decorating labels.
+- Opening the Steam section may submit exact-path shared-IO reads for one recent-games cache record and up to five corresponding achievement records so Most Recent / Recent #2-#5 labels can include names in achievement-recency order. It may not enumerate cache directories, contact Steam, or change the persisted mode value while decorating labels.
 
 #### Required inheritance for future Steam cards
 
@@ -1124,11 +1129,11 @@ Do not:
 - Default is Most Recent.
 - Custom selection persists by app ID.
 - Custom remains selected when absent from current recents.
-- Wide and every allowed Square artwork size remain top/right aligned to the header rail.
-- Square artwork remains cover-filled, and `Unlocked` stays below it without capsule overlap.
+- Wide and every allowed Square/Portrait artwork width remain top/right aligned to the header rail.
+- Square and Portrait artwork remain cover-filled; Portrait is the `140 x 196` default, and `Unlocked` stays below either compact mode without capsule overlap.
 - One through five unlock names remain unnumbered and preserve the intended type hierarchy.
 - Capsule labels/results remain readable, uppercase, colon-free, and oppositely aligned in compact mode.
-- Long measured values use a same-column detail capsule only when the option is enabled and compact text would elide; the upper heading is centred and Previous reads `PREVIOUSLY`.
+- With Double Capsules enabled, every visible field uses a centred same-column heading/detail pair regardless of value length; Previous reads `PREVIOUSLY`. Compact mode remains available when the option is off.
 - Recent selection labels may include cached game names in parentheses without changing their stable mode data or submitting provider work.
 - Capsule fill/border alpha, font family/size, artwork visibility/shape/size, and field choices round-trip through Settings.
 - Cache-first startup does not flash a false disconnected state or require reauthorization on every run.
@@ -1195,8 +1200,13 @@ Higher playtime and higher unlock counts are deprioritized, not forbidden. “Al
 ### Rotation
 
 - Smart rotation advances from existing qualified cache candidates only.
-- Default visual rotation is 30 minutes (5-minute configurable minimum); it must not send a request merely because the card changes.
+- Default visual rotation is 30 minutes (5-minute configurable minimum); it must not send an owned/recent/achievement request merely because the card changes. The one selected allowlisted public-art asset may fill a cache miss on the existing worker job when automatic updates are allowed; `--noupdates` forbids that automatic asset fetch.
 - Semantic rotation cursor is profile-level so `monitor: ALL` does not show different games on different monitors by accident.
+- Selection is not archive-index traversal. Each due interval advances a persisted profile/policy draw counter, chooses a preference tier with fixed weights independent of tier population, then chooses a game within that tier. Every tier remains reachable and the current App ID is excluded whenever an alternative exists.
+- The optional `ARCHIVE N/M` shelf displays preference rank within the current candidate set. It is diagnostic context, not a sequential rotation index; runtime rotation diagnostics must include selected identity and archive rank so this distinction is testable from logs.
+- Persisted `changed_at` is cadence authority across widget/settings/display rebuilds. Recreated widgets rotate immediately when overdue or arm one shortened first interval for only the remaining duration, then return to the single configured recurring interval.
+- Explicit widget refresh forces one non-repeating cache-backed semantic draw after refreshing eligible sources and restarts the full configured cadence. Seeing owned/recent cache writes is not itself evidence that the selected game changed.
+- If the low-frequency expiry lands during a parent image transition, it remains pending and retries once per second through the shared transition-deferral/`ThreadManager.single_shot` path. The interval is not discarded and no second recurring timer is created.
 - A ranking-policy setting/version change reselects once immediately; ordinary cache reloads retain the current game and cooldowns prevent preference evidence from snapping back to a recently shown title.
 - Pinning disables smart selection for that card, but does not mutate the shared library index.
 
@@ -1210,7 +1220,10 @@ Implemented default composition:
 - reliable last-played age;
 - optional stable rediscovery message;
 - warm archive tab and double-line `LAST VISIT` stamp;
-- bottom ledger rows rather than Achievement Pulse capsules.
+- bottom ledger rows rather than Achievement Pulse capsules;
+- default-on `PLAYED`, `ACHIEVEMENTS`, `LAST UNLOCK`, `LAST PLAYED`, and `ARCHIVE CLASS` shelves.
+
+At the default 140-pixel Portrait artwork width, that five-shelf composition is authored at `560 x 331`; legacy `420 x 180` / `560 x 300` default-sized cards migrate to the current measured envelope, while genuinely custom geometry continues to scale the composition uniformly.
 
 Rediscovery-message contract:
 
@@ -1223,9 +1236,13 @@ Rediscovery-message contract:
 Optional fields:
 
 - total playtime;
-- queue position;
-- cache source label;
-- selection/pinned mode.
+- achievement count as `unlocked / total`, only from a successful cached per-app snapshot;
+- latest unlock age, or `NO UNLOCKS` only when that same snapshot proves zero unlocks;
+- exact `DD/MM/YYYY` UTC last-played date, only from the selected row's verified positive non-future `rtime_last_played`;
+- derived engagement-depth archive class (`BARELY STARTED`, `SHORT START`, or `DEEP ARCHIVE`) without completion semantics;
+- queue position, cache source label, and selection/pinned mode as default-off diagnostics.
+
+The first five fields above form the default user ledger. Unknown/private achievement evidence removes only the affected achievement shelf, and unknown last-played provenance removes the exact-date shelf. Enabled shelves are not capped at four: the authored two-column ledger grows by complete rows, preserving the existing art/title/stamp scale and adding no provider request, timer, image work, or paint-time data derivation.
 
 ### Guilt Desaturater
 
@@ -1529,14 +1546,14 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Add visual/pixmap safety tests.
 - [x] Prove no provider/asset work occurs in constructors, `paintEvent`, or Settings preview.
 - [x] Promote Achievement Pulse's header, typography, artwork rails, capsules, alpha swatches, and authored scaling as the current family engineering baseline while requiring distinct future-card identities.
-- [x] Add bounded header-aligned Square artwork sizing (`140-190`, default `140`) with cover crop, prepared-size/DPR cache keys, matched header/artwork stroke, and fixed-below-art `Unlocked` geometry.
+- [x] Add bounded header-aligned Square and default 1.4-ratio Portrait artwork sizing (`140-190` width, default Portrait `140 x 196`) with cover crop, prepared-size/DPR cache keys, measured authored-card growth, matched header/artwork stroke, and fixed-below-art `Unlocked` geometry.
 - [x] Add compact versus default-on all-field double capsules, whole-row occupancy, and independent capsule-font-driven rail/card growth without field-specific geometry exceptions.
 
 **Gate:** All four cards render from fixture view models with normal, narrow, and Custom geometry without clipping outside their card or changing committed rectangle.
 
 ## Phase 5 — Achievement Pulse cache/fixture slice
 
-- [x] Implement Most Recent, Recent #2–#5, and literal Custom app-ID selection from cache/fixture payloads only.
+- [x] Implement Most Recent and Recent #2–#5 from the newest positive achievement unlock across at most five recent-play candidates, with stable recent-play fallback for missing evidence, plus literal Custom app-ID selection.
 - [x] Implement selected-app achievement progress view-model mapping.
 - [x] Preserve private/unavailable/no-achievement as literal card states with no substitute game.
 - [x] Add shared Steam logo + card-name header composition.
@@ -1570,12 +1587,12 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 ## Phase 6 — Achievement Pulse real data hookup
 
 - [x] Connect the pure resolver to versioned Steam cache records.
-- [x] Implement selected-app achievement cache refresh through shared service-widget/ThreadManager scheduling only.
+- [x] Implement bounded up-to-five candidate achievement cache refresh through shared service-widget/ThreadManager scheduling only, followed by selected-app-only schema refresh.
 - [ ] Implement local library index/autocomplete if the Custom app-ID control proves too brittle for users.
 - [ ] Re-evaluate painter-drawn ring, rarity, date, and tile-highlight extensions only after the promoted typographic card has real-runtime evidence; they are not baseline requirements.
 - [x] Implement card fields/settings/manual refresh without cache churn for unchanged visible models.
-- [x] Implement one-to-five latest unlocks, artwork visibility/shape/bounded Square size, family typography, supporting field choices, alpha capsule swatches, compact/default-on-all-field double capsules, and independent capsule typography.
-- [x] Decorate Most Recent / Recent #2-#5 Settings choices with position-preserving names from one bounded cache-only IO read.
+- [x] Implement one-to-five latest unlocks, artwork visibility plus Wide/Square/default Portrait shape and bounded compact width, family typography, supporting field choices, alpha capsule swatches, compact/default-on-all-field double capsules, and independent capsule typography.
+- [x] Decorate Most Recent / Recent #2-#5 Settings choices with achievement-recency-ordered names from one recent record plus at most five exact cached achievement records on bounded cache-only IO.
 - [x] Implement cache-first/fade/transition deferral integration.
 - [ ] Add real-account manual validation after fixture coverage.
 
@@ -1587,8 +1604,14 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Implement candidate eligibility/score/cooldowns/pin/Never Show.
 - [x] Prefer old short starts with bounded cache-only achievement evidence and policy-aware reranking without completion claims.
 - [x] Implement cache-only rotation shared by profile rather than display.
+- [x] Replace archive-order traversal with profile-seeded preference-biased random draws, persisted draw counters, immediate-repeat exclusion, and due-boundary tolerance.
+- [x] Preserve a rotation expiry that collides with a parent transition through the shared deferred single-shot path rather than dropping it or adding a recurring timer.
+- [x] Preserve rotation age across widget/settings/display rebuilds by arming only the remaining first interval or rotating immediately when overdue.
+- [x] Make explicit widget refresh force one non-repeating cache-backed draw and restart the configured cadence after source refresh.
+- [x] Fill a selected game's missing allowlisted public artwork on the existing rotation IO job when automatic updates are allowed, while preserving strict artwork-cache-only behavior under `--noupdates`.
 - [x] Implement Guilt Desaturater via bucketed worker-prepared art assets.
 - [x] Implement settings, cache-only library picker, display fields, deterministic 60/40 optional rediscovery copy, and distinct archival visual composition.
+- [x] Add evidence-gated achievement count/latest unlock/exact last-played/archive-class shelves, default the user-facing set on, and grow the authored ledger for every enabled field without provider or UI-thread work.
 - [x] Validate unavailable/invalid/future timestamp branches remain honest.
 - [x] Add sparse manager-owned fade-out/commit/fade-in for live game/title/art changes, with stable header/chrome and no private timer or effect.
 - [ ] Complete compiled multi-display, frozen-build, long-idle, transition, `--noupdates`, and Custom-geometry runtime validation.
@@ -1721,17 +1744,17 @@ Required bars:
 
 `tests/test_steam_achievement_pulse.py`, `tests/test_steam_phase3_settings_descriptors.py`, `tests/test_steam_phase4_mock_visuals.py`
 
-- [x] Most Recent / Recent #2–#5 / Custom resolution;
+- [x] Most Recent / Recent #2–#5 rank up to five recent-play candidates by newest positive unlock timestamp, with stable fallback for missing evidence; Custom remains literal;
 - [x] Custom persisted app ID survives recents changes;
 - [x] unavailable dynamic entries do not cause unsafe substitution;
 - [x] literal Custom unavailable state;
 - [x] schema display names replace internal achievement IDs;
 - [x] one-to-five newest unlock ordering and unprefixed presentation;
-- [x] Previous derives from the second current recent-game entry;
+- [x] Previous and cached Settings labels derive from the same achievement-recency-ranked candidate order;
 - [x] unchanged successful payload freshens source timestamps while retaining the visible fingerprint and suppressing repaint;
 - [x] unauthorized refresh preserves valid cache and marks connection attention;
 - [x] Settings/defaults/factory/runtime parity for artwork, font, fields, capsule alpha, and double-capsule controls;
-- [x] bounded Square artwork and fixed-below-art `Unlocked` geometry at minimum/default/maximum size;
+- [x] bounded Square/default Portrait artwork and fixed-below-art `Unlocked` geometry at minimum/default/maximum width, including portrait-driven authored-card growth;
 - [x] compact mode and default-on all-field double mode use collision-free whole rows, with `PREVIOUSLY`, independent capsule font sizing, and measured authored-card growth;
 - [ ] local index autocomplete never calls network, if autocomplete is promoted beyond direct Custom app ID;
 - [ ] any future ring/rarity/date/tile mode has its own deterministic model, settings, geometry, and render bars before implementation.
@@ -1742,7 +1765,8 @@ Required bars:
 - [x] verified timestamp eligibility;
 - [x] 15-minute eligibility plus 2-hour/2-unlock/26-week ranking tiers and likely-complete demotion;
 - [x] cooldown/pin/Never Show and profile-shared selection;
-- [x] cache-only rotation;
+- [x] cache-only profile-shared weighted-random semantic rotation with persisted draw count, non-sequential archive-position coverage, immediate-repeat exclusion, due-boundary tolerance, selected-art worker hydration, and transition-collision deferral;
+- [x] rebuilds preserve remaining rotation cadence and widget-level manual refresh forces one non-repeating cache-backed draw;
 - [x] Guilt Desaturater bucket/clamp and worker-prepared asset behavior;
 - [x] owned/recent refresh preservation and shared-source reuse with Achievement Pulse;
 - [x] authored large-art layout, deterministic render, cache-before-first-fade, and sparse transition updates;
@@ -1804,13 +1828,14 @@ Assert:
 | Expired/unauthorized connection with cache at least 1 day stale | Cached card remains visible; optional default-on orange info affordance appears beside the header and routes through the same Settings request path. |
 | Private friend/library data | No “offline everyone” interpretation; Settings shows safe availability state. |
 | Invalid API key | Cache preserved; safe error, no secret logging. |
-| `--noupdates` | No automatic requests; cache can still display; manual refresh follows deliberate route. |
+| `--noupdates` | No automatic provider or public-art requests; cache can still display; manual refresh follows deliberate route. |
 | Parent image transition during refresh | Fetch/result apply/spinner respects deferred service helper contract. |
+| Parent image transition at Abandonment rotation expiry | The cache-only semantic expiry remains pending, retries through one low-frequency shared single-shot, prepares any permitted selected-art cache miss on worker IO, then commits one weighted-random non-repeating draw through the sparse fade. |
 | Settings open/close without Steam tab visit | No Steam auth/cache/provider activity. |
 | Steam family master off | No Steam card is created, expected by fade coordination, or included in stack preview/status; subordinate settings are hidden and saved card choices remain intact for re-enable. |
 | Steam tab open | Controls build once, rehydrate non-secret encrypted-storage availability, and read at most one recent-games cache record on shared IO for bracketed selection names; no credential decrypt, directory scan, provider request, or full library refresh. |
 | Check Saved Connection | UI remains responsive; success/failure feedback is gentle; a failed check does not erase the linked Steam ID or valid cached card. |
-| Square artwork size 140 / 180 / 190 | Art remains header/right aligned and cover-filled; title, latest unlocks, `Unlocked`, capsules, shadows, and card bounds do not overlap or clip. |
+| Square/Portrait artwork width 140 / 180 / 190 | Art remains header/right aligned and cover-filled; Portrait grows only the authored height; title, latest unlocks, `Unlocked`, capsules, shadows, and card bounds do not overlap, clip, or rearrange. |
 | Double capsules on | Every visible field receives a centred upper heading and fitted lower value; `Previous` uses `PREVIOUSLY`; complete heading/value row pairs grow downward without overlap. |
 | Double capsules off | Every field uses the compact colon-free left-label/right-value composition and elides only its own value. |
 | Capsule font minimum/default/maximum | Capsule height, rail pitch, widget minimum, and authored card height grow as required while title/art/Unlocked remain fixed and `Custom` remains a uniform scale. |

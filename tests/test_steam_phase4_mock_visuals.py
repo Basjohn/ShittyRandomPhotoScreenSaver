@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_components import (
     ACHIEVEMENT_PULSE_AUTHORED_SIZE,
+    ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE,
     ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE,
     ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     ACHIEVEMENT_SQUARE_ARTWORK_MAX,
@@ -40,7 +41,12 @@ def _assert_inside(outer: QRectF, inner: QRectF) -> None:
     assert expanded.contains(inner), f"{inner} escaped {outer}"
 
 
-def _achievement_target(*, artwork_shape: str = "wide", field_count: int = 5) -> QRectF:
+def _achievement_target(
+    *,
+    artwork_shape: str = "wide",
+    artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
+    field_count: int = 5,
+) -> QRectF:
     capsule_height, capsule_gap = achievement_capsule_geometry(
         font_family="Inter",
         capsule_font_size=12,
@@ -48,6 +54,7 @@ def _achievement_target(*, artwork_shape: str = "wide", field_count: int = 5) ->
     size = achievement_pulse_authored_size(
         show_artwork=True,
         artwork_shape=artwork_shape,
+        artwork_size=artwork_size,
         field_rail_count=achievement_field_rail_count(
             field_count,
             double_capsules=False,
@@ -179,9 +186,21 @@ def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -
     model = build_mock_steam_view_model("achievement_pulse")
     wide_target = _achievement_target(artwork_shape="wide")
     square_target = _achievement_target(artwork_shape="square")
+    portrait_target = _achievement_target(artwork_shape="portrait")
+    largest_portrait_target = _achievement_target(
+        artwork_shape="portrait",
+        artwork_size=ACHIEVEMENT_SQUARE_ARTWORK_MAX,
+    )
 
     wide = layout_steam_card(model, wide_target, artwork_shape="wide")
     square = layout_steam_card(model, square_target, artwork_shape="square")
+    portrait = layout_steam_card(model, portrait_target, artwork_shape="portrait")
+    largest_portrait = layout_steam_card(
+        model,
+        largest_portrait_target,
+        artwork_shape="portrait",
+        square_artwork_size=ACHIEVEMENT_SQUARE_ARTWORK_MAX,
+    )
     smallest = layout_steam_card(
         model,
         square_target,
@@ -198,8 +217,13 @@ def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -
 
     assert wide.art_rect.top() == wide.header_rect.top()
     assert square.art_rect.top() == square.header_rect.top()
+    assert portrait.art_rect.top() == portrait.header_rect.top()
     assert square.art_rect.right() == wide.art_rect.right()
+    assert portrait.art_rect.right() == wide.art_rect.right()
     assert square.art_rect.width() == square.art_rect.height()
+    assert portrait.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
+    assert portrait.art_rect.height() == pytest.approx(196.0)
+    assert portrait_target.height() == ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE.height()
     assert square.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
     assert smallest.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_MIN
     assert largest.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_MAX
@@ -207,11 +231,48 @@ def test_achievement_pulse_artwork_shapes_follow_authored_alignment_contract() -
     assert largest.art_rect.intersects(largest.header_rect) is False
     assert square.art_rect.center().x() == square.metric_rect.center().x()
     assert square.art_rect.bottom() < square.metric_rect.top()
+    assert portrait.art_rect.bottom() < portrait.metric_rect.top()
+    assert wide.metric_rect.width() > wide.art_rect.width()
+    assert square.metric_rect.width() > square.art_rect.width()
+    assert portrait.metric_rect.width() > portrait.art_rect.width()
+    assert largest_portrait.art_rect.width() == ACHIEVEMENT_SQUARE_ARTWORK_MAX
+    assert largest_portrait.art_rect.height() == pytest.approx(266.0)
+    assert largest_portrait.metric_rect.bottom() + 12.0 <= min(
+        rect.top() for _field_id, rect, _rail in largest_portrait.field_rects
+    )
     assert largest.metric_rect.bottom() < min(
         rect.top() for _field_id, rect, _rail in largest.field_rects
     )
     assert hidden.art_rect.isNull()
     assert hidden.title_rect.width() > wide.title_rect.width()
+
+
+def test_achievement_pulse_metric_never_elides_normal_steam_counts(monkeypatch) -> None:
+    drawn_metrics: list[str] = []
+    original = steam_components.draw_text_rect_with_shadow
+
+    def _capture(*args, **kwargs):
+        text = str(args[3])
+        if text.startswith("Unlocked"):
+            drawn_metrics.append(text)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(steam_components, "draw_text_rect_with_shadow", _capture)
+    model = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        metric_value="999/999",
+    )
+
+    for shape in ("wide", "square", "portrait"):
+        target = _achievement_target(artwork_shape=shape)
+        _render_to_pixmap(
+            model,
+            int(target.width()),
+            int(target.height()),
+            artwork_shape=shape,
+        )
+
+    assert drawn_metrics == ["Unlocked: 999/999"] * 3
 
 
 def test_achievement_pulse_double_capsules_give_every_field_an_aligned_value_rail() -> None:

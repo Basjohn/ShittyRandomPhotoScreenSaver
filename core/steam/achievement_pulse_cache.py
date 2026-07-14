@@ -16,6 +16,7 @@ from pathlib import Path
 from core.steam.achievement_pulse import (
     AchievementPulseResolved,
     AchievementPulseSelection,
+    recent_game_appids,
     recent_game_titles,
     resolve_achievement_pulse,
 )
@@ -35,6 +36,7 @@ ACHIEVEMENTS_CACHE_KEY_PREFIX = "achievement_pulse_achievements_"
 ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX = "achievement_pulse_schema_"
 _REFRESH_FRESH_WINDOW_SECONDS = 60.0
 DEFAULT_SOURCE_FRESH_SECONDS = 10.0 * 60.0
+RECENT_ACHIEVEMENT_CANDIDATE_LIMIT = 5
 _refresh_coordinator = SteamRequestCoordinator()
 _refresh_backoff = SteamBackoffPolicy()
 _refresh_locks: dict[str, threading.Lock] = {}
@@ -52,8 +54,10 @@ class AchievementPulseCacheSnapshot:
     recent_result: SteamResult
     library_result: SteamResult
     achievement_result: SteamResult | None
+    achievement_results: tuple[tuple[int, SteamResult], ...]
     schema_result: SteamResult | None
     cache_age_seconds: float | None
+    candidate_cache_complete: bool
 
     @property
     def has_usable_cache(self) -> bool:
@@ -61,6 +65,7 @@ class AchievementPulseCacheSnapshot:
             self.recent_result.ok
             or self.library_result.ok
             or (self.achievement_result is not None and self.achievement_result.ok)
+            or any(result.ok for _appid, result in self.achievement_results)
         )
 
 
@@ -90,6 +95,43 @@ def achievement_schema_cache_key_for_app(appid: int) -> str:
     return f"{ACHIEVEMENT_SCHEMA_CACHE_KEY_PREFIX}{max(0, int(appid))}"
 
 
+def _selection_candidate_appids(
+    recent_result: SteamResult,
+    selection: AchievementPulseSelection,
+) -> tuple[int, ...]:
+    if selection.mode == "custom":
+        try:
+            appid = int(selection.custom_appid or 0)
+        except (TypeError, ValueError):
+            return ()
+        return (appid,) if appid > 0 else ()
+    return recent_game_appids(
+        recent_result,
+        limit=RECENT_ACHIEVEMENT_CANDIDATE_LIMIT,
+    )
+
+
+def _read_candidate_achievement_results(
+    *,
+    profile_key: str,
+    appids: tuple[int, ...],
+    profile: str | None,
+    root: Path | None,
+    read_record: Callable[[Path], SteamResult],
+) -> dict[int, SteamResult]:
+    return {
+        appid: read_record(
+            cache_path_for_profile_key(
+                profile_key,
+                achievement_cache_key_for_app(appid),
+                profile=profile,
+                root=root,
+            )
+        )
+        for appid in appids
+    }
+
+
 def load_recent_game_titles_from_cache(
     *,
     profile_key: str,
@@ -107,7 +149,21 @@ def load_recent_game_titles_from_cache(
             root=root,
         )
     )
-    return recent_game_titles(result, limit=5)
+    achievement_results = _read_candidate_achievement_results(
+        profile_key=profile_key,
+        appids=recent_game_appids(
+            result,
+            limit=RECENT_ACHIEVEMENT_CANDIDATE_LIMIT,
+        ),
+        profile=profile,
+        root=root,
+        read_record=read_record,
+    )
+    return recent_game_titles(
+        result,
+        achievement_results=achievement_results,
+        limit=5,
+    )
 
 
 def load_achievement_pulse_cache_snapshot(
@@ -126,25 +182,23 @@ def load_achievement_pulse_cache_snapshot(
     library_result = read_record(
         cache_path_for_profile_key(profile_key, OWNED_GAMES_CACHE_KEY, profile=profile, root=root)
     )
+    candidate_appids = _selection_candidate_appids(recent_result, selection)
+    achievement_results = _read_candidate_achievement_results(
+        profile_key=profile_key,
+        appids=candidate_appids,
+        profile=profile,
+        root=root,
+        read_record=read_record,
+    )
     selection_probe = resolve_achievement_pulse(
         recent_result=recent_result,
-        achievement_results={},
+        achievement_results=achievement_results,
         selection=selection,
         library_result=library_result,
     )
-    achievement_result: SteamResult | None = None
+    achievement_result = achievement_results.get(selection_probe.appid)
     schema_result: SteamResult | None = None
-    achievement_results: dict[int, SteamResult] = {}
     if selection_probe.appid is not None:
-        achievement_result = read_record(
-            cache_path_for_profile_key(
-                profile_key,
-                achievement_cache_key_for_app(selection_probe.appid),
-                profile=profile,
-                root=root,
-            )
-        )
-        achievement_results[selection_probe.appid] = achievement_result
         schema_result = read_record(
             cache_path_for_profile_key(
                 profile_key,
@@ -160,9 +214,14 @@ def load_achievement_pulse_cache_snapshot(
         library_result=library_result,
         schema_result=schema_result,
     )
+    timestamp_results = (
+        *((recent_result,) if selection.mode != "custom" else ()),
+        *achievement_results.values(),
+        schema_result,
+    )
     timestamps = [
         result.fetched_at
-        for result in (recent_result, library_result, achievement_result, schema_result)
+        for result in timestamp_results
         if result is not None and result.ok and result.fetched_at is not None
     ]
     reference_now = time.time() if now is None else float(now)
@@ -172,8 +231,14 @@ def load_achievement_pulse_cache_snapshot(
         recent_result=recent_result,
         library_result=library_result,
         achievement_result=achievement_result,
+        achievement_results=tuple(achievement_results.items()),
         schema_result=schema_result,
         cache_age_seconds=cache_age_seconds,
+        candidate_cache_complete=(
+            (selection.mode == "custom" or recent_result.ok)
+            and all(result.ok for result in achievement_results.values())
+            and (selection_probe.appid is None or bool(schema_result and schema_result.ok))
+        ),
     )
 
 
@@ -219,7 +284,8 @@ def refresh_achievement_pulse_cache(
             not force
             and (
                 (
-                    existing.cache_age_seconds is not None
+                    existing.candidate_cache_complete
+                    and existing.cache_age_seconds is not None
                     and existing.cache_age_seconds < source_fresh_window
                 )
                 or _has_recent_success(refresh_identity, now=reference_now)
@@ -245,31 +311,36 @@ def refresh_achievement_pulse_cache(
             if not recent_result.ok:
                 recent_result = existing.recent_result
 
-        selection_probe = resolve_achievement_pulse(
-            recent_result=recent_result,
-            achievement_results={},
-            selection=selection,
-            library_result=existing.library_result,
-        )
-        if selection_probe.appid is not None:
+        candidate_appids = _selection_candidate_appids(recent_result, selection)
+        for appid in candidate_appids:
             refresh_results.append(_fetch_and_cache(
                 profile_key=profile_key,
-                cache_key=achievement_cache_key_for_app(selection_probe.appid),
+                cache_key=achievement_cache_key_for_app(appid),
                 source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
                 credential=credential,
-                appid=selection_probe.appid,
+                appid=appid,
                 profile=profile,
                 root=root,
                 opener=opener,
                 now=reference_now,
                 fresh_seconds=0.0 if force else source_fresh_window,
             ))
+
+        provisional = load_achievement_pulse_cache_snapshot(
+            profile_key=profile_key,
+            selection=selection,
+            profile=profile,
+            root=root,
+            now=reference_now,
+        )
+        selected_appid = provisional.resolved.appid
+        if selected_appid is not None:
             refresh_results.append(_fetch_and_cache(
                 profile_key=profile_key,
-                cache_key=achievement_schema_cache_key_for_app(selection_probe.appid),
+                cache_key=achievement_schema_cache_key_for_app(selected_appid),
                 source_id=SteamSourceId.ACHIEVEMENT_SCHEMA,
                 credential=credential,
-                appid=selection_probe.appid,
+                appid=selected_appid,
                 profile=profile,
                 root=root,
                 opener=opener,

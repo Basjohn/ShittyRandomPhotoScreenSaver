@@ -60,6 +60,19 @@ class ClockPosition(Enum):
     BOTTOM_RIGHT = "bottom_right"
 
 
+def analog_hand_angles(now: datetime) -> tuple[float, float, float]:
+    """Return exact one-second hand angles for the shared one-second ticker."""
+
+    second = float(now.second)
+    minute = float(now.minute) + second / 60.0
+    hour = float(now.hour % 12) + minute / 60.0
+    return (
+        (hour / 12.0) * 360.0,
+        (minute / 60.0) * 360.0,
+        (second / 60.0) * 360.0,
+    )
+
+
 class ClockWidget(BaseOverlayWidget):
     """
     Clock widget for displaying time on screensaver.
@@ -1523,18 +1536,18 @@ class ClockWidget(BaseOverlayWidget):
                 fb_painter.setPen(hand_pen)
                 fb_painter.drawLine(center_x, center_y, ex, ey)
 
-            # Compute hand angles
-            sec = now.second + now.microsecond / 1_000_000.0
-            minute = now.minute + sec / 60.0
-            hour = (now.hour % 12) + minute / 60.0
-
-            hour_angle = (hour / 12.0) * 360.0
-            minute_angle = (minute / 60.0) * 360.0
-            second_angle = (sec / 60.0) * 360.0
+            # The clock has one shared one-second ticker, so fractional wall
+            # time would only turn callback jitter into uneven hand motion.
+            hour_angle, minute_angle, second_angle = analog_hand_angles(now)
             
             # Debug: log second angle periodically
             if self._show_seconds and now.second % 5 == 0 and now.microsecond < 100_000:
-                logger.debug(f"[CLOCK_PAINT] sec={sec:.2f}, second_angle={second_angle:.1f}, time={now.strftime('%H:%M:%S')}")
+                logger.debug(
+                    "[CLOCK_PAINT] sec=%d second_angle=%.1f time=%s",
+                    now.second,
+                    second_angle,
+                    now.strftime("%H:%M:%S"),
+                )
 
             # Draw hands in order: second, hour, minute so the seconds hand sits below.
             # The seconds hand is drawn without a drop shadow to avoid shadow

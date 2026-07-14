@@ -65,12 +65,36 @@ def _recent_games(recent_result: SteamResult | None) -> tuple[Mapping[str, Any],
     return tuple(game for game in games if isinstance(game, Mapping) and _coerce_appid(game.get("appid")) is not None)
 
 
-def recent_game_titles(recent_result: SteamResult | None, *, limit: int = 5) -> tuple[str, ...]:
-    """Return position-preserving display names from one cached recent-games result."""
+def recent_game_appids(
+    recent_result: SteamResult | None,
+    *,
+    limit: int = 5,
+) -> tuple[int, ...]:
+    """Return a bounded, position-preserving recent-app candidate list."""
+
+    resolved_limit = max(1, min(20, int(limit)))
+    return tuple(
+        appid
+        for game in _recent_games(recent_result)[:resolved_limit]
+        if (appid := _coerce_appid(game.get("appid"))) is not None
+    )
+
+
+def recent_game_titles(
+    recent_result: SteamResult | None,
+    *,
+    achievement_results: Mapping[int, SteamResult] | None = None,
+    limit: int = 5,
+) -> tuple[str, ...]:
+    """Return game names ordered by newest known unlock, then recent-play fallback."""
 
     resolved_limit = max(1, min(5, int(limit)))
     titles: list[str] = []
-    for game in _recent_games(recent_result)[:resolved_limit]:
+    games = _recent_games_by_achievement(
+        recent_result,
+        achievement_results or {},
+    )
+    for game in games[:resolved_limit]:
         appid = _coerce_appid(game.get("appid"))
         fallback = f"App {appid}" if appid is not None else "Steam Game"
         titles.append(" ".join(_game_name(game, fallback).split()))
@@ -161,6 +185,45 @@ def _unlock_time(row: Mapping[str, Any]) -> int:
         return 0
 
 
+def _latest_unlock_time(result: SteamResult | None) -> int:
+    return max(
+        (
+            _unlock_time(row)
+            for row in _achievement_rows(result)
+            if bool(row.get("achieved"))
+        ),
+        default=0,
+    )
+
+
+def _recent_games_by_achievement(
+    recent_result: SteamResult | None,
+    achievement_results: Mapping[int, SteamResult],
+) -> tuple[Mapping[str, Any], ...]:
+    """Order recent candidates by their newest positive achievement timestamp.
+
+    Steam exposes no account-wide achievement activity feed. Known positive
+    per-app timestamps therefore lead; candidates with missing/zero timestamp
+    evidence retain Steam's recent-play order as a stable bootstrap fallback.
+    """
+
+    games = _recent_games(recent_result)
+    ranked: list[tuple[int, int, Mapping[str, Any]]] = []
+    fallback: list[tuple[int, Mapping[str, Any]]] = []
+    for index, game in enumerate(games):
+        appid = _coerce_appid(game.get("appid"))
+        latest_unlock = _latest_unlock_time(achievement_results.get(appid)) if appid else 0
+        if latest_unlock > 0:
+            ranked.append((latest_unlock, index, game))
+        else:
+            fallback.append((index, game))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return tuple(
+        [game for _latest, _index, game in ranked]
+        + [game for _index, game in fallback]
+    )
+
+
 def _schema_achievement_rows(schema_result: SteamResult | None) -> dict[str, Mapping[str, Any]]:
     """Map Steam's internal achievement ids to their cache-safe schema rows."""
     payload = _payload(schema_result)
@@ -223,7 +286,7 @@ def resolve_achievement_pulse(
 
     selected_game: Mapping[str, Any] | None = None
     appid: int | None = None
-    recent_games = _recent_games(recent_result)
+    recent_games = _recent_games_by_achievement(recent_result, achievement_results)
     previous_game_title = (
         _game_name(recent_games[1], str(recent_games[1].get("appid") or "Previous Game"))
         if len(recent_games) > 1

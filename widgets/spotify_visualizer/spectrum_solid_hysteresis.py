@@ -16,7 +16,10 @@ _SPECTRUM_UPLOAD_SCALE = 0.55
 _SPECTRUM_CURVE_POWER = 1.15
 _SPECTRUM_MAX_BOOST = 0.95
 _SPECTRUM_DEFAULT_DT_S = 1.0 / 60.0
-_SPECTRUM_MAX_DT_S = 0.10
+_SPECTRUM_MAX_DT_S = 1.0 / 60.0
+_SPECTRUM_ZERO_FRAME_HOLD_S = 0.18
+_SPECTRUM_ZERO_SEGMENT_EPSILON = 0.01
+_SPECTRUM_VISIBLE_SEGMENT_EPSILON = 0.25
 _SPECTRUM_MICRO_ZONE_SEG = 0.45
 _SPECTRUM_NORMAL_ZONE_SEG = 1.40
 _SPECTRUM_MICRO_RATE_HZ = 8.0
@@ -104,6 +107,7 @@ def reset_overlay_spectrum_solid_hysteresis_state(overlay: Any) -> None:
     overlay._spectrum_solid_last_update_ts = []
     overlay._spectrum_solid_hysteresis_segments = 0
     overlay._spectrum_solid_hysteresis_bar_count = 0
+    overlay._spectrum_solid_last_signal_ts = 0.0
 
 
 def _ensure_overlay_hysteresis_state(overlay: Any, *, count: int, segments: int) -> None:
@@ -119,6 +123,7 @@ def _ensure_overlay_hysteresis_state(overlay: Any, *, count: int, segments: int)
         overlay._spectrum_solid_last_update_ts = [0.0] * count
         overlay._spectrum_solid_hysteresis_segments = segments
         overlay._spectrum_solid_hysteresis_bar_count = count
+        overlay._spectrum_solid_last_signal_ts = 0.0
 
 
 def _alpha_for_rate(rate_hz: float, dt_s: float) -> float:
@@ -149,16 +154,35 @@ def apply_overlay_spectrum_solid_hysteresis(
     display_segments = overlay._spectrum_solid_display_segments
     display_segment_values = overlay._spectrum_solid_display_segment_values
     last_update_ts = overlay._spectrum_solid_last_update_ts
-    output: List[float] = []
-
-    for idx, raw_bar in enumerate(bars):
-        target_segment_value = spectrum_bar_to_segment_float(
+    target_segment_values = [
+        spectrum_bar_to_segment_float(
             raw_bar,
             segments=segs,
             height_scale=height_scale,
         )
+        for raw_bar in bars
+    ]
+    has_signal = any(
+        value > _SPECTRUM_ZERO_SEGMENT_EPSILON
+        for value in target_segment_values
+    )
+    if has_signal:
+        overlay._spectrum_solid_last_signal_ts = float(now_ts)
+    last_signal_ts = float(getattr(overlay, "_spectrum_solid_last_signal_ts", 0.0) or 0.0)
+    coherent_zero_hold = bool(
+        not has_signal
+        and last_signal_ts > 0.0
+        and 0.0 <= float(now_ts) - last_signal_ts <= _SPECTRUM_ZERO_FRAME_HOLD_S
+        and any(value >= _SPECTRUM_VISIBLE_SEGMENT_EPSILON for value in display_segment_values)
+    )
+    output: List[float] = []
+
+    for idx, target_segment_value in enumerate(target_segment_values):
         current_segment_value = float(display_segment_values[idx])
         last_ts = float(last_update_ts[idx] or 0.0)
+
+        if coherent_zero_hold and current_segment_value >= 0.0:
+            target_segment_value = current_segment_value
 
         if current_segment_value < 0.0 or current_segment_value > float(segs):
             current_segment_value = target_segment_value

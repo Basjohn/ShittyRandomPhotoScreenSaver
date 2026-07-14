@@ -1,16 +1,28 @@
 from __future__ import annotations
 
-from datetime import datetime
 from copy import deepcopy
+from datetime import datetime
 
-import widgets.clock_widget as clock_mod
-from widgets.clock_widget import ClockWidget
+import pytest
 from PySide6.QtCore import QPoint, QRect
 from PySide6.QtGui import QFont, QFontMetrics, QImage, QPainter
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QWidget
 
 from rendering.custom_layout_contract import get_screen_signature
+import widgets.clock_widget as clock_mod
+from widgets.clock_widget import ClockWidget, analog_hand_angles
+
+
+def test_analog_hand_angles_use_exact_one_second_steps_without_callback_jitter() -> None:
+    early = analog_hand_angles(datetime(2026, 1, 1, 10, 20, 30, 10_000))
+    late = analog_hand_angles(datetime(2026, 1, 1, 10, 20, 30, 990_000))
+    next_second = analog_hand_angles(datetime(2026, 1, 1, 10, 20, 31, 250_000))
+
+    assert early == late
+    assert next_second[2] - early[2] == pytest.approx(6.0)
+    assert next_second[1] > early[1]
+    assert next_second[0] > early[0]
 
 
 def test_analog_clock_fade_in_uses_shared_fade_without_direct_show(qtbot, monkeypatch):

@@ -30,6 +30,7 @@ _ALLOWED_SUFFIX_BY_KIND = {
 _STEAM_APP_ARTWORK_URLS = {
     "wide": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/header.jpg",
     "square": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
+    "portrait": "https://cdn.akamai.steamstatic.com/steam/apps/{appid}/library_600x900.jpg",
 }
 
 
@@ -57,7 +58,9 @@ def steam_app_artwork_url(appid: int, artwork_shape: str) -> str:
     """Return the allowlisted public artwork URL for one Steam app."""
 
     safe_appid = max(1, int(appid))
-    shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    shape = str(artwork_shape or "").strip().lower()
+    if shape not in _STEAM_APP_ARTWORK_URLS:
+        shape = "wide"
     return _STEAM_APP_ARTWORK_URLS[shape].format(appid=safe_appid)
 
 

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from core.logging.logger import get_logger
 from core.settings.storage_paths import get_steam_cache_dir
 from core.steam.abandonment_issues import (
     AbandonmentAchievementProgress,
@@ -48,6 +49,7 @@ from core.steam.request_policy import (
 ABANDONMENT_ROTATION_STATE_KEY = "abandonment_issues"
 ABANDONMENT_COOLDOWN_PREFIX = "abandonment_issues:"
 DEFAULT_ROTATION_INTERVAL_MINUTES = 30
+ROTATION_DUE_TOLERANCE_SECONDS = 2.0
 _DISPLAY_FOLLOWER_FRESH_SECONDS = 60.0
 DEFAULT_OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
 DEFAULT_RECENT_GAMES_FRESH_SECONDS = 10.0 * 60.0
@@ -56,6 +58,7 @@ _request_coordinator = SteamRequestCoordinator()
 _request_backoff = SteamBackoffPolicy()
 _profile_locks: dict[str, threading.RLock] = {}
 _profile_locks_guard = threading.Lock()
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -66,6 +69,7 @@ class AbandonmentCacheSnapshot:
     owned_result: SteamResult
     recent_result: SteamResult
     cache_age_seconds: float | None
+    rotation_due_seconds: float | None
 
     @property
     def has_usable_cache(self) -> bool:
@@ -119,6 +123,7 @@ def load_abandonment_cache_snapshot(
     root: Path | None = None,
     now: float | None = None,
     advance_rotation: bool = False,
+    force_rotation: bool = False,
     rotation_interval_minutes: int = DEFAULT_ROTATION_INTERVAL_MINUTES,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
 ) -> AbandonmentCacheSnapshot:
@@ -150,14 +155,24 @@ def load_abandonment_cache_snapshot(
             rotation = {}
         current_appid = _positive_int(rotation.get("appid"))
         changed_at = _float_or_zero(rotation.get("changed_at"))
+        rotation_index = _non_negative_int(rotation.get("rotation_index"))
         policy_signature = _selection_policy_signature(selection)
         if rotation.get("policy_signature") != policy_signature:
             current_appid = None
             changed_at = 0.0
+            rotation_index = 0
+        rotation_was_initialized = current_appid is not None and changed_at > 0.0
         rotation_seconds = max(5, int(rotation_interval_minutes)) * 60
         rotation_due = bool(
-            advance_rotation
-            and (changed_at <= 0.0 or reference_now - changed_at >= rotation_seconds)
+            force_rotation
+            or (
+                advance_rotation
+                and (
+                    changed_at <= 0.0
+                    or reference_now - changed_at
+                    >= max(0.0, rotation_seconds - ROTATION_DUE_TOLERANCE_SECONDS)
+                )
+            )
         )
         exposures = _exposure_timestamps(state.cooldowns)
         base_candidates = build_abandonment_candidates(
@@ -181,6 +196,11 @@ def load_abandonment_cache_snapshot(
             now=reference_now,
             current_appid=current_appid,
             advance_rotation=rotation_due,
+            rotation_seed=_rotation_seed(
+                profile_key=profile_key,
+                policy_signature=policy_signature,
+                rotation_index=rotation_index + 1,
+            ),
             exposure_timestamps=exposures,
             achievement_progress_by_appid=achievement_progress,
         )
@@ -188,11 +208,13 @@ def load_abandonment_cache_snapshot(
         if selection.mode != "pinned_game" and resolved.ok:
             selected_changed = resolved.appid != current_appid
             if selected_changed or rotation_due or changed_at <= 0.0:
+                next_rotation_index = rotation_index + 1
                 rotations = dict(state.rotations)
                 rotations[ABANDONMENT_ROTATION_STATE_KEY] = {
                     "appid": resolved.appid,
                     "changed_at": reference_now,
                     "policy_signature": policy_signature,
+                    "rotation_index": next_rotation_index,
                 }
                 cooldowns = dict(state.cooldowns)
                 if selected_changed or changed_at <= 0.0:
@@ -204,6 +226,24 @@ def load_abandonment_cache_snapshot(
                     updated_at=reference_now,
                 )
                 write_profile_state(state_path, state)
+                changed_at = reference_now
+                logger.info(
+                    "[STEAM][ABANDONMENT_ROTATION] committed draw=%d reason=%s changed=%s "
+                    "previous_appid=%s selected_appid=%s archive=%d/%d",
+                    next_rotation_index,
+                    (
+                        "forced"
+                        if force_rotation
+                        else "interval"
+                        if rotation_was_initialized and rotation_due
+                        else "initial_or_policy"
+                    ),
+                    selected_changed,
+                    current_appid,
+                    resolved.appid,
+                    resolved.queue_position,
+                    resolved.queue_count,
+                )
 
         timestamps = [
             result.fetched_at
@@ -218,6 +258,13 @@ def load_abandonment_cache_snapshot(
             owned_result=owned_result,
             recent_result=recent_result,
             cache_age_seconds=cache_age_seconds,
+            rotation_due_seconds=(
+                None
+                if selection.mode == "pinned_game"
+                else float(rotation_seconds)
+                if changed_at <= 0.0
+                else max(0.0, float(rotation_seconds) - (reference_now - changed_at))
+            ),
         )
 
 
@@ -230,6 +277,7 @@ def refresh_abandonment_cache(
     opener=None,
     now: float | None = None,
     force: bool = False,
+    force_rotation: bool = False,
     rotation_interval_minutes: int = DEFAULT_ROTATION_INTERVAL_MINUTES,
     owned_fresh_seconds: float = DEFAULT_OWNED_GAMES_FRESH_SECONDS,
     recent_fresh_seconds: float = DEFAULT_RECENT_GAMES_FRESH_SECONDS,
@@ -275,6 +323,7 @@ def refresh_abandonment_cache(
             profile=profile,
             root=root,
             now=reference_now,
+            force_rotation=force_rotation,
             rotation_interval_minutes=rotation_interval_minutes,
         )
         return AbandonmentRefreshOutcome(
@@ -428,7 +477,7 @@ def _load_cached_achievement_progress(
 
 def _selection_policy_signature(selection: AbandonmentSelection) -> str:
     values = (
-        "ranking-v2",
+        "ranking-v3-weighted-random",
         str(max(0, int(selection.minimum_playtime_minutes))),
         str(max(1, int(selection.preferred_max_playtime_minutes))),
         str(max(0, int(selection.preferred_max_unlocked_achievements))),
@@ -437,6 +486,14 @@ def _selection_policy_signature(selection: AbandonmentSelection) -> str:
         ",".join(str(appid) for appid in parse_appid_list(selection.never_show_appids)),
     )
     return hashlib.sha256("|".join(values).encode("ascii", errors="ignore")).hexdigest()[:16]
+
+
+def _rotation_seed(*, profile_key: str, policy_signature: str, rotation_index: int) -> int:
+    payload = f"{profile_key}|{policy_signature}|{max(0, int(rotation_index))}".encode(
+        "ascii",
+        errors="ignore",
+    )
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big", signed=False)
 
 
 def _profile_lock_for(profile_key: str) -> threading.RLock:
@@ -475,6 +532,13 @@ def _positive_int(value: object) -> int | None:
     except (TypeError, ValueError):
         return None
     return resolved if resolved > 0 else None
+
+
+def _non_negative_int(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _float_or_zero(value: object) -> float:

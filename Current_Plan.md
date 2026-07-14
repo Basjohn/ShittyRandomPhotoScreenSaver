@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-12
+Last updated: 2026-07-14
 
 This file tracks active work only. Long-lived architecture truth belongs in `Spec.md`; dated bug narratives belong in `Docs/Historical_Bugs.md`.
 
@@ -16,20 +16,24 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-### Blob Dynamic Morphology And Active-Mode Performance, Dev-Gated
+### Steam And Visual Timing Runtime Bar
 
-- [ ] Run a fresh `-devblob --viz --perf` pass through temporary presets 5-8 and Custom: Mighty must show one-to-three broad lifecycle limbs that visibly grow, hold, retract to zero, and reappear at new hidden-retargeted sites without a fixed splat, orbit, flicker, circular fallback, or sharp groove; vocal contour motion must remain independently visible.
-- [ ] In the same pass, verify Shaped Filled retains its authored goal inside the filled-only soft bounds while still mutating, and Shaped Ring keeps the wider negative-space warps, light migrating tendrils, and vocal/transient contour wobble that made Ring the stronger live reference.
-- [ ] Confirm fresh `[BLOB_PROFILE]` transport telemetry stays near the bounded 30 Hz contour cadence while tendril display transport follows every coherent handoff, target/display lane counts remain sparse, per-step reach/angle deltas stay bounded, and Blob-active paint/tick cadence remains comparable to healthy modes on all displays.
-- [ ] Exercise startup, settings close, subtype switches, preset cycling, and reset: require current-generation authority after any expected primer, no Mighty/Shaped geometry inheritance, no fallback/first-frame poison, and unchanged Bubble/Spectrum/shared-audio behavior.
-- [ ] After the live visual gate passes, rerun the Blob architecture/UI/preset locks plus the current-good visualizer lock, then prune this task instead of retaining implementation history here.
+- [ ] In a fresh normal and MC compiled run, validate Achievement Pulse's default `140 x 196` Portrait art at `540 x 334`: header/right rails stay aligned, `Unlocked` remains six authored pixels below art and renders complete high counts without ellipsis in Portrait/Wide/Square/art-off, the first capsule rail retains its measured gap, and 140/190 width changes, high DPR, large capsule font, settings rebuild, and Custom scaling do not clip or rearrange content. With two recent games whose play order and latest-unlock order disagree, require Most Recent, Previous, and Settings labels to follow the newest positive unlock timestamp while missing timestamp evidence falls back stably.
+- [ ] Run solid-bar Spectrum with `--viz --perf` through quiet/dropout material and at least one image transition: the 2026-07-14-style coherent input collapse must decay/recover without a brief zero flash or delayed-frame snap, while ordinary smoothing remains visually unchanged and logs show no new timer/repaint/audio-floor pressure.
+- [ ] Run the analogue clock with seconds visible for several minutes in normal and MC builds: require discrete six-degree second ticks with matching one-second minute/hour progression, no semi-smooth pause/jump interpolation, and unchanged shared clock-ticker/paint cadence.
 
 ### Steam Abandonment Issues Production Runtime Bar
 
 - [ ] In a fresh compiled run without `--devsteam`, enable Abandonment Issues and verify cached content appears before the first coordinated fade, Smart/Pinned/unknown-history states remain honest, cached library names populate without provider work, and explicit Refresh Steam Library gives gentle success/failure feedback.
-- [ ] Run multi-display and long-idle passes with `--steam --perf --cache --set --geo --life`: confirm one shared owned-library request per 24-hour source window, recent games follow the shared freshness window, 30-minute rotation is cache-only/profile-synchronized, 15-minute/2-hour/2-unlock/26-week ranking changes rotate through several cached games without completion claims, and game/title/art changes use the sparse fade without a repaint burst, UI-thread stall, or DT spike.
-- [ ] Validate portrait/wide/art-off, minimum/default/maximum portrait size, Guilt off/on/max, RGBA accent, rediscovery message off/on plus a longest alternate staying fitted and stable across displays/rebuilds, every optional ledger-field combination, large fonts, high DPR, and narrow/tall multi-monitor `Custom` geometry without overlap, reflow, clipping, or committed-rect mutation.
-- [ ] Exercise `--noupdates`, offline, unauthorized-with-valid-cache, disconnect, settings restart, frozen build, and non-repository cwd; cache must remain authoritative, failed sources must not freshen it, teardown must leave no Steam timer/task/resource warnings, and credentials/account data must remain absent from logs/exports/repo artifacts.
+- [ ] Run multi-display and long-idle passes with `--steam --perf --cache --set --geo --life`: confirm one shared owned-library request per 24-hour source window, recent games follow the shared freshness window, 30-minute semantic rotation is cache-only/profile-synchronized, widget/settings/display rebuilds preserve only the remaining due interval, explicit widget refresh forces a visibly different non-repeating draw when alternatives exist, several due intervals log preference-biased non-sequential `ARCHIVE` ranks without immediate repeats, and `ARCHIVE N/M` remains rank rather than cursor. A selected public-art cache miss may hydrate only on the existing IO job before the atomic fade commit; require `ABANDONMENT_ARTWORK` evidence, no provider/achievement request, no blank committed art when CDN access succeeds, no repaint burst/UI-thread stall/DT spike, and one deferred retry rather than a lost interval on parent-transition collision. Keep 15-minute/2-hour/2-unlock/26-week ranking changes honest.
+- [ ] Validate portrait/wide/art-off, minimum/default/maximum portrait size, Guilt off/on/max, RGBA accent, rediscovery message off/on plus a longest alternate staying fitted and stable across displays/rebuilds, and every optional ledger-field combination. Specifically prove default `PLAYED` / `ACHIEVEMENTS` / `LAST UNLOCK` / exact `LAST PLAYED` date / `ARCHIVE CLASS` shelves remain truthful, unknown evidence removes only its shelf, all eight enabled shelves grow complete rows, and large fonts, high DPR, and narrow/tall multi-monitor `Custom` geometry do not overlap, reflow, clip, shrink the authored hierarchy, or mutate the committed rect.
+- [ ] Exercise `--noupdates`, offline, unauthorized-with-valid-cache, disconnect, settings restart, frozen build, and non-repository cwd; cache must remain authoritative, `--noupdates` must log `cache_miss_network_disabled` rather than fetching public art automatically, failed sources must not freshen it, teardown must leave no Steam timer/task/resource warnings, and credentials/account data must remain absent from logs/exports/repo artifacts.
+
+### Visualizer Regression-Bar Reconciliation
+
+- [ ] Root-cause the deterministic Oscilloscope failure in `test_paused_reactive_modes_keep_waiting_for_fresh_engine_frame`: a paused Oscilloscope currently clears `_waiting_for_fresh_engine_frame` while the Spectrum branch preserves it. Reconcile the intended fresh-generation contract against `Docs/Historical_Bugs.md` and the current tick pipeline before changing either the test or runtime; do not disturb the accepted Spectrum zero-frame/catch-up behavior.
+- [ ] Reconcile the 15 deterministic Bubble/Deep Sea failures in `tests/test_spotify_visualizer_widget.py` as likely stale-oracle debt against the currently accepted live Bubble behavior. Freeze Bubble runtime/preset behavior unless fresh runtime-shaped evidence proves a user-visible regression; use the existing fixture/log-replay harnesses to identify obsolete numeric signatures, update/remove only disproven expectations, and do not retune Bubble or add UI-thread/timer/paint pressure merely to make the suite green.
+- [ ] Require the complete `tests/test_spotify_visualizer_widget.py` file to pass (environment skips excepted), then run the focused visualizer reactivity lock from `Docs/Harness_Index.md` before pruning this task.
 
 ## Watchlist
 
@@ -41,7 +45,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Settings runtime restart: expected lazy-section omission must stay free of `blocked_save_from_unhydrated_section`; reopen only if that warning reflects a real direct unhydrated save, deleted Qt wrapper errors, stale background hydration, or settings-exit runtime bleed in `--set` / main logs.
 - [ ] Sources / RSS reset: validate that "Just Make It Work" preserves existing RSS cache, emits one deferred source-change during settings, and settings exit performs only one clean source/RSS initialization without stranding media or visualizer.
 - [ ] Non-`Custom` authored stacking: default-on for new users; re-audit with `--geo` only if authored-layout collision behavior reopens.
-- [ ] Oscilloscope, Spectrum, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence.
+- [ ] Oscilloscope, Sine Waves, Bubble, and Dev Curve: accepted current behavior. Reopen mode-owned work only with fresh `--viz` evidence. Spectrum is temporarily covered by the active rare-dropout runtime bar above.
 - [ ] Media metadata preservation during live visualizer preset churn: if it reopens, first suspect partial same-track playback snapshots during visualizer-only settings writes.
 - [ ] Steam Journey and Friend Pulse remain production-hidden until each is explicitly promoted beyond `--devsteam`; Journey's next gate is editorial classification/noise/request-budget evidence, not transport discovery.
 
@@ -52,7 +56,6 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
   - [ ] Extract reusable list-feed seams from Reddit without changing Reddit UX first.
   - [ ] Design Feeds as an additional widget family with isolated per-spawn source/cache/settings contracts.
   - [ ] Prefer official/feed-native sources and avoid HTML scraping/session automation by default; Reddit HTML is the explicit paced exception because Reddit's structured public endpoints are fragile.
-- Dynamic Volume Floor follow-up stays deferred.
 - Startup update-policy observability stays deferred behind current runtime-health priorities.
 - Secure-desktop long-runtime exit reliability stays deferred.
 

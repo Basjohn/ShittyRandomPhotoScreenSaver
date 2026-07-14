@@ -1051,7 +1051,11 @@ class SteamCardFactory(WidgetFactory):
         from widgets.abandonment_issues_widget import AbandonmentIssuesWidget
         from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
         from widgets.steam_components import achievement_pulse_authored_size
-        from widgets.steam_abandonment_components import abandonment_authored_size
+        from widgets.steam_abandonment_components import (
+            ABANDONMENT_FIELD_DEFAULTS,
+            abandonment_authored_size,
+            abandonment_field_slot_count,
+        )
 
         if self._widget_name not in {"achievement_pulse", "abandonment_issues"} and not is_steam_enabled():
             return None
@@ -1086,7 +1090,9 @@ class SteamCardFactory(WidgetFactory):
 
         try:
             achievement_show_artwork = SettingsManager.to_bool(config.get("show_artwork", True), True)
-            achievement_artwork_shape = str(config.get("artwork_shape", "wide") or "wide")
+            achievement_artwork_shape = str(
+                config.get("artwork_shape", "portrait") or "portrait"
+            )
             achievement_capsule_fill = parse_color_to_qcolor(
                 config.get("capsule_fill_color", [199, 213, 224, 38])
             )
@@ -1102,11 +1108,12 @@ class SteamCardFactory(WidgetFactory):
                 "selected": False,
             }
             if definition.widget_id == "abandonment_issues":
-                abandonment_field_defaults = {
-                    "playtime": True,
-                    "queue": True,
-                    "source": False,
-                    "pinned": False,
+                abandonment_field_visibility = {
+                    field_id: SettingsManager.to_bool(
+                        config.get(f"show_{field_id}", default_value),
+                        default_value,
+                    )
+                    for field_id, default_value in ABANDONMENT_FIELD_DEFAULTS.items()
                 }
                 widget = AbandonmentIssuesWidget(
                     parent=parent,
@@ -1139,13 +1146,7 @@ class SteamCardFactory(WidgetFactory):
                         ) * 7,
                         never_show_appids=parse_appid_list(config.get("never_show_appids", ())),
                     ),
-                    field_visibility={
-                        field_id: SettingsManager.to_bool(
-                            config.get(f"show_{field_id}", default_value),
-                            default_value,
-                        )
-                        for field_id, default_value in abandonment_field_defaults.items()
-                    },
+                    field_visibility=abandonment_field_visibility,
                     show_rediscovery_message=SettingsManager.to_bool(
                         config.get("show_rediscovery_message", True),
                         True,
@@ -1241,18 +1242,28 @@ class SteamCardFactory(WidgetFactory):
                     (420, 180),
                     (540, 250),
                     (540, 290),
+                    (540, 330),
+                    (540, 334),
                 }:
                     authored_size = achievement_pulse_authored_size(
                         show_artwork=achievement_show_artwork,
                         artwork_shape=achievement_artwork_shape,
+                        artwork_size=int(config.get("square_artwork_size", 140)),
                     )
                     width = int(authored_size.width())
                     height = int(authored_size.height())
-                elif definition.widget_id == "abandonment_issues" and (width, height) == (420, 180):
+                elif definition.widget_id == "abandonment_issues" and (width, height) in {
+                    (420, 180),
+                    (560, 300),
+                    (560, 331),
+                }:
                     authored_size = abandonment_authored_size(
                         show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
                         artwork_shape=str(config.get("artwork_shape", "square") or "square"),
                         artwork_size=int(config.get("artwork_size", 140)),
+                        field_count=abandonment_field_slot_count(
+                            abandonment_field_visibility
+                        ),
                     )
                     width = int(math.ceil(authored_size.width()))
                     height = int(math.ceil(authored_size.height()))

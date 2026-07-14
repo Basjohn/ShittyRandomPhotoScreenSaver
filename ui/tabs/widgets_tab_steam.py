@@ -74,6 +74,7 @@ from widgets.steam_abandonment_components import (
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     ABANDONMENT_ARTWORK_SIZE_MAX,
     ABANDONMENT_ARTWORK_SIZE_MIN,
+    ABANDONMENT_FIELD_DEFAULTS,
 )
 
 if TYPE_CHECKING:
@@ -112,6 +113,7 @@ _ACHIEVEMENT_FIELD_DEFAULTS = {
 _ACHIEVEMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Wide", "wide"),
     ("Square", "square"),
+    ("Portrait", "portrait"),
 )
 _ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
 _ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
@@ -123,18 +125,16 @@ _ABANDONMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
     ("Portrait", "square"),
     ("Wide", "wide"),
 )
-_ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str], ...] = (
-    ("playtime", "Show total playtime"),
-    ("queue", "Show shelf position"),
-    ("source", "Show source"),
-    ("pinned", "Show selection mode"),
+_ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str, str], ...] = (
+    ("playtime", "Show total playtime", "Total owned-library playtime for the selected game."),
+    ("achievements", "Show achievements", "Unlocked and total achievements from a cached successful snapshot."),
+    ("last_unlock", "Show last unlock", "Time since the latest cached achievement unlock, or No Unlocks when proven."),
+    ("last_played", "Show last played date", "Exact UTC date from Steam's verified last-played timestamp."),
+    ("archive_class", "Show archive class", "A non-judgmental engagement-depth label derived from playtime and cached achievements."),
+    ("queue", "Show shelf position", "Selection position within the current eligible archive."),
+    ("source", "Show source", "Whether the displayed library snapshot came from cache or Steam."),
+    ("pinned", "Show selection mode", "Whether this game is pinned or selected by Smart Rotation."),
 )
-_ABANDONMENT_FIELD_DEFAULTS = {
-    "playtime": True,
-    "queue": True,
-    "source": False,
-    "pinned": False,
-}
 
 
 def _coerce_rgba_color(value: object, fallback: tuple[int, int, int, int]) -> QColor:
@@ -841,7 +841,8 @@ def _update_achievement_artwork_controls(tab: "WidgetsTab") -> None:
         shape.setEnabled(visible.isChecked())
         if size is not None:
             size.setEnabled(
-                visible.isChecked() and str(shape.currentData() or "wide") == "square"
+                visible.isChecked()
+                and str(shape.currentData() or "portrait") in {"square", "portrait"}
             )
 
 
@@ -1023,14 +1024,14 @@ def _build_card_group(
         artwork_shape = StyledComboBox()
         for shape_label, shape_value in _ACHIEVEMENT_ARTWORK_SHAPES:
             artwork_shape.addItem(shape_label, shape_value)
-        _set_combo_data(artwork_shape, str(tab._widget_default(key, "artwork_shape", "wide")))
+        _set_combo_data(artwork_shape, str(tab._widget_default(key, "artwork_shape", "portrait")))
         artwork_shape.currentIndexChanged.connect(tab._save_settings)
         artwork_shape.currentIndexChanged.connect(lambda _index: _update_achievement_artwork_controls(tab))
         tab.achievement_pulse_artwork_shape = artwork_shape
         artwork_shape_row.addWidget(artwork_shape)
         artwork_shape_row.addStretch()
 
-        artwork_size_row = _aligned_row(appearance_layout, "Square Artwork Size:")
+        artwork_size_row = _aligned_row(appearance_layout, "Artwork Width:")
         square_artwork_size = QSpinBox()
         square_artwork_size.setRange(
             ACHIEVEMENT_SQUARE_ARTWORK_MIN,
@@ -1326,10 +1327,11 @@ def _build_card_group(
         fields_label = QLabel("Displayed Ledger Fields:")
         fields_label.setStyleSheet(INFO_LABEL_STYLE)
         content_layout.addWidget(fields_label)
-        for field_id, label_text in _ABANDONMENT_FIELD_OPTIONS:
+        for field_id, label_text, tooltip in _ABANDONMENT_FIELD_OPTIONS:
             field_toggle = QCheckBox(label_text)
             field_toggle.setProperty("circleIndicator", True)
-            fallback = _ABANDONMENT_FIELD_DEFAULTS[field_id]
+            field_toggle.setToolTip(tooltip)
+            fallback = ABANDONMENT_FIELD_DEFAULTS[field_id]
             field_toggle.setChecked(tab._default_bool(key, f"show_{field_id}", fallback))
             field_toggle.stateChanged.connect(tab._save_settings)
             setattr(tab, f"abandonment_issues_show_{field_id}", field_toggle)
@@ -1621,7 +1623,7 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
             _set_combo_data(
                 tab.achievement_pulse_artwork_shape,
-                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "wide"))),
+                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "portrait"))),
             )
             try:
                 tab.achievement_pulse_square_artwork_size.setValue(
@@ -1789,8 +1791,8 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                     )
                 )
             )
-            for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
-                fallback = _ABANDONMENT_FIELD_DEFAULTS[field_id]
+            for field_id, _label_text, _tooltip in _ABANDONMENT_FIELD_OPTIONS:
+                fallback = ABANDONMENT_FIELD_DEFAULTS[field_id]
                 getattr(tab, f"abandonment_issues_show_{field_id}").setChecked(
                     bool(config.get(f"show_{field_id}", tab._default_bool(key, f"show_{field_id}", fallback)))
                 )
@@ -1819,7 +1821,9 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         custom_appid = int(tab.achievement_pulse_custom_appid.value())
         payload["custom_appid"] = custom_appid or None
         payload["show_artwork"] = bool(tab.achievement_pulse_show_artwork.isChecked())
-        payload["artwork_shape"] = str(tab.achievement_pulse_artwork_shape.currentData() or "wide")
+        payload["artwork_shape"] = str(
+            tab.achievement_pulse_artwork_shape.currentData() or "portrait"
+        )
         payload["square_artwork_size"] = int(tab.achievement_pulse_square_artwork_size.value())
         payload.pop("double_capsule_long_data", None)
         payload["double_capsules"] = bool(tab.achievement_pulse_double_capsules.isChecked())
@@ -1882,7 +1886,7 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["show_rediscovery_message"] = bool(
             tab.abandonment_issues_show_rediscovery_message.isChecked()
         )
-        for field_id, _label_text in _ABANDONMENT_FIELD_OPTIONS:
+        for field_id, _label_text, _tooltip in _ABANDONMENT_FIELD_OPTIONS:
             payload[f"show_{field_id}"] = bool(
                 getattr(tab, f"abandonment_issues_show_{field_id}").isChecked()
             )

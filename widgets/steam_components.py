@@ -31,9 +31,11 @@ from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_w
 STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
 ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(540.0, 290.0)
 ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE = QSizeF(540.0, 318.0)
+ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE = QSizeF(540.0, 334.0)
 ACHIEVEMENT_SQUARE_ARTWORK_MIN = 140
 ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT = 140
 ACHIEVEMENT_SQUARE_ARTWORK_MAX = 190
+ACHIEVEMENT_PORTRAIT_ASPECT_RATIO = 1.4
 ACHIEVEMENT_CAPSULE_FILL_RGBA = (199, 213, 224, 38)
 ACHIEVEMENT_CAPSULE_BORDER_RGBA = (199, 213, 224, 145)
 ACHIEVEMENT_CAPSULE_FONT_SIZE_MIN = 8
@@ -485,13 +487,20 @@ def _enabled_fields(fields: Iterable[SteamCardField]) -> tuple[SteamCardField, .
 
 
 def normalize_achievement_square_artwork_size(value: object) -> int:
-    """Clamp square artwork to the authored header/title collision envelope."""
+    """Clamp compact artwork width to the authored header/title envelope."""
 
     try:
         resolved = int(value)
     except (TypeError, ValueError):
         resolved = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT
     return max(ACHIEVEMENT_SQUARE_ARTWORK_MIN, min(ACHIEVEMENT_SQUARE_ARTWORK_MAX, resolved))
+
+
+def normalize_achievement_artwork_shape(value: object) -> str:
+    """Normalize Achievement Pulse artwork modes without collapsing portrait."""
+
+    shape = str(value or "").strip().lower()
+    return shape if shape in {"wide", "square", "portrait"} else "portrait"
 
 
 def normalize_achievement_capsule_font_size(value: object) -> int:
@@ -616,6 +625,7 @@ def achievement_pulse_authored_size(
     *,
     show_artwork: bool,
     artwork_shape: str,
+    artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
     field_rail_count: int = 2,
     capsule_height: float = ACHIEVEMENT_CAPSULE_BASE_HEIGHT,
     capsule_gap: float = ACHIEVEMENT_CAPSULE_BASE_GAP,
@@ -630,7 +640,26 @@ def achievement_pulse_authored_size(
     )
     required_block_height = rail_count * field_height + max(0, rail_count - 1) * field_gap
     extra_height = max(0.0, required_block_height - baseline_block_height)
-    if show_artwork and str(artwork_shape).strip().lower() == "square":
+    resolved_shape = normalize_achievement_artwork_shape(artwork_shape)
+    if show_artwork and resolved_shape == "portrait":
+        portrait_height = (
+            normalize_achievement_square_artwork_size(artwork_size)
+            * ACHIEVEMENT_PORTRAIT_ASPECT_RATIO
+        )
+        required_height = (
+            14.0
+            + portrait_height
+            + 6.0
+            + 28.0
+            + 12.0
+            + required_block_height
+            + 16.0
+        )
+        return QSizeF(
+            ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE.width(),
+            max(ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE.height(), required_height),
+        )
+    if show_artwork and resolved_shape == "square":
         return QSizeF(
             ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.width(),
             ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE.height() + extra_height,
@@ -664,8 +693,12 @@ def layout_steam_card(
 
     target = QRectF(target_rect)
     is_achievement_pulse = model.card_id == "achievement_pulse"
-    resolved_artwork_shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
-    square_mode = is_achievement_pulse and show_artwork and resolved_artwork_shape == "square"
+    resolved_artwork_shape = normalize_achievement_artwork_shape(artwork_shape)
+    vertical_art_mode = bool(
+        is_achievement_pulse
+        and show_artwork
+        and resolved_artwork_shape in {"square", "portrait"}
+    )
     resolved_square_artwork_size = normalize_achievement_square_artwork_size(square_artwork_size)
     fields = _enabled_fields(model.fields)
     achievement_placements: tuple[tuple[SteamCardField, int, int, bool], ...] = ()
@@ -685,6 +718,7 @@ def layout_steam_card(
         achievement_pulse_authored_size(
             show_artwork=show_artwork,
             artwork_shape=resolved_artwork_shape,
+            artwork_size=resolved_square_artwork_size,
             field_rail_count=achievement_rail_count,
             capsule_height=capsule_height,
             capsule_gap=capsule_gap,
@@ -710,13 +744,18 @@ def layout_steam_card(
         if not show_artwork:
             art = QRectF()
             title_width = 504.0
-        elif resolved_artwork_shape == "square":
+        elif resolved_artwork_shape in {"square", "portrait"}:
             art_left = 522.0 - resolved_square_artwork_size
+            art_height = (
+                resolved_square_artwork_size * ACHIEVEMENT_PORTRAIT_ASPECT_RATIO
+                if resolved_artwork_shape == "portrait"
+                else resolved_square_artwork_size
+            )
             art = QRectF(
                 art_left,
                 14.0,
                 float(resolved_square_artwork_size),
-                float(resolved_square_artwork_size),
+                float(art_height),
             )
             title_width = art_left - 32.0
         else:
@@ -724,10 +763,13 @@ def layout_steam_card(
             title_width = 310.0
         title = QRectF(18.0, 62.0, title_width, 34.0)
         subtitle = QRectF(18.0, 100.0, title_width, 88.0)
+        # Keep the metric visually attached to the artwork while using the
+        # otherwise-empty outer gutter. Constraining it to the exact artwork
+        # width elides ordinary two-digit achievement totals at high DPI.
         metric = (
-            QRectF(art.x(), art.bottom() + 6.0, art.width(), 28.0)
-            if square_mode
-            else QRectF(342.0, 108.0, 180.0, 28.0)
+            QRectF(art.x() - 10.0, art.bottom() + 6.0, art.width() + 20.0, 28.0)
+            if vertical_art_mode
+            else QRectF(332.0, 108.0, 200.0, 28.0)
         )
         status = QRectF()
         info = QRectF(300.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
@@ -1126,9 +1168,15 @@ def _draw_capsule_shell(
     painter.drawPath(pill)
 
 
-def _fit_font_to_width(font: QFont, text: str, width: float) -> QFont:
+def _fit_font_to_width(
+    font: QFont,
+    text: str,
+    width: float,
+    *,
+    minimum_ratio: float = 0.65,
+) -> QFont:
     fitted = QFont(font)
-    minimum = max(6, int(round(fitted.pointSize() * 0.65)))
+    minimum = max(6, int(round(fitted.pointSize() * max(0.25, minimum_ratio))))
     while fitted.pointSize() > minimum and QFontMetricsF(fitted).horizontalAdvance(text) > width:
         fitted.setPointSize(fitted.pointSize() - 1)
     return fitted
@@ -1296,6 +1344,12 @@ def render_steam_card(
         elif model.subtitle:
             _draw_elided_text(painter, layout.subtitle_rect, model.subtitle, color=muted, font=subtitle_font)
         metric_text = f"{model.metric_label}: {model.metric_value}" if model.metric_label else model.metric_value
+        metric_font = _fit_font_to_width(
+            metric_font,
+            metric_text,
+            layout.metric_rect.width(),
+            minimum_ratio=0.5,
+        )
         _draw_elided_text(
             painter,
             layout.metric_rect,

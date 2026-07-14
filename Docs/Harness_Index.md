@@ -67,7 +67,7 @@ python tools/winprobe_observer.py
 ## Steam Widgets
 
 ### Production Steam source / cache / visual lock
-- Purpose: protect Achievement Pulse and Abandonment Issues source provenance, successful-only cache authority, cross-card/display request reuse, cache-before-fade lifecycle, worker-prepared assets, sparse content transitions, settings/default parity, and deterministic authored geometry.
+- Purpose: protect Achievement Pulse unlock-recency candidate ordering and selected-schema request bounds, Abandonment's rebuild-proof/forced non-sequential semantic rotation cadence plus selected-art hydration boundary, source provenance, successful-only cache authority, cross-card/display request reuse, cache-before-fade lifecycle, worker-prepared assets, sparse content transitions, settings/default parity, and deterministic authored geometry.
 - Use when editing `core/steam/`, either production Steam widget, Steam descriptors/factories/settings, shared Steam painting, or Steam refresh/transition policy.
 - Typical command:
 ```powershell
@@ -85,6 +85,7 @@ python -m pytest `
 ```
 - Notes:
   - Tests use synthetic fixtures and injected openers only; no test may contact Steam or contain real account data.
+  - Achievement dynamic refresh is bounded to five recent candidate achievement records plus schema for the selected app; Settings uses exact cache paths only. Abandonment semantic rotation remains cache-only and owns one ordinary recurring timer; only its selected allowlisted public-art miss may hydrate on the existing IO job when automatic updates are allowed.
   - Offscreen raster bars require bundled font registration for representative typography. They prove geometry and paint safety, not final frozen-build/multi-display appearance.
   - Runtime validation should use `--steam --perf --cache --set --geo --life`; add `--devsteam` only when intentionally testing Journey/Friend prototypes.
 

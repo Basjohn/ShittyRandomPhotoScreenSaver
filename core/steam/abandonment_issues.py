@@ -44,6 +44,7 @@ class AbandonmentAchievementProgress:
 
     unlocked_count: int
     total_count: int
+    latest_unlock_at: float | None = None
 
     @property
     def likely_complete(self) -> bool:
@@ -64,6 +65,8 @@ class AbandonmentCandidate:
     unlocked_achievement_count: int | None
     total_achievement_count: int | None
     score: float
+    latest_unlock_at: float | None = None
+    latest_unlock_age_days: int | None = None
 
 
 @dataclass(frozen=True)
@@ -85,6 +88,8 @@ class AbandonmentResolved:
     unavailable_reason: str = ""
     unlocked_achievement_count: int | None = None
     total_achievement_count: int | None = None
+    latest_unlock_at: float | None = None
+    latest_unlock_age_days: int | None = None
 
     @property
     def ok(self) -> bool:
@@ -176,6 +181,7 @@ def resolve_abandonment_issues(
     now: float,
     current_appid: int | None = None,
     advance_rotation: bool = False,
+    rotation_seed: int = 0,
     exposure_timestamps: Mapping[int, float] | None = None,
     exposure_cooldown_days: int = DEFAULT_EXPOSURE_COOLDOWN_DAYS,
     achievement_progress_by_appid: Mapping[int, AbandonmentAchievementProgress] | None = None,
@@ -250,6 +256,7 @@ def resolve_abandonment_issues(
             None if better_unexposed_candidate else _coerce_positive_int(current_appid)
         ),
         advance=bool(advance_rotation),
+        rotation_seed=rotation_seed,
     )
     queue_position = next(
         (index + 1 for index, candidate in enumerate(candidates) if candidate.appid == selected.appid),
@@ -358,6 +365,16 @@ def _candidate_from_row(
         achievement_progress=achievement_progress,
         selection=selection,
     )
+    latest_unlock_at = (
+        _coerce_timestamp(achievement_progress.latest_unlock_at, now=now)
+        if achievement_progress is not None
+        else None
+    )
+    latest_unlock_age_days = (
+        max(0, int((float(now) - latest_unlock_at) // (24 * 60 * 60)))
+        if latest_unlock_at is not None
+        else None
+    )
     score = math.log2(inactivity_days + 2.0) * 10.0 + math.log2(playtime + 1.0) * 1.5
     return AbandonmentCandidate(
         appid=appid,
@@ -374,6 +391,8 @@ def _candidate_from_row(
             achievement_progress.total_count if achievement_progress is not None else None
         ),
         score=score,
+        latest_unlock_at=latest_unlock_at,
+        latest_unlock_age_days=latest_unlock_age_days,
     )
 
 
@@ -401,6 +420,8 @@ def _resolved_from_candidate(
         source_label=source_label,
         unlocked_achievement_count=candidate.unlocked_achievement_count,
         total_achievement_count=candidate.total_achievement_count,
+        latest_unlock_at=candidate.latest_unlock_at,
+        latest_unlock_age_days=candidate.latest_unlock_age_days,
     )
 
 
@@ -419,9 +440,20 @@ def achievement_progress_from_result(
         return None
     valid_rows = tuple(row for row in rows if isinstance(row, Mapping))
     unlocked = sum(1 for row in valid_rows if _coerce_non_negative_int(row.get("achieved")) == 1)
+    latest_unlock_at = max(
+        (
+            timestamp
+            for row in valid_rows
+            if _coerce_non_negative_int(row.get("achieved")) == 1
+            for timestamp in (_coerce_historical_timestamp(row.get("unlocktime")),)
+            if timestamp is not None
+        ),
+        default=None,
+    )
     return AbandonmentAchievementProgress(
         unlocked_count=unlocked,
         total_count=len(valid_rows),
+        latest_unlock_at=latest_unlock_at,
     )
 
 
@@ -456,16 +488,54 @@ def _select_rotation_candidate(
     candidates: tuple[AbandonmentCandidate, ...],
     current_appid: int | None,
     advance: bool,
+    rotation_seed: int = 0,
 ) -> AbandonmentCandidate:
     current_index = next(
         (index for index, candidate in enumerate(candidates) if candidate.appid == current_appid),
         None,
     )
-    if current_index is None:
-        return candidates[0]
-    if not advance:
+    if current_index is not None and not advance:
         return candidates[current_index]
-    return candidates[(current_index + 1) % len(candidates)]
+    pool = (
+        tuple(candidate for candidate in candidates if candidate.appid != current_appid)
+        if current_index is not None
+        else candidates
+    )
+    if not pool:
+        return candidates[current_index or 0]
+
+    # Select a preference tier before a game so a large library cannot
+    # overwhelm the strongest rediscovery evidence by candidate count.
+    tier_groups: dict[int, list[AbandonmentCandidate]] = {}
+    for candidate in pool:
+        tier_groups.setdefault(candidate.preference_tier, []).append(candidate)
+    best_tier = min(tier_groups)
+    weighted_tiers: list[tuple[int, int]] = []
+    for tier in sorted(tier_groups):
+        delta = max(0, tier - best_tier)
+        if delta == 0:
+            weight = 64
+        elif delta == 1:
+            weight = 24
+        elif delta == 2:
+            weight = 8
+        elif delta <= 4:
+            weight = 3
+        else:
+            weight = 1
+        weighted_tiers.append((tier, weight))
+
+    seed = abs(int(rotation_seed))
+    total_weight = sum(weight for _tier, weight in weighted_tiers)
+    draw = seed % total_weight
+    selected_tier = weighted_tiers[-1][0]
+    for tier, weight in weighted_tiers:
+        if draw < weight:
+            selected_tier = tier
+            break
+        draw -= weight
+    tier_candidates = tier_groups[selected_tier]
+    return tier_candidates[(seed // total_weight) % len(tier_candidates)]
 
 
 def _is_on_cooldown(
@@ -524,6 +594,15 @@ def _coerce_non_negative_int(value: object) -> int | None:
 
 
 def _coerce_timestamp(value: object, *, now: float) -> float | None:
+    timestamp = _coerce_historical_timestamp(value)
+    if timestamp is None:
+        return None
+    if timestamp > float(now) + MAXIMUM_FUTURE_SKEW_SECONDS:
+        return None
+    return timestamp
+
+
+def _coerce_historical_timestamp(value: object) -> float | None:
     try:
         timestamp = float(value)
     except (TypeError, ValueError):
@@ -531,8 +610,6 @@ def _coerce_timestamp(value: object, *, now: float) -> float | None:
     if not math.isfinite(timestamp):
         return None
     if timestamp < MINIMUM_REASONABLE_STEAM_TIMESTAMP:
-        return None
-    if timestamp > float(now) + MAXIMUM_FUTURE_SKEW_SECONDS:
         return None
     return timestamp
 

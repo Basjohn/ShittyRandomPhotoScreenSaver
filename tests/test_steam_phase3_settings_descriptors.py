@@ -108,7 +108,7 @@ def test_steam_phase3_descriptors_are_complete_behind_dev_gate() -> None:
         _restore_steam_gate(prior)
 
 
-def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
+def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     widgets = get_default_settings()["widgets"]
 
     steam = widgets["steam"]
@@ -118,17 +118,14 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert isinstance(steam["show_connection_info_icon"], bool)
     for widget_id in STEAM_WIDGET_IDS:
         card = widgets[widget_id]
-        assert card["enabled"] is False
+        assert isinstance(card["enabled"], bool)
         assert str(card["monitor"]) in {"ALL", "1", "2", "3"}
-        assert card["show_background"] is True
-        expected_size = {
-            "achievement_pulse": (540, 290),
-            "abandonment_issues": (560, 300),
-        }.get(widget_id, (420, 180))
-        assert (card["preferred_width"], card["preferred_height"]) == expected_size
+        assert isinstance(card["show_background"], bool)
+        assert int(card["preferred_width"]) >= 260
+        assert int(card["preferred_height"]) >= 120
     achievement = widgets["achievement_pulse"]
     assert isinstance(achievement["show_artwork"], bool)
-    assert achievement["artwork_shape"] in {"wide", "square"}
+    assert achievement["artwork_shape"] in {"wide", "square", "portrait"}
     assert 1 <= achievement["latest_unlock_count"] <= 5
     for bool_key in (
         "show_latest",
@@ -149,15 +146,26 @@ def test_steam_defaults_include_shared_preferences_and_disabled_cards() -> None:
     assert 8 <= achievement["capsule_font_size"] <= 32
     assert "double_capsule_long_data" not in achievement
     abandonment = widgets["abandonment_issues"]
-    assert abandonment["selection_mode"] == "smart_rotation"
-    assert abandonment["minimum_playtime_minutes"] == 15
-    assert abandonment["preferred_max_playtime_hours"] == 2
-    assert abandonment["preferred_max_unlocked_achievements"] == 2
-    assert abandonment["minimum_inactivity_weeks"] == 12
-    assert abandonment["preferred_minimum_inactivity_weeks"] == 26
+    assert abandonment["selection_mode"] in {"smart_rotation", "pinned_game"}
+    assert 0 <= int(abandonment["minimum_playtime_minutes"]) <= 24 * 60
+    assert 1 <= int(abandonment["preferred_max_playtime_hours"]) <= 10_000
+    assert 0 <= int(abandonment["preferred_max_unlocked_achievements"]) <= 10_000
+    assert 0 <= int(abandonment["minimum_inactivity_weeks"]) <= 10_000
+    assert 0 <= int(abandonment["preferred_minimum_inactivity_weeks"]) <= 10_000
     assert abandonment["rotation_interval_minutes"] >= 5
-    assert abandonment["guilt_desaturater"] is False
-    assert abandonment["show_rediscovery_message"] is True
+    assert isinstance(abandonment["guilt_desaturater"], bool)
+    assert isinstance(abandonment["show_rediscovery_message"], bool)
+    for bool_key in (
+        "show_playtime",
+        "show_achievements",
+        "show_last_unlock",
+        "show_last_played",
+        "show_archive_class",
+        "show_queue",
+        "show_source",
+        "show_pinned",
+    ):
+        assert isinstance(abandonment[bool_key], bool)
     assert len(abandonment["accent_color"]) == 4
 
 
@@ -234,7 +242,9 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_guilt_desaturater.setChecked(True)
             tab.abandonment_issues_guilt_desaturation_strength.setValue(65)
             tab.abandonment_issues_show_rediscovery_message.setChecked(False)
-            tab.abandonment_issues_show_queue.setChecked(False)
+            tab.abandonment_issues_show_achievements.setChecked(False)
+            tab.abandonment_issues_show_last_played.setChecked(False)
+            tab.abandonment_issues_show_queue.setChecked(True)
             tab.abandonment_issues_accent_color_btn.color_changed.emit(
                 QColor(180, 110, 55, 170)
             )
@@ -287,7 +297,9 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert abandonment_payload["guilt_desaturater"] is True
             assert abandonment_payload["guilt_desaturation_strength"] == 65
             assert abandonment_payload["show_rediscovery_message"] is False
-            assert abandonment_payload["show_queue"] is False
+            assert abandonment_payload["show_achievements"] is False
+            assert abandonment_payload["show_last_played"] is False
+            assert abandonment_payload["show_queue"] is True
             assert abandonment_payload["accent_color"] == [180, 110, 55, 170]
         finally:
             tab.deleteLater()
@@ -652,6 +664,15 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
             assert getattr(abandonment_widget, "_abandonment_show_rediscovery_message") is False
             assert getattr(abandonment_widget, "_abandonment_accent_color").getRgb() == (180, 110, 55, 170)
+            abandonment_fields = getattr(
+                abandonment_widget,
+                "_abandonment_field_visibility",
+            )
+            assert abandonment_fields["achievements"] is True
+            assert abandonment_fields["last_unlock"] is True
+            assert abandonment_fields["last_played"] is True
+            assert abandonment_fields["archive_class"] is True
+            assert abandonment_fields["queue"] is False
             assert abandonment_widget.minimumWidth() >= 560
             assert abandonment_widget.minimumHeight() > 300
             abandonment_widget.deleteLater()

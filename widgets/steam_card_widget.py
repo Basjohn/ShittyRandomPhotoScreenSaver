@@ -33,6 +33,7 @@ from widgets.steam_components import (
     build_mock_steam_view_model,
     build_steam_connect_required_view_model,
     layout_steam_card,
+    normalize_achievement_artwork_shape,
     normalize_achievement_capsule_font_size,
     normalize_achievement_square_artwork_size,
     render_steam_card,
@@ -64,7 +65,7 @@ STEAM_CARD_DEFINITIONS: dict[str, SteamCardDefinition] = {
     "abandonment_issues": SteamCardDefinition(
         widget_id="abandonment_issues",
         title="Abandonment Issues",
-        subtitle="Dev-gated library return card scaffold",
+        subtitle="Cache-first library rediscovery card",
     ),
     "friend_pulse": SteamCardDefinition(
         widget_id="friend_pulse",
@@ -91,7 +92,7 @@ class SteamCardWidget(BaseOverlayWidget):
         achievement_latest_unlock_count: int = 1,
         achievement_show_latest_artwork: bool = True,
         achievement_show_artwork: bool = True,
-        achievement_artwork_shape: str = "wide",
+        achievement_artwork_shape: str = "portrait",
         achievement_square_artwork_size: int = ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT,
         achievement_double_capsules: bool = True,
         achievement_capsule_font_size: int = ACHIEVEMENT_CAPSULE_FONT_SIZE_DEFAULT,
@@ -106,8 +107,8 @@ class SteamCardWidget(BaseOverlayWidget):
         self._achievement_latest_unlock_count = max(1, min(5, int(achievement_latest_unlock_count)))
         self._achievement_show_latest_artwork = bool(achievement_show_latest_artwork)
         self._achievement_show_artwork = bool(achievement_show_artwork)
-        self._achievement_artwork_shape = (
-            "square" if str(achievement_artwork_shape).strip().lower() == "square" else "wide"
+        self._achievement_artwork_shape = normalize_achievement_artwork_shape(
+            achievement_artwork_shape
         )
         self._achievement_square_artwork_size = normalize_achievement_square_artwork_size(
             achievement_square_artwork_size
@@ -202,6 +203,7 @@ class SteamCardWidget(BaseOverlayWidget):
         return achievement_pulse_authored_size(
             show_artwork=self._achievement_show_artwork,
             artwork_shape=self._achievement_artwork_shape,
+            artwork_size=self._achievement_square_artwork_size,
             field_rail_count=field_rails,
             capsule_height=capsule_height,
             capsule_gap=capsule_gap,

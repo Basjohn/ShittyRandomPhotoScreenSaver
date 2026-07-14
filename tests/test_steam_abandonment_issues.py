@@ -15,8 +15,11 @@ from core.steam.abandonment_cache import (
 )
 from core.steam.abandonment_issues import (
     AbandonmentAchievementProgress,
+    AbandonmentResolved,
     AbandonmentSelection,
     LAST_PLAYED_UNKNOWN,
+    LAST_PLAYED_VERIFIED,
+    achievement_progress_from_result,
     build_abandonment_candidates,
     format_appid_list,
     parse_appid_list,
@@ -29,6 +32,7 @@ from core.steam.achievement_pulse_cache import (
     refresh_achievement_pulse_cache,
 )
 from core.steam.assets import (
+    SteamAssetRecord,
     abandonment_desaturation_bucket,
     prepare_desaturated_steam_artwork,
 )
@@ -49,12 +53,15 @@ from widgets.abandonment_issues_widget import AbandonmentIssuesWidget, _prepare_
 from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
+    ABANDONMENT_FIELD_DEFAULTS,
     ABANDONMENT_PRIMARY_REDISCOVERY_MESSAGE,
     _fit_wrapped_font,
     _rediscovery_message_for_bucket,
     abandonment_authored_size,
+    abandonment_archive_class,
     abandonment_rediscovery_message,
     build_abandonment_view_model,
+    format_abandonment_last_played,
     layout_abandonment_card,
     render_abandonment_card,
 )
@@ -148,6 +155,104 @@ def test_abandonment_prefers_old_short_low_unlock_games_without_forbidding_other
     assert [candidate.preference_tier for candidate in candidates] == [0, 2, 3, 6, 10]
 
 
+def test_abandonment_user_shelves_require_and_format_cached_evidence() -> None:
+    last_played = 1_493_424_000.0  # 29/04/2017 UTC
+    latest_unlock = 1_609_459_200.0
+    owned = SteamResult(
+        status=SteamResultStatus.SUCCESS,
+        source_id=SteamSourceId.OWNED_GAMES,
+        payload={
+            "response": {
+                "games": [
+                    {
+                        "appid": 77,
+                        "name": "Shelf Fixture",
+                        "playtime_forever": 90,
+                        "rtime_last_played": last_played,
+                    }
+                ]
+            }
+        },
+        from_cache=True,
+    )
+    achievement_result = SteamResult(
+        status=SteamResultStatus.SUCCESS,
+        source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+        payload={
+            "playerstats": {
+                "achievements": [
+                    {"name": "ONE", "achieved": 1, "unlocktime": latest_unlock - 100},
+                    {"name": "TWO", "achieved": 1, "unlocktime": latest_unlock},
+                    {"name": "THREE", "achieved": 0, "unlocktime": 0},
+                    {"name": "FOUR", "achieved": 0},
+                ]
+            }
+        },
+        from_cache=True,
+    )
+    progress = achievement_progress_from_result(achievement_result)
+
+    assert progress is not None
+    assert progress.latest_unlock_at == latest_unlock
+    resolved = resolve_abandonment_issues(
+        owned_result=owned,
+        recent_result=None,
+        achievement_progress_by_appid={77: progress},
+        now=NOW,
+    )
+    fields = {field.field_id: field for field in build_abandonment_view_model(resolved).fields}
+
+    assert fields["achievements"].enabled is True
+    assert fields["achievements"].value == "2 / 4"
+    assert fields["last_unlock"].enabled is True
+    assert str(fields["last_unlock"].value).endswith("YEARS AGO")
+    assert fields["last_played"].enabled is True
+    assert fields["last_played"].value == "29/04/2017"
+    assert fields["archive_class"].value == "Barely Started"
+    assert fields["queue"].enabled is False
+    assert abandonment_archive_class(resolved) == "Barely Started"
+
+
+def test_abandonment_last_played_and_unlock_shelves_hide_unproven_values() -> None:
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=88,
+        title="Unknown Evidence",
+        playtime_minutes=400,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_UNKNOWN,
+        unlocked_achievement_count=None,
+        total_achievement_count=None,
+    )
+    fields = {field.field_id: field for field in build_abandonment_view_model(resolved).fields}
+
+    assert format_abandonment_last_played(
+        resolved.last_played_at,
+        resolved.last_played_confidence,
+    ) is None
+    assert fields["last_played"].enabled is False
+    assert fields["achievements"].enabled is False
+    assert fields["last_unlock"].enabled is False
+
+
+def test_abandonment_zero_unlock_snapshot_proves_no_unlocks() -> None:
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=89,
+        title="No Unlock Fixture",
+        playtime_minutes=45,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_VERIFIED,
+        unlocked_achievement_count=0,
+        total_achievement_count=12,
+    )
+    fields = {field.field_id: field for field in build_abandonment_view_model(resolved).fields}
+
+    assert fields["achievements"].value == "0 / 12"
+    assert fields["last_unlock"].enabled is True
+    assert fields["last_unlock"].value == "No Unlocks"
+
+
 def test_abandonment_never_show_and_pinned_unknown_history_remain_honest() -> None:
     smart = build_abandonment_candidates(
         owned_result=_owned_result(),
@@ -195,6 +300,102 @@ def test_abandonment_rotation_retains_current_until_advance_and_honors_cooldown(
     assert advanced.appid != initial.appid
 
 
+def test_abandonment_weighted_rotation_is_varied_biased_and_repeatable() -> None:
+    draws = [
+        resolve_abandonment_issues(
+            owned_result=_owned_result(),
+            recent_result=_recent_result(),
+            now=NOW,
+            rotation_seed=seed,
+        ).appid
+        for seed in range(256)
+    ]
+    repeated = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+        rotation_seed=67,
+    )
+    repeated_again = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+        rotation_seed=67,
+    )
+
+    assert len(set(draws)) >= 2
+    assert draws.count(102) > sum(draws.count(appid) for appid in (101, 106))
+    assert repeated.appid == repeated_again.appid
+
+
+def test_abandonment_persisted_draws_shuffle_archive_positions(tmp_path) -> None:
+    profile_key = derive_profile_cache_key("76561198000000999")
+    owned_payload = {
+        "response": {
+            "game_count": 18,
+            "games": [
+                {
+                    "appid": 5_000 + index,
+                    "name": f"Archive Game {index:02d}",
+                    "playtime_forever": 30,
+                    "rtime_last_played": NOW - (500 + index) * 24 * 60 * 60,
+                }
+                for index in range(18)
+            ],
+        }
+    }
+    recent_payload = {"response": {"total_count": 0, "games": []}}
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, owned_payload),
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, recent_payload),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    draws = [
+        load_abandonment_cache_snapshot(
+            profile_key=profile_key,
+            root=tmp_path,
+            now=NOW + index,
+            force_rotation=index > 0,
+        ).resolved
+        for index in range(10)
+    ]
+    archive_positions = [draw.queue_position for draw in draws]
+    appids = [draw.appid for draw in draws]
+
+    assert len(set(appids)) == len(appids)
+    assert archive_positions != sorted(archive_positions)
+    assert any(
+        abs(archive_positions[index] - archive_positions[index - 1]) > 1
+        for index in range(1, len(archive_positions))
+    )
+
+
+def test_abandonment_advanced_rotation_never_immediately_repeats_when_alternatives_exist() -> None:
+    appids = {
+        resolve_abandonment_issues(
+            owned_result=_owned_result(),
+            recent_result=_recent_result(),
+            now=NOW,
+            current_appid=102,
+            advance_rotation=True,
+            rotation_seed=seed,
+        ).appid
+        for seed in range(128)
+    }
+
+    assert 102 not in appids
+    assert appids
+
+
 def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_path) -> None:
     profile_key = derive_profile_cache_key("76561198000000001")
     for cache_key, source_id, payload in (
@@ -227,7 +428,7 @@ def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_pat
     advanced = load_abandonment_cache_snapshot(
         profile_key=profile_key,
         root=tmp_path,
-        now=NOW + 30 * 60 + 1,
+        now=NOW + 30 * 60 - 1,
         advance_rotation=True,
         rotation_interval_minutes=30,
     )
@@ -235,11 +436,49 @@ def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_pat
     assert first.resolved.ok is True
     assert follower.resolved.appid == first.resolved.appid
     assert advanced.resolved.appid != first.resolved.appid
+    assert first.rotation_due_seconds == 30 * 60
+    assert follower.rotation_due_seconds == 30 * 60 - 1
+    assert advanced.rotation_due_seconds == 30 * 60
     state_payload = json.loads((tmp_path / "profile_state.json").read_text(encoding="utf-8"))
     assert state_payload["rotations"]["abandonment_issues"]["appid"] == advanced.resolved.appid
+    assert state_payload["rotations"]["abandonment_issues"]["rotation_index"] == 2
 
 
-def test_abandonment_reranks_once_when_preference_policy_changes(tmp_path) -> None:
+def test_abandonment_forced_rotation_does_not_wait_for_interval(tmp_path) -> None:
+    profile_key = derive_profile_cache_key("76561198000000022")
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
+        (RECENT_GAMES_CACHE_KEY, SteamSourceId.RECENTLY_PLAYED, _fixture("recent_games_for_abandonment.json")),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    first = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW,
+        rotation_interval_minutes=30,
+    )
+    forced = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW + 1,
+        force_rotation=True,
+        rotation_interval_minutes=30,
+    )
+
+    assert forced.resolved.appid != first.resolved.appid
+    assert forced.rotation_due_seconds == 30 * 60
+
+
+def test_abandonment_recomputes_profile_rotation_when_preference_policy_changes(tmp_path) -> None:
     profile_key = derive_profile_cache_key("76561198000000020")
     for cache_key, source_id, payload in (
         (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
@@ -261,15 +500,24 @@ def test_abandonment_reranks_once_when_preference_policy_changes(tmp_path) -> No
         root=tmp_path,
         now=NOW,
     )
+    high_playtime_state = json.loads((tmp_path / "profile_state.json").read_text(encoding="utf-8"))
     short_start_policy = load_abandonment_cache_snapshot(
         profile_key=profile_key,
         selection=AbandonmentSelection(),
         root=tmp_path,
         now=NOW + 1,
     )
+    short_start_state = json.loads((tmp_path / "profile_state.json").read_text(encoding="utf-8"))
 
-    assert high_playtime_policy.resolved.appid == 101
-    assert short_start_policy.resolved.appid == 102
+    assert high_playtime_policy.resolved.appid in {101, 102}
+    assert short_start_policy.resolved.appid in {101, 102, 106}
+    assert short_start_policy.resolved.appid != high_playtime_policy.resolved.appid
+    assert (
+        high_playtime_state["rotations"]["abandonment_issues"]["policy_signature"]
+        != short_start_state["rotations"]["abandonment_issues"]["policy_signature"]
+    )
+    assert short_start_state["rotations"]["abandonment_issues"]["rotation_index"] == 1
+    assert short_start_state["rotations"]["abandonment_issues"]["changed_at"] == NOW + 1
 
 
 def test_abandonment_uses_bounded_cached_achievement_signal_without_provider_work(tmp_path) -> None:
@@ -607,6 +855,67 @@ def test_guilt_desaturater_is_smooth_capped_and_prepared_outside_paint(tmp_path)
     assert not hasattr(AbandonmentIssuesWidget, "_scaled_artwork_for")
 
 
+def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
+    qt_app,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from core.settings import storage_paths
+    from core.steam import assets
+
+    source = tmp_path / "selected.png"
+    image = QImage(120, 180, QImage.Format.Format_RGB32)
+    image.fill(QColor(190, 90, 45))
+    assert image.save(str(source), "PNG")
+    resolved = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+    )
+
+    class _Snapshot:
+        cache_age_seconds = 60.0
+
+        def __init__(self):
+            self.resolved = resolved
+
+    fetches: list[int] = []
+    monkeypatch.setattr(storage_paths, "get_steam_cache_dir", lambda **_kwargs: tmp_path)
+    monkeypatch.setattr(assets, "find_cached_steam_app_artwork", lambda **_kwargs: None)
+
+    def _fetch(**kwargs):
+        fetches.append(kwargs["appid"])
+        return SteamAssetRecord(
+            url_fingerprint="fixture",
+            path=source,
+            bytes_written=source.stat().st_size,
+            image_kind="png",
+        )
+
+    monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=True,
+        artwork_shape="square",
+        guilt_desaturater=False,
+    )
+    try:
+        presentation = widget._prepare_presentation(
+            _Snapshot(),
+            profile_key="profile_fixture",
+            allow_asset_network=True,
+            artwork_target=(80, 80),
+        )
+
+        assert fetches == [resolved.appid]
+        assert presentation.artwork_identity == str(source)
+        assert (presentation.artwork.width(), presentation.artwork.height()) == (80, 80)
+    finally:
+        widget.cleanup()
+
+
 def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt_app) -> None:
     resolved = resolve_abandonment_issues(
         owned_result=_owned_result(),
@@ -632,6 +941,115 @@ def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt
     assert not layout.art_rect.intersects(layout.title_rect)
     assert not layout.art_rect.intersects(layout.age_stamp_rect)
     assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
+
+
+def test_abandonment_layout_allocates_every_enabled_ledger_shelf(qt_app) -> None:
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=90,
+        title="Full Ledger Fixture",
+        playtime_minutes=90,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_VERIFIED,
+        inactivity_days=2_500,
+        queue_position=3,
+        queue_count=40,
+        source_label="Cache",
+        unlocked_achievement_count=2,
+        total_achievement_count=20,
+        latest_unlock_at=1_609_459_200.0,
+        latest_unlock_age_days=1_400,
+    )
+    visibility = {field_id: True for field_id in ABANDONMENT_FIELD_DEFAULTS}
+    model = build_abandonment_view_model(resolved, field_visibility=visibility)
+    authored = abandonment_authored_size(
+        show_artwork=True,
+        artwork_shape="square",
+        artwork_size=140,
+        field_count=len(visibility),
+    )
+    layout = layout_abandonment_card(
+        model,
+        QRectF(0, 0, authored.width(), authored.height()),
+        show_artwork=True,
+        artwork_shape="square",
+        artwork_size=140,
+        field_slot_count=len(visibility),
+    )
+
+    assert authored.height() == 362
+    assert len(layout.field_rects) == len(visibility)
+    assert {field_id for field_id, _rect in layout.field_rects} == set(visibility)
+    assert max(rect.bottom() for _field_id, rect in layout.field_rects) < authored.height()
+    assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
+
+
+def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch) -> None:
+    import widgets.steam_abandonment_components as components
+
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=91,
+        title="Measured Ledger Fixture",
+        playtime_minutes=90,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_VERIFIED,
+        inactivity_days=3_350,
+        queue_position=3,
+        queue_count=40,
+        source_label="Cache",
+        unlocked_achievement_count=2,
+        total_achievement_count=54,
+        latest_unlock_at=1_609_459_200.0,
+        latest_unlock_age_days=42,
+    )
+    model = build_abandonment_view_model(resolved)
+    calls: list[tuple[QRectF, str, QFont]] = []
+
+    def _capture(_painter, rect, text, *, color, font, flags=None) -> None:
+        del color, flags
+        calls.append((QRectF(rect), str(text), QFont(font)))
+
+    monkeypatch.setattr(components, "_draw_elided_text", _capture)
+    image = QImage(560, 331, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(image)
+    try:
+        render_abandonment_card(
+            painter,
+            model,
+            QRectF(0, 0, 560, 331),
+            font_family="Segoe UI",
+            font_size=14,
+            text_color=QColor(255, 255, 255, 230),
+            logo_pixmap=None,
+            artwork_image=None,
+            show_artwork=True,
+            artwork_shape="square",
+            artwork_size=140,
+            accent_color=QColor(222, 157, 88, 225),
+            field_slot_count=5,
+        )
+    finally:
+        painter.end()
+
+    expected = {
+        "PLAYED",
+        "1.5H",
+        "ACHIEVEMENTS",
+        "2 / 54",
+        "LAST UNLOCK",
+        "6 WEEKS AGO",
+        "LAST PLAYED",
+        "29/04/2017",
+        "ARCHIVE CLASS",
+        "BARELY STARTED",
+    }
+    measured = {text: (rect, font) for rect, text, font in calls if text in expected}
+
+    assert set(measured) == expected
+    for text, (rect, font) in measured.items():
+        assert QFontMetricsF(font).horizontalAdvance(text) <= rect.width() + 1.0
 
 
 def test_abandonment_rediscovery_messages_use_exact_stable_60_40_buckets() -> None:
@@ -740,6 +1158,194 @@ def test_abandonment_renderer_produces_nonempty_archival_card(qt_app) -> None:
 
     assert not layout.art_rect.isNull()
     assert any(image.pixelColor(x, y).alpha() > 0 for x, y in ((30, 30), (40, 100), (250, 180)))
+
+
+def test_abandonment_rotation_defers_transition_collision_through_shared_single_shot(
+    qt_app,
+    monkeypatch,
+) -> None:
+    from core.threading.manager import ThreadManager
+    import widgets.service_widget_runtime as service_runtime
+
+    scheduled: list[tuple[int, object]] = []
+    busy = {"value": True}
+    monkeypatch.setattr(
+        service_runtime,
+        "parent_transition_running",
+        lambda _widget: busy["value"],
+    )
+    monkeypatch.setattr(
+        ThreadManager,
+        "single_shot",
+        staticmethod(
+            lambda delay_ms, callback, *args, **kwargs: scheduled.append((delay_ms, callback))
+        ),
+    )
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=False,
+    )
+    resumed: list[bool] = []
+    try:
+        assert widget._request_cache_only_rotation() is True
+        assert widget._pending_abandonment_rotation is True
+        assert scheduled[0][0] == 1_000
+
+        busy["value"] = False
+        monkeypatch.setattr(
+            widget,
+            "_request_cache_only_rotation",
+            lambda: resumed.append(True) or True,
+        )
+        scheduled[0][1]()
+
+        assert widget._pending_abandonment_rotation is False
+        assert resumed == [True]
+    finally:
+        widget.cleanup()
+
+
+@pytest.mark.parametrize(
+    ("updates_enabled", "expected_asset_network"),
+    ((True, True), (False, False)),
+)
+def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
+    qt_app,
+    monkeypatch,
+    updates_enabled: bool,
+    expected_asset_network: bool,
+) -> None:
+    from core import runtime_flags
+    from core.steam import abandonment_cache, credentials
+
+    class _Metadata:
+        profile_cache_key = "profile_fixture"
+
+    class _InlineThreadManager:
+        def submit_io_task(self, func, *, task_id, callback):
+            callback(TaskResult(success=True, result=func(), task_id=task_id))
+            return task_id
+
+    snapshot = object()
+    prepared = object()
+    preparation_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        runtime_flags,
+        "automatic_service_updates_enabled",
+        lambda: updates_enabled,
+    )
+    monkeypatch.setattr(credentials, "read_credential_metadata", lambda: _Metadata())
+    monkeypatch.setattr(
+        abandonment_cache,
+        "load_abandonment_cache_snapshot",
+        lambda **_kwargs: snapshot,
+    )
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=True,
+    )
+    try:
+        widget.set_thread_manager(_InlineThreadManager())
+
+        def _prepare(_snapshot, **kwargs):
+            preparation_calls.append(kwargs)
+            return prepared
+
+        monkeypatch.setattr(widget, "_prepare_presentation", _prepare)
+        monkeypatch.setattr(widget, "_apply_prepared_presentation", lambda *_args, **_kwargs: None)
+
+        assert widget._request_cache_only_rotation() is True
+        qt_app.processEvents()
+
+        assert preparation_calls[0]["allow_asset_network"] is expected_asset_network
+    finally:
+        widget.cleanup()
+
+
+def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
+    qt_app,
+    monkeypatch,
+) -> None:
+    created: list[tuple[int, object, object]] = []
+
+    class _Handle:
+        def __init__(self) -> None:
+            self.active = True
+
+        def is_active(self) -> bool:
+            return self.active
+
+        def stop(self) -> None:
+            self.active = False
+
+    def _create(_widget, interval_ms, callback, *, description):
+        handle = _Handle()
+        created.append((interval_ms, callback, handle))
+        return handle
+
+    monkeypatch.setattr(
+        "widgets.abandonment_issues_widget.create_overlay_timer",
+        _create,
+    )
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=False,
+        rotation_interval_minutes=5,
+    )
+    rotations: list[bool] = []
+    try:
+        widget._abandonment_activation_rotation_due_seconds = 75.0
+        monkeypatch.setattr(
+            widget,
+            "_request_cache_only_rotation",
+            lambda: rotations.append(True) or True,
+        )
+
+        widget._start_rotation_timer()
+        assert created[0][0] == 75_000
+        created[0][1]()
+
+        assert created[0][2].active is False
+        assert created[1][0] == 5 * 60 * 1_000
+        assert rotations == [True]
+    finally:
+        widget.cleanup()
+
+
+def test_abandonment_double_click_forces_source_refresh_and_new_draw(
+    qt_app,
+    monkeypatch,
+) -> None:
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=False,
+    )
+    calls: list[dict[str, object]] = []
+    try:
+        monkeypatch.setattr(
+            widget,
+            "_refresh_abandonment_cache",
+            lambda **kwargs: calls.append(kwargs) or True,
+        )
+
+        assert widget.handle_double_click(None) is True
+        assert calls == [
+            {
+                "cache_age_seconds": None,
+                "force": True,
+                "force_rotation": True,
+            }
+        ]
+    finally:
+        widget.cleanup()
 
 
 def test_abandonment_widget_applies_cache_before_first_coordinated_fade(

@@ -389,6 +389,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._spectrum_solid_last_update_ts: list[float] = []
         self._spectrum_solid_hysteresis_segments: int = 0
         self._spectrum_solid_hysteresis_bar_count: int = 0
+        self._spectrum_solid_last_signal_ts: float = 0.0
 
         # Ghosting configuration – whether trailing segments are drawn and
         # how strong they appear relative to the main bar border colour. The

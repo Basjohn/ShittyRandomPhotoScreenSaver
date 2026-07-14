@@ -18,8 +18,8 @@ from widgets.steam_abandonment_components import (
     AbandonmentCardLayout,
     abandonment_artwork_dimensions,
     abandonment_authored_size,
+    abandonment_field_slot_count,
     build_abandonment_view_model,
-    layout_abandonment_card,
     normalize_abandonment_artwork_size,
     render_abandonment_card,
 )
@@ -63,7 +63,7 @@ def _prepare_cover_image(
 
 
 class AbandonmentIssuesWidget(SteamCardWidget):
-    """Cache-first archival rediscovery card with cache-only rotation."""
+    """Cache-first archival rediscovery card with cache-backed rotation."""
 
     def __init__(
         self,
@@ -87,6 +87,9 @@ class AbandonmentIssuesWidget(SteamCardWidget):
     ) -> None:
         self._abandonment_selection = selection
         self._abandonment_field_visibility = dict(field_visibility or {})
+        self._abandonment_field_slots = abandonment_field_slot_count(
+            self._abandonment_field_visibility
+        )
         self._abandonment_show_artwork = bool(show_artwork)
         self._abandonment_artwork_shape = (
             "square" if str(artwork_shape).strip().lower() == "square" else "wide"
@@ -108,6 +111,8 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_show_rediscovery_message = bool(show_rediscovery_message)
         self._abandonment_artwork = QImage()
         self._abandonment_rotation_timer: OverlayTimerHandle | None = None
+        self._abandonment_rotation_initial_delay = False
+        self._pending_abandonment_rotation = False
         super().__init__(
             parent=parent,
             definition=definition,
@@ -122,6 +127,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             show_artwork=self._abandonment_show_artwork,
             artwork_shape=self._abandonment_artwork_shape,
             artwork_size=self._abandonment_artwork_size,
+            field_count=self._abandonment_field_slots,
         )
 
     def _calculate_content_size(self) -> QSize:
@@ -164,28 +170,60 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._stop_rotation_timer()
         super()._cleanup_impl()
 
-    def _start_rotation_timer(self) -> None:
+    def _start_rotation_timer(self, *, delay_seconds: float | None = None) -> None:
         if self._abandonment_selection.mode == "pinned_game":
             return
         if self._abandonment_rotation_timer is not None and self._abandonment_rotation_timer.is_active():
             return
+        full_interval_ms = self._abandonment_rotation_interval_minutes * 60 * 1_000
+        if delay_seconds is None:
+            delay_seconds = getattr(
+                self,
+                "_abandonment_activation_rotation_due_seconds",
+                full_interval_ms / 1_000.0,
+            )
+        interval_ms = max(1_000, min(full_interval_ms, int(round(delay_seconds * 1_000))))
+        self._abandonment_rotation_initial_delay = interval_ms < full_interval_ms
         try:
             self._abandonment_rotation_timer = create_overlay_timer(
                 self,
-                self._abandonment_rotation_interval_minutes * 60 * 1_000,
-                self._request_cache_only_rotation,
-                description="Abandonment Issues cache-only rotation",
+                interval_ms,
+                self._on_rotation_timer,
+                description="Abandonment Issues cache-backed rotation",
             )
         except Exception:
+            self._abandonment_rotation_initial_delay = False
             logger.warning("[STEAM] Could not start Abandonment Issues rotation", exc_info=True)
 
+    def _on_rotation_timer(self) -> bool:
+        if self._abandonment_rotation_initial_delay:
+            handle = self._abandonment_rotation_timer
+            self._abandonment_rotation_timer = None
+            self._abandonment_rotation_initial_delay = False
+            if handle is not None:
+                handle.stop()
+            self._start_rotation_timer(
+                delay_seconds=float(self._abandonment_rotation_interval_minutes * 60)
+            )
+        return self._request_cache_only_rotation()
+
+    def _restart_rotation_timer_full_interval(self) -> None:
+        self._stop_rotation_timer()
+        self._start_rotation_timer(
+            delay_seconds=float(self._abandonment_rotation_interval_minutes * 60)
+        )
+
     def _stop_rotation_timer(self) -> None:
+        self._pending_abandonment_rotation = False
+        self._abandonment_rotation_initial_delay = False
         handle = self._abandonment_rotation_timer
         self._abandonment_rotation_timer = None
         if handle is not None:
             handle.stop()
 
     def _load_abandonment_cache(self, *, start_fade_after_load: bool = False) -> bool:
+        from core.runtime_flags import automatic_service_updates_enabled
+
         if getattr(self, "_abandonment_cache_load_started", False):
             if start_fade_after_load:
                 if getattr(self, "_abandonment_activation_cache_preloaded", False):
@@ -199,6 +237,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_start_fade_after_cache_load = bool(start_fade_after_load)
         generation = self._next_abandonment_generation()
         artwork_target = self._capture_artwork_prepare_target()
+        allow_asset_network = automatic_service_updates_enabled()
 
         def _load_snapshot():
             from core.steam.abandonment_cache import load_abandonment_cache_snapshot
@@ -210,6 +249,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             snapshot = load_abandonment_cache_snapshot(
                 profile_key=metadata.profile_cache_key,
                 selection=self._abandonment_selection,
+                advance_rotation=True,
                 rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
             )
             return (
@@ -218,7 +258,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 self._prepare_presentation(
                     snapshot,
                     profile_key=metadata.profile_cache_key,
-                    allow_asset_network=False,
+                    allow_asset_network=allow_asset_network,
                     artwork_target=artwork_target,
                 ),
             )
@@ -237,6 +277,9 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 cache_age_seconds = None
                 if snapshot is not None and presentation is not None:
                     cache_age_seconds = snapshot.cache_age_seconds
+                    self._abandonment_activation_rotation_due_seconds = (
+                        snapshot.rotation_due_seconds
+                    )
                     self._apply_prepared_presentation(presentation, animate=False)
                 self._abandonment_activation_cache_preloaded = True
                 self._abandonment_activation_has_metadata = metadata is not None
@@ -263,6 +306,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         *,
         cache_age_seconds: float | None,
         force: bool = False,
+        force_rotation: bool = False,
     ) -> bool:
         from core.runtime_flags import automatic_service_updates_enabled
 
@@ -300,6 +344,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 snapshot = load_abandonment_cache_snapshot(
                     profile_key=metadata.profile_cache_key,
                     selection=self._abandonment_selection,
+                    force_rotation=force_rotation,
                     rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
                 )
                 outcome = AbandonmentRefreshOutcome(
@@ -319,6 +364,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 credential=credential,
                 selection=self._abandonment_selection,
                 force=force,
+                force_rotation=force_rotation,
                 rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
                 recent_fresh_seconds=self._refresh_minutes * 60,
             )
@@ -342,6 +388,8 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 if result is not None:
                     _outcome, presentation = result
                     self._apply_prepared_presentation(presentation, animate=True)
+                    if force_rotation:
+                        self._restart_rotation_timer_full_interval()
 
             ThreadManager.run_on_ui_thread(_apply_result)
 
@@ -368,7 +416,11 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             log_message="[STEAM] Deferred manual Abandonment Issues refresh during parent transition",
         ):
             return True
-        return self._refresh_abandonment_cache(cache_age_seconds=None, force=True)
+        return self._refresh_abandonment_cache(
+            cache_age_seconds=None,
+            force=True,
+            force_rotation=True,
+        )
 
     def _schedule_deferred_manual_refresh(self) -> None:
         from core.threading.manager import ThreadManager
@@ -384,15 +436,27 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             self._schedule_deferred_manual_refresh()
             return
         self._pending_abandonment_manual_refresh = False
-        self._refresh_abandonment_cache(cache_age_seconds=None, force=True)
+        self._refresh_abandonment_cache(
+            cache_age_seconds=None,
+            force=True,
+            force_rotation=True,
+        )
 
     def _request_cache_only_rotation(self) -> bool:
-        from widgets.service_widget_runtime import parent_transition_running
+        from core.runtime_flags import automatic_service_updates_enabled
+        from widgets.service_widget_runtime import defer_refresh_if_transition
 
         if self._abandonment_selection.mode == "pinned_game":
             return False
-        if parent_transition_running(self):
-            return False
+        if defer_refresh_if_transition(
+            self,
+            pending_attr="_pending_abandonment_rotation",
+            schedule_callback=self._schedule_deferred_cache_rotation,
+            logger=logger,
+            log_message="[STEAM] Deferred Abandonment Issues rotation during parent transition",
+        ):
+            return True
+        self._pending_abandonment_rotation = False
         if getattr(self, "_abandonment_rotation_in_progress", False):
             return True
         if not self._ensure_thread_manager("Abandonment Issues cache-only rotation"):
@@ -400,6 +464,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         self._abandonment_rotation_in_progress = True
         generation = self._next_abandonment_generation()
         artwork_target = self._capture_artwork_prepare_target()
+        allow_asset_network = automatic_service_updates_enabled()
 
         def _rotate_snapshot():
             from core.steam.abandonment_cache import load_abandonment_cache_snapshot
@@ -417,7 +482,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             return self._prepare_presentation(
                 snapshot,
                 profile_key=metadata.profile_cache_key,
-                allow_asset_network=False,
+                allow_asset_network=allow_asset_network,
                 artwork_target=artwork_target,
             )
 
@@ -446,6 +511,22 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             return False
         return True
 
+    def _schedule_deferred_cache_rotation(self) -> None:
+        from core.threading.manager import ThreadManager
+
+        ThreadManager.single_shot(1_000, self._run_deferred_cache_rotation)
+
+    def _run_deferred_cache_rotation(self) -> None:
+        from widgets.service_widget_runtime import parent_transition_running
+
+        if not self._pending_abandonment_rotation:
+            return
+        if parent_transition_running(self):
+            self._schedule_deferred_cache_rotation()
+            return
+        self._pending_abandonment_rotation = False
+        self._request_cache_only_rotation()
+
     def _prepare_presentation(
         self,
         snapshot,
@@ -473,10 +554,17 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             field_visibility=self._abandonment_field_visibility,
         )
         asset_path: Path | None = None
+        artwork_outcome = "disabled"
         bucket = 0
         if self._abandonment_show_artwork and model.appid is not None:
             asset_dir = get_steam_cache_dir(profile_key=profile_key) / "assets"
-            if allow_asset_network:
+            asset_path = find_cached_steam_app_artwork(
+                cache_dir=asset_dir,
+                appid=model.appid,
+                artwork_shape=self._abandonment_artwork_shape,
+            )
+            artwork_outcome = "cache_hit" if asset_path is not None else "cache_miss"
+            if asset_path is None and allow_asset_network:
                 asset = fetch_steam_app_artwork(
                     cache_dir=asset_dir,
                     appid=model.appid,
@@ -484,12 +572,12 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 )
                 if isinstance(asset, SteamAssetRecord):
                     asset_path = asset.path
-            else:
-                asset_path = find_cached_steam_app_artwork(
-                    cache_dir=asset_dir,
-                    appid=model.appid,
-                    artwork_shape=self._abandonment_artwork_shape,
-                )
+                    artwork_outcome = "hydrated"
+                else:
+                    status = getattr(getattr(asset, "status", None), "value", "unavailable")
+                    artwork_outcome = f"unavailable:{status}"
+            elif asset_path is None:
+                artwork_outcome = "cache_miss_network_disabled"
             if asset_path is not None:
                 bucket = abandonment_desaturation_bucket(
                     inactivity_days=snapshot.resolved.inactivity_days,
@@ -506,13 +594,26 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                     desaturation_percent=bucket,
                 )
         artwork_identity = str(asset_path or "")
+        artwork = _prepare_cover_image(
+            asset_path,
+            target_width=artwork_target[0],
+            target_height=artwork_target[1],
+        )
+        if asset_path is not None and artwork.isNull():
+            artwork_outcome = "decode_failed"
+        if self._abandonment_show_artwork and model.appid is not None:
+            logger.info(
+                "[STEAM][ABANDONMENT_ARTWORK] appid=%s archive=%s/%s outcome=%s "
+                "network_allowed=%s",
+                model.appid,
+                snapshot.resolved.queue_position,
+                snapshot.resolved.queue_count,
+                artwork_outcome,
+                allow_asset_network,
+            )
         return _AbandonmentPreparedPresentation(
             model=model,
-            artwork=_prepare_cover_image(
-                asset_path,
-                target_width=artwork_target[0],
-                target_height=artwork_target[1],
-            ),
+            artwork=artwork,
             artwork_identity=artwork_identity,
             desaturation_bucket=bucket,
         )
@@ -616,13 +717,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 max(1.0, float(self.width() - shrink_r)),
                 max(1.0, float(self.height() - shrink_b)),
             )
-            layout = layout_abandonment_card(
-                self._view_model,
-                target,
-                show_artwork=self._abandonment_show_artwork,
-                artwork_shape=self._abandonment_artwork_shape,
-                artwork_size=self._abandonment_artwork_size,
-            )
             self._last_layout = render_abandonment_card(
                 painter,
                 self._view_model,
@@ -637,6 +731,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 artwork_size=self._abandonment_artwork_size,
                 accent_color=self._abandonment_accent_color,
                 content_opacity=self.content_opacity(),
+                field_slot_count=self._abandonment_field_slots,
             )
         finally:
             if painter is not None:

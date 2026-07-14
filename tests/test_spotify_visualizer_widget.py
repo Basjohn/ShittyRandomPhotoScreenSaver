@@ -2503,6 +2503,7 @@ def _make_spectrum_solid_hysteresis_state():
         _spectrum_solid_last_update_ts=[],
         _spectrum_solid_hysteresis_segments=0,
         _spectrum_solid_hysteresis_bar_count=0,
+        _spectrum_solid_last_signal_ts=0.0,
     )
 
 
@@ -5178,6 +5179,79 @@ def test_spectrum_solid_hysteresis_one_segment_drop_settles_smoothly_without_rob
     assert settled_outputs[-1] < 11.35
     assert settled_outputs[-1] > 11.0
     assert settled_outputs == sorted(settled_outputs, reverse=True)
+
+
+def test_spectrum_solid_hysteresis_holds_brief_coherent_zero_frame_then_releases():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+    signal = segment_index_to_spectrum_bar(10, segments=segments, height_scale=height_scale)
+
+    apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [signal, signal],
+        segments=segments,
+        render_height=render_height,
+        now_ts=1.0,
+    )
+    held = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [0.0, 0.0],
+        segments=segments,
+        render_height=render_height,
+        now_ts=1.12,
+    )
+    released = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [0.0, 0.0],
+        segments=segments,
+        render_height=render_height,
+        now_ts=1.20,
+    )
+
+    assert all(
+        spectrum_bar_to_segment_float(value, segments=segments, height_scale=height_scale)
+        == pytest.approx(10.0, abs=0.02)
+        for value in held
+    )
+    assert all(
+        0.0
+        < spectrum_bar_to_segment_float(value, segments=segments, height_scale=height_scale)
+        < 10.0
+        for value in released
+    )
+
+
+def test_spectrum_solid_hysteresis_limits_one_frame_catchup_after_tick_stall():
+    overlay = _make_spectrum_solid_hysteresis_state()
+    segments = 18
+    render_height = 220.0
+    height_scale = compute_spectrum_height_scale(render_height)
+    low = segment_index_to_spectrum_bar(4, segments=segments, height_scale=height_scale)
+    high = segment_index_to_spectrum_bar(14, segments=segments, height_scale=height_scale)
+
+    apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [low],
+        segments=segments,
+        render_height=render_height,
+        now_ts=1.0,
+    )
+    after_stall = apply_overlay_spectrum_solid_hysteresis(
+        overlay,
+        [high],
+        segments=segments,
+        render_height=render_height,
+        now_ts=1.076,
+    )
+    after_stall_segment = spectrum_bar_to_segment_float(
+        after_stall[0],
+        segments=segments,
+        height_scale=height_scale,
+    )
+
+    assert 9.0 < after_stall_segment < 13.5
 
 
 @pytest.mark.qt
