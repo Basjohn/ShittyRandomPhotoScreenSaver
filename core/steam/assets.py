@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import urllib.error
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -54,14 +55,27 @@ def find_cached_asset(cache_dir: Path, url: str) -> Path | None:
     return None
 
 
+def _normalize_steam_app_artwork_shape(artwork_shape: str) -> str:
+    shape = str(artwork_shape or "").strip().lower()
+    if shape not in _STEAM_APP_ARTWORK_URLS:
+        shape = "wide"
+    return shape
+
+
 def steam_app_artwork_url(appid: int, artwork_shape: str) -> str:
     """Return the allowlisted public artwork URL for one Steam app."""
 
     safe_appid = max(1, int(appid))
-    shape = str(artwork_shape or "").strip().lower()
-    if shape not in _STEAM_APP_ARTWORK_URLS:
-        shape = "wide"
+    shape = _normalize_steam_app_artwork_shape(artwork_shape)
     return _STEAM_APP_ARTWORK_URLS[shape].format(appid=safe_appid)
+
+
+def steam_app_artwork_variant_order(artwork_shape: str) -> tuple[str, str]:
+    """Return the requested app-art variant followed by one bounded fallback."""
+
+    primary = _normalize_steam_app_artwork_shape(artwork_shape)
+    fallback = "wide" if primary != "wide" else "portrait"
+    return primary, fallback
 
 
 def find_cached_steam_app_artwork(
@@ -265,9 +279,36 @@ def fetch_and_cache_asset(
     """Fetch through an injected fetcher, then validate/cache the asset."""
     try:
         data = fetcher(url)
+    except urllib.error.HTTPError as exc:
+        http_status = int(exc.code)
+        logger.warning(
+            "[STEAM] Asset fetch failed url_hash=%s http_status=%s",
+            hashlib.sha256(url.encode("utf-8")).hexdigest()[:12],
+            http_status,
+        )
+        return SteamResult(
+            status=(
+                SteamResultStatus.NOT_FOUND
+                if http_status == 404
+                else SteamResultStatus.NETWORK_ERROR
+            ),
+            message=(
+                "Steam asset was not found."
+                if http_status == 404
+                else "Steam asset request failed."
+            ),
+            http_status=http_status,
+        )
     except Exception as exc:
-        logger.warning("[STEAM] Asset fetch failed url_hash=%s error=%s", hashlib.sha256(url.encode("utf-8")).hexdigest()[:12], exc)
-        return SteamResult(status=SteamResultStatus.NETWORK_ERROR, message="Steam asset fetch failed.")
+        logger.warning(
+            "[STEAM] Asset fetch failed url_hash=%s error=%s",
+            hashlib.sha256(url.encode("utf-8")).hexdigest()[:12],
+            exc,
+        )
+        return SteamResult(
+            status=SteamResultStatus.NETWORK_ERROR,
+            message="Steam asset fetch failed.",
+        )
     return cache_asset_from_bytes(cache_dir=cache_dir, url=url, data=data, allowed_hosts=allowed_hosts)
 
 

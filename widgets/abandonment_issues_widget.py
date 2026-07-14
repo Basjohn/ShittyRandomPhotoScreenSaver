@@ -80,7 +80,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         accent_color: QColor | None = None,
         guilt_desaturater: bool = False,
         guilt_desaturation_strength: int = 55,
-        rotation_interval_minutes: int = 30,
         refresh_minutes: int = 10,
         show_connection_info_icon: bool = True,
         show_rediscovery_message: bool = True,
@@ -103,10 +102,6 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             0,
             min(100, int(guilt_desaturation_strength)),
         )
-        self._abandonment_rotation_interval_minutes = max(
-            5,
-            min(24 * 60, int(rotation_interval_minutes)),
-        )
         self._abandonment_show_connection_info_icon = bool(show_connection_info_icon)
         self._abandonment_show_rediscovery_message = bool(show_rediscovery_message)
         self._abandonment_artwork = QImage()
@@ -120,6 +115,12 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             initial_view_model=initial_view_model,
             achievement_show_artwork=False,
             refresh_minutes=refresh_minutes,
+        )
+        logger.info(
+            "[STEAM][ABANDONMENT_CADENCE] shared_refresh_minutes=%s "
+            "rotation_minutes=%s authority=widgets.steam.refresh_minutes",
+            self._refresh_minutes,
+            self._refresh_minutes,
         )
 
     def _authored_content_size(self):
@@ -175,7 +176,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             return
         if self._abandonment_rotation_timer is not None and self._abandonment_rotation_timer.is_active():
             return
-        full_interval_ms = self._abandonment_rotation_interval_minutes * 60 * 1_000
+        full_interval_ms = self._refresh_minutes * 60 * 1_000
         if delay_seconds is None:
             delay_seconds = getattr(
                 self,
@@ -203,14 +204,14 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             if handle is not None:
                 handle.stop()
             self._start_rotation_timer(
-                delay_seconds=float(self._abandonment_rotation_interval_minutes * 60)
+                delay_seconds=float(self._refresh_minutes * 60)
             )
         return self._request_cache_only_rotation()
 
     def _restart_rotation_timer_full_interval(self) -> None:
         self._stop_rotation_timer()
         self._start_rotation_timer(
-            delay_seconds=float(self._abandonment_rotation_interval_minutes * 60)
+            delay_seconds=float(self._refresh_minutes * 60)
         )
 
     def _stop_rotation_timer(self) -> None:
@@ -250,7 +251,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 profile_key=metadata.profile_cache_key,
                 selection=self._abandonment_selection,
                 advance_rotation=True,
-                rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
+                refresh_interval_minutes=self._refresh_minutes,
             )
             return (
                 metadata,
@@ -345,7 +346,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                     profile_key=metadata.profile_cache_key,
                     selection=self._abandonment_selection,
                     force_rotation=force_rotation,
-                    rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
+                    refresh_interval_minutes=self._refresh_minutes,
                 )
                 outcome = AbandonmentRefreshOutcome(
                     snapshot=snapshot,
@@ -365,7 +366,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 selection=self._abandonment_selection,
                 force=force,
                 force_rotation=force_rotation,
-                rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
+                refresh_interval_minutes=self._refresh_minutes,
                 recent_fresh_seconds=self._refresh_minutes * 60,
             )
             profile_key = derive_profile_cache_key(credential.profile_identifier)
@@ -477,7 +478,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 profile_key=metadata.profile_cache_key,
                 selection=self._abandonment_selection,
                 advance_rotation=True,
-                rotation_interval_minutes=self._abandonment_rotation_interval_minutes,
+                refresh_interval_minutes=self._refresh_minutes,
             )
             return self._prepare_presentation(
                 snapshot,
@@ -543,7 +544,9 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             fetch_steam_app_artwork,
             find_cached_steam_app_artwork,
             prepare_desaturated_steam_artwork,
+            steam_app_artwork_variant_order,
         )
+        from core.steam.models import SteamResultStatus
 
         model = build_abandonment_view_model(
             snapshot.resolved,
@@ -555,27 +558,62 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         )
         asset_path: Path | None = None
         artwork_outcome = "disabled"
+        resolved_artwork_shape = "none"
         bucket = 0
         if self._abandonment_show_artwork and model.appid is not None:
             asset_dir = get_steam_cache_dir(profile_key=profile_key) / "assets"
-            asset_path = find_cached_steam_app_artwork(
-                cache_dir=asset_dir,
-                appid=model.appid,
-                artwork_shape=self._abandonment_artwork_shape,
+            artwork_shapes = steam_app_artwork_variant_order(
+                self._abandonment_artwork_shape
             )
-            artwork_outcome = "cache_hit" if asset_path is not None else "cache_miss"
+            for index, artwork_shape in enumerate(artwork_shapes):
+                asset_path = find_cached_steam_app_artwork(
+                    cache_dir=asset_dir,
+                    appid=model.appid,
+                    artwork_shape=artwork_shape,
+                )
+                if asset_path is None:
+                    continue
+                resolved_artwork_shape = artwork_shape
+                artwork_outcome = (
+                    "cache_hit"
+                    if index == 0
+                    else f"fallback_cache_hit:{artwork_shape}"
+                )
+                break
             if asset_path is None and allow_asset_network:
                 asset = fetch_steam_app_artwork(
                     cache_dir=asset_dir,
                     appid=model.appid,
-                    artwork_shape=self._abandonment_artwork_shape,
+                    artwork_shape=artwork_shapes[0],
                 )
                 if isinstance(asset, SteamAssetRecord):
                     asset_path = asset.path
+                    resolved_artwork_shape = artwork_shapes[0]
                     artwork_outcome = "hydrated"
                 else:
                     status = getattr(getattr(asset, "status", None), "value", "unavailable")
                     artwork_outcome = f"unavailable:{status}"
+                    if getattr(asset, "status", None) in {
+                        SteamResultStatus.NOT_FOUND,
+                        SteamResultStatus.ASSET_INVALID,
+                    }:
+                        fallback_shape = artwork_shapes[1]
+                        fallback_asset = fetch_steam_app_artwork(
+                            cache_dir=asset_dir,
+                            appid=model.appid,
+                            artwork_shape=fallback_shape,
+                        )
+                        if isinstance(fallback_asset, SteamAssetRecord):
+                            asset_path = fallback_asset.path
+                            resolved_artwork_shape = fallback_shape
+                            artwork_outcome = f"fallback_hydrated:{fallback_shape}"
+                        else:
+                            fallback_status = getattr(
+                                getattr(fallback_asset, "status", None),
+                                "value",
+                                "unavailable",
+                            )
+                            artwork_outcome = f"unavailable:{fallback_status}"
             elif asset_path is None:
                 artwork_outcome = "cache_miss_network_disabled"
             if asset_path is not None:
@@ -604,11 +642,13 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         if self._abandonment_show_artwork and model.appid is not None:
             logger.info(
                 "[STEAM][ABANDONMENT_ARTWORK] appid=%s archive=%s/%s outcome=%s "
-                "network_allowed=%s",
+                "requested_shape=%s resolved_shape=%s network_allowed=%s",
                 model.appid,
                 snapshot.resolved.queue_position,
                 snapshot.resolved.queue_count,
                 artwork_outcome,
+                self._abandonment_artwork_shape,
+                resolved_artwork_shape,
                 allow_asset_network,
             )
         return _AbandonmentPreparedPresentation(

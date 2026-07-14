@@ -48,7 +48,7 @@ from core.steam.request_policy import (
 
 ABANDONMENT_ROTATION_STATE_KEY = "abandonment_issues"
 ABANDONMENT_COOLDOWN_PREFIX = "abandonment_issues:"
-DEFAULT_ROTATION_INTERVAL_MINUTES = 30
+DEFAULT_REFRESH_INTERVAL_MINUTES = 10
 ROTATION_DUE_TOLERANCE_SECONDS = 2.0
 _DISPLAY_FOLLOWER_FRESH_SECONDS = 60.0
 DEFAULT_OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
@@ -124,7 +124,7 @@ def load_abandonment_cache_snapshot(
     now: float | None = None,
     advance_rotation: bool = False,
     force_rotation: bool = False,
-    rotation_interval_minutes: int = DEFAULT_ROTATION_INTERVAL_MINUTES,
+    refresh_interval_minutes: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
     read_record: Callable[[Path], SteamResult] = read_cache_record,
 ) -> AbandonmentCacheSnapshot:
     """Resolve one card from local cache and profile policy state only."""
@@ -162,7 +162,7 @@ def load_abandonment_cache_snapshot(
             changed_at = 0.0
             rotation_index = 0
         rotation_was_initialized = current_appid is not None and changed_at > 0.0
-        rotation_seconds = max(5, int(rotation_interval_minutes)) * 60
+        rotation_seconds = max(5, int(refresh_interval_minutes)) * 60
         rotation_due = bool(
             force_rotation
             or (
@@ -278,7 +278,7 @@ def refresh_abandonment_cache(
     now: float | None = None,
     force: bool = False,
     force_rotation: bool = False,
-    rotation_interval_minutes: int = DEFAULT_ROTATION_INTERVAL_MINUTES,
+    refresh_interval_minutes: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
     owned_fresh_seconds: float = DEFAULT_OWNED_GAMES_FRESH_SECONDS,
     recent_fresh_seconds: float = DEFAULT_RECENT_GAMES_FRESH_SECONDS,
 ) -> AbandonmentRefreshOutcome:
@@ -324,7 +324,7 @@ def refresh_abandonment_cache(
             root=root,
             now=reference_now,
             force_rotation=force_rotation,
-            rotation_interval_minutes=rotation_interval_minutes,
+            refresh_interval_minutes=refresh_interval_minutes,
         )
         return AbandonmentRefreshOutcome(
             snapshot=snapshot,

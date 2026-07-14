@@ -152,7 +152,8 @@ def test_steam_defaults_include_shared_preferences_and_valid_cards() -> None:
     assert 0 <= int(abandonment["preferred_max_unlocked_achievements"]) <= 10_000
     assert 0 <= int(abandonment["minimum_inactivity_weeks"]) <= 10_000
     assert 0 <= int(abandonment["preferred_minimum_inactivity_weeks"]) <= 10_000
-    assert abandonment["rotation_interval_minutes"] >= 5
+    assert "rotation_interval_minutes" not in abandonment
+    assert widgets["steam"]["refresh_minutes"] >= 5
     assert isinstance(abandonment["guilt_desaturater"], bool)
     assert isinstance(abandonment["show_rediscovery_message"], bool)
     for bool_key in (
@@ -193,6 +194,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
         tab = WidgetsTab(settings_manager, lazy_sections=True, initial_view_state={"subtab_id": "steam"})
         try:
             assert hasattr(tab, "steam_privacy_mode")
+            assert not hasattr(tab, "abandonment_issues_rotation_interval_minutes")
             assert tab.steam_enabled.isChecked() is bool(
                 get_default_settings()["widgets"]["steam"]["enabled"]
             )
@@ -200,6 +202,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.steam_enabled.setChecked(True)
             assert tab._steam_controls_container.isHidden() is False
             tab.steam_show_connection_info_icon.setChecked(False)
+            tab.steam_refresh_minutes.setValue(5)
             tab.steam_enabled.setChecked(False)
             assert tab._steam_controls_container.isHidden() is True
             assert _find_toggle(tab, "Layout") is not None
@@ -235,7 +238,6 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             tab.abandonment_issues_preferred_max_unlocked_achievements.setValue(1)
             tab.abandonment_issues_minimum_inactivity_weeks.setValue(24)
             tab.abandonment_issues_preferred_minimum_inactivity_weeks.setValue(52)
-            tab.abandonment_issues_rotation_interval_minutes.setValue(45)
             tab.abandonment_issues_never_show_appids.setText("440, 570; 440")
             tab.abandonment_issues_artwork_shape.setCurrentIndex(1)
             tab.abandonment_issues_artwork_size.setValue(175)
@@ -260,6 +262,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert steam_payload["enabled"] is False
             assert steam_payload["privacy_mode"] == tab.steam_privacy_mode.currentText()
             assert steam_payload["show_connection_info_icon"] is False
+            assert steam_payload["refresh_minutes"] == 5
             assert progress_payload["enabled"] is True
             assert progress_payload["position"] == "Center"
             assert progress_payload["font_family"] == "Jost"
@@ -290,7 +293,7 @@ def test_steam_settings_section_load_save_roundtrip_is_non_secret_and_inert(qt_a
             assert abandonment_payload["preferred_max_unlocked_achievements"] == 1
             assert abandonment_payload["minimum_inactivity_weeks"] == 24
             assert abandonment_payload["preferred_minimum_inactivity_weeks"] == 52
-            assert abandonment_payload["rotation_interval_minutes"] == 45
+            assert "rotation_interval_minutes" not in abandonment_payload
             assert abandonment_payload["never_show_appids"] == [440, 570]
             assert abandonment_payload["artwork_shape"] == "wide"
             assert abandonment_payload["artwork_size"] == 175
@@ -626,8 +629,9 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert getattr(achievement_widget, "_achievement_capsule_border_color").getRgb() == (90, 87, 65, 43)
             achievement_widget.deleteLater()
 
-            abandonment_widget = registry.create_widget(
-                "abandonment_issues",
+            abandonment_factory = registry.get_factory("abandonment_issues")
+            assert abandonment_factory is not None
+            abandonment_widget = abandonment_factory.create(
                 parent,
                 {
                     "enabled": True,
@@ -651,6 +655,7 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
                     "preferred_width": 420,
                     "preferred_height": 180,
                 },
+                steam_settings={"enabled": True, "refresh_minutes": 5},
             )
             assert abandonment_widget is not None
             assert abandonment_widget.objectName() == "abandonment_issues_overlay"
@@ -660,6 +665,7 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_playtime_minutes == 360
             assert getattr(abandonment_widget, "_abandonment_selection").preferred_max_unlocked_achievements == 1
             assert getattr(abandonment_widget, "_abandonment_selection").preferred_minimum_inactivity_days == 364
+            assert getattr(abandonment_widget, "_refresh_minutes") == 5
             assert getattr(abandonment_widget, "_abandonment_artwork_size") == 175
             assert getattr(abandonment_widget, "_abandonment_guilt_desaturater") is True
             assert getattr(abandonment_widget, "_abandonment_show_rediscovery_message") is False
@@ -707,7 +713,12 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
                 "preferred_height": 180,
             },
             "achievement_pulse": {"enabled": False, "monitor": "ALL"},
-            "abandonment_issues": {"enabled": False, "monitor": "ALL"},
+            "abandonment_issues": {
+                "enabled": True,
+                "monitor": "ALL",
+                "position": "Bottom Right",
+                "show_artwork": False,
+            },
             "friend_pulse": {"enabled": False, "monitor": "ALL"},
             "shadows": {"enabled": True},
         })
@@ -717,6 +728,10 @@ def test_steam_cards_flow_through_descriptor_widget_setup_when_enabled(qt_app) -
             assert created["steam_progress_widget"] is getattr(parent, "steam_progress_widget")
             assert getattr(created["steam_progress_widget"], "_refresh_minutes") == 5
             assert "achievement_pulse_widget" not in created
+            assert "abandonment_issues_widget" in created
+            abandonment_widget = created["abandonment_issues_widget"]
+            assert getattr(abandonment_widget, "_refresh_minutes") == 5
+            assert not hasattr(abandonment_widget, "_abandonment_rotation_interval_minutes")
 
             created_again = manager.setup_all_widgets(settings, screen_index=0, thread_manager=None)
             assert created_again["steam_progress_widget"] is created["steam_progress_widget"]

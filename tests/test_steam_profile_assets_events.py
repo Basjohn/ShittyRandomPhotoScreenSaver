@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from core.steam.assets import (
     fetch_steam_app_artwork,
     fetch_steam_app_header,
     prune_asset_cache,
+    steam_app_artwork_variant_order,
 )
 from core.steam.events import STEAM_DATA_READY_EVENT, publish_steam_data_ready
 from core.steam.mock_backend import SteamFixtureBackend
@@ -125,6 +127,28 @@ def test_compact_steam_artwork_uses_the_portrait_library_capsule(
 
     assert isinstance(asset, SteamAssetRecord)
     assert calls == ["https://cdn.akamai.steamstatic.com/steam/apps/1086940/library_600x900.jpg"]
+
+
+def test_steam_app_artwork_variant_order_is_bounded_and_shape_aware() -> None:
+    assert steam_app_artwork_variant_order("square") == ("square", "wide")
+    assert steam_app_artwork_variant_order("portrait") == ("portrait", "wide")
+    assert steam_app_artwork_variant_order("wide") == ("wide", "portrait")
+
+
+def test_missing_steam_artwork_is_classified_as_not_found(tmp_path: Path) -> None:
+    def _missing(url: str) -> bytes:
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+
+    result = fetch_steam_app_artwork(
+        cache_dir=tmp_path,
+        appid=424242,
+        artwork_shape="square",
+        fetcher=_missing,
+    )
+
+    assert isinstance(result, SteamResult)
+    assert result.status == SteamResultStatus.NOT_FOUND
+    assert result.http_status == 404
 
 
 def test_achievement_icon_accepts_schema_host_and_reuses_cache(tmp_path: Path) -> None:

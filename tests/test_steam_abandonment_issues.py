@@ -416,21 +416,21 @@ def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_pat
         profile_key=profile_key,
         root=tmp_path,
         now=NOW,
-        rotation_interval_minutes=30,
+        refresh_interval_minutes=30,
     )
     follower = load_abandonment_cache_snapshot(
         profile_key=profile_key,
         root=tmp_path,
         now=NOW + 1,
         advance_rotation=True,
-        rotation_interval_minutes=30,
+        refresh_interval_minutes=30,
     )
     advanced = load_abandonment_cache_snapshot(
         profile_key=profile_key,
         root=tmp_path,
         now=NOW + 30 * 60 - 1,
         advance_rotation=True,
-        rotation_interval_minutes=30,
+        refresh_interval_minutes=30,
     )
 
     assert first.resolved.ok is True
@@ -442,6 +442,55 @@ def test_abandonment_profile_rotation_is_shared_across_display_followers(tmp_pat
     state_payload = json.loads((tmp_path / "profile_state.json").read_text(encoding="utf-8"))
     assert state_payload["rotations"]["abandonment_issues"]["appid"] == advanced.resolved.appid
     assert state_payload["rotations"]["abandonment_issues"]["rotation_index"] == 2
+
+
+def test_abandonment_shared_refresh_interval_rebases_remaining_duration(
+    tmp_path,
+) -> None:
+    profile_key = derive_profile_cache_key("shared_refresh_interval_fixture")
+    for cache_key, source_id, payload in (
+        (OWNED_GAMES_CACHE_KEY, SteamSourceId.OWNED_GAMES, _fixture("owned_games_last_played.json")),
+        (
+            RECENT_GAMES_CACHE_KEY,
+            SteamSourceId.RECENTLY_PLAYED,
+            _fixture("recent_games_for_abandonment.json"),
+        ),
+    ):
+        write_cache_record(
+            SteamCacheRecord(
+                cache_key=cache_key,
+                source_id=source_id,
+                payload=payload,
+                fetched_at=NOW - 60,
+            ),
+            cache_path_for_profile_key(profile_key, cache_key, root=tmp_path),
+        )
+
+    first = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW,
+        refresh_interval_minutes=15,
+    )
+    shortened = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW + 4 * 60,
+        advance_rotation=True,
+        refresh_interval_minutes=5,
+    )
+    due = load_abandonment_cache_snapshot(
+        profile_key=profile_key,
+        root=tmp_path,
+        now=NOW + 5 * 60,
+        advance_rotation=True,
+        refresh_interval_minutes=5,
+    )
+
+    assert shortened.resolved.appid == first.resolved.appid
+    assert shortened.rotation_due_seconds == 60
+    assert due.resolved.appid != first.resolved.appid
+    assert due.rotation_due_seconds == 5 * 60
 
 
 def test_abandonment_forced_rotation_does_not_wait_for_interval(tmp_path) -> None:
@@ -464,14 +513,14 @@ def test_abandonment_forced_rotation_does_not_wait_for_interval(tmp_path) -> Non
         profile_key=profile_key,
         root=tmp_path,
         now=NOW,
-        rotation_interval_minutes=30,
+        refresh_interval_minutes=30,
     )
     forced = load_abandonment_cache_snapshot(
         profile_key=profile_key,
         root=tmp_path,
         now=NOW + 1,
         force_rotation=True,
-        rotation_interval_minutes=30,
+        refresh_interval_minutes=30,
     )
 
     assert forced.resolved.appid != first.resolved.appid
@@ -916,6 +965,124 @@ def test_abandonment_preparation_hydrates_one_missing_selected_artwork(
         widget.cleanup()
 
 
+def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
+    qt_app,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from core.settings import storage_paths
+    from core.steam import assets
+
+    source = tmp_path / "fallback-wide.png"
+    image = QImage(180, 100, QImage.Format.Format_RGB32)
+    image.fill(QColor(45, 90, 190))
+    assert image.save(str(source), "PNG")
+    resolved = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+    )
+
+    class _Snapshot:
+        cache_age_seconds = 60.0
+
+        def __init__(self):
+            self.resolved = resolved
+
+    fetch_shapes: list[str] = []
+    monkeypatch.setattr(storage_paths, "get_steam_cache_dir", lambda **_kwargs: tmp_path)
+    monkeypatch.setattr(assets, "find_cached_steam_app_artwork", lambda **_kwargs: None)
+
+    def _fetch(**kwargs):
+        shape = kwargs["artwork_shape"]
+        fetch_shapes.append(shape)
+        if shape == "square":
+            return SteamResult(
+                status=SteamResultStatus.NOT_FOUND,
+                http_status=404,
+            )
+        return SteamAssetRecord(
+            url_fingerprint="fallback",
+            path=source,
+            bytes_written=source.stat().st_size,
+            image_kind="png",
+        )
+
+    monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=True,
+        artwork_shape="square",
+        guilt_desaturater=False,
+    )
+    try:
+        presentation = widget._prepare_presentation(
+            _Snapshot(),
+            profile_key="profile_fixture",
+            allow_asset_network=True,
+            artwork_target=(80, 80),
+        )
+
+        assert fetch_shapes == ["square", "wide"]
+        assert presentation.artwork_identity == str(source)
+        assert not presentation.artwork.isNull()
+    finally:
+        widget.cleanup()
+
+
+def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
+    qt_app,
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from core.settings import storage_paths
+    from core.steam import assets
+
+    resolved = resolve_abandonment_issues(
+        owned_result=_owned_result(),
+        recent_result=_recent_result(),
+        now=NOW,
+    )
+
+    class _Snapshot:
+        cache_age_seconds = 60.0
+
+        def __init__(self):
+            self.resolved = resolved
+
+    fetch_shapes: list[str] = []
+    monkeypatch.setattr(storage_paths, "get_steam_cache_dir", lambda **_kwargs: tmp_path)
+    monkeypatch.setattr(assets, "find_cached_steam_app_artwork", lambda **_kwargs: None)
+
+    def _fetch(**kwargs):
+        fetch_shapes.append(kwargs["artwork_shape"])
+        return SteamResult(status=SteamResultStatus.NETWORK_ERROR)
+
+    monkeypatch.setattr(assets, "fetch_steam_app_artwork", _fetch)
+    widget = AbandonmentIssuesWidget(
+        definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
+        position=OverlayPosition.BOTTOM_RIGHT,
+        initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        show_artwork=True,
+        artwork_shape="square",
+        guilt_desaturater=False,
+    )
+    try:
+        presentation = widget._prepare_presentation(
+            _Snapshot(),
+            profile_key="profile_fixture",
+            allow_asset_network=True,
+            artwork_target=(80, 80),
+        )
+
+        assert fetch_shapes == ["square"]
+        assert presentation.artwork.isNull()
+    finally:
+        widget.cleanup()
+
+
 def test_abandonment_archival_layout_keeps_large_portrait_and_ledger_separate(qt_app) -> None:
     resolved = resolve_abandonment_issues(
         owned_result=_owned_result(),
@@ -1296,7 +1463,7 @@ def test_abandonment_rebuild_arms_persisted_remaining_rotation_delay(
         position=OverlayPosition.BOTTOM_RIGHT,
         initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
         show_artwork=False,
-        rotation_interval_minutes=5,
+        refresh_minutes=5,
     )
     rotations: list[bool] = []
     try:

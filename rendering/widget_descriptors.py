@@ -644,7 +644,6 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
             "abandonment_issues_preferred_max_unlocked_achievements",
             "abandonment_issues_minimum_inactivity_weeks",
             "abandonment_issues_preferred_minimum_inactivity_weeks",
-            "abandonment_issues_rotation_interval_minutes",
             "abandonment_issues_never_show_appids",
             "abandonment_issues_show_artwork",
             "abandonment_issues_artwork_shape",

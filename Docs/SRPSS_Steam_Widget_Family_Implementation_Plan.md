@@ -1200,11 +1200,11 @@ Higher playtime and higher unlock counts are deprioritized, not forbidden. “Al
 ### Rotation
 
 - Smart rotation advances from existing qualified cache candidates only.
-- Default visual rotation is 30 minutes (5-minute configurable minimum); it must not send an owned/recent/achievement request merely because the card changes. The one selected allowlisted public-art asset may fill a cache miss on the existing worker job when automatic updates are allowed; `--noupdates` forbids that automatic asset fetch.
+- Visual rotation uses the one shared `widgets.steam.refresh_minutes` setting (10-minute fresh-install default, 5-minute minimum). There is no separate Abandonment rotation setting, and a legacy card-level value must be ignored/removed rather than allowed to contradict the shared interval. Changing games must not send an owned/recent/achievement request merely because the shared interval elapsed. The one selected allowlisted public-art asset may fill a cache miss on the existing worker job when automatic updates are allowed; after a definitive 404/invalid requested shape, exactly one alternate allowlisted shape may be attempted. Transient failures do not fan out, and `--noupdates` forbids automatic asset fetches.
 - Semantic rotation cursor is profile-level so `monitor: ALL` does not show different games on different monitors by accident.
 - Selection is not archive-index traversal. Each due interval advances a persisted profile/policy draw counter, chooses a preference tier with fixed weights independent of tier population, then chooses a game within that tier. Every tier remains reachable and the current App ID is excluded whenever an alternative exists.
 - The optional `ARCHIVE N/M` shelf displays preference rank within the current candidate set. It is diagnostic context, not a sequential rotation index; runtime rotation diagnostics must include selected identity and archive rank so this distinction is testable from logs.
-- Persisted `changed_at` is cadence authority across widget/settings/display rebuilds. Recreated widgets rotate immediately when overdue or arm one shortened first interval for only the remaining duration, then return to the single configured recurring interval.
+- Persisted `changed_at` plus the current shared Steam refresh interval are cadence authority across widget/settings/display rebuilds and setting changes. Recreated widgets rotate immediately when overdue or arm one shortened first interval for only the remaining duration, then return to the single shared recurring interval.
 - Explicit widget refresh forces one non-repeating cache-backed semantic draw after refreshing eligible sources and restarts the full configured cadence. Seeing owned/recent cache writes is not itself evidence that the selected game changed.
 - If the low-frequency expiry lands during a parent image transition, it remains pending and retries once per second through the shared transition-deferral/`ThreadManager.single_shot` path. The interval is not discarded and no second recurring timer is created.
 - A ranking-policy setting/version change reselects once immediately; ordinary cache reloads retain the current game and cooldowns prevent preference evidence from snapping back to a recently shown title.
@@ -1607,8 +1607,9 @@ Each phase ends with a gate. Do not begin a later user-facing card merely becaus
 - [x] Replace archive-order traversal with profile-seeded preference-biased random draws, persisted draw counters, immediate-repeat exclusion, and due-boundary tolerance.
 - [x] Preserve a rotation expiry that collides with a parent transition through the shared deferred single-shot path rather than dropping it or adding a recurring timer.
 - [x] Preserve rotation age across widget/settings/display rebuilds by arming only the remaining first interval or rotating immediately when overdue.
+- [x] Retire the competing per-card rotation setting and drive automatic changes solely from `widgets.steam.refresh_minutes`, including exact 5-minute settings/factory/timer/remaining-duration coverage and legacy-key removal.
 - [x] Make explicit widget refresh force one non-repeating cache-backed draw and restart the configured cadence after source refresh.
-- [x] Fill a selected game's missing allowlisted public artwork on the existing rotation IO job when automatic updates are allowed, while preserving strict artwork-cache-only behavior under `--noupdates`.
+- [x] Fill a selected game's missing allowlisted public artwork on the existing rotation IO job when automatic updates are allowed, fall back once to the alternate allowlisted shape after a definitive 404/invalid asset without retrying transient failures, and preserve strict artwork-cache-only behavior under `--noupdates`.
 - [x] Implement Guilt Desaturater via bucketed worker-prepared art assets.
 - [x] Implement settings, cache-only library picker, display fields, deterministic 60/40 optional rediscovery copy, and distinct archival visual composition.
 - [x] Add evidence-gated achievement count/latest unlock/exact last-played/archive-class shelves, default the user-facing set on, and grow the authored ledger for every enabled field without provider or UI-thread work.
@@ -1765,8 +1766,8 @@ Required bars:
 - [x] verified timestamp eligibility;
 - [x] 15-minute eligibility plus 2-hour/2-unlock/26-week ranking tiers and likely-complete demotion;
 - [x] cooldown/pin/Never Show and profile-shared selection;
-- [x] cache-only profile-shared weighted-random semantic rotation with persisted draw count, non-sequential archive-position coverage, immediate-repeat exclusion, due-boundary tolerance, selected-art worker hydration, and transition-collision deferral;
-- [x] rebuilds preserve remaining rotation cadence and widget-level manual refresh forces one non-repeating cache-backed draw;
+- [x] cache-only profile-shared weighted-random semantic rotation driven by the shared Steam refresh interval, with persisted draw count, non-sequential archive-position coverage, immediate-repeat exclusion, due-boundary tolerance, bounded selected-art worker hydration/fallback, and transition-collision deferral;
+- [x] exact 5-minute UI-save/factory/descriptor/timer plumbing ignores legacy conflicting card values; rebuilds and interval changes preserve the true remaining cadence, while widget-level manual refresh forces one non-repeating cache-backed draw;
 - [x] Guilt Desaturater bucket/clamp and worker-prepared asset behavior;
 - [x] owned/recent refresh preservation and shared-source reuse with Achievement Pulse;
 - [x] authored large-art layout, deterministic render, cache-before-first-fade, and sparse transition updates;
@@ -1830,7 +1831,8 @@ Assert:
 | Invalid API key | Cache preserved; safe error, no secret logging. |
 | `--noupdates` | No automatic provider or public-art requests; cache can still display; manual refresh follows deliberate route. |
 | Parent image transition during refresh | Fetch/result apply/spinner respects deferred service helper contract. |
-| Parent image transition at Abandonment rotation expiry | The cache-only semantic expiry remains pending, retries through one low-frequency shared single-shot, prepares any permitted selected-art cache miss on worker IO, then commits one weighted-random non-repeating draw through the sparse fade. |
+| Parent image transition at Abandonment rotation expiry | The cache-only semantic expiry follows the shared Steam refresh interval, remains pending, retries through one low-frequency shared single-shot, prepares any permitted selected-art cache miss/fallback on worker IO, then commits one weighted-random non-repeating draw through the sparse fade. |
+| Steam refresh interval set to 5 while legacy Abandonment data says 15/30/45 | The card ignores/removes the legacy value, reports shared/rotation cadence as 5, evaluates persisted remaining age against five minutes, and owns one 300,000 ms recurring timer. |
 | Settings open/close without Steam tab visit | No Steam auth/cache/provider activity. |
 | Steam family master off | No Steam card is created, expected by fade coordination, or included in stack preview/status; subordinate settings are hidden and saved card choices remain intact for re-enable. |
 | Steam tab open | Controls build once, rehydrate non-secret encrypted-storage availability, and read at most one recent-games cache record on shared IO for bracketed selection names; no credential decrypt, directory scan, provider request, or full library refresh. |

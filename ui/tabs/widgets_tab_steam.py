@@ -723,7 +723,6 @@ def _hydrate_abandonment_library_choices(tab: "WidgetsTab") -> None:
 def _update_abandonment_controls(tab: "WidgetsTab") -> None:
     mode = getattr(tab, "abandonment_issues_selection_mode", None)
     pinned = getattr(tab, "abandonment_issues_pinned_game", None)
-    rotation = getattr(tab, "abandonment_issues_rotation_interval_minutes", None)
     show_artwork = getattr(tab, "abandonment_issues_show_artwork", None)
     shape = getattr(tab, "abandonment_issues_artwork_shape", None)
     artwork_size = getattr(tab, "abandonment_issues_artwork_size", None)
@@ -732,8 +731,6 @@ def _update_abandonment_controls(tab: "WidgetsTab") -> None:
     pinned_mode = mode is not None and str(mode.currentData() or "") == "pinned_game"
     if pinned is not None:
         pinned.setEnabled(pinned_mode)
-    if rotation is not None:
-        rotation.setEnabled(not pinned_mode)
     artwork_enabled = bool(show_artwork is not None and show_artwork.isChecked())
     if shape is not None:
         shape.setEnabled(artwork_enabled)
@@ -778,7 +775,7 @@ def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
     generation = int(getattr(tab, "_steam_abandonment_refresh_generation", 0)) + 1
     tab._steam_abandonment_refresh_generation = generation
     selection = _current_abandonment_selection(tab)
-    rotation_minutes = int(tab.abandonment_issues_rotation_interval_minutes.value())
+    refresh_minutes = int(tab.steam_refresh_minutes.value())
 
     def _refresh():
         from core.steam.abandonment_cache import refresh_abandonment_cache
@@ -794,7 +791,7 @@ def _on_abandonment_manual_refresh(tab: "WidgetsTab") -> None:
             credential=credential,
             selection=selection,
             force=True,
-            rotation_interval_minutes=rotation_minutes,
+            refresh_interval_minutes=refresh_minutes,
         )
 
     def _finished(task_result) -> None:
@@ -1267,19 +1264,6 @@ def _build_card_group(
         preferred_inactivity_row.addWidget(preferred_inactivity)
         preferred_inactivity_row.addStretch()
 
-        rotation_row = _aligned_row(content_layout, "Rotation Interval:")
-        rotation_interval = QSpinBox()
-        rotation_interval.setRange(5, 24 * 60)
-        rotation_interval.setSuffix(" min")
-        rotation_interval.setValue(tab._default_int(key, "rotation_interval_minutes", 30))
-        rotation_interval.setToolTip(
-            "How slowly Smart Rotation advances through already cached candidates. Rotation never requests Steam data."
-        )
-        rotation_interval.valueChanged.connect(tab._save_settings)
-        tab.abandonment_issues_rotation_interval_minutes = rotation_interval
-        rotation_row.addWidget(rotation_interval)
-        rotation_row.addStretch()
-
         never_row = _aligned_row(content_layout, "Never Show App IDs:")
         never_show = QLineEdit()
         never_show.setPlaceholderText("Example: 440, 570, 730")
@@ -1517,11 +1501,16 @@ def build_steam_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     privacy_row.addWidget(tab.steam_privacy_mode)
     privacy_row.addStretch()
 
-    refresh_row = _aligned_row(connection_layout, "Refresh Window:")
+    refresh_row = _aligned_row(connection_layout, "Steam Refresh Interval:")
     tab.steam_refresh_minutes = QSpinBox()
     tab.steam_refresh_minutes.setRange(5, 240)
     tab.steam_refresh_minutes.setSuffix(" min")
     tab.steam_refresh_minutes.setValue(tab._default_int("steam", "refresh_minutes", 10))
+    tab.steam_refresh_minutes.setToolTip(
+        "The shared freshness window for ordinary Steam data and the exact "
+        "Abandonment Issues automatic game-change cadence. Long-lived sources keep "
+        "their documented TTL; game rotation itself is cache-only."
+    )
     tab.steam_refresh_minutes.valueChanged.connect(tab._save_settings)
     refresh_row.addWidget(tab.steam_refresh_minutes)
     refresh_row.addStretch()
@@ -1743,7 +1732,6 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
                     "abandonment_issues_preferred_minimum_inactivity_weeks",
                     26,
                 ),
-                ("rotation_interval_minutes", "abandonment_issues_rotation_interval_minutes", 30),
                 ("artwork_size", "abandonment_issues_artwork_size", ABANDONMENT_ARTWORK_SIZE_DEFAULT),
                 ("guilt_desaturation_strength", "abandonment_issues_guilt_desaturation_strength", 55),
             ):
@@ -1859,9 +1847,7 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
         payload["preferred_minimum_inactivity_weeks"] = int(
             tab.abandonment_issues_preferred_minimum_inactivity_weeks.value()
         )
-        payload["rotation_interval_minutes"] = int(
-            tab.abandonment_issues_rotation_interval_minutes.value()
-        )
+        payload.pop("rotation_interval_minutes", None)
         normalized_never_show = parse_appid_list(
             tab.abandonment_issues_never_show_appids.text()
         )

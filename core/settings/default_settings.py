@@ -536,7 +536,6 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                     'preferred_minimum_inactivity_weeks': 26,
                                     'preferred_height': 331,
                                     'preferred_width': 560,
-                                    'rotation_interval_minutes': 30,
                                     'selection_mode': 'smart_rotation',
                                     'show_achievements': True,
                                     'show_archive_class': True,

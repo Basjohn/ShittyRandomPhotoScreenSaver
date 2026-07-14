@@ -1,9 +1,9 @@
 {
   "application": "Screensaver_MC",
   "metadata": {
-    "last_migration_completed": "2026-07-14T01:06:34.670333Z",
+    "last_migration_completed": "2026-07-14T02:42:25.449071Z",
     "legacy_profile": "Screensaver_MC",
-    "migrated_at": "2026-07-14T01:06:34.666511Z",
+    "migrated_at": "2026-07-14T02:42:25.447009Z",
     "migrated_from": "qsettings",
     "visualizer_schema_version": 2
   },
@@ -378,7 +378,6 @@
         "preferred_max_unlocked_achievements": 2,
         "preferred_minimum_inactivity_weeks": 26,
         "preferred_width": 560,
-        "rotation_interval_minutes": 30,
         "selection_mode": "smart_rotation",
         "show_achievements": true,
         "show_archive_class": true,

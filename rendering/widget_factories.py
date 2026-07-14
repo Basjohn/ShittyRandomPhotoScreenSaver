@@ -1164,9 +1164,6 @@ class SteamCardFactory(WidgetFactory):
                     guilt_desaturation_strength=int(
                         config.get("guilt_desaturation_strength", 55)
                     ),
-                    rotation_interval_minutes=int(
-                        config.get("rotation_interval_minutes", 30)
-                    ),
                     refresh_minutes=int(shared_steam_settings.get("refresh_minutes", 10)),
                     show_connection_info_icon=SettingsManager.to_bool(
                         shared_steam_settings.get("show_connection_info_icon", True),
