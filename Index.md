@@ -14,15 +14,7 @@ Living map of the current SRPSS codebase.
 | `Docs/Guardrails.md` | Engineering rules and anti-regression policy |
 | `Docs/Contracts.md` | Short contract index that routes quickly to the canonical owner for each major subsystem seam |
 | `Docs/Historical_Bugs.md` | Dated bug timeline and postmortems |
-| `audits/ArchitectureAudit/Project_Health_Audit.md` | Active project-wide runtime-health audit for compositor/startup timing, timers, settings, legacy seams, stale tests, cache fallback pressure, and long-term prevention work; currently routes shared visualizer work through the reactivity lock in `Docs/Harness_Index.md` first |
-| `audits/ArchitectureAudit/README.md` | Small entrypoint that points at the active project-wide audit |
-| `audits/BubbleAudit/Bubble_End_To_End_Audit.md` | Historical Bubble audit reference for the transition-time perf collapse and loud small-lane recovery work that informed the current tighter runtime-shaped Bubble oracles |
-| `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` | Document-only audit of Bubble runtime-touching preset settings, with Deep Sea Preset 1 hypotheses and authored experiment order before more Bubble code tuning |
-| `audits/BubbleAudit/README.md` | Small entrypoint that points at the Bubble audit reference |
-| `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` | Historical/watchlist geometry audit for the visualizer CUSTOM/runtime shape family; reopen only when fresh `--geo` evidence shows route repair, fallback, duplicate owner, impossible shape, or runtime replay drift |
-| `audits/GeoAudit/README.md` | Small entrypoint for the visualizer geometry audit/watchlist |
-| `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md` | Historical/watchlist Oscilloscope visual/reactivity audit for the resolved strobe/flicker, ghosting, waveform response, transient width authority, and shader glow contract drift |
-| `audits/OscilloscopeAudit/README.md` | Small entrypoint for the Oscilloscope audit |
+| Local `audits/` workspace | Ignored and untracked investigation material, not a portable canonical source; `Current_Plan.md` owns the active classification/migration task before any file is published or discarded |
 | `Docs/Regression_Notes.md` | Lightweight resolved regression notes that do not need full historical narratives |
 | `Docs/Defaults_Guide.md` | Defaults, reset, SST transport, and generated snapshot contracts |
 | `Docs/Documentation_Maintenance.md` | Drift-check routine for canonical docs and active navigation |
@@ -45,6 +37,13 @@ Living map of the current SRPSS codebase.
 |---|---|
 | `main.py` | Screensaver runtime (`/s`, `/c`, `/p`, script mode) |
 | `main_mc.py` | Media Center runtime |
+
+## Test Infrastructure
+
+| File | Purpose |
+|---|---|
+| `tests/conftest.py` | Shared APPDATA/LOCALAPPDATA isolation, deterministic chunk selection, and default quarantine of deprecated Blob-named tests while retaining removal guards |
+| `tests/run_chunked.py` | Bounded subprocess test runner with selectable targets, deterministic chunks, per-chunk timeout, optional logs, and continuation after failures/timeouts |
 
 ## Manager Layer
 
@@ -73,7 +72,7 @@ Living map of the current SRPSS codebase.
 | Visualizer settings model | `core/settings/models/_spotify_visualizer.py` | Canonical grouped field-spec/default/build/serialize contract for visualizer settings; keeps `from_settings()`, `from_mapping()`, and `to_dict()` aligned through ordered section merges rather than entry-point-specific handwritten payloads |
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
 | Technical normalization / legacy migration contract | `core/settings/visualizer_settings_contract.py` | Migrates legacy shared technical inputs into canonical per-mode visualizer settings |
-| Blob subtype contract | `core/settings/visualizer_blob_contract.py` | Canonical `blob_type` ownership (`mighty` / `shaped`, default Mighty), forward migration from `normal` / `unshaped` and `blob_shaper_enabled`, plus symmetric inactive-subtype stripping used by atomic persistence, snapshots, presets, and runtime payloads |
+| Deprecated Blob subtype inventory | `core/settings/visualizer_blob_contract.py` | Temporary removal/migration inventory for the failed `blob` mode; no new behavior investment, and the active plan owns complete teardown plus safe saved-selection fallback |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files, including Steam credential/cache roots |
@@ -108,6 +107,8 @@ Living map of the current SRPSS codebase.
 | Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/cache log bar for paired render-healthy/paint-starved cadence collapse, stable-divisor FPS locks, `GL ANIM` vs `GL PAINT` separation, owner/peak-count animation-manager evidence, visualizer timing warnings, slow GL uploads, fallback loudness, and timeline correlation |
 
 ## Visualizer System
+
+Blob-labelled rows below are temporary teardown inventory for a deprecated failed mode, not supported architecture targets. They remain mapped only so removal can prove every UI/settings/runtime/shader/package seam is gone without disturbing supported visualizers.
 
 | Module | File | Role |
 |---|---|---|
@@ -257,6 +258,6 @@ Living map of the current SRPSS codebase.
 | `--steam` | Steam widget family diagnostics sidecar logs |
 | `--viz-diagnostics`, `--viz-diag` | Legacy compatibility alias for extra visualizer diagnostics |
 | `--fresh` | Clear all resolved runtime log files at startup |
-| `-devblob` | Enable blob mode gate | (Change this to --devblob in code at some random point)
+| `-devblob` | Deprecated compatibility gate for the failed Blob mode; remove with the mode |
 | `--devcurve` | Compatibility no-op alias |
 | `--devsteam` | Show unfinished Steam Journey and Friend Pulse card prototypes |

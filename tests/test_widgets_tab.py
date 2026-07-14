@@ -701,31 +701,54 @@ class TestWidgetsTab:
         mgr.reset_to_defaults()
 
         tab = WidgetsTab(mgr)
-        defaults = get_default_settings()["widgets"]
-        clock_defaults = defaults["clock"]
-        weather_defaults = defaults["weather"]
-        shadow_defaults = defaults["shadows"]
+        try:
+            defaults = get_default_settings()["widgets"]
+            clock_defaults = defaults["clock"]
+            weather_defaults = defaults["weather"]
+            shadow_defaults = defaults["shadows"]
 
-        assert tab.clock_enabled.isChecked() is bool(clock_defaults["enabled"])
-        assert tab.clock_position.currentText() == str(clock_defaults["position"])
-        expected_format = "24 Hour" if clock_defaults["format"] == "24h" else "12 Hour"
-        assert tab.clock_format.currentText() == expected_format
-        assert tab.clock_seconds.isChecked() is bool(clock_defaults["show_seconds"])
-        assert tab.clock_show_background.isChecked() is bool(clock_defaults["show_background"])
-        assert tab.clock_bg_opacity.value() == round(float(clock_defaults["bg_opacity"]) * 100)
-        assert tab.clock_monitor_combo.currentText() == str(clock_defaults["monitor"])
+            assert tab.clock_enabled.isChecked() is bool(clock_defaults["enabled"])
+            assert tab.clock_position.currentText() == str(clock_defaults["position"])
+            expected_format = "24 Hour" if clock_defaults["format"] == "24h" else "12 Hour"
+            assert tab.clock_format.currentText() == expected_format
+            assert tab.clock_seconds.isChecked() is bool(clock_defaults["show_seconds"])
+            assert tab.clock_show_background.isChecked() is bool(clock_defaults["show_background"])
+            assert tab.clock_bg_opacity.value() == round(float(clock_defaults["bg_opacity"]) * 100)
+            assert tab.clock_monitor_combo.currentText() == str(clock_defaults["monitor"])
 
-        assert tab.weather_enabled.isChecked() is bool(weather_defaults["enabled"])
-        assert tab.weather_position.currentText() == str(weather_defaults["position"])
-        assert tab.weather_location.text() == str(weather_defaults["location"])
-        assert tab.weather_show_forecast.isChecked() is bool(weather_defaults["show_forecast"])
-        assert tab.weather_show_background.isChecked() is bool(weather_defaults["show_background"])
-        assert tab.weather_bg_opacity.value() == round(float(weather_defaults["bg_opacity"]) * 100)
-        assert tab.widget_shadows_enabled.isChecked() is bool(shadow_defaults["enabled"])
-        assert tab.widget_text_shadows_enabled.isChecked() is bool(shadow_defaults["text_enabled"])
-        assert tab.widget_header_shadows_enabled.isChecked() is bool(shadow_defaults["header_enabled"])
+            assert tab.weather_enabled.isChecked() is bool(weather_defaults["enabled"])
+            assert tab.weather_position.currentText() == str(weather_defaults["position"])
+            assert tab.weather_location.text() == str(weather_defaults["location"])
+            assert tab.weather_show_forecast.isChecked() is bool(weather_defaults["show_forecast"])
+            assert tab.weather_show_background.isChecked() is bool(weather_defaults["show_background"])
+            assert tab.weather_bg_opacity.value() == round(float(weather_defaults["bg_opacity"]) * 100)
+            assert tab.widget_shadows_enabled.isChecked() is bool(shadow_defaults["enabled"])
+            assert tab.widget_text_shadows_enabled.isChecked() is bool(shadow_defaults["text_enabled"])
+            assert tab.widget_header_shadows_enabled.isChecked() is bool(shadow_defaults["header_enabled"])
+        finally:
+            tab.deleteLater()
 
-        tab.deleteLater()
+    def test_weather_empty_location_stays_explicit(self, qt_app, settings_manager, monkeypatch):
+        import ui.tabs.widgets_tab_weather as weather_tab_module
+
+        monkeypatch.setattr(
+            weather_tab_module,
+            "get_local_timezone",
+            lambda: "Africa/Blantyre",
+            raising=False,
+        )
+        settings_manager.set("widgets.weather.location", "")
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "weather"},
+        )
+        try:
+            assert tab.weather_location.text() == ""
+            assert settings_manager.get("widgets.weather.location", "missing") == ""
+        finally:
+            tab.deleteLater()
 
     def test_widgets_tab_position_combos_follow_descriptor_position_options(self, qt_app, settings_manager):
         tab = WidgetsTab(settings_manager)
@@ -1208,7 +1231,8 @@ class TestWidgetsTab:
 
 
 def test_visualizer_bucket_toggles_use_standard_circle_checkbox_spacing():
-    src = Path(r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\ui\tabs\media\technical_controls.py").read_text(encoding="utf-8")
+    source_path = Path(__file__).resolve().parents[1] / "ui" / "tabs" / "media" / "technical_controls.py"
+    src = source_path.read_text(encoding="utf-8")
     toggle_block_start = src.index("def _build_visibility_toggle(")
     toggle_block_end = src.index("def _aligned_row_widget(", toggle_block_start)
     toggle_block = src[toggle_block_start:toggle_block_end]
@@ -1989,7 +2013,6 @@ def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_man
         tab._save_settings = tab._save_settings_now
         mode = "bubble"
         slider = tab._bubble_preset_slider
-        custom_index = slider.custom_index()
 
         widgets_cfg = settings_manager.get("widgets", {}) or {}
         spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})

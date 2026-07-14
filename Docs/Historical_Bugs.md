@@ -1203,7 +1203,7 @@ This is the long-term anti-regression record for the project, not an active task
   - when Bubble or Blob regress, first identify whether the failure is continuous-path contract, stale event reuse, refill cadence, or geometry floor. Do not throw all four into one tuning bucket.
   - do not call the issue solved merely because one half of the opposite-failure pair disappeared.
   - if runtime says “worse in reality than in tests,” expand the synthetic toward the runtime evidence instead of assuming the user is seeing noise.
-  - keep this entry and [Current_Plan.md](F:\Programming\Apps\ShittyRandomPhotoScreenSaver\current_plan.md) aligned so the current attempted fix and the retired bad ideas are both visible at the same time.
+  - keep this entry and [Current_Plan.md](../Current_Plan.md) aligned so the current attempted fix and the retired bad ideas are both visible at the same time.
   - if spiral/swirl Bubble modes behave better than ordinary stream modes, do not keep applying Bubble-wide tuning blindly. Trace the edge-spawn + travel + refill path specifically.
   - dense Bubble presets should be treated as hostile-but-valid authored content. If runtime cannot present them cleanly anymore, first assume a runtime regression before assuming the preset suddenly became unreasonable.
   - when older commits were visibly healthier, compare against those much older baselines instead of only diffing the newest churn. Recent-vs-recent diffs can hide the actual regression family.

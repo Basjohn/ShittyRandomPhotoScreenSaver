@@ -879,23 +879,23 @@ def test_timer_context_includes_media_widget_poll_state(qt_app):
     assert context["media_fade_in_completed"] is True
     assert _classify_large_timer_gap_warning(context) == "media_widget_poll_starvation"
 
-    @pytest.mark.qt_no_exception_capture
-    def test_schedule_recurring_respects_description(self, qt_app):
-        manager = ThreadManager()
-        ticks: list[float] = []
+@pytest.mark.qt_no_exception_capture
+def test_schedule_recurring_respects_description(qt_app):
+    manager = ThreadManager()
+    ticks: list[float] = []
 
-        timer = manager.schedule_recurring(
-            5,
-            lambda: ticks.append(time.time()),
-            description="test_timer",
-        )
+    timer = manager.schedule_recurring(
+        5,
+        lambda: ticks.append(time.time()),
+        description="test_timer",
+    )
 
-        deadline = time.time() + 0.2
-        while len(ticks) < 2 and time.time() < deadline:
-            qt_app.processEvents()
-            time.sleep(0.01)
+    deadline = time.time() + 0.2
+    while len(ticks) < 2 and time.time() < deadline:
+        qt_app.processEvents()
+        time.sleep(0.01)
 
-        timer.stop()
-        manager.shutdown()
+    timer.stop()
+    manager.shutdown()
 
-        assert len(ticks) >= 1
+    assert len(ticks) >= 1

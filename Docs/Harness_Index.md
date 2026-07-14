@@ -181,50 +181,12 @@ python -m pytest `
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
-### Blob Mighty / Shaped architecture lock
+### Deprecated Blob retirement corpus
 
-- Purpose: protect the preset-owned Blob subtype contract, canonical migration, isolated UI/runtime/shader ownership, subtype-boundary resets, Mighty organic behavior, Shaped authored-contour behavior, and shared reactive body paint.
-- Use when:
-  - changing `blob_type`, Blob defaults/model/snapshot/preset repair, or Blob curated payloads
-  - editing Blob Settings builders/binding
-  - editing Blob runtime config, overlay state, renderer dispatch, contour solvers, or shader programs
-  - investigating stale Shaped/Mighty state after startup, settings refresh, preset apply, or hot cycling
-- Focused command:
-```powershell
-python -m pytest `
-  tests/test_visualizer_blob_contract.py `
-  tests/test_blob_type_runtime.py `
-  tests/test_blob_unshaped_geometry.py `
-  tests/test_blob_shaper_plumbing.py `
-  tests/test_blob_pockets.py `
-  tests/test_blob_intensity_reserve.py `
-  tests/test_blob_inward_liquid.py `
-  tests/test_blob_shader_compile.py `
-  tests/test_visualizer_reactivity_quality.py `
-  tests/test_visualizer_overlay_kwargs.py `
-  tests/test_overlay_render_dispatch.py `
-  tests/test_startup_shader_warmup.py `
-  tests/test_visualizer_presets.py `
-  tests/test_visualizer_preset_cycling_runtime.py `
-  -q --tb=short
-```
-- Focused Blob UI/settings command:
-```powershell
-python -m pytest tests/test_settings_manager.py tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q --tb=short
-```
-- Schema/artifact checks:
-```powershell
-python tools/regenerate_defaults_snapshot_artifacts.py
-python tools/regenerate_visualizer_shipped_presets.py
-python tools/visualizer_preset_repair.py --audit-curated
-```
-- Notes:
-  - Run the current-good visualizer reactivity lock before and after any change that crosses shared audio/activation/render seams.
-  - The strong Mighty oracle uses 128 samples and a synthetic fixed-phase quiet/hot vector. It must measure non-circular idle shape, pixel-scale contour/Stretch movement, at least `95%` target-to-settled audio-delta transfer, bounded attack/release, and zero-shift-dominant temporal motion. A large static spread or helper-only variation is not closure.
-  - The strong Shaped oracle uses synthetic authored base/reaction nodes rather than a copied temporary preset. It must measure mutation beyond the authored no-motion goal, temporal/fixed-angle motion, representative pixel reach, bounded neighbor steps, clean release, and zero-shift-dominant growth/relaxation.
-  - Do not turn temporary showcase presets into exact artistic regression snapshots. Preset bars own schema, subtype payload isolation, slot/manifest integrity, and runtime application; synthetic contour cases own the measurable creative behavior.
-  - Green automation proves the contract, not the final look. Under `-devblob`, validate Mighty and Shaped at startup and through curated/Custom hot switches; confirm `[SPOTIFY_VIS][BLOB][TYPE_RESET]` occurs only at real subtype boundaries, no fallback appears, both body fills visibly react, Mighty stays organic/bounded with no circular center, and Shaped mutates around then returns cleanly to its authored contour.
-  - In Blob logs, `[BLOB_PROFILE]` is final-runtime evidence. Compare it with incoming bands/transients and, for code closure, with target-profile synthetic bars; profile spread alone can be the static authored shape. Interpret `[FIRST_FRAME_PRIMER]` under the same authority rule as the current-good lock above.
+- Status: Blob is a failed mode scheduled for removal. Its former creative/runtime architecture lock is retired and is not an acceptance harness.
+- Default behavior: `tests/conftest.py` skips Blob-named tests while retaining guards that production UI remains hidden and defaults do not reintroduce the inactive family.
+- Do not repair, retune, or routinely run the Blob corpus. `--run-deprecated-blob-tests` is available only when explicit teardown forensics need an old oracle before deleting its owner.
+- Removal acceptance is absence-based: migrate saved/imported active `blob` selections to the registry default, strip retired keys without re-emission, remove UI/runtime/shader/preset/package ownership, regenerate defaults/SST artifacts, and pass supported-mode visualizer locks.
 
 ### Visualizer distribution harness
 - Purpose: inspect transition-random distribution or mode-selection skew over longer sessions.

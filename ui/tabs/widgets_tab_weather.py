@@ -17,7 +17,6 @@ from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger
 from rendering.widget_descriptors import get_widget_position_option_labels
-from widgets.timezone_utils import get_local_timezone
 from ui.styled_popup import ColorSwatchButton
 from ui.tabs.shared_styles import (
     STATUS_LABEL_STYLE,
@@ -393,24 +392,6 @@ def build_weather_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
 def load_weather_settings(tab: WidgetsTab, widgets: dict) -> None:
     """Load weather settings from widgets config dict."""
     weather_config = widgets.get('weather', {})
-
-    # Auto-derive location from timezone if still default
-    try:
-        raw_loc = str(weather_config.get('location', 'New York') or 'New York')
-        if raw_loc == 'New York':
-            tz = get_local_timezone()
-            derived_city = None
-            if isinstance(tz, str) and '/' in tz:
-                candidate = tz.split('/')[-1].strip().replace('_', ' ')
-                if candidate and candidate.lower() not in {"local", "utc"}:
-                    derived_city = candidate
-            if derived_city:
-                weather_config['location'] = derived_city
-                widgets['weather'] = weather_config
-                tab._settings.set('widgets', widgets)
-                tab._settings.save()
-    except Exception:
-        logger.debug("Failed to auto-derive weather location from timezone", exc_info=True)
 
     tab.weather_enabled.setChecked(tab._config_bool('weather', weather_config, 'enabled', True))
     tab.weather_location.setText(tab._config_str('weather', weather_config, 'location', ''))

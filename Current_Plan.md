@@ -35,6 +35,30 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - [ ] Reconcile the 15 deterministic Bubble/Deep Sea failures in `tests/test_spotify_visualizer_widget.py` as likely stale-oracle debt against the currently accepted live Bubble behavior. Freeze Bubble runtime/preset behavior unless fresh runtime-shaped evidence proves a user-visible regression; use the existing fixture/log-replay harnesses to identify obsolete numeric signatures, update/remove only disproven expectations, and do not retune Bubble or add UI-thread/timer/paint pressure merely to make the suite green.
 - [ ] Require the complete `tests/test_spotify_visualizer_widget.py` file to pass (environment skips excepted), then run the focused visualizer reactivity lock from `Docs/Harness_Index.md` before pruning this task.
 
+### Deprecated Blob End-To-End Removal
+
+- [ ] Inventory every Blob-owned dev gate, default/descriptor, settings field/control, preset, runtime builder/binding, shader/asset, package rule, log route, test, and documentation reference. Treat the current 267 collected tests and 115-file / 5,955-match footprint as deletion scope, not a repair queue; shared visualizer/audio/animation/compositor behavior is frozen unless removal proves a direct dependency.
+- [ ] Add the migration seam first: a saved Blob mode must resolve once to the registry-owned supported default, obsolete Blob keys must be stripped without being re-emitted, and normal/MC imported settings plus generated defaults must remain valid. Preserve only absence/migration tests that protect supported modes.
+- [ ] Remove Blob implementation and its dedicated test corpus end to end, then remove the temporary default pytest skip and `--run-deprecated-blob-tests` escape hatch. A repository-wide search may retain only explicit historical migration notes; startup, settings, presets, packaging, synthetic audio, and the focused supported-visualizer reactivity lock must pass without Blob fixtures or branches.
+
+### Canonical SST Reproducibility And Parity
+
+- [ ] Make the generated normal and MC `.sst` artifacts derive from one profile-aware canonical defaults source. Remove accidental snapshot-only keys such as empty Weather latitude/longitude unless they become descriptor-owned defaults, and explicitly classify the small intended normal/MC delta rather than maintaining two independent settings bodies.
+- [ ] Replace run-time-dependent `migrated_at` / `last_migration_completed` output with deterministic generated metadata or exclude operational migration state from distributable defaults. Two clean regenerations from identical source must be byte-identical.
+- [ ] Extend regeneration tests to compare every generated snapshot against canonical defaults for its profile, reject secrets/private runtime state, and prove the Defaults Foundry does not invalidate existing installation JSON. Regenerate both tracked artifacts, run Foundry/import/default-parity suites, and document the single authoritative edit/regenerate path before pruning this task.
+
+### Gmail OAuth Thread Ownership
+
+- [ ] Replace the raw `threading.Thread` used for `HTTPServer.serve_forever` in `core/gmail/gmail_oauth.py` with a bounded `ThreadManager`-owned task using the manager already supplied to the OAuth flow. Define one owner for completion, cancellation, timeout, server shutdown, and task cleanup.
+- [ ] Add success, user-cancel, callback-timeout, settings-close, and application-teardown tests that prove the local server/port and task are released exactly once. Keep browser handoff and DPAPI-backed credential behavior unchanged, and do not add UI polling, repaint loops, or rescue timers.
+- [ ] Require the thread-policy suite and focused Gmail OAuth tests to pass in source and frozen-build-shaped paths, with no orphan-thread, late-callback, or UI-thread pressure warnings.
+
+### Canonical Audit Document Classification
+
+- [ ] Review all nine ignored/untracked Markdown documents under `audits/` for unique evidence, stale conclusions, credentials, identifiers, screenshots, absolute machine paths, and generated debris. Do not unignore or upload the directory wholesale.
+- [ ] For each document, either sanitize and deliberately track it as durable source, migrate still-valid guidance into `Spec.md` / `Docs/Historical_Bugs.md` / `Docs/Harness_Index.md` and retire the local copy, or leave it explicitly local and noncanonical with no navigation dependency.
+- [ ] Add a bounded documentation-link check proving every canonical file reference in `Index.md` and this plan exists in tracked source. Restore specific audit links only for documents that pass classification, then prune this task.
+
 ## Watchlist
 
 - [ ] Performance cadence: preserve fresh evidence if Display 0 falls into a suspicious near-60 visible cadence, Display 1 into near-40 under-delivery, or the parser reports paint starvation, overlay under-delivery, swap-interval warnings, shader/cache fallbacks, or repeated app-shared `AnimationManager` under-target windows with actionable `active_labels`.
@@ -67,11 +91,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 - Dated regressions: `Docs/Historical_Bugs.md`
 - Drift-check routine: `Docs/Documentation_Maintenance.md`
 - Harness reference: `Docs/Harness_Index.md`
-- Runtime health audit: `audits/ArchitectureAudit/Project_Health_Audit.md`
-- Historical geometry audit: `audits/GeoAudit/Visualizer_Runtime_Shape_Audit.md` when geometry/runtime replay issues reopen
-- Bubble preset/runtime audit: `audits/BubbleAudit/Bubble_Preset_Runtime_Audit.md` as historical authored-setting reference
-- Bubble historical audit reference: `audits/BubbleAudit/Bubble_End_To_End_Audit.md`
-- Oscilloscope visual/reactivity audit: `audits/OscilloscopeAudit/Oscilloscope_End_To_End_Audit.md`
+- Local ignored `audits/` notebooks are noncanonical until the active classification task either tracks a sanitized document or migrates its valid guidance into the sources above.
 
 #######
 ### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.

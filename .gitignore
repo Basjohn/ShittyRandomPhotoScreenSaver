@@ -147,7 +147,6 @@ MyReuseableUtilityModules/
 /tmp_*.md
 /temp_*.md
 /temp_search.txt
-/Current_Plan.md
 AGENTS.md
 
 # Repo-local agent / assistant metadata should stay private, including local skills.

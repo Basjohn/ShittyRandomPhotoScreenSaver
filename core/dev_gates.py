@@ -1,7 +1,7 @@
 """Dev-gated feature flags for modes under active development.
 
 Gates are activated via command-line flags:
-    python main.py --debug -devblob   # enable Blob mode
+    python main.py --debug -devblob   # deprecated Blob compatibility gate
     python main.py --debug --devcurve # legacy no-op (kept for compatibility)
     python main.py --debug --devsteam # show unfinished Steam card prototypes
 
@@ -26,7 +26,7 @@ def _init_from_argv() -> None:
 
 
 def is_blob_enabled() -> bool:
-    """True when Blob mode should be visible in UI / preset swaps."""
+    """True only when the deprecated Blob compatibility gate is forced on."""
     return _DEV_BLOB
 
 

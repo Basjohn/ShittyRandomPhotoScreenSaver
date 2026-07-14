@@ -10,9 +10,9 @@ Testing strategy, execution guidance, and minimum quality bar.
 - Treat visual/timing-sensitive bugs as requiring runtime validation in addition to tests.
 
 ## 2. How to Run
-- Full suite:
+- Full suite (bounded subprocess chunks; continues after a failed/timed-out chunk):
 ```powershell
-pytest tests -q
+python tests/run_chunked.py --chunks 4 --timeout-seconds 900
 ```
 - Collect only:
 ```powershell
@@ -23,29 +23,11 @@ pytest --collect-only tests -q
 pytest tests/test_settings_manager.py -q
 pytest tests/test_visualizer_presets.py::TestVisualizerPresetRepair -q
 ```
-- Blob Mighty / Shaped architecture slice:
+- Slow Qt file in bounded target chunks:
 ```powershell
-python -m pytest `
-  tests/test_visualizer_blob_contract.py `
-  tests/test_blob_type_runtime.py `
-  tests/test_blob_unshaped_geometry.py `
-  tests/test_blob_shaper_plumbing.py `
-  tests/test_blob_pockets.py `
-  tests/test_blob_intensity_reserve.py `
-  tests/test_blob_inward_liquid.py `
-  tests/test_blob_shader_compile.py `
-  tests/test_visualizer_reactivity_quality.py `
-  tests/test_visualizer_overlay_kwargs.py `
-  tests/test_overlay_render_dispatch.py `
-  tests/test_startup_shader_warmup.py `
-  tests/test_visualizer_presets.py `
-  tests/test_visualizer_preset_cycling_runtime.py `
-  -q --tb=short
+python tests/run_chunked.py --chunks 4 --timeout-seconds 180 tests/test_widgets_tab.py
 ```
-- Blob settings-authority slice:
-```powershell
-python -m pytest tests/test_settings_manager.py tests/test_widgets_tab.py tests/test_visualizer_settings_plumbing.py -k "blob" -q --tb=short
-```
+- Blob is deprecated pending removal. Blob-named tests are skipped by default and are not part of the acceptance bar. `--run-deprecated-blob-tests` exists only for an explicit retirement-forensics run; do not spend routine validation time repairing that corpus.
 
 ## 3. High-Value Regression Areas
 - Settings manager cache invalidation and section-write behavior.
@@ -95,25 +77,8 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_settings_dialog_cache.py`
   Settings-dialog defaults-cache invalidation tracks both the authoritative Normal source and generated MC differential source.
 - `tests/test_visualizer_presets.py`
-  Preset repair/reindex behavior, SST export/import roundtrip, canonical visualizer snapshot integrity, Blob subtype migration, selected-subtype-only curated payloads, and source/release tree parity.
-- `tests/test_visualizer_blob_contract.py`
-  Canonical `blob_type` defaults/aliases/schema migration, model serialization without the retired boolean, symmetric inactive-subtype stripping, and preset-repair behavior while shared inward-liquid settings survive.
-- `tests/test_blob_type_runtime.py`
-  Mighty/Shaped renderer-program selection, subtype ownership fencing, selected-subtype-only GPU extras, full subtype-boundary state reset, and shared reactive inner-paint shader contract.
-- `tests/test_blob_unshaped_geometry.py`
-  Mighty 128-sample organic contour continuity, non-circular idle shape, rich harmonics, outward-biased anchored tendrils, stable body mean, bounded local pocket response, hot-range dynamics above `1.0`, zero-shift-dominant growth/relaxation, and high-authority target-to-settled solver transfer without repeated containment or angle-varying floor attenuation.
-- `tests/test_blob_shaper_plumbing.py`
-  Shaped authored-contour/routing/solver behavior, 128-sample pixel-scale mutation beyond the authored no-motion goal, fixed-angle living/music motion, bounded neighbor steps and release, zero-shift-dominant growth rather than orbiting, Mighty/Shaped config transport fences, ring behavior, and renderer uniform ownership.
-- `tests/test_blob_pockets.py`
-  Mighty fixed-family pocket anchors, attack/decay, stable slot reuse, and rounded local event growth rather than successive-hit orbiting.
-- `tests/test_blob_intensity_reserve.py`
-  Blob intensity/stage reserve, bounded means, and pressure headroom without scalar-size saturation replacing contour work.
-- `tests/test_blob_inward_liquid.py`
-  Blob-owned inward-liquid geometry/reactivity and its isolation from the main contour contract.
-- `tests/test_blob_shader_compile.py`
-  Headless compile and link bars for both concrete Blob shader programs.
-- `tests/test_settings_manager.py`, `tests/test_widgets_tab.py`, `tests/test_visualizer_settings_plumbing.py`
-  Blob subtype changes commit `blob_type` and owned values atomically, subtype sliders leave curated authority for Custom before save, and the visible Settings controls round-trip through the runtime bridge instead of appearing to accept edits that normalization later strips.
+  Preset repair/reindex behavior, SST export/import roundtrip, canonical visualizer snapshot integrity, supported-mode payload behavior, and source/release tree parity. Blob-named cases are deprecated and skipped.
+- Deprecated Blob corpus: `tests/test_blob_*.py`, `tests/test_visualizer_blob_contract.py`, and Blob-named cases in mixed visualizer files remain only as temporary teardown inventory. Default collection skips them; the two retained guards prove production UI stays gated and defaults do not reintroduce the inactive family.
 - `tests/test_gmail_oauth.py`
   Gmail OAuth callback/threading contract, fake-credential token handling, and DPAPI safety expectations.
 - `tests/test_widget_manager.py`
@@ -141,7 +106,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_spotify_visualizer_widget.py`
   Secondary-stage startup ownership, manager/coordinator reveal routing, fresh-frame reveal gating, post-reset stale-frame blocking, parent deadline coordination, activation/reset runtime contracts, live audio block-size capture rebinding, lifecycle-aware latency diagnostics (including startup audio-ready suppression and explicit-probe preservation), Bubble dispatch hot-path guards (single pre-AGC snapshot read plus reused payload dicts), authored Bubble `Preset 1 (Deep Sea)` feed-plus-visible-motion oracle coverage including sustained-loud hold, live big-size edit authority, seeded Preset 1 vs Preset 9 runtime comparison, Spectrum GPU extras reuse, solid-Spectrum coherent-zero hold and delayed-frame catch-up bounds, authored Spectrum `Preset 1 (Organs)` first-visible/startup-parity oracle coverage, first-visible-frame synthetic oracle parity for hot mode switch/preset cycle versus fresh activation, and architecture-split engine-resolution regression coverage.
 - `tests/test_visualizer_settings_plumbing.py`
-  Visualizer settings-model round-trip coverage, active-mode parity between `from_mapping()` and `from_settings()` for Bubble/Spectrum/Spline, curated-vs-custom preset authority, grouped build/serialize field-family contracts, legacy migration normalization, Blob Type load/save ownership with shared versus subtype-specific fields, and create-time cross-display media-anchor resolution for Custom-routed visualizers.
+  Visualizer settings-model round-trip coverage, active-mode parity between `from_mapping()` and `from_settings()` for Bubble/Spectrum/Spline, curated-vs-custom preset authority, grouped build/serialize field-family contracts, legacy migration normalization, and create-time cross-display media-anchor resolution for Custom-routed visualizers. Blob-named cases are deprecated teardown inventory and skipped by default.
 - `tests/test_spotify_visualizer_mode_transition.py`
   Mode-fade-out reset ordering, runtime bar-array zeroing before engine prepare, no hidden `_replay_engine_config()` reintroduction, and stale activation/generation rejection before display-bar authority returns.
 - `tests/test_ghost_isolation.py`
@@ -192,7 +157,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_transition_registry.py`
   Transition registry parity: canonical labels/aliases, hardware gating, cycle-list coverage, compositor program routing, and factory-side random fallback behavior.
 - `tests/test_visualizer_card_geometry.py`
-  Visualizer outer card geometry parity: mode/preset-owned preferred height, shrink-to-base behavior for strip-like modes, blob-width reduction, and media-relative placement ownership separate from stencil math.
+  Supported visualizer outer card geometry parity: mode/preset-owned preferred dimensions, shrink-to-base behavior for strip-like modes, and media-relative placement ownership separate from stencil math. Blob-named cases are not part of this acceptance bar.
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 - `tests/test_startup_shader_warmup.py`
@@ -208,14 +173,10 @@ When changing visualizer settings/contracts, include tests for:
 - preset repair/reindex behavior,
 - mode-prefix compatibility for future/unknown-style payload prefixes.
 - reset-order / stale-generation gating when touching mode-reset, activation, or overlay-handoff code.
-- Blob changes must prove that only `mighty` / `shaped` serialize, legacy `normal` / `unshaped` / `blob_shaper_enabled` migrate without re-emission, and preset/custom normalization removes the inactive subtype's creative fields while retaining shared appearance fields.
-- Blob runtime changes must prove distinct `blob_mighty` / `blob_shaped` dispatch, selected-subtype-only GPU payloads, reset of both subtype solver/profile/ghost/pocket families at type boundaries, and successful compile/link of both concrete shader programs.
-- Blob behavior bars must keep Mighty smoothly organic and outward-biased without raw-circle/deep-pinch regressions, keep Shaped mutations bounded around the authored goal with smooth release, and assert shared body-fill paint reactivity independently from the optional inward-liquid effect.
-- **Mighty measurable contour oracle** (`tests/test_blob_unshaped_geometry.py`): use 128 samples and synthetic quiet/hot fixed-phase inputs. Assert meaningful pixel-scale contour and Stretch motion, at least `95%` target-to-settled audio-delta transfer, a non-circular idle profile, bounded attack/release, and circular shift `0` as the best explanation for sustained motion. This specifically guards repeated post-solver containment, angle-varying hard floors, multi-pass attenuation stacks, and scalar-pulse domination.
-- **Shaped measurable goal-mutation oracle** (`tests/test_blob_shaper_plumbing.py`): build synthetic authored base/reaction contours and energy nodes, then compare active runtime against the same authored goal with living/audio motion disabled. Assert mutation beyond goal at representative pixel scale, fixed-angle temporal range, bounded neighbor steps, clean release, and zero-shift-dominant motion. Merely reaching a large authored goal or changing glow is not reactivity.
+- Blob behavior and subtype tests are deprecated pending complete mode removal. Do not repair or retune Blob to satisfy old creative oracles; removal must instead prove safe migration to the registry default, absence from UI/runtime/package artifacts, and unchanged supported-mode bars.
 - **Poison-log interpretation** (`tests/test_spotify_visualizer_widget.py`, `tests/test_spotify_visualizer_mode_transition.py`, `tests/test_ghost_isolation.py`): `[FIRST_FRAME_PRIMER]` alone means stale overlay ownership was detected before the authoritative first push. It becomes failure evidence only when current generation/activation does not replace it or guard/parity/technical-replay/fallback/stale-commit checks fail. Likewise, cached `[PERF][SPOTIFY_VIS][BUBBLE]` lines after a mode switch are telemetry-only unless Bubble simulation, drift, or dispatch also continues.
 - **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
-- **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that mode/preset-owned growth still drives preferred outer height, blob-width reduction stays media-relative, and top/bottom anchor placement remains correct independently of stencil-shell behavior.
+- **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that supported mode/preset-owned growth still drives preferred outer dimensions and top/bottom anchor placement remains correct independently of stencil-shell behavior.
 - **CUSTOM adaptive visualizer sizing** (`tests/test_custom_layout_manager.py`, `tests/test_widget_manager.py`, `tests/test_visualizer_card_geometry.py`): validates that visualizer CUSTOM edit shells use a maximum-envelope footprint for safe alignment, saved CUSTOM payload stores width/height scales, and runtime re-resolves the live mode/preset card size instead of freezing the first captured CUSTOM rect dimensions.
 - **First visible activation parity** (`tests/test_spotify_visualizer_widget.py`): validates that the first authoritative visible GPU frame after hot mode switch or preset cycle matches a fresh-activation oracle under the same synthetic audio and preset-owned technical values, so poisoned runtime state or entry-point drift cannot hide behind worker-only tests.
 - **Authored runtime motion oracles** (`tests/test_spotify_visualizer_widget.py`, `tests/test_bubble_reactivity.py`): when a mode has a known curated “truth” preset such as Bubble `Preset 1 (Deep Sea)`, the bar should include runtime-path checks that measure visible simulation motion, not only helper/feed variance. Bubble closure now requires direct runtime-path oracles for both lanes: big bubbles must be present, visibly active under soft phrases, sustain visible authority through loud holds, and stay competitive with authored comparison presets without silently flattening under render-size clamp saturation; the small/medium lane must also remain alive through sustained loud passages instead of only looking good in quieter sections. Runtime pulse payload plumbing must be proven live, not merely present.
@@ -242,7 +203,7 @@ When changing Gmail widget OAuth/backend, include tests for:
 - Clean up Qt objects/timers in teardown paths.
 - Prefer focused assertions over broad brittle snapshots.
 - Avoid locking tests to artistic preset content unless explicitly intentional.
-- Do not copy temporary Blob showcase preset names or exact creative JSON into behavior tests. Use synthetic controls/nodes that encode the measurable failure shape; keep exact preset assertions limited to schema, subtype ownership, slot/manifest integrity, and intentional migration behavior.
+- Do not add or repair Blob creative/runtime behavior tests. Retain only migration/absence guards until the deprecated mode and its corpus are removed.
 
 ## 6. Runtime Validation Rule
 For bugs with user-visible rendering/startup/focus behavior:

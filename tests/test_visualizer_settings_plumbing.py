@@ -233,11 +233,14 @@ class TestSettingsModelPlumbing:
     def _payload(self):
         from core.settings import visualizer_presets as vp
 
-        return {
+        payload = {
             "mode": "bubble",
             "preset_bubble": vp.get_custom_preset_index("bubble"),
             **self.CRITICAL_SETTINGS,
         }
+        payload["bubble_rainbow_enabled"] = payload.pop("rainbow_enabled")
+        payload["bubble_rainbow_speed"] = payload.pop("rainbow_speed")
+        return payload
 
     def _assert_model_matches(self, model):
         for key, expected in self.CRITICAL_SETTINGS.items():
@@ -1326,7 +1329,13 @@ class TestCreateTimeRefreshParity:
             "that settings re-entry uses."
         )
 
-    def test_create_spotify_visualizer_widget_skips_immediate_refresh_for_pending_custom_route(self, monkeypatch):
+    def test_create_spotify_visualizer_widget_suppresses_pending_custom_route_without_exact_rect(
+        self,
+        monkeypatch,
+        caplog,
+    ):
+        import logging
+
         appdata = ROOT / "tests_tmp_appdata"
         appdata.mkdir(parents=True, exist_ok=True)
         monkeypatch.setenv("APPDATA", str(appdata))
@@ -1433,29 +1442,24 @@ class TestCreateTimeRefreshParity:
             },
         }
 
-        vis = creators.create_spotify_visualizer_widget(
-            mgr,
-            widgets_config,
-            shadows_config={},
-            screen_index=0,
-            thread_manager=None,
-            media_widget=FakeMediaWidget(),
-        )
+        with caplog.at_level(logging.WARNING):
+            vis = creators.create_spotify_visualizer_widget(
+                mgr,
+                widgets_config,
+                shadows_config={},
+                screen_index=0,
+                thread_manager=None,
+                media_widget=FakeMediaWidget(),
+            )
 
-        assert vis is not None
-        assert vis.activation_calls == ["startup_create"]
-        assert vis.activation_manager_attached == [True], (
-            "CUSTOM startup must attach a real WidgetManager before startup_create "
-            "so route-aware geometry logic cannot freelance into authored sizing."
-        )
-        assert vis.custom_rect_seen_during_activation == [None], (
-            "A pending CUSTOM route without a saved rect must stay unattached during "
-            "startup_create so the creator does not invent geometry authority."
-        )
+        assert vis is None
+        assert mgr._widgets == {}
+        assert mgr.bound == {}
         assert refresh_calls == [], (
-            "CUSTOM-routed startup must not re-enter the generic refresh path "
-            "before committed replay attaches the authoritative rect."
+            "A suppressed CUSTOM startup must not re-enter generic refresh before "
+            "an exact committed rect is available."
         )
+        assert "Suppressing CUSTOM visualizer creation because no exact local custom rect is available" in caplog.text
 
     @pytest.mark.qt
     def test_create_spotify_visualizer_widget_custom_route_does_not_expand_to_authored_height_before_replay(
@@ -2484,47 +2488,10 @@ class TestCreateTimeRefreshParity:
         assert vis is not None
         assert vis.call_order.index("activation_payload") < vis.call_order.index("thread_manager")
 
-    def test_create_spotify_visualizer_widget_can_anchor_to_media_on_other_display(self, monkeypatch):
-        appdata = ROOT / "tests_tmp_appdata"
-        appdata.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setenv("APPDATA", str(appdata))
+    def test_anchor_resolution_can_use_media_on_other_display(self, monkeypatch):
         from rendering import spotify_widget_creators as creators
 
-        class FakeVisualizer:
-            def __init__(self, parent, bar_count, initial_mode=None):
-                self.parent = parent
-                self.bar_count = bar_count
-                self.initial_mode = initial_mode
-
-            def set_anchor_media_widget(self, widget):
-                self.anchor = widget
-
-            def set_bar_style(self, **kwargs):
-                self.bar_style = kwargs
-
-            def set_shadow_config(self, cfg):
-                self.shadow = cfg
-
-            def apply_resolved_activation_payload(self, model, activation_payload, **kwargs):
-                self.model = model
-
-            def handle_media_update(self, *args, **kwargs):
-                return None
-
-        monkeypatch.setattr(creators, "SpotifyVisualizerWidget", FakeVisualizer)
-        monkeypatch.setattr(creators, "parse_color_to_qcolor", lambda *args, **kwargs: SimpleNamespace())
-        class FakeSignal:
-            def __init__(self):
-                self.connected = []
-
-            def connect(self, callback):
-                self.connected.append(callback)
-
-        class FakeMediaWidget:
-            def __init__(self):
-                self.media_updated = FakeSignal()
-
-        remote_media = FakeMediaWidget()
+        remote_media = object()
 
         class FakeDisplay:
             def __init__(self, screen_index, media_widget=None):
@@ -2537,37 +2504,16 @@ class TestCreateTimeRefreshParity:
 
         monkeypatch.setattr(creators, "get_coordinator", lambda: FakeCoordinator())
 
-        class FakeManager:
-            def __init__(self):
-                self._parent = object()
-                self._widgets = {}
-
-            def _log_spotify_vis_config(self, *args, **kwargs):
-                return None
-
-            def register_widget(self, name, widget):
-                self._widgets[name] = widget
-
-            def _bind_parent_attribute(self, name, widget):
-                return None
-
-            def _refresh_spotify_visualizer_config(self, payload=None):
-                return None
-
-        vis = creators.create_spotify_visualizer_widget(
-            FakeManager(),
+        anchor = creators._resolve_visualizer_anchor_media_widget(
+            SimpleNamespace(),
             {
                 "media": {"enabled": True, "monitor": "1"},
-                "spotify_visualizer": {"enabled": True, "position": "Custom", "monitor": "2", "mode": "bubble"},
             },
-            shadows_config={},
             screen_index=1,
-            thread_manager=None,
-            media_widget=None,
+            local_media_widget=None,
         )
 
-        assert vis is not None
-        assert vis.anchor is remote_media
+        assert anchor is remote_media
 
     def test_create_spotify_visualizer_widget_requires_valid_media_anchor(self, monkeypatch):
         appdata = ROOT / "tests_tmp_appdata"
@@ -3115,7 +3061,7 @@ class TestPerModeTechnicalRoundTrip:
         self._assert_model_matches(model, per_mode)
         self._assert_dict_matches(serialized, per_mode)
 
-    def test_from_mapping_migrates_legacy_shared_technical_inputs_once(self):
+    def test_from_mapping_drops_legacy_shared_technical_inputs(self):
         from core.settings.models import PER_MODE_TECHNICAL_MODES, SpotifyVisualizerSettings
 
         payload = {
@@ -3137,42 +3083,56 @@ class TestPerModeTechnicalRoundTrip:
 
         model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
         serialized = model.to_dict()
+        defaults = SpotifyVisualizerSettings()
+        supported_modes = tuple(mode for mode in PER_MODE_TECHNICAL_MODES if mode != "blob")
 
-        for mode in PER_MODE_TECHNICAL_MODES:
-            expected_floor = 0.41 if mode == "spectrum" else 0.27
-            assert model.resolve_bar_count(mode) == 64
+        for mode in supported_modes:
+            expected_floor = 0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode)
+            assert model.resolve_bar_count(mode) == defaults.resolve_bar_count(mode)
             assert model.resolve_manual_floor(mode) == pytest.approx(expected_floor)
-            assert model.resolve_dynamic_floor(mode) is False
-            assert model.resolve_dynamic_range_enabled(mode) is True
-            assert model.resolve_audio_block_size(mode) == 384
-            assert model.resolve_adaptive_sensitivity(mode) is False
-            assert model.resolve_sensitivity(mode) == pytest.approx(0.91)
-            assert model.resolve_agc_strength(mode) == pytest.approx(0.66)
-            assert model.resolve_input_gain(mode) == pytest.approx(1.21)
-            assert model.resolve_kick_lane_gain(mode) == pytest.approx(1.44)
-            assert model.resolve_transient_pulse_gain(mode) == pytest.approx(1.18)
-            assert model.resolve_transient_clamp(mode) == pytest.approx(1.73)
+            assert model.resolve_dynamic_floor(mode) is defaults.resolve_dynamic_floor(mode)
+            assert model.resolve_dynamic_range_enabled(mode) is defaults.resolve_dynamic_range_enabled(mode)
+            assert model.resolve_audio_block_size(mode) == defaults.resolve_audio_block_size(mode)
+            assert model.resolve_adaptive_sensitivity(mode) is defaults.resolve_adaptive_sensitivity(mode)
+            assert model.resolve_sensitivity(mode) == pytest.approx(defaults.resolve_sensitivity(mode))
+            assert model.resolve_agc_strength(mode) == pytest.approx(defaults.resolve_agc_strength(mode))
+            assert model.resolve_input_gain(mode) == pytest.approx(defaults.resolve_input_gain(mode))
+            assert model.resolve_kick_lane_gain(mode) == pytest.approx(defaults.resolve_kick_lane_gain(mode))
+            assert model.resolve_transient_pulse_gain(mode) == pytest.approx(
+                defaults.resolve_transient_pulse_gain(mode)
+            )
+            assert model.resolve_transient_clamp(mode) == pytest.approx(defaults.resolve_transient_clamp(mode))
 
         self._assert_dict_matches(
             serialized,
             {
                 mode: {
-                    "bar_count": 64,
-                    "manual_floor": 0.41 if mode == "spectrum" else 0.27,
-                    "dynamic_floor": False,
-                    "dynamic_range_enabled": True,
-                    "audio_block_size": 384,
-                    "adaptive_sensitivity": False,
-                    "sensitivity": 0.91,
+                    "bar_count": defaults.resolve_bar_count(mode),
+                    "manual_floor": 0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode),
+                    "dynamic_floor": defaults.resolve_dynamic_floor(mode),
+                    "dynamic_range_enabled": defaults.resolve_dynamic_range_enabled(mode),
+                    "audio_block_size": defaults.resolve_audio_block_size(mode),
+                    "adaptive_sensitivity": defaults.resolve_adaptive_sensitivity(mode),
+                    "sensitivity": defaults.resolve_sensitivity(mode),
                 }
-                for mode in PER_MODE_TECHNICAL_MODES
+                for mode in supported_modes
             },
         )
-        assert serialized["widgets.spotify_visualizer.spectrum_agc_strength"] == pytest.approx(0.66)
-        assert serialized["widgets.spotify_visualizer.spectrum_input_gain"] == pytest.approx(1.21)
-        assert serialized["widgets.spotify_visualizer.spectrum_kick_lane_gain"] == pytest.approx(1.44)
-        assert serialized["widgets.spotify_visualizer.spectrum_transient_pulse_gain"] == pytest.approx(1.18)
-        assert serialized["widgets.spotify_visualizer.spectrum_transient_clamp"] == pytest.approx(1.73)
+        for legacy_key in (
+            "bar_count",
+            "manual_floor",
+            "dynamic_floor",
+            "dynamic_range_enabled",
+            "audio_block_size",
+            "adaptive_sensitivity",
+            "sensitivity",
+            "agc_strength",
+            "input_gain",
+            "kick_lane_gain",
+            "transient_pulse_gain",
+            "transient_clamp",
+        ):
+            assert f"widgets.spotify_visualizer.{legacy_key}" not in serialized
 
     def test_from_mapping_prefers_canonical_sine_wave_technical_key_over_visual_sine_alias(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -3753,7 +3713,8 @@ class TestVisualizerSettingsSnapshotNormalization:
         assert normalized["sine_wave_rainbow_speed"] == pytest.approx(0.41)
         assert normalized["bubble_rainbow_enabled"] is False
 
-    def test_mode_payload_normalizer_promotes_shared_technical_keys_to_mode_keys(self):
+    def test_mode_payload_normalizer_drops_shared_technical_keys_without_poisoning_mode_defaults(self):
+        from core.settings.models import SpotifyVisualizerSettings
         from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
 
         normalized = normalize_visualizer_mode_payload(
@@ -3768,8 +3729,9 @@ class TestVisualizerSettingsSnapshotNormalization:
 
         assert "manual_floor" not in normalized
         assert "input_gain" not in normalized
-        assert normalized["bubble_manual_floor"] == pytest.approx(0.22)
-        assert normalized["bubble_input_gain"] == pytest.approx(0.75)
+        defaults = SpotifyVisualizerSettings()
+        assert normalized["bubble_manual_floor"] == pytest.approx(defaults.resolve_manual_floor("bubble"))
+        assert normalized["bubble_input_gain"] == pytest.approx(defaults.resolve_input_gain("bubble"))
         assert normalized["bubble_growth"] == pytest.approx(3.1)
 
     def test_section_normalizer_preserves_bubble_bounce_keys(self):
@@ -5286,16 +5248,6 @@ class TestSpectrumSettingsBinding:
                     self.lane_strengths = []
                 self.lane_strengths.append((mirrored, strengths))
 
-            def set_lane_strengths(self, strengths, *, mirrored):
-                if not hasattr(self, "lane_strengths"):
-                    self.lane_strengths = []
-                self.lane_strengths.append((mirrored, strengths))
-
-            def set_lane_strengths(self, strengths, *, mirrored):
-                if not hasattr(self, "lane_strengths"):
-                    self.lane_strengths = []
-                self.lane_strengths.append((mirrored, strengths))
-
         class _Tab:
             def __init__(self):
                 self.spectrum_growth = _Slider()
@@ -5952,69 +5904,82 @@ def test_normalized_visualizer_section_drops_legacy_global_technical_keys():
     assert "manual_floor" not in normalized
     assert normalized["bubble_manual_floor"] == pytest.approx(0.22)
 
-    def test_versioned_gradient_direction_preserves_canonical_label(self):
-        from core.settings.models import SpotifyVisualizerSettings
+def test_versioned_gradient_direction_preserves_canonical_label():
+    from core.settings.models import SpotifyVisualizerSettings
 
-        model = SpotifyVisualizerSettings.from_mapping({
-            "mode": "bubble",
-            "bubble_gradient_direction": "left",
-            "bubble_gradient_semantics_version": 2,
-        }, apply_preset_overlay=False)
-        assert model.bubble_gradient_direction == "left"
+    model = SpotifyVisualizerSettings.from_mapping({
+        "mode": "bubble",
+        "bubble_gradient_direction": "left",
+        "bubble_gradient_semantics_version": 2,
+    }, apply_preset_overlay=False)
+    assert model.bubble_gradient_direction == "left"
 
-    def test_config_applier_accepts_cardinal_directions(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
 
-        class DummyWidget:
-            _bubble_specular_direction = "top_left"
-            _bubble_gradient_direction = "top"
+def test_config_applier_accepts_cardinal_directions():
+    from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
 
-        widget = DummyWidget()
-        for val in ("top", "bottom", "left", "right"):
-            apply_vis_mode_kwargs(widget, {
-                "bubble_specular_direction": val,
-                "bubble_gradient_direction": val,
-            })
-            assert widget._bubble_specular_direction == val
-            assert widget._bubble_gradient_direction == val
+    class DummyWidget:
+        _bubble_specular_direction = "top_left"
+        _bubble_gradient_direction = "top"
 
-    def test_config_applier_accepts_center_out_reverse_for_gradient(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
-
-        class DummyWidget:
-            _bubble_gradient_direction = "top"
-
-        widget = DummyWidget()
+    widget = DummyWidget()
+    for val in ("top", "bottom", "left", "right"):
         apply_vis_mode_kwargs(widget, {
-            "bubble_gradient_direction": "center_out_reverse",
+            "bubble_specular_direction": val,
+            "bubble_gradient_direction": val,
         })
-        assert widget._bubble_gradient_direction == "center_out_reverse"
+        assert widget._bubble_specular_direction == val
+        assert widget._bubble_gradient_direction == val
 
-    def test_gradient_shader_helper_uses_brightest_point_semantics(self):
-        from core.settings.bubble_gradient_semantics import (
-            get_bubble_gradient_shader_mode,
-            get_bubble_gradient_shader_vector,
-        )
 
-        assert get_bubble_gradient_shader_vector("left") == (-1.0, 0.0)
-        assert get_bubble_gradient_shader_vector("top") == (0.0, -1.0)
-        assert get_bubble_gradient_shader_vector("bottom_right") == (0.707, 0.707)
-        assert get_bubble_gradient_shader_mode("center_out") == 1
-        assert get_bubble_gradient_shader_mode("center_out_reverse") == 2
+def test_config_applier_accepts_center_out_reverse_for_gradient():
+    from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs
 
-    def test_bubble_shader_radial_modes_keep_center_out_as_primary_mode(self):
-        shader = Path(
-            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_visualizer\shaders\bubble.frag"
-        ).read_text(encoding="utf-8")
+    class DummyWidget:
+        _bubble_gradient_direction = "top"
 
-        assert 'grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);' in shader
+    widget = DummyWidget()
+    apply_vis_mode_kwargs(widget, {
+        "bubble_gradient_direction": "center_out_reverse",
+    })
+    assert widget._bubble_gradient_direction == "center_out_reverse"
 
-    def test_gl_overlay_queries_bubble_gradient_mode_uniform(self):
-        src = Path(
-            r"F:\Programming\Apps\ShittyRandomPhotoScreenSaver\widgets\spotify_bars_gl_overlay.py"
-        ).read_text(encoding="utf-8")
 
-        assert '"u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color"' in src
+def test_gradient_shader_helper_uses_brightest_point_semantics():
+    from core.settings.bubble_gradient_semantics import (
+        get_bubble_gradient_shader_mode,
+        get_bubble_gradient_shader_vector,
+    )
+
+    assert get_bubble_gradient_shader_vector("left") == (-1.0, 0.0)
+    assert get_bubble_gradient_shader_vector("top") == (0.0, -1.0)
+    assert get_bubble_gradient_shader_vector("bottom_right") == (0.707, 0.707)
+    assert get_bubble_gradient_shader_mode("center_out") == 1
+    assert get_bubble_gradient_shader_mode("center_out_reverse") == 2
+
+
+def test_bubble_shader_radial_modes_keep_center_out_as_primary_mode():
+    shader_path = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_visualizer"
+        / "shaders"
+        / "bubble.frag"
+    )
+    shader = shader_path.read_text(encoding="utf-8")
+
+    assert 'grad_t = (u_gradient_mode == 2) ? radial_t : (1.0 - radial_t);' in shader
+
+
+def test_gl_overlay_queries_bubble_gradient_mode_uniform():
+    source_path = (
+        Path(__file__).resolve().parents[1]
+        / "widgets"
+        / "spotify_bars_gl_overlay.py"
+    )
+    src = source_path.read_text(encoding="utf-8")
+
+    assert '"u_specular_dir", "u_gradient_dir", "u_gradient_mode", "u_outline_color", "u_specular_color"' in src
 
 
 # ===========================================================================

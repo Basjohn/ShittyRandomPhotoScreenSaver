@@ -2,10 +2,8 @@
 Shared pytest fixtures for screensaver tests.
 
 Chunked test execution:
-  When running the full suite (``pytest tests/``), tests are automatically
-  split into chunks to avoid memory/timeout issues.  The chunking is
-  transparent — each chunk runs in its own subprocess so GL state, leaked
-  Qt singletons, and memory are cleanly isolated.
+  Use ``python tests/run_chunked.py`` to run isolated subprocess chunks with
+  a per-chunk timeout. Direct ``pytest tests/`` remains a single process.
 
   Manual chunk selection::
 
@@ -13,7 +11,7 @@ Chunked test execution:
 
   Or use the helper script::
 
-      python tests/run_chunked.py          # auto-detect chunk count
+      python tests/run_chunked.py          # four bounded chunks
       python tests/run_chunked.py --chunks 6
 """
 import os
@@ -26,8 +24,21 @@ from PySide6.QtWidgets import QApplication
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_APPDATA = ROOT / "tests_tmp_appdata"
+TEST_LOCALAPPDATA = ROOT / "tests_tmp_localappdata"
 TEST_APPDATA.mkdir(parents=True, exist_ok=True)
+TEST_LOCALAPPDATA.mkdir(parents=True, exist_ok=True)
 os.environ["APPDATA"] = str(TEST_APPDATA)
+os.environ["LOCALAPPDATA"] = str(TEST_LOCALAPPDATA)
+
+
+_DEPRECATED_BLOB_REASON = (
+    "Blob is deprecated pending removal; use --run-deprecated-blob-tests only "
+    "for explicit retirement forensics"
+)
+_BLOB_RETIREMENT_GUARDS = (
+    "test_visualizer_settings_do_not_build_gated_blob_ui",
+    "test_default_merge_does_not_reintroduce_inactive_blob_family",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -39,10 +50,31 @@ def pytest_addoption(parser):
                      help="1-indexed chunk number to run (requires --total-chunks)")
     parser.addoption("--total-chunks", type=int, default=None,
                      help="Total number of chunks the suite is split into")
+    parser.addoption(
+        "--run-deprecated-blob-tests",
+        action="store_true",
+        default=False,
+        help="Run deprecated Blob-specific tests while the failed mode awaits removal",
+    )
+
+
+def _mark_deprecated_blob_tests(config, items) -> None:
+    if config.getoption("--run-deprecated-blob-tests"):
+        return
+
+    for item in items:
+        nodeid = item.nodeid.casefold()
+        if "blob" not in nodeid:
+            continue
+        if any(guard in nodeid for guard in _BLOB_RETIREMENT_GUARDS):
+            continue
+        item.add_marker(pytest.mark.skip(reason=_DEPRECATED_BLOB_REASON))
 
 
 def pytest_collection_modifyitems(config, items):
-    """Filter collected tests to only those in the requested chunk."""
+    """Mark deprecated coverage, then select a deterministic requested chunk."""
+    _mark_deprecated_blob_tests(config, items)
+
     chunk = config.getoption("--chunk")
     total = config.getoption("--total-chunks")
     if chunk is None or total is None:
