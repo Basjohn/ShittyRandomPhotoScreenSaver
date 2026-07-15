@@ -914,7 +914,7 @@ class WidgetsTab(QWidget):
         title.setStyleSheet(PAGE_TITLE_STYLE)
         layout.addWidget(title)
 
-        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit / Defaults)
+        # Subtab-style toggle buttons (Clocks / Weather / Media / Reddit / General)
         subtab_row = QHBoxLayout()
         self._subtab_group = QButtonGroup(self)
         self._subtab_group.setExclusive(True)

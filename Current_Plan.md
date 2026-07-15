@@ -16,7 +16,18 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-Execution order is dependency-driven: runtime-validate the fresh paused-visualizer pressure correction first because the latest log regressed both displays into visible transition collapse; then retire deprecated Blob against the supported-visualizer baseline and canonical generated defaults; then spend the longer compiled Steam budget against the intended release shape; then classify the ignored audit documents. No existing Steam, Blob, or audit bar is displaced or treated as complete.
+Execution order is dependency-driven: complete the contained General-widget-settings UX/cache work and existing drift-log evidence pass while no fresh compiled runtime is required; then runtime-validate the paused-visualizer pressure correction because the latest mixed-refresh log regressed both displays into visible transition collapse; then retire deprecated Blob against the supported-visualizer baseline and canonical generated defaults; then spend the longer compiled Steam budget against the intended release shape; then classify the ignored audit documents. No existing Steam, Blob, or audit bar is displaced or treated as complete.
+
+### General Widget Settings And Cache Maintenance
+
+- [x] Rename only the user-facing WidgetsTab `Defaults` section/button/group copy to `General`. Preserve the internal descriptor `section_id="defaults"`, existing attribute/function/module names, Defaults Foundry, canonical-default terminology, reset wording, and documentation titles whose subject is genuinely defaults. Focused UI/descriptor/docs oracles now lock that distinction without broad word replacement.
+- [x] Recompose the General section into styled buckets. Existing shadow controls and card border width remain under Appearance, authored stacking and reset positions remain under Layout, and Cache Maintenance is collapsed by default; descriptor-owned lazy build/load/save, hydration guards, scroll state, and current settings authority remain intact.
+- [x] Add explicit cache maintenance with per-cache-family selection, a confirmation step naming the selected scope, safe locked/in-use-file handling, and gentle completion/failure feedback. The allowlist contains RSS images, Reddit post snapshots, Weather responses, Gmail metadata, Steam responses/public artwork, and Settings performance data only; recursive Steam deletion runs on ThreadManager IO, follows no symlinks, removes no directories, and credentials/settings/layouts/defaults/pacing markers/deprecated Imgur remain excluded.
+- [x] Assess a global eight-direction shadow control against the real shadow pipeline. `widgets.shadows.offset` currently persists but does not drive the fragmented painter consumers, while card/visualizer/volume outer geometry reserves right/bottom-only gutter and Clock/Weather/Media retain special offsets. A GUI selector would therefore be misleading and top/left directions could clip; the required signed-vector/four-sided-padding/cache-key unification and eight-direction DPR bar are preserved in `Future_Cleanup.md` rather than shipping a partial control.
+
+### Drift Reactivity Evidence
+
+- [ ] Correlate the newest usable `--viz`/perf logs across idle, soft passages, and loud passages. Quantify whether Drift displacement/energy visibly and measurably rises with loudness while remaining minimal at idle, separate source-energy movement from transition/paint cadence, and record exact windows plus any missing telemetry. Do not retune Drift from aggregate FPS alone; promote implementation only if evidence shows a real response defect.
 
 ### Paused Visualizer / Mixed-Refresh Cadence Recovery
 
@@ -34,9 +45,8 @@ Execution order is dependency-driven: runtime-validate the fresh paused-visualiz
 ### Widget And Visual Timing Runtime Bar
 
 - [ ] In a fresh normal and MC compiled run, validate Achievement Pulse's default `140 x 196` Portrait art at `600 x 334`: left/right padding matches the family rails, header/art alignment stays exact, `Unlocked` remains six authored pixels below art and renders complete high counts without ellipsis in Portrait/Wide/Square/art-off, and the 40px achievement icon occupies the prior-unlock lane without narrowing the primary unlock title. Long game/latest/prior names must shrink before elision while preserving game >= latest >= prior font size; the first capsule rail retains its measured gap, and 140/190 width changes, high DPR, large capsule font, settings rebuild, and Custom scaling do not clip or rearrange content. With two recent games whose play order and latest-unlock order disagree, require Most Recent, Previous, and Settings labels to follow the newest positive unlock timestamp while missing timestamp evidence falls back stably.
-- [ ] In normal and MC Settings, exercise Gmail's default 35/65 Text Balance and both slider extremes at 600 px plus narrow/wide Custom widths. Sender + gap + subject must stay inside the post-reserve row budget, timestamp/envelope/menu lanes must remain intact, subjects must use only the word limit before final pixel elision, and Custom font resizing must preserve the dimensionless ratio. In Defaults Foundry, change Abandonment Accent through the alpha swatch, dismiss the picker, and confirm the visible value and saved/regenerated canonical default retain the selected RGBA value without modifying an installed profile.
 - [ ] Run solid-bar Spectrum with `--viz --perf` through quiet/dropout material and at least one image transition: the 2026-07-14-style coherent input collapse must decay/recover without a brief zero flash or delayed-frame snap, while ordinary smoothing remains visually unchanged and logs show no new timer/repaint/audio-floor pressure.
-- [ ] Run the analogue clock with seconds visible for several minutes in normal and MC builds: require discrete six-degree second ticks with matching one-second minute/hour progression, no semi-smooth pause/jump interpolation, and unchanged shared clock-ticker/paint cadence.
+- [ ] Run the analogue clock with seconds visible for several minutes in normal and MC builds: require discrete six-degree second ticks with matching one-second minute/hour progression, no semi-smooth pause/jump interpolation, and unchanged shared clock-ticker/paint cadence. At a clearly non-default CUSTOM scale, switch digital/analogue through Settings and double-click in both directions and restart each time; require mode-appropriate centered geometry, scale, position, and display route to survive while `--geo` payloads contain only `font_size` plus `geometry_variant`, never behavior-authoritative `display_mode`.
 
 ### Steam Abandonment Issues Production Runtime Bar
 
@@ -88,10 +98,5 @@ Execution order is dependency-driven: runtime-validate the fresh paused-visualiz
 #######
 ### User Task Box: NEVER remove this box/section, only integrate its tasks into the active plan and then remove the text BELOW prompting the tasks.
 ----
-1. Rename Defaults Widget Tab section in settings to "General", be careful not to catch the word default/defaults from the rest of the project accidentally while doing this, it is a very common word, which is why we are changing it.
-1.1 In the new general add a Clear Caches button or Checkbox selection with button confirmation. The user would be able to specifically choose which caches to clear.
-1.2 Assess feasability of adding "Shadow Direction" with a arrow like grid GUI (much like photoshops resize arrows in canvas resize look) where users can click one of 8 cardinal directions and change the general shadow direction of all our widgets/their backdrops to face a certain direction. The button would be inset to show which direction is chosen. Default is how we are now with bottom right aimed shadows. All other directions would use current settings adjusted for that direction relatively.
-1.3. Bucket the General section as you go to avoid messes.
-2. Measure logs drift idle vs drift soft-passages vs drift loud-passages to make sure there is an actual noticible increase in drift with loudest passages and minimal during idle. Use any logs and collect evidence about this.
 ----
 ######

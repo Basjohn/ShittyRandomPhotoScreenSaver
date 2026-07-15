@@ -493,7 +493,7 @@ def test_gmail_content_height_updates_do_not_change_width_constraints(qt_app):
         widget.cleanup()
 
 
-def test_gmail_custom_layout_payload_preserves_dimensionless_text_ratio():
+def test_gmail_custom_layout_payload_leaves_text_ratio_settings_owned():
     from types import SimpleNamespace
 
     from rendering.custom_layout_manager import CustomLayoutManager
@@ -501,7 +501,7 @@ def test_gmail_custom_layout_payload_preserves_dimensionless_text_ratio():
     class _DummyGmail:
         def __init__(self) -> None:
             self._font_size = 13
-            self._sender_subject_ratio = 35
+            self._sender_subject_ratio = 62
 
         def set_font_size(self, value: int) -> None:
             self._font_size = int(value)
@@ -517,11 +517,23 @@ def test_gmail_custom_layout_payload_preserves_dimensionless_text_ratio():
     scaled = manager._scale_size_payload(descriptor, payload, 0.65)
     manager._apply_size_payload(descriptor, widget, scaled)
 
-    assert payload == {"font_size": 13, "sender_subject_ratio": 35}
+    assert payload == {"font_size": 13}
     assert scaled["font_size"] < payload["font_size"]
-    assert scaled["sender_subject_ratio"] == payload["sender_subject_ratio"]
     assert widget._font_size == scaled["font_size"]
-    assert widget._sender_subject_ratio == scaled["sender_subject_ratio"]
+    assert widget._sender_subject_ratio == 62
+
+    manager._apply_size_payload(
+        descriptor,
+        widget,
+        {
+            "font_size": 16,
+            "sender_subject_ratio": 35,
+            "sender_column_width": 180,
+        },
+    )
+
+    assert widget._font_size == 16
+    assert widget._sender_subject_ratio == 62
 
 
 def test_gmail_small_font_compacts_action_lane(qt_app):

@@ -300,9 +300,9 @@ class ClockWidget(BaseOverlayWidget):
         self._set_main_clock_font(target_size)
         self._update_tz_label_font()
 
-    def _natural_custom_size_for_mode(self, mode: str) -> QSize:
+    def _natural_custom_size_for_mode(self, mode: str, *, font_size: int | None = None) -> QSize:
         target = str(mode or "").lower()
-        font_size = max(12, int(self._font_size))
+        font_size = max(12, int(self._font_size if font_size is None else font_size))
         if target == "analog":
             width = max(160, int(round(font_size * 4.5)))
             height_factor = 1.3 if self._show_timezone else 1.0
@@ -338,7 +338,12 @@ class ClockWidget(BaseOverlayWidget):
         )
         return QSize(width, height)
 
-    def _rebuild_custom_rect_for_mode(self, target_mode: str) -> QRect | None:
+    def _rebuild_custom_rect_for_mode(
+        self,
+        target_mode: str,
+        *,
+        font_size: int | None = None,
+    ) -> QRect | None:
         custom_rect = self._active_custom_layout_rect()
         if custom_rect is None:
             return None
@@ -346,7 +351,7 @@ class ClockWidget(BaseOverlayWidget):
         if parent is None:
             return None
 
-        target_size = self._natural_custom_size_for_mode(target_mode)
+        target_size = self._natural_custom_size_for_mode(target_mode, font_size=font_size)
         center_x = custom_rect.x() + (custom_rect.width() / 2.0)
         center_y = custom_rect.y() + (custom_rect.height() / 2.0)
         rebuilt = QRect(
@@ -890,7 +895,7 @@ class ClockWidget(BaseOverlayWidget):
                     clock_cfg['clock_analog_mode'] = (new_mode == "analog")
                     clock_cfg['display_mode'] = new_mode
                     cfg[widget_id] = clock_cfg
-                    self._persist_display_mode_to_custom_layout(cfg, widget_id, new_mode)
+                    self._persist_mode_switched_custom_layout(cfg, widget_id, new_mode)
                     if hasattr(sm, "set_widgets_map"):
                         try:
                             sm.set_widgets_map(cfg, emit_change=False)
@@ -904,7 +909,7 @@ class ClockWidget(BaseOverlayWidget):
                 except Exception:
                     logger.debug("[CLOCK] Failed to persist display mode", exc_info=True)
 
-    def _persist_display_mode_to_custom_layout(self, widgets_map: dict, widget_id: str, new_mode: str) -> None:
+    def _persist_mode_switched_custom_layout(self, widgets_map: dict, widget_id: str, new_mode: str) -> None:
         custom_rect = getattr(self, "_custom_layout_local_rect", None)
         if not isinstance(custom_rect, QRect):
             return
@@ -935,7 +940,8 @@ class ClockWidget(BaseOverlayWidget):
         if not isinstance(entry, dict):
             return
         payload = dict(entry.get("size_payload", {}) or {})
-        payload["display_mode"] = new_mode
+        payload.pop("display_mode", None)
+        payload["geometry_variant"] = new_mode
         payload["font_size"] = int(getattr(self, "_font_size", payload.get("font_size", self.DEFAULT_FONT_SIZE)))
         entry["size_payload"] = payload
         parent = self.parentWidget()

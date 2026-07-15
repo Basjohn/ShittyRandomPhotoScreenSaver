@@ -332,9 +332,9 @@
     "widgets": {
       "abandonment_issues": {
         "accent_color": [
+          211,
+          209,
           222,
-          157,
-          88,
           225
         ],
         "artwork_shape": "portrait",

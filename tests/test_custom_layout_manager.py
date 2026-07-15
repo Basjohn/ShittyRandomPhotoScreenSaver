@@ -10,6 +10,7 @@ from core.settings.models._enums import WidgetPosition, coerce_widget_position
 from rendering.custom_layout_manager import CustomLayoutManager
 from rendering.custom_layout_contract import get_screen_signature, resolve_snap_local_rect_for_edit
 from widgets.base_overlay_widget import BaseOverlayWidget, OverlayPosition
+from widgets.clock_widget import ClockWidget
 from widgets.edit_shell_widget import EditShellWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 
@@ -150,10 +151,14 @@ class _RedditLikeTestWidget(_EditableTestWidget):
 class _GmailLikeTestWidget(_EditableTestWidget):
     def __init__(self, parent: QWidget, *, font_size: int = 13) -> None:
         super().__init__(parent, font_size=font_size)
+        self._sender_subject_ratio = 35
         self.setGeometry(50, 70, 600, 220)
 
     def set_font_size(self, size: int) -> None:
         self._font_size = int(size)
+
+    def set_sender_subject_ratio(self, ratio: int) -> None:
+        self._sender_subject_ratio = int(ratio)
 
     def set_display_mode(self, mode: str) -> None:
         self._display_mode = str(mode)
@@ -350,7 +355,8 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert len(displays) == 1
     payload = next(iter(displays.values()))["clock"]
     assert payload["size_payload"]["font_size"] == 72
-    assert payload["size_payload"]["display_mode"] == "digital"
+    assert payload["size_payload"]["geometry_variant"] == "digital"
+    assert "display_mode" not in payload["size_payload"]
     assert payload["resize_mode"] == "clock_font"
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
 
@@ -358,7 +364,7 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert clock.isVisible() is False
 
 
-def test_custom_layout_manager_clock_payload_reapplies_display_mode(qtbot):
+def test_custom_layout_manager_clock_payload_keeps_display_mode_settings_owned(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
     settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
@@ -383,7 +389,66 @@ def test_custom_layout_manager_clock_payload_reapplies_display_mode(qtbot):
     )
 
     assert clock._font_size == 54
-    assert clock._display_mode == "digital"
+    assert clock._display_mode == "analog"
+
+
+def test_custom_layout_manager_clock_replay_migrates_legacy_mode_to_geometry_variant(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "clock": {
+            "enabled": True,
+            "position": "Custom",
+            "monitor": "1",
+            "display_mode": "analog",
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "clock": {
+                        "rect": {"x": 0.10, "y": 0.20, "width": 0.40, "height": 0.16},
+                        "size_payload": {"font_size": 55, "display_mode": "digital"},
+                        "resize_mode": "clock_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    clock = ClockWidget(parent=display)
+    qtbot.addWidget(clock)
+    clock.set_show_timezone(True)
+    clock.set_show_background(True)
+    clock.set_font_size(30)
+    clock.set_display_mode("analog")
+    display.clock_widget = clock
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    expected_rect = QRect(176, 35, 248, 322)
+    saved_entry = settings_stub._widgets_map["custom_layout"]["displays"][signature]["clock"]
+    saved_payload = saved_entry["size_payload"]
+
+    assert clock._display_mode == "analog"
+    assert clock._font_size == 55
+    assert clock.geometry() == expected_rect
+    assert clock._custom_layout_local_rect == expected_rect
+    assert saved_payload == {"font_size": 55, "geometry_variant": "analog"}
+    assert saved_entry["rect"] == {
+        "x": expected_rect.x() / screen.geometry().width(),
+        "y": expected_rect.y() / screen.geometry().height(),
+        "width": expected_rect.width() / screen.geometry().width(),
+        "height": expected_rect.height() / screen.geometry().height(),
+    }
+    assert settings_stub.saved is True
 
 
 def test_custom_layout_manager_save_session_persists_untouched_widgets_as_authoritative_custom_scene(qtbot):
@@ -2506,6 +2571,55 @@ def test_custom_layout_manager_saves_and_reapplies_gmail_font_resize(qtbot):
     payload = next(iter(settings_stub.get_widgets_map()["custom_layout"]["displays"].values()))["gmail"]
     assert payload["size_payload"]["font_size"] == 18
     assert payload["resize_mode"] == "gmail_font"
+
+
+def test_custom_layout_manager_replay_keeps_gmail_internal_balance_settings_owned(qtbot):
+    _reset_custom_layout_manager_state()
+    screen = _FakeScreen("Display-A", QRect(0, 0, 1000, 700))
+    signature = get_screen_signature(screen)
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {
+        "gmail": {
+            "position": "Custom",
+            "monitor": "1",
+            "sender_subject_ratio": 68,
+        },
+        "custom_layout": {
+            "version": 1,
+            "displays": {
+                signature: {
+                    "gmail": {
+                        "rect": {"x": 0.12, "y": 0.16, "width": 0.44, "height": 0.28},
+                        "size_payload": {
+                            "font_size": 18,
+                            "sender_subject_ratio": 35,
+                            "sender_column_width": 180,
+                        },
+                        "resize_mode": "gmail_font",
+                    }
+                }
+            },
+        },
+    }
+    display = _DisplayStub(settings_stub, screen=screen)
+    qtbot.addWidget(display)
+    display.show()
+
+    gmail = _GmailLikeTestWidget(display, font_size=13)
+    gmail._sender_subject_ratio = 68
+    display.gmail_widget = gmail
+    qtbot.addWidget(gmail)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    manager.apply_saved_layouts_to_display()
+
+    custom_rect = getattr(gmail, "_custom_layout_local_rect", None)
+    assert isinstance(custom_rect, QRect)
+    assert custom_rect == QRect(120, 112, 440, 196)
+    assert gmail.geometry() == custom_rect
+    assert gmail._font_size == 18
+    assert gmail._sender_subject_ratio == 68
 
 
 def test_custom_layout_manager_marks_runtime_reload_pending_during_save(qtbot):

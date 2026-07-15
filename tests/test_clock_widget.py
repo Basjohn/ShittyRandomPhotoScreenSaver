@@ -574,7 +574,8 @@ def test_clock_double_click_rebuilds_custom_runtime_rect_from_digital_to_analog(
     assert clock._font_size == 55
     assert analog_rect.height() > analog_rect.width()
     assert analog_rect == QRect(376, 99, 248, 322)
-    assert saved_payload["display_mode"] == "analog"
+    assert saved_payload["geometry_variant"] == "analog"
+    assert "display_mode" not in saved_payload
     assert saved_payload["font_size"] == 55
     assert saved_entry["rect"] == {
         "x": analog_rect.x() / parent.width(),
@@ -657,7 +658,8 @@ def test_clock_double_click_rebuilds_custom_runtime_rect_from_analog_to_digital(
     assert digital_rect.width() > digital_rect.height() * 2
     assert digital_rect.width() > 248
     assert digital_rect.height() < 322
-    assert saved_payload["display_mode"] == "digital"
+    assert saved_payload["geometry_variant"] == "digital"
+    assert "display_mode" not in saved_payload
     assert saved_payload["font_size"] == 55
     assert saved_entry["rect"] == {
         "x": digital_rect.x() / parent.width(),

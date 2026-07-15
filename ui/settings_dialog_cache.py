@@ -105,3 +105,10 @@ def get_settings_dialog_cache() -> SettingsDialogCacheData:
     )
     _persist_cache(_cache)
     return _cache
+
+
+def invalidate_settings_dialog_cache() -> None:
+    """Drop the process-local snapshot after explicit persistent-cache clearing."""
+
+    global _cache
+    _cache = None

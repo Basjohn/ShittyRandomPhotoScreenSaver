@@ -60,6 +60,11 @@ _MIN_CUSTOM_WIDGET_WIDTH = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.width())
 _MIN_CUSTOM_WIDGET_HEIGHT = int(CUSTOM_LAYOUT_MIN_WIDGET_SIZE.height())
 _VISUALIZER_RECOVERY_ASPECT = 1.5
 _VISUALIZER_RECOVERY_MIN_SIZE = QSize(max(260, _MIN_CUSTOM_WIDGET_WIDTH), max(120, _MIN_CUSTOM_WIDGET_HEIGHT))
+_CLOCK_GEOMETRY_VARIANT_KEY = "geometry_variant"
+
+
+def _normalize_clock_geometry_variant(value: Any) -> str:
+    return "analog" if str(value or "").strip().lower() in {"analog", "analogue"} else "digital"
 
 
 class _CustomLayoutSessionKeyFilter(QObject):
@@ -651,9 +656,10 @@ class CustomLayoutManager:
         )
         size_payload = dict(state.current_size_payload)
         if state.descriptor.custom_layout_resize_mode == "clock_font":
+            size_payload.pop("display_mode", None)
             size_payload.setdefault(
-                "display_mode",
-                str(getattr(state.widget, "_display_mode", "digital") or "digital"),
+                _CLOCK_GEOMETRY_VARIANT_KEY,
+                _normalize_clock_geometry_variant(getattr(state.widget, "_display_mode", "digital")),
             )
         entry = CustomLayoutEntry(
             widget_id=widget_id,
@@ -870,6 +876,7 @@ class CustomLayoutManager:
         custom_layout_map = load_custom_layout_map(widgets_map)
         matched_signature, entries = get_screen_layout_entries_for_screen(custom_layout_map, screen)
         self._screen_signature = matched_signature or fallback_signature
+        layout_changed = False
 
         for descriptor in get_layout_edit_runtime_descriptors():
             widget = getattr(self._display, descriptor.attr_name, None)
@@ -883,7 +890,78 @@ class CustomLayoutManager:
             if entry is None:
                 self._clear_widget_custom_layout(widget)
                 continue
+            entry, entry_changed = self._reconcile_clock_geometry_variant(widget, descriptor, entry)
+            if entry_changed and matched_signature:
+                set_screen_layout_entry(custom_layout_map, matched_signature, descriptor.widget_id, entry)
+                layout_changed = True
             self._apply_entry_to_widget(widget, descriptor, entry)
+
+        if layout_changed:
+            write_custom_layout_map(widgets_map, custom_layout_map)
+            try:
+                settings_manager.set_widgets_map(widgets_map, emit_change=False)
+                save = getattr(settings_manager, "save", None)
+                if callable(save):
+                    save()
+            except Exception:
+                logger.debug("[CUSTOM_LAYOUT] Failed to persist reconciled clock geometry variants", exc_info=True)
+
+    def _reconcile_clock_geometry_variant(
+        self,
+        widget: Any,
+        descriptor: WidgetRuntimeDescriptor,
+        entry: CustomLayoutEntry,
+    ) -> tuple[CustomLayoutEntry, bool]:
+        """Keep Clock mode settings-owned while preserving mode-shaped CUSTOM rects."""
+
+        if descriptor.custom_layout_resize_mode != "clock_font" or self._screen is None:
+            return entry, False
+
+        payload = dict(entry.size_payload)
+        legacy_variant = payload.pop("display_mode", None)
+        saved_variant_raw = payload.get(_CLOCK_GEOMETRY_VARIANT_KEY, legacy_variant)
+        current_variant = _normalize_clock_geometry_variant(getattr(widget, "_display_mode", "digital"))
+        saved_variant = (
+            _normalize_clock_geometry_variant(saved_variant_raw)
+            if saved_variant_raw is not None
+            else current_variant
+        )
+        target_variant = current_variant
+        rect = entry.rect
+
+        if saved_variant != current_variant:
+            local_rect = denormalize_local_rect(entry.rect, self._screen.geometry().size())
+            setattr(widget, "_custom_layout_local_rect", QRect(local_rect))
+            rebuild = getattr(widget, "_rebuild_custom_rect_for_mode", None)
+            rebuilt_rect = (
+                rebuild(
+                    current_variant,
+                    font_size=int(payload.get("font_size", getattr(widget, "_font_size", 48))),
+                )
+                if callable(rebuild)
+                else None
+            )
+            if isinstance(rebuilt_rect, QRect) and rebuilt_rect.width() > 0 and rebuilt_rect.height() > 0:
+                rect = normalize_local_rect(rebuilt_rect, self._screen.geometry().size())
+                logger.info(
+                    "[CUSTOM_LAYOUT] Rebuilt %s rect for clock geometry variant %s -> %s",
+                    descriptor.widget_id,
+                    saved_variant,
+                    current_variant,
+                )
+            else:
+                # Keep the old geometry marker if a non-production stand-in cannot
+                # perform the required shape conversion.
+                target_variant = saved_variant
+
+        payload[_CLOCK_GEOMETRY_VARIANT_KEY] = target_variant
+        reconciled = CustomLayoutEntry(
+            widget_id=entry.widget_id,
+            rect=rect,
+            size_payload=payload,
+            resize_mode=entry.resize_mode,
+        )
+        return reconciled, reconciled != entry
 
     def persist_runtime_content_rect(self, widget: Any, local_rect: QRect) -> bool:
         """Persist a live CUSTOM rect adjustment without triggering rebuild churn."""
@@ -2180,7 +2258,9 @@ class CustomLayoutManager:
         if mode == "clock_font":
             return {
                 "font_size": int(getattr(widget, "_font_size", 48)),
-                "display_mode": str(getattr(widget, "_display_mode", "digital") or "digital"),
+                _CLOCK_GEOMETRY_VARIANT_KEY: _normalize_clock_geometry_variant(
+                    getattr(widget, "_display_mode", "digital")
+                ),
             }
         if mode == "weather_scale":
             return {
@@ -2196,12 +2276,7 @@ class CustomLayoutManager:
         if mode == "reddit_font":
             return {"font_size": int(getattr(widget, "_font_size", 18))}
         if mode == "gmail_font":
-            return {
-                "font_size": int(getattr(widget, "_font_size", 13)),
-                "sender_subject_ratio": int(
-                    getattr(widget, "_sender_subject_ratio", 35)
-                ),
-            }
+            return {"font_size": int(getattr(widget, "_font_size", 13))}
         if mode == "imgur_scale":
             return {
                 "header_font_size": int(getattr(widget, "_header_font_size", 14)),
@@ -2244,7 +2319,12 @@ class CustomLayoutManager:
             base = int(baseline_payload.get("font_size", 48))
             return {
                 "font_size": max(12, int(round(base * scale))),
-                "display_mode": str(baseline_payload.get("display_mode", "digital") or "digital"),
+                _CLOCK_GEOMETRY_VARIANT_KEY: _normalize_clock_geometry_variant(
+                    baseline_payload.get(
+                        _CLOCK_GEOMETRY_VARIANT_KEY,
+                        baseline_payload.get("display_mode", "digital"),
+                    )
+                ),
             }
         if mode == "weather_scale":
             font_size = max(10, int(round(int(baseline_payload.get("font_size", 18)) * scale)))
@@ -2267,22 +2347,7 @@ class CustomLayoutManager:
             return {"font_size": max(8, int(round(base * scale)))}
         if mode == "gmail_font":
             base = int(baseline_payload.get("font_size", 13))
-            scaled = {
-                "font_size": max(8, int(round(base * scale))),
-            }
-            if "sender_subject_ratio" in baseline_payload:
-                scaled["sender_subject_ratio"] = max(
-                    10,
-                    min(80, int(baseline_payload["sender_subject_ratio"])),
-                )
-            elif "sender_column_width" in baseline_payload:
-                scaled["sender_column_width"] = max(
-                    40,
-                    int(round(int(baseline_payload["sender_column_width"]) * scale)),
-                )
-            else:
-                scaled["sender_subject_ratio"] = 35
-            return scaled
+            return {"font_size": max(8, int(round(base * scale)))}
         if mode == "imgur_scale":
             return {
                 "header_font_size": max(10, int(round(int(baseline_payload.get("header_font_size", 14)) * scale))),
@@ -2315,8 +2380,6 @@ class CustomLayoutManager:
         mode = descriptor.custom_layout_resize_mode
         try:
             if mode == "clock_font":
-                if hasattr(widget, "set_display_mode"):
-                    widget.set_display_mode(str(payload.get("display_mode", getattr(widget, "_display_mode", "digital"))))
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 48))))
                 return
             if mode == "weather_scale":
@@ -2333,10 +2396,6 @@ class CustomLayoutManager:
                 return
             if mode == "gmail_font":
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 13))))
-                if "sender_subject_ratio" in payload:
-                    widget.set_sender_subject_ratio(int(payload["sender_subject_ratio"]))
-                elif "sender_column_width" in payload:
-                    widget.set_sender_column_width(int(payload["sender_column_width"]))
                 return
             if mode == "imgur_scale":
                 widget.set_header_font_size(int(payload.get("header_font_size", getattr(widget, "_header_font_size", 14))))

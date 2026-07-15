@@ -511,7 +511,7 @@ DEFAULT_SETTINGS = {'accessibility': {'dimming': {'enabled': False, 'opacity': 4
                                'bubble.bubble_transient_pulse_gain': 0.05,
                                'bubble.mode': 'bubble',
                                'bubble.monitor': '2'},
- 'widgets': {'abandonment_issues': {'accent_color': [222, 157, 88, 225],
+ 'widgets': {'abandonment_issues': {'accent_color': [211, 209, 222, 225],
                                     'artwork_shape': 'portrait',
                                     'artwork_size': 140,
                                     'bg_color': [35, 35, 35, 255],

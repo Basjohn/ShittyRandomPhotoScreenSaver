@@ -149,6 +149,7 @@ def test_widget_settings_section_descriptors_capture_loader_routing():
     assert gmail.loader_name == "load_gmail_settings"
     assert defaults.loader_module == "ui.tabs.widgets_tab_defaults"
     assert defaults.loader_name == "load_defaults_settings"
+    assert defaults.button_label == "General"
     assert defaults.loader_guard_attrs == (
         "widget_shadows_enabled",
         "widget_text_shadows_enabled",

@@ -668,7 +668,7 @@ WIDGET_SETTINGS_SECTION_DESCRIPTORS: tuple[WidgetSettingsSectionDescriptor, ...]
     ),
     WidgetSettingsSectionDescriptor(
         section_id="defaults",
-        button_label="Defaults",
+        button_label="General",
         button_attr_name="_btn_defaults",
         container_attr_name="_defaults_container",
         builder_module="ui.tabs.widgets_tab_defaults",
