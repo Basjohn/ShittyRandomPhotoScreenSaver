@@ -3,8 +3,9 @@ from __future__ import annotations
 from copy import deepcopy
 import json
 
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QFontComboBox
+from PySide6.QtWidgets import QDialog, QFontComboBox
 
 from core.settings.defaults import (
     MC_PROFILE,
@@ -358,35 +359,54 @@ def test_editor_uses_alpha_swatch_and_font_delegate_editors(qt_app, tmp_path) ->
         editor.close()
 
 
-def test_editor_color_swatch_commits_without_close_race(qt_app, tmp_path, monkeypatch) -> None:
+def test_editor_color_swatch_survives_modal_picker_and_persists(qt_app, tmp_path, monkeypatch) -> None:
     base_path = _copy_base_source(tmp_path)
     overrides_path = tmp_path / "default_profile_overrides.py"
     overrides_path.write_text(
         render_profile_overrides_module({NORMAL_PROFILE: {}, MC_PROFILE: {}}),
         encoding="utf-8",
     )
+    regenerated: list[bool] = []
     editor = DefaultSettingsEditor(
         base_path=base_path,
         overrides_path=overrides_path,
         undo_path=tmp_path / "undo.json",
-        regenerate=lambda: "",
+        regenerate=lambda: regenerated.append(True) or "",
     )
     try:
         path = ("widgets", "abandonment_issues", "accent_color")
         item = editor._leaf_items[path]
-        index = editor.tree.indexFromItem(item, 1)
-        delegate = editor.tree.itemDelegateForColumn(1)
-        swatch = delegate.createEditor(editor.tree, None, index)
-        delegate.setEditorData(swatch, index)
-        delegate.commitData.connect(
-            lambda target: delegate.setModelData(target, editor.tree.model(), index)
+        original = item.data(1, VALUE_ROLE)
+        parent = item.parent()
+        while parent is not None:
+            parent.setExpanded(True)
+            parent = parent.parent()
+        editor.show()
+        editor.tree.setCurrentItem(item, 1)
+        editor.tree.scrollToItem(item)
+        qt_app.processEvents()
+
+        picker_results = iter((None, QColor(12, 34, 56, 78)))
+
+        def _modal_picker(*_args, **_kwargs):
+            dialog = QDialog(editor)
+            QTimer.singleShot(0, dialog.accept)
+            assert dialog.exec() == QDialog.DialogCode.Accepted
+            return next(picker_results)
+
+        monkeypatch.setattr("ui.styled_popup.StyledColorPicker.get_color", _modal_picker)
+        editor.tree.editItem(item, 1)
+        qt_app.processEvents()
+        swatch = next(
+            control
+            for control in editor.tree.findChildren(ColorSwatchButton)
+            if control.isVisible()
         )
-        closed: list[bool] = []
-        delegate.closeEditor.connect(lambda *_args: closed.append(True))
-        monkeypatch.setattr(
-            "ui.styled_popup.StyledColorPicker.get_color",
-            lambda *_args, **_kwargs: QColor(12, 34, 56, 78),
-        )
+
+        swatch.click()
+        qt_app.processEvents()
+        assert item.data(1, VALUE_ROLE) == original
+        assert swatch.isVisible() is True
 
         swatch.click()
         qt_app.processEvents()
@@ -395,7 +415,13 @@ def test_editor_color_swatch_commits_without_close_race(qt_app, tmp_path, monkey
         assert editor._models[NORMAL_PROFILE]["widgets"]["abandonment_issues"][
             "accent_color"
         ] == [12, 34, 56, 78]
-        assert closed == []
-        swatch.deleteLater()
+        assert swatch.color().getRgb() == (12, 34, 56, 78)
+
+        editor._save_and_regenerate()
+
+        assert regenerated == [True]
+        assert load_default_settings_source(base_path)["widgets"]["abandonment_issues"][
+            "accent_color"
+        ] == [12, 34, 56, 78]
     finally:
         editor.close()

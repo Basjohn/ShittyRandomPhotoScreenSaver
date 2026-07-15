@@ -26,7 +26,7 @@ python -m pytest tests/test_default_settings_editor.py tests/test_regenerate_sst
 ```
 - Notes:
   - Normal writes the authoritative `default_settings.py` base; MC stores only differences from resolved Normal defaults.
-  - Alpha colour swatches and font-family leaves use application controls; all other leaves remain type-aware and recursively discovered.
+  - Alpha colour swatches and font-family leaves use application controls; the swatch bar uses a real tree editor plus modal focus transfer, cancel, accept, and temporary canonical-source persistence rather than a direct delegate proxy. All other leaves remain type-aware and recursively discovered.
   - **Import SST / JSON Into Selected Profile** merges an exported application snapshot into the selected model while stripping credentials, reset-preserved source/weather state, machine-local absolute paths, active CUSTOM geometry, and layout slots. It remains unsaved until Save and Regenerate.
   - Every string leaf tooltip identifies registered finite choices or its accepted free-text domain.
   - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes. SST generation calls the profile-aware canonical builder directly and cannot construct a settings manager, probe QSettings migration state, or resolve either installed profile.

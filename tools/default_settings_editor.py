@@ -21,7 +21,7 @@ import sys
 import time
 from typing import Any, Callable, Iterable, Mapping
 
-from PySide6.QtCore import QAbstractItemModel, QModelIndex, Qt, Signal
+from PySide6.QtCore import QAbstractItemModel, QEvent, QModelIndex, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -680,14 +680,38 @@ class DefaultsTree(QTreeWidget):
         return super().edit(index, trigger, event)
 
 
+class _FoundryColorSwatchButton(ColorSwatchButton):
+    """Keep the delegate editor alive while its modal picker owns focus."""
+
+    _picker_active = False
+
+    def _open_picker(self) -> None:
+        self._picker_active = True
+        try:
+            super()._open_picker()
+        finally:
+            self._picker_active = False
+
+
 class DefaultValueDelegate(QStyledItemDelegate):
     validation_failed = Signal(str)
+
+    def eventFilter(self, editor, event) -> bool:  # noqa: ANN001, N802
+        if (
+            isinstance(editor, _FoundryColorSwatchButton)
+            and editor._picker_active
+            and event.type() == QEvent.Type.FocusOut
+        ):
+            # QStyledItemDelegate normally destroys an editor on focus-out.
+            # A modal picker temporarily takes focus before returning its value.
+            return False
+        return super().eventFilter(editor, event)
 
     def createEditor(self, parent, option, index):  # noqa: ANN001, N802
         value = index.data(VALUE_ROLE)
         path = index.data(PATH_ROLE)
         if _is_color_setting(path, value):
-            editor = ColorSwatchButton(
+            editor = _FoundryColorSwatchButton(
                 _color_from_value(value),
                 parent=parent,
                 title=f"Choose {_pretty_name(path[-1])}",
