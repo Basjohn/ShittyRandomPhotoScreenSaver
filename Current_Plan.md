@@ -16,7 +16,7 @@ This file tracks active work only. Long-lived architecture truth belongs in `Spe
 
 ## Active Tasks
 
-Execution order is dependency-driven: complete the contained General-widget-settings UX/cache work and existing drift-log evidence pass while no fresh compiled runtime is required; then runtime-validate the paused-visualizer pressure correction because the latest mixed-refresh log regressed both displays into visible transition collapse; then retire deprecated Blob against the supported-visualizer baseline and canonical generated defaults; then spend the longer compiled Steam budget against the intended release shape; then classify the ignored audit documents. No existing Steam, Blob, or audit bar is displaced or treated as complete.
+Execution order is dependency-driven: finish the contained General-widget-settings UX/cache validation; then runtime-validate the paused-visualizer pressure correction because the latest mixed-refresh log regressed both displays into visible transition collapse; then retire deprecated Blob against the supported-visualizer baseline and canonical generated defaults; then spend the longer compiled Steam budget against the intended release shape; then classify the ignored audit documents. The Drift evidence pass is complete and preserved under U-07 in `Docs/Historical_Bugs.md`; it found no implementation defect. No existing Steam, Blob, or audit bar is displaced or treated as complete.
 
 ### General Widget Settings And Cache Maintenance
 
@@ -24,10 +24,6 @@ Execution order is dependency-driven: complete the contained General-widget-sett
 - [x] Recompose the General section into styled buckets. Existing shadow controls and card border width remain under Appearance, authored stacking and reset positions remain under Layout, and Cache Maintenance is collapsed by default; descriptor-owned lazy build/load/save, hydration guards, scroll state, and current settings authority remain intact.
 - [x] Add explicit cache maintenance with per-cache-family selection, a confirmation step naming the selected scope, safe locked/in-use-file handling, and gentle completion/failure feedback. The allowlist contains RSS images, Reddit post snapshots, Weather responses, Gmail metadata, Steam responses/public artwork, and Settings performance data only; recursive Steam deletion runs on ThreadManager IO, follows no symlinks, removes no directories, and credentials/settings/layouts/defaults/pacing markers/deprecated Imgur remain excluded.
 - [x] Assess a global eight-direction shadow control against the real shadow pipeline. `widgets.shadows.offset` currently persists but does not drive the fragmented painter consumers, while card/visualizer/volume outer geometry reserves right/bottom-only gutter and Clock/Weather/Media retain special offsets. A GUI selector would therefore be misleading and top/left directions could clip; the required signed-vector/four-sided-padding/cache-key unification and eight-direction DPR bar are preserved in `Future_Cleanup.md` rather than shipping a partial control.
-
-### Drift Reactivity Evidence
-
-- [ ] Correlate the newest usable `--viz`/perf logs across idle, soft passages, and loud passages. Quantify whether Drift displacement/energy visibly and measurably rises with loudness while remaining minimal at idle, separate source-energy movement from transition/paint cadence, and record exact windows plus any missing telemetry. Do not retune Drift from aggregate FPS alone; promote implementation only if evidence shows a real response defect.
 
 ### Paused Visualizer / Mixed-Refresh Cadence Recovery
 
