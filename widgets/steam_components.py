@@ -29,9 +29,9 @@ from widgets.shadow_utils import draw_rounded_rect_with_shadow, draw_text_rect_w
 
 
 STEAM_CARD_AUTHORED_SIZE = QSizeF(420.0, 180.0)
-ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(540.0, 290.0)
-ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE = QSizeF(540.0, 318.0)
-ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE = QSizeF(540.0, 334.0)
+ACHIEVEMENT_PULSE_AUTHORED_SIZE = QSizeF(600.0, 290.0)
+ACHIEVEMENT_PULSE_SQUARE_AUTHORED_SIZE = QSizeF(600.0, 318.0)
+ACHIEVEMENT_PULSE_PORTRAIT_AUTHORED_SIZE = QSizeF(600.0, 334.0)
 ACHIEVEMENT_SQUARE_ARTWORK_MIN = 140
 ACHIEVEMENT_SQUARE_ARTWORK_DEFAULT = 140
 ACHIEVEMENT_SQUARE_ARTWORK_MAX = 190
@@ -737,15 +737,15 @@ def layout_steam_card(
     authored_rect = QRectF(origin_x, origin_y, painted_w, painted_h)
 
     if is_achievement_pulse:
-        logical_content = QRectF(18.0, 14.0, 504.0, authored_h - 30.0)
+        logical_content = QRectF(18.0, 14.0, 564.0, authored_h - 30.0)
         header = QRectF(18.0, 14.0, 302.0, 38.0)
         logo = QRectF(30.0, 19.0, 28.0, 28.0)
         header_text = QRectF(66.0, 16.0, 236.0, 34.0)
         if not show_artwork:
             art = QRectF()
-            title_width = 504.0
+            title_width = 564.0
         elif resolved_artwork_shape in {"square", "portrait"}:
-            art_left = 522.0 - resolved_square_artwork_size
+            art_left = 582.0 - resolved_square_artwork_size
             art_height = (
                 resolved_square_artwork_size * ACHIEVEMENT_PORTRAIT_ASPECT_RATIO
                 if resolved_artwork_shape == "portrait"
@@ -759,8 +759,8 @@ def layout_steam_card(
             )
             title_width = art_left - 32.0
         else:
-            art = QRectF(342.0, 14.0, 180.0, 86.0)
-            title_width = 310.0
+            art = QRectF(402.0, 14.0, 180.0, 86.0)
+            title_width = 370.0
         title = QRectF(18.0, 62.0, title_width, 34.0)
         subtitle = QRectF(18.0, 100.0, title_width, 88.0)
         # Keep the metric visually attached to the artwork while using the
@@ -769,34 +769,37 @@ def layout_steam_card(
         metric = (
             QRectF(art.x() - 10.0, art.bottom() + 6.0, art.width() + 20.0, 28.0)
             if vertical_art_mode
-            else QRectF(332.0, 108.0, 200.0, 28.0)
+            else QRectF(392.0, 108.0, 200.0, 28.0)
         )
         status = QRectF()
         info = QRectF(300.0, 14.0, 18.0, 18.0) if model.show_connection_info else None
-        latest_art_anchor_x = art.x() if not art.isNull() else 522.0
+        latest_art_anchor_x = art.x() if not art.isNull() else 582.0
         show_latest_icon = bool(
             show_latest_artwork
             and model.latest_unlock_icon_url
             and model.latest_unlocks
         )
         latest_artwork = QRectF()
-        latest_text_width = title_width
+        secondary_text_width = title_width
         if show_latest_icon:
-            latest_font_size = max(8, int(font_size * 0.86) + 2)
+            latest_font_size = max(6, int(round((int(font_size * 0.86) + 2) * 0.5)))
             latest_font = QFont(font_family, latest_font_size, QFont.Weight.DemiBold)
-            primary_width = _layout_text_advance(latest_font, model.latest_unlocks[0])
+            previous_width = max(
+                (_layout_text_advance(latest_font, text) for text in model.latest_unlocks[1:4]),
+                default=0.0,
+            )
             latest_icon_x = min(
                 latest_art_anchor_x - 48.0,
-                18.0 + primary_width + 10.0,
+                18.0 + previous_width + 10.0,
             )
             latest_icon_x = max(18.0, latest_icon_x)
-            latest_artwork = QRectF(latest_icon_x, 100.0, 40.0, 40.0)
-            latest_text_width = max(60.0, latest_artwork.left() - 26.0)
+            latest_artwork = QRectF(latest_icon_x, 130.0, 40.0, 40.0)
+            secondary_text_width = max(60.0, latest_artwork.left() - 26.0)
         logical_latest_rects = tuple(
             QRectF(
                 18.0,
                 100.0 if index == 0 else 130.0 + (index - 1) * 14.0,
-                latest_text_width if show_latest_icon and index < 2 else title_width,
+                secondary_text_width if show_latest_icon and 1 <= index <= 3 else title_width,
                 26.0 if index == 0 else 13.0,
             )
             for index, _latest in enumerate(model.latest_unlocks[:5])
@@ -817,7 +820,7 @@ def layout_steam_card(
 
     field_rects: list[tuple[str, QRectF, int]] = []
     field_detail_rects: list[tuple[str, QRectF, int]] = []
-    field_w = 159.0 if is_achievement_pulse else 84.0
+    field_w = 182.0 if is_achievement_pulse else 84.0
     field_h = capsule_height if is_achievement_pulse else 18.0
     gap = 9.0 if is_achievement_pulse else 8.0
     achievement_last_rail_y = authored_h - 16.0 - field_h
@@ -1174,9 +1177,15 @@ def _fit_font_to_width(
     width: float,
     *,
     minimum_ratio: float = 0.65,
+    minimum_point_size: int | None = None,
 ) -> QFont:
     fitted = QFont(font)
-    minimum = max(6, int(round(fitted.pointSize() * max(0.25, minimum_ratio))))
+    ratio_minimum = max(6, int(round(fitted.pointSize() * max(0.25, minimum_ratio))))
+    minimum = (
+        ratio_minimum
+        if minimum_point_size is None
+        else max(6, min(fitted.pointSize(), int(minimum_point_size)))
+    )
     while fitted.pointSize() > minimum and QFontMetricsF(fitted).horizontalAdvance(text) > width:
         fitted.setPointSize(fitted.pointSize() - 1)
     return fitted
@@ -1331,7 +1340,44 @@ def render_steam_card(
             )
             painter.drawPath(latest_art_path)
 
-        _draw_elided_text(painter, layout.title_rect, model.title, color=color, font=title_font)
+        fitted_secondary_fonts = tuple(
+            _fit_font_to_width(
+                latest_secondary_font,
+                latest,
+                latest_rect.width(),
+                minimum_point_size=6,
+            )
+            for latest, latest_rect in zip(
+                model.latest_unlocks[1:],
+                layout.latest_unlock_rects[1:],
+            )
+        )
+        latest_primary_draw_font = latest_primary_font
+        if layout.latest_unlock_rects and model.latest_unlocks:
+            latest_primary_draw_font = _fit_font_to_width(
+                latest_primary_font,
+                model.latest_unlocks[0],
+                layout.latest_unlock_rects[0].width(),
+                minimum_point_size=latest_secondary_font.pointSize(),
+            )
+        title_floor = (
+            latest_primary_draw_font.pointSize()
+            if layout.latest_unlock_rects
+            else subtitle_font.pointSize()
+        )
+        title_draw_font = _fit_font_to_width(
+            title_font,
+            model.title,
+            layout.title_rect.width(),
+            minimum_point_size=title_floor,
+        )
+        _draw_elided_text(
+            painter,
+            layout.title_rect,
+            model.title,
+            color=color,
+            font=title_draw_font,
+        )
         if layout.latest_unlock_rects:
             for index, (latest, latest_rect) in enumerate(zip(model.latest_unlocks, layout.latest_unlock_rects)):
                 _draw_elided_text(
@@ -1339,7 +1385,11 @@ def render_steam_card(
                     latest_rect,
                     latest,
                     color=color if index == 0 else muted,
-                    font=latest_primary_font if index == 0 else latest_secondary_font,
+                    font=(
+                        latest_primary_draw_font
+                        if index == 0
+                        else fitted_secondary_fonts[index - 1]
+                    ),
                 )
         elif model.subtitle:
             _draw_elided_text(painter, layout.subtitle_rect, model.subtitle, color=muted, font=subtitle_font)

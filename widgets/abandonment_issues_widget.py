@@ -15,11 +15,14 @@ from widgets.overlay_timers import OverlayTimerHandle, create_overlay_timer
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ACCENT_RGBA,
     ABANDONMENT_ARTWORK_SIZE_DEFAULT,
+    ABANDONMENT_FIELD_DEFAULTS,
     AbandonmentCardLayout,
     abandonment_artwork_dimensions,
     abandonment_authored_size,
     abandonment_field_slot_count,
+    abandonment_shelf_diagnostics,
     build_abandonment_view_model,
+    normalize_abandonment_artwork_shape,
     normalize_abandonment_artwork_size,
     render_abandonment_card,
 )
@@ -28,6 +31,13 @@ from widgets.steam_components import SteamCardViewModel
 
 
 logger = get_logger(__name__)
+
+
+def _achievement_evidence_requested(field_visibility: Mapping[str, bool]) -> bool:
+    return any(
+        bool(field_visibility.get(field_id, ABANDONMENT_FIELD_DEFAULTS[field_id]))
+        for field_id in ("achievements", "last_unlock")
+    )
 
 
 @dataclass(frozen=True)
@@ -75,7 +85,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         selection: AbandonmentSelection = AbandonmentSelection(),
         field_visibility: Mapping[str, bool] | None = None,
         show_artwork: bool = True,
-        artwork_shape: str = "square",
+        artwork_shape: str = "portrait",
         artwork_size: int = ABANDONMENT_ARTWORK_SIZE_DEFAULT,
         accent_color: QColor | None = None,
         guilt_desaturater: bool = False,
@@ -90,8 +100,8 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             self._abandonment_field_visibility
         )
         self._abandonment_show_artwork = bool(show_artwork)
-        self._abandonment_artwork_shape = (
-            "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+        self._abandonment_artwork_shape = normalize_abandonment_artwork_shape(
+            artwork_shape
         )
         self._abandonment_artwork_size = normalize_abandonment_artwork_size(artwork_size)
         self._abandonment_accent_color = QColor(
@@ -368,6 +378,9 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 force_rotation=force_rotation,
                 refresh_interval_minutes=self._refresh_minutes,
                 recent_fresh_seconds=self._refresh_minutes * 60,
+                hydrate_achievement_evidence=_achievement_evidence_requested(
+                    self._abandonment_field_visibility
+                ),
             )
             profile_key = derive_profile_cache_key(credential.profile_identifier)
             return outcome, self._prepare_presentation(
@@ -468,8 +481,16 @@ class AbandonmentIssuesWidget(SteamCardWidget):
         allow_asset_network = automatic_service_updates_enabled()
 
         def _rotate_snapshot():
-            from core.steam.abandonment_cache import load_abandonment_cache_snapshot
-            from core.steam.credentials import read_credential_metadata
+            from core.steam.abandonment_cache import (
+                hydrate_selected_achievement_evidence,
+                load_abandonment_cache_snapshot,
+            )
+            from core.steam.credentials import (
+                SteamCredentialError,
+                load_credentials,
+                read_credential_metadata,
+            )
+            from core.steam.models import SteamResultStatus
 
             metadata = read_credential_metadata()
             if metadata is None:
@@ -480,11 +501,34 @@ class AbandonmentIssuesWidget(SteamCardWidget):
                 advance_rotation=True,
                 refresh_interval_minutes=self._refresh_minutes,
             )
+            connection_needs_attention = False
+            if (
+                allow_asset_network
+                and _achievement_evidence_requested(
+                    self._abandonment_field_visibility
+                )
+            ):
+                try:
+                    credential = load_credentials()
+                except SteamCredentialError:
+                    credential = None
+                    connection_needs_attention = True
+                if credential is not None:
+                    snapshot, achievement_result = hydrate_selected_achievement_evidence(
+                        snapshot=snapshot,
+                        credential=credential,
+                        profile_key=metadata.profile_cache_key,
+                    )
+                    connection_needs_attention = (
+                        achievement_result is not None
+                        and achievement_result.status == SteamResultStatus.UNAUTHORIZED
+                    )
             return self._prepare_presentation(
                 snapshot,
                 profile_key=metadata.profile_cache_key,
                 allow_asset_network=allow_asset_network,
                 artwork_target=artwork_target,
+                connection_needs_attention=connection_needs_attention,
             )
 
         def _finished(task_result) -> None:
@@ -555,6 +599,20 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             show_connection_info_icon=self._abandonment_show_connection_info_icon,
             show_rediscovery_message=self._abandonment_show_rediscovery_message,
             field_visibility=self._abandonment_field_visibility,
+        )
+        requested, rendered, unavailable, evidence = abandonment_shelf_diagnostics(
+            snapshot.resolved,
+            model,
+            self._abandonment_field_visibility,
+        )
+        logger.info(
+            "[STEAM][ABANDONMENT_SHELVES] appid=%s requested=%s rendered=%s "
+            "unavailable=%s evidence=%s",
+            model.appid,
+            ",".join(requested) or "none",
+            ",".join(rendered) or "none",
+            ",".join(unavailable) or "none",
+            ",".join(evidence) or "none",
         )
         asset_path: Path | None = None
         artwork_outcome = "disabled"
@@ -641,7 +699,7 @@ class AbandonmentIssuesWidget(SteamCardWidget):
             artwork_outcome = "decode_failed"
         if self._abandonment_show_artwork and model.appid is not None:
             logger.info(
-                "[STEAM][ABANDONMENT_ARTWORK] appid=%s archive=%s/%s outcome=%s "
+                "[STEAM][ABANDONMENT_ARTWORK] appid=%s backlog=%s/%s outcome=%s "
                 "requested_shape=%s resolved_shape=%s network_allowed=%s",
                 model.appid,
                 snapshot.resolved.queue_position,

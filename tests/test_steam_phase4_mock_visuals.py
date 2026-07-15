@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 import widgets.steam_components as steam_components
 from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
 
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
 from widgets.steam_components import (
@@ -473,8 +473,9 @@ def test_latest_achievement_artwork_uses_dead_space_without_reflow() -> None:
 
     assert square.latest_unlock_art_rect.width() == 40.0
     assert square.latest_unlock_art_rect.height() == 40.0
-    assert square.latest_unlock_art_rect.top() == square.latest_unlock_rects[0].top()
-    assert 5.0 <= square.latest_unlock_art_rect.left() - square.latest_unlock_rects[0].right() <= 12.0
+    assert square.latest_unlock_art_rect.top() == square.latest_unlock_rects[1].top()
+    assert square.latest_unlock_rects[0].width() == square.title_rect.width()
+    assert 5.0 <= square.latest_unlock_art_rect.left() - square.latest_unlock_rects[1].right() <= 12.0
     assert square.latest_unlock_art_rect.center().x() < square.title_rect.right()
     assert square.latest_unlock_art_rect.right() < square.art_rect.left()
     assert square.title_rect == hidden.title_rect
@@ -487,6 +488,42 @@ def test_latest_achievement_artwork_uses_dead_space_without_reflow() -> None:
         not rect.intersects(square.latest_unlock_art_rect)
         for rect in square.latest_unlock_rects
     )
+
+
+def test_achievement_pulse_shrinks_titles_before_eliding_with_font_hierarchy(monkeypatch) -> None:
+    drawn: dict[str, QFont] = {}
+
+    def _capture(_painter, _rect, text, *, color, font, flags=None, shadow=True) -> None:
+        del color, flags, shadow
+        drawn[str(text)] = QFont(font)
+
+    monkeypatch.setattr(steam_components, "_draw_elided_text", _capture)
+    title = "A Game With An Exceptionally Long Deluxe Complete Collection Title"
+    latest = "A Latest Achievement Name That Also Needs To Use Its Available Width"
+    previous = "A Previous Achievement With A Long Name"
+    model = replace(
+        build_mock_steam_view_model("achievement_pulse"),
+        title=title,
+        latest_unlocks=(latest, previous, "Third Unlock", "Fourth Unlock", "Fifth Unlock"),
+    )
+    target = _achievement_target(artwork_shape="portrait")
+    image = QImage(int(target.width()), int(target.height()), QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    try:
+        render_steam_card(
+            painter,
+            model,
+            target,
+            artwork_shape="portrait",
+            show_latest_artwork=False,
+        )
+    finally:
+        painter.end()
+
+    assert drawn[title].pointSize() < 22
+    assert drawn[title].pointSize() >= drawn[latest].pointSize()
+    assert drawn[latest].pointSize() >= drawn[previous].pointSize()
 
 
 def test_latest_achievement_artwork_paints_inside_its_framed_slot() -> None:

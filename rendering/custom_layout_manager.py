@@ -2198,7 +2198,9 @@ class CustomLayoutManager:
         if mode == "gmail_font":
             return {
                 "font_size": int(getattr(widget, "_font_size", 13)),
-                "sender_column_width": int(getattr(widget, "_sender_column_width", 180)),
+                "sender_subject_ratio": int(
+                    getattr(widget, "_sender_subject_ratio", 35)
+                ),
             }
         if mode == "imgur_scale":
             return {
@@ -2265,11 +2267,22 @@ class CustomLayoutManager:
             return {"font_size": max(8, int(round(base * scale)))}
         if mode == "gmail_font":
             base = int(baseline_payload.get("font_size", 13))
-            sender_column_width = int(baseline_payload.get("sender_column_width", 180))
-            return {
+            scaled = {
                 "font_size": max(8, int(round(base * scale))),
-                "sender_column_width": max(40, int(round(sender_column_width * scale))),
             }
+            if "sender_subject_ratio" in baseline_payload:
+                scaled["sender_subject_ratio"] = max(
+                    10,
+                    min(80, int(baseline_payload["sender_subject_ratio"])),
+                )
+            elif "sender_column_width" in baseline_payload:
+                scaled["sender_column_width"] = max(
+                    40,
+                    int(round(int(baseline_payload["sender_column_width"]) * scale)),
+                )
+            else:
+                scaled["sender_subject_ratio"] = 35
+            return scaled
         if mode == "imgur_scale":
             return {
                 "header_font_size": max(10, int(round(int(baseline_payload.get("header_font_size", 14)) * scale))),
@@ -2320,9 +2333,10 @@ class CustomLayoutManager:
                 return
             if mode == "gmail_font":
                 widget.set_font_size(int(payload.get("font_size", getattr(widget, "_font_size", 13))))
-                widget.set_sender_column_width(
-                    int(payload.get("sender_column_width", getattr(widget, "_sender_column_width", 180)))
-                )
+                if "sender_subject_ratio" in payload:
+                    widget.set_sender_subject_ratio(int(payload["sender_subject_ratio"]))
+                elif "sender_column_width" in payload:
+                    widget.set_sender_column_width(int(payload["sender_column_width"]))
                 return
             if mode == "imgur_scale":
                 widget.set_header_font_size(int(payload.get("header_font_size", getattr(widget, "_header_font_size", 14))))

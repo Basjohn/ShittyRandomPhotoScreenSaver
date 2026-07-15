@@ -537,7 +537,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         screen = self._perf_screen_index()
         logger.info(
             "[PERF][SPOTIFY_VIS][OVERLAY] reason=%s screen=%s mode=%s elapsed_ms=%.1f "
-            "set_state=%d paint=%d update_requests=%d geometry_changes=%d visible=%s enabled=%s",
+            "set_state=%d paint=%d update_requests=%d geometry_changes=%d "
+            "visible=%s enabled=%s playing=%s",
             reason,
             screen if screen is not None else "<unknown>",
             self._vis_mode,
@@ -548,6 +549,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._perf_geometry_change_count,
             self.isVisible(),
             self._enabled,
+            self._playing,
         )
         self._perf_set_state_count = 0
         self._perf_paint_count = 0

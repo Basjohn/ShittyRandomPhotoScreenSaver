@@ -75,6 +75,7 @@ from widgets.steam_abandonment_components import (
     ABANDONMENT_ARTWORK_SIZE_MAX,
     ABANDONMENT_ARTWORK_SIZE_MIN,
     ABANDONMENT_FIELD_DEFAULTS,
+    normalize_abandonment_artwork_shape,
 )
 
 if TYPE_CHECKING:
@@ -122,7 +123,7 @@ _ABANDONMENT_SELECTION_OPTIONS: tuple[tuple[str, str], ...] = (
     ("Pinned Game", "pinned_game"),
 )
 _ABANDONMENT_ARTWORK_SHAPES: tuple[tuple[str, str], ...] = (
-    ("Portrait", "square"),
+    ("Portrait", "portrait"),
     ("Wide", "wide"),
 )
 _ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str, str], ...] = (
@@ -130,8 +131,8 @@ _ABANDONMENT_FIELD_OPTIONS: tuple[tuple[str, str, str], ...] = (
     ("achievements", "Show achievements", "Unlocked and total achievements from a cached successful snapshot."),
     ("last_unlock", "Show last unlock", "Time since the latest cached achievement unlock, or No Unlocks when proven."),
     ("last_played", "Show last played date", "Exact UTC date from Steam's verified last-played timestamp."),
-    ("archive_class", "Show archive class", "A non-judgmental engagement-depth label derived from playtime and cached achievements."),
-    ("queue", "Show shelf position", "Selection position within the current eligible archive."),
+    ("archive_class", "Show backlog class", "A non-judgmental engagement-depth label derived from playtime and cached achievements."),
+    ("queue", "Show shelf position", "Selection position within the current eligible backlog."),
     ("source", "Show source", "Whether the displayed library snapshot came from cache or Steam."),
     ("pinned", "Show selection mode", "Whether this game is pinned or selected by Smart Rotation."),
 )
@@ -1322,7 +1323,7 @@ def _build_card_group(
             content_layout.addWidget(field_toggle)
 
         artwork_row = _aligned_row(appearance_layout, "Artwork:")
-        show_artwork = QCheckBox("Show Archived Artwork")
+        show_artwork = QCheckBox("Show Game Artwork")
         show_artwork.setProperty("circleIndicator", True)
         show_artwork.setChecked(tab._default_bool(key, "show_artwork", True))
         show_artwork.stateChanged.connect(tab._save_settings)
@@ -1337,7 +1338,9 @@ def _build_card_group(
             artwork_shape.addItem(shape_label, shape_value)
         _set_combo_data(
             artwork_shape,
-            str(tab._widget_default(key, "artwork_shape", "square")),
+            normalize_abandonment_artwork_shape(
+                tab._widget_default(key, "artwork_shape", "portrait")
+            ),
         )
         artwork_shape.currentIndexChanged.connect(tab._save_settings)
         tab.abandonment_issues_artwork_shape = artwork_shape
@@ -1362,14 +1365,14 @@ def _build_card_group(
         artwork_size_row.addWidget(artwork_size)
         artwork_size_row.addStretch()
 
-        accent_row = _aligned_row(appearance_layout, "Archive Accent:")
+        accent_row = _aligned_row(appearance_layout, "Backlog Accent:")
         tab._abandonment_accent_color = _coerce_rgba_color(
             tab._widget_default(key, "accent_color", ABANDONMENT_ACCENT_RGBA),
             ABANDONMENT_ACCENT_RGBA,
         )
         accent_button = ColorSwatchButton(
             tab._abandonment_accent_color,
-            title="Choose Abandonment Archive Accent",
+            title="Choose Abandonment Backlog Accent",
             show_alpha=True,
         )
         accent_button.color_changed.connect(
@@ -1756,7 +1759,12 @@ def load_steam_settings(tab: "WidgetsTab", widgets_config: Mapping[str, Any]) ->
             )
             _set_combo_data(
                 tab.abandonment_issues_artwork_shape,
-                str(config.get("artwork_shape", tab._default_str(key, "artwork_shape", "square"))),
+                normalize_abandonment_artwork_shape(
+                    config.get(
+                        "artwork_shape",
+                        tab._default_str(key, "artwork_shape", "portrait"),
+                    )
+                ),
             )
             tab._abandonment_accent_color = _coerce_rgba_color(
                 config.get(
@@ -1859,7 +1867,7 @@ def _save_card(tab: "WidgetsTab", key: str) -> dict[str, Any]:
             tab.abandonment_issues_show_artwork.isChecked()
         )
         payload["artwork_shape"] = str(
-            tab.abandonment_issues_artwork_shape.currentData() or "square"
+            tab.abandonment_issues_artwork_shape.currentData() or "portrait"
         )
         payload["artwork_size"] = int(tab.abandonment_issues_artwork_size.value())
         payload["accent_color"] = _rgba_payload(tab._abandonment_accent_color)

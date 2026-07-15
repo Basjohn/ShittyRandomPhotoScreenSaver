@@ -34,7 +34,7 @@ from widgets.steam_components import (
 )
 
 
-ABANDONMENT_AUTHORED_SIZE = QSizeF(560.0, 300.0)
+ABANDONMENT_AUTHORED_SIZE = QSizeF(600.0, 300.0)
 ABANDONMENT_ARTWORK_SIZE_MIN = 110
 ABANDONMENT_ARTWORK_SIZE_DEFAULT = 140
 ABANDONMENT_ARTWORK_SIZE_MAX = 180
@@ -44,7 +44,7 @@ ABANDONMENT_FIELD_DEFAULTS: dict[str, bool] = {
     "achievements": True,
     "last_unlock": True,
     "last_played": True,
-    "archive_class": True,
+    "archive_class": False,
     "queue": False,
     "source": False,
     "pinned": False,
@@ -95,6 +95,13 @@ def normalize_abandonment_artwork_size(value: object) -> int:
     return max(ABANDONMENT_ARTWORK_SIZE_MIN, min(ABANDONMENT_ARTWORK_SIZE_MAX, resolved))
 
 
+def normalize_abandonment_artwork_shape(value: object) -> str:
+    """Use a descriptive token while accepting the legacy portrait alias."""
+
+    shape = str(value or "").strip().lower()
+    return "portrait" if shape in {"portrait", "square"} else "wide"
+
+
 def abandonment_authored_size(
     *,
     show_artwork: bool,
@@ -109,7 +116,7 @@ def abandonment_authored_size(
     ledger_height = ABANDONMENT_AUTHORED_SIZE.height() + (
         max(0, field_rows - 2) * ABANDONMENT_LEDGER_ROW_HEIGHT
     )
-    if show_artwork and str(artwork_shape).strip().lower() == "square":
+    if show_artwork and normalize_abandonment_artwork_shape(artwork_shape) == "portrait":
         required_height = 76.0 + resolved_size * 1.4 + 22.0
         return QSizeF(
             ABANDONMENT_AUTHORED_SIZE.width(),
@@ -129,6 +136,49 @@ def abandonment_field_slot_count(field_visibility: Mapping[str, bool] | None) ->
     )
 
 
+def abandonment_shelf_diagnostics(
+    resolved: AbandonmentResolved,
+    model: SteamCardViewModel,
+    field_visibility: Mapping[str, bool] | None,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Describe configured shelf evidence without logging user-facing values."""
+
+    visibility = field_visibility or {}
+    requested = tuple(
+        field_id
+        for field_id, default in ABANDONMENT_FIELD_DEFAULTS.items()
+        if bool(visibility.get(field_id, default))
+    )
+    rendered_ids = {field.field_id for field in model.fields if field.enabled}
+    rendered = tuple(field_id for field_id in requested if field_id in rendered_ids)
+    unavailable = tuple(field_id for field_id in requested if field_id not in rendered_ids)
+    achievement_evidence = (
+        resolved.unlocked_achievement_count is not None
+        and resolved.total_achievement_count is not None
+    )
+    last_unlock_evidence = (
+        resolved.unlocked_achievement_count == 0
+        or resolved.latest_unlock_age_days is not None
+    )
+    evidence_state = {
+        "playtime": "loaded" if resolved.playtime_minutes is not None else "missing",
+        "achievements": "loaded" if achievement_evidence else "missing",
+        "last_unlock": "loaded" if last_unlock_evidence else "missing",
+        "last_played": (
+            "verified"
+            if resolved.last_played_confidence == LAST_PLAYED_VERIFIED
+            and resolved.last_played_at is not None
+            else "missing"
+        ),
+        "archive_class": "derived" if resolved.playtime_minutes is not None else "missing",
+        "queue": "loaded" if resolved.queue_count > 0 else "empty",
+        "source": "loaded" if bool(resolved.source_label) else "missing",
+        "pinned": "loaded",
+    }
+    evidence = tuple(f"{field_id}:{evidence_state[field_id]}" for field_id in requested)
+    return requested, rendered, unavailable, evidence
+
+
 def abandonment_artwork_dimensions(
     *,
     show_artwork: bool,
@@ -140,7 +190,7 @@ def abandonment_artwork_dimensions(
     if not show_artwork:
         return QSizeF()
     resolved_size = normalize_abandonment_artwork_size(artwork_size)
-    if str(artwork_shape).strip().lower() == "square":
+    if normalize_abandonment_artwork_shape(artwork_shape) == "portrait":
         return QSizeF(float(resolved_size), resolved_size * 1.4)
     return QSizeF(
         min(238.0, resolved_size * 1.45),
@@ -195,7 +245,7 @@ def abandonment_archive_class(resolved: AbandonmentResolved) -> str | None:
         ):
             return "Barely Started"
         return "Short Start"
-    return "Deep Archive"
+    return "Deep Backlog"
 
 
 def build_abandonment_view_model(
@@ -260,7 +310,7 @@ def build_abandonment_view_model(
         ),
         SteamCardField(
             "archive_class",
-            "Archive Class",
+            "Backlog Class",
             archive_class_value or "",
             _enabled("archive_class", ABANDONMENT_FIELD_DEFAULTS["archive_class"])
             and archive_class_value is not None,
@@ -300,7 +350,7 @@ def build_abandonment_view_model(
             status=(
                 "PINNED FILE"
                 if resolved.pinned
-                else f"ARCHIVE {resolved.queue_position:02d}/{resolved.queue_count:02d}"
+                else f"BACKLOG {resolved.queue_position:02d}/{resolved.queue_count:02d}"
             ),
             accent="#de9d58",
             fields=fields,
@@ -318,7 +368,7 @@ def build_abandonment_view_model(
                 if resolved.last_played_confidence != LAST_PLAYED_VERIFIED
                 else format_abandonment_age(resolved.inactivity_days)
             ),
-            status="ARCHIVE PAUSED",
+            status="BACKLOG PAUSED",
             accent="#de9d58",
             fields=fields,
             state="unavailable",
@@ -336,7 +386,7 @@ def layout_abandonment_card(
     target_rect: QRectF,
     *,
     show_artwork: bool = True,
-    artwork_shape: str = "square",
+    artwork_shape: str = "portrait",
     artwork_size: int = ABANDONMENT_ARTWORK_SIZE_DEFAULT,
     field_slot_count: int | None = None,
 ) -> AbandonmentCardLayout:
@@ -373,8 +423,8 @@ def layout_abandonment_card(
     header = QRectF(18.0, 14.0, 322.0, 42.0)
     logo = QRectF(30.0, 20.0, 30.0, 30.0)
     header_text = QRectF(68.0, 17.0, 254.0, 36.0)
-    archive_tab = QRectF(407.0, 19.0, 135.0, 30.0)
-    shape = "square" if str(artwork_shape).strip().lower() == "square" else "wide"
+    archive_tab = QRectF(447.0, 19.0, 135.0, 30.0)
+    shape = normalize_abandonment_artwork_shape(artwork_shape)
     art_size = abandonment_artwork_dimensions(
         show_artwork=show_artwork,
         artwork_shape=shape,
@@ -383,13 +433,13 @@ def layout_abandonment_card(
     if not show_artwork:
         art = QRectF()
         text_left = 24.0
-    elif shape == "square":
+    elif shape == "portrait":
         art = QRectF(22.0, 76.0, art_size.width(), art_size.height())
         text_left = art.right() + 24.0
     else:
         art = QRectF(22.0, 82.0, art_size.width(), art_size.height())
         text_left = art.right() + 24.0
-    text_right = 538.0
+    text_right = 578.0
     text_width = max(150.0, text_right - text_left)
     title = QRectF(text_left, 74.0, text_width, 46.0)
     subtitle = QRectF(text_left, 119.0, text_width, 34.0)
@@ -532,17 +582,23 @@ def render_abandonment_card(
             return layout
 
         _draw_artwork_shelf(painter, layout, accent=accent)
+        subtitle_font = _fit_wrapped_font(
+            QFont(font_family, max(7, int(font_size * scale * 0.88)), QFont.Weight.DemiBold),
+            model.subtitle,
+            layout.subtitle_rect,
+        )
+        title_font = _fit_font(
+            QFont(font_family, max(11, int(font_size * scale * 1.45)), QFont.Weight.Bold),
+            model.title,
+            layout.title_rect.width(),
+            minimum_point_size=subtitle_font.pointSize(),
+        )
         _draw_elided_text(
             painter,
             layout.title_rect,
             model.title,
             color=color,
-            font=QFont(font_family, max(11, int(font_size * scale * 1.45)), QFont.Weight.Bold),
-        )
-        subtitle_font = _fit_wrapped_font(
-            QFont(font_family, max(7, int(font_size * scale * 0.88)), QFont.Weight.DemiBold),
-            model.subtitle,
-            layout.subtitle_rect,
+            font=title_font,
         )
         painter.save()
         try:
@@ -753,9 +809,20 @@ def _draw_ledger_fields(
         )
 
 
-def _fit_font(font: QFont, text: str, width: float) -> QFont:
+def _fit_font(
+    font: QFont,
+    text: str,
+    width: float,
+    *,
+    minimum_point_size: int | None = None,
+) -> QFont:
     fitted = QFont(font)
-    minimum = max(6, int(fitted.pointSize() * 0.68))
+    ratio_minimum = max(6, int(fitted.pointSize() * 0.68))
+    minimum = (
+        ratio_minimum
+        if minimum_point_size is None
+        else max(6, min(fitted.pointSize(), int(minimum_point_size)))
+    )
     while fitted.pointSize() > minimum and QFontMetricsF(fitted).horizontalAdvance(text) > width:
         fitted.setPointSize(fitted.pointSize() - 1)
     return fitted

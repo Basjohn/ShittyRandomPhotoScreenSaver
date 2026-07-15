@@ -6,7 +6,7 @@ perform IO, touch credentials, schedule work, or depend on Qt.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Mapping
 
 from core.steam.models import SteamResult, SteamResultStatus
@@ -94,6 +94,31 @@ class AbandonmentResolved:
     @property
     def ok(self) -> bool:
         return self.status == "ok"
+
+
+def with_achievement_progress(
+    resolved: AbandonmentResolved,
+    progress: AbandonmentAchievementProgress | None,
+    *,
+    now: float,
+) -> AbandonmentResolved:
+    """Attach exact selected-app evidence without rerunning game selection."""
+
+    if not resolved.ok or progress is None:
+        return resolved
+    latest_unlock_at = _coerce_timestamp(progress.latest_unlock_at, now=now)
+    latest_unlock_age_days = (
+        max(0, int((float(now) - latest_unlock_at) // (24 * 60 * 60)))
+        if latest_unlock_at is not None
+        else None
+    )
+    return replace(
+        resolved,
+        unlocked_achievement_count=progress.unlocked_count,
+        total_achievement_count=progress.total_count,
+        latest_unlock_at=latest_unlock_at,
+        latest_unlock_age_days=latest_unlock_age_days,
+    )
 
 
 def parse_appid_list(value: object) -> tuple[int, ...]:

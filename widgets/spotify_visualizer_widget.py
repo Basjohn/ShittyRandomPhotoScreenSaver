@@ -532,6 +532,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._transition_spinup_window: float = 2.0
         self._idle_fps_boost_delay: float = 5.0
         self._idle_max_fps: float = 100.0
+        # Keep paused idle motion smooth on 60 Hz owners without spending the
+        # live-playback 90-100 Hz source budget on synthetic idle frames.
+        self._paused_idle_max_fps: float = 75.0
         self._target_timer_interval_ms: int = 16
         self._current_timer_interval_ms: int = 16
         self._spectrum_gpu_push_extras: Dict[str, Any] = {}

@@ -22,9 +22,9 @@ _PRESERVED_DOC_KEYS = (
 )
 
 
-def build_defaults_snapshot() -> Dict[str, Any]:
-    """Return the canonical sanitized defaults snapshot payload."""
-    defaults = deepcopy(get_default_settings())
+def build_defaults_snapshot(application: str | None = None) -> Dict[str, Any]:
+    """Return the sanitized canonical snapshot for the selected profile."""
+    defaults = deepcopy(get_default_settings(application))
     defaults.pop("preset", None)
     defaults.pop("custom_preset_backup", None)
 
@@ -61,3 +61,33 @@ def build_defaults_snapshot() -> Dict[str, Any]:
             fft["enabled"] = False
 
     return defaults
+
+
+def build_sst_defaults_snapshot(application: str | None = None) -> Dict[str, Any]:
+    """Project canonical defaults into SettingsManager's SST transport shape."""
+    defaults = build_defaults_snapshot(application)
+    snapshot: Dict[str, Any] = {}
+
+    def flatten_section(mapping: Mapping[str, Any], prefix: str = "") -> Dict[str, Any]:
+        flattened: Dict[str, Any] = {}
+        for key, value in mapping.items():
+            dotted = f"{prefix}.{key}" if prefix else str(key)
+            if isinstance(value, Mapping):
+                flattened.update(flatten_section(value, dotted))
+            else:
+                # Later dotted compatibility leaves intentionally override an
+                # earlier nested form, matching reset_to_defaults().
+                flattened[dotted] = deepcopy(value)
+        return flattened
+
+    for section, value in defaults.items():
+        if section in {"widgets", "transitions"}:
+            snapshot[section] = deepcopy(value)
+        elif isinstance(value, Mapping):
+            flattened = flatten_section(value)
+            if flattened:
+                snapshot[section] = flattened
+        else:
+            snapshot[section] = deepcopy(value)
+
+    return snapshot

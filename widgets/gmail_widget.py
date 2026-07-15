@@ -156,9 +156,8 @@ class GmailWidget(BaseOverlayWidget):
         self._auto_title_case = True
         self._clean_sender_names = True
         self._max_sender_words = 3
-        self._sender_column_width = 180
+        self._sender_subject_ratio = 35
         self._max_subject_words = 4
-        self._max_subject_chars = 0
         self._show_unread_count_in_header = True
         self._desaturate_when_no_unread = True
         self._account_slot = "0"
@@ -1369,10 +1368,28 @@ class GmailWidget(BaseOverlayWidget):
         sender_text_gap = max(6, int(round(12 * layout_scale)))
         text_area_width = max(1, available_width - env_slot_width - time_slot_width - action_width - row_outer_gap)
         sender_slot_width = 0
-        if self._show_sender:
-            max_sender_width = max(40, text_area_width - 20)
-            configured_sender_width = max(40, int(self._sender_column_width))
-            sender_slot_width = min(configured_sender_width, max_sender_width)
+        subject_slot_width = 0
+        sender_subject_gap = 0
+        if self._show_sender and self._show_subject:
+            sender_subject_gap = min(sender_text_gap, max(0, text_area_width - 2))
+        split_budget = max(0, text_area_width - sender_subject_gap)
+        if self._show_sender and self._show_subject:
+            if split_budget >= 2:
+                sender_slot_width = max(
+                    1,
+                    min(
+                        split_budget - 1,
+                        int(round(split_budget * self._sender_subject_ratio / 100.0)),
+                    ),
+                )
+                subject_slot_width = split_budget - sender_slot_width
+            elif split_budget == 1:
+                sender_slot_width = int(self._sender_subject_ratio >= 50)
+                subject_slot_width = 1 - sender_slot_width
+        elif self._show_sender:
+            sender_slot_width = text_area_width
+        elif self._show_subject:
+            subject_slot_width = text_area_width
         return {
             "left": left,
             "base_font_pt": base_font_pt,
@@ -1386,21 +1403,17 @@ class GmailWidget(BaseOverlayWidget):
             "sender_text_gap": sender_text_gap,
             "text_area_width": text_area_width,
             "sender_slot_width": sender_slot_width,
+            "subject_slot_width": subject_slot_width,
+            "sender_subject_gap": sender_subject_gap,
         }
 
     def _compute_email_row_budget(self, row: DisplayRow, layout_metrics: Dict[str, Any]) -> Dict[str, int]:
         sender_width = 0
         if self._show_sender:
-            sender_width = int(layout_metrics["sender_slot_width"]) + int(layout_metrics["sender_text_gap"])
-        subject_max_width = max(
-            20,
-            int(layout_metrics["available_width"])
-            - int(layout_metrics["time_slot_width"])
-            - sender_width
-            - int(layout_metrics["env_slot_width"])
-            - int(layout_metrics["action_width"])
-            - int(layout_metrics["row_outer_gap"]),
-        )
+            sender_width = int(layout_metrics["sender_slot_width"]) + int(
+                layout_metrics["sender_subject_gap"]
+            )
+        subject_max_width = int(layout_metrics["subject_slot_width"])
         return {
             "sender_width": sender_width,
             "subject_max_width": subject_max_width,
@@ -1562,7 +1575,7 @@ class GmailWidget(BaseOverlayWidget):
         return shorten_subject(
             subject_text,
             max_words=self._max_subject_words,
-            max_chars=self._max_subject_chars,
+            max_chars=0,
         )
 
     # ------------------------------------------------------------------
@@ -1855,9 +1868,11 @@ class GmailWidget(BaseOverlayWidget):
         self.set_auto_title_case(getattr(settings, "auto_title_case", self._auto_title_case))
         self.set_clean_sender_names(getattr(settings, "clean_sender_names", self._clean_sender_names))
         self.set_max_sender_words(getattr(settings, "max_sender_words", self._max_sender_words))
-        self.set_sender_column_width(getattr(settings, "sender_column_width", self._sender_column_width))
+        if hasattr(settings, "sender_subject_ratio"):
+            self.set_sender_subject_ratio(getattr(settings, "sender_subject_ratio"))
+        elif hasattr(settings, "sender_column_width"):
+            self.set_sender_column_width(getattr(settings, "sender_column_width"))
         self.set_max_subject_words(getattr(settings, "max_subject_words", self._max_subject_words))
-        self.set_max_subject_chars(getattr(settings, "max_subject_chars", self._max_subject_chars))
         self.set_show_unread_count_in_header(getattr(settings, "show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(getattr(settings, "desaturate_when_no_unread", self._desaturate_when_no_unread))
         self.set_play_sound_on_new_mail(getattr(settings, "play_sound_on_new_mail", self._play_sound_on_new_mail))
@@ -1893,9 +1908,11 @@ class GmailWidget(BaseOverlayWidget):
         self.set_auto_title_case(d.get("auto_title_case", self._auto_title_case))
         self.set_clean_sender_names(d.get("clean_sender_names", self._clean_sender_names))
         self.set_max_sender_words(d.get("max_sender_words", self._max_sender_words))
-        self.set_sender_column_width(d.get("sender_column_width", self._sender_column_width))
+        if "sender_subject_ratio" in d:
+            self.set_sender_subject_ratio(d["sender_subject_ratio"])
+        elif "sender_column_width" in d:
+            self.set_sender_column_width(d["sender_column_width"])
         self.set_max_subject_words(d.get("max_subject_words", self._max_subject_words))
-        self.set_max_subject_chars(d.get("max_subject_chars", self._max_subject_chars))
         self.set_show_unread_count_in_header(d.get("show_unread_count_in_header", self._show_unread_count_in_header))
         self.set_desaturate_when_no_unread(d.get("desaturate_when_no_unread", self._desaturate_when_no_unread))
         self.set_play_sound_on_new_mail(d.get("play_sound_on_new_mail", self._play_sound_on_new_mail))
@@ -2111,18 +2128,25 @@ class GmailWidget(BaseOverlayWidget):
     def set_max_sender_words(self, value: Any) -> None:
         self._set_attr_and_update("_max_sender_words", self._coerce_non_negative_int(value, 3))
 
-    def set_sender_column_width(self, value: Any) -> None:
+    def set_sender_subject_ratio(self, value: Any) -> None:
         try:
-            next_width = max(40, min(360, int(value)))
+            next_ratio = max(10, min(80, int(value)))
         except (TypeError, ValueError):
-            next_width = 180
-        self._set_attr_and_update("_sender_column_width", next_width)
+            next_ratio = 35
+        self._set_attr_and_update("_sender_subject_ratio", next_ratio)
+
+    def set_sender_column_width(self, value: Any) -> None:
+        """Migrate a legacy fixed sender width into the bounded ratio contract."""
+
+        try:
+            legacy_width = max(1, int(value))
+        except (TypeError, ValueError):
+            legacy_width = 180
+        estimated_text_budget = max(80, int(self._width) - 80)
+        self.set_sender_subject_ratio(round(legacy_width * 100.0 / estimated_text_budget))
 
     def set_max_subject_words(self, value: Any) -> None:
         self._set_attr_and_update("_max_subject_words", self._coerce_non_negative_int(value, 4))
-
-    def set_max_subject_chars(self, value: Any) -> None:
-        self._set_attr_and_update("_max_subject_chars", self._coerce_non_negative_int(value, 0))
 
     @staticmethod
     def _coerce_non_negative_int(value: Any, default: int) -> int:

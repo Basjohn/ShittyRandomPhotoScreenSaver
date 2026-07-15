@@ -1152,7 +1152,7 @@ class SteamCardFactory(WidgetFactory):
                         True,
                     ),
                     show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
-                    artwork_shape=str(config.get("artwork_shape", "square") or "square"),
+                    artwork_shape=str(config.get("artwork_shape", "portrait") or "portrait"),
                     artwork_size=int(config.get("artwork_size", 140)),
                     accent_color=parse_color_to_qcolor(
                         config.get("accent_color", [222, 157, 88, 225])
@@ -1241,6 +1241,9 @@ class SteamCardFactory(WidgetFactory):
                     (540, 290),
                     (540, 330),
                     (540, 334),
+                    (600, 290),
+                    (600, 318),
+                    (600, 334),
                 }:
                     authored_size = achievement_pulse_authored_size(
                         show_artwork=achievement_show_artwork,
@@ -1253,10 +1256,12 @@ class SteamCardFactory(WidgetFactory):
                     (420, 180),
                     (560, 300),
                     (560, 331),
+                    (600, 300),
+                    (600, 331),
                 }:
                     authored_size = abandonment_authored_size(
                         show_artwork=SettingsManager.to_bool(config.get("show_artwork", True), True),
-                        artwork_shape=str(config.get("artwork_shape", "square") or "square"),
+                        artwork_shape=str(config.get("artwork_shape", "portrait") or "portrait"),
                         artwork_size=int(config.get("artwork_size", 140)),
                         field_count=abandonment_field_slot_count(
                             abandonment_field_visibility

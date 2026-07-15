@@ -227,11 +227,12 @@ def test_perf_health_allows_restored_smooth_overlay_feed_above_low_refresh_targe
             "2026-07-03 00:00:13 - widgets.spotify_bars_gl_overlay - INFO - "
             "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=bubble "
             "elapsed_ms=10000.0 set_state=953 paint=946 update_requests=953 "
-            "geometry_changes=0 visible=True enabled=True",
+            "geometry_changes=0 visible=True enabled=True playing=False",
         ]
     )
 
     assert len(report.spotify_overlay_perf_windows) == 1
+    assert report.spotify_overlay_perf_windows[0].playing is False
     assert report.spotify_overlay_overpaint_windows == []
     assert report.spotify_overlay_under_delivery_windows == []
     assert report.anomalies == []

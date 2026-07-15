@@ -36,7 +36,7 @@ def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
             "enabled": False,
             "position": "Top Center",
             "limit": 5,
-            "sender_column_width": 220,
+            "sender_subject_ratio": 42,
             "account_slot": "2",
             "filter_label": "Alerts",
         },
@@ -73,7 +73,7 @@ def test_capture_layout_slot_includes_layout_state_and_excludes_sources():
         "enabled": False,
         "position": "Top Center",
         "limit": 5,
-        "sender_column_width": 220,
+        "sender_subject_ratio": 42,
     }
     assert payload["widgets"]["spotify_visualizer"] == {
         "enabled": True,

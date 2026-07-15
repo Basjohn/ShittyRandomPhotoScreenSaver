@@ -3,14 +3,38 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
-import requests
 from PySide6.QtCore import QThread
 
 import core.gmail.gmail_oauth as gmail_oauth_module
 from core.gmail.gmail_oauth import GmailConfigError
+from core.threading.manager import ThreadManager
+
+
+def _wait_until(predicate, timeout: float = 2.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.01)
+    return bool(predicate())
+
+
+def _write_fake_client_config(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "installed": {
+                    "client_id": "fake_client_id.apps.googleusercontent.com",
+                    "client_secret": "fake_client_secret",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def test_dpapi_roundtrip_no_leak() -> None:
@@ -120,95 +144,191 @@ def test_imap_password_storage_mocked() -> None:
 def test_oauth_callback_submits_token_exchange_off_ui_thread(tmp_path: Path, qt_app, monkeypatch) -> None:
     """Verify callback flow submits token exchange to background IO instead of the UI thread."""
     credentials_path = tmp_path / "client_secrets.json"
-    credentials_path.write_text(
-        json.dumps(
-            {
-                "installed": {
-                    "client_id": "fake_client_id.apps.googleusercontent.com",
-                    "client_secret": "fake_client_secret",
-                }
-            }
-        ),
-        encoding="utf-8",
-    )
+    _write_fake_client_config(credentials_path)
 
     token_path = tmp_path / "gmail_token.enc"
+    thread_manager = ThreadManager.create_helper_manager(io_workers=2, compute_workers=1)
     manager = gmail_oauth_module.GmailOAuthManager(
         credentials_path=credentials_path,
         token_path=token_path,
+        thread_manager=thread_manager,
     )
     manager._pkce_verifier = "fake_verifier"
     manager._state = "fake_state"
 
-    class _FakeThreadManager:
-        def __init__(self) -> None:
-            self.calls: list[tuple[object, tuple[object, ...]]] = []
-            self.done = threading.Event()
-            self.worker: threading.Thread | None = None
-
-        def submit_io_task(self, fn, *args):
-            self.calls.append((fn, args))
-
-            # Use a real worker thread here because the contract we are guarding
-            # is specifically "not on the Qt UI thread".
-            def runner() -> None:
-                fn(*args)
-                self.done.set()
-
-            self.worker = threading.Thread(target=runner, daemon=True)
-            self.worker.start()
-            return self.worker
-
-    fake_tm = _FakeThreadManager()
-    ui_dispatches: list[tuple[object, tuple[object, ...]]] = []
+    exchange_done = threading.Event()
+    exchange_args: list[tuple[str, str, str]] = []
     request_thread_state: dict[str, bool] = {}
 
-    monkeypatch.setattr(manager, "_get_thread_manager", lambda: fake_tm)
-    monkeypatch.setattr(
-        gmail_oauth_module.ThreadManager,
-        "run_on_ui_thread",
-        staticmethod(lambda fn, *args: ui_dispatches.append((fn, args))),
-    )
-
-    def fake_post(url, data=None, timeout=None, **kwargs):
+    def fake_exchange(code: str, redirect_uri: str, pkce_verifier: str) -> None:
         request_thread_state["is_ui_thread"] = (
             QThread.currentThread() == qt_app.thread()
         )
+        exchange_args.append((code, redirect_uri, pkce_verifier))
+        exchange_done.set()
 
-        class _Response:
-            def raise_for_status(self) -> None:
-                return None
-
-            def json(self) -> dict[str, object]:
-                return {
-                    "access_token": "fake_access_token",
-                    "refresh_token": "fake_refresh_token",
-                    "token_type": "Bearer",
-                    "expires_in": 3600,
-                    "scope": " ".join(gmail_oauth_module.GMAIL_SCOPES),
-                }
-
-        return _Response()
-
-    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(manager, "_exchange_code", fake_exchange)
 
     try:
         manager._start_callback_server()
         assert manager._redirect_uri is not None
+        context = manager._auth_context
+        assert context is not None
+        assert context.task_id in thread_manager.get_active_tasks()
 
         callback_url = f"{manager._redirect_uri}/callback?code=fake_code&state=fake_state"
         with urllib.request.urlopen(callback_url, timeout=2) as response:
             body = response.read().decode("utf-8")
 
         assert "Authorization Successful!" in body
-        assert fake_tm.done.wait(timeout=2), "OAuth IO task did not finish"
-        assert fake_tm.calls
-        submitted_fn, submitted_args = fake_tm.calls[0]
-        assert getattr(submitted_fn, "__self__", None) is manager
-        assert submitted_args == ("fake_code",)
+        assert exchange_done.wait(timeout=2), "OAuth IO task did not finish"
+        assert exchange_args == [("fake_code", context.redirect_uri, "fake_verifier")]
         assert request_thread_state["is_ui_thread"] is False
-        assert ui_dispatches, "Expected auth completion/failure dispatch back to UI thread"
+        assert context.finished_event.wait(timeout=2)
+        assert manager._auth_server is None
+        assert manager._auth_server_task_id is None
+        assert manager._redirect_uri is None
+        assert _wait_until(lambda: not thread_manager.get_active_tasks())
     finally:
-        manager._stop_callback_server()
-        if fake_tm.worker is not None:
-            fake_tm.worker.join(timeout=2)
+        manager.cancel_auth_flow()
+        thread_manager.shutdown(wait=True, timeout=2)
+
+
+def test_oauth_user_cancel_releases_callback_server_once(tmp_path: Path, qt_app, monkeypatch) -> None:
+    credentials_path = tmp_path / "client_secrets.json"
+    _write_fake_client_config(credentials_path)
+    thread_manager = ThreadManager.create_helper_manager(io_workers=1, compute_workers=1)
+    real_server_type = gmail_oauth_module.HTTPServer
+
+    class _CountingHTTPServer(real_server_type):
+        def __init__(self, *args, **kwargs):
+            self.close_calls = 0
+            super().__init__(*args, **kwargs)
+
+        def server_close(self) -> None:
+            self.close_calls += 1
+            super().server_close()
+
+    dispatches: list[tuple[object, tuple[object, ...]]] = []
+    monkeypatch.setattr(gmail_oauth_module, "HTTPServer", _CountingHTTPServer)
+    monkeypatch.setattr(
+        gmail_oauth_module.ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda fn, *args: dispatches.append((fn, args))),
+    )
+    manager = gmail_oauth_module.GmailOAuthManager(
+        credentials_path=credentials_path,
+        token_path=tmp_path / "gmail_token.enc",
+        thread_manager=thread_manager,
+    )
+    manager._pkce_verifier = "fake_verifier"
+    manager._state = "fake_state"
+
+    try:
+        manager._start_callback_server()
+        context = manager._auth_context
+        assert context is not None
+        with urllib.request.urlopen(
+            f"{context.redirect_uri}/?error=access_denied&error_description=fake_cancel",
+            timeout=2,
+        ) as response:
+            assert "Authorization Failed" in response.read().decode("utf-8")
+        assert context.finished_event.wait(timeout=2)
+        assert context.server.close_calls == 1
+        assert dispatches
+        assert "access_denied" in str(dispatches[0][1][0])
+        assert _wait_until(lambda: not thread_manager.get_active_tasks())
+    finally:
+        manager.cancel_auth_flow()
+        thread_manager.shutdown(wait=True, timeout=2)
+
+
+def test_oauth_callback_timeout_releases_server(tmp_path: Path, qt_app, monkeypatch) -> None:
+    credentials_path = tmp_path / "client_secrets.json"
+    _write_fake_client_config(credentials_path)
+    thread_manager = ThreadManager.create_helper_manager(io_workers=1, compute_workers=1)
+    dispatches: list[tuple[object, tuple[object, ...]]] = []
+    monkeypatch.setattr(gmail_oauth_module, "SERVER_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(
+        gmail_oauth_module.ThreadManager,
+        "run_on_ui_thread",
+        staticmethod(lambda fn, *args: dispatches.append((fn, args))),
+    )
+    manager = gmail_oauth_module.GmailOAuthManager(
+        credentials_path=credentials_path,
+        token_path=tmp_path / "gmail_token.enc",
+        thread_manager=thread_manager,
+    )
+    manager._pkce_verifier = "fake_verifier"
+    manager._state = "fake_state"
+
+    try:
+        manager._start_callback_server()
+        context = manager._auth_context
+        assert context is not None
+        assert context.finished_event.wait(timeout=2)
+        assert manager._auth_server is None
+        assert dispatches
+        assert "timed out" in str(dispatches[0][1][0]).lower()
+        assert _wait_until(lambda: not thread_manager.get_active_tasks())
+    finally:
+        manager.cancel_auth_flow()
+        thread_manager.shutdown(wait=True, timeout=2)
+
+
+def test_oauth_shutdown_releases_pending_callback_task(tmp_path: Path, qt_app) -> None:
+    credentials_path = tmp_path / "client_secrets.json"
+    _write_fake_client_config(credentials_path)
+    thread_manager = ThreadManager.create_helper_manager(io_workers=1, compute_workers=1)
+    manager = gmail_oauth_module.GmailOAuthManager(
+        credentials_path=credentials_path,
+        token_path=tmp_path / "gmail_token.enc",
+        thread_manager=thread_manager,
+    )
+    manager._pkce_verifier = "fake_verifier"
+    manager._state = "fake_state"
+
+    try:
+        manager._start_callback_server()
+        context = manager._auth_context
+        assert context is not None
+        manager.shutdown()
+        assert context.finished_event.wait(timeout=2)
+        assert manager._auth_server is None
+        assert _wait_until(lambda: not thread_manager.get_active_tasks())
+    finally:
+        thread_manager.shutdown(wait=True, timeout=2)
+
+
+def test_settings_owner_destruction_cancels_oauth_flow() -> None:
+    from ui.tabs.widgets_tab_gmail import _wire_gmail_auth_lifecycle
+
+    class _FakeSignal:
+        def __init__(self) -> None:
+            self.callbacks: list[object] = []
+
+        def connect(self, callback) -> None:
+            self.callbacks.append(callback)
+
+        def emit(self) -> None:
+            for callback in self.callbacks:
+                callback(None)
+
+    class _FakeTab:
+        def __init__(self) -> None:
+            self.destroyed = _FakeSignal()
+
+    class _FakeOAuthManager:
+        def __init__(self) -> None:
+            self.cancel_calls = 0
+
+        def cancel_auth_flow(self) -> None:
+            self.cancel_calls += 1
+
+    tab = _FakeTab()
+    manager = _FakeOAuthManager()
+    _wire_gmail_auth_lifecycle(tab, manager)
+    _wire_gmail_auth_lifecycle(tab, manager)
+    assert len(tab.destroyed.callbacks) == 1
+    tab.destroyed.emit()
+    assert manager.cancel_calls == 1

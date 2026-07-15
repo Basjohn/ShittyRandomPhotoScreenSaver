@@ -153,7 +153,15 @@ def resolve_max_fps(widget: Any, transition_ctx: Dict[str, Any]) -> float:
     """Determine the FPS cap based on transition activity."""
     max_fps = widget._base_max_fps  # 90Hz default
     idle_age = transition_ctx.get("idle_age")
-    if idle_age is not None and idle_age >= widget._idle_fps_boost_delay:
+    if not bool(getattr(widget, "_spotify_playing", False)):
+        # Paused idle-reveal modes remain animated, but they must not inherit
+        # the no-transition live-playback boost. Keep oversampling headroom for
+        # low-refresh owners instead of dropping accepted overlay repaints.
+        max_fps = min(
+            max_fps,
+            float(getattr(widget, "_paused_idle_max_fps", 75.0)),
+        )
+    elif idle_age is not None and idle_age >= widget._idle_fps_boost_delay:
         max_fps = min(widget._idle_max_fps, widget._base_max_fps + 10.0)
     return max(15.0, float(max_fps))
 

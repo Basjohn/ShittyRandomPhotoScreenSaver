@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -49,7 +50,11 @@ from core.steam.credentials import (
 )
 from core.steam.models import SteamResult, SteamResultStatus, SteamSourceId
 from core.threading.manager import TaskResult
-from widgets.abandonment_issues_widget import AbandonmentIssuesWidget, _prepare_cover_image
+from widgets.abandonment_issues_widget import (
+    AbandonmentIssuesWidget,
+    _achievement_evidence_requested,
+    _prepare_cover_image,
+)
 from widgets.base_overlay_widget import OverlayPosition
 from widgets.steam_abandonment_components import (
     ABANDONMENT_ALTERNATE_REDISCOVERY_MESSAGES,
@@ -60,9 +65,11 @@ from widgets.steam_abandonment_components import (
     abandonment_authored_size,
     abandonment_archive_class,
     abandonment_rediscovery_message,
+    abandonment_shelf_diagnostics,
     build_abandonment_view_model,
     format_abandonment_last_played,
     layout_abandonment_card,
+    normalize_abandonment_artwork_shape,
     render_abandonment_card,
 )
 from widgets.steam_card_widget import STEAM_CARD_DEFINITIONS, SteamCardWidget
@@ -97,7 +104,23 @@ def _recent_result() -> SteamResult:
 def test_abandonment_appid_list_normalizes_only_positive_unique_ids() -> None:
     assert parse_appid_list("440, 570; 440\n730 invalid -2 0") == (440, 570, 730)
     assert parse_appid_list([10, "20", 10, None]) == (10, 20)
+
+
+def test_abandonment_portrait_shape_promotes_legacy_square_token() -> None:
+    assert normalize_abandonment_artwork_shape("portrait") == "portrait"
+    assert normalize_abandonment_artwork_shape("square") == "portrait"
+    assert normalize_abandonment_artwork_shape("wide") == "wide"
     assert format_appid_list((440, 570, 440)) == "440, 570"
+
+
+def test_abandonment_achievement_hydration_follows_dependent_shelf_visibility() -> None:
+    assert _achievement_evidence_requested({}) is True
+    assert _achievement_evidence_requested(
+        {"achievements": False, "last_unlock": True}
+    ) is True
+    assert _achievement_evidence_requested(
+        {"achievements": False, "last_unlock": False}
+    ) is False
 
 
 def test_abandonment_smart_candidates_require_meaningful_play_and_verified_age() -> None:
@@ -211,6 +234,7 @@ def test_abandonment_user_shelves_require_and_format_cached_evidence() -> None:
     assert fields["archive_class"].value == "Barely Started"
     assert fields["queue"].enabled is False
     assert abandonment_archive_class(resolved) == "Barely Started"
+    assert build_abandonment_view_model(resolved).status == "BACKLOG 01/01"
 
 
 def test_abandonment_last_played_and_unlock_shelves_hide_unproven_values() -> None:
@@ -233,6 +257,50 @@ def test_abandonment_last_played_and_unlock_shelves_hide_unproven_values() -> No
     assert fields["last_played"].enabled is False
     assert fields["achievements"].enabled is False
     assert fields["last_unlock"].enabled is False
+
+
+def test_abandonment_shelf_diagnostics_report_requested_missing_evidence_without_values() -> None:
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=88,
+        title="Private Title Must Not Enter Diagnostics",
+        playtime_minutes=400,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_UNKNOWN,
+        queue_position=1,
+        queue_count=12,
+    )
+    visibility = {
+        "playtime": True,
+        "achievements": True,
+        "last_unlock": True,
+        "last_played": True,
+        "archive_class": True,
+        "queue": True,
+        "source": False,
+        "pinned": False,
+    }
+    model = build_abandonment_view_model(resolved, field_visibility=visibility)
+
+    requested, rendered, unavailable, evidence = abandonment_shelf_diagnostics(
+        resolved,
+        model,
+        visibility,
+    )
+
+    assert requested == (
+        "playtime",
+        "achievements",
+        "last_unlock",
+        "last_played",
+        "archive_class",
+        "queue",
+    )
+    assert rendered == ("playtime", "archive_class", "queue")
+    assert unavailable == ("achievements", "last_unlock", "last_played")
+    assert "achievements:missing" in evidence
+    assert "last_played:missing" in evidence
+    assert all("Private Title" not in item for item in evidence)
 
 
 def test_abandonment_zero_unlock_snapshot_proves_no_unlocks() -> None:
@@ -328,7 +396,7 @@ def test_abandonment_weighted_rotation_is_varied_biased_and_repeatable() -> None
     assert repeated.appid == repeated_again.appid
 
 
-def test_abandonment_persisted_draws_shuffle_archive_positions(tmp_path) -> None:
+def test_abandonment_persisted_draws_shuffle_backlog_ranks(tmp_path) -> None:
     profile_key = derive_profile_cache_key("76561198000000999")
     owned_payload = {
         "response": {
@@ -368,14 +436,14 @@ def test_abandonment_persisted_draws_shuffle_archive_positions(tmp_path) -> None
         ).resolved
         for index in range(10)
     ]
-    archive_positions = [draw.queue_position for draw in draws]
+    backlog_ranks = [draw.queue_position for draw in draws]
     appids = [draw.appid for draw in draws]
 
     assert len(set(appids)) == len(appids)
-    assert archive_positions != sorted(archive_positions)
+    assert backlog_ranks != sorted(backlog_ranks)
     assert any(
-        abs(archive_positions[index] - archive_positions[index - 1]) > 1
-        for index in range(1, len(archive_positions))
+        abs(backlog_ranks[index] - backlog_ranks[index - 1]) > 1
+        for index in range(1, len(backlog_ranks))
     )
 
 
@@ -692,6 +760,123 @@ def test_abandonment_refresh_uses_owned_and_recent_sources_and_persists_success(
     assert owned_cache.fetched_at == NOW
 
 
+def test_abandonment_hydrates_only_selected_achievement_evidence_and_reuses_it(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from core.steam import abandonment_cache
+
+    credential = SteamCredentialPayload(
+        api_key="fixture_api_key_selected_evidence_123456",
+        profile_identifier="76561198000000023",
+    )
+    selected_appid = 77
+    old_timestamp = NOW - 400 * 24 * 60 * 60
+    latest_unlock = NOW - 200 * 24 * 60 * 60
+    requests: list[str] = []
+    log_messages: list[str] = []
+    monkeypatch.setattr(
+        abandonment_cache.logger,
+        "info",
+        lambda message, *args: log_messages.append(message % args),
+    )
+
+    class _Response:
+        status = 200
+
+        def __init__(self, payload: dict) -> None:
+            self._data = json.dumps(payload).encode("utf-8")
+
+        def read(self, _limit: int) -> bytes:
+            return self._data
+
+    def _opener(request, _timeout):
+        requests.append(request.full_url)
+        if "GetOwnedGames" in request.full_url:
+            return _Response(
+                {
+                    "response": {
+                        "game_count": 1,
+                        "games": [
+                            {
+                                "appid": selected_appid,
+                                "name": "Selected Evidence Fixture",
+                                "playtime_forever": 90,
+                                "rtime_last_played": old_timestamp,
+                            }
+                        ],
+                    }
+                }
+            )
+        if "GetRecentlyPlayedGames" in request.full_url:
+            return _Response({"response": {"total_count": 0, "games": []}})
+        if "GetPlayerAchievements" in request.full_url:
+            assert f"appid={selected_appid}" in request.full_url
+            return _Response(
+                {
+                    "playerstats": {
+                        "gameName": "Selected Evidence Fixture",
+                        "achievements": [
+                            {"name": "ONE", "achieved": 1, "unlocktime": latest_unlock},
+                            {"name": "TWO", "achieved": 0, "unlocktime": 0},
+                        ],
+                        "success": True,
+                    }
+                }
+            )
+        raise AssertionError(request.full_url)
+
+    first = refresh_abandonment_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW,
+        hydrate_achievement_evidence=True,
+    )
+    second = refresh_abandonment_cache(
+        credential=credential,
+        root=tmp_path,
+        opener=_opener,
+        now=NOW + 5 * 60,
+        hydrate_achievement_evidence=True,
+    )
+
+    assert first.snapshot.resolved.appid == selected_appid
+    assert first.snapshot.resolved.unlocked_achievement_count == 1
+    assert first.snapshot.resolved.total_achievement_count == 2
+    assert first.snapshot.resolved.latest_unlock_at == latest_unlock
+    hydrated_fields = {
+        field.field_id: field
+        for field in build_abandonment_view_model(first.snapshot.resolved).fields
+    }
+    assert hydrated_fields["achievements"].enabled is True
+    assert hydrated_fields["achievements"].value == "1 / 2"
+    assert hydrated_fields["last_unlock"].enabled is True
+    assert second.snapshot.resolved.appid == selected_appid
+    assert sum("GetPlayerAchievements" in url for url in requests) == 1
+    assert len(requests) == 3
+    profile_key = derive_profile_cache_key(credential.profile_identifier)
+    achievement_cache = read_cache_record(
+        cache_path_for_profile_key(
+            profile_key,
+            achievement_cache_key_for_app(selected_appid),
+            root=tmp_path,
+        )
+    )
+    assert achievement_cache.ok is True
+    assert achievement_cache.fetched_at == NOW
+    assert any(
+        "[STEAM][ABANDONMENT_ACHIEVEMENTS]" in message
+        and "outcome=hydrated" in message
+        for message in log_messages
+    )
+    assert any(
+        "[STEAM][ABANDONMENT_ACHIEVEMENTS]" in message
+        and "outcome=cache_hit" in message
+        for message in log_messages
+    )
+
+
 def test_abandonment_reuses_daily_library_but_manual_refreshes_both_sources(tmp_path) -> None:
     credential = SteamCredentialPayload(
         api_key="fixture_api_key_source_ttl_123456",
@@ -996,7 +1181,7 @@ def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
     def _fetch(**kwargs):
         shape = kwargs["artwork_shape"]
         fetch_shapes.append(shape)
-        if shape == "square":
+        if shape == "portrait":
             return SteamResult(
                 status=SteamResultStatus.NOT_FOUND,
                 http_status=404,
@@ -1025,7 +1210,7 @@ def test_abandonment_preparation_falls_back_to_wide_artwork_after_portrait_404(
             artwork_target=(80, 80),
         )
 
-        assert fetch_shapes == ["square", "wide"]
+        assert fetch_shapes == ["portrait", "wide"]
         assert presentation.artwork_identity == str(source)
         assert not presentation.artwork.isNull()
     finally:
@@ -1077,7 +1262,7 @@ def test_abandonment_preparation_does_not_retry_transient_artwork_failure(
             artwork_target=(80, 80),
         )
 
-        assert fetch_shapes == ["square"]
+        assert fetch_shapes == ["portrait"]
         assert presentation.artwork.isNull()
     finally:
         widget.cleanup()
@@ -1151,7 +1336,7 @@ def test_abandonment_layout_allocates_every_enabled_ledger_shelf(qt_app) -> None
     assert all(not layout.art_rect.intersects(rect) for _field_id, rect in layout.field_rects)
 
 
-def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch) -> None:
+def test_abandonment_enabled_ledger_text_is_measured_to_fit(qt_app, monkeypatch) -> None:
     import widgets.steam_abandonment_components as components
 
     resolved = AbandonmentResolved(
@@ -1170,7 +1355,10 @@ def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch)
         latest_unlock_at=1_609_459_200.0,
         latest_unlock_age_days=42,
     )
-    model = build_abandonment_view_model(resolved)
+    model = build_abandonment_view_model(
+        resolved,
+        field_visibility={"archive_class": True},
+    )
     calls: list[tuple[QRectF, str, QFont]] = []
 
     def _capture(_painter, rect, text, *, color, font, flags=None) -> None:
@@ -1178,14 +1366,14 @@ def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch)
         calls.append((QRectF(rect), str(text), QFont(font)))
 
     monkeypatch.setattr(components, "_draw_elided_text", _capture)
-    image = QImage(560, 331, QImage.Format.Format_ARGB32_Premultiplied)
+    image = QImage(600, 331, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(QColor(0, 0, 0, 0))
     painter = QPainter(image)
     try:
         render_abandonment_card(
             painter,
             model,
-            QRectF(0, 0, 560, 331),
+            QRectF(0, 0, 600, 331),
             font_family="Segoe UI",
             font_size=14,
             text_color=QColor(255, 255, 255, 230),
@@ -1209,7 +1397,7 @@ def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch)
         "6 WEEKS AGO",
         "LAST PLAYED",
         "29/04/2017",
-        "ARCHIVE CLASS",
+        "BACKLOG CLASS",
         "BARELY STARTED",
     }
     measured = {text: (rect, font) for rect, text, font in calls if text in expected}
@@ -1217,6 +1405,70 @@ def test_abandonment_default_ledger_text_is_measured_to_fit(qt_app, monkeypatch)
     assert set(measured) == expected
     for text, (rect, font) in measured.items():
         assert QFontMetricsF(font).horizontalAdvance(text) <= rect.width() + 1.0
+
+
+def test_abandonment_game_title_shrinks_before_eliding_without_crossing_reminder_floor(
+    qt_app,
+    monkeypatch,
+) -> None:
+    import widgets.steam_abandonment_components as components
+
+    resolved = AbandonmentResolved(
+        status="ok",
+        appid=92,
+        title="Fixture",
+        playtime_minutes=90,
+        last_played_at=1_493_424_000.0,
+        last_played_confidence=LAST_PLAYED_VERIFIED,
+        inactivity_days=3_350,
+        queue_position=3,
+        queue_count=40,
+        source_label="Cache",
+    )
+    title = "An Exceptionally Long Complete Deluxe Collection Game Title"
+    reminder = "You Don't Even Remember Buying This One Do You?"
+    model = replace(
+        build_abandonment_view_model(resolved),
+        title=title,
+        subtitle=reminder,
+    )
+    captured: dict[str, QFont] = {}
+
+    def _capture_elided(_painter, _rect, text, *, color, font, flags=None) -> None:
+        del color, flags
+        if text == title:
+            captured["title"] = QFont(font)
+
+    def _capture_shadow(painter, _rect, _flags, text, **_kwargs) -> None:
+        if text == reminder:
+            captured["reminder"] = QFont(painter.font())
+
+    monkeypatch.setattr(components, "_draw_elided_text", _capture_elided)
+    monkeypatch.setattr(components, "draw_text_rect_with_shadow", _capture_shadow)
+    image = QImage(600, 300, QImage.Format.Format_ARGB32_Premultiplied)
+    image.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(image)
+    try:
+        render_abandonment_card(
+            painter,
+            model,
+            QRectF(0, 0, 600, 300),
+            font_family="Segoe UI",
+            font_size=14,
+            text_color=QColor(255, 255, 255, 230),
+            logo_pixmap=None,
+            artwork_image=None,
+            show_artwork=True,
+            artwork_shape="square",
+            artwork_size=140,
+            accent_color=QColor(222, 157, 88, 225),
+            field_slot_count=4,
+        )
+    finally:
+        painter.end()
+
+    assert captured["title"].pointSize() < 20
+    assert captured["title"].pointSize() >= captured["reminder"].pointSize()
 
 
 def test_abandonment_rediscovery_messages_use_exact_stable_60_40_buckets() -> None:
@@ -1375,14 +1627,25 @@ def test_abandonment_rotation_defers_transition_collision_through_shared_single_
 
 
 @pytest.mark.parametrize(
-    ("updates_enabled", "expected_asset_network"),
-    ((True, True), (False, False)),
+    (
+        "updates_enabled",
+        "field_visibility",
+        "expected_asset_network",
+        "expected_evidence_calls",
+    ),
+    (
+        (True, {}, True, 1),
+        (True, {"achievements": False, "last_unlock": False}, True, 0),
+        (False, {}, False, 0),
+    ),
 )
 def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
     qt_app,
     monkeypatch,
     updates_enabled: bool,
+    field_visibility: dict[str, bool],
     expected_asset_network: bool,
+    expected_evidence_calls: int,
 ) -> None:
     from core import runtime_flags
     from core.steam import abandonment_cache, credentials
@@ -1398,21 +1661,35 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
     snapshot = object()
     prepared = object()
     preparation_calls: list[dict[str, object]] = []
+    evidence_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         runtime_flags,
         "automatic_service_updates_enabled",
         lambda: updates_enabled,
     )
     monkeypatch.setattr(credentials, "read_credential_metadata", lambda: _Metadata())
+    monkeypatch.setattr(credentials, "load_credentials", lambda: object())
     monkeypatch.setattr(
         abandonment_cache,
         "load_abandonment_cache_snapshot",
         lambda **_kwargs: snapshot,
     )
+    monkeypatch.setattr(
+        abandonment_cache,
+        "hydrate_selected_achievement_evidence",
+        lambda **kwargs: (
+            evidence_calls.append(kwargs) or snapshot,
+            SteamResult(
+                status=SteamResultStatus.SUCCESS,
+                source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+            ),
+        ),
+    )
     widget = AbandonmentIssuesWidget(
         definition=STEAM_CARD_DEFINITIONS["abandonment_issues"],
         position=OverlayPosition.BOTTOM_RIGHT,
         initial_view_model=SteamCardWidget.connect_required_model("abandonment_issues"),
+        field_visibility=field_visibility,
         show_artwork=True,
     )
     try:
@@ -1429,6 +1706,7 @@ def test_abandonment_automatic_rotation_hydrates_only_when_updates_are_allowed(
         qt_app.processEvents()
 
         assert preparation_calls[0]["allow_asset_network"] is expected_asset_network
+        assert len(evidence_calls) == expected_evidence_calls
     finally:
         widget.cleanup()
 

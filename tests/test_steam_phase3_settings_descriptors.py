@@ -677,7 +677,11 @@ def test_promoted_factories_are_public_while_unfinished_factories_are_dev_gated(
             assert abandonment_fields["achievements"] is True
             assert abandonment_fields["last_unlock"] is True
             assert abandonment_fields["last_played"] is True
-            assert abandonment_fields["archive_class"] is True
+            assert abandonment_fields["archive_class"] is bool(
+                get_default_settings()["widgets"]["abandonment_issues"][
+                    "show_archive_class"
+                ]
+            )
             assert abandonment_fields["queue"] is False
             assert abandonment_widget.minimumWidth() >= 560
             assert abandonment_widget.minimumHeight() > 300

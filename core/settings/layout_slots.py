@@ -62,10 +62,10 @@ _LAYOUT_SECTION_KEYS = frozenset(
         "image_spacing",
         "image_border_width",
         "cell_base_width",
-        "sender_column_width",
+        "sender_subject_ratio",
+        "sender_column_width",  # Legacy slot import; current Gmail saves the ratio.
         "max_sender_words",
         "max_subject_words",
-        "max_subject_chars",
         "date_display_mode",
         "separator_thickness",
         "boundary_separator_thickness",

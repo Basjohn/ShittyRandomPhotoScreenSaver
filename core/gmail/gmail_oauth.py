@@ -11,7 +11,8 @@ import secrets
 import hashlib
 import base64
 import threading
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -36,6 +37,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 REDIRECT_HOST = "127.0.0.1"
 SERVER_TIMEOUT_SECONDS = 300
+SERVER_POLL_SECONDS = 1.0
 
 
 class GmailConfigError(Exception):
@@ -73,6 +75,29 @@ class GmailCredentials:
         )
 
 
+@dataclass
+class _CallbackServerContext:
+    server: HTTPServer
+    generation: int
+    task_id: str
+    redirect_uri: str
+    expected_state: str
+    pkce_verifier: str
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    finished_event: threading.Event = field(default_factory=threading.Event)
+    _close_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _closed: bool = field(default=False, repr=False)
+
+    def close_once(self) -> bool:
+        """Close the listening socket exactly once across cancel/task races."""
+        with self._close_lock:
+            if self._closed:
+                return False
+            self._closed = True
+        self.server.server_close()
+        return True
+
+
 class GmailOAuthManager(QObject):
     auth_started = Signal()
     auth_completed = Signal(object)
@@ -93,17 +118,23 @@ class GmailOAuthManager(QObject):
         self,
         credentials_path: Optional[Path] = None,
         token_path: Optional[Path] = None,
+        thread_manager: Optional[ThreadManager] = None,
     ):
         super().__init__()
         self._credentials: Optional[GmailCredentials] = None
         self._client_id: Optional[str] = None
         self._client_secret: Optional[str] = None
         self._auth_server: Optional[HTTPServer] = None
-        self._auth_thread: Optional[threading.Thread] = None
+        self._auth_context: Optional[_CallbackServerContext] = None
+        self._auth_server_task_id: Optional[str] = None
+        self._auth_server_generation = 0
+        self._auth_server_lock = threading.RLock()
         self._pkce_verifier: Optional[str] = None
         self._state: Optional[str] = None
         self._redirect_uri: Optional[str] = None
-        self._thread_manager: Optional[ThreadManager] = None
+        self._thread_manager = thread_manager
+        self._owns_thread_manager = False
+        self._shutdown_hook_connected = False
 
         app_data = get_app_data_dir()
 
@@ -177,6 +208,7 @@ class GmailOAuthManager(QObject):
         return self._credentials
 
     def clear_local_credentials(self) -> None:
+        self.cancel_auth_flow()
         try:
             if self._token_path.exists():
                 self._token_path.unlink()
@@ -242,6 +274,7 @@ class GmailOAuthManager(QObject):
             logger.info("[GMAIL_OAUTH] Auth flow started")
             return True
         except Exception as exc:
+            self._stop_callback_server()
             logger.error("[GMAIL_OAUTH] Failed to start auth flow: %s", exc)
             self.auth_failed.emit(str(exc))
             return False
@@ -257,6 +290,8 @@ class GmailOAuthManager(QObject):
     def _start_callback_server(self) -> None:
         """Start local HTTP server to receive OAuth callback."""
         manager = self
+        self._stop_callback_server()
+        context: _CallbackServerContext
 
         class CallbackHandler(BaseHTTPRequestHandler):
             def log_message(self, format, *args):
@@ -272,15 +307,27 @@ class GmailOAuthManager(QObject):
                     if "code" in params and "state" in params:
                         code = params["code"][0]
                         state = params["state"][0]
-                        if state == manager._state:
+                        if state == context.expected_state:
                             self.wfile.write(
                                 b"<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
                                 b"<h1>Authorization Successful!</h1>"
                                 b"<p>You can close this window and return to the application.</p>"
                                 b"</body></html>"
                             )
-                            # Submit token exchange as IO task (not on UI thread)
-                            manager._get_thread_manager().submit_io_task(manager._exchange_code, code)
+                            try:
+                                manager._get_thread_manager().submit_io_task(
+                                    manager._exchange_code,
+                                    code,
+                                    context.redirect_uri,
+                                    context.pkce_verifier,
+                                    task_id=f"gmail_oauth_exchange_{id(manager)}_{context.generation}",
+                                )
+                            except Exception as exc:
+                                logger.error("[GMAIL_OAUTH] Token exchange submission failed: %s", exc)
+                                ThreadManager.run_on_ui_thread(
+                                    manager._emit_auth_failed_safe,
+                                    "Could not start Gmail token exchange",
+                                )
                         else:
                             self.wfile.write(
                                 b"<html><body style='font-family:sans-serif;text-align:center;padding:50px;'>"
@@ -304,52 +351,167 @@ class GmailOAuthManager(QObject):
                                 full_error += f" — {error_desc}"
                             logger.error("[GMAIL_OAUTH] Callback received error: %s", full_error)
                             ThreadManager.run_on_ui_thread(manager._emit_auth_failed_safe, full_error)
+                        else:
+                            ThreadManager.run_on_ui_thread(
+                                manager._emit_auth_failed_safe,
+                                "Missing authorization code or state",
+                            )
+                    context.stop_event.set()
                 else:
                     self.send_response(404)
                     self.end_headers()
 
+        callback_server: Optional[HTTPServer] = None
+        redirect_uri: Optional[str] = None
         for port in range(8080, 8100):
             try:
-                self._redirect_uri = f"http://{REDIRECT_HOST}:{port}"
-                self._auth_server = HTTPServer((REDIRECT_HOST, port), CallbackHandler)
-                self._auth_server.timeout = SERVER_TIMEOUT_SECONDS
+                redirect_uri = f"http://{REDIRECT_HOST}:{port}"
+                callback_server = HTTPServer((REDIRECT_HOST, port), CallbackHandler)
                 break
             except OSError:
                 continue
-        if self._auth_server is None:
+        if callback_server is None or redirect_uri is None:
             raise GmailConfigError("Could not find an available port for OAuth callback server")
-        self._auth_thread = threading.Thread(target=self._auth_server.serve_forever, daemon=True)
-        self._auth_thread.start()
+
+        with self._auth_server_lock:
+            self._auth_server_generation += 1
+            generation = self._auth_server_generation
+            task_id = f"gmail_oauth_callback_{id(self)}_{generation}"
+            context = _CallbackServerContext(
+                server=callback_server,
+                generation=generation,
+                task_id=task_id,
+                redirect_uri=redirect_uri,
+                expected_state=self._state or "",
+                pkce_verifier=self._pkce_verifier or "",
+            )
+            self._auth_context = context
+            self._auth_server = callback_server
+            self._auth_server_task_id = task_id
+            self._redirect_uri = redirect_uri
+
+        try:
+            thread_manager = self._get_thread_manager()
+            self._ensure_shutdown_hook()
+            thread_manager.submit_io_task(
+                self._run_callback_server,
+                context,
+                task_id=task_id,
+            )
+        except Exception:
+            self._finalize_callback_server(context)
+            raise
+        logger.info(
+            "[GMAIL_OAUTH] Callback server started on %s task_id=%s",
+            redirect_uri,
+            task_id,
+        )
+
+    def _run_callback_server(self, context: _CallbackServerContext) -> None:
+        """Serve one bounded OAuth flow from a ThreadManager IO worker."""
+        deadline = time.monotonic() + max(0.0, float(SERVER_TIMEOUT_SECONDS))
+        timed_out = False
+        try:
+            while not context.stop_event.is_set():
+                thread_manager = self._thread_manager
+                if thread_manager is not None and getattr(thread_manager, "_shutdown", False):
+                    context.stop_event.set()
+                    break
+                remaining = deadline - time.monotonic()
+                if remaining <= 0.0:
+                    timed_out = True
+                    context.stop_event.set()
+                    break
+                context.server.timeout = min(SERVER_POLL_SECONDS, remaining)
+                try:
+                    context.server.handle_request()
+                except OSError:
+                    if not context.stop_event.is_set():
+                        raise
+            if timed_out and self._is_active_callback_context(context):
+                ThreadManager.run_on_ui_thread(
+                    self._emit_auth_failed_safe,
+                    "Gmail authorization timed out. Please try again.",
+                )
+                logger.info("[GMAIL_OAUTH] Callback server timed out")
+        finally:
+            self._finalize_callback_server(context)
 
     def _get_thread_manager(self) -> ThreadManager:
         """Return the owned ThreadManager used for OAuth network work."""
         manager = self._thread_manager
         if manager is None:
             manager = ThreadManager.get_app_shared()
-            owns_manager = manager is None
             if manager is None:
                 manager = ThreadManager.create_helper_manager(
                     resource_manager=ResourceManager.get_app_shared(),
                 )
+                self._owns_thread_manager = True
             self._thread_manager = manager
-            app = QCoreApplication.instance()
-            if owns_manager and app is not None:
-                try:
-                    app.aboutToQuit.connect(lambda m=manager: m.shutdown(wait=False))
-                except Exception as exc:
-                    logger.debug("[GMAIL_OAUTH] Failed to attach ThreadManager shutdown hook: %s", exc)
         return manager
-        logger.info("[GMAIL_OAUTH] Callback server started on %s", self._redirect_uri)
+
+    def _ensure_shutdown_hook(self) -> None:
+        if self._shutdown_hook_connected:
+            return
+        app = QCoreApplication.instance()
+        if app is None:
+            return
+        try:
+            app.aboutToQuit.connect(self.shutdown)
+            self._shutdown_hook_connected = True
+        except Exception as exc:
+            logger.debug("[GMAIL_OAUTH] Failed to attach OAuth shutdown hook: %s", exc)
+
+    def _is_active_callback_context(self, context: _CallbackServerContext) -> bool:
+        with self._auth_server_lock:
+            return self._auth_context is context
+
+    def _finalize_callback_server(self, context: _CallbackServerContext) -> None:
+        try:
+            context.close_once()
+        except Exception as exc:
+            logger.debug("[GMAIL_OAUTH] Server close suppressed: %s", exc)
+        finally:
+            with self._auth_server_lock:
+                if self._auth_context is context:
+                    self._auth_context = None
+                    self._auth_server = None
+                    self._auth_server_task_id = None
+                    self._redirect_uri = None
+            context.finished_event.set()
 
     def _stop_callback_server(self) -> None:
-        if self._auth_server:
+        with self._auth_server_lock:
+            context = self._auth_context
+        if context is None:
+            return
+        context.stop_event.set()
+        manager = self._thread_manager
+        cancelled = False
+        if manager is not None and not getattr(manager, "_shutdown", False):
             try:
-                self._auth_server.shutdown()
+                cancelled = manager.cancel_task(context.task_id)
             except Exception as exc:
-                logger.debug("[GMAIL_OAUTH] Server shutdown suppressed: %s", exc)
-            self._auth_server = None
-        self._auth_thread = None
-        self._redirect_uri = None
+                logger.debug("[GMAIL_OAUTH] Callback task cancellation suppressed: %s", exc)
+        if cancelled or manager is None or getattr(manager, "_shutdown", False):
+            self._finalize_callback_server(context)
+
+    def cancel_auth_flow(self) -> None:
+        """Cancel any pending browser callback without blocking the UI thread."""
+        self._stop_callback_server()
+
+    def shutdown(self) -> None:
+        """Release callback state before application-owned thread pools stop."""
+        with self._auth_server_lock:
+            context = self._auth_context
+        self._stop_callback_server()
+        if context is not None:
+            context.finished_event.wait(timeout=SERVER_POLL_SECONDS + 0.25)
+        manager = self._thread_manager
+        if self._owns_thread_manager and manager is not None:
+            manager.shutdown(wait=True, timeout=SERVER_POLL_SECONDS + 0.25)
+            self._thread_manager = None
+            self._owns_thread_manager = False
 
     def _emit_auth_failed_safe(self, msg: str) -> None:
         """Emit auth_failed on the UI thread with R-10 RuntimeError guard."""
@@ -367,7 +529,12 @@ class GmailOAuthManager(QObject):
             return
         self.auth_completed.emit(creds)
 
-    def _exchange_code(self, code: str) -> None:
+    def _exchange_code(
+        self,
+        code: str,
+        redirect_uri: Optional[str] = None,
+        pkce_verifier: Optional[str] = None,
+    ) -> None:
         """Exchange authorization code for tokens.
 
         Runs on a ThreadManager IO thread (not the UI thread).
@@ -380,8 +547,8 @@ class GmailOAuthManager(QObject):
                 "client_id": self._client_id,
                 "client_secret": self._client_secret or "",
                 "code": code,
-                "redirect_uri": self._redirect_uri,
-                "code_verifier": self._pkce_verifier,
+                "redirect_uri": redirect_uri or self._redirect_uri,
+                "code_verifier": pkce_verifier or self._pkce_verifier,
             }
             resp = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=30)
             resp.raise_for_status()
@@ -390,8 +557,6 @@ class GmailOAuthManager(QObject):
         except Exception as exc:
             logger.error("[GMAIL_OAUTH] Token exchange failed: %s", exc)
             ThreadManager.run_on_ui_thread(self._emit_auth_failed_safe, str(exc))
-        finally:
-            self._stop_callback_server()
 
     def _process_token_response(self, token_data: dict) -> None:
         """Convert raw token response to GmailCredentials and save."""

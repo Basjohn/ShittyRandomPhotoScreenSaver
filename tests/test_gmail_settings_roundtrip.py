@@ -89,16 +89,19 @@ def test_gmail_settings_type_safety() -> None:
 def test_gmail_text_cleanup_defaults_exist() -> None:
     """Verify Gmail text cleanup defaults are present in the widget settings dict."""
     from core.settings.default_settings import DEFAULT_SETTINGS
+    from core.settings.defaults import get_default_settings
 
     gmail = DEFAULT_SETTINGS["widgets"]["gmail"]
-    assert gmail["clean_sender_names"] is True
-    assert gmail["max_sender_words"] == 3
-    assert gmail["sender_column_width"] == 180
-    assert gmail["max_subject_words"] == 4
-    assert gmail["max_subject_chars"] == 0
-    assert gmail["group_threads"] is False
-    assert gmail["date_display_mode"] == "relative"
-    assert gmail["width"] == 600
+    canonical = get_default_settings()["widgets"]["gmail"]
+    assert gmail == canonical
+    assert isinstance(gmail["clean_sender_names"], bool)
+    assert gmail["max_sender_words"] > 0
+    assert 10 <= gmail["sender_subject_ratio"] <= 80
+    assert gmail["max_subject_words"] > 0
+    assert isinstance(gmail["group_threads"], bool)
+    assert gmail["date_display_mode"] in {"relative", "numeric", "words"}
+    assert "sender_column_width" not in gmail
+    assert "max_subject_chars" not in gmail
     assert "min_width" not in gmail
     assert "max_width" not in gmail
     assert "content_padding_left" not in gmail
@@ -116,7 +119,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
         "show_three_dot_menu", "show_refresh_spiral", "show_unread_count_in_header", "show_header_border",
         "show_separators", "show_timestamp", "date_display_mode", "group_threads",
         "auto_title_case", "clean_sender_names", "max_sender_words",
-        "sender_column_width", "max_subject_words", "max_subject_chars",
+        "sender_subject_ratio", "max_subject_words",
         "desaturate_when_no_unread", "show_background",
         "bg_opacity", "border_opacity", "separator_thickness",
         "boundary_separator_thickness", "play_sound_on_new_mail", "sound_file_path",
@@ -128,7 +131,7 @@ def test_gmail_defaults_are_complete_and_do_not_contain_credentials() -> None:
     assert not any("password" in key.lower() for key in gmail)
     assert not any("email" in key.lower() for key in gmail)
     assert not any("token" in key.lower() for key in gmail)
-    assert gmail["limit"] == 5
+    assert gmail["limit"] > 0
 
 
 def test_reddit_refresh_spiral_default_comes_from_defaults() -> None:
@@ -157,9 +160,8 @@ def test_gmail_signal_block_attrs_cover_newer_controls() -> None:
         "gmail_group_threads",
         "gmail_clean_sender_names",
         "gmail_max_sender_words",
-        "gmail_sender_column_width",
+        "gmail_sender_subject_ratio",
         "gmail_max_subject_words",
-        "gmail_max_subject_chars",
         "gmail_sound_file",
         "gmail_sound_volume",
     }
@@ -188,6 +190,7 @@ def test_gmail_default_accessor_requires_canonical_default() -> None:
 
 def test_widget_defaults_merge_stale_cache_with_canonical_defaults() -> None:
     """A stale settings-dialog cache must not hide newly added Gmail defaults."""
+    from core.settings.defaults import get_default_settings
     from ui.tabs.widgets_tab import WidgetsTab
 
     tab = WidgetsTab.__new__(WidgetsTab)
@@ -196,8 +199,9 @@ def test_widget_defaults_merge_stale_cache_with_canonical_defaults() -> None:
     defaults = WidgetsTab._load_widget_defaults(tab)
 
     assert defaults["gmail"]["enabled"] is True
-    assert defaults["gmail"]["width"] == 600
-    assert defaults["gmail"]["filter_label"] == "INBOX"
+    canonical_gmail = get_default_settings()["widgets"]["gmail"]
+    assert defaults["gmail"]["width"] == canonical_gmail["width"]
+    assert defaults["gmail"]["filter_label"] == canonical_gmail["filter_label"]
 
 
 def test_gmail_signal_blocker_blocks_and_unblocks_all_present_controls() -> None:
@@ -285,16 +289,18 @@ def test_styled_combos_do_not_precreate_popup_views() -> None:
         assert "self.view()" not in init_source
 
 
-def test_gmail_text_limits_are_split_across_two_rows() -> None:
-    """Keep sender and subject text-limit spinboxes from crowding one row."""
+def test_gmail_text_limits_and_balance_use_distinct_controls() -> None:
+    """Word limits stay concise while the row width split uses one ratio slider."""
     source = Path("ui/tabs/widgets_tab_gmail.py").read_text(encoding="utf-8")
 
     assert 'text_limit_row = _aligned_row(appearance_inner, "Text Limits:")' in source
     assert "text_limit_grid = QGridLayout()" in source
     assert "text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)" in source
-    assert "text_limit_grid.addWidget(tab.gmail_sender_column_width, 0, 3)" in source
-    assert "text_limit_grid.addWidget(tab.gmail_max_subject_words, 1, 1)" in source
-    assert "text_limit_grid.addWidget(tab.gmail_max_subject_chars, 1, 3)" in source
+    assert "text_limit_grid.addWidget(tab.gmail_max_subject_words, 0, 3)" in source
+    assert 'balance_row = _aligned_row(appearance_inner, "Text Balance:")' in source
+    assert "tab.gmail_sender_subject_ratio = QSlider" in source
+    assert "gmail_sender_column_width = QSpinBox" not in source
+    assert "gmail_max_subject_chars = QSpinBox" not in source
 
 
 def test_gmail_buckets_defer_initial_collapse_until_children_exist() -> None:

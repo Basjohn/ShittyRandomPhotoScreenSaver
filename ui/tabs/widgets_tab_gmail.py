@@ -83,6 +83,13 @@ def _update_gmail_enabled_visibility(tab: WidgetsTab) -> None:
     _set_visible_if_changed(container, bool(enabled))
 
 
+def _update_gmail_text_balance_label(tab: WidgetsTab) -> None:
+    ratio = int(tab.gmail_sender_subject_ratio.value())
+    tab.gmail_sender_subject_ratio_label.setText(
+        f"Sender {ratio}% / Subject {100 - ratio}%"
+    )
+
+
 def _aligned_row(parent: QVBoxLayout, label_text: str) -> QHBoxLayout:
     row, _ = add_aligned_row(parent, label_text, label_width=LABEL_WIDTH, wrap=True)
     return row
@@ -257,6 +264,8 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
         StyledPopup.show_warning(tab, "Gmail", "OAuth subsystem unavailable.")
         return
 
+    _wire_gmail_auth_lifecycle(tab, mgr)
+
     # Wire signals once per tab instance
     if not getattr(tab, '_gmail_auth_signals_wired', False):
         try:
@@ -320,6 +329,19 @@ def _on_gmail_authorize_clicked(tab: WidgetsTab) -> None:
     success = backend.start_oauth_flow()
     if not success:
         pass
+
+
+def _wire_gmail_auth_lifecycle(tab: WidgetsTab, manager) -> None:
+    """Cancel the local callback listener when its Settings owner is destroyed."""
+    if getattr(tab, "_gmail_auth_lifecycle_wired", False):
+        return
+    try:
+        tab.destroyed.connect(
+            lambda _obj=None, m=manager: m.cancel_auth_flow()
+        )
+        tab._gmail_auth_lifecycle_wired = True
+    except Exception as exc:
+        logger.debug("[GMAIL_TAB] Failed to attach OAuth lifecycle cleanup: %s", exc)
 
 
 def _on_gmail_auth_failed(tab: WidgetsTab, message: str) -> None:
@@ -841,7 +863,7 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     text_limit_grid = QGridLayout()
     text_limit_grid.setContentsMargins(0, 0, 0, 0)
     text_limit_grid.setHorizontalSpacing(20)
-    text_limit_grid.setVerticalSpacing(10)
+    text_limit_grid.setVerticalSpacing(0)
     text_limit_grid.setColumnMinimumWidth(0, 112)
     text_limit_grid.setColumnMinimumWidth(2, 136)
     tab.gmail_max_sender_words = QSpinBox()
@@ -853,35 +875,41 @@ def build_gmail_ui(tab: WidgetsTab, layout: QVBoxLayout) -> QWidget:
     text_limit_grid.addWidget(create_inline_label("Sender words"), 0, 0)
     text_limit_grid.addWidget(tab.gmail_max_sender_words, 0, 1)
 
-    tab.gmail_sender_column_width = QSpinBox()
-    tab.gmail_sender_column_width.setRange(40, 360)
-    tab.gmail_sender_column_width.setValue(tab._default_int('gmail', 'sender_column_width', 180))
-    tab.gmail_sender_column_width.setAccelerated(True)
-    tab.gmail_sender_column_width.setSuffix(" px")
-    tab.gmail_sender_column_width.valueChanged.connect(tab._save_settings)
-    text_limit_grid.addWidget(create_inline_label("Sender column"), 0, 2)
-    text_limit_grid.addWidget(tab.gmail_sender_column_width, 0, 3)
-
     tab.gmail_max_subject_words = QSpinBox()
     tab.gmail_max_subject_words.setRange(0, 30)
     tab.gmail_max_subject_words.setSpecialValueText("Off")
     tab.gmail_max_subject_words.setValue(tab._default_int('gmail', 'max_subject_words', 4))
     tab.gmail_max_subject_words.setAccelerated(True)
     tab.gmail_max_subject_words.valueChanged.connect(tab._save_settings)
-    text_limit_grid.addWidget(create_inline_label("Subject words"), 1, 0)
-    text_limit_grid.addWidget(tab.gmail_max_subject_words, 1, 1)
-
-    tab.gmail_max_subject_chars = QSpinBox()
-    tab.gmail_max_subject_chars.setRange(0, 200)
-    tab.gmail_max_subject_chars.setSpecialValueText("Off")
-    tab.gmail_max_subject_chars.setValue(tab._default_int('gmail', 'max_subject_chars', 0))
-    tab.gmail_max_subject_chars.setAccelerated(True)
-    tab.gmail_max_subject_chars.valueChanged.connect(tab._save_settings)
-    text_limit_grid.addWidget(create_inline_label("Subject chars"), 1, 2)
-    text_limit_grid.addWidget(tab.gmail_max_subject_chars, 1, 3)
+    text_limit_grid.addWidget(create_inline_label("Subject words"), 0, 2)
+    text_limit_grid.addWidget(tab.gmail_max_subject_words, 0, 3)
     text_limit_grid.setColumnStretch(4, 1)
     text_limit_row.addLayout(text_limit_grid)
     text_limit_row.addStretch()
+
+    balance_row = _aligned_row(appearance_inner, "Text Balance:")
+    tab.gmail_sender_subject_ratio = QSlider(Qt.Orientation.Horizontal)
+    tab.gmail_sender_subject_ratio.setRange(10, 80)
+    tab.gmail_sender_subject_ratio.setInvertedAppearance(True)
+    tab.gmail_sender_subject_ratio.setInvertedControls(True)
+    tab.gmail_sender_subject_ratio.setMinimumWidth(220)
+    tab.gmail_sender_subject_ratio.setValue(
+        tab._default_int('gmail', 'sender_subject_ratio', 35)
+    )
+    tab.gmail_sender_subject_ratio.setToolTip(
+        "Move left for more sender space or right for more subject space. "
+        "The split is applied only after timestamp, icon, menu, and spacing reserves."
+    )
+    tab.gmail_sender_subject_ratio.valueChanged.connect(
+        lambda _value: _update_gmail_text_balance_label(tab)
+    )
+    tab.gmail_sender_subject_ratio.valueChanged.connect(tab._save_settings)
+    tab.gmail_sender_subject_ratio_label = QLabel()
+    tab.gmail_sender_subject_ratio_label.setMinimumWidth(166)
+    _update_gmail_text_balance_label(tab)
+    balance_row.addWidget(tab.gmail_sender_subject_ratio)
+    balance_row.addWidget(tab.gmail_sender_subject_ratio_label)
+    balance_row.addStretch()
 
     tab.gmail_desaturate = QCheckBox("Desaturate Logo When No Unread")
     tab.gmail_desaturate.setProperty("circleIndicator", True)
@@ -1111,8 +1139,8 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
             'show_unread_count_in_header', 'show_header_border',
             'show_separators', 'show_timestamp', 'date_display_mode',
             'group_threads', 'auto_title_case', 'clean_sender_names',
-            'max_sender_words', 'sender_column_width', 'max_subject_words',
-            'max_subject_chars', 'desaturate_when_no_unread',
+            'max_sender_words', 'sender_subject_ratio', 'max_subject_words',
+            'desaturate_when_no_unread',
             'show_background', 'bg_opacity',
             'border_opacity', 'separator_thickness',
             'boundary_separator_thickness', 'play_sound_on_new_mail',
@@ -1179,9 +1207,22 @@ def load_gmail_settings(tab: WidgetsTab, widgets: dict) -> None:
         tab.gmail_auto_title_case.setChecked(tab._config_bool('gmail', gmail_config, 'auto_title_case', bool(gmail_defaults['auto_title_case'])))
         tab.gmail_clean_sender_names.setChecked(tab._config_bool('gmail', gmail_config, 'clean_sender_names', bool(gmail_defaults['clean_sender_names'])))
         tab.gmail_max_sender_words.setValue(tab._config_int('gmail', gmail_config, 'max_sender_words', int(gmail_defaults['max_sender_words'])))
-        tab.gmail_sender_column_width.setValue(tab._config_int('gmail', gmail_config, 'sender_column_width', int(gmail_defaults['sender_column_width'])))
+        if 'sender_subject_ratio' in gmail_config:
+            ratio_value = tab._config_int(
+                'gmail',
+                gmail_config,
+                'sender_subject_ratio',
+                int(gmail_defaults['sender_subject_ratio']),
+            )
+        elif 'sender_column_width' in gmail_config:
+            legacy_width = tab._config_int('gmail', gmail_config, 'sender_column_width', 180)
+            estimated_text_budget = max(80, int(tab.gmail_width.value()) - 80)
+            ratio_value = round(legacy_width * 100.0 / estimated_text_budget)
+        else:
+            ratio_value = int(gmail_defaults['sender_subject_ratio'])
+        tab.gmail_sender_subject_ratio.setValue(max(10, min(80, ratio_value)))
+        _update_gmail_text_balance_label(tab)
         tab.gmail_max_subject_words.setValue(tab._config_int('gmail', gmail_config, 'max_subject_words', int(gmail_defaults['max_subject_words'])))
-        tab.gmail_max_subject_chars.setValue(tab._config_int('gmail', gmail_config, 'max_subject_chars', int(gmail_defaults['max_subject_chars'])))
         tab.gmail_desaturate.setChecked(tab._config_bool('gmail', gmail_config, 'desaturate_when_no_unread', bool(gmail_defaults['desaturate_when_no_unread'])))
 
         tab.gmail_show_background.setChecked(tab._config_bool('gmail', gmail_config, 'show_background', bool(gmail_defaults['show_background'])))
@@ -1264,9 +1305,8 @@ def save_gmail_settings(tab: WidgetsTab) -> dict:
         'auto_title_case': tab.gmail_auto_title_case.isChecked(),
         'clean_sender_names': tab.gmail_clean_sender_names.isChecked(),
         'max_sender_words': tab.gmail_max_sender_words.value(),
-        'sender_column_width': tab.gmail_sender_column_width.value(),
+        'sender_subject_ratio': tab.gmail_sender_subject_ratio.value(),
         'max_subject_words': tab.gmail_max_subject_words.value(),
-        'max_subject_chars': tab.gmail_max_subject_chars.value(),
         'desaturate_when_no_unread': tab.gmail_desaturate.isChecked(),
         'show_background': tab.gmail_show_background.isChecked(),
         'bg_opacity': tab.gmail_bg_opacity.value() / 100.0,

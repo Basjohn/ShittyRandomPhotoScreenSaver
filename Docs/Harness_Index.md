@@ -29,7 +29,8 @@ python -m pytest tests/test_default_settings_editor.py tests/test_regenerate_sst
   - Alpha colour swatches and font-family leaves use application controls; all other leaves remain type-aware and recursively discovered.
   - **Import SST / JSON Into Selected Profile** merges an exported application snapshot into the selected model while stripping credentials, reset-preserved source/weather state, machine-local absolute paths, active CUSTOM geometry, and layout slots. It remains unsaved until Save and Regenerate.
   - Every string leaf tooltip identifies registered finite choices or its accepted free-text domain.
-  - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes, with SST managers rooted in a temporary directory rather than either installed profile.
+  - Save regenerates `core/settings/defaults_snapshot.json` plus both canonical SST files in fresh processes. SST generation calls the profile-aware canonical builder directly and cannot construct a settings manager, probe QSettings migration state, or resolve either installed profile.
+  - The Normal/MC SSTs use stable generated metadata, must be byte-identical across unchanged runs, and are checked for full canonical parity plus private-field absence before atomic replacement.
   - Failed save/undo regeneration restores the prior canonical base, MC source, prior undo state, and regenerated artifacts when rollback generation remains available; a second rollback failure is reported explicitly.
   - Undo state is local under `%LOCALAPPDATA%/SRPSS/DefaultSettingsEditor`, never in the repository.
   - The editor changes fresh/reset defaults, not the current user's saved settings.
@@ -85,7 +86,7 @@ python -m pytest `
 ```
 - Notes:
   - Tests use synthetic fixtures and injected openers only; no test may contact Steam or contain real account data.
-  - Achievement dynamic refresh is bounded to five recent candidate achievement records plus schema for the selected app; Settings uses exact cache paths only. Abandonment semantic rotation remains cache-only, takes its exact cadence solely from `widgets.steam.refresh_minutes`, and owns one ordinary recurring timer. Only its selected allowlisted public-art miss may hydrate on the existing IO job when automatic updates are allowed, with one alternate-shape request after definitive 404/invalid evidence and no fanout on transient failure.
+  - Achievement dynamic refresh is bounded to five recent candidate achievement records plus schema for the selected app; Settings uses exact cache paths only. Abandonment semantic selection remains cache-only, takes its exact cadence solely from `widgets.steam.refresh_minutes`, and owns one ordinary recurring timer. After identity commit, only the selected app's enabled stale/missing achievement evidence and allowlisted public-art miss may hydrate on the existing IO job when automatic updates are allowed; achievements use a 24-hour exact cache and stable identity, while art permits one alternate-shape request after definitive 404/invalid evidence and no fanout on transient failure.
   - Offscreen raster bars require bundled font registration for representative typography. They prove geometry and paint safety, not final frozen-build/multi-display appearance.
   - Runtime validation should use `--steam --perf --cache --set --geo --life`; add `--devsteam` only when intentionally testing Journey/Friend prototypes.
 
@@ -176,7 +177,11 @@ python -m pytest `
 ```
 - Notes:
   - Bubble oracle failures that only reflect stale expected values are re-baseline work, not permission to change Bubble feel.
+  - Paused idle-reveal modes use a timer-owned source budget below live playback while retaining low-refresh headroom. Validate that change with the full lock plus overlay `playing` telemetry; do not replace it with owner-target repaint dropping or mode-owned retuning.
+  - Legacy Bubble proxy/current-feel signatures that were disproved by the healthier active runtime remain explicitly skipped as retired U-07 oracles. Visible-lane, authored-preset, first-frame, motion, and perf guards remain active; do not revive a retired internal numeric signature as a release gate.
+  - Bubble's isolated worker perf bar keeps strict wall-time averages, component budgets, collision density, and worst complete authored-profile averages. Do not gate on a single Windows wall-clock sample: unrelated scheduler preemption is not deterministic worker cost, while real `--perf` logs remain authoritative for end-to-end spikes.
   - `Oscilloscope` is now part of the accepted lock after its mode-owned waveform/ghost/glow pass; keep future changes mode-owned unless a shared seam is proven.
+  - Paused `Oscilloscope`, Bubble, Sine, and Dev Curve intentionally use idle reveal and clear the fresh-engine wait; paused Spectrum retains the fresh-engine wait. A shared parameterized test must not flatten those distinct contracts.
   - A lone `[FIRST_FRAME_PRIMER]` is expected remediation when the overlay still owns an old generation/activation before the first authoritative push. Escalate only when current source authority does not replace it, or when `FIRST_FRAME_GUARD`, `PARITY`, technical replay, fallback, or stale-commit evidence also fails.
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.

@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 
-from core.settings.defaults import CANONICAL_DEFAULTS, PRESERVE_ON_RESET, get_default_settings
+from core.settings.defaults import (
+    CANONICAL_DEFAULTS,
+    MC_PROFILE,
+    NORMAL_PROFILE,
+    PRESERVE_ON_RESET,
+    get_default_settings,
+)
 from core.settings.defaults_generated import DEFAULT_SETTINGS as GENERATED_DEFAULTS
 from core.settings.defaults_snapshot_builder import build_defaults_snapshot
 from tools import visualizer_preset_repair as repair
@@ -123,6 +129,16 @@ class TestDefaultsArtifactParity:
 
     def test_snapshot_json_matches_builder_output(self):
         assert _load_snapshot_json() == _build_snapshot_with_default_gates()
+
+    @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
+    def test_profile_snapshot_builder_uses_selected_canonical_defaults(self, application: str):
+        snapshot = build_defaults_snapshot(application)
+        canonical = get_default_settings(application)
+
+        assert snapshot["display"] == canonical["display"]
+        assert snapshot["input"] == canonical["input"]
+        assert snapshot["widgets"]["gmail"] == canonical["widgets"]["gmail"]
+        assert snapshot["widgets"]["media"] == canonical["widgets"]["media"]
 
     def test_snapshot_sanitizes_doc_preserved_keys(self):
         snapshot = _build_snapshot_with_default_gates()

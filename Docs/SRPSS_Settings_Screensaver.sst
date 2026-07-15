@@ -1,11 +1,9 @@
 {
   "application": "Screensaver",
   "metadata": {
-    "last_migration_completed": "2026-07-14T02:42:25.262907Z",
-    "legacy_profile": "Screensaver",
-    "migrated_at": "2026-07-14T02:42:25.258747Z",
-    "migrated_from": "qsettings",
-    "visualizer_schema_version": 2
+    "artifact_kind": "canonical_defaults",
+    "generator": "tools/regenerate_sst_defaults.py",
+    "source": "core.settings.defaults_snapshot_builder.build_sst_defaults_snapshot"
   },
   "profile": "Screensaver",
   "settings_version": 2,
@@ -48,7 +46,7 @@
       "rss_stale_minutes": 60
     },
     "timing": {
-      "interval": 180
+      "interval": 40
     },
     "transitions": {
       "blinds": {
@@ -337,7 +335,7 @@
           88,
           225
         ],
-        "artwork_shape": "square",
+        "artwork_shape": "portrait",
         "artwork_size": 140,
         "bg_color": [
           35,
@@ -375,10 +373,10 @@
         "preferred_max_playtime_hours": 2,
         "preferred_max_unlocked_achievements": 2,
         "preferred_minimum_inactivity_weeks": 26,
-        "preferred_width": 560,
+        "preferred_width": 600,
         "selection_mode": "smart_rotation",
         "show_achievements": true,
-        "show_archive_class": true,
+        "show_archive_class": false,
         "show_artwork": true,
         "show_background": true,
         "show_last_played": true,
@@ -434,7 +432,7 @@
         "monitor": "1",
         "position": "Bottom Right",
         "preferred_height": 334,
-        "preferred_width": 540,
+        "preferred_width": 600,
         "selection_mode": "most_recent",
         "show_artwork": true,
         "show_background": true,
@@ -650,13 +648,12 @@
         "limit": 10,
         "margin": 30,
         "max_sender_words": 3,
-        "max_subject_chars": 0,
         "max_subject_words": 4,
         "monitor": 2,
         "play_sound_on_new_mail": false,
         "position": "Bottom Left",
         "refresh_minutes": 5,
-        "sender_column_width": 160,
+        "sender_subject_ratio": 35,
         "separator_color": [
           200,
           200,
@@ -675,8 +672,8 @@
         "show_timestamp": true,
         "show_unread_count_in_header": true,
         "sound_file_path": "resources/tutuogg.ogg",
-        "sound_volume_percent": 50,
-        "width": 750
+        "sound_volume_percent": 25,
+        "width": 600
       },
       "imgur": {
         "bg_color": [
@@ -1667,7 +1664,7 @@
       "steam": {
         "enabled": false,
         "privacy_mode": "Rich",
-        "refresh_minutes": 10,
+        "refresh_minutes": 6,
         "show_connection_info_icon": true
       },
       "steam_progress": {
@@ -1728,9 +1725,7 @@
         "font_size": 25,
         "icon_alignment": "RIGHT",
         "icon_size": 96,
-        "latitude": "",
         "location": "",
-        "longitude": "",
         "margin": 30,
         "monitor": 1,
         "position": "Bottom Right",

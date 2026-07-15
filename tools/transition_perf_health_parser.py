@@ -259,6 +259,7 @@ class SpotifyOverlayPerfWindow:
     geometry_change_count: int
     visible: bool
     enabled: bool
+    playing: bool | None = None
     line: str = ""
 
     @property
@@ -805,6 +806,12 @@ def _parse_bool(value: str | None) -> bool:
     return str(value).strip().lower() == "true"
 
 
+def _parse_optional_bool(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    return _parse_bool(value)
+
+
 def _timestamp_from_line(line: str) -> str | None:
     match = _TIME_RE.search(line)
     return match.group("ts") if match else None
@@ -898,6 +905,7 @@ def _spotify_overlay_perf_from_line(line: str, detail: str) -> SpotifyOverlayPer
         geometry_change_count=_parse_int(parts.get("geometry_changes")) or 0,
         visible=_parse_bool(parts.get("visible")),
         enabled=_parse_bool(parts.get("enabled")),
+        playing=_parse_optional_bool(parts.get("playing")),
         line=line,
     )
 

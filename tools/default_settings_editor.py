@@ -696,7 +696,6 @@ class DefaultValueDelegate(QStyledItemDelegate):
             editor.setMinimumHeight(30)
             editor.setMaximumHeight(34)
             editor.color_changed.connect(lambda _color, target=editor: self.commitData.emit(target))
-            editor.color_changed.connect(lambda _color, target=editor: self.closeEditor.emit(target))
             return editor
         if isinstance(path, tuple) and path[-1].lower() == "font_family":
             editor = QFontComboBox(parent)

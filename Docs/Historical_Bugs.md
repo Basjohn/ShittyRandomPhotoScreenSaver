@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-14
+Last updated: 2026-07-15
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -10,41 +10,43 @@ This is the long-term anti-regression record for the project, not an active task
 ### Open Issues
 1. [U-05 — 2026-04-08 — MC Keyboard Focus / Ctrl Halo Runtime Input Family Reopened (Unresolved)](#U-05)
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
-3. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Unresolved)](#U-07)
 
 ### Recent Resolutions
-1. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-2. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-3. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-4. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-5. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-6. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-7. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-8. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-9. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-10. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-11. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-12. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-13. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-14. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-15. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-16. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-17. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-18. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-19. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-20. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-21. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-22. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-23. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-24. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-25. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-26. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-27. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-28. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-29. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-30. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-31. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-32. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved In Code, Runtime Validation Pending)](#R-42)
+2. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
+3. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
+4. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
+5. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
+6. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
+7. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+8. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+9. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
+10. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+11. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+12. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+13. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+14. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+15. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+16. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+17. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
+18. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+19. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+20. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+21. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+22. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+23. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+24. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+25. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+26. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+27. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+28. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+29. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+30. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+31. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+32. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+33. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+34. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+35. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -67,6 +69,34 @@ This is the long-term anti-regression record for the project, not an active task
 
 ## Recent Entries
 
+<a id="R-42"></a>
+### [R-42] 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure:** `ACHIEVEMENTS` and `LAST UNLOCK` remained absent even while both default-on shelves were enabled. Privacy-safe shelf diagnostics repeatedly reported both as requested but unavailable with `achievements:missing,last_unlock:missing`.
+- **Root cause:** Abandonment probed only existing Achievement Pulse cache paths. Achievement Pulse acquires per-app records for at most five recent games, while Abandonment deliberately selects old inactive games; selected backlog games therefore had no realistic producer for their exact achievement cache file. The renderer and evidence guards were correct, but the source contract made their success state unreachable for most selections.
+- **Fix:** cache-only ranking and weighted selection remain unchanged. After one identity is committed, Abandonment's existing startup/refresh/rotation worker may hydrate exactly that app's `GetPlayerAchievements` record only when `ACHIEVEMENTS` or `LAST UNLOCK` is enabled. It reuses Achievement Pulse's canonical cache key, the process-shared source lock, app-scoped request/backoff identity, and a 24-hour automatic freshness window. The result enriches the already-selected immutable snapshot and cannot rerank, replace, or fan out across candidates. `--noupdates` suppresses automatic hydration; explicit manual refresh retains its deliberate force behavior.
+- **Pressure/security boundary:** no timer, thread, UI retry, paint work, cache enumeration, schema request, or library-wide achievement sweep was added. The new sidecar record contains only selected app ID, cache/network outcome, source status, and loaded/missing state; it does not log titles, achievement names, counts, credentials, or raw payloads.
+- **Bars:** `tests/test_steam_abandonment_issues.py` proves default/explicit shelf demand, one provider-shaped selected-app request, exact cache persistence, count/latest-unlock enrichment, 24-hour cache reuse, stable selected identity, automatic-rotation worker wiring, and no hydration when automatic updates are disabled. Runtime validation must observe one `hydrated` record for a supported selected game, subsequent `cache_hit`, visible shelves, no same-job identity change, and no DT/repaint spike.
+
+<a id="R-41"></a>
+### [R-41] 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Observed risk:** Gmail already submitted token exchange through `ThreadManager`, but its loopback `HTTPServer.serve_forever()` ran on a raw daemon `threading.Thread`. Browser cancellation, callback timeout, settings destruction, and application shutdown therefore had split ownership over the listener, task, and port.
+- **Root cause:** the callback listener was treated as incidental HTTP plumbing rather than bounded asynchronous business work. It had no generation identity, no manager task id, and no single close-once lifecycle context shared by success and cancellation paths.
+- **Fix:** each authorization attempt now captures state, PKCE verifier, redirect URI, generation, task id, stop/finished events, and close-once socket ownership in one context. A bounded `handle_request()` loop runs on a `ThreadManager` IO worker; success submits token exchange with the captured values, while browser rejection, malformed callback, timeout, explicit cancellation, credential clearing, settings-owner destruction, and application teardown converge on the same release path. Qt completion signals remain marshalled to the UI thread, and no UI polling, repaint loop, or rescue timer was added.
+- **Bars:** `tests/test_gmail_oauth.py` uses a real helper manager and proves off-UI exchange plus success, user-cancel, timeout, settings-owner, and application-shutdown cleanup with no active task or listener left behind. `tests/unit/test_policy_compliance.py` rejects a return to raw production thread creation.
+- **Security/behavior boundary:** PKCE, callback-state validation, browser handoff, token exchange, and DPAPI credential behavior are unchanged; lifecycle ownership was repaired without widening token/log/export exposure.
+
 <a id="R-40"></a>
 ### [R-40] 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)
 
@@ -78,7 +108,7 @@ This is the long-term anti-regression record for the project, not an active task
 - **Observed failure pattern:** the active MC profile's Steam refresh interval was 5 minutes, but Abandonment armed a 15-minute timer and reported roughly 15 minutes of remaining duration. Automatic game changes therefore occurred around three times later than the setting promised.
 - **Log/settings evidence:** the reviewed MC run constructed a 900,000 ms Abandonment timer while `snapshot.widgets.steam.refresh_minutes` was `5`. A separate legacy `snapshot.widgets.abandonment_issues.rotation_interval_minutes` value was `15`; Normal likewise carried a separate 30-minute card value while its shared Steam interval was 10. Treating those card values as valid made two visible settings contracts compete.
 - **Root cause:** Abandonment introduced a private user-facing rotation setting and passed it through Settings, defaults, descriptors, the factory, cache remaining-duration math, and the widget timer independently of the family refresh interval. The generic `Refresh Window` label did not make the conflict clear, but clearer labels would not solve the underlying duplicate authority.
-- **Fix:** `widgets.steam.refresh_minutes` is now the sole automatic-change cadence. The per-card control/default/descriptor/factory argument was removed; card save drops a legacy `rotation_interval_minutes` key; installed Normal/MC profiles no longer retain it; and the cache API now receives the shared refresh interval explicitly. Current profile values remain independent: MC is 5 minutes and Normal is 10 minutes. Rebuild/remaining-duration math evaluates persisted `changed_at` against the current shared value, so shortening 15 to 5 rotates when due rather than honoring stale duration. Cadence diagnostics name `widgets.steam.refresh_minutes` as authority.
+- **Fix:** `widgets.steam.refresh_minutes` is now the sole automatic-change cadence. The per-card control/default/descriptor/factory argument was removed; card save drops a legacy `rotation_interval_minutes` key; installed Normal/MC profiles no longer retain it; and the cache API now receives the shared refresh interval explicitly. At closure, MC used 5 minutes and Normal used 10; the later Foundry-authoritative canonical default is 6 minutes for both profiles. Rebuild/remaining-duration math evaluates persisted `changed_at` against the current shared value, so shortening an interval rotates when due rather than honoring stale duration. Cadence diagnostics name `widgets.steam.refresh_minutes` as authority.
 - **Bars:** Settings/default tests prove no second control, emitted default, or duplicate widget cadence field exists; a conflicting legacy card value of 45 is ignored; UI save retains shared 5 and removes the legacy key; direct and descriptor-driven factories construct `_refresh_minutes` as 5; stale 15-minute state reports 60 seconds remaining after four minutes under shared 5 and advances at five; and the widget recurring timer is exactly 300,000 ms. Defaults JSON/SST artifacts were regenerated without touching unrelated installed settings.
 - **Runtime validation target:** in the next MC run, require `[STEAM][ABANDONMENT_CADENCE] shared_refresh_minutes=5 rotation_minutes=5 authority=widgets.steam.refresh_minutes`, a 300,000 ms recurring timer, and automatic non-repeating draws at that cadence except for a visible bounded parent-transition deferral. No 15/30-minute card cadence may reappear, and cadence changes must not add provider, timer, paint, or UI-thread pressure.
 
@@ -91,11 +121,11 @@ This is the long-term anti-regression record for the project, not an active task
 - [ ] SOLVED
 
 - **Observed failure pattern:** automatic Abandonment rotation changed the game and text but twice committed no artwork; forced double-click refreshes changed games and restored artwork normally.
-- **Log/cache evidence:** interval draws committed successfully and changed selection, and archive ranks formed a non-sequential sequence rather than a linear walk. The follow-up failure near the end of the reviewed run allowed asset network work, then logged no artwork because the selected app's requested portrait `library_600x900.jpg` returned HTTP 404 while its allowlisted wide `header.jpg` variant returned valid JPEG data. The 404 had been collapsed into generic network failure, so no valid alternate was considered.
+- **Log/cache evidence:** interval draws committed successfully and changed selection, and backlog ranks formed a non-sequential sequence rather than a linear walk. The follow-up failure near the end of the reviewed run allowed asset network work, then logged no artwork because the selected app's requested portrait `library_600x900.jpg` returned HTTP 404 while its allowlisted wide `header.jpg` variant returned valid JPEG data. The 404 had been collapsed into generic network failure, so no valid alternate was considered.
 - **Root causes:** the original `_request_cache_only_rotation()` path prepared a newly selected game with `allow_asset_network=False`, unlike manual/provider refresh. After that boundary was corrected, selected-art hydration still requested only the configured shape and treated a definitive 404 like a transient network error. A game lacking Steam's portrait capsule could therefore render blank even though its wide artwork existed.
-- **Fix:** semantic rotation still reads only owned/recent/profile/achievement cache state. When automatic updates are allowed, the same existing IO task resolves cached requested/fallback shapes first and hydrates only the selected app before atomically committing the game/title/art fade. A definitive requested-shape 404 or invalid image permits one alternate allowlisted shape; ordinary timeout/network failures do not trigger a second request. HTTP 404 is classified as `NOT_FOUND`, `--noupdates` retains strict automatic artwork-cache-only behavior, and diagnostics include requested/resolved shapes and fallback outcomes without credentials or account identity. The redundant discarded Abandonment layout pass remains removed from paint.
+- **Fix:** semantic selection still reads only owned/recent/profile/achievement cache state. When automatic updates are allowed, the same existing IO task resolves cached requested/fallback shapes first and hydrates only the selected app before atomically committing the game/title/art fade. A definitive requested-shape 404 or invalid image permits one alternate allowlisted shape; ordinary timeout/network failures do not trigger a second request. HTTP 404 is classified as `NOT_FOUND`, `--noupdates` retains strict automatic artwork-cache-only behavior, and diagnostics include requested/resolved shapes and fallback outcomes without credentials or account identity. R-42 later permits one similarly bounded selected-app achievement-evidence hydration for enabled shelves without changing this no-candidate-work rule. The redundant discarded Abandonment layout pass remains removed from paint.
 - **Bars:** `tests/test_steam_profile_assets_events.py` proves HTTP 404 classification and bounded shape order. `tests/test_steam_abandonment_issues.py` proves non-sequential draws, ordinary/`--noupdates` asset-network decisions, requested-shape hydration, 404-to-wide fallback into worker-prepared cover art, and no fallback fanout after a transient failure. The full Steam bar passes.
-- **Runtime validation target:** on the next long normal and MC runs, require `ABANDONMENT_ROTATION` ranks to remain non-sequential, ordinary misses to log `outcome=hydrated`, portrait-missing/wide-valid apps to log `outcome=fallback_hydrated:wide requested_shape=square resolved_shape=wide` before a complete sparse fade, `--noupdates` misses to log `cache_miss_network_disabled`, and no provider request, UI-thread stall, paint burst, or new visualizer DT spike attributable to the low-frequency worker task.
+- **Runtime validation target:** on the next long normal and MC runs, require `ABANDONMENT_ROTATION` ranks to remain non-sequential, ordinary misses to log `outcome=hydrated`, portrait-missing/wide-valid apps to log `outcome=fallback_hydrated:wide requested_shape=portrait resolved_shape=wide` before a complete sparse fade, `--noupdates` misses to log `cache_miss_network_disabled`, and no owned/recent/candidate provider request, duplicate selected-evidence request, UI-thread stall, paint burst, or new visualizer DT spike attributable to the low-frequency worker task.
 
 <a id="R-38"></a>
 ### [R-38] 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)
@@ -128,7 +158,7 @@ This is the long-term anti-regression record for the project, not an active task
   4. Every widget/settings/display rebuild armed a complete new interval instead of the remaining persisted duration, so several otherwise normal recreations could postpone a five-minute rotation indefinitely.
   5. Explicit widget refresh bypassed source freshness but did not force semantic rotation. Owned/recent cache writes therefore appeared in logs while the same selected game was intentionally retained.
 - **Fix:** Abandonment now reuses `defer_refresh_if_transition()` and a low-pressure one-second `ThreadManager.single_shot` retry only while a due rotation is pending. Cache state persists a profile/policy draw counter; each due interval hashes that counter into a tier-first weighted draw, then a candidate draw within the tier. Tier weights do not grow with library population, every tier remains reachable, and the current App ID is excluded when alternatives exist. A two-second due tolerance handles timer-boundary jitter. Persisted `changed_at` now arms only the remaining first interval after a rebuild or rotates immediately when overdue; the timer then returns to one ordinary recurring interval. Explicit widget refresh forces one non-repeating cache-backed draw and restarts the configured cadence after source refresh.
-- **Bars:** `tests/test_steam_abandonment_issues.py` proves preference bias plus variety, same-seed repeatability, persisted non-sequential archive ranks, immediate-repeat exclusion, profile-shared draw-count persistence, two-second due-boundary behavior, policy invalidation, remaining-delay timer replacement after rebuild, forced manual rotation, and a simulated parent-transition collision that resumes through the shared single-shot contract. No achievement/provider request is added by rotation; the narrow selected-public-art boundary is recorded in R-39.
+- **Bars:** `tests/test_steam_abandonment_issues.py` proves preference bias plus variety, same-seed repeatability, persisted non-sequential backlog ranks, immediate-repeat exclusion, profile-shared draw-count persistence, two-second due-boundary behavior, policy invalidation, remaining-delay timer replacement after rebuild, forced manual rotation, and a simulated parent-transition collision that resumes through the shared single-shot contract. Selection adds no owned/recent/candidate-achievement request; the narrow post-selection evidence and public-art worker boundaries are recorded in R-42 and R-39.
 - **Runtime validation target:** with the shared Steam refresh interval set to 5 minutes, across settings/display rebuilds, several due intervals, and a double-click refresh, require multiple non-sequential games/ranks, no immediate repeat where alternatives exist, no cadence reset to a full interval after rebuild, one diagnostic `[STEAM][ABANDONMENT_ROTATION]` line per committed draw, and a collided expiry that logs deferral then changes through the existing sparse fade without UI-thread/DT pressure.
 
 <a id="R-36"></a>
@@ -204,9 +234,9 @@ This is the long-term anti-regression record for the project, not an active task
 
 - **Observed failure pattern:** Foundry Save and Regenerate could make existing installation JSON appear invalid/reset, turning a small default tweak into a disruptive profile recovery. The canonical Normal literal also contained saved layout-slot display identities and geometry from one machine.
 - **Root cause:** `regenerate_sst_defaults.py` relied on a throwaway QSettings organization, but JSON storage paths are application/profile-owned and ignore that organization. Because no `storage_base_dir` was supplied, `reset_to_defaults()` and `save()` targeted installed `Screensaver` / `Screensaver_MC` JSON. Separately, Foundry import did not exclude profile-local CUSTOM/layout-slot payloads, allowing active machine geometry into defaults.
-- **Fix:** SST generation now creates a temporary directory and passes it explicitly to every `SettingsManager`. Explicit storage roots also suppress argv/profile auto-detection so tools honor the requested application exactly. Foundry imports exclude CUSTOM geometry and layout slots, canonical slots start empty, and text settings describe finite values or accepted free-text domains.
-- **Bars:** `tests/test_regenerate_sst_defaults.py` fails unless both managers receive the isolated root; `tests/test_settings_profile_separation.py` locks explicit-root identity; `tests/test_default_settings_editor.py` proves machine geometry is stripped and every text leaf has guidance; defaults parity validates regenerated artifacts.
-- **Security/privacy note:** regenerated canonical JSON/SST files contain no saved display identities/layout slots. The Foundry changes defaults and checked-in artifacts only; it no longer opens or mutates installed settings JSON.
+- **Final fix:** Foundry imports exclude CUSTOM geometry and layout slots, canonical slots start empty, and text settings describe finite values or accepted free-text domains. Default SST generation no longer constructs `SettingsManager` at all: both artifacts derive directly from the profile-aware sanitized builder, validate exact canonical parity and private-field absence, carry deterministic generated metadata instead of `migrated_at` / `last_migration_completed`, and replace their targets atomically only after validation.
+- **Bars:** `tests/test_regenerate_sst_defaults.py` proves unchanged repeat runs are byte-identical, Normal/MC snapshots equal their selected canonical profile, the actual MC leaf delta equals the Foundry-owned override mapping, Weather coordinates and credential fields are absent, a settings-manager constructor cannot be reached, and an installation JSON sentinel remains unchanged. `tests/test_settings_profile_separation.py`, `tests/test_default_settings_editor.py`, defaults parity, SettingsManager import/export, Steam credential, and visualizer SST round-trip suites protect the surrounding runtime paths.
+- **Security/privacy note:** regenerated canonical JSON/SST files contain no saved display identities/layout slots, operational migration state, or credential fields. The Foundry changes source defaults and checked-in derived artifacts only; generated SST work has no code path to installed settings JSON.
 
 <a id="R-32"></a>
 ### [R-32] 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)
@@ -325,6 +355,7 @@ This is the long-term anti-regression record for the project, not an active task
 - **Final validation pass:**
   - runtime testing after the final pass reported the correct contract: idle startup and pause behavior were acceptable, playback reaction was in a good place, line ghost visibility was restored via the new ghost-decay control, and metadata no longer vanished during middle-click preset cycling.
   - focused bars cover the fixed seams in `tests/test_oscilloscope_display_contract.py`, `tests/test_visualizer_preset_cycling_runtime.py`, `tests/test_visualizer_settings_plumbing.py`, `tests/test_spotify_visualizer_widget.py`, and `tests/test_ghost_isolation.py`.
+- **2026-07-14 baseline reconciliation:** a stale shared parameterization incorrectly expected paused Oscilloscope to retain `_waiting_for_fresh_engine_frame`, contradicting this entry's accepted idle-reveal contract. The test now keeps that wait only for paused Spectrum; existing four-mode idle-reveal and dedicated Oscilloscope startup bars own Oscilloscope behavior. No runtime or preset code changed, and the focused current-good lock passed all 17 cases.
 
 <a id="R-27"></a>
 ### [R-27] 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)
@@ -377,6 +408,7 @@ This is the long-term anti-regression record for the project, not an active task
 - ThreadManager callback failures now include traceback and callable context because a `pop index out of range` callback error in the same family was previously untraceable from logs.
 - 2026-07-02 later evidence showed the "visualizer on Display 1 lowers Display 0 transition FPS" shape was not transition-specific or visualizer-mode-specific. The first concrete root seam was `SpotifyBarsGLOverlay.paintGL()` self-scheduling `update()` after every paint while `set_state()` already requested frames, creating child-GL overpaint (`paint≈275fps`, `update≈364fps` on a 60Hz owner). Removing paint-owned self-scheduling materially improved the old starvation pattern: follow-up logs showed no paint-delivery starvation, no cross-display topology starvation, no near-60/stable-divisor collapse, no shader/swap/fallback noise, and no severe visualizer latency.
 - A tempting follow-up fix failed: capping actual overlay `update()` requests to the owning display target made the counters look cleaner but produced visible Display 1 visualizer stutter. The failure signature was `set_state≈90-100fps` while `paint/update≈39-40fps` on a 60Hz owner. This is now barred as producer-side visualizer throttling; the correct contract is one repaint request per accepted visualizer payload, no `paintGL()` self-update loop, and parser coverage for both overpaint and under-delivery.
+- **2026-07-14 paused-source follow-up:** the 06:03-06:09 run began with healthy Wipe/Diffuse delivery near `151/59` paint FPS while the visualizer was paused and still waiting for usable authority. After playback started, Bubble became active, and playback was confirmed paused, synthetic Bubble idle continued around `80-98` accepted overlay payloads per second on Display 1's 60 Hz surface. Every later transition family then collapsed both displays to roughly `22-33` paint FPS, worsening under back-to-back transitions. Bubble worker summaries stayed stable around `1.8-2.7 ms`; transition paint durations were generally cheap; cache hits stayed `100%`; and there were no worker, shader, swap, or pending-requeue fallbacks. The concrete correction keeps playing cadence untouched but prevents confirmed non-playing state from inheriting the no-transition `100 Hz` source boost, using a timer-owned `75 Hz` paused target with low-refresh headroom. This is not the failed producer throttle: every accepted payload still requests one overlay repaint. Runtime validation remains active in `Current_Plan.md`; if the paired collapse survives at the lower paused source rate, the next target is passive child-GL paint/delivery attribution and same-surface compositor ownership, not another repaint loop.
 
 <a id="R-26"></a>
 ### [R-26] 2026-06-18 — Visualizer CUSTOM Display-Participation Fallback / Duplicate Owner From Startup And Sleep-Wake Participation Churn (Resolved)
@@ -567,12 +599,14 @@ This is the long-term anti-regression record for the project, not an active task
 <a id="U-07"></a>
 ### [U-07] 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)
 
-- [x] COMPLETELY FUCKED
+- [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
 - [ ] AWAITING VALIDATION
 - [x] SOLVED
 
 - **Final resolved state:** Bubble no longer sits under the same unresolved loud-path/oracle-drift family. The stronger newer Bubble runtime path became the authoritative path, the old proxy/current-feel bars that disagreed with the healthier runtime were retired as blockers, and the remaining follow-up issues split cleanly into separate seams such as grouped-drift feel or ordinary authored tuning rather than the old "soft better than loud because the whole Bubble contract is lying" family.
+- **2026-07-14 regression-bar reconciliation:** the complete supported visualizer file ran in eight bounded shards and passed `186` tests with `21` explicit skips. Historical parity against `9d4925e` and `510520e` showed the current Deep Sea runtime materially stronger in loud hero and small-lane response with no clamp dependence. Disproved proxy/current-feel signatures remain named, skipped retirement evidence rather than release blockers; active visible-lane, authored-motion, first-frame, and performance guards remain green. Bubble runtime and curated presets were not changed during this reconciliation.
+- **2026-07-14 cadence follow-up:** after adding the paused-source cadence bars, the complete file passed `188` tests with the same `21` explicit skips. The active Bubble worker oracle still enforces wall-time average, simulation components, active-field/collision density, and sustained authored-profile cost; its former individual p95/max wall-clock assertions were replaced by the worst complete replay-profile average after they failed only in the full Qt process while isolated repeats and runtime Bubble summaries remained healthy. This removes Windows scheduler preemption from the deterministic worker contract without changing Bubble runtime or weakening sustained-cost detection.
 - **Observed failure pattern:**
   - live runtime repeatedly showed soft passages looking more expressive than louder passages
   - small bubbles often died in loud passages while big bubbles pulsed late, flickered, or plateaued at the wrong visible size

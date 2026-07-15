@@ -493,7 +493,7 @@ def test_gmail_content_height_updates_do_not_change_width_constraints(qt_app):
         widget.cleanup()
 
 
-def test_gmail_custom_layout_payload_scales_sender_column_width():
+def test_gmail_custom_layout_payload_preserves_dimensionless_text_ratio():
     from types import SimpleNamespace
 
     from rendering.custom_layout_manager import CustomLayoutManager
@@ -501,13 +501,13 @@ def test_gmail_custom_layout_payload_scales_sender_column_width():
     class _DummyGmail:
         def __init__(self) -> None:
             self._font_size = 13
-            self._sender_column_width = 180
+            self._sender_subject_ratio = 35
 
         def set_font_size(self, value: int) -> None:
             self._font_size = int(value)
 
-        def set_sender_column_width(self, value: int) -> None:
-            self._sender_column_width = int(value)
+        def set_sender_subject_ratio(self, value: int) -> None:
+            self._sender_subject_ratio = int(value)
 
     manager = CustomLayoutManager.__new__(CustomLayoutManager)
     descriptor = SimpleNamespace(custom_layout_resize_mode="gmail_font", widget_id="gmail")
@@ -517,11 +517,11 @@ def test_gmail_custom_layout_payload_scales_sender_column_width():
     scaled = manager._scale_size_payload(descriptor, payload, 0.65)
     manager._apply_size_payload(descriptor, widget, scaled)
 
-    assert payload == {"font_size": 13, "sender_column_width": 180}
+    assert payload == {"font_size": 13, "sender_subject_ratio": 35}
     assert scaled["font_size"] < payload["font_size"]
-    assert scaled["sender_column_width"] < payload["sender_column_width"]
+    assert scaled["sender_subject_ratio"] == payload["sender_subject_ratio"]
     assert widget._font_size == scaled["font_size"]
-    assert widget._sender_column_width == scaled["sender_column_width"]
+    assert widget._sender_subject_ratio == scaled["sender_subject_ratio"]
 
 
 def test_gmail_small_font_compacts_action_lane(qt_app):
@@ -606,6 +606,97 @@ def test_gmail_small_font_rebalances_budget_toward_subject_text(qt_app):
         assert compact_layout["action_width"] < baseline_layout["action_width"]
         assert compact_layout["time_slot_width"] < baseline_layout["time_slot_width"]
         assert compact_budget["subject_max_width"] > baseline_budget["subject_max_width"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_sender_subject_ratio_splits_only_the_remaining_row_budget(qt_app):
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        widget.resize(600, 220)
+        widget._emails = [
+            EmailMetadata(
+                id="msg_ratio",
+                thread_id="thread_ratio",
+                sender="A Sender With Several Words",
+                subject="A subject that should receive the larger default share",
+                date=datetime.now(),
+                labels=("INBOX",),
+                is_unread=True,
+            )
+        ]
+        widget._rebuild_display_rows()
+        row = widget._display_rows[0]
+
+        widget.set_sender_subject_ratio(35)
+        default_layout = widget._compute_email_layout_metrics(widget._display_rows)
+        default_budget = widget._compute_email_row_budget(row, default_layout)
+        assert (
+            default_layout["sender_slot_width"]
+            + default_layout["sender_subject_gap"]
+            + default_layout["subject_slot_width"]
+            == default_layout["text_area_width"]
+        )
+        assert default_budget["subject_max_width"] > default_layout["sender_slot_width"]
+        assert default_layout["text_area_width"] < default_layout["available_width"]
+
+        widget.set_sender_subject_ratio(60)
+        sender_heavy_layout = widget._compute_email_layout_metrics(widget._display_rows)
+        sender_heavy_budget = widget._compute_email_row_budget(row, sender_heavy_layout)
+        assert sender_heavy_layout["sender_slot_width"] > default_layout["sender_slot_width"]
+        assert sender_heavy_budget["subject_max_width"] < default_budget["subject_max_width"]
+        assert sender_heavy_layout["text_area_width"] == default_layout["text_area_width"]
+
+        widget.set_width(200)
+        widget.resize(200, 220)
+        widget.set_font_size(40)
+        constrained_layout = widget._compute_email_layout_metrics(widget._display_rows)
+        assert (
+            constrained_layout["sender_slot_width"]
+            + constrained_layout["sender_subject_gap"]
+            + constrained_layout["subject_slot_width"]
+            == constrained_layout["text_area_width"]
+        )
+        assert constrained_layout["text_area_width"] <= constrained_layout["available_width"]
+    finally:
+        widget.cleanup()
+
+
+def test_gmail_legacy_subject_character_limit_is_ignored(qt_app):
+    from datetime import datetime
+
+    from core.gmail.gmail_client import EmailMetadata
+    from widgets.gmail_components import DisplayRow
+    from widgets.gmail_widget import GmailWidget
+
+    widget = GmailWidget()
+    try:
+        subject = "This subject remains governed only by its word limit"
+        widget.apply_settings(
+            {
+                "auto_title_case": False,
+                "max_subject_words": 0,
+                "max_subject_chars": 5,
+            }
+        )
+        row = DisplayRow(
+            email=EmailMetadata(
+                id="msg_subject",
+                thread_id="thread_subject",
+                sender="Sender",
+                subject=subject,
+                date=datetime.now(),
+                labels=("INBOX",),
+                is_unread=True,
+            )
+        )
+
+        assert widget._build_subject_display_text(row) == subject
     finally:
         widget.cleanup()
 
@@ -800,7 +891,7 @@ def test_gmail_widget_text_cleanup_settings(qt_app):
             {
                 "gmail.clean_sender_names": False,
                 "gmail.max_sender_words": 2,
-                "gmail.sender_column_width": 220,
+                "gmail.sender_subject_ratio": 42,
                 "gmail.max_subject_words": 5,
                 "gmail.max_subject_chars": 24,
             }
@@ -808,9 +899,9 @@ def test_gmail_widget_text_cleanup_settings(qt_app):
 
         assert widget._clean_sender_names is False
         assert widget._max_sender_words == 2
-        assert widget._sender_column_width == 220
+        assert widget._sender_subject_ratio == 42
         assert widget._max_subject_words == 5
-        assert widget._max_subject_chars == 24
+        assert not hasattr(widget, "_max_subject_chars")
     finally:
         widget.cleanup()
 
@@ -1127,7 +1218,7 @@ def test_gmail_widget_setters_skip_noop_repaints(qt_app):
         widget.set_show_subject(widget._show_subject)
         widget.set_show_envelope_icon(widget._show_envelope_icon)
         widget.set_date_display_mode(widget._date_display_mode)
-        widget.set_sender_column_width(widget._sender_column_width)
+        widget.set_sender_subject_ratio(widget._sender_subject_ratio)
         widget.set_max_subject_words(widget._max_subject_words)
 
         assert calls == []
@@ -1561,7 +1652,7 @@ def test_gmail_cache_invalidates_for_visual_settings_but_not_spinner(qt_app):
         widget._cache_invalidated = False
         widget.update = lambda *args, **kwargs: updates.append(args)  # type: ignore[method-assign]
 
-        widget.set_sender_column_width(widget._sender_column_width + 1)
+        widget.set_sender_subject_ratio(widget._sender_subject_ratio + 1)
         assert widget._cache_invalidated is True
         assert updates
 

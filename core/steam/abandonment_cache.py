@@ -5,7 +5,7 @@ import hashlib
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +20,7 @@ from core.steam.abandonment_issues import (
     build_abandonment_candidates,
     parse_appid_list,
     resolve_abandonment_issues,
+    with_achievement_progress,
 )
 from core.steam.achievement_pulse_cache import (
     OWNED_GAMES_CACHE_KEY,
@@ -53,6 +54,7 @@ ROTATION_DUE_TOLERANCE_SECONDS = 2.0
 _DISPLAY_FOLLOWER_FRESH_SECONDS = 60.0
 DEFAULT_OWNED_GAMES_FRESH_SECONDS = 24.0 * 60.0 * 60.0
 DEFAULT_RECENT_GAMES_FRESH_SECONDS = 10.0 * 60.0
+DEFAULT_SELECTED_ACHIEVEMENTS_FRESH_SECONDS = 24.0 * 60.0 * 60.0
 MAX_CACHED_ACHIEVEMENT_PROBES = 12
 _request_coordinator = SteamRequestCoordinator()
 _request_backoff = SteamBackoffPolicy()
@@ -229,7 +231,7 @@ def load_abandonment_cache_snapshot(
                 changed_at = reference_now
                 logger.info(
                     "[STEAM][ABANDONMENT_ROTATION] committed draw=%d reason=%s changed=%s "
-                    "previous_appid=%s selected_appid=%s archive=%d/%d",
+                    "previous_appid=%s selected_appid=%s backlog=%d/%d",
                     next_rotation_index,
                     (
                         "forced"
@@ -281,8 +283,10 @@ def refresh_abandonment_cache(
     refresh_interval_minutes: int = DEFAULT_REFRESH_INTERVAL_MINUTES,
     owned_fresh_seconds: float = DEFAULT_OWNED_GAMES_FRESH_SECONDS,
     recent_fresh_seconds: float = DEFAULT_RECENT_GAMES_FRESH_SECONDS,
+    hydrate_achievement_evidence: bool = False,
+    achievement_fresh_seconds: float = DEFAULT_SELECTED_ACHIEVEMENTS_FRESH_SECONDS,
 ) -> AbandonmentRefreshOutcome:
-    """Refresh owned/recent sources through the shared cache boundary."""
+    """Refresh bounded card sources through the shared cache boundary."""
 
     profile_key = derive_profile_cache_key(credential.profile_identifier)
     reference_now = time.time() if now is None else float(now)
@@ -326,6 +330,21 @@ def refresh_abandonment_cache(
             force_rotation=force_rotation,
             refresh_interval_minutes=refresh_interval_minutes,
         )
+        selected_appid = snapshot.resolved.appid
+        if hydrate_achievement_evidence and selected_appid is not None:
+            snapshot, achievement_result = hydrate_selected_achievement_evidence(
+                snapshot=snapshot,
+                credential=credential,
+                profile_key=profile_key,
+                profile=profile,
+                root=root,
+                opener=opener,
+                now=reference_now,
+                force=force,
+                achievement_fresh_seconds=achievement_fresh_seconds,
+            )
+            if achievement_result is not None:
+                refresh_results.append(achievement_result)
         return AbandonmentRefreshOutcome(
             snapshot=snapshot,
             connection_needs_attention=any(
@@ -333,6 +352,64 @@ def refresh_abandonment_cache(
                 for result in refresh_results
             ),
         )
+
+
+def hydrate_selected_achievement_evidence(
+    *,
+    snapshot: AbandonmentCacheSnapshot,
+    credential: SteamCredentialPayload,
+    profile_key: str,
+    profile: str | None = None,
+    root: Path | None = None,
+    opener=None,
+    now: float | None = None,
+    force: bool = False,
+    achievement_fresh_seconds: float = DEFAULT_SELECTED_ACHIEVEMENTS_FRESH_SECONDS,
+) -> tuple[AbandonmentCacheSnapshot, SteamResult | None]:
+    """Hydrate only the chosen app and preserve the committed rotation identity."""
+
+    selected_appid = snapshot.resolved.appid
+    if selected_appid is None:
+        return snapshot, None
+    reference_now = time.time() if now is None else float(now)
+    achievement_result = _fetch_and_cache(
+        profile_key=profile_key,
+        cache_key=achievement_cache_key_for_app(selected_appid),
+        source_id=SteamSourceId.PLAYER_ACHIEVEMENTS,
+        credential=credential,
+        profile=profile,
+        root=root,
+        opener=opener,
+        now=reference_now,
+        force=force,
+        fresh_seconds=achievement_fresh_seconds,
+        appid=selected_appid,
+    )
+    progress = achievement_progress_from_result(achievement_result)
+    if progress is not None:
+        snapshot = replace(
+            snapshot,
+            resolved=with_achievement_progress(
+                snapshot.resolved,
+                progress,
+                now=reference_now,
+            ),
+        )
+    logger.info(
+        "[STEAM][ABANDONMENT_ACHIEVEMENTS] appid=%s outcome=%s "
+        "status=%s evidence=%s",
+        selected_appid,
+        (
+            "cache_hit"
+            if achievement_result.ok and achievement_result.from_cache
+            else "hydrated"
+            if achievement_result.ok
+            else "unavailable"
+        ),
+        achievement_result.status.value,
+        "loaded" if progress is not None else "missing",
+    )
+    return snapshot, achievement_result
 
 
 def _fetch_and_cache(
@@ -403,6 +480,8 @@ def _fetch_and_cache_unlocked(
         profile_key=profile_key,
         source_id=source_id,
         category="abandonment_issues",
+        appid=_positive_int(params.get("appid")),
+        params=params,
     )
     decision = _request_backoff.check(request_key, now=now)
     if not decision.allowed:
