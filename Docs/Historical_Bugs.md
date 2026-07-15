@@ -12,10 +12,10 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved In Code, Runtime Validation Pending)](#R-48)
-2. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved In Code, Runtime Validation Pending)](#R-47)
+1. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
+2. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
 3. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
-4. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved In Code, Runtime Validation Pending)](#R-45)
+4. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
 5. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
 6. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
 7. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
@@ -76,32 +76,34 @@ This is the long-term anti-regression record for the project, not an active task
 ## Recent Entries
 
 <a id="R-48"></a>
-### [R-48] 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved In Code, Runtime Validation Pending)
+### [R-48] 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure:** a Clock routed to all displays could no longer remain analogue on one display and digital on another. Double-click visibly toggled the selected instance, but the choice was persisted into the shared Clock setting and therefore became the baseline for every display on the next settings event/rebuild.
 - **Root cause:** R-45 correctly removed behavior authority from per-display CUSTOM geometry payloads, but the surviving double-click persistence path still wrote `display_mode` and `clock_analog_mode` into the shared widget section. Removing the stale geometry authority therefore exposed the older global-write assumption and erased a useful mixed-display runtime contract.
 - **Fix:** the Settings value remains the global baseline. Double-click now persists an explicit `display_mode_overrides` entry keyed by the existing stable screen signature, and `ClockWidgetFactory` applies that override only when creating the matching display instance. CUSTOM entries continue to contain only `font_size` and `geometry_variant`; no behavior field was restored to geometry payloads. The local mode and mode-shaped rect still update immediately, and persistence uses `emit_change=False`, so no cross-display rebuild or UI-pressure path was added.
 - **Bars:** Clock tests prove digital-to-analogue and analogue-to-digital CUSTOM transformations preserve the shared baseline while writing only the current screen override; factory coverage proves a matching signature selects the override. The focused Clock/factory/diagnostic suite passed `45/45`.
 - **Runtime validation target:** route one Clock to ALL, double-click only one display, then exercise unrelated Settings refresh, engine rebuild, and restart. Require one analogue and one digital instance, stable per-display geometry, no global mode flip, no duplicate widget creation, and no DT/paint burst.
+- **Validation:** the user validated Clock behavior in every requested scenario, including mixed analogue/digital display ownership. The live plan no longer carries a Clock runtime-validation task.
 
 <a id="R-47"></a>
-### [R-47] 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved In Code, Runtime Validation Pending)
+### [R-47] 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure:** hotswapping to Oscilloscope produced no visible mode, and starting directly in Oscilloscope left the visualizer absent. Startup eventually logged a reveal-watchdog expiry while waiting for its first valid frame.
 - **Root cause:** Blob retirement correctly deleted the Blob-only portion of the Oscilloscope diagnostic signature, but accidentally removed the entire local `sig` assignment while leaving the shared throttle and assignment references intact. With visualizer diagnostics enabled, every `SpotifyBarsGLOverlay.set_state()` call raised `NameError` after state preparation. The display push failed before startup staging could observe a valid frame; the reviewed run emitted 78 copies of the same frame-boundary exception.
 - **Fix:** restored a Blob-free Oscilloscope signature from supported mode-owned state: line speed, waveform blend, ghost-ring occupancy/delay/alpha, and transient-width mix. The existing bounded diagnostic throttle and render behavior are unchanged. No timer, repaint, retry, fallback, visual retuning, or exception suppression was added.
 - **Bars:** diagnostics-enabled coverage now executes repeated Oscilloscope calls, proves unchanged state is throttled, proves a supported-state change logs again, and would fail on the deleted assignment. The focused Clock/factory/diagnostic suite passed `45/45`; the supported visualizer lock remains required before closure.
 - **Runtime validation target:** start in Oscilloscope and hotswap into it from two supported modes under `--viz --perf`. Require first-frame reveal, continuous frame pushes, bounded `[SPOTIFY_VIS][OSC]` logs, no push traceback/watchdog expiry, and unchanged waveform/ghost/transient visuals.
+- **Validation:** the user validated both direct Oscilloscope startup and hotswap behavior. The current-good supported visualizer reactivity/smoothness lock remains the regression safeguard; no mode-specific validation task remains active.
 
 <a id="R-46"></a>
 ### [R-46] 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)
@@ -118,18 +120,19 @@ This is the long-term anti-regression record for the project, not an active task
 - **Guardrail:** Blob may appear only as a migration input or historical record. Do not restore its dev gate, defaults, presets, tests, render branches, shaders, or package assets. Any future visualizer must establish its own active descriptor, settings, visual identity, supported-mode regression bars, and release intent rather than inheriting retired Blob code.
 
 <a id="R-45"></a>
-### [R-45] 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved In Code, Runtime Validation Pending)
+### [R-45] 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)
 
 - [ ] COMPLETELY FUCKED
 - [ ] PARTIAL
-- [x] AWAITING VALIDATION
-- [ ] SOLVED
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
 
 - **Observed failure:** Clock CUSTOM entries captured and replayed `display_mode`. This preserved the digital/analogue-shaped outer rect during restart, but it also made the saved layout a second behavior authority: changing `Use Analogue Clock` in Settings could be reverted by the older CUSTOM payload after the factory had already applied the current setting.
 - **Root cause:** an earlier hot-swap repair correctly established that digital and analogue clocks need different CUSTOM outer shapes, but represented that geometry dependency by storing the behavior setting itself. Ordinary replay then called `set_display_mode()` before applying the resize-derived font, conflating “which shape this rect was authored for” with “which mode the user currently selected.”
 - **Fix:** `clock_font` payloads now contain resize-derived `font_size` plus `geometry_variant`, an outer-shape marker that is never applied as widget behavior. Replay keeps the factory/Settings baseline authoritative. If the saved shape marker differs, the manager rebuilds a centered, clamped target-mode rect using the saved CUSTOM font scale, then persists the canonical marker. Legacy `display_mode` payload keys migrate through that one geometry comparison and are removed. The R-48 follow-up preserves double-click as an explicit screen-signature behavior override while the rebuilt CUSTOM payload still writes only `geometry_variant` and font size. No timer, retry, repaint, thread, or broad widget refresh was added.
 - **Bars:** the full CUSTOM manager suite (`94 passed`) proves direct payload application cannot change mode, legacy digital-to-analogue restart rebuilds the exact target rect with base and CUSTOM font sizes intentionally different, and canonical persistence strips the legacy key. The Clock suite (`19 passed`) preserves both double-click rect transformations and setting writes; descriptor/layout integration adds `16 passed`.
 - **Runtime validation target:** in normal and MC builds, place Clock in CUSTOM at a clearly non-default scale. Switch digital/analogue from Settings and by double-click in both directions, restart each time, and require the current setting, centered mode-appropriate rect, position, display route, and scale to survive. `--geo` must show `font_size` plus `geometry_variant`, never `display_mode`, with no repeated migration write, fallback, paint burst, or DT spike.
+- **Validation:** the user validated Clock in all requested normal/mixed-display scenarios, including the mode/geometry combinations that exercised this payload boundary. R-48's per-display override remained intact, so this entry is closed rather than retained as duplicate plan work.
 
 <a id="R-44"></a>
 ### [R-44] 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)

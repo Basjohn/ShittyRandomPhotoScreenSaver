@@ -3,6 +3,34 @@ from __future__ import annotations
 from tools.transition_perf_health_parser import parse_perf_health_lines, parse_perf_health_logs
 
 
+def _usage_line(
+    timestamp: str,
+    sequence: int,
+    *,
+    cpu: float = 25.0,
+    rss: float = 400.0,
+    threads: int = 20,
+    handles: int = 500,
+    collect_ms: float = 5.0,
+    cadence_gap_ms: float = 15_000.0,
+    skipped: int = 0,
+    gpu: str = "na",
+    vram: str = "na",
+) -> str:
+    return (
+        f"{timestamp} - core.performance.usage_sampler - INFO - [USAGE] sample "
+        f"seq={sequence} cadence_gap_ms={cadence_gap_ms} skipped={skipped} "
+        f"collect_ms={collect_ms} cpu_primed=1 cpu_app_pct={cpu} cpu_main_pct={cpu} "
+        f"cpu_system_pct=35.0 processes=2 children=1 rss_app_mb={rss} rss_main_mb=300.0 "
+        f"private_app_mb=na vms_app_mb=900.0 threads_app={threads} handles_app={handles} "
+        f"io_read_mb=10.0 io_write_mb=2.0 gpu_supported=1 gpu_active=1 gpu_status=ok "
+        f"gpu_busy_pct={gpu} gpu_engine_sum_pct={gpu} vram_supported=1 "
+        f"vram_dedicated_mb={vram} vram_shared_mb=64.0 tm_active=1 tm_io_max=4 "
+        "tm_compute_max=3 tm_io_submitted=7 tm_io_completed=6 tm_io_failed=0 "
+        "tm_compute_submitted=4 tm_compute_completed=4 tm_compute_failed=0"
+    )
+
+
 def test_perf_health_flags_high_refresh_window_that_delivers_near_sixty():
     report = parse_perf_health_lines(
         [
@@ -236,6 +264,62 @@ def test_perf_health_allows_restored_smooth_overlay_feed_above_low_refresh_targe
     assert report.spotify_overlay_overpaint_windows == []
     assert report.spotify_overlay_under_delivery_windows == []
     assert report.anomalies == []
+
+
+def test_perf_health_parses_usage_availability_without_treating_na_as_zero():
+    report = parse_perf_health_lines(
+        [_usage_line("2026-07-15 14:45:30", 1, gpu="na", vram="na")]
+    )
+
+    assert len(report.usage_samples) == 1
+    sample = report.usage_samples[0]
+    assert sample.gpu_supported is True
+    assert sample.gpu_active is True
+    assert sample.gpu_busy_pct is None
+    assert sample.vram_dedicated_mb is None
+    assert report.usage_growth_anomalies == []
+
+
+def test_perf_health_flags_resource_growth_and_sampler_self_interference():
+    report = parse_perf_health_lines(
+        [
+            _usage_line("2026-07-15 14:45:15", 1, rss=350.0, threads=20, handles=500),
+            _usage_line("2026-07-15 14:45:30", 2, rss=400.0, threads=21, handles=510),
+            _usage_line(
+                "2026-07-15 14:45:45",
+                3,
+                rss=650.0,
+                threads=31,
+                handles=700,
+                collect_ms=140.0,
+                skipped=1,
+                vram="700.0",
+            ),
+        ]
+    )
+
+    assert len(report.intrusive_usage_samples) == 1
+    assert any("RSS grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("thread count grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("handle count grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("usage telemetry was slow" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_correlates_usage_with_visualizer_smoothness_and_reactivity_failures():
+    report = parse_perf_health_lines(
+        [
+            _usage_line("2026-07-15 14:45:30", 1, cpu=120.0, gpu="91.0"),
+            "2026-07-15 14:45:39 - widgets.spotify_visualizer.tick_helpers - WARNING - "
+            "[PERF] [SPOTIFY_VIS] Tick dt spike_ms=46.17 mode=oscilloscope",
+            "2026-07-15 14:45:40 - widgets.spotify_visualizer.widget - ERROR - "
+            "[SPOTIFY_VIS][STARTUP] Reveal watchdog expired mode=oscilloscope",
+        ]
+    )
+
+    assert len(report.usage_visualizer_correlations) == 1
+    assert report.usage_visualizer_correlations[0].warning.kind == "tick_spike"
+    assert len(report.visualizer_safeguard_failures) == 1
+    assert any("reactivity safeguard" in anomaly for anomaly in report.anomalies)
 
 
 def test_perf_health_flags_spotify_overlay_under_delivery_despite_healthy_feed():

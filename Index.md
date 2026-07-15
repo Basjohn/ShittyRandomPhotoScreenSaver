@@ -102,9 +102,10 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Frame budget / GC controller | `core/performance/frame_budget.py` | Frame pacing and GC budget helpers for render/runtime hot paths |
 | Widget perf profiler | `core/performance/widget_profiler.py` | Widget paint/timer metrics sampling and perf log emission |
+| Whole-process usage sampler | `core/performance/usage_sampler.py` | Opt-in `--usage` main-plus-child CPU/memory/thread/handle/IO and Windows process GPU/VRAM telemetry, submitted at low cadence through the app-shared ThreadManager with self-cost/cadence guards |
 | Transition frame state | `core/animation/frame_interpolator.py` | Paint-authoritative elapsed-time/easing state for transitions so visible shader progress is not tethered to stale `AnimationManager` callback samples |
 | Animation perf diagnostics | `core/animation/animator.py` | Owner-tagged `AnimationManager` metrics with active/listener peak counts so completed transition cadence, listener pressure, and idle timer churn are separable |
-| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/cache log bar for paired render-healthy/paint-starved cadence collapse, stable-divisor FPS locks, `GL ANIM` vs `GL PAINT` separation, owner/peak-count animation-manager evidence, visualizer timing warnings, slow GL uploads, fallback loudness, and timeline correlation |
+| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/`--usage`/cache log bar for cadence collapse, resource peaks/growth, sampler self-interference, visualizer reactivity/smoothness correlation, slow GL uploads, fallback loudness, and merged timeline evidence |
 
 ## Visualizer System
 

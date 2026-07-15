@@ -51,6 +51,7 @@ _VERBOSE: bool = False
 # PERF metrics default to False for production builds. Script mode and frozen
 # builds opt in explicitly through CLI/config, not environment toggles.
 _PERF_METRICS_ENABLED: bool = False
+_USAGE_LOGGING_ENABLED: bool = False
 # Widget PERF verbosity flag controls whether per-call summaries land in main log
 _WIDGET_PERF_VERBOSE: bool = False
 # Visualizer logging defaults to False (opt-in via --viz). When enabled, logs
@@ -460,7 +461,7 @@ class SuppressingStreamHandler(logging.StreamHandler):
 
 
 class NonPerfFilter(logging.Filter):
-    """Filter that drops PERF-tagged records from the main log file.
+    """Filter that drops dedicated PERF/USAGE records from the main log file.
 
     Detailed performance telemetry is already written to a dedicated
     ``screensaver_perf.log`` via PerfLogFilter, so the primary
@@ -473,7 +474,7 @@ class NonPerfFilter(logging.Filter):
             msg = record.getMessage()
         except Exception:
             msg = str(record.msg)
-        return "[PERF]" not in msg
+        return "[PERF]" not in msg and "[USAGE]" not in msg
 
 
 class NonSpotifyFilter(logging.Filter):
@@ -678,6 +679,17 @@ class PerfLogFilter(logging.Filter):
         return "[PERF]" in msg
 
 
+class UsageLogFilter(logging.Filter):
+    """Filter that accepts only whole-process usage telemetry records."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        try:
+            msg = record.getMessage()
+        except Exception:
+            msg = str(record.msg)
+        return "[USAGE]" in msg
+
+
 class WidgetPerfLogFilter(logging.Filter):
     """Filter that accepts only widget PERF instrumentation records."""
 
@@ -858,6 +870,7 @@ def setup_logging(
     debug: bool = False,
     verbose: bool = False,
     perf: bool = False,
+    usage: bool = False,
     viz: bool = False,
     viz_diag: bool = False,
     geo: bool = False,
@@ -875,6 +888,7 @@ def setup_logging(
             selected modules (media widget polling, raw settings dumps,
             etc.). Verbose mode also implies debug-level logging.
         perf: Enables performance/PERF logging families.
+        usage: Enables low-cadence whole-process resource telemetry.
         viz: When True, enables visualizer-specific logging ([SPOTIFY_VIS],
             [SPOTIFY_VOL]) and visualizer diagnostics.
         viz_diag: Legacy alias for enabling Spotify visualizer DSP diagnostics.
@@ -884,7 +898,8 @@ def setup_logging(
         cache_trace: Enables image-cache/prefetch/cache-authority sidecar diagnostics.
         steam_trace: Enables Steam widget family sidecar diagnostics.
     """
-    global _VERBOSE, _PERF_METRICS_ENABLED, _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
+    global _VERBOSE, _PERF_METRICS_ENABLED, _USAGE_LOGGING_ENABLED
+    global _VIZ_LOGGING_ENABLED, _VIZ_DIAGNOSTICS_ENABLED
     global _GEOMETRY_LOGGING_ENABLED, _SETTINGS_LOGGING_ENABLED, _LIFECYCLE_LOGGING_ENABLED
     global _CACHE_LOGGING_ENABLED, _STEAM_LOGGING_ENABLED
     global _BASE_DIR, _FORCED_LOG_DIR, _ACTIVE_LOG_DIR
@@ -931,6 +946,8 @@ def setup_logging(
     # Command-line flag overrides config file / environment fallback.
     if perf:
         _PERF_METRICS_ENABLED = True
+    if usage:
+        _USAGE_LOGGING_ENABLED = True
     if viz:
         _VIZ_LOGGING_ENABLED = True
         _VIZ_DIAGNOSTICS_ENABLED = True
@@ -959,7 +976,20 @@ def setup_logging(
     else:
         _FORCED_LOG_DIR = None
 
-    if logging_disabled and not debug_enabled:
+    specific_logging_enabled = any(
+        (
+            _PERF_METRICS_ENABLED,
+            _USAGE_LOGGING_ENABLED,
+            _VIZ_LOGGING_ENABLED,
+            _VIZ_DIAGNOSTICS_ENABLED,
+            _GEOMETRY_LOGGING_ENABLED,
+            _SETTINGS_LOGGING_ENABLED,
+            _LIFECYCLE_LOGGING_ENABLED,
+            _CACHE_LOGGING_ENABLED,
+            _STEAM_LOGGING_ENABLED,
+        )
+    )
+    if logging_disabled and not debug_enabled and not specific_logging_enabled:
         _ACTIVE_LOG_DIR = None
         root = logging.getLogger()
         for handler in list(root.handlers):
@@ -1082,6 +1112,19 @@ def setup_logging(
         widget_perf_handler.setLevel(logging.INFO)
         widget_perf_handler.addFilter(WidgetPerfLogFilter())
         root_logger.addHandler(widget_perf_handler)
+
+    if _USAGE_LOGGING_ENABLED:
+        usage_log_file = log_dir / "screensaver_usage.log"
+        usage_handler = DeduplicatingRotatingFileHandler(
+            usage_log_file,
+            maxBytes=1 * 1024 * 1024,
+            backupCount=5,
+            encoding='utf-8',
+        )
+        usage_handler.setFormatter(formatter)
+        usage_handler.setLevel(logging.INFO)
+        usage_handler.addFilter(UsageLogFilter())
+        root_logger.addHandler(usage_handler)
 
     if _VIZ_LOGGING_ENABLED:
         spotify_vis_log_file = log_dir / "screensaver_spotify_vis.log"
@@ -1273,10 +1316,11 @@ def setup_logging(
 
     root_logger.info("=" * 60)
     root_logger.info(
-        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
+        "Screensaver logging initialized (debug=%s, verbose=%s, perf=%s, usage=%s, viz=%s, geo=%s, set=%s, life=%s, cache=%s, steam=%s)",
         debug_enabled,
         _VERBOSE,
         _PERF_METRICS_ENABLED,
+        _USAGE_LOGGING_ENABLED,
         _VIZ_LOGGING_ENABLED,
         _GEOMETRY_LOGGING_ENABLED,
         _SETTINGS_LOGGING_ENABLED,
@@ -1285,11 +1329,13 @@ def setup_logging(
         _STEAM_LOGGING_ENABLED,
     )
     root_logger.info(
-        "Specific logs available: --perf=screensaver_perf.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
+        "Specific logs available: --perf=screensaver_perf.log, --usage=screensaver_usage.log, --viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log, --geo=screensaver_geometry.log, --set=screensaver_settings.log, --life=screensaver_lifecycle.log, --cache=screensaver_cache.log, --steam=screensaver_steam.log"
     )
     active_specific_logs: list[str] = []
     if _PERF_METRICS_ENABLED:
         active_specific_logs.append("perf=screensaver_perf.log")
+    if _USAGE_LOGGING_ENABLED:
+        active_specific_logs.append("usage=screensaver_usage.log")
     if _VIZ_LOGGING_ENABLED:
         active_specific_logs.append("viz=screensaver_spotify_vis.log+screensaver_spotify_vol.log")
     if _GEOMETRY_LOGGING_ENABLED:
@@ -1477,6 +1523,12 @@ def is_perf_metrics_enabled() -> bool:
     """Return True when PERF metrics/telemetry are enabled globally."""
 
     return _PERF_METRICS_ENABLED
+
+
+def is_usage_logging_enabled() -> bool:
+    """Return True when whole-process usage telemetry is enabled."""
+
+    return _USAGE_LOGGING_ENABLED
 
 
 def is_widget_perf_verbose() -> bool:

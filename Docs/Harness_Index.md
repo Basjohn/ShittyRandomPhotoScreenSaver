@@ -156,13 +156,14 @@ python tools/media_key_reality_harness.py --profile-mode mirrored --scenario foc
 
 ## Visualizer / Distribution / Presets
 
-### Current-good visualizer reactivity lock
-- Purpose: protect the currently accepted behavior of `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` before touching shared visualizer/audio/activation/render/transition seams.
+### Current-good visualizer reactivity and smoothness lock
+- Purpose: protect the currently accepted reactivity, motion continuity, first-frame delivery, and smoothness of `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` before touching shared visualizer/audio/activation/render/transition/performance seams.
 - Use when:
   - editing visualizer tick/render/audio feed plumbing
   - changing mode activation/reset/first-frame behavior
   - changing overlay payloads or transition handoff
   - changing shared perf paths that could alter visualizer timing
+  - adding or changing `--usage`/resource telemetry that could create cadence or logging pressure
 - Typical command:
 ```powershell
 python -m pytest `
@@ -233,6 +234,7 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
 
 ### Widget and integration perf probes
 - Tools:
+  - `core/performance/usage_sampler.py` via runtime `--usage`
   - `tools/perf_integration_harness.py`
   - `tools/perf_measure.py`
   - `tools/overlay_log_parser.py`
@@ -243,6 +245,7 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
   - widget repaint churn is suspected
   - transition contention is suspected
   - visualizer perf logs need aggregation
+  - CPU, memory, thread/handle, GPU, or VRAM pressure must be correlated with cadence loss
   - mixed-refresh transition windows need a fail-fast health check
   - Spotify visualizer overlay paint/update cadence needs to be checked for both overpaint and under-delivery against the owning display target
   - cache fallback warnings need producer-state classification
@@ -252,8 +255,17 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8 --timeline
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log --max-samples 8
+python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --usage-log logs\screensaver_usage.log --extra-log logs\screensaver_spotify_vis.log --max-samples 8 --timeline
 python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
 ```
+- Start runtime collection with `--usage`; combine it with `--perf --viz` when diagnosing visualizer/cadence pressure. The parser auto-merges `screensaver_usage.log` beside the primary `screensaver_perf.log` when present, while `--usage-log` selects an explicit sidecar.
+- `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager activity, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero.
+- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, coarse RSS/thread/handle/VRAM growth, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. Correlation is evidence, not automatic root-cause proof.
+- Focused implementation bar:
+```powershell
+python -m pytest tests/test_usage_sampler.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
+```
+- Non-interference is mandatory: no tray probe, unmanaged thread, per-frame query, UI-thread collection/logging, repaint/update, mode retuning, source-cadence change, or automatic quality reduction. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
 - Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Use `--extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log` when investigating Spotify/media/visualizer topology; the perf sidecar owns render/paint cadence, the viz sidecar owns visualizer creation/display ownership, and the main log carries media/fallback context.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.

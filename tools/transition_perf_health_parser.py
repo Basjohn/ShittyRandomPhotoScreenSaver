@@ -66,6 +66,13 @@ _PREFETCH_STATE_RE = re.compile(
     r"scaled_inflight:(?P<scaled_inflight>\d+),"
     r"scaled_pending:(?P<scaled_pending>\d+)"
 )
+_USAGE_SAMPLE_RE = re.compile(r"\[USAGE\] sample (?P<payload>.*)")
+_VISUALIZER_SAFEGUARD_FAILURE_RE = re.compile(
+    r"(?P<detail>Reveal watchdog expired|Failed to push frame|"
+    r"\[FIRST_FRAME_GUARD\].*(?:failed|expired|timeout|stale)|"
+    r"\[PARITY\].*(?:failed|mismatch))",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -136,6 +143,51 @@ class TimerGap:
 class VisualizerTimingWarning:
     kind: str
     value_ms: float
+    line: str = ""
+    timestamp: str | None = None
+
+
+@dataclass(frozen=True)
+class UsageSample:
+    timestamp: str | None
+    sequence: int
+    cadence_gap_ms: float
+    skipped: int
+    collect_ms: float
+    cpu_primed: bool
+    cpu_app_pct: float
+    cpu_system_pct: float
+    rss_app_mb: float
+    private_app_mb: float | None
+    threads_app: int
+    handles_app: int | None
+    gpu_supported: bool
+    gpu_active: bool
+    gpu_busy_pct: float | None
+    vram_supported: bool
+    vram_dedicated_mb: float | None
+    tm_active: int
+    line: str = ""
+
+
+@dataclass(frozen=True)
+class UsageVisualizerCorrelation:
+    usage: UsageSample
+    warning: VisualizerTimingWarning
+
+    @property
+    def line(self) -> str:
+        return (
+            f"{self.usage.timestamp or '<no-ts>'} cpu_app={self.usage.cpu_app_pct:.1f}% "
+            f"rss={self.usage.rss_app_mb:.1f}MB gpu={self.usage.gpu_busy_pct if self.usage.gpu_busy_pct is not None else 'na'} "
+            f"visualizer={self.warning.kind}:{self.warning.value_ms:.1f}ms"
+        )
+
+
+@dataclass(frozen=True)
+class VisualizerSafeguardFailure:
+    timestamp: str | None
+    detail: str
     line: str = ""
 
 
@@ -307,6 +359,8 @@ class PerfHealthReport:
     pending_paint_stalls: list[str] = field(default_factory=list)
     timer_gaps: list[TimerGap] = field(default_factory=list)
     visualizer_timing_warnings: list[VisualizerTimingWarning] = field(default_factory=list)
+    visualizer_safeguard_failures: list[VisualizerSafeguardFailure] = field(default_factory=list)
+    usage_samples: list[UsageSample] = field(default_factory=list)
     visualizer_tick_phase_breakdowns: list[VisualizerTickPhaseBreakdown] = field(default_factory=list)
     media_refresh_warnings: list[MediaRefreshWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
@@ -317,6 +371,86 @@ class PerfHealthReport:
     spotify_overlay_perf_windows: list[SpotifyOverlayPerfWindow] = field(default_factory=list)
     startup_first_frame_exposures: list[StartupFirstFrameExposure] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
+
+    @property
+    def intrusive_usage_samples(self) -> list[UsageSample]:
+        """Samples where diagnostics were slow, late, or unable to keep cadence."""
+        return [
+            sample
+            for sample in self.usage_samples
+            if (sample.sequence > 1 and sample.collect_ms >= 100.0)
+            or sample.skipped > 0
+            or sample.cadence_gap_ms >= 30_000.0
+        ]
+
+    @property
+    def sustained_high_cpu_samples(self) -> list[UsageSample]:
+        high = [
+            sample
+            for sample in self.usage_samples
+            if sample.cpu_primed and sample.cpu_app_pct >= 100.0
+        ]
+        return high if len(high) >= 3 else []
+
+    @property
+    def sustained_gpu_saturation_samples(self) -> list[UsageSample]:
+        high = [
+            sample
+            for sample in self.usage_samples
+            if sample.gpu_supported
+            and sample.gpu_active
+            and (sample.gpu_busy_pct or 0.0) >= 90.0
+        ]
+        return high if len(high) >= 3 else []
+
+    @property
+    def usage_growth_anomalies(self) -> list[str]:
+        if len(self.usage_samples) < 3:
+            return []
+        baseline = self.usage_samples[1]
+        latest = self.usage_samples[-1]
+        anomalies: list[str] = []
+        rss_growth = latest.rss_app_mb - baseline.rss_app_mb
+        if rss_growth >= 128.0 and latest.rss_app_mb >= baseline.rss_app_mb * 1.20:
+            anomalies.append(f"app RSS grew {rss_growth:.1f}MB across usage samples")
+        thread_growth = latest.threads_app - baseline.threads_app
+        if thread_growth >= 8:
+            anomalies.append(f"app thread count grew by {thread_growth} across usage samples")
+        if baseline.handles_app is not None and latest.handles_app is not None:
+            handle_growth = latest.handles_app - baseline.handles_app
+            if handle_growth >= 128:
+                anomalies.append(f"app handle count grew by {handle_growth} across usage samples")
+        if (
+            baseline.vram_dedicated_mb is not None
+            and latest.vram_dedicated_mb is not None
+        ):
+            vram_growth = latest.vram_dedicated_mb - baseline.vram_dedicated_mb
+            if vram_growth >= 256.0 and latest.vram_dedicated_mb >= baseline.vram_dedicated_mb * 1.25:
+                anomalies.append(f"dedicated VRAM grew {vram_growth:.1f}MB across usage samples")
+        return anomalies
+
+    @property
+    def usage_visualizer_correlations(self) -> list[UsageVisualizerCorrelation]:
+        correlated: list[UsageVisualizerCorrelation] = []
+        for warning in self.significant_visualizer_timing_warnings:
+            warning_seconds = _timestamp_seconds(warning.timestamp)
+            if warning_seconds is None:
+                continue
+            nearest: tuple[float, UsageSample] | None = None
+            for sample in self.usage_samples:
+                sample_seconds = _timestamp_seconds(sample.timestamp)
+                if sample_seconds is None:
+                    continue
+                distance = abs(sample_seconds - warning_seconds)
+                if distance > 20.0:
+                    continue
+                if nearest is None or distance < nearest[0]:
+                    nearest = (distance, sample)
+            if nearest is not None:
+                correlated.append(
+                    UsageVisualizerCorrelation(usage=nearest[1], warning=warning)
+                )
+        return correlated
 
     @property
     def high_target_near_sixty(self) -> list[MetricWindow]:
@@ -779,6 +913,26 @@ class PerfHealthReport:
                 "spotify visualizer CUSTOM rect bucket repairs present: "
                 f"{len(self.visualizer_custom_bucket_repairs)}"
             )
+        if self.intrusive_usage_samples:
+            messages.append(
+                "usage telemetry was slow, late, or skipped samples: "
+                f"{len(self.intrusive_usage_samples)}"
+            )
+        if self.sustained_high_cpu_samples:
+            messages.append(
+                f"app CPU remained above one logical core: {len(self.sustained_high_cpu_samples)}"
+            )
+        if self.sustained_gpu_saturation_samples:
+            messages.append(
+                "app GPU engine usage remained near saturation: "
+                f"{len(self.sustained_gpu_saturation_samples)}"
+            )
+        messages.extend(self.usage_growth_anomalies)
+        if self.visualizer_safeguard_failures:
+            messages.append(
+                "visualizer first-frame/reactivity safeguard failures present: "
+                f"{len(self.visualizer_safeguard_failures)}"
+            )
         return messages
 
 
@@ -810,6 +964,57 @@ def _parse_optional_bool(value: str | None) -> bool | None:
     if value is None:
         return None
     return _parse_bool(value)
+
+
+def _parse_flag(value: str | None) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
+    parts = _parse_kv_payload(payload)
+    sequence = _parse_int(parts.get("seq"))
+    cadence_gap_ms = _parse_float(parts.get("cadence_gap_ms"))
+    skipped = _parse_int(parts.get("skipped"))
+    collect_ms = _parse_float(parts.get("collect_ms"))
+    cpu_app_pct = _parse_float(parts.get("cpu_app_pct"))
+    cpu_system_pct = _parse_float(parts.get("cpu_system_pct"))
+    rss_app_mb = _parse_float(parts.get("rss_app_mb"))
+    threads_app = _parse_int(parts.get("threads_app"))
+    tm_active = _parse_int(parts.get("tm_active"))
+    required = (
+        sequence,
+        cadence_gap_ms,
+        skipped,
+        collect_ms,
+        cpu_app_pct,
+        cpu_system_pct,
+        rss_app_mb,
+        threads_app,
+        tm_active,
+    )
+    if any(value is None for value in required):
+        return None
+    return UsageSample(
+        timestamp=_timestamp_from_line(line),
+        sequence=sequence,
+        cadence_gap_ms=cadence_gap_ms,
+        skipped=skipped,
+        collect_ms=collect_ms,
+        cpu_primed=_parse_flag(parts.get("cpu_primed")),
+        cpu_app_pct=cpu_app_pct,
+        cpu_system_pct=cpu_system_pct,
+        rss_app_mb=rss_app_mb,
+        private_app_mb=_parse_float(parts.get("private_app_mb")),
+        threads_app=threads_app,
+        handles_app=_parse_int(parts.get("handles_app")),
+        gpu_supported=_parse_flag(parts.get("gpu_supported")),
+        gpu_active=_parse_flag(parts.get("gpu_active")),
+        gpu_busy_pct=_parse_float(parts.get("gpu_busy_pct")),
+        vram_supported=_parse_flag(parts.get("vram_supported")),
+        vram_dedicated_mb=_parse_float(parts.get("vram_dedicated_mb")),
+        tm_active=tm_active,
+        line=line,
+    )
 
 
 def _timestamp_from_line(line: str) -> str | None:
@@ -959,6 +1164,42 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
 
+        usage_match = _USAGE_SAMPLE_RE.search(line)
+        if usage_match:
+            sample = _usage_sample_from_line(line, usage_match.group("payload"))
+            if sample is not None:
+                report.usage_samples.append(sample)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "usage_sample",
+                        (
+                            f"cpu_app={sample.cpu_app_pct:.1f}% rss={sample.rss_app_mb:.1f}MB "
+                            f"gpu={sample.gpu_busy_pct if sample.gpu_busy_pct is not None else 'na'}"
+                        ),
+                        line,
+                    )
+                )
+            continue
+
+        safeguard_failure = _VISUALIZER_SAFEGUARD_FAILURE_RE.search(line)
+        if safeguard_failure:
+            report.visualizer_safeguard_failures.append(
+                VisualizerSafeguardFailure(
+                    timestamp=timestamp,
+                    detail=safeguard_failure.group("detail"),
+                    line=line,
+                )
+            )
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "visualizer_safeguard_failure",
+                    safeguard_failure.group("detail"),
+                    line,
+                )
+            )
+
         spotify_vis_created = _SPOTIFY_VIS_CREATED_RE.search(line)
         if spotify_vis_created:
             screen = int(spotify_vis_created.group("screen"))
@@ -1106,7 +1347,7 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             lag_ms = _parse_float(severe_spotify_latency.group("lag_ms"))
             if lag_ms is not None:
                 report.visualizer_timing_warnings.append(
-                    VisualizerTimingWarning("severe_latency", lag_ms, line)
+                    VisualizerTimingWarning("severe_latency", lag_ms, line, timestamp)
                 )
                 report.timeline_markers.append(
                     TimelineMarker(timestamp, "spotify_severe_latency", f"lag_ms={lag_ms:.1f}", line)
@@ -1118,7 +1359,7 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             lag_ms = _parse_float(spotify_latency.group("lag_ms"))
             if lag_ms is not None:
                 report.visualizer_timing_warnings.append(
-                    VisualizerTimingWarning("latency", lag_ms, line)
+                    VisualizerTimingWarning("latency", lag_ms, line, timestamp)
                 )
                 report.timeline_markers.append(
                     TimelineMarker(timestamp, "spotify_latency", f"lag_ms={lag_ms:.1f}", line)
@@ -1130,7 +1371,7 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
             dt_ms = _parse_float(spotify_tick_spike.group("dt_ms"))
             if dt_ms is not None:
                 report.visualizer_timing_warnings.append(
-                    VisualizerTimingWarning("tick_spike", dt_ms, line)
+                    VisualizerTimingWarning("tick_spike", dt_ms, line, timestamp)
                 )
                 report.timeline_markers.append(
                     TimelineMarker(timestamp, "spotify_tick_spike", f"dt_ms={dt_ms:.1f}", line)
@@ -1355,6 +1596,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Additional sidecar log to merge into the timeline, e.g. --viz for Spotify topology.",
     )
     parser.add_argument(
+        "--usage-log",
+        type=Path,
+        default=None,
+        help=(
+            "Whole-process usage sidecar. When omitted, screensaver_usage.log "
+            "beside the primary perf log is merged automatically if present."
+        ),
+    )
+    parser.add_argument(
         "--fail-on-anomaly",
         action="store_true",
         help="Return exit code 2 when high-signal anomalies are present.",
@@ -1384,6 +1634,12 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
     log_paths: list[Path] = [args.log, *args.extra_log]
+    usage_log = args.usage_log or args.log.with_name("screensaver_usage.log")
+    if usage_log.exists() and usage_log not in log_paths:
+        log_paths.append(usage_log)
+    elif args.usage_log is not None and not usage_log.exists():
+        print(f"Log file not found: {usage_log}")
+        return 1
     for log_path in log_paths:
         if not log_path.exists() or not log_path.is_file():
             print(f"Log file not found: {log_path}")
@@ -1405,6 +1661,8 @@ def main() -> int:
     print(f"Timer gaps: {len(report.timer_gaps)}")
     print(f"MediaWidget slow refreshes: {len(report.media_refresh_warnings)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
+    print(f"Visualizer safeguard failures: {len(report.visualizer_safeguard_failures)}")
+    print(f"Whole-process usage samples: {len(report.usage_samples)}")
     print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
     print(f"Settings stalls: {len(report.settings_stalls)}")
@@ -1415,6 +1673,24 @@ def main() -> int:
     print(f"Spotify overlay perf windows: {len(report.spotify_overlay_perf_windows)}")
     print(f"Spotify overlay under-delivery windows: {len(report.spotify_overlay_under_delivery_windows)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
+    if report.usage_samples:
+        first_usage = report.usage_samples[0]
+        last_usage = report.usage_samples[-1]
+        peak_cpu = max(sample.cpu_app_pct for sample in report.usage_samples)
+        peak_rss = max(sample.rss_app_mb for sample in report.usage_samples)
+        gpu_values = [
+            sample.gpu_busy_pct
+            for sample in report.usage_samples
+            if sample.gpu_busy_pct is not None
+        ]
+        peak_gpu = max(gpu_values) if gpu_values else None
+        print(
+            "Usage summary: "
+            f"peak_cpu={peak_cpu:.1f}% peak_rss={peak_rss:.1f}MB "
+            f"rss_delta={last_usage.rss_app_mb - first_usage.rss_app_mb:.1f}MB "
+            f"threads_delta={last_usage.threads_app - first_usage.threads_app} "
+            f"peak_gpu={f'{peak_gpu:.1f}%' if peak_gpu is not None else 'na'}"
+        )
 
     _print_samples(
         "Paint delivery starvation windows",
@@ -1460,6 +1736,21 @@ def main() -> int:
     _print_samples(
         "Spotify visualizer timing warnings",
         report.significant_visualizer_timing_warnings,
+        args.max_samples,
+    )
+    _print_samples(
+        "Visualizer first-frame/reactivity safeguard failures",
+        report.visualizer_safeguard_failures,
+        args.max_samples,
+    )
+    _print_samples(
+        "Usage telemetry slow/late/skipped samples",
+        report.intrusive_usage_samples,
+        args.max_samples,
+    )
+    _print_samples(
+        "Usage samples near visualizer timing warnings",
+        report.usage_visualizer_correlations,
         args.max_samples,
     )
     _print_samples(

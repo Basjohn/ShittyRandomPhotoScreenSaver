@@ -7,6 +7,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
     monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_USAGE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_DIAGNOSTICS_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_GEOMETRY_LOGGING_ENABLED", False)
@@ -20,6 +21,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
         debug=False,
         verbose=False,
         perf=True,
+        usage=True,
         viz=True,
         geo=True,
         settings_trace=True,
@@ -32,6 +34,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.getLogger("SettingsManager").info("[SETTINGS] write trace")
     logging.getLogger("widgets.spotify_visualizer_widget").info("[SPOTIFY_VIS] mode trace")
     logging.getLogger("engine.screensaver").info("[PERF] timing trace")
+    logging.getLogger("core.performance.usage_sampler").info("[USAGE] sample seq=1")
     logging.getLogger("core.process.supervisor").info("ProcessSupervisor initialized")
     logging.getLogger("engine.image_pipeline").info("[CACHE] cache authority trace")
     logging.getLogger("core.steam.backend").info("[STEAM] provider trace")
@@ -39,6 +42,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     logging.shutdown()
 
     assert logger_mod.is_perf_metrics_enabled() is True
+    assert logger_mod.is_usage_logging_enabled() is True
     assert logger_mod.is_viz_logging_enabled() is True
     assert logger_mod.is_viz_diagnostics_enabled() is True
     assert logger_mod.is_geometry_logging_enabled() is True
@@ -52,6 +56,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[SETTINGS] write trace" not in main_log
     assert "[SPOTIFY_VIS] mode trace" not in main_log
     assert "[PERF] timing trace" not in main_log
+    assert "[USAGE] sample seq=1" not in main_log
     assert "ProcessSupervisor initialized" not in main_log
     assert "[CACHE] cache authority trace" not in main_log
     assert "[STEAM] provider trace" not in main_log
@@ -62,6 +67,7 @@ def test_setup_logging_cli_families_enable_sidecar_logs(tmp_path, monkeypatch):
     assert "[SETTINGS] write trace" in (tmp_path / "screensaver_settings.log").read_text(encoding="utf-8")
     assert "[SPOTIFY_VIS] mode trace" in (tmp_path / "screensaver_spotify_vis.log").read_text(encoding="utf-8")
     assert "[PERF] timing trace" in (tmp_path / "screensaver_perf.log").read_text(encoding="utf-8")
+    assert "[USAGE] sample seq=1" in (tmp_path / "screensaver_usage.log").read_text(encoding="utf-8")
     assert "ProcessSupervisor initialized" in (tmp_path / "screensaver_lifecycle.log").read_text(encoding="utf-8")
     assert "[CACHE] cache authority trace" in (tmp_path / "screensaver_cache.log").read_text(encoding="utf-8")
     assert "[STEAM] provider trace" in (tmp_path / "screensaver_steam.log").read_text(encoding="utf-8")
@@ -135,6 +141,7 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     monkeypatch.setattr(logger_mod, "_ACTIVE_LOG_DIR", None)
     monkeypatch.setattr(logger_mod, "_LOGGING_DISABLED", False)
     monkeypatch.setattr(logger_mod, "_PERF_METRICS_ENABLED", False)
+    monkeypatch.setattr(logger_mod, "_USAGE_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_LOGGING_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_VIZ_DIAGNOSTICS_ENABLED", False)
     monkeypatch.setattr(logger_mod, "_GEOMETRY_LOGGING_ENABLED", False)
@@ -152,6 +159,7 @@ def test_old_logging_env_toggles_no_longer_enable_families(tmp_path, monkeypatch
     logging.shutdown()
 
     assert logger_mod.is_perf_metrics_enabled() is False
+    assert logger_mod.is_usage_logging_enabled() is False
     assert logger_mod.is_viz_logging_enabled() is False
     assert logger_mod.is_viz_diagnostics_enabled() is False
     assert logger_mod.is_geometry_logging_enabled() is False

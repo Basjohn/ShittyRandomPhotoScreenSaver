@@ -200,6 +200,18 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
             except Exception as e:
                 logger.debug("Beat engine force-stop failed: %s", e)
 
+        # The opt-in sampler shares the app ThreadManager and must quiesce
+        # before that pool. Keep it alive across settings pauses so a profiling
+        # run remains continuous through the stop/restart cycle.
+        if exit_app:
+            usage_telemetry = getattr(engine, "_usage_telemetry", None)
+            if usage_telemetry is not None:
+                try:
+                    usage_telemetry.stop()
+                except Exception as e:
+                    logger.debug("[USAGE] Failed to stop usage telemetry: %s", e)
+                engine._usage_telemetry = None
+
         # Shutdown ProcessSupervisor and all workers
         if exit_app and engine._process_supervisor:
             logger.info("Shutting down ProcessSupervisor...")

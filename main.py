@@ -116,6 +116,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --debug, -d - Enable debug logging
     - --verbose, -v - Enable full verbose log stream
     - --perf - Enable performance logging
+    - --usage - Enable low-cadence CPU/GPU/memory/thread usage logging
     - --viz - Enable visualizer logging and diagnostics
     - --geo - Enable geometry/z-order/edit-layout diagnostics
     - --set - Enable settings mutation/import/schema diagnostics
@@ -132,7 +133,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     """
     # Filter out debug/viz/dev-gate flags
     _filtered = {
-        "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
+        "--debug", "-d", "--verbose", "-v", "--perf", "--usage", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
         "--fresh", "--devcurve", "--devsteam",
@@ -343,12 +344,13 @@ def _schedule_runtime_reddit_helper_session(engine) -> bool:
     return True
 
 
-def run_screensaver(app: QApplication) -> int:
+def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
     """
     Run the screensaver.
     
     Args:
         app: Qt application instance
+        usage_enabled: Start opt-in low-cadence resource telemetry.
     
     Returns:
         Exit code
@@ -431,6 +433,18 @@ def run_screensaver(app: QApplication) -> int:
             QTimer.singleShot(10_000, msg3.accept)
             msg3.exec()
             return run_config(app)
+
+        if usage_enabled:
+            try:
+                from core.performance.usage_sampler import UsageTelemetryService
+
+                if engine.thread_manager is None:
+                    raise RuntimeError("ThreadManager unavailable after engine start")
+                engine._usage_telemetry = UsageTelemetryService(engine.thread_manager)
+                if not engine._usage_telemetry.start():
+                    raise RuntimeError("usage telemetry declined startup")
+            except Exception:
+                logger.exception("[USAGE] Failed to start whole-process telemetry")
         
         # Optional system tray presence in Interaction Mode.
         tray_icon = None
@@ -522,6 +536,7 @@ def main():
     debug_mode = '--debug' in sys.argv or '-d' in sys.argv
     verbose_mode = '--verbose' in sys.argv or '-v' in sys.argv
     perf_mode = '--perf' in sys.argv
+    usage_mode = '--usage' in sys.argv
     viz_mode = '--viz' in sys.argv
     geo_mode = '--geo' in sys.argv
     settings_trace_mode = '--set' in sys.argv
@@ -533,6 +548,7 @@ def main():
         debug=debug_mode,
         verbose=verbose_mode,
         perf=perf_mode,
+        usage=usage_mode,
         viz=viz_mode,
         viz_diag=viz_diag_mode,
         geo=geo_mode,
@@ -649,7 +665,7 @@ def main():
 
                 profiler = cProfile.Profile()
                 profiler.enable()
-                exit_code = run_screensaver(app)
+                exit_code = run_screensaver(app, usage_enabled=usage_mode)
                 profiler.disable()
                 try:
                     profile_path = get_log_dir() / "screensaver_run.pstats"
@@ -658,7 +674,7 @@ def main():
                 except Exception:
                     logger.debug("[PERF] [CPU] Failed to write cProfile stats", exc_info=True)
             else:
-                exit_code = run_screensaver(app)
+                exit_code = run_screensaver(app, usage_enabled=usage_mode)
             
         elif mode == ScreensaverMode.CONFIG:
             logger.info("Starting configuration dialog")

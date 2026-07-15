@@ -2,14 +2,14 @@
 
 Provides a small, themed tray icon with a context menu for
 opening Settings and exiting the screensaver when Interaction Mode
-mode is enabled. Tooltip shows GPU usage (if available) on hover.
+mode is enabled.
 """
 from __future__ import annotations
 
 from typing import Optional
 from pathlib import Path
 
-from PySide6.QtCore import Signal, QTimer
+from PySide6.QtCore import Signal
 from PySide6.QtGui import QIcon, QAction
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -19,41 +19,6 @@ from core.resources.types import ResourceType
 
 
 logger = get_logger(__name__)
-
-# Lazy imports for performance monitoring (only loaded when needed)
-_pynvml_initialized = False
-_nvml_handle = None
-
-
-def _get_gpu_usage() -> Optional[float]:
-    """Get GPU usage percentage using pynvml (NVIDIA) or fallback.
-    
-    Returns None if GPU monitoring is unavailable.
-    Uses lazy initialization to avoid startup penalty.
-    """
-    global _pynvml_initialized, _nvml_handle
-    
-    if not _pynvml_initialized:
-        _pynvml_initialized = True
-        try:
-            import pynvml
-            pynvml.nvmlInit()
-            _nvml_handle = pynvml.nvmlDeviceGetHandleByIndex(0)
-        except Exception as e:
-            logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
-            _nvml_handle = None
-    
-    if _nvml_handle is None:
-        return None
-    
-    try:
-        import pynvml
-        util = pynvml.nvmlDeviceGetUtilizationRates(_nvml_handle)
-        return float(util.gpu)
-    except Exception as e:
-        logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
-        return None
-
 
 def _load_tray_menu_stylesheet() -> str | None:
     """Load the dark theme stylesheet for use with the tray menu only.
@@ -79,7 +44,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
     can wire Settings / Exit behaviour without this class
     needing additional dependencies.
     
-    Tooltip displays CPU/GPU usage when hovered (updated lazily).
+    The tooltip is intentionally static; diagnostics belong to opt-in sidecars.
     """
 
     settings_requested = Signal()
@@ -96,13 +61,7 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         if not tray_icon.isNull():
             self.setIcon(tray_icon)
 
-        # Initial tooltip update
-        QTimer.singleShot(1000, self._update_tooltip)
-        
-        # Periodic tooltip refresh timer (every 5 seconds)
-        self._tooltip_timer = QTimer(self)
-        self._tooltip_timer.timeout.connect(self._update_tooltip)
-        self._tooltip_timer.start(5000)  # 5 second refresh
+        self.setToolTip("SRPSS")
 
         # Build a small context menu and apply the dark theme so it
         # matches other context menus styled in dark.qss.
@@ -142,20 +101,14 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
         else:
             logger.info("System tray not available; skipping tray icon")
 
-        # Register with the centralized ResourceManager so the icon
-        # and its timers are cleaned up on shutdown with other Qt resources.
+        # Register with the centralized ResourceManager so the icon is cleaned
+        # up on shutdown with other Qt resources.
         try:
             manager = ResourceManager.get_or_create_app_shared()
             manager.register_qt(
                 self,
                 resource_type=ResourceType.GUI_COMPONENT,
                 description="Screensaver system tray icon",
-                group="qt",
-            )
-            manager.register_qt(
-                self._tooltip_timer,
-                resource_type=ResourceType.TIMER,
-                description="Tray tooltip refresh timer (5s)",
                 group="qt",
             )
         except Exception:
@@ -201,29 +154,3 @@ class ScreensaverTrayIcon(QSystemTrayIcon):
             widgets: List of DisplayWidget instances
         """
         self._display_widgets = widgets
-    
-    def _update_tooltip(self) -> None:
-        """Update tooltip with current GPU usage.
-        
-        Called on init and periodically via timer.
-        Uses lazy-loaded monitoring to avoid startup penalty.
-        """
-        try:
-            gpu = _get_gpu_usage()
-            
-            parts = ["SRPSS"]
-            if gpu is not None:
-                parts.append(f"GPU: {gpu:.0f}%")
-            
-            tooltip = " | ".join(parts) if len(parts) > 1 else parts[0]
-            self.setToolTip(tooltip)
-        except Exception as e:
-            logger.debug("[SYSTEM_TRAY] Exception suppressed: %s", e)
-            self.setToolTip("SRPSS")
-
-    def refresh_tooltip(self) -> None:
-        """Public method to refresh the tooltip with current usage stats.
-        
-        Can be called from a timer or event handler to keep tooltip current.
-        """
-        self._update_tooltip()

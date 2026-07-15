@@ -13,7 +13,7 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 - **Random Image Slideshow**
   - Local folders (recursive) as primary source
-  - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds)
+  - Optional RSS/JSON image feeds (e.g. curated Reddit wallpaper feeds) with a one click "Just Make It Work" button to fill feeds for you.
   - Mixed mode (folders + RSS) support with ratio control
   - High‑quality scaling with optional sharpening
   - Transitions:
@@ -33,14 +33,17 @@ ShittyRandomPhotoScreenSaver (SRPSS) is a modern Windows (W10/W11) screensaver t
 
 - **Overlay widgets**
   - **GMAIL** Via Imap with customizable notifications, control from inside the app/saver etc.
-  - **Clock widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
-  - **Weather widget** using Open‑Meteo (no API key) with location autodetect on first run
-  - **Media widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
-  - **Beat visualizer** paired with the media widget – Overly robust and feature filled af.
-  - **Reddit widget** showing top posts from a configured subreddit
-    
-  Widget requests are welcome, the engine is robust enough to handle all sorts of your weird kinky shit.
-  Realisitically since so many APIs are bogged down and so much scraping is blocked each has to be assessed. Steam/Search/*Arr widgets are the next best targets if anyone ever cares about this   project beyond me.
+  - **Clock Widgets** (up to three): 12h/24h, multiple time zones, analogue or digital
+  - **Weather Widget** using Open‑Meteo (no API key) with location autodetect on first run
+  - **Media Widget** (Spotify/Musicbee now‑playing) with optional controls and artwork. Auto detection for which app is open, link to Musicbee plugin in settings.
+  - **Beat Visualizer** paired with the media widget – Overly robust and feature filled af. 5 Distinct OpenGL modes with a full user friendly preset and custom system to make your own.
+  - **Reddit Widgets** showing top posts from up to two configured subreddits, posts can be clicked to take you to their comments because no one reads the articles/links anyway.
+  - **STEAM Widgets** Achievement Pulse (Your glorious work.) and Abandonment Issues (Your backlog.)
+  
+- **Custom Layouts**
+
+  - **Edit Mode** Right click, go into edit mode and resize and repositions widgets however your kinky ass wants, right click save to confirm it.
+  - **Layout Slots** Use Shift+1/2/3/4/5/6/7/8/9/0 to save your current layout and 1/2/3/4/5/6/7/8/9/0 to bring it back at any point.
 
 - **Settings dialog (config mode)**
   - Dark, frameless UI
@@ -164,6 +167,8 @@ In the **Screen Saver Settings** dialog:
   - Clock does a decent job figuring out your timezone, you can have multiple timezones and up to 3 clocks, optionally digital or analogue and with different regions per display.
   - Weather does a really bad job of figuring out where you are but has awesome autocomplete so just start typing your City name and click the suggestion.
   - Reddit can be set to any kinky ass subreddit you want.
+
+- Note, you will need to rerun the application or screensaver after setting sources for the first time to start up properly, first sources dry run always closes for now.
 
 ### 4. Layout
 
