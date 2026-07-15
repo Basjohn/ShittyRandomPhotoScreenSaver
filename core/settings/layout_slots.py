@@ -97,7 +97,6 @@ _SOURCE_SECTION_KEYS = frozenset(
 )
 
 _SOURCE_KEY_PREFIXES = (
-    "blob_",
     "bubble_",
     "devcurve_",
     "osc_",

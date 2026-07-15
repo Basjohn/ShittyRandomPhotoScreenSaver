@@ -42,7 +42,7 @@ Living map of the current SRPSS codebase.
 
 | File | Purpose |
 |---|---|
-| `tests/conftest.py` | Shared APPDATA/LOCALAPPDATA isolation, deterministic chunk selection, and default quarantine of deprecated Blob-named tests while retaining removal guards |
+| `tests/conftest.py` | Shared APPDATA/LOCALAPPDATA isolation and deterministic chunk selection |
 | `tests/run_chunked.py` | Bounded subprocess test runner with selectable targets, deterministic chunks, per-chunk timeout, optional logs, and continuation after failures/timeouts |
 
 ## Manager Layer
@@ -68,11 +68,11 @@ Living map of the current SRPSS codebase.
 | Layout slots | `core/settings/layout_slots.py` | Pure source-free widget layout-slot capture/apply helpers for `widgets.layout_slots`, including slot id normalization, layout-field allowlisting, custom-layout map copy semantics, and source/provider/account exclusion |
 | List-capacity policy | `core/settings/widget_capacity_policy.py` | Shared active list-widget capacity policy (`5..25`) and fixed candidate-window envelope |
 | Settings store | `core/settings/json_store.py` | Atomic JSON persistence |
-| Settings manager | `core/settings/settings_manager.py` | Dotted API over structured roots, legacy-key alias migration, persisted visualizer schema version gating, atomic typed visualizer-section persistence, and default-merge fencing that does not reintroduce intentionally absent inactive Blob subtype fields |
+| Settings manager | `core/settings/settings_manager.py` | Dotted API over structured roots, legacy-key alias migration, persisted visualizer schema version gating, and atomic typed visualizer-section persistence |
 | Visualizer settings model | `core/settings/models/_spotify_visualizer.py` | Canonical grouped field-spec/default/build/serialize contract for visualizer settings; keeps `from_settings()`, `from_mapping()`, and `to_dict()` aligned through ordered section merges rather than entry-point-specific handwritten payloads |
 | Snapshot normalization | `core/settings/visualizer_settings_snapshot.py` | Canonical visualizer mapping normalization |
 | Technical normalization / legacy migration contract | `core/settings/visualizer_settings_contract.py` | Migrates legacy shared technical inputs into canonical per-mode visualizer settings |
-| Deprecated Blob subtype inventory | `core/settings/visualizer_blob_contract.py` | Temporary removal/migration inventory for the failed `blob` mode; no new behavior investment, and the active plan owns complete teardown plus safe saved-selection fallback |
+| Retired visualizer migration | `core/settings/visualizer_retired_modes.py` | Forward-only saved/imported mode fallback and retired-key stripping before canonical visualizer persistence |
 | Preset index contract | `core/settings/visualizer_preset_indices.py` | Shared preset index fallback/lookup |
 | Shadow tuning loader | `core/settings/shadow_tuning.py` | Loads `shadowtuning.json`; provides `CARD_SHADOW_TUNING` + `VOLUME_SLIDER_SHADOW_TUNING` |
 | Storage paths | `core/settings/storage_paths.py` | Canonical `%APPDATA%` path resolver for all persistent files, including Steam credential/cache roots |
@@ -108,8 +108,6 @@ Living map of the current SRPSS codebase.
 
 ## Visualizer System
 
-Blob-labelled rows below are temporary teardown inventory for a deprecated failed mode, not supported architecture targets. They remain mapped only so removal can prove every UI/settings/runtime/shader/package seam is gone without disturbing supported visualizers.
-
 | Module | File | Role |
 |---|---|---|
 | Mode registry | `core/settings/visualizer_mode_registry.py` | Mode ids, labels, canonical default-mode fallback, and key-prefix ownership |
@@ -119,22 +117,19 @@ Blob-labelled rows below are temporary teardown inventory for a deprecated faile
 | Bubble parity harness | `tools/bubble_parity_harness.py` | Historical comparison harness for Bubble curated presets against `9d4925e` / `510520e`, used when Deep Sea regressions are too severe for present-day proxy bars to be trusted |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist, and active CUSTOM geometry now rejects foreign outer-rect writes once committed rect authority exists |
 | Display participation helper | `rendering/spotify_display_participation.py` | Narrow visualizer/display owner selection helper that distinguishes truly absent CUSTOM targets from runtime-known but temporarily non-participating displays, so owner selection can stay cautious during startup and sleep/wake churn |
-| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, Blob subtype-boundary reset diagnostics, and deferred warmup of remaining visualizer mode programs |
-| Visualizer overlay prewarm bridge | `rendering/display_image_ops.py` | Creates/synchronizes the visualizer GL overlay at authoritative geometry and seeds the resolved startup mode plus canonical Blob subtype before first-program prewarm so Shaped startup cannot compile Mighty from stale defaults |
+| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, and deferred warmup of remaining visualizer mode programs |
+| Visualizer overlay prewarm bridge | `rendering/display_image_ops.py` | Creates/synchronizes the visualizer GL overlay at authoritative geometry and seeds the resolved startup mode before first-program prewarm |
 | Oscilloscope display contract | `widgets/spotify_visualizer/oscilloscope_contract.py` | Mode-owned Oscilloscope waveform-consumption helpers for live PCM display conditioning, line-speed blend alpha, playback-boundary waveform reset support, ghost-ring delay/fill, and bounded transient-width display accent; intentionally outside shared audio/floor production |
 | Spectrum solid-bar display smoothing | `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` | Display-only solid Spectrum smoothing/easing: continuous display-state motion, small-zone chatter suppression, brief coherent-zero hold, and bounded delayed-frame catch-up, intentionally kept out of shared audio/floor/timer logic |
-| Overlay diagnostics | `widgets/spotify_visualizer/overlay_diagnostics.py` | Passive overlay diagnostics for Glow, Blob, and Sine idle-state logging, extracted so diagnostic payload assembly stays outside render authority code |
-| Blob settings UI | `ui/tabs/media/blob_builder.py` / `blob_mighty_builder.py` / `blob_shaped_builder.py` | Shared Blob Body/Appearance/Layout/Glow/Ghost buckets plus high-level subtype selection and isolated Mighty procedural controls versus Shaped authored-contour controls |
+| Overlay diagnostics | `widgets/spotify_visualizer/overlay_diagnostics.py` | Passive overlay diagnostics for Glow and Sine idle-state logging, extracted so diagnostic payload assembly stays outside render authority code |
 | Overlay common uniforms | `widgets/spotify_visualizer/overlay_uniforms.py` | Shared mode-neutral GL uniform upload and rainbow hue/logging prep, extracted so common transport stays outside mode-owned renderer math |
 | Overlay render dispatch | `widgets/spotify_visualizer/overlay_render_dispatch.py` | Mode-program resolution and renderer-owned uniform dispatch, extracted so the overlay shell no longer owns lazy mode-program compilation and renderer registry calls inline |
 | Overlay frame shell | `widgets/spotify_visualizer/overlay_frame_shell.py` | Shared backbuffer clear, fade gating, and stencil-wrapped render envelope for the overlay paint path |
-| Outer card geometry | `widgets/spotify_visualizer/card_geometry.py` | Canonical outer card geometry policy: mode/preset-owned preferred height, blob-width reduction, and media-relative placement, kept intentionally separate from stencil math for future custom layout/resize work |
+| Outer card geometry | `widgets/spotify_visualizer/card_geometry.py` | Canonical outer card geometry policy: mode/preset-owned preferred height and media-relative placement, kept intentionally separate from stencil math for future custom layout/resize work |
 | Overlay stencil mask | `widgets/spotify_visualizer/overlay_mask.py` | Shared painted-card stencil uniform math for the GL overlay render path, preserving the rounded-rect border-inset clipping contract |
-| Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, invisible-frame early return, and Blob subtype-boundary clearing of both solver/profile families plus ghost/peak/pocket state |
+| Overlay state handoff | `widgets/spotify_visualizer/overlay_state.py` | Overlay-local mode reset, activation/generation metadata capture, border-width/floor snapshot handoff, and invisible-frame early return |
 | Overlay lifecycle bridge | `widgets/spotify_visualizer/media_bridge.py` / `widgets/spotify_visualizer/engine_lifecycle.py` | Runtime overlay clear/destroy policy: mode and preset resets preserve the GL overlay object where possible, while cleanup/teardown still destroys it |
-| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping; Blob subtype ownership fencing and selected-subtype-only GPU extras; engine config replay; shared GPU extras payload construction, including the reusable steady-state Spectrum extras dict |
-| Blob contour and tendril runtimes | `widgets/spotify_visualizer/blob_math.py` / `blob_pockets.py` / `blob_tendril_runtime.py`; `widgets/spotify_visualizer/renderers/blob_runtime_update.py` / `blob_unshaped_runtime.py` / `blob_shaper_runtime.py` | Blob-owned 128-sample CPU contour solvers cached at a bounded cadence plus per-state visual transport for sparse curved GPU tendrils: Mighty grow/hold/retract lifecycles retarget only while hidden, while Shaped adds topology-aware authored-goal mutation; no shared-audio or other-mode authority |
-| Blob renderers and programs | `widgets/spotify_visualizer/renderers/blob_common.py` / `blob_mighty.py` / `blob_shaped.py`; `widgets/spotify_visualizer/shaders/blob.frag` / `blob_mighty.frag` / `blob_shaped.frag` | Selected subtype uploads one CPU-solved 128-sample `u_blob_runtime_profile` consumed directly by its fixed-variant SDF; common code owns neutral paint/energy/glow/inward-liquid transport plus low-rate contour/target/temporal diagnostics, while concrete programs avoid runtime selector and duplicate motion authority |
+| Config application | `widgets/spotify_visualizer/config_applier.py` | Settings/model to runtime kwargs mapping, engine config replay, and shared GPU extras payload construction, including the reusable steady-state Spectrum extras dict |
 | Spectrum bar-field contract | `widgets/spotify_visualizer/renderers/spectrum.py` / `widgets/spotify_visualizer/shaders/spectrum.frag` | Shared Spectrum horizontal layout contract: CPU helper and shader agree on the same slightly left-biased bar field so runtime no longer freelances separate left/right spacing math |
 | Spline Curve (`devcurve`) runtime | `widgets/spotify_visualizer/tick_pipeline.py` / `widgets/spotify_visualizer/renderers/devcurve.py` | Spline Curve runtime curves, specular slots, idle/play specular alpha activity multiplier, and activation-aware visualizer latency logging |
 | Startup contract | `widgets/spotify_visualizer/startup_contract.py` | Staged startup state contract |
@@ -259,6 +254,5 @@ Blob-labelled rows below are temporary teardown inventory for a deprecated faile
 | `--steam` | Steam widget family diagnostics sidecar logs |
 | `--viz-diagnostics`, `--viz-diag` | Legacy compatibility alias for extra visualizer diagnostics |
 | `--fresh` | Clear all resolved runtime log files at startup |
-| `-devblob` | Deprecated compatibility gate for the failed Blob mode; remove with the mode |
 | `--devcurve` | Compatibility no-op alias |
 | `--devsteam` | Show unfinished Steam Journey and Friend Pulse card prototypes |

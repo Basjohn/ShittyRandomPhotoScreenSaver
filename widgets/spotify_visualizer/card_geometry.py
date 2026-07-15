@@ -2,7 +2,6 @@
 
 This module intentionally owns only the *outer* card contract:
 - mode-driven preferred height
-- blob-specific width reduction
 - media-relative card placement
 - CUSTOM-mode outer card rect authority and clamping
 
@@ -25,7 +24,6 @@ MAX_HEIGHT: int = 600
 DEFAULT_GROWTH: dict[str, float] = {
     "spectrum": 2.0,
     "oscilloscope": 2.0,
-    "blob": 3.5,
     "sine_wave": 2.0,
     "bubble": 3.0,
     "devcurve": 3.5,
@@ -58,7 +56,6 @@ def build_growth_map_from_widget(widget) -> dict[str, float]:
     return {
         "spectrum": float(getattr(widget, "_spectrum_growth", DEFAULT_GROWTH["spectrum"])),
         "oscilloscope": float(getattr(widget, "_osc_growth", DEFAULT_GROWTH["oscilloscope"])),
-        "blob": float(getattr(widget, "_blob_growth", DEFAULT_GROWTH["blob"])),
         "sine_wave": float(getattr(widget, "_sine_wave_growth", DEFAULT_GROWTH["sine_wave"])),
         "bubble": float(getattr(widget, "_bubble_growth", DEFAULT_GROWTH["bubble"])),
         "devcurve": float(getattr(widget, "_devcurve_growth", DEFAULT_GROWTH["devcurve"])),
@@ -109,19 +106,12 @@ def resolve_relative_card_placement(
     mode_id: str,
     card_height: int,
     position_name: str,
-    blob_width: float = 1.0,
     gap: int = 20,
 ) -> VisualizerCardPlacement:
     """Resolve media-relative card geometry for the visualizer."""
     full_width = media_rect.width()
     width = full_width
     x = media_rect.left()
-
-    if mode_id == "blob":
-        blob_width = max(0.1, min(1.0, float(blob_width)))
-        if blob_width < 1.0:
-            width = max(40, int(full_width * blob_width))
-            x = media_rect.left() + (full_width - width) // 2
 
     place_below = should_place_below_media(position_name)
     if place_below:
@@ -146,15 +136,10 @@ def resolve_mode_card_width(
     *,
     mode_id: str,
     media_width: int,
-    blob_width: float = 1.0,
 ) -> int:
     """Resolve the authored card width for one mode."""
 
     width = max(10, int(media_width))
-    if mode_id == "blob":
-        blob_width = max(0.1, min(1.0, float(blob_width)))
-        if blob_width < 1.0:
-            width = max(40, int(width * blob_width))
     return width
 
 
@@ -164,7 +149,6 @@ def resolve_custom_card_size(
     media_width: int,
     base_height: int,
     growth_by_mode: Mapping[str, float] | None = None,
-    blob_width: float = 1.0,
     width_scale: float = 1.0,
     height_scale: float = 1.0,
     maximum_envelope: bool = False,
@@ -177,7 +161,6 @@ def resolve_custom_card_size(
     authored_width = resolve_mode_card_width(
         mode_id=mode_id,
         media_width=media_width,
-        blob_width=blob_width,
     )
     authored_metrics = resolve_card_metrics(
         mode_id,
@@ -194,7 +177,6 @@ def resolve_custom_card_size(
             resolve_mode_card_width(
                 mode_id=candidate_mode,
                 media_width=media_width,
-                blob_width=blob_width,
             )
             for candidate_mode in growth_map.keys()
         )

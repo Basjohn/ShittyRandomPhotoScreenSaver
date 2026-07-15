@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Collection
 
 from core.logging.logger import get_logger
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 
 logger = get_logger(__name__)
 
 _MANAGED_PRESET_NAME_RE = re.compile(r"^preset[_-]*\d+(?:[_-].+)?\.json$", re.IGNORECASE)
 _MANAGED_PRESET_SLOT_RE = re.compile(r"^preset[_-]*(\d+)(?:[_-].+)?\.json$", re.IGNORECASE)
+_SUPPORTED_MODE_IDS = frozenset(VISUALIZER_MODE_IDS)
 
 
 def _is_frozen_build() -> bool:
@@ -33,7 +35,9 @@ def _normalize_manifest_entries(entries: object) -> set[str]:
     return {
         Path(str(entry)).as_posix()
         for entry in entries
-        if isinstance(entry, str) and entry.strip()
+        if isinstance(entry, str)
+        and entry.strip()
+        and _is_supported_curated_preset_path(Path(entry))
     }
 
 
@@ -43,6 +47,7 @@ def build_curated_visualizer_manifest_payload(entries: Collection[str]) -> dict[
         Path(str(entry)).as_posix()
         for entry in entries
         if str(entry).strip()
+        and _is_supported_curated_preset_path(Path(str(entry)))
     }
     return {
         "managed_curated_files": sorted(normalized),
@@ -59,7 +64,7 @@ def scan_curated_visualizer_preset_tree(root: Path) -> set[str]:
             relative_path = json_path.relative_to(root)
         except Exception:
             continue
-        if not is_managed_curated_preset_path(relative_path):
+        if not _is_supported_curated_preset_path(relative_path):
             continue
         discovered.add(relative_path.as_posix())
     return discovered
@@ -101,6 +106,7 @@ def write_curated_visualizer_preset_manifest(
         Path(str(entry)).as_posix()
         for entry in (entries if entries is not None else scan_curated_visualizer_preset_tree(root))
         if str(entry).strip()
+        and _is_supported_curated_preset_path(Path(str(entry)))
     }
     manifest_path = get_visualizer_preset_manifest_path(root)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -223,6 +229,15 @@ def is_managed_curated_preset_path(relative_path: Path) -> bool:
     return bool(_MANAGED_PRESET_NAME_RE.match(relative_path.name))
 
 
+def _is_supported_curated_preset_path(relative_path: Path) -> bool:
+    """Return whether a managed preset belongs to a registered runtime mode."""
+
+    return (
+        is_managed_curated_preset_path(relative_path)
+        and relative_path.parts[0].lower() in _SUPPORTED_MODE_IDS
+    )
+
+
 def sync_curated_preset_tree(
     root: Path,
     *,
@@ -241,6 +256,7 @@ def sync_curated_preset_tree(
             manifest_entries if manifest_entries is not None else load_curated_visualizer_preset_manifest(root)
         )
         if str(entry).strip()
+        and _is_supported_curated_preset_path(Path(str(entry)))
     }
     if not managed_entries:
         return []
@@ -288,6 +304,7 @@ def mirror_curated_visualizer_preset_tree(
             manifest_entries if manifest_entries is not None else resolve_curated_visualizer_manifest_entries(source_root)
         )
         if str(entry).strip()
+        and _is_supported_curated_preset_path(Path(str(entry)))
     }
     if not resolved_entries:
         raise RuntimeError(f"No curated preset entries were discovered under {source_root}")

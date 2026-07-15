@@ -26,7 +26,7 @@ _PER_MODE_TECH_ATTR = "_per_mode_technical_controls"
 MANUAL_FLOOR_MIN = 0.05
 MANUAL_FLOOR_MAX = 1.0
 
-_KICK_GAIN_MODES = frozenset({"spectrum", "blob"})
+_KICK_GAIN_MODES = frozenset({"spectrum"})
 _PULSE_GAIN_MODES = frozenset({"bubble"})
 
 _TRANSIENT_MIX_META: Dict[str, tuple] = {
@@ -43,13 +43,6 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
         "Transient bass energy weight for bubble pulse (0%–100%).\n"
         "Higher = stronger kick punch. 75% = default.",
         0.75, 0.0, 1.0,
-    ),
-    "blob": (
-        "blob_transient_mix_bass",
-        "Transient Bass Mix:",
-        "Transient bass energy weight for blob deformation (0%–100%).\n"
-        "Higher = stronger kick response. 50% = default.",
-        0.5, 0.0, 1.0,
     ),
     "sine_wave": (
         "sine_wave_transient_width_mix",
@@ -70,12 +63,12 @@ _TRANSIENT_MIX_META: Dict[str, tuple] = {
 _KICK_GAIN_TIP = (
     "Kick event gain (0%–200%). Controls how strongly discrete kick help\n"
     "pushes the mode's fast-react path. 0% = disabled, 100% = default.\n"
-    "Spectrum spends this in the kick lane; Blob spends it in stage/kick assist.\n"
+    "Spectrum spends this in the kick lane.\n"
     "0% = disabled, 100% = default, 200% = double."
 )
 _PULSE_GAIN_TIP = (
     "Transient pulse gain (0%–300%). Controls how strongly transient\n"
-    "bass energy mixes into bubble/blob pulse amplitude.\n"
+    "bass energy mixes into Bubble pulse amplitude.\n"
     "0% = disabled, 100% = default, 300% = triple."
 )
 
@@ -83,7 +76,6 @@ _MODE_LABELS: Dict[str, str] = {
     "spectrum": "Spectrum",
     "oscilloscope": "Oscilloscope",
     "sine_wave": "Sine Wave",
-    "blob": "Blob",
     "bubble": "Bubble",
 }
 
@@ -91,7 +83,6 @@ _MODE_RECOMMENDED_BLOCK_SIZE: Dict[str, int] = {
     "spectrum": 128,
     "oscilloscope": 128,
     "sine_wave": 128,
-    "blob": 256,
     "bubble": 256,
 }
 
@@ -99,7 +90,6 @@ _MODE_RECOMMENDED_AGC: Dict[str, float] = {
     "spectrum": 0.42,
     "oscilloscope": 0.15,
     "sine_wave": 0.18,
-    "blob": 0.45,
     "bubble": 0.50,
 }
 
@@ -227,7 +217,6 @@ def _agc_tooltip(mode_key: str) -> str:
     mode_name = _mode_display_name(mode_key)
     recommendation_map = {
         "spectrum": "Recommended starting range: 35%–50%. Higher values trade punch for steadier loud/quiet balance.",
-        "blob": "Recommended starting range: 35%–55%. Higher values help uneven tracks but can soften hard transient contrast.",
         "bubble": "Recommended starting range: 45%–60%. Useful when the stream feels too uneven between tracks.",
         "oscilloscope": "Recommended starting range: 0%–25%. Usually keep this low so line dynamics stay honest.",
         "sine_wave": "Recommended starting range: 0%–25%. Usually keep this low so heartbeat/width motion keeps its natural contrast.",
@@ -495,30 +484,6 @@ def _control_defs_for_mode(mode_key: str) -> tuple[_ControlDef, ...]:
                 tooltip=(
                     "Transient vocal/mid energy weight for bubble pulse (0%–100%).\n"
                     "Higher = more mid-range response. 25% = default."
-                ),
-                minimum=0.0,
-                maximum=1.0,
-                tick_interval=10,
-                scale=100.0,
-                storage_kind="direct",
-                display=_format_percent,
-            )
-        )
-    if mode_key == "blob":
-        defs.append(
-            _ControlDef(
-                control_key="blob_vocal_slider",
-                config_key="blob_transient_mix_vocal",
-                default_key="transient_mix_vocal",
-                widget_kind="slider",
-                default_type="float",
-                base_default=0.35,
-                label_text="Transient Vocal Mix:",
-                label_key="blob_vocal_label",
-                section="transient",
-                tooltip=(
-                    "Transient vocal/mid energy weight for blob deformation (0%–100%).\n"
-                    "Higher = more mid-range response. 35% = default."
                 ),
                 minimum=0.0,
                 maximum=1.0,

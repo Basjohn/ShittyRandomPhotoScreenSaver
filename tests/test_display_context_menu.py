@@ -11,7 +11,7 @@ def test_get_current_visualizer_mode_prefers_live_visualizer_widget() -> None:
             return default
 
     widget = SimpleNamespace(
-        spotify_visualizer_widget=SimpleNamespace(_vis_mode_str="blob"),
+        spotify_visualizer_widget=SimpleNamespace(_vis_mode_str="bubble"),
         settings_manager=_Settings(),
     )
 
@@ -35,11 +35,11 @@ def test_get_current_visualizer_mode_falls_back_to_settings_when_local_widget_mi
 
 def test_get_current_visualizer_mode_uses_live_widget_only_when_settings_missing() -> None:
     widget = SimpleNamespace(
-        spotify_visualizer_widget=SimpleNamespace(_vis_mode_str="blob"),
+        spotify_visualizer_widget=SimpleNamespace(_vis_mode_str="bubble"),
         settings_manager=None,
     )
 
-    assert _get_current_visualizer_mode(widget) == "blob"
+    assert _get_current_visualizer_mode(widget) == "bubble"
 
 
 class _VisualizerSwitchTarget:

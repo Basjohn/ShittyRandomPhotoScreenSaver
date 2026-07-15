@@ -4,7 +4,6 @@ Verifies that WidgetsTab integrates correctly with the canonical nested
 `widgets` settings structure (clock + weather) and that defaults and
 roundtrips behave as expected.
 """
-from contextlib import contextmanager
 from copy import deepcopy
 import logging
 from pathlib import Path
@@ -19,7 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover
 import uuid
 
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QLabel, QToolButton
+from PySide6.QtWidgets import QToolButton
 
 from ui.tabs.widgets_tab import WidgetsTab
 from ui.tabs.shared_styles import SPINBOX_STYLE
@@ -39,18 +38,6 @@ def _find_toggle(container, text: str) -> QToolButton | None:
         if toggle.text() == text:
             return toggle
     return None
-
-
-@contextmanager
-def _blob_gate(enabled: bool):
-    from core.dev_gates import force_gate, is_blob_enabled
-
-    prior_blob_gate = is_blob_enabled()
-    force_gate(blob=enabled)
-    try:
-        yield
-    finally:
-        force_gate(blob=prior_blob_gate)
 
 
 @pytest.fixture
@@ -1288,18 +1275,6 @@ def test_visualizer_mode_builders_keep_preset_scaffold_wiring(qt_app, settings_m
         tab.deleteLater()
 
 
-def test_visualizer_settings_do_not_build_gated_blob_ui(qt_app, settings_manager):
-    with _blob_gate(False):
-        tab = WidgetsTab(settings_manager)
-        try:
-            tab._load_settings()
-            assert not hasattr(tab, "_blob_settings_container")
-            assert not hasattr(tab, "_blob_preset_slider")
-            assert tab.vis_mode_combo.findData("blob") < 0
-        finally:
-            tab.deleteLater()
-
-
 def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_manager):
     widgets_cfg = settings_manager.get("widgets", {}) or {}
     widgets_cfg["spotify_visualizer"] = {
@@ -1312,8 +1287,6 @@ def test_visualizer_sparse_mapping_uses_first_preset_fallback(qt_app, settings_m
         tab._load_settings()
         assert tab._sine_preset_slider.preset_index() == 0
         assert tab._bubble_preset_slider.preset_index() == 0
-        if hasattr(tab, "_blob_preset_slider"):
-            assert tab._blob_preset_slider.preset_index() == 0
     finally:
         tab.deleteLater()
 
@@ -1688,33 +1661,6 @@ def test_bubble_center_out_reverse_round_trips_through_widgets_tab(qt_app, setti
         tab.deleteLater()
 
 
-def test_blob_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            normal_layout = tab._blob_normal.layout()
-            normal_titles = []
-            for idx in range(normal_layout.count()):
-                widget = normal_layout.itemAt(idx).widget()
-                if widget is not None:
-                    title = widget.property("bucketTitle")
-                    if title:
-                        normal_titles.append(title)
-            assert normal_titles == ["Blob Type", "Body", "Appearance", "Layout", "Glow"]
-
-            adv_layout = tab._blob_advanced.layout()
-            adv_titles = []
-            for idx in range(adv_layout.count()):
-                widget = adv_layout.itemAt(idx).widget()
-                if widget is not None:
-                    title = widget.property("bucketTitle")
-                    if title:
-                        adv_titles.append(title)
-            assert adv_titles == ["Ghost"]
-        finally:
-            tab.deleteLater()
-
-
 def test_spectrum_builder_uses_real_bucket_order_and_collapsible_sections(qt_app, settings_manager):
     tab = WidgetsTab(settings_manager)
     try:
@@ -1750,74 +1696,6 @@ def test_spectrum_builder_uses_explicit_bar_segment_render_mode_buttons(qt_app, 
         assert tab._spectrum_render_mode in {"bars", "segment"}
     finally:
         tab.deleteLater()
-
-
-def test_blob_builder_switches_dedicated_mighty_and_shaped_controls_by_blob_type(
-    qt_app,
-    settings_manager,
-):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            assert tab.blob_type_combo.itemText(0) == "Mighty Blob"
-            assert tab.blob_type_combo.itemText(1) == "Shaped Blob"
-            assert not hasattr(tab, "blob_shaper_enabled")
-
-            tab.blob_type_combo.setCurrentIndex(0)
-            qt_app.processEvents()
-
-            assert tab._blob_mighty_container.isHidden() is False
-            assert tab._blob_mighty_container.isEnabled() is True
-            assert tab._blob_shaped_container.isHidden() is True
-            assert tab._blob_shaped_container.isEnabled() is False
-
-            tab.blob_type_combo.setCurrentIndex(1)
-            qt_app.processEvents()
-
-            assert tab._blob_mighty_container.isHidden() is True
-            assert tab._blob_mighty_container.isEnabled() is False
-            assert tab._blob_shaped_container.isHidden() is False
-            assert tab._blob_shaped_container.isEnabled() is True
-            shaped_labels = {
-                label.text() for label in tab._blob_shaped_container.findChildren(QLabel)
-            }
-            assert "Authored Shape:" in shaped_labels
-            assert "Living Wobble:" in shaped_labels
-            assert "Music Mutation:" in shaped_labels
-
-            tab.blob_type_combo.setCurrentIndex(0)
-            qt_app.processEvents()
-
-            assert tab._blob_mighty_container.isHidden() is False
-            assert tab._blob_shaped_container.isHidden() is True
-
-            tab.blob_reactive_glow.setChecked(False)
-            qt_app.processEvents()
-
-            for row in (
-                tab._blob_glow_color_row,
-                tab._blob_glow_intensity_row,
-                tab._blob_glow_reactivity_row,
-                tab._blob_glow_drive_row,
-                tab._blob_glow_max_size_row,
-            ):
-                assert row.isHidden() is True
-                assert row.isEnabled() is False
-
-            tab.blob_reactive_glow.setChecked(True)
-            qt_app.processEvents()
-
-            for row in (
-                tab._blob_glow_color_row,
-                tab._blob_glow_intensity_row,
-                tab._blob_glow_reactivity_row,
-                tab._blob_glow_drive_row,
-                tab._blob_glow_max_size_row,
-            ):
-                assert row.isHidden() is False
-                assert row.isEnabled() is True
-        finally:
-            tab.deleteLater()
 
 
 def test_widgets_tab_curated_preset_apply_ignores_stale_custom_runtime_values(qt_app, settings_manager):
@@ -1859,151 +1737,6 @@ def test_widgets_tab_curated_preset_apply_ignores_stale_custom_runtime_values(qt
         assert saved_model.resolve_audio_block_size("bubble") == baseline.resolve_audio_block_size("bubble")
     finally:
         tab.deleteLater()
-
-
-def test_blob_builder_keeps_shared_controls_visible_when_shaped_blob_is_selected(
-    qt_app,
-    settings_manager,
-):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            tab.blob_type_combo.setCurrentIndex(1)
-            qt_app.processEvents()
-
-            assert tab._blob_reactive_glow_row.isHidden() is False
-            assert tab._blob_glow_color_row.isHidden() is False
-            assert tab._blob_glow_intensity_row.isHidden() is False
-            assert tab._blob_glow_reactivity_row.isHidden() is False
-            assert tab._blob_glow_drive_row.isHidden() is False
-            assert tab._blob_glow_max_size_row.isHidden() is False
-            assert tab._blob_shaper_idle_motion_row.isHidden() is False
-            assert tab._blob_shaper_audio_motion_row.isHidden() is False
-            assert tab._blob_pulse_row.isHidden() is False
-            assert tab._blob_pulse_release_row.isHidden() is False
-            assert tab._blob_topology_row.isHidden() is False
-            assert tab._blob_ring_thickness_row.isHidden() is True
-
-            tab.blob_topology_combo.setCurrentIndex(1)
-            qt_app.processEvents()
-            assert tab._blob_ring_thickness_row.isHidden() is False
-
-            tab.blob_topology_combo.setCurrentIndex(0)
-            qt_app.processEvents()
-            assert tab._blob_ring_thickness_row.isHidden() is True
-            assert tab._blob_mighty_container.isHidden() is True
-            assert tab._blob_shaped_container.isHidden() is False
-        finally:
-            tab.deleteLater()
-
-
-def test_blob_builder_gates_inward_liquid_detail_rows_from_enable_toggle(
-    qt_app,
-    settings_manager,
-):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            assert tab._blob_inward_liquid_enabled_row.isHidden() is False
-            assert tab._blob_inward_liquid_color_row.isHidden() is True
-            assert tab._blob_inward_liquid_reactivity_row.isHidden() is True
-            assert tab._blob_inward_liquid_max_size_row.isHidden() is True
-
-            tab.blob_inward_liquid_enabled.setChecked(True)
-            qt_app.processEvents()
-
-            assert tab._blob_inward_liquid_color_row.isHidden() is False
-            assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
-            assert tab._blob_inward_liquid_max_size_row.isHidden() is False
-
-            tab.blob_type_combo.setCurrentIndex(1)
-            qt_app.processEvents()
-
-            assert tab._blob_inward_liquid_enabled_row.isHidden() is False
-            assert tab._blob_inward_liquid_color_row.isHidden() is False
-            assert tab._blob_inward_liquid_reactivity_row.isHidden() is False
-            assert tab._blob_inward_liquid_max_size_row.isHidden() is False
-        finally:
-            tab.deleteLater()
-
-
-def test_widgets_tab_blob_type_round_trip_saves_canonical_value_without_legacy_toggle(
-    qt_app,
-    settings_manager,
-):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            widgets_cfg = settings_manager.get("widgets", {}) or {}
-            spotify_vis = widgets_cfg.setdefault("spotify_visualizer", {})
-            spotify_vis.update(
-                {
-                    "mode": "blob",
-                    "blob_type": "shaped",
-                    "blob_shaper_enabled": False,
-                    "blob_topology": "ring",
-                }
-            )
-            settings_manager.set("widgets", widgets_cfg)
-
-            tab._load_settings()
-            assert tab.blob_type_combo.currentIndex() == 1
-            assert tab._blob_mighty_container.isHidden() is True
-            assert tab._blob_shaped_container.isHidden() is False
-            assert tab.blob_topology_combo.currentIndex() == 1
-            assert tab._blob_ring_thickness_row.isHidden() is False
-
-            tab.blob_type_combo.setCurrentIndex(0)
-            tab._save_settings_now()
-
-            saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-            assert saved["blob_type"] == "mighty"
-            assert "blob_shaper_enabled" not in saved
-        finally:
-            tab.deleteLater()
-
-
-@pytest.mark.parametrize(
-    ("curated_index", "blob_type", "control_attr", "ui_value", "setting_key", "saved_value"),
-    [
-        (0, "mighty", "blob_reactive_deformation", 137, "blob_reactive_deformation", 1.37),
-        (2, "shaped", "blob_shaper_audio_motion", 173, "blob_shaper_audio_motion", 1.73),
-    ],
-)
-def test_blob_subtype_slider_edit_moves_curated_preset_to_custom_and_persists(
-    qt_app,
-    settings_manager,
-    curated_index,
-    blob_type,
-    control_attr,
-    ui_value,
-    setting_key,
-    saved_value,
-):
-    with _blob_gate(True):
-        tab = WidgetsTab(settings_manager)
-        try:
-            tab.vis_mode_combo.setCurrentIndex(tab.vis_mode_combo.findData("blob"))
-            slider = tab._blob_preset_slider
-            slider.set_preset_index(curated_index)
-            tab._on_visualizer_preset_changed("blob", curated_index)
-            qt_app.processEvents()
-
-            assert slider.preset_index() == curated_index
-            assert ("shaped" if tab.blob_type_combo.currentIndex() == 1 else "mighty") == blob_type
-
-            getattr(tab, control_attr).setValue(ui_value)
-            qt_app.processEvents()
-
-            assert slider.preset_index() == slider.custom_index()
-
-            tab._save_settings_now()
-            saved = settings_manager.get("widgets", {}).get("spotify_visualizer", {})
-            assert saved["preset_blob"] == slider.custom_index()
-            assert saved["blob_type"] == blob_type
-            assert saved[setting_key] == pytest.approx(saved_value)
-        finally:
-            tab.deleteLater()
 
 
 def test_move_to_custom_preserves_current_visualizer_colors(qt_app, settings_manager):
@@ -2289,7 +2022,6 @@ def test_build_visualizer_preset_payload_uses_shared_missing_preset_fallback(qt_
     [
         ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
         ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
-        ("blob", "_blob_preset_slider", "blob_stretch", 0.48),
         ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
         ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
     ],
@@ -2302,37 +2034,35 @@ def test_build_visualizer_preset_payload_strips_retired_compat_keys_for_all_mode
     mode_key,
     mode_value,
 ):
-    context = _blob_gate(True) if mode == "blob" else _blob_gate(False)
-    with context:
-        tab = WidgetsTab(settings_manager)
-        try:
-            slider = getattr(tab, slider_attr)
-            custom_index = slider.custom_index()
-            prefix = MODE_KEY_PREFIXES[mode][0]
-            widgets_cfg = settings_manager.get("widgets", {}) or {}
-            widgets_cfg["spotify_visualizer"] = {
-                "mode": mode,
-                f"preset_{mode}": custom_index,
-                f"{prefix}energy_boost": 1.33,
-                f"{prefix}use_raw_energy": True,
-                mode_key: mode_value,
-            }
-            settings_manager.set("widgets", widgets_cfg)
+    tab = WidgetsTab(settings_manager)
+    try:
+        slider = getattr(tab, slider_attr)
+        custom_index = slider.custom_index()
+        prefix = MODE_KEY_PREFIXES[mode][0]
+        widgets_cfg = settings_manager.get("widgets", {}) or {}
+        widgets_cfg["spotify_visualizer"] = {
+            "mode": mode,
+            f"preset_{mode}": custom_index,
+            f"{prefix}energy_boost": 1.33,
+            f"{prefix}use_raw_energy": True,
+            mode_key: mode_value,
+        }
+        settings_manager.set("widgets", widgets_cfg)
 
-            tab._load_settings()
-            payload = tab.build_visualizer_preset_payload(mode)
+        tab._load_settings()
+        payload = tab.build_visualizer_preset_payload(mode)
 
-            assert payload
-            snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
-            assert f"{prefix}energy_boost" not in snapshot
-            assert f"{prefix}use_raw_energy" not in snapshot
-            assert "ghosting_enabled" not in snapshot
-            assert "ghost_alpha" not in snapshot
-            assert "ghost_decay" not in snapshot
-            assert "osc_sensitivity" not in snapshot
-            assert snapshot[mode_key] == pytest.approx(mode_value)
-        finally:
-            tab.deleteLater()
+        assert payload
+        snapshot = payload["snapshot"]["widgets"]["spotify_visualizer"]
+        assert f"{prefix}energy_boost" not in snapshot
+        assert f"{prefix}use_raw_energy" not in snapshot
+        assert "ghosting_enabled" not in snapshot
+        assert "ghost_alpha" not in snapshot
+        assert "ghost_decay" not in snapshot
+        assert "osc_sensitivity" not in snapshot
+        assert snapshot[mode_key] == pytest.approx(mode_value)
+    finally:
+        tab.deleteLater()
 
 
 def test_build_current_widgets_config_uses_live_visualizer_builder(qt_app, settings_manager):

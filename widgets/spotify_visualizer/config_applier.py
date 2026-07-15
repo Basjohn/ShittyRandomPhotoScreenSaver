@@ -16,10 +16,6 @@ from core.settings.bubble_gradient_semantics import (
     normalize_bubble_gradient_direction,
     normalize_bubble_specular_direction,
 )
-from core.settings.visualizer_blob_contract import (
-    BLOB_TYPE_SHAPED,
-    normalize_blob_type,
-)
 
 logger = get_logger(__name__)
 
@@ -55,11 +51,6 @@ def _normalize_direction(value: Any, default: str = "top_left") -> str:
     return val if val in valid else default
 
 
-def _normalize_blob_glow_drive_mode(value: Any, default: str = "bass") -> str:
-    val = str(value).strip().lower()
-    return val if val in {"bass", "vocal"} else default
-
-
 def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[str, float] | None:
     if not isinstance(value, dict):
         return None
@@ -71,70 +62,6 @@ def _normalize_lane_strengths(value: Any, defaults: Dict[str, float]) -> Dict[st
             lane_value = float(default)
         normalized[label] = max(0.0, min(1.0, lane_value))
     return normalized
-
-
-def normalize_blob_mode_contract_values(
-    *,
-    blob_type: str | None = None,
-    blob_shaper_enabled: bool | None = None,
-    blob_reactive_deformation: float,
-    blob_constant_wobble: float,
-    blob_reactive_wobble: float,
-    blob_stretch_tendency: float,
-    blob_stretch_inner: float,
-    blob_stretch_outer: float,
-) -> Dict[str, Any]:
-    """Return Blob motion values normalized for shaped vs Mighty ownership.
-
-    Shaped Blob owns the authored contour solver and must not consume Mighty
-    freeform motion controls. Mighty Blob, meanwhile, must never
-    revive inward denting through stale stretch-inner payloads.
-    """
-    resolved_type = normalize_blob_type(
-        blob_type,
-        legacy_shaper_enabled=blob_shaper_enabled,
-    )
-    if resolved_type == BLOB_TYPE_SHAPED:
-        return {
-            'blob_type': resolved_type,
-            'blob_reactive_deformation': 0.0,
-            'blob_constant_wobble': 0.0,
-            'blob_reactive_wobble': 0.0,
-            'blob_stretch_tendency': 0.0,
-            'blob_stretch_inner': 0.0,
-            'blob_stretch_outer': 0.0,
-        }
-    return {
-        'blob_type': resolved_type,
-        'blob_reactive_deformation': float(blob_reactive_deformation),
-        'blob_constant_wobble': float(blob_constant_wobble),
-        'blob_reactive_wobble': float(blob_reactive_wobble),
-        'blob_stretch_tendency': float(blob_stretch_tendency),
-        'blob_stretch_inner': 0.0,
-        'blob_stretch_outer': float(blob_stretch_outer),
-    }
-
-
-def _enforce_blob_mode_contract(widget: Any) -> None:
-    """Apply the Shaped/Mighty Blob ownership fence to widget runtime state."""
-    normalized = normalize_blob_mode_contract_values(
-        blob_type=getattr(widget, '_blob_type', None),
-        blob_shaper_enabled=getattr(widget, '_blob_shaper_enabled', None),
-        blob_reactive_deformation=float(getattr(widget, '_blob_reactive_deformation', 0.0)),
-        blob_constant_wobble=float(getattr(widget, '_blob_constant_wobble', 0.0)),
-        blob_reactive_wobble=float(getattr(widget, '_blob_reactive_wobble', 0.0)),
-        blob_stretch_tendency=float(getattr(widget, '_blob_stretch_tendency', 0.0)),
-        blob_stretch_inner=float(getattr(widget, '_blob_stretch_inner', 0.0)),
-        blob_stretch_outer=float(getattr(widget, '_blob_stretch_outer', 0.0)),
-    )
-    widget._blob_type = normalized['blob_type']
-    widget._blob_shaper_enabled = normalized['blob_type'] == BLOB_TYPE_SHAPED
-    widget._blob_reactive_deformation = normalized['blob_reactive_deformation']
-    widget._blob_constant_wobble = normalized['blob_constant_wobble']
-    widget._blob_reactive_wobble = normalized['blob_reactive_wobble']
-    widget._blob_stretch_tendency = normalized['blob_stretch_tendency']
-    widget._blob_stretch_inner = normalized['blob_stretch_inner']
-    widget._blob_stretch_outer = normalized['blob_stretch_outer']
 
 
 def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
@@ -221,127 +148,8 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
         widget._osc_ghost_line6_enabled = bool(kwargs['osc_ghost_line6_enabled'])
 
 
-    # --- Blob ---------------------------------------------------------
-    if 'blob_type' in kwargs or 'blob_shaper_enabled' in kwargs:
-        widget._blob_type = normalize_blob_type(
-            kwargs.get('blob_type'),
-            legacy_shaper_enabled=kwargs.get('blob_shaper_enabled'),
-        )
-        widget._blob_shaper_enabled = widget._blob_type == BLOB_TYPE_SHAPED
-    if 'blob_color' in kwargs:
-        c = _color_or_none(kwargs['blob_color'])
-        if c is not None:
-            widget._blob_color = c
-    if 'blob_glow_color' in kwargs:
-        c = _color_or_none(kwargs['blob_glow_color'])
-        if c is not None:
-            widget._blob_glow_color = c
-    if 'blob_edge_color' in kwargs:
-        c = _color_or_none(kwargs['blob_edge_color'])
-        if c is not None:
-            widget._blob_edge_color = c
-    if 'blob_outline_color' in kwargs:
-        c = _color_or_none(kwargs['blob_outline_color'])
-        if c is not None:
-            widget._blob_outline_color = c
-    if 'blob_inward_liquid_color' in kwargs:
-        c = _color_or_none(kwargs['blob_inward_liquid_color'])
-        if c is not None:
-            widget._blob_inward_liquid_color = c
-    if 'blob_pulse' in kwargs:
-        _blob_pulse = max(0.0, float(kwargs['blob_pulse']))
-        widget._blob_pulse = _blob_pulse
-        # Keep blob_pulse local to the pulse path. Historically we also
         # mirrored it into pulse_cap/stage_gain when those keys were absent,
-        # which made ordinary preset edits silently re-tune Blob's whole-body
         # size ladder and caused "why did it suddenly explode?" regressions.
-    if 'blob_width' in kwargs:
-        widget._blob_width = max(0.1, min(1.0, float(kwargs['blob_width'])))
-    if 'blob_size' in kwargs:
-        widget._blob_size = max(0.3, min(2.0, float(kwargs['blob_size'])))
-    if 'blob_glow_intensity' in kwargs:
-        widget._blob_glow_intensity = max(0.0, min(1.0, float(kwargs['blob_glow_intensity'])))
-    if 'blob_glow_reactivity' in kwargs:
-        widget._blob_glow_reactivity = max(0.0, min(2.0, float(kwargs['blob_glow_reactivity'])))
-    if 'blob_glow_max_size' in kwargs:
-        widget._blob_glow_max_size = max(0.1, min(3.0, float(kwargs['blob_glow_max_size'])))
-    if 'blob_reactive_glow' in kwargs:
-        widget._blob_reactive_glow = bool(kwargs['blob_reactive_glow'])
-    if 'blob_inward_liquid_enabled' in kwargs:
-        widget._blob_inward_liquid_enabled = bool(kwargs['blob_inward_liquid_enabled'])
-    if 'blob_inward_liquid_reactivity' in kwargs:
-        widget._blob_inward_liquid_reactivity = max(0.0, min(2.0, float(kwargs['blob_inward_liquid_reactivity'])))
-    if 'blob_inward_liquid_max_size' in kwargs:
-        widget._blob_inward_liquid_max_size = max(0.05, min(0.45, float(kwargs['blob_inward_liquid_max_size'])))
-    if 'blob_glow_drive_mode' in kwargs:
-        widget._blob_glow_drive_mode = _normalize_blob_glow_drive_mode(kwargs['blob_glow_drive_mode'])
-    if 'blob_reactive_deformation' in kwargs:
-        widget._blob_reactive_deformation = max(0.0, min(3.0, float(kwargs['blob_reactive_deformation'])))
-    if 'blob_pulse_cap' in kwargs:
-        widget._blob_pulse_cap = max(0.0, min(3.0, float(kwargs['blob_pulse_cap'])))
-    if 'blob_pulse_release_ms' in kwargs:
-        _blob_release = max(60.0, min(1500.0, float(kwargs['blob_pulse_release_ms'])))
-        widget._blob_pulse_release_ms = _blob_release
-        if 'blob_stage2_release_ms' not in kwargs:
-            widget._blob_stage2_release_ms = max(200.0, min(4000.0, _blob_release * 4.1))
-        if 'blob_stage3_release_ms' not in kwargs:
-            widget._blob_stage3_release_ms = max(200.0, min(4000.0, _blob_release * 5.45))
-    if 'blob_stage_gain' in kwargs:
-        widget._blob_stage_gain = max(0.0, min(2.0, float(kwargs['blob_stage_gain'])))
-    if 'blob_core_scale' in kwargs:
-        widget._blob_core_scale = max(0.25, min(2.5, float(kwargs['blob_core_scale'])))
-    if 'blob_core_floor_bias' in kwargs:
-        widget._blob_core_floor_bias = max(0.0, min(0.6, float(kwargs['blob_core_floor_bias'])))
-    if 'blob_stage_bias' in kwargs:
-        widget._blob_stage_bias = max(-0.60, min(0.60, float(kwargs['blob_stage_bias'])))
-    if 'blob_stage2_release_ms' in kwargs:
-        widget._blob_stage2_release_ms = max(200.0, min(4000.0, float(kwargs['blob_stage2_release_ms'])))
-    if 'blob_stage3_release_ms' in kwargs:
-        widget._blob_stage3_release_ms = max(200.0, min(4000.0, float(kwargs['blob_stage3_release_ms'])))
-    if 'blob_constant_wobble' in kwargs:
-        widget._blob_constant_wobble = max(0.0, min(2.0, float(kwargs['blob_constant_wobble'])))
-    if 'blob_reactive_wobble' in kwargs:
-        widget._blob_reactive_wobble = max(0.0, min(3.0, float(kwargs['blob_reactive_wobble'])))
-    if 'blob_stretch_tendency' in kwargs:
-        widget._blob_stretch_tendency = max(0.0, min(1.0, float(kwargs['blob_stretch_tendency'])))
-    if 'blob_stretch_inner' in kwargs:
-        widget._blob_stretch_inner = max(0.0, min(1.0, float(kwargs['blob_stretch_inner'])))
-    if 'blob_stretch_outer' in kwargs:
-        widget._blob_stretch_outer = max(0.0, min(1.0, float(kwargs['blob_stretch_outer'])))
-    if 'blob_stretch' in kwargs:
-        _blob_stretch = max(0.0, min(1.0, float(kwargs['blob_stretch'])))
-        widget._blob_stretch_tendency = _blob_stretch
-        widget._blob_stretch_inner = 0.0
-        widget._blob_stretch_outer = _blob_stretch
-    # Shaped Blob
-    if 'blob_shaper_base_strength' in kwargs:
-        widget._blob_shaper_base_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_base_strength'])))
-    if 'blob_shaper_react_strength' in kwargs:
-        widget._blob_shaper_react_strength = max(0.0, min(1.0, float(kwargs['blob_shaper_react_strength'])))
-    if 'blob_shaper_idle_motion' in kwargs:
-        widget._blob_shaper_idle_motion = max(0.0, min(2.0, float(kwargs['blob_shaper_idle_motion'])))
-    if 'blob_shaper_audio_motion' in kwargs:
-        widget._blob_shaper_audio_motion = max(0.0, min(3.0, float(kwargs['blob_shaper_audio_motion'])))
-    if 'blob_topology' in kwargs:
-        val = str(kwargs['blob_topology']).strip().lower()
-        widget._blob_topology = val if val in {'circle', 'ring'} else 'circle'
-    if 'blob_ring_thickness' in kwargs:
-        widget._blob_ring_thickness = max(0.05, min(1.0, float(kwargs['blob_ring_thickness'])))
-    if 'blob_shape_base_nodes' in kwargs:
-        nodes = kwargs['blob_shape_base_nodes']
-        if isinstance(nodes, list):
-            widget._blob_shape_base_nodes = nodes
-    if 'blob_shape_reaction_nodes' in kwargs:
-        nodes = kwargs['blob_shape_reaction_nodes']
-        if isinstance(nodes, list):
-            widget._blob_shape_reaction_nodes = nodes
-    if 'blob_shape_energy_nodes' in kwargs:
-        nodes = kwargs['blob_shape_energy_nodes']
-        if isinstance(nodes, list):
-            widget._blob_shape_energy_nodes = nodes
-    _enforce_blob_mode_contract(widget)
-
-
     # --- Card + bar styling (global across modes) ---------------------
     if 'bar_fill_color' in kwargs:
         c = _color_or_none(kwargs['bar_fill_color'])
@@ -482,8 +290,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     # --- Height growth factors ----------------------------------------
     if 'spectrum_growth' in kwargs:
         widget._spectrum_growth = max(0.5, min(5.0, float(kwargs['spectrum_growth'])))
-    if 'blob_growth' in kwargs:
-        widget._blob_growth = max(0.5, min(5.0, float(kwargs['blob_growth'])))
     if 'osc_growth' in kwargs:
         widget._osc_growth = max(0.5, min(5.0, float(kwargs['osc_growth'])))
     if 'devcurve_growth' in kwargs:
@@ -654,13 +460,6 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'spectrum_ghost_decay' in kwargs:
         widget._spectrum_ghost_decay = max(0.1, min(1.0, float(kwargs['spectrum_ghost_decay'])))
 
-    # --- Blob ghost -------------------------------------------------------
-    if 'blob_ghosting_enabled' in kwargs:
-        widget._blob_ghosting_enabled = bool(kwargs['blob_ghosting_enabled'])
-    if 'blob_ghost_alpha' in kwargs:
-        widget._blob_ghost_alpha = max(0.0, min(1.0, float(kwargs['blob_ghost_alpha'])))
-    if 'blob_ghost_decay' in kwargs:
-        widget._blob_ghost_decay = max(0.1, min(1.0, float(kwargs['blob_ghost_decay'])))
 
     # --- Sine ghost -------------------------------------------------------
     if 'sine_ghosting_enabled' in kwargs:
@@ -889,9 +688,6 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['osc_ghost_decay'] = getattr(widget, '_osc_ghost_decay', 0.4)
     extra['osc_ghost_line2_enabled'] = getattr(widget, '_osc_ghost_line2_enabled', True)
     extra['osc_ghost_line3_enabled'] = getattr(widget, '_osc_ghost_line3_enabled', True)
-    extra['blob_ghosting_enabled'] = getattr(widget, '_blob_ghosting_enabled', False)
-    extra['blob_ghost_alpha'] = getattr(widget, '_blob_ghost_alpha', 0.4)
-    extra['blob_ghost_decay'] = getattr(widget, '_blob_ghost_decay', 0.3)
     extra['sine_ghosting_enabled'] = getattr(widget, '_sine_ghosting_enabled', True)
     extra['sine_ghost_alpha'] = getattr(widget, '_sine_ghost_alpha', 0.45)
     extra['sine_ghost_decay'] = getattr(widget, '_sine_ghost_decay', 0.3)
@@ -914,20 +710,6 @@ def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
 
 
 def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
-    """Return the canonical continuous energy source for the active mode.
-
-    Warning:
-    Blob and Bubble have repeatedly regressed when their ordinary continuous
-    support path was switched wholesale onto hotter pre-AGC energy. That
-    change made both modes feel initially "more reactive" while actually
-    pushing them into the same recurring failure family: Bubble ceiling/hold
-    pinning and Blob hot-baseline blowout/judder.
-
-    If those modes need more hit readability, prefer transient/event routing
-    or mode-local attack/release work. Do not blindly swap their whole
-    continuous body signal back to pre-AGC energy without proving the full
-    downstream contract can tolerate it.
-    """
     return engine.get_energy_bands()
 
 
@@ -975,19 +757,7 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
     if scheduler is None:
         return
 
-    if mode_str == 'blob':
-        # Consume-once at the mode snapshot boundary so Blob gets a fresh edge
-        # signal without replaying the same scheduled event for every frame in
-        # its max-age window.
-        kick_evt = scheduler.consume_next('kick', max_age_s=0.18)
-        snare_evt = scheduler.consume_next('snare', max_age_s=0.22)
-        extra['blob_kick_event_strength'] = (
-            float(getattr(kick_evt, 'strength', 0.0)) if kick_evt is not None else 0.0
-        )
-        extra['blob_snare_event_strength'] = (
-            float(getattr(snare_evt, 'strength', 0.0)) if snare_evt is not None else 0.0
-        )
-    elif mode_str in {'sine_wave', 'oscilloscope'}:
+    if mode_str in {'sine_wave', 'oscilloscope'}:
         kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
         snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
         extra['line_kick_event_strength'] = (
@@ -1080,85 +850,6 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
         extra['line_speed'] = max(0.22, float(extra.get('line_speed', 0.0) or 0.0))
 
 
-def _append_blob_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach Blob-only live-core and retained-ghost parameters."""
-    extra['blob_color'] = widget._blob_color
-    extra['blob_glow_color'] = widget._blob_glow_color
-    extra['blob_edge_color'] = widget._blob_edge_color
-    extra['blob_outline_color'] = widget._blob_outline_color
-    extra['blob_inward_liquid_color'] = getattr(widget, '_blob_inward_liquid_color', None)
-    extra['blob_pulse'] = widget._blob_pulse
-    extra['blob_pulse_release_ms'] = getattr(widget, '_blob_pulse_release_ms', 220.0)
-    extra['blob_width'] = widget._blob_width
-    extra['blob_size'] = widget._blob_size
-    extra['blob_glow_intensity'] = widget._blob_glow_intensity
-    extra['blob_glow_reactivity'] = getattr(widget, '_blob_glow_reactivity', 1.0)
-    extra['blob_glow_max_size'] = getattr(widget, '_blob_glow_max_size', 1.0)
-    extra['blob_reactive_glow'] = widget._blob_reactive_glow
-    extra['blob_inward_liquid_enabled'] = bool(getattr(widget, '_blob_inward_liquid_enabled', False))
-    extra['blob_inward_liquid_reactivity'] = max(0.0, min(2.0, float(getattr(widget, '_blob_inward_liquid_reactivity', 1.0))))
-    extra['blob_inward_liquid_max_size'] = max(0.05, min(0.45, float(getattr(widget, '_blob_inward_liquid_max_size', 0.28))))
-    extra['blob_glow_drive_mode'] = _normalize_blob_glow_drive_mode(
-        getattr(widget, '_blob_glow_drive_mode', 'bass')
-    )
-    # Blob owns these mode-specific transient controls. Transport them with
-    # every frame so live preset edits cannot leave the GL overlay on stale
-    # technical values.
-    extra['transient_pulse_gain'] = max(
-        0.0,
-        min(3.0, float(getattr(widget, '_transient_pulse_gain', 1.0))),
-    )
-    extra['transient_clamp'] = max(
-        0.0,
-        min(3.0, float(getattr(widget, '_transient_clamp', 1.5))),
-    )
-    extra['blob_transient_mix_bass'] = max(
-        0.0,
-        min(1.0, float(getattr(widget, '_blob_transient_mix_bass', 0.5))),
-    )
-    extra['blob_transient_mix_vocal'] = max(
-        0.0,
-        min(1.0, float(getattr(widget, '_blob_transient_mix_vocal', 0.35))),
-    )
-    _blob_type = normalize_blob_type(
-        getattr(widget, '_blob_type', None),
-        legacy_shaper_enabled=getattr(widget, '_blob_shaper_enabled', None),
-    )
-    normalized = normalize_blob_mode_contract_values(
-        blob_type=_blob_type,
-        blob_reactive_deformation=float(getattr(widget, '_blob_reactive_deformation', 0.0)),
-        blob_constant_wobble=float(getattr(widget, '_blob_constant_wobble', 0.0)),
-        blob_reactive_wobble=float(getattr(widget, '_blob_reactive_wobble', 0.0)),
-        blob_stretch_tendency=float(getattr(widget, '_blob_stretch_tendency', 0.0)),
-        blob_stretch_inner=float(getattr(widget, '_blob_stretch_inner', 0.0)),
-        blob_stretch_outer=float(getattr(widget, '_blob_stretch_outer', 0.0)),
-    )
-    extra['blob_pulse_cap'] = getattr(widget, '_blob_pulse_cap', getattr(widget, '_blob_pulse', 1.0))
-    extra['blob_stage_gain'] = getattr(widget, '_blob_stage_gain', getattr(widget, '_blob_pulse', 1.0))
-    extra['blob_core_scale'] = widget._blob_core_scale
-    extra['blob_core_floor_bias'] = widget._blob_core_floor_bias
-    extra['blob_stage_bias'] = getattr(widget, '_blob_stage_bias', 0.0)
-    extra['blob_stage2_release_ms'] = getattr(widget, '_blob_stage2_release_ms', 900.0)
-    extra['blob_stage3_release_ms'] = getattr(widget, '_blob_stage3_release_ms', 1200.0)
-    # Blob subtype. The legacy boolean is intentionally not emitted.
-    extra['blob_type'] = _blob_type
-    if _blob_type == BLOB_TYPE_SHAPED:
-        extra['blob_shaper_base_strength'] = getattr(widget, '_blob_shaper_base_strength', 0.5)
-        extra['blob_shaper_react_strength'] = getattr(widget, '_blob_shaper_react_strength', 0.5)
-        extra['blob_shaper_idle_motion'] = getattr(widget, '_blob_shaper_idle_motion', 0.18)
-        extra['blob_shaper_audio_motion'] = getattr(widget, '_blob_shaper_audio_motion', 1.20)
-        extra['blob_topology'] = getattr(widget, '_blob_topology', 'circle')
-        extra['blob_ring_thickness'] = getattr(widget, '_blob_ring_thickness', 0.3)
-        extra['blob_shape_base_nodes'] = getattr(widget, '_blob_shape_base_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
-        extra['blob_shape_reaction_nodes'] = getattr(widget, '_blob_shape_reaction_nodes', [[0.0, 1.0], [0.5, 1.0], [1.0, 1.0]])
-        extra['blob_shape_energy_nodes'] = getattr(widget, '_blob_shape_energy_nodes', [])
-    else:
-        extra['blob_reactive_deformation'] = normalized['blob_reactive_deformation']
-        extra['blob_constant_wobble'] = normalized['blob_constant_wobble']
-        extra['blob_reactive_wobble'] = normalized['blob_reactive_wobble']
-        extra['blob_stretch_tendency'] = normalized['blob_stretch_tendency']
-        extra['blob_stretch_inner'] = normalized['blob_stretch_inner']
-        extra['blob_stretch_outer'] = normalized['blob_stretch_outer']
 
 
 def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
@@ -1194,8 +885,6 @@ def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict
     _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
     if mode_str in {'sine_wave', 'oscilloscope'}:
         _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
-    elif mode_str == 'blob':
-        _append_blob_visual_extras(extra, widget)
     elif mode_str == 'bubble':
         _append_bubble_visual_extras(extra, widget)
     elif mode_str == 'devcurve':
@@ -1306,8 +995,6 @@ def replay_engine_config(widget: Any, engine: Any) -> None:
     spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
     bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
     bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
-    blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
-    blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
     sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
     osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
 
@@ -1318,8 +1005,6 @@ def replay_engine_config(widget: Any, engine: Any) -> None:
     widget._spectrum_lane_transient_mix = spectrum_lane_transient_mix
     widget._bubble_transient_mix_bass = bubble_transient_mix_bass
     widget._bubble_transient_mix_vocal = bubble_transient_mix_vocal
-    widget._blob_transient_mix_bass = blob_transient_mix_bass
-    widget._blob_transient_mix_vocal = blob_transient_mix_vocal
     widget._sine_wave_transient_width_mix = sine_wave_transient_width_mix
     widget._osc_transient_width_mix = osc_transient_width_mix
 
@@ -1343,8 +1028,6 @@ def replay_engine_config(widget: Any, engine: Any) -> None:
     overlay = getattr(parent, '_spotify_bars_overlay', None) if parent else None
     if overlay is not None:
         try:
-            overlay._blob_transient_mix_bass = blob_transient_mix_bass
-            overlay._blob_transient_mix_vocal = blob_transient_mix_vocal
             overlay._transient_pulse_gain = transient_pulse_gain
             overlay._transient_clamp = transient_clamp
             overlay._sine_wave_transient_width_mix = sine_wave_transient_width_mix

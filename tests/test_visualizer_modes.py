@@ -1,11 +1,7 @@
 """
 Tests for Spotify Visualizer visualization modes.
 
-These tests verify the VisualizerMode enum and the SPECTRUM mode
-which is the only currently implemented visualization style.
-
-Note: WAVEFORM and ABSTRACT modes were planned but not implemented.
-Tests for those modes have been removed to match actual implementation.
+These tests verify the VisualizerMode enum and the five active registry modes.
 """
 # ruff: noqa: E402
 from __future__ import annotations
@@ -37,11 +33,11 @@ class TestVisualizerModeEnum:
     def test_visualizer_mode_count(self):
         """Verify the current visualizer mode set exists."""
         from widgets.spotify_visualizer_widget import VisualizerMode
+        from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         modes = list(VisualizerMode)
-        assert len(modes) == 6
+        assert len(modes) == 5
         assert modes[0] == VisualizerMode.SPECTRUM
-        expected = {"SPECTRUM", "OSCILLOSCOPE", "BLOB", "SINE_WAVE", "BUBBLE", "DEVCURVE"}
-        assert {m.name for m in modes} == expected
+        assert {m.name.lower() for m in modes} == set(VISUALIZER_MODE_IDS)
 
     def test_registry_default_mode_id_matches_canonical_default(self):
         """Verify the shared default-mode helper stays aligned with product defaults."""

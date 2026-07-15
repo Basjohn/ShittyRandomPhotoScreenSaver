@@ -2791,13 +2791,11 @@ class CustomLayoutManager:
             mode_id = str(getattr(widget, "_vis_mode_str", "spectrum") or "spectrum")
             growth_map = build_growth_map_from_widget(widget)
             base_height = int(getattr(widget, "_base_height", max(40, fallback_size.height())))
-            blob_width = float(getattr(widget, "_blob_width", 1.0))
             authored_current_size = resolve_custom_card_size(
                 mode_id=mode_id,
                 media_width=media_width,
                 base_height=base_height,
                 growth_by_mode=growth_map,
-                blob_width=blob_width,
                 width_scale=1.0,
                 height_scale=1.0,
                 maximum_envelope=False,
@@ -2808,7 +2806,6 @@ class CustomLayoutManager:
                     media_width=media_width,
                     base_height=base_height,
                     growth_by_mode=growth_map,
-                    blob_width=blob_width,
                     width_scale=1.0,
                     height_scale=1.0,
                     maximum_envelope=True,
@@ -2832,7 +2829,6 @@ class CustomLayoutManager:
                 media_width=media_width,
                 base_height=base_height,
                 growth_by_mode=growth_map,
-                blob_width=blob_width,
                 width_scale=float(payload.get("width_scale", 1.0)),
                 height_scale=float(payload.get("height_scale", 1.0)),
                 maximum_envelope=False,

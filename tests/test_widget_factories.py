@@ -145,6 +145,27 @@ class TestClockWidgetFactory:
         # Clean up
         widget.deleteLater()
 
+    def test_create_applies_screen_specific_display_mode_override(self, mock_settings, parent_widget):
+        from PySide6.QtGui import QGuiApplication
+
+        from rendering.custom_layout_contract import get_screen_signature
+
+        parent_widget._screen = QGuiApplication.primaryScreen()
+        signature = get_screen_signature(parent_widget._screen)
+        factory = ClockWidgetFactory(mock_settings)
+        widget = factory.create(
+            parent_widget,
+            {
+                "enabled": True,
+                "display_mode": "digital",
+                "display_mode_overrides": {signature: "analog"},
+            },
+        )
+
+        assert widget is not None
+        assert widget._display_mode == "analog"
+        widget.deleteLater()
+
 
 # ---------------------------------------------------------------------------
 # Weather Widget Factory Tests

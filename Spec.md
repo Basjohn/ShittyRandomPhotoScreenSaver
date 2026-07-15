@@ -113,7 +113,6 @@ Active ids:
 - `oscilloscope`
 - `sine_wave`
 - `bubble`
-- `blob` (deprecated failed mode, still gated by `-devblob` only until removal)
 - `devcurve` (display label: Spline Curve)
 
 ### 5.2 Naming contract
@@ -124,8 +123,8 @@ Active ids:
 ### 5.3 Shared seams
 - Mapping normalization: `visualizer_settings_snapshot.py`
 - Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
-- Blob subtype normalization / forward migration: `core/settings/visualizer_blob_contract.py`
-- Typed visualizer persistence: `SettingsManager.set_spotify_visualizer_settings()` writes one complete normalized `widgets` root transaction. Blob subtype and subtype-owned fields must not be persisted as independent dotted writes because intermediate normalization can strip the incoming subtype before its `blob_type` arrives. Default merges must treat missing inactive subtype fields as intentional and must not re-add them.
+- Retired-mode forward migration: `core/settings/visualizer_retired_modes.py`; retired selections resolve to the registry default and their owned keys are stripped before canonical persistence.
+- Typed visualizer persistence: `SettingsManager.set_spotify_visualizer_settings()` writes one complete normalized `widgets` root transaction while preserving sibling widgets.
 - Settings-model field-spec source of truth: `core/settings/models/_spotify_visualizer.py`; grouped build specs, serializer specs, defaults, and ordered build/serialize section merges must be updated together so `from_settings()`, `from_mapping()`, and `to_dict()` remain one contract instead of drifting per entry point
 - Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
 - Curated preset import/export transfer: `core/settings/visualizer_preset_transfer.py`; zip/folder imports replace the active curated tree, while loose JSON imports are parsed, canonicalized, and written to the inferred mode/slot.
@@ -134,7 +133,7 @@ Active ids:
 - Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`
 - Mode-program resolution and renderer-owned uniform dispatch: `widgets/spotify_visualizer/overlay_render_dispatch.py`
 - Shared GL frame shell for backbuffer clear, fade gating, and stencil-wrapped render execution: `widgets/spotify_visualizer/overlay_frame_shell.py`
-- Outer visualizer card geometry policy: `widgets/spotify_visualizer/card_geometry.py`; mode/preset-owned outer height, blob-width reduction, and media-relative placement belong here rather than in the stencil shell or generic overlay-widget sizing
+- Outer visualizer card geometry policy: `widgets/spotify_visualizer/card_geometry.py`; mode/preset-owned outer height and media-relative placement belong here rather than in the stencil shell or generic overlay-widget sizing
 - Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
 - Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
 - Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.
@@ -182,13 +181,13 @@ Active ids:
 - Oscilloscope display response is mode-owned at the waveform consumption seam. Its live waveform conditioning, line-speed blending, ghost-ring delay, playback-boundary waveform reset, and transient-width accent must stay in Oscilloscope-owned helpers/render code and must not reopen shared audio, shared floor, or other accepted mode behavior unless an Oscilloscope oracle proves the shared source is wrong.
 - Visualizer latency warnings are activation- and playback-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation, and must not age paused/non-playing stale audio into normal latency errors. Explicit probe-triggered latency requests may still log before readiness or while paused so reset/transition investigations remain visible.
 
-### 5.3.1 Deprecated Blob removal contract
-**Deprecated 2026-07-14:** Blob is a failed mode scheduled for end-to-end removal. Do not repair, retune, optimize, or extend Blob behavior or its former creative/runtime acceptance tests.
+### 5.3.1 Retired Blob compatibility contract
+**Removed 2026-07-15:** Blob is not an active, gated, selectable, preset-owning, rendered, packaged, or tested visualizer mode.
 
-- The compatibility gate remains off by default only until the mode is deleted. Routine pytest collection skips Blob-named tests; the only retained acceptance bars are safe migration, production absence, and unchanged supported visualizers.
-- Saved/imported `blob` selections and legacy subtype keys (`blob_type`, `normal`, `unshaped`, and `blob_shaper_enabled`) are migration inputs only. Resolve an active Blob selection to the registry-owned supported default, strip all Blob-owned keys, and do not re-emit them through defaults, typed settings, presets, snapshots, or generated `.sst` files.
-- Removal scope includes the dev gate, defaults/descriptors, settings model/UI/builders, runtime/config/renderers, shaders/assets/presets, diagnostics, packaging, documentation, and dedicated tests. Remove owners rather than replacing them with compatibility shells.
-- Blob removal must not modify shared audio extraction, animation/timer cadence, compositor behavior, or supported mode tuning. Validate the focused supported-mode reactivity lock after each shared-file deletion.
+- Saved/imported `blob` selections and all `blob_*` / `preset_blob` leaves are migration inputs only. `core/settings/visualizer_retired_modes.py` resolves the selection to the registry-owned supported default and strips those leaves before model normalization.
+- Defaults, typed settings, presets, Custom snapshots, generated JSON/SST artifacts, UI, runtime transport, shaders, diagnostics, and packaging must never re-emit or regain Blob ownership.
+- Historical Blob bug records remain documentation only. They are not runtime contracts or acceptance oracles.
+- Retired-mode migration must not modify shared audio extraction, animation/timer cadence, compositor behavior, or supported-mode tuning. The focused supported-mode reactivity lock remains the regression bar for shared visualizer seams.
 
 ### 5.4 Mode isolation
 - Mode-owned behavior belongs to mode-owned code.

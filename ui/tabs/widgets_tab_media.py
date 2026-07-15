@@ -18,7 +18,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
-from core.settings.visualizer_mode_registry import is_mode_active
 from rendering.widget_descriptors import get_widget_position_option_labels
 from ui.color_utils import qcolor_to_list as _qcolor_to_list
 from ui.styled_popup import ColorSwatchButton
@@ -41,10 +40,6 @@ from ui.tabs.settings_binding import (
 from ui.tabs.media.technical_controls import (
     collect_per_mode_technical_controls,
     load_per_mode_technical_controls,
-)
-from ui.tabs.media.blob_settings_binding import (
-    collect_blob_mode_settings,
-    load_blob_mode_settings,
 )
 from ui.tabs.media.bubble_settings_binding import (
     collect_bubble_mode_settings,
@@ -698,24 +693,15 @@ def build_visualizers_ui(tab: "WidgetsTab", layout: QVBoxLayout) -> QWidget:
     # ==========================================
     from ui.tabs.media.spectrum_builder import build_spectrum_ui
     from ui.tabs.media.oscilloscope_builder import build_oscilloscope_ui
-    from ui.tabs.media.blob_builder import build_blob_ui, build_blob_growth
     from ui.tabs.media.sine_wave_builder import build_sine_wave_ui
     from ui.tabs.media.bubble_builder import build_bubble_ui
     from ui.tabs.media.devcurve_builder import build_devcurve_ui
 
     _run_visualizer_settings_step("build_spectrum_ui", lambda: build_spectrum_ui(tab, _svctl))
     _run_visualizer_settings_step("build_oscilloscope_ui", lambda: build_oscilloscope_ui(tab, _svctl))
-    if is_mode_active("blob"):
-        _run_visualizer_settings_step("build_blob_ui", lambda: build_blob_ui(tab, _svctl))
-    else:
-        logger.debug("[VISUALIZER_SETTINGS] Skipping gated Blob UI build")
     _run_visualizer_settings_step("build_sine_wave_ui", lambda: build_sine_wave_ui(tab, _svctl))
     _run_visualizer_settings_step("build_bubble_ui", lambda: build_bubble_ui(tab, _svctl))
     _run_visualizer_settings_step("build_devcurve_ui", lambda: build_devcurve_ui(tab, _svctl))
-
-    # Append growth sliders that were originally added after sine section
-    if is_mode_active("blob"):
-        _run_visualizer_settings_step("build_blob_growth", lambda: build_blob_growth(tab))
 
     spotify_vis_layout.addWidget(tab._vis_controls_container)
     tab.vis_enabled_checkbox.stateChanged.connect(lambda: _update_spotify_vis_enabled_visibility(tab))
@@ -919,16 +905,6 @@ def load_visualizer_settings(tab: "WidgetsTab", widgets: dict | None) -> None:
     # Update per-mode section visibility
     tab._update_vis_mode_sections()
 
-    if is_mode_active("blob"):
-        _run_visualizer_settings_step(
-            "load_blob_mode_settings",
-            lambda: load_blob_mode_settings(
-                tab,
-                spotify_vis_config,
-                sync_color_button=_apply_color_to_button,
-            ),
-        )
-
     load_visualizer_rainbow_state(tab, spotify_vis_config)
     _run_visualizer_settings_step(
         "load_bubble_mode_settings",
@@ -1035,8 +1011,6 @@ def save_visualizer_settings(tab: WidgetsTab) -> dict:
         )
     elif _cur_mode == 'sine_wave':
         spotify_vis_config.update(collect_sine_wave_mode_settings(tab))
-    elif _cur_mode == 'blob':
-        spotify_vis_config.update(collect_blob_mode_settings(tab))
     elif _cur_mode == 'bubble':
         spotify_vis_config.update(collect_bubble_mode_settings(tab))
     elif _cur_mode == 'devcurve':

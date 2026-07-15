@@ -20,7 +20,6 @@ from core.settings.visualizer_presets import (
     resolve_visualizer_activation_payload,
 )
 from core.settings.visualizer_mode_registry import coerce_visualizer_mode_id
-from core.settings.visualizer_blob_contract import BLOB_TYPE_MIGHTY
 from widgets.shadow_utils import ShadowFadeProfile, configure_overlay_widget_attributes, shadow_config_enabled
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -109,9 +108,6 @@ class SpotifyVisualizerWidget(QWidget):
         self._ghosting_enabled: bool = True
         self._ghost_alpha: float = 0.4
         self._ghost_decay_rate: float = 0.4
-        self._blob_ghosting_enabled: bool = False
-        self._blob_ghost_alpha: float = 0.4
-        self._blob_ghost_decay: float = 0.3
         self._spectrum_ghosting_enabled: bool = True
         self._spectrum_ghost_alpha: float = 0.4
         self._spectrum_ghost_decay: float = 0.4
@@ -161,7 +157,6 @@ class SpotifyVisualizerWidget(QWidget):
             "spectrum": VisualizerMode.SPECTRUM,
             "oscilloscope": VisualizerMode.OSCILLOSCOPE,
             "sine_wave": VisualizerMode.SINE_WAVE,
-            "blob": VisualizerMode.BLOB,
             "bubble": VisualizerMode.BUBBLE,
             "devcurve": VisualizerMode.DEVCURVE,
         }.get(_initial_mode_id, VisualizerMode.BUBBLE)
@@ -189,45 +184,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._osc_line6_glow_color: QColor = QColor(200, 100, 255, 180)
 
 
-        # Blob settings
-        self._blob_type: str = BLOB_TYPE_MIGHTY
-        # Compatibility mirror only. Production persistence/runtime payloads
-        # use ``blob_type``; this remains derived for old callers during the
-        # forward-migration window.
-        self._blob_shaper_enabled: bool = False
-        self._blob_color: QColor = QColor(0, 180, 255, 230)
-        self._blob_glow_color: QColor = QColor(0, 140, 255, 180)
-        self._blob_edge_color: QColor = QColor(100, 220, 255, 230)
-        self._blob_outline_color: QColor = QColor(0, 0, 0, 0)
-        self._blob_inward_liquid_color: QColor = QColor(170, 225, 255, 190)
-        self._blob_pulse: float = 1.0
-        self._blob_width: float = 1.0
-        self._blob_size: float = 1.0
-        self._blob_glow_intensity: float = 0.5
-        self._blob_glow_reactivity: float = 1.0
-        self._blob_glow_max_size: float = 1.0
-        self._blob_reactive_glow: bool = True
-        self._blob_inward_liquid_enabled: bool = False
-        self._blob_inward_liquid_reactivity: float = 1.0
-        self._blob_inward_liquid_max_size: float = 0.28
-        self._blob_reactive_deformation: float = 1.0
-        self._blob_stage_gain: float = 1.0
-        self._blob_core_scale: float = 1.0
-        self._blob_core_floor_bias: float = 0.35
-        self._blob_stage_bias: float = 0.0
-        self._blob_stage2_release_ms: float = 900.0
-        self._blob_stage3_release_ms: float = 1200.0
-        self._blob_constant_wobble: float = 1.0
-        self._blob_reactive_wobble: float = 1.0
-        self._blob_stretch_tendency: float = 0.35
-        self._blob_stretch_inner: float = 0.0  # default modern path: no authored inward dents
-        self._blob_stretch_outer: float = 0.35  # 0..1 how far outward protrusions go
-
-
         # Card height expansion (per-mode growth factors, user-customizable)
         self._base_height: int = 80
         self._spectrum_growth: float = 2.0
-        self._blob_growth: float = 3.5
         self._osc_growth: float = 2.0
         self._bubble_growth: float = 3.0
         self._devcurve_growth: float = 3.0
@@ -360,8 +319,6 @@ class SpotifyVisualizerWidget(QWidget):
         self._spectrum_lane_transient_mix: float = 0.65   # Spectrum: transient bleed into kick lane
         self._bubble_transient_mix_bass: float = 0.75     # Bubble: bass transient mix weight
         self._bubble_transient_mix_vocal: float = 0.25    # Bubble: vocal/mid transient mix weight
-        self._blob_transient_mix_bass: float = 0.5        # Blob: bass transient mix weight
-        self._blob_transient_mix_vocal: float = 0.35      # Blob: vocal/mid transient mix weight
         self._sine_wave_transient_width_mix: float = 0.4  # Sine: transient→width reaction mix
         self._osc_transient_width_mix: float = 0.35       # Osc: transient→width reaction mix
         self._bubble_big_contraction_bias: float = 1.0
@@ -759,7 +716,6 @@ class SpotifyVisualizerWidget(QWidget):
         mode_map = {
             'spectrum': VisualizerMode.SPECTRUM,
             'oscilloscope': VisualizerMode.OSCILLOSCOPE,
-            'blob': VisualizerMode.BLOB,
             'sine_wave': VisualizerMode.SINE_WAVE,
             'bubble': VisualizerMode.BUBBLE,
             'devcurve': VisualizerMode.DEVCURVE,
@@ -1058,11 +1014,6 @@ class SpotifyVisualizerWidget(QWidget):
         return metrics.preferred_height
 
     def _request_reposition(self) -> None:
-        """Ask the WidgetManager to reposition this widget for the new mode.
-
-        This ensures the card height and position are correct after a mode
-        switch (e.g. from Spectrum's 80px strip to Blob's taller card).
-        """
         wm = getattr(self, '_widget_manager', None)
         if wm is None:
             return
@@ -1233,13 +1184,6 @@ class SpotifyVisualizerWidget(QWidget):
         super().setMaximumHeight(self._resolve_custom_locked_height(maxh))
 
     def _apply_preferred_height(self) -> None:
-        """Resize the widget to match the preferred height for the current mode.
-
-        For spectrum/oscilloscope (growth=1.0), we explicitly shrink the
-        widget back to base_height so the positioning system doesn't keep
-        a stale tall height from an expanded mode (blob/bubble).
-        For expanded modes we set a minimum height from the growth factor.
-        """
         from widgets.spotify_visualizer.card_geometry import (
             build_growth_map_from_widget,
             resolve_card_metrics,

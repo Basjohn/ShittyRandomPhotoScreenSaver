@@ -155,7 +155,6 @@ _VISUALIZER_ADVANCED_ROOT_ATTRS = {
     "spectrum": ("_spectrum_advanced",),
     "oscilloscope": ("_osc_advanced",),
     "sine_wave": ("_sine_advanced", "_sine_advanced_host"),
-    "blob": ("_blob_advanced",),
     "bubble": ("_bubble_advanced",),
     "devcurve": ("_devcurve_normal", "_devcurve_advanced", "_devcurve_advanced_host"),
 }
@@ -1868,9 +1867,8 @@ class WidgetsTab(QWidget):
         working_config = dict(spotify_vis_config)
         working_config['mode'] = mode_key
         applied = apply_preset_to_config(mode_key, preset_index, working_config)
-        # Use REPLACE semantics, not merge — .update() would leave stale
-        # custom mode-specific keys (e.g. blob_shaper_enabled) that the
-        # preset didn't include, causing settings to "stick" across presets.
+        # Use REPLACE semantics so stale mode-specific keys do not survive a
+        # preset switch when the target payload intentionally omits them.
         restore_visualizer_snapshot(mode_key, spotify_vis_config, applied)
         spotify_vis_config[f"preset_{mode_key}"] = preset_index
 
@@ -1925,7 +1923,6 @@ class WidgetsTab(QWidget):
         containers = {
             'spectrum': getattr(self, '_spectrum_settings_container', None),
             'oscilloscope': getattr(self, '_osc_settings_container', None),
-            'blob': getattr(self, '_blob_settings_container', None),
             'sine_wave': getattr(self, '_sine_wave_settings_container', None),
             'bubble': getattr(self, '_bubble_settings_container', None),
             'devcurve': getattr(self, '_devcurve_settings_container', None),

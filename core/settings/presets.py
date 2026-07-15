@@ -293,17 +293,6 @@ PRESET_DEFINITIONS: Dict[str, PresetDefinition] = {
             "widgets.spotify_visualizer.osc_line2_glow_color": [2, 166, 255, 255],
             "widgets.spotify_visualizer.osc_line3_color": [255, 255, 255, 255],
             "widgets.spotify_visualizer.osc_line3_glow_color": [0, 238, 179, 255],
-            # Blob settings
-            "widgets.spotify_visualizer.blob_color": [0, 105, 243, 230],
-            "widgets.spotify_visualizer.blob_edge_color": [89, 175, 255, 255],
-            "widgets.spotify_visualizer.blob_glow_color": [0, 196, 255, 180],
-            "widgets.spotify_visualizer.blob_glow_intensity": 0.6,
-            "widgets.spotify_visualizer.blob_outline_color": [0, 111, 255, 255],
-            "widgets.spotify_visualizer.blob_pulse": 1.75,
-            "widgets.spotify_visualizer.blob_reactive_glow": True,
-            "widgets.spotify_visualizer.blob_size": 0.5,
-            "widgets.spotify_visualizer.blob_width": 0.9,
-            "widgets.spotify_visualizer.blob_growth": 3.99,
             # Reddit 1: All, Bottom Center
             "widgets.reddit.enabled": True,
             "widgets.reddit.subreddit": "All",

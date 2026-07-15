@@ -26,7 +26,7 @@ def preferred_height(
     Parameters
     ----------
     vis_mode:
-        One of ``spectrum``, ``oscilloscope``, ``blob``, ``sine_wave``,
+        One of ``spectrum``, ``oscilloscope``, ``sine_wave``,
         ``bubble``.
     base_height:
         The widget's default (spectrum) height in logical pixels.

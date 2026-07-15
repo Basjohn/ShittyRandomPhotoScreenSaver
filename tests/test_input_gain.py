@@ -146,7 +146,6 @@ class TestInputGainModelRoundTrip:
         assert model.input_gain == 1.0
         assert model.spectrum_input_gain == 1.0
         assert model.bubble_input_gain == 1.0
-        assert model.blob_input_gain == 1.0
         assert model.sine_wave_input_gain == 1.0
         assert model.oscilloscope_input_gain == 1.0
 
@@ -180,7 +179,6 @@ class TestInputGainModelRoundTrip:
         )
         assert abs(model.resolve_input_gain("spectrum") - 0.4) < 1e-6
         assert abs(model.resolve_input_gain("bubble") - 1.2) < 1e-6
-        assert abs(model.resolve_input_gain("blob") - 1.0) < 1e-6
 
 
 class TestAudioWorkerInputGain:

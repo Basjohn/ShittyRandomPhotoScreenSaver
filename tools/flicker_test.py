@@ -1189,8 +1189,8 @@ def make_dialog(variant: int) -> QDialog:
         lay = QVBoxLayout(d)
         lay.setContentsMargins(20, 20, 20, 20)
         lay.setSpacing(12)
-        lay.addWidget(QLabel("V54: plain dialog + six VisualizerPresetSlider instances"))
-        for mode_id in ("spectrum", "oscilloscope", "blob", "sine_wave", "bubble", "devcurve"):
+        lay.addWidget(QLabel("V54: plain dialog + five VisualizerPresetSlider instances"))
+        for mode_id in ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"):
             lay.addWidget(VisualizerPresetSlider(mode_id))
         return d
     elif variant in {55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70}:
@@ -1562,7 +1562,7 @@ def make_dialog(variant: int) -> QDialog:
             lay.setContentsMargins(20, 20, 20, 20)
             lay.setSpacing(12)
             lay.addWidget(QLabel(f"V{variant}: preset slider micro-isolation"))
-            for mode_id in ("spectrum", "oscilloscope", "blob", "sine_wave", "bubble", "devcurve"):
+            for mode_id in ("spectrum", "oscilloscope", "sine_wave", "bubble", "devcurve"):
                 lay.addWidget(VisualizerPresetSlider(mode_id))
             return d
         finally:

@@ -79,45 +79,34 @@ def test_sine_idle_diagnostics_respect_throttle(monkeypatch):
     assert all("[SPOTIFY_VIS][SINE][IDLE_STATE]" in msg for msg in logger.messages)
 
 
-def test_blob_diagnostics_skip_duplicate_quiet_state(monkeypatch):
+def test_oscilloscope_diagnostics_build_signature_before_throttling(monkeypatch):
     logger = _CaptureLogger()
     overlay = SimpleNamespace(
-        _vis_mode="blob",
-        _blob_kick_event_strength=0.12,
-        _blob_snare_event_strength=0.09,
-        _blob_diag_last_ts=0.0,
-        _blob_diag_last_sig=None,
-        _blob_diag_base_bass=0.1,
-        _blob_diag_base_mid=0.2,
-        _blob_diag_base_high=0.3,
-        _blob_diag_base_overall=0.4,
-        _blob_diag_transient_bass=0.01,
-        _blob_diag_transient_mid=0.02,
-        _blob_diag_transient_high=0.03,
+        _vis_mode="oscilloscope",
+        _line_speed=0.21,
+        _osc_last_waveform_blend_alpha=0.08,
+        _osc_last_waveform_delta=0.01,
+        _osc_ghost_alpha=0.65,
+        _ghost_waveform_ring=[object()] * 4,
+        _ghost_delay_frames=4,
+        _osc_transient_width_mix=0.35,
+        _osc_last_transient_width_drive=0.8,
+        _osc_last_sensitivity_mod=0.4,
+        _line_smoothed_bass=0.3,
+        _line_smoothed_mid=0.2,
+        _line_smoothed_high=0.1,
+        _energy_bands=SimpleNamespace(overall=0.25),
+        _osc_diag_last_ts=0.0,
+        _osc_diag_last_sig=None,
     )
     monkeypatch.setattr(overlay_diag, "is_viz_diagnostics_enabled", lambda: True)
-
-    times = iter((10.0, 10.2, 10.9))
+    times = iter((10.0, 10.5, 12.0))
     monkeypatch.setattr(overlay_diag.time, "time", lambda: next(times))
 
-    kwargs = dict(
-        dt_seconds=0.016,
-        blob_dt=0.016,
-        kick_raw=0.10,
-        snare_raw=0.08,
-        raw_live=(0.1, 0.2, 0.3, 0.4),
-        filtered_live=(0.1, 0.2, 0.3, 0.4),
-        prev_smoothed=0.4,
-        raw_e=0.41,
-        smoothed_e=0.42,
-        stage_raw=(0.1, 0.2, 0.3),
-        stage_filtered=(0.1, 0.2, 0.3),
-        prev_stage_filtered=(0.1, 0.2, 0.3),
-    )
+    overlay_diag.maybe_log_oscilloscope_diagnostics(overlay, logger)
+    overlay_diag.maybe_log_oscilloscope_diagnostics(overlay, logger)
+    overlay._line_speed = 0.5
+    overlay_diag.maybe_log_oscilloscope_diagnostics(overlay, logger)
 
-    overlay_diag.maybe_log_blob_diagnostics(overlay, logger, **kwargs)
-    overlay_diag.maybe_log_blob_diagnostics(overlay, logger, **kwargs)
-    overlay_diag.maybe_log_blob_diagnostics(overlay, logger, **kwargs)
-
-    assert len(logger.messages) == 1
-    assert all("[SPOTIFY_VIS][BLOB]" in msg for msg in logger.messages)
+    assert len(logger.messages) == 2
+    assert all("[SPOTIFY_VIS][OSC]" in msg for msg in logger.messages)

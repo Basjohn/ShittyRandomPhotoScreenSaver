@@ -64,19 +64,18 @@ def test_relative_card_placement_uses_top_anchor_below_contract():
     assert placement.height == 160
 
 
-def test_relative_card_placement_centers_blob_width_factor():
+def test_relative_card_placement_uses_full_media_width_for_supported_modes():
     placement = resolve_relative_card_placement(
         media_rect=QRect(100, 700, 300, 100),
         parent_width=1920,
         parent_height=1080,
-        mode_id="blob",
+        mode_id="bubble",
         card_height=280,
         position_name="BOTTOM_LEFT",
-        blob_width=0.5,
     )
     assert placement.place_below_media is False
-    assert placement.width == 150
-    assert placement.x == 175
+    assert placement.width == 300
+    assert placement.x == 100
     assert placement.y == 400
 
 
@@ -113,16 +112,15 @@ def test_resolve_custom_card_size_maximum_envelope_uses_largest_mode_metrics():
     assert size.height() == 280
 
 
-def test_resolve_custom_card_size_scales_blob_width_and_height_contract():
+def test_resolve_custom_card_size_scales_full_width_and_height_contract():
     size = resolve_custom_card_size(
-        mode_id="blob",
+        mode_id="bubble",
         media_width=280,
         base_height=80,
         growth_by_mode=DEFAULT_GROWTH,
-        blob_width=0.5,
         width_scale=1.5,
         height_scale=1.25,
         maximum_envelope=False,
     )
-    assert size.width() == 210
-    assert size.height() == 350
+    assert size.width() == 420
+    assert size.height() == 300

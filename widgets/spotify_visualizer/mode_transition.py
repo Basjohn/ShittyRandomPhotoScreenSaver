@@ -342,29 +342,6 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
         "_devcurve_specular_travel_rate",
         "_devcurve_specular_activity_alpha",
         "_devcurve_diag_last_log_ts",
-        "_blob_smoothed_energy",
-        "_blob_glow_energy",
-        "_blob_raw_bass_energy",
-        "_blob_raw_mid_energy",
-        "_blob_raw_high_energy",
-        "_blob_raw_overall_energy",
-        "_blob_live_bass_energy",
-        "_blob_live_mid_energy",
-        "_blob_live_high_energy",
-        "_blob_live_overall_energy",
-        "_blob_peak_energy",
-        "_blob_peak_bass",
-        "_blob_peak_mid",
-        "_blob_peak_high",
-        "_blob_peak_overall",
-        "_blob_peak_hold_remaining",
-        "_blob_kick_event_strength",
-        "_blob_snare_event_strength",
-        "_blob_kick_event_envelope",
-        "_blob_snare_event_envelope",
-        "_blob_diag_last_ts",
-        "_blob_runtime_diag_ts",
-        "_blob_shaper_solver_ts",
         "_line_smoothed_bass",
         "_line_smoothed_mid",
         "_line_smoothed_high",
@@ -399,11 +376,6 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
 
     for attr in (
         "_devcurve_runtime_state",
-        "_blob_shaper_runtime_profile",
-        "_blob_shaper_runtime_velocity",
-        "_blob_shaper_runtime_target_profile",
-        "_blob_shaper_solver_seed",
-        "_blob_diag_last_sig",
         "_latency_last_signature",
     ):
         try:
@@ -423,14 +395,6 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
         pass
 
     try:
-        widget._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
-        widget._blob_stage_progress_filtered = (-1.0, -1.0, -1.0)
-        widget._blob_stage_progress_ready = False
-        widget._blob_seed_pending = True
-    except Exception:
-        pass
-
-    try:
         widget._bubble_count = 0
         widget._bubble_compute_pending = False
         clear_pending_bubble_result = getattr(widget, "_clear_pending_bubble_result", None)
@@ -440,15 +404,6 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
         bubble_sim = getattr(widget, "_bubble_simulation", None)
         if bubble_sim is not None and hasattr(bubble_sim, "reset"):
             bubble_sim.reset()
-    except Exception:
-        pass
-
-    try:
-        from widgets.spotify_visualizer.blob_pockets import reset_blob_pocket_state
-
-        widget._blob_pocket_state = reset_blob_pocket_state(
-            getattr(widget, "_blob_pocket_state", None)
-        )
     except Exception:
         pass
 

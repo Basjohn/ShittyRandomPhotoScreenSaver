@@ -17,11 +17,7 @@ from core.settings.visualizer_mode_registry import (
     get_setting_prefixes,
     VISUALIZER_MODE_IDS,
 )
-from core.settings.visualizer_blob_contract import (
-    DEFAULT_BLOB_TYPE,
-    migrate_blob_type_mapping,
-    normalize_blob_type,
-)
+from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_preset_indices import (
     get_missing_preset_fallback_index,
     resolve_all_preset_indices_from_getter,
@@ -111,30 +107,11 @@ _TRANSIENT_MIX_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "spectrum_lane_transient_mix": float,
     "bubble_transient_mix_bass": float,
     "bubble_transient_mix_vocal": float,
-    "blob_transient_mix_bass": float,
-    "blob_transient_mix_vocal": float,
     "sine_wave_transient_width_mix": float,
     "oscilloscope_transient_width_mix": float,
 }
 
-_BLOB_SHAPE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
-    "blob_type": normalize_blob_type,
-    "blob_shape_base_nodes": lambda value: value,
-    "blob_shape_reaction_nodes": lambda value: value,
-    "blob_shape_energy_nodes": list,
-    "blob_shaper_base_strength": float,
-    "blob_shaper_react_strength": float,
-    "blob_shaper_idle_motion": float,
-    "blob_shaper_audio_motion": float,
-    "blob_topology": str,
-    "blob_ring_thickness": float,
-    "blob_inward_liquid_enabled": bool,
-    "blob_inward_liquid_reactivity": float,
-    "blob_inward_liquid_max_size": float,
-    "blob_inward_liquid_color": list,
-}
-
-_OSC_BLOB_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
+_OSC_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_glow_enabled": bool,
     "osc_glow_intensity": float,
     "osc_glow_reactivity": float,
@@ -142,17 +119,6 @@ _OSC_BLOB_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_reactive_glow": bool,
     "osc_line_amplitude": float,
     "osc_smoothing": float,
-    "blob_color": list,
-    "blob_glow_color": list,
-    "blob_edge_color": list,
-    "blob_outline_color": list,
-    "blob_pulse": float,
-    "blob_pulse_release_ms": int,
-    "blob_width": float,
-    "blob_size": float,
-    "blob_glow_intensity": float,
-    "blob_reactive_glow": bool,
-    "blob_glow_drive_mode": str,
     "osc_line_color": list,
     "osc_line_count": int,
     "osc_line2_color": list,
@@ -166,7 +132,6 @@ _OSC_BLOB_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_line6_color": list,
     "osc_line6_glow_color": list,
     "spectrum_growth": float,
-    "blob_growth": float,
     "osc_speed": float,
     "osc_line_dim": bool,
     "osc_line_offset_bias": float,
@@ -180,17 +145,6 @@ _OSC_BLOB_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "osc_ghost_line4_enabled": bool,
     "osc_ghost_line5_enabled": bool,
     "osc_ghost_line6_enabled": bool,
-    "blob_reactive_deformation": float,
-    "blob_constant_wobble": float,
-    "blob_reactive_wobble": float,
-    "blob_stretch": float,
-    "blob_stage_gain": float,
-    "blob_core_scale": float,
-    "blob_core_floor_bias": float,
-    "blob_stage_bias": float,
-    "blob_stretch_tendency": float,
-    "blob_stretch_inner": float,
-    "blob_stretch_outer": float,
 }
 
 _SPECTRUM_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
@@ -320,11 +274,6 @@ _BUBBLE_SERIALIZERS: Dict[str, Callable[[Any], Any]] = {
     "bubble_ghosting_enabled": bool,
     "bubble_ghost_alpha": float,
     "bubble_ghost_decay": float,
-    "blob_glow_reactivity": float,
-    "blob_glow_max_size": float,
-    "blob_ghosting_enabled": bool,
-    "blob_ghost_alpha": float,
-    "blob_ghost_decay": float,
 }
 
 _CORE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
@@ -393,14 +342,9 @@ _BUBBLE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "bubble_ghosting_enabled": (False, bool),
     "bubble_ghost_alpha": (0.0, float),
     "bubble_ghost_decay": (0.4, float),
-    "blob_glow_reactivity": (1.0, float),
-    "blob_glow_max_size": (1.0, float),
-    "blob_ghosting_enabled": (False, bool),
-    "blob_ghost_alpha": (0.4, float),
-    "blob_ghost_decay": (0.3, float),
 }
 
-_OSC_BLOB_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
+_OSC_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "osc_glow_enabled": (False, bool),
     "osc_glow_intensity": (1.0, float),
     "osc_glow_reactivity": (1.0, float),
@@ -408,17 +352,6 @@ _OSC_BLOB_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "osc_reactive_glow": (True, bool),
     "osc_line_amplitude": (1.0, float),
     "osc_smoothing": (0.7, float),
-    "blob_color": ([255, 255, 255, 255], list),
-    "blob_glow_color": ([0, 200, 255, 230], list),
-    "blob_edge_color": ([255, 255, 255, 255], list),
-    "blob_outline_color": ([255, 255, 255, 255], list),
-    "blob_pulse": (0.5, float),
-    "blob_pulse_release_ms": (250, int),
-    "blob_width": (1.0, float),
-    "blob_size": (1.0, float),
-    "blob_glow_intensity": (1.0, float),
-    "blob_reactive_glow": (True, bool),
-    "blob_glow_drive_mode": ("bass", str),
     "osc_line_color": ([255, 255, 255, 255], list),
     "osc_line_count": (1, int),
     "osc_line2_color": ([255, 120, 50, 230], list),
@@ -432,21 +365,11 @@ _OSC_BLOB_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "osc_line6_color": ([200, 100, 255, 230], list),
     "osc_line6_glow_color": ([200, 100, 255, 180], list),
     "spectrum_growth": (1.0, float),
-    "blob_growth": (2.5, float),
     "osc_speed": (1.0, float),
     "osc_line_dim": (False, bool),
     "osc_line_offset_bias": (0.0, float),
     "osc_vertical_shift": (0, int),
     "osc_growth": (1.0, float),
-    "blob_reactive_deformation": (1.0, float),
-    "blob_constant_wobble": (1.0, float),
-    "blob_reactive_wobble": (1.0, float),
-    "blob_stretch": (0.35, float),
-    "blob_stage_gain": (1.0, float),
-    "blob_core_scale": (1.0, float),
-    "blob_core_floor_bias": (0.35, float),
-    "blob_stage_bias": (0.0, float),
-    "blob_stretch_inner": (0.0, float),
 }
 
 _SINE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
@@ -508,23 +431,6 @@ _SINE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
     "osc_ghost_line6_enabled": (True, bool),
     "sine_heartbeat": (0.0, float),
 }
-
-_BLOB_SHAPE_BUILD_SPECS: Dict[str, Tuple[Any, Callable[[Any], Any]]] = {
-    "blob_shape_base_nodes": ([[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]], list),
-    "blob_shape_reaction_nodes": ([[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]], list),
-    "blob_shape_energy_nodes": ([], list),
-    "blob_shaper_base_strength": (0.5, float),
-    "blob_shaper_react_strength": (0.5, float),
-    "blob_shaper_idle_motion": (0.18, float),
-    "blob_shaper_audio_motion": (1.20, float),
-    "blob_topology": ("circle", str),
-    "blob_ring_thickness": (0.3, float),
-    "blob_inward_liquid_enabled": (False, bool),
-    "blob_inward_liquid_reactivity": (1.0, float),
-    "blob_inward_liquid_max_size": (0.28, float),
-    "blob_inward_liquid_color": ([170, 225, 255, 190], list),
-}
-
 
 _OSCILLOSCOPE_COLOR_DEFAULTS: Dict[str, list[int]] = {
     "osc_line_color": [255, 255, 255, 255],
@@ -766,7 +672,7 @@ def _build_visualizer_model_kwargs(
     )
     return _extend_visualizer_kwargs(
         data,
-        _build_visualizer_osc_blob_kwargs(read_value),
+        _build_visualizer_osc_kwargs(read_value),
         _build_visualizer_spectrum_kwargs(read_value),
         _build_visualizer_sine_kwargs(read_value),
         _build_visualizer_bubble_kwargs(
@@ -775,7 +681,6 @@ def _build_visualizer_model_kwargs(
             bubble_stream_constant_speed_default=bubble_stream_constant_speed_default,
             bubble_stream_speed_cap_default=bubble_stream_speed_cap_default,
         ),
-        _build_visualizer_blob_shape_kwargs(read_value),
         _build_visualizer_devcurve_kwargs(read_value),
         preset_kwargs,
     )
@@ -814,18 +719,12 @@ def _build_visualizer_core_kwargs(
     return data
 
 
-def _build_visualizer_osc_blob_kwargs(
+def _build_visualizer_osc_kwargs(
     read_value: Callable[[str, Any], Any],
 ) -> Dict[str, Any]:
-    data = _build_read_value_map(read_value, _OSC_BLOB_BUILD_SPECS)
+    data = _build_read_value_map(read_value, _OSC_BUILD_SPECS)
     data["osc_glow_reactivity"] = float(
         read_value("osc_glow_reactivity", read_value("osc_glow_size", 1.0))
-    )
-    data["blob_stretch_tendency"] = float(
-        read_value("blob_stretch_tendency", read_value("blob_stretch", 0.35))
-    )
-    data["blob_stretch_outer"] = float(
-        read_value("blob_stretch_outer", read_value("blob_stretch", 0.35))
     )
     return data
 
@@ -893,17 +792,6 @@ def _build_visualizer_bubble_kwargs(
         read_value("bubble_gradient_direction", "top"),
         semantics_version=bubble_gradient_semantics_version,
         default="top",
-    )
-    return data
-
-
-def _build_visualizer_blob_shape_kwargs(
-    read_value: Callable[[str, Any], Any],
-) -> Dict[str, Any]:
-    data = _build_read_value_map(read_value, _BLOB_SHAPE_BUILD_SPECS)
-    data["blob_type"] = normalize_blob_type(
-        read_value("blob_type", None),
-        legacy_shaper_enabled=read_value("blob_shaper_enabled", None),
     )
     return data
 
@@ -1128,9 +1016,6 @@ class SpotifyVisualizerSettings:
     bubble_bar_fill_color: list | None = None
     bubble_bar_border_color: list | None = None
     bubble_bar_border_opacity: float = 0.85
-    blob_bar_fill_color: list | None = None
-    blob_bar_border_color: list | None = None
-    blob_bar_border_opacity: float = 0.85
     sine_wave_bar_fill_color: list | None = None
     sine_wave_bar_border_color: list | None = None
     sine_wave_bar_border_opacity: float = 0.85
@@ -1180,20 +1065,6 @@ class SpotifyVisualizerSettings:
     bubble_adaptive_sensitivity: bool = True
     bubble_sensitivity: float = 0.4
     bubble_bar_count: int = 48
-    blob_dynamic_floor: bool = True
-    blob_manual_floor: float = 0.12
-    blob_dynamic_range_enabled: bool = False
-    blob_agc_strength: float = 0.5
-    blob_input_gain: float = 1.0
-    blob_kick_lane_gain: float = 1.0
-    blob_transient_pulse_gain: float = 1.0
-    blob_transient_clamp: float = 1.5
-    blob_transient_mix_bass: float = 0.5
-    blob_transient_mix_vocal: float = 0.35
-    blob_audio_block_size: int = 512
-    blob_adaptive_sensitivity: bool = True
-    blob_sensitivity: float = 0.4
-    blob_bar_count: int = 32
     sine_wave_dynamic_floor: bool = True
     sine_wave_manual_floor: float = 0.12
     sine_wave_dynamic_range_enabled: bool = False
@@ -1240,17 +1111,6 @@ class SpotifyVisualizerSettings:
     osc_reactive_glow: bool = True
     osc_line_amplitude: float = 3.0
     osc_smoothing: float = 0.7
-    blob_color: list = None
-    blob_glow_color: list = None
-    blob_edge_color: list = None
-    blob_outline_color: list = None
-    blob_pulse: float = 1.0
-    blob_pulse_release_ms: int = 220
-    blob_width: float = 1.0
-    blob_size: float = 1.0
-    blob_glow_intensity: float = 0.5
-    blob_reactive_glow: bool = True
-    blob_glow_drive_mode: str = "bass"
     osc_line_color: list = None
     osc_line_count: int = 1
     osc_line2_color: list = None
@@ -1264,23 +1124,11 @@ class SpotifyVisualizerSettings:
     osc_line6_color: list = None
     osc_line6_glow_color: list = None
     spectrum_growth: float = 1.0
-    blob_growth: float = 2.5
     osc_speed: float = 1.0
     osc_line_dim: bool = False
     osc_line_offset_bias: float = 0.0
     osc_vertical_shift: int = 0
     osc_growth: float = 1.0
-    blob_reactive_deformation: float = 1.0
-    blob_constant_wobble: float = 1.0
-    blob_reactive_wobble: float = 1.0
-    blob_stretch: float = 0.35
-    blob_stage_gain: float = 1.0
-    blob_core_scale: float = 1.0
-    blob_core_floor_bias: float = 0.35
-    blob_stage_bias: float = 0.0
-    blob_stretch_tendency: float = 0.35
-    blob_stretch_inner: float = 0.0
-    blob_stretch_outer: float = 0.35
     spectrum_render_mode: str = "bars"
     spectrum_unique_colors: bool = True
     spectrum_rainbow_border: bool = False
@@ -1408,27 +1256,7 @@ class SpotifyVisualizerSettings:
     bubble_ghosting_enabled: bool = False
     bubble_ghost_alpha: float = 0.0
     bubble_ghost_decay: float = 0.4
-    blob_glow_reactivity: float = 1.0
-    blob_glow_max_size: float = 1.0
-    blob_ghosting_enabled: bool = False
-    blob_ghost_alpha: float = 0.4
-    blob_ghost_decay: float = 0.3
     sine_line_dim: bool = False
-    # Blob subtype / Shaped contour authoring
-    blob_type: str = DEFAULT_BLOB_TYPE
-    blob_shape_base_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
-    blob_shape_reaction_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 1.0], [0.25, 1.0], [0.5, 1.0], [0.75, 1.0]])
-    blob_shape_energy_nodes: List[Dict[str, Any]] = field(default_factory=list)
-    blob_shaper_base_strength: float = 0.5
-    blob_shaper_react_strength: float = 0.5
-    blob_shaper_idle_motion: float = 0.18
-    blob_shaper_audio_motion: float = 1.20
-    blob_topology: str = "circle"
-    blob_ring_thickness: float = 0.3
-    blob_inward_liquid_enabled: bool = False
-    blob_inward_liquid_reactivity: float = 1.0
-    blob_inward_liquid_max_size: float = 0.28
-    blob_inward_liquid_color: Any = None
     # Dev Curve visualizer
     devcurve_active_layer: str = "bass"
     devcurve_layer_bass_shape_nodes: List[List[float]] = field(default_factory=lambda: [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]])
@@ -1488,13 +1316,11 @@ class SpotifyVisualizerSettings:
     preset_spectrum: int = field(default_factory=lambda: get_missing_preset_fallback_index("spectrum"))
     preset_oscilloscope: int = field(default_factory=lambda: get_missing_preset_fallback_index("oscilloscope"))
     preset_sine_wave: int = field(default_factory=lambda: get_missing_preset_fallback_index("sine_wave"))
-    preset_blob: int = field(default_factory=lambda: get_missing_preset_fallback_index("blob"))
     preset_bubble: int = field(default_factory=lambda: get_missing_preset_fallback_index("bubble"))
     preset_devcurve: int = field(default_factory=lambda: get_missing_preset_fallback_index("devcurve"))
 
     def __post_init__(self):
         self._apply_core_visual_defaults()
-        self._apply_blob_defaults()
         self._apply_oscilloscope_defaults()
         self._apply_sine_defaults()
         self._apply_bubble_defaults()
@@ -1530,17 +1356,6 @@ class SpotifyVisualizerSettings:
                 mode_opacity = float(self.bar_border_opacity)
             setattr(self, opacity_attr, mode_opacity)
  
-    def _apply_blob_defaults(self) -> None:
-        self.blob_type = normalize_blob_type(self.blob_type)
-        self._apply_list_default("blob_color", [0, 180, 255, 230])
-        self._apply_list_default("blob_glow_color", [0, 140, 255, 180])
-        self._apply_list_default("blob_edge_color", [100, 220, 255, 230])
-        self._apply_list_default("blob_outline_color", [0, 0, 0, 0])
-        self._apply_list_default("blob_inward_liquid_color", [170, 225, 255, 190])
-        self.blob_glow_drive_mode = (
-            "vocal" if str(self.blob_glow_drive_mode).strip().lower() == "vocal" else "bass"
-        )
-
     def _apply_oscilloscope_defaults(self) -> None:
         _apply_list_defaults(self, _OSCILLOSCOPE_COLOR_DEFAULTS)
 
@@ -1652,7 +1467,7 @@ class SpotifyVisualizerSettings:
         # For non-Custom presets with a non-empty settings dict, the preset
         # values override the stored user values.  Custom (index 3) and empty
         # preset dicts are no-ops so existing behaviour is fully preserved.
-        _raw = migrate_blob_type_mapping(dict(data), prefix=prefix)
+        _raw = strip_retired_visualizer_settings(data, prefix=prefix)
         _raw = strip_legacy_global_technical_keys(_raw, prefix=prefix)
         _raw = migrate_legacy_global_visual_keys(_raw, prefix=prefix)
         _mode = coerce_visualizer_mode_id(
@@ -1693,11 +1508,10 @@ class SpotifyVisualizerSettings:
         """Convert to dictionary for saving."""
         return _merge_serialized_sections(
             self._serialize_core_settings(prefix),
-            self._serialize_osc_blob_settings(prefix),
+            self._serialize_osc_settings(prefix),
             self._serialize_spectrum_settings(prefix),
             self._serialize_sine_settings(prefix),
             self._serialize_bubble_settings(prefix),
-            self._serialize_blob_shape_settings(prefix),
             self._serialize_devcurve_settings(prefix),
             self._serialize_preset_indices(prefix),
             self._serialize_per_mode_technical_settings(prefix),
@@ -1707,8 +1521,8 @@ class SpotifyVisualizerSettings:
     def _serialize_core_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _CORE_SETTINGS_SERIALIZERS)
 
-    def _serialize_osc_blob_settings(self, prefix: str) -> Dict[str, Any]:
-        return _serialize_prefixed_fields(self, prefix, _OSC_BLOB_SERIALIZERS)
+    def _serialize_osc_settings(self, prefix: str) -> Dict[str, Any]:
+        return _serialize_prefixed_fields(self, prefix, _OSC_SERIALIZERS)
 
     def _serialize_spectrum_settings(self, prefix: str) -> Dict[str, Any]:
         return _serialize_prefixed_fields(self, prefix, _SPECTRUM_SERIALIZERS)
@@ -1720,9 +1534,6 @@ class SpotifyVisualizerSettings:
         data = _serialize_prefixed_fields(self, prefix, _BUBBLE_SERIALIZERS)
         data[f"{prefix}.bubble_gradient_semantics_version"] = CURRENT_BUBBLE_GRADIENT_SEMANTICS_VERSION
         return data
-
-    def _serialize_blob_shape_settings(self, prefix: str) -> Dict[str, Any]:
-        return _serialize_prefixed_fields(self, prefix, _BLOB_SHAPE_SERIALIZERS)
 
     def _serialize_preset_indices(self, prefix: str) -> Dict[str, int]:
         return {
@@ -1822,12 +1633,6 @@ class SpotifyVisualizerSettings:
 
     def resolve_bubble_transient_mix_vocal(self) -> float:
         return float(self.bubble_transient_mix_vocal)
-
-    def resolve_blob_transient_mix_bass(self) -> float:
-        return float(self.blob_transient_mix_bass)
-
-    def resolve_blob_transient_mix_vocal(self) -> float:
-        return float(self.blob_transient_mix_vocal)
 
     def resolve_sine_wave_transient_width_mix(self) -> float:
         return float(self.sine_wave_transient_width_mix)

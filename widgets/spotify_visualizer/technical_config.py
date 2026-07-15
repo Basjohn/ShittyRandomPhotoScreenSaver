@@ -19,7 +19,6 @@ def map_mode_key_to_enum(mode_key: str) -> VisualizerMode:
     return {
         "spectrum": VisualizerMode.SPECTRUM,
         "oscilloscope": VisualizerMode.OSCILLOSCOPE,
-        "blob": VisualizerMode.BLOB,
         "sine_wave": VisualizerMode.SINE_WAVE,
         "bubble": VisualizerMode.BUBBLE,
         "devcurve": VisualizerMode.DEVCURVE,
@@ -49,7 +48,6 @@ def extract_technical_config_from_kwargs(
     mode_specific_keys = {
         "spectrum": ("spectrum_lane_transient_mix",),
         "bubble": ("bubble_transient_mix_bass", "bubble_transient_mix_vocal"),
-        "blob": ("blob_transient_mix_bass", "blob_transient_mix_vocal"),
         "sine_wave": ("sine_wave_transient_width_mix",),
         "oscilloscope": ("oscilloscope_transient_width_mix",),
     }.get(mode_key, ())
@@ -96,10 +94,6 @@ def sync_active_mode_legacy_ghost_bridge(widget: Any, mode: VisualizerMode) -> N
         widget._ghosting_enabled = bool(widget._spectrum_ghosting_enabled)
         widget._ghost_alpha = float(widget._spectrum_ghost_alpha)
         widget._ghost_decay_rate = float(widget._spectrum_ghost_decay)
-    elif mode_key == "blob":
-        widget._ghosting_enabled = bool(widget._blob_ghosting_enabled)
-        widget._ghost_alpha = float(widget._blob_ghost_alpha)
-        widget._ghost_decay_rate = float(widget._blob_ghost_decay)
     elif mode_key == "sine_wave":
         widget._ghosting_enabled = bool(widget._sine_ghosting_enabled)
         widget._ghost_alpha = float(widget._sine_ghost_alpha)
@@ -141,9 +135,6 @@ def build_technical_cache(widget: Any, model: SpotifyVisualizerSettings) -> Dict
             elif mode_key == "bubble":
                 cache[mode_key]["bubble_transient_mix_bass"] = model.resolve_bubble_transient_mix_bass()
                 cache[mode_key]["bubble_transient_mix_vocal"] = model.resolve_bubble_transient_mix_vocal()
-            elif mode_key == "blob":
-                cache[mode_key]["blob_transient_mix_bass"] = model.resolve_blob_transient_mix_bass()
-                cache[mode_key]["blob_transient_mix_vocal"] = model.resolve_blob_transient_mix_vocal()
             elif mode_key == "sine_wave":
                 cache[mode_key]["sine_wave_transient_width_mix"] = model.resolve_sine_wave_transient_width_mix()
             elif mode_key == "oscilloscope":
@@ -188,8 +179,6 @@ def apply_technical_config_for_mode(widget: Any, mode: VisualizerMode, *, reason
     widget._spectrum_lane_transient_mix = max(0.0, min(1.0, float(config.get("spectrum_lane_transient_mix", 0.65))))
     widget._bubble_transient_mix_bass = max(0.0, min(1.0, float(config.get("bubble_transient_mix_bass", 0.75))))
     widget._bubble_transient_mix_vocal = max(0.0, min(1.0, float(config.get("bubble_transient_mix_vocal", 0.25))))
-    widget._blob_transient_mix_bass = max(0.0, min(1.0, float(config.get("blob_transient_mix_bass", 0.5))))
-    widget._blob_transient_mix_vocal = max(0.0, min(1.0, float(config.get("blob_transient_mix_vocal", 0.35))))
     widget._sine_wave_transient_width_mix = max(0.0, min(1.0, float(config.get("sine_wave_transient_width_mix", 0.4))))
     widget._osc_transient_width_mix = max(0.0, min(1.0, float(config.get("oscilloscope_transient_width_mix", 0.35))))
     widget.apply_floor_config(dynamic_floor, manual_floor)
@@ -206,8 +195,6 @@ def apply_technical_config_for_mode(widget: Any, mode: VisualizerMode, *, reason
     parent = widget.parent()
     overlay = getattr(parent, "_spotify_bars_overlay", None) if parent else None
     if overlay is not None:
-        overlay._blob_transient_mix_bass = widget._blob_transient_mix_bass
-        overlay._blob_transient_mix_vocal = widget._blob_transient_mix_vocal
         overlay._transient_clamp = widget._transient_clamp
         overlay._sine_wave_transient_width_mix = widget._sine_wave_transient_width_mix
         overlay._osc_transient_width_mix = widget._osc_transient_width_mix

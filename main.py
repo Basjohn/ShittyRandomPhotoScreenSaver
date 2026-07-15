@@ -124,7 +124,6 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
     - --steam - Enable Steam widget family diagnostics
     - --noupdates - Disable automatic Gmail/Reddit/Weather retrievals; manual refresh still works
     - --viz-diagnostics (or --viz-diag) - Legacy alias for extra Spotify visualizer diagnostics
-    - -devblob - Enable dev-gated Blob visualizer mode
     - --devcurve - Legacy no-op flag kept for compatibility
     - --devsteam - Show unfinished Steam Journey, Abandonment Issues, and Friend Pulse cards
     
@@ -136,7 +135,7 @@ def parse_screensaver_args() -> tuple[ScreensaverMode, int | None]:
         "--debug", "-d", "--verbose", "-v", "--perf", "--viz", "--geo", "--set", "--life", "--cache", "--steam",
         "--noupdates",
         "--viz-diagnostics", "--viz-diag",
-        "--fresh", "-devblob", "--devcurve", "--devsteam",
+        "--fresh", "--devcurve", "--devsteam",
     }
     args = [arg for arg in sys.argv if arg not in _filtered]
     

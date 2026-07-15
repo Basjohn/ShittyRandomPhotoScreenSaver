@@ -14,7 +14,6 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.settings.settings_manager import SettingsManager
 from core.settings.models import SpotifyVisualizerSettings, MediaWidgetSettings
 from core.settings.visualizer_presets import resolve_visualizer_activation_payload
-from core.settings.visualizer_blob_contract import normalize_blob_type
 from rendering.multi_monitor_coordinator import get_coordinator
 from rendering.widget_setup import parse_color_to_qcolor
 from rendering.widget_descriptors import (
@@ -34,7 +33,6 @@ from rendering.custom_layout_contract import (
     write_custom_layout_map,
 )
 from rendering.spotify_display_participation import resolve_visualizer_spawn_display
-from widgets.spotify_visualizer.config_applier import normalize_blob_mode_contract_values
 from widgets.media_widget import MediaWidget
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
@@ -544,19 +542,6 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
     spectrum_render_mode = str(getattr(model, "spectrum_render_mode", "bars") or "bars").lower()
     spectrum_single_piece = spectrum_render_mode != "segment"
     spectrum_unique_colors = bool(getattr(model, "spectrum_unique_colors", True))
-    blob_type = normalize_blob_type(
-        getattr(model, "blob_type", None),
-        legacy_shaper_enabled=getattr(model, "blob_shaper_enabled", None),
-    )
-    blob_motion_contract = normalize_blob_mode_contract_values(
-        blob_type=blob_type,
-        blob_reactive_deformation=model.blob_reactive_deformation,
-        blob_constant_wobble=model.blob_constant_wobble,
-        blob_reactive_wobble=model.blob_reactive_wobble,
-        blob_stretch_tendency=model.blob_stretch_tendency,
-        blob_stretch_inner=model.blob_stretch_inner,
-        blob_stretch_outer=model.blob_stretch_outer,
-    )
     kwargs = dict(
         mode=str(model.mode),
         bar_fill_color=model.bar_fill_color,
@@ -568,20 +553,6 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         osc_reactive_glow=model.osc_reactive_glow,
         osc_line_amplitude=model.osc_line_amplitude,
         osc_smoothing=model.osc_smoothing,
-        blob_color=model.blob_color,
-        blob_glow_color=model.blob_glow_color,
-        blob_edge_color=model.blob_edge_color,
-        blob_outline_color=model.blob_outline_color,
-        blob_inward_liquid_color=model.blob_inward_liquid_color,
-        blob_pulse=model.blob_pulse,
-        blob_pulse_release_ms=model.blob_pulse_release_ms,
-        blob_width=model.blob_width,
-        blob_size=model.blob_size,
-        blob_glow_intensity=model.blob_glow_intensity,
-        blob_reactive_glow=model.blob_reactive_glow,
-        blob_inward_liquid_enabled=model.blob_inward_liquid_enabled,
-        blob_inward_liquid_reactivity=model.blob_inward_liquid_reactivity,
-        blob_inward_liquid_max_size=model.blob_inward_liquid_max_size,
         osc_line_color=model.osc_line_color,
         osc_line_count=model.osc_line_count,
         osc_line2_color=model.osc_line2_color,
@@ -607,37 +578,11 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         spectrum_glow_color=model.spectrum_glow_color,
         spectrum_rainbow_per_bar=spectrum_unique_colors,
         spectrum_rainbow_border=bool(getattr(model, "spectrum_rainbow_border", False)),
-        blob_growth=model.blob_growth,
         osc_speed=model.osc_speed,
         osc_line_dim=model.osc_line_dim,
         osc_line_offset_bias=model.osc_line_offset_bias,
         osc_vertical_shift=int(model.osc_vertical_shift),
         osc_growth=model.osc_growth,
-        blob_reactive_deformation=blob_motion_contract['blob_reactive_deformation'],
-        blob_pulse_cap=model.blob_pulse,
-        blob_stage_gain=model.blob_stage_gain,
-        blob_core_scale=model.blob_core_scale,
-        blob_core_floor_bias=model.blob_core_floor_bias,
-        blob_stage_bias=model.blob_stage_bias,
-        blob_stage2_release_ms=max(400, int(round(model.blob_pulse_release_ms * 4.1))),
-        blob_stage3_release_ms=max(500, int(round(model.blob_pulse_release_ms * 5.45))),
-        blob_constant_wobble=blob_motion_contract['blob_constant_wobble'],
-        blob_reactive_wobble=blob_motion_contract['blob_reactive_wobble'],
-        blob_stretch=blob_motion_contract['blob_stretch_outer'],
-        blob_stretch_tendency=blob_motion_contract['blob_stretch_tendency'],
-        blob_stretch_inner=blob_motion_contract['blob_stretch_inner'],
-        blob_stretch_outer=blob_motion_contract['blob_stretch_outer'],
-        # Blob subtype / Shaped Blob
-        blob_type=blob_type,
-        blob_shaper_base_strength=model.blob_shaper_base_strength,
-        blob_shaper_react_strength=model.blob_shaper_react_strength,
-        blob_shaper_idle_motion=model.blob_shaper_idle_motion,
-        blob_shaper_audio_motion=model.blob_shaper_audio_motion,
-        blob_topology=model.blob_topology,
-        blob_ring_thickness=model.blob_ring_thickness,
-        blob_shape_base_nodes=model.blob_shape_base_nodes,
-        blob_shape_reaction_nodes=model.blob_shape_reaction_nodes,
-        blob_shape_energy_nodes=model.blob_shape_energy_nodes,
         spectrum_border_radius=model.spectrum_border_radius,
         spectrum_mirrored=model.spectrum_mirrored,
         spectrum_shape_nodes=model.spectrum_shape_nodes,
@@ -700,17 +645,12 @@ def apply_spotify_vis_model_config(vis, model: SpotifyVisualizerSettings, *, app
         osc_ghosting_enabled=model.osc_ghosting_enabled,
         osc_ghost_intensity=model.osc_ghost_intensity,
         osc_ghost_decay=model.osc_ghost_decay,
-        blob_ghosting_enabled=model.blob_ghosting_enabled,
-        blob_ghost_alpha=model.blob_ghost_alpha,
-        blob_ghost_decay=model.blob_ghost_decay,
         sine_ghosting_enabled=model.sine_ghosting_enabled,
         sine_ghost_alpha=model.sine_ghost_alpha,
         sine_ghost_decay=model.sine_ghost_decay,
         bubble_ghosting_enabled=model.bubble_ghosting_enabled,
         bubble_ghost_alpha=model.bubble_ghost_alpha,
         bubble_ghost_decay=model.bubble_ghost_decay,
-        blob_glow_reactivity=model.blob_glow_reactivity,
-        blob_glow_max_size=model.blob_glow_max_size,
         sine_heartbeat=model.sine_heartbeat,
         sine_density=model.sine_density,
         sine_displacement=model.sine_displacement,

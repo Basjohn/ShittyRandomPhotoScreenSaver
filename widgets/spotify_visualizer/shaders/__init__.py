@@ -31,17 +31,11 @@ void main() {
 _ALL_SHADER_FILES: Dict[str, str] = {
     "spectrum": "spectrum.frag",
     "oscilloscope": "oscilloscope.frag",
-    "blob_mighty": "blob_mighty.frag",
-    "blob_shaped": "blob_shaped.frag",
     "sine_wave": "sine_wave.frag",
     "bubble": "bubble.frag",
     "devcurve": "devcurve.frag",
 }
-_SHADER_ALIASES: Dict[str, str] = {
-    # Stable visualizer mode id compatibility; concrete Blob runtime dispatch
-    # chooses Mighty or Shaped explicitly.
-    "blob": "blob_mighty",
-}
+_SHADER_ALIASES: Dict[str, str] = {}
 
 
 def _active_shader_files() -> Dict[str, str]:
@@ -49,15 +43,14 @@ def _active_shader_files() -> Dict[str, str]:
     return {
         mode: filename
         for mode, filename in _ALL_SHADER_FILES.items()
-        if is_mode_active("blob" if mode.startswith("blob_") else mode)
+        if is_mode_active(mode)
     }
 
 
 def _load_shader_source(path: Path, *, include_stack: tuple[Path, ...] = ()) -> str:
     """Load a shader and expand local ``#include`` directives.
 
-    Blob uses two tiny entry shaders with one shared paint/body source.  The
-    include expander stays deliberately local-only and rejects cycles.
+    The include expander stays deliberately local-only and rejects cycles.
     """
     resolved = path.resolve()
     if resolved in include_stack:

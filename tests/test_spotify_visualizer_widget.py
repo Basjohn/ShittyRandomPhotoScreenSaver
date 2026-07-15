@@ -3574,43 +3574,6 @@ def test_set_settings_model_applies_incoming_mode_technical_config(qt_app, qtbot
     assert widget._last_floor_config[1] == pytest.approx(0.21)
 
 
-@pytest.mark.qt
-def test_apply_vis_mode_config_merges_runtime_technical_overrides(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    fake_engine._audio_worker = SimpleNamespace()
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    widget._engine = fake_engine
-
-    widget.apply_vis_mode_config(
-        mode="blob",
-        blob_dynamic_floor=False,
-        blob_manual_floor=0.12,
-        blob_adaptive_sensitivity=False,
-        blob_sensitivity=0.58,
-        blob_audio_block_size=128,
-    )
-
-    blob_cfg = widget._technical_config_cache["blob"]
-    assert blob_cfg["dynamic_floor"] is False
-    assert blob_cfg["manual_floor"] == pytest.approx(0.12)
-    assert blob_cfg["adaptive_sensitivity"] is False
-    assert blob_cfg["sensitivity"] == pytest.approx(0.58)
-    assert blob_cfg["audio_block_size"] == 128
-    assert widget._last_floor_config[0] is False
-    assert widget._last_floor_config[1] == pytest.approx(0.12)
-    assert widget._last_sensitivity_config[0] is False
-    assert widget._last_sensitivity_config[1] == pytest.approx(0.58)
-    assert widget._last_audio_block_size == 128
-
 
 @pytest.mark.qt
 def test_missing_mode_cache_does_not_fall_back_to_foreign_technical_state(qt_app, qtbot, monkeypatch):
@@ -3628,7 +3591,7 @@ def test_missing_mode_cache_does_not_fall_back_to_foreign_technical_state(qt_app
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._engine = fake_engine
     widget._technical_config_cache = {
-        "blob": {
+        "bubble": {
             "bar_count": 19,
             "dynamic_floor": False,
             "manual_floor": 0.31,
@@ -3641,8 +3604,6 @@ def test_missing_mode_cache_does_not_fall_back_to_foreign_technical_state(qt_app
             "kick_lane_gain": 1.25,
             "transient_pulse_gain": 1.4,
             "transient_clamp": 1.8,
-            "blob_transient_mix_bass": 0.93,
-            "blob_transient_mix_vocal": 0.41,
         }
     }
     widget._last_floor_config = (True, 0.12)
@@ -3660,95 +3621,6 @@ def test_missing_mode_cache_does_not_fall_back_to_foreign_technical_state(qt_app
     assert fake_engine.last_floor_config == (True, 0.12)
     assert fake_engine.last_sensitivity_config == (True, 1.0)
 
-
-@pytest.mark.qt
-def test_mode_switch_replays_distinct_per_mode_shared_technical_state(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    fake_engine._audio_worker = SimpleNamespace()
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-    widget._engine = fake_engine
-
-    model = SpotifyVisualizerSettings(
-        mode="blob",
-        bar_count=8,
-        blob_bar_count=18,
-        blob_dynamic_floor=False,
-        blob_manual_floor=0.14,
-        blob_adaptive_sensitivity=False,
-        blob_sensitivity=0.66,
-        blob_audio_block_size=128,
-        blob_dynamic_range_enabled=True,
-        blob_agc_strength=0.72,
-        blob_input_gain=1.35,
-        blob_kick_lane_gain=1.55,
-        blob_transient_clamp=2.2,
-        blob_transient_mix_bass=0.92,
-        blob_transient_mix_vocal=0.38,
-        sine_wave_bar_count=27,
-        sine_wave_dynamic_floor=False,
-        sine_wave_manual_floor=0.24,
-        sine_wave_adaptive_sensitivity=False,
-        sine_wave_sensitivity=0.83,
-        sine_wave_audio_block_size=512,
-        sine_wave_dynamic_range_enabled=False,
-        sine_wave_agc_strength=0.41,
-        sine_wave_input_gain=1.12,
-        sine_wave_kick_lane_gain=0.77,
-        sine_wave_transient_clamp=1.3,
-        sine_wave_transient_width_mix=0.21,
-    )
-
-    widget.set_settings_model(model)
-
-    assert widget._bar_count == 18
-    assert widget._last_floor_config[0] is False
-    assert widget._last_floor_config[1] == pytest.approx(0.14)
-    assert widget._last_sensitivity_config[0] is False
-    assert widget._last_sensitivity_config[1] == pytest.approx(0.66)
-    assert widget._last_audio_block_size == 128
-    assert widget._last_input_gain == pytest.approx(1.35)
-    assert widget._blob_transient_mix_bass == pytest.approx(0.92)
-    assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
-    assert parent._spotify_bars_overlay._blob_transient_mix_bass == pytest.approx(0.92)
-    assert parent._spotify_bars_overlay._blob_transient_mix_vocal == pytest.approx(0.38)
-
-    widget.set_visualization_mode(VisualizerMode.SINE_WAVE)
-
-    assert widget._bar_count == 27
-    assert widget._last_floor_config[0] is False
-    assert widget._last_floor_config[1] == pytest.approx(0.24)
-    assert widget._last_sensitivity_config[0] is False
-    assert widget._last_sensitivity_config[1] == pytest.approx(0.83)
-    assert widget._last_audio_block_size == 512
-    assert widget._last_input_gain == pytest.approx(1.12)
-    assert widget._kick_lane_gain == pytest.approx(0.77)
-    assert widget._transient_clamp == pytest.approx(1.3)
-    assert widget._sine_wave_transient_width_mix == pytest.approx(0.21)
-    assert parent._spotify_bars_overlay is not None
-
-    widget.set_visualization_mode(VisualizerMode.BLOB)
-
-    assert widget._bar_count == 18
-    assert widget._last_floor_config[0] is False
-    assert widget._last_floor_config[1] == pytest.approx(0.14)
-    assert widget._last_sensitivity_config[0] is False
-    assert widget._last_sensitivity_config[1] == pytest.approx(0.66)
-    assert widget._last_audio_block_size == 128
-    assert widget._last_input_gain == pytest.approx(1.35)
-    assert widget._kick_lane_gain == pytest.approx(1.55)
-    assert widget._transient_clamp == pytest.approx(2.2)
-    assert widget._blob_transient_mix_bass == pytest.approx(0.92)
-    assert widget._blob_transient_mix_vocal == pytest.approx(0.38)
-    assert parent._spotify_bars_overlay is not None
 
 
 @pytest.mark.qt
@@ -3820,7 +3692,6 @@ def test_runtime_mode_switch_all_modes_replaces_poisoned_technical_state(qt_app,
     growth_attr = {
         "spectrum": "_spectrum_growth",
         "oscilloscope": "_osc_growth",
-        "blob": "_blob_growth",
         "sine_wave": "_sine_wave_growth",
         "bubble": "_bubble_growth",
         "devcurve": "_devcurve_growth",
@@ -3860,7 +3731,7 @@ def test_runtime_mode_switch_all_modes_replaces_poisoned_technical_state(qt_app,
 
     for mode_id in VISUALIZER_MODE_IDS:
         target = getattr(VisualizerMode, mode_id.upper())
-        widget._vis_mode = VisualizerMode.SPECTRUM if target is not VisualizerMode.SPECTRUM else VisualizerMode.BLOB
+        widget._vis_mode = VisualizerMode.SPECTRUM if target is not VisualizerMode.SPECTRUM else VisualizerMode.BUBBLE
         widget._last_floor_config = (False, 0.61)
         widget._last_sensitivity_config = (False, 9.0)
         for attr in growth_attr.values():
@@ -3900,7 +3771,7 @@ def test_visualizer_preferred_height_defers_direct_resize_when_custom_rect_activ
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
     widget._custom_layout_local_rect = QRect(10, 20, 300, 160)
-    widget._vis_mode = VisualizerMode.BLOB
+    widget._vis_mode = VisualizerMode.BUBBLE
     widget.setGeometry(0, 0, 300, 160)
 
     widget._apply_preferred_height()
@@ -3919,7 +3790,7 @@ def test_visualizer_preferred_height_defers_when_custom_route_is_selected_but_re
 
     widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
     widget._widget_manager = SimpleNamespace(_settings_manager=_Settings())
-    widget._vis_mode = VisualizerMode.BLOB
+    widget._vis_mode = VisualizerMode.BUBBLE
     widget.setGeometry(0, 0, 300, 160)
 
     widget._apply_preferred_height()
@@ -4004,7 +3875,7 @@ def test_visualizer_custom_rect_survives_repeated_deferred_layout_after_square_r
     widget._custom_layout_local_rect = QRect(36, 200, 402, 357)
     widget._widget_manager = WidgetManager(parent)
     widget._widget_manager._settings_manager = _Settings()
-    widget._vis_mode = VisualizerMode.BLOB
+    widget._vis_mode = VisualizerMode.BUBBLE
 
     for _ in range(3):
         QWidget.setGeometry(widget, QRect(36, 200, 357, 357))
@@ -4159,7 +4030,6 @@ def test_runtime_switch_paths_apply_target_technical_floor_for_all_modes(qt_app,
     authored_floors = {
         "spectrum": 0.11,
         "oscilloscope": 0.21,
-        "blob": 0.05,
         "sine_wave": 0.24,
         "bubble": 0.07,
         "devcurve": 0.49,
@@ -4287,8 +4157,6 @@ def test_runtime_mode_activation_clears_widget_owned_visual_state(qt_app, qtbot)
     widget._devcurve_active_amplitude = 0.91
     widget._devcurve_curve_bass = [0.9, 0.8]
     widget._devcurve_specular_slot0 = [0.5, 0.4, 0.3, 0.2]
-    widget._blob_shaper_runtime_profile = [0.8] * 8
-    widget._blob_live_bass_energy = 0.77
     widget._sine_peak_bass = 0.66
     widget._heartbeat_intensity = 0.55
 
@@ -4299,8 +4167,6 @@ def test_runtime_mode_activation_clears_widget_owned_visual_state(qt_app, qtbot)
     assert widget._devcurve_active_amplitude == pytest.approx(0.0)
     assert widget._devcurve_curve_bass == []
     assert widget._devcurve_specular_slot0 == [0.0, 0.0, 0.0, 0.0]
-    assert widget._blob_shaper_runtime_profile is None
-    assert widget._blob_live_bass_energy == pytest.approx(0.0)
     assert widget._sine_peak_bass == pytest.approx(0.0)
     assert widget._heartbeat_intensity == pytest.approx(0.0)
 
@@ -8656,7 +8522,6 @@ def test_repeated_mode_switches_keep_fresh_generation_contract(qt_app, qtbot, mo
     modes = [
         VisualizerMode.OSCILLOSCOPE,
         VisualizerMode.SPECTRUM,
-        VisualizerMode.BLOB,
         VisualizerMode.SINE_WAVE,
         VisualizerMode.OSCILLOSCOPE,
     ]
@@ -8715,42 +8580,6 @@ def test_spotify_visualizer_replays_config_on_start(qt_app, qtbot, monkeypatch):
     assert fake_engine.last_floor_config == (False, 0.3)
     assert fake_engine.last_sensitivity_config == (False, 2.4)
 
-
-@pytest.mark.qt
-def test_blob_crossover_waits_for_fresh_engine_frame(qt_app, qtbot, monkeypatch):
-    parent = _FakeDisplayParent()
-    qtbot.addWidget(parent)
-
-    fake_engine = _FakeEngine(bar_count=8)
-    monkeypatch.setattr(
-        vis_mod,
-        "get_shared_spotify_beat_engine",
-        lambda *_: fake_engine,
-    )
-
-    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
-
-    widget.set_visualization_mode(VisualizerMode.SPECTRUM)
-    widget.start()
-    qt_app.processEvents()
-    widget._engine = fake_engine
-
-    widget.set_visualization_mode(VisualizerMode.BLOB)
-    widget._engine = fake_engine
-    widget._reset_engine_state(reason="test_crossover")
-    widget._track_engine_generation(fake_engine)
-
-    parent.reset_pushes()
-    widget._on_tick()
-
-    assert widget._waiting_for_fresh_engine_frame is True
-    assert parent.frames == []
-
-    fake_engine.publish_frame([0.75] * widget._bar_count)
-    widget._on_tick()
-
-    assert widget._waiting_for_fresh_engine_frame is False
-    assert parent.frames, "GPU push should resume once a fresh engine generation publishes"
 
 
 @pytest.mark.qt
@@ -10327,7 +10156,7 @@ def test_mode_reset_with_distinct_mode_configs_prevents_bleed():
 
         def _build_technical_cache(self, model):
             cache = {}
-            for mode_key in ["spectrum", "bubble", "blob", "devcurve"]:
+            for mode_key in ["spectrum", "bubble", "devcurve"]:
                 cache[mode_key] = {
                     "dynamic_floor": mode_key == "bubble",
                     "manual_floor": 0.12 if mode_key == "spectrum" else 0.66 if mode_key == "bubble" else 0.44,
@@ -10349,13 +10178,6 @@ def test_mode_reset_with_distinct_mode_configs_prevents_bleed():
     assert engine.input_gain == 1.1
     assert engine.block_size == 256
 
-    # Test BUBBLE -> BLOB
-    widget._vis_mode = VisualizerMode.BLOB
-    prepare_engine_for_mode_reset(widget)
-    assert engine.floor == (False, 0.44)
-    assert engine.sensitivity == (True, 0.88)
-    assert engine.input_gain == 1.1
-    assert engine.block_size == 512
 
 
 def test_prepare_engine_for_mode_reset_rebuilds_technical_config_cache():
@@ -10434,7 +10256,7 @@ def test_prepare_engine_for_mode_reset_rebuilds_technical_config_cache():
 
         def _build_technical_cache(self, model):
             cache = {}
-            for mode_key in ["spectrum", "bubble", "blob", "devcurve"]:
+            for mode_key in ["spectrum", "bubble", "devcurve"]:
                 cache[mode_key] = {
                     "dynamic_floor": False,
                     "manual_floor": 0.99,
@@ -10455,10 +10277,9 @@ def test_prepare_engine_for_mode_reset_rebuilds_technical_config_cache():
     prepare_engine_for_mode_reset(widget)
 
     # Verify cache was rebuilt
-    assert len(widget._technical_config_cache) == 4
+    assert len(widget._technical_config_cache) == 3
     assert "spectrum" in widget._technical_config_cache
     assert "bubble" in widget._technical_config_cache
-    assert "blob" in widget._technical_config_cache
     assert "devcurve" in widget._technical_config_cache
 
     # Verify config was applied from rebuilt cache

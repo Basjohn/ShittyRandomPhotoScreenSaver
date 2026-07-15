@@ -139,7 +139,6 @@ class VisualizerMode(Enum):
     """Visualization display modes for the Spotify visualizer."""
     SPECTRUM = auto()       # Classic segmented bar analyzer
     OSCILLOSCOPE = auto()   # Audio waveform spline with glow
-    BLOB = auto()           # Organic reactive metaball
     SINE_WAVE = auto()      # Pure sine wave with audio-reactive amplitude
     BUBBLE = auto()         # Sound-reactive bubble/water tank flow
     DEVCURVE = auto()            # Reactive liquid pool (dev-gated)

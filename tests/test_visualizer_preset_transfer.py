@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from zipfile import ZipFile
 
+import pytest
+
 from core.settings import visualizer_presets as vp
 from core.settings.visualizer_preset_transfer import (
     export_visualizer_presets_zip,
@@ -12,6 +14,16 @@ from core.settings.visualizer_preset_transfer import (
     import_visualizer_presets_folder,
 )
 from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
+
+
+@pytest.fixture(autouse=True)
+def _restore_visualizer_preset_registry():
+    original_presets = {mode: list(presets) for mode, presets in vp._PRESETS.items()}
+    original_synced = vp._CURATED_TREE_SYNCED
+    yield
+    vp._PRESETS.clear()
+    vp._PRESETS.update(original_presets)
+    vp._CURATED_TREE_SYNCED = original_synced
 
 
 def _preset_payload(mode: str, index: int, *, value: float = 1.0) -> dict:

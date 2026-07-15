@@ -25,15 +25,8 @@ def _load_snapshot_json() -> dict:
     return json.loads(SNAPSHOT_JSON_PATH.read_text(encoding="utf-8"))
 
 
-def _build_snapshot_with_default_gates() -> dict:
-    from core.dev_gates import force_gate, is_blob_enabled
-
-    prior_blob_gate = is_blob_enabled()
-    force_gate(blob=False)
-    try:
-        return build_defaults_snapshot()
-    finally:
-        force_gate(blob=prior_blob_gate)
+def _build_snapshot() -> dict:
+    return build_defaults_snapshot()
 
 
 class TestDefaultsStructure:
@@ -116,19 +109,13 @@ class TestDefaultsArtifactParity:
         assert GENERATED_DEFAULTS == CANONICAL_DEFAULTS
 
     def test_snapshot_module_matches_builder_output(self):
-        from core.dev_gates import force_gate, is_blob_enabled
         import core.settings.defaults_snapshot as defaults_snapshot_module
 
-        prior_blob_gate = is_blob_enabled()
-        force_gate(blob=False)
-        try:
-            reloaded = importlib.reload(defaults_snapshot_module)
-            assert reloaded.DEFAULTS == _build_snapshot_with_default_gates()
-        finally:
-            force_gate(blob=prior_blob_gate)
+        reloaded = importlib.reload(defaults_snapshot_module)
+        assert reloaded.DEFAULTS == _build_snapshot()
 
     def test_snapshot_json_matches_builder_output(self):
-        assert _load_snapshot_json() == _build_snapshot_with_default_gates()
+        assert _load_snapshot_json() == _build_snapshot()
 
     @pytest.mark.parametrize("application", [NORMAL_PROFILE, MC_PROFILE])
     def test_profile_snapshot_builder_uses_selected_canonical_defaults(self, application: str):
@@ -141,7 +128,7 @@ class TestDefaultsArtifactParity:
         assert snapshot["widgets"]["media"] == canonical["widgets"]["media"]
 
     def test_snapshot_sanitizes_doc_preserved_keys(self):
-        snapshot = _build_snapshot_with_default_gates()
+        snapshot = _build_snapshot()
 
         assert snapshot["sources"]["folders"] == []
         assert snapshot["sources"]["rss_feeds"] == []
@@ -155,7 +142,7 @@ class TestDefaultsArtifactParity:
 
     def test_visualizer_snapshot_matches_canonical_mode(self):
         canonical_visualizer = get_default_settings()["widgets"]["spotify_visualizer"]
-        snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
+        snapshot_visualizer = _build_snapshot()["widgets"]["spotify_visualizer"]
 
         assert isinstance(canonical_visualizer["enabled"], bool)
         assert snapshot_visualizer["mode"] == canonical_visualizer["mode"]
@@ -163,13 +150,12 @@ class TestDefaultsArtifactParity:
 
     def test_transition_snapshot_keeps_canonical_burn_pool_choice(self):
         canonical_transitions = get_default_settings()["transitions"]
-        snapshot_transitions = _build_snapshot_with_default_gates()["transitions"]
+        snapshot_transitions = _build_snapshot()["transitions"]
         assert snapshot_transitions["pool"]["Burn"] == canonical_transitions["pool"]["Burn"]
 
     @pytest.mark.parametrize(
         "key",
         [
-            "blob_manual_floor",
             "bubble_manual_floor",
             "oscilloscope_manual_floor",
             "sine_wave_manual_floor",
@@ -178,7 +164,7 @@ class TestDefaultsArtifactParity:
     )
     def test_visualizer_snapshot_manual_floors_stay_on_current_contract(self, key: str):
         canonical_visualizer = get_default_settings()["widgets"]["spotify_visualizer"]
-        snapshot_visualizer = _build_snapshot_with_default_gates()["widgets"]["spotify_visualizer"]
+        snapshot_visualizer = _build_snapshot()["widgets"]["spotify_visualizer"]
         assert snapshot_visualizer[key] == pytest.approx(canonical_visualizer[key])
         assert 0.0 <= snapshot_visualizer[key] <= 1.0
         assert "manual_floor" not in snapshot_visualizer

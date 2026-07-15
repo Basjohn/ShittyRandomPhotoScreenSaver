@@ -110,7 +110,7 @@ class TestCardHeight:
 
     def test_all_modes_have_default_growth(self):
         from widgets.spotify_visualizer.card_height import DEFAULT_GROWTH
-        required_modes = {"spectrum", "oscilloscope", "blob", "sine_wave", "bubble"}
+        required_modes = {"spectrum", "oscilloscope", "sine_wave", "bubble"}
         missing = required_modes - set(DEFAULT_GROWTH.keys())
         assert not missing, f"Modes missing from DEFAULT_GROWTH: {missing}"
 
@@ -133,7 +133,6 @@ class TestCardHeight:
             _base_height=80,
             _spectrum_growth=2.0,
             _osc_growth=2.0,
-            _blob_growth=3.5,
             _sine_wave_growth=2.0,
             _bubble_growth=3.0,
         )
@@ -148,7 +147,6 @@ class TestCardHeight:
             _base_height=80,
             _spectrum_growth=1.75,
             _osc_growth=2.0,
-            _blob_growth=3.5,
             _sine_wave_growth=2.0,
             _bubble_growth=3.0,
             _devcurve_growth=3.5,
@@ -168,7 +166,7 @@ class TestRainbowGreyscaleFix:
 
     SHADER_FILES = [
         "spectrum.frag", "oscilloscope.frag", "sine_wave.frag",
-        "blob.frag", "bubble.frag",
+        "bubble.frag",
     ]
 
     def test_all_shaders_have_rainbow_uniform(self):
@@ -792,121 +790,7 @@ class TestConfigApplier:
 
         assert widget._sine_width_reaction == pytest.approx(0.61)
         assert extra["sine_width_reaction"] == pytest.approx(0.61)
-        assert "blob_color" not in extra
         assert "bubble_pos_data" not in extra
-
-    def test_blob_pulse_controls_applied_and_pushed(self):
-        from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
-
-        class DummyWidget:
-            _blob_pulse_cap = 1.0
-            _blob_pulse_release_ms = 220.0
-            _blob_stage_gain = 1.0
-            _blob_glow_drive_mode = "bass"
-
-            def __getattr__(self, name):
-                if "color" in name or "tint" in name:
-                    return QColor(255, 255, 255, 255)
-                if name.endswith("enabled"):
-                    return False
-                if name.endswith("_direction"):
-                    return "top"
-                if name.endswith("line_count"):
-                    return 1
-                return 0.0
-
-        widget = DummyWidget()
-        apply_vis_mode_kwargs(widget, {
-            "blob_pulse": 1.65,
-            "blob_pulse_release_ms": 1320.0,
-            "blob_glow_drive_mode": "vocal",
-        })
-        extra = build_gpu_push_extra_kwargs(widget, "blob", None)
-
-        assert widget._blob_pulse == pytest.approx(1.65)
-        assert widget._blob_pulse_cap == pytest.approx(1.0)
-        assert widget._blob_pulse_release_ms == pytest.approx(1320.0)
-        assert widget._blob_stage_gain == pytest.approx(1.0)
-        assert widget._blob_glow_drive_mode == "vocal"
-        assert extra["blob_pulse"] == pytest.approx(1.65)
-        assert extra["blob_pulse_cap"] == pytest.approx(1.0)
-        assert extra["blob_pulse_release_ms"] == pytest.approx(1320.0)
-        assert extra["blob_glow_drive_mode"] == "vocal"
-        assert "line_sensitivity" not in extra
-        assert "bubble_pos_data" not in extra
-
-    def test_blob_non_shaper_export_keeps_inner_stretch_zero(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-
-        class DummyWidget:
-            _blob_shaper_enabled = False
-            _blob_stretch_inner = 0.5
-            _blob_stretch_outer = 0.4
-
-            def __getattr__(self, name):
-                if "color" in name or "tint" in name:
-                    return QColor(255, 255, 255, 255)
-                if name.endswith("enabled"):
-                    return False
-                if name.endswith("_direction"):
-                    return "top"
-                if name.endswith("line_count"):
-                    return 1
-                return 0.0
-
-        extra = build_gpu_push_extra_kwargs(DummyWidget(), "blob", None)
-
-        assert extra["blob_stretch_inner"] == pytest.approx(0.0)
-        assert extra["blob_stretch_outer"] == pytest.approx(0.4)
-
-    def test_blob_gpu_push_includes_floor_snapshot_from_engine(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.energy_bands import EnergyBands
-        from widgets.spotify_visualizer.transient_bus import TransientEnergyBands
-
-        class _DummyWidget:
-            def __getattr__(self, name):
-                if "color" in name:
-                    return QColor(255, 255, 255, 255)
-                if name.endswith("enabled"):
-                    return False
-                if "alpha" in name or "decay" in name or "intensity" in name:
-                    return 0.0
-                return 0
-
-        class _Engine:
-            def get_waveform(self):
-                return []
-
-            def get_waveform_count(self):
-                return 0
-
-            def get_pre_agc_energy_bands(self):
-                return EnergyBands(bass=0.1, mid=0.2, high=0.1, overall=0.15)
-
-            def get_energy_bands(self):
-                return EnergyBands(bass=0.1, mid=0.2, high=0.1, overall=0.15)
-
-            def get_transient_energy_bands(self):
-                return TransientEnergyBands()
-
-            def get_floor_snapshot(self):
-                return {
-                    "dynamic_enabled": True,
-                    "manual_floor": 0.15,
-                    "gate_floor": 0.30,
-                    "last_noise_floor": 0.86,
-                    "support_pressure": 0.86,
-                }
-
-            def get_event_scheduler(self):
-                return None
-
-        extra = build_gpu_push_extra_kwargs(_DummyWidget(), "blob", _Engine())
-
-        assert extra["floor_snapshot"]["dynamic_enabled"] is True
-        assert extra["floor_snapshot"]["manual_floor"] == pytest.approx(0.15)
-        assert extra["floor_snapshot"]["gate_floor"] == pytest.approx(0.30)
 
     def test_spectrum_glow_applied_and_pushed(self):
         from widgets.spotify_visualizer.config_applier import apply_vis_mode_kwargs, build_gpu_push_extra_kwargs
@@ -1001,7 +885,6 @@ class TestConfigApplier:
         extra = build_gpu_push_extra_kwargs(DummyWidget(), "bubble", None)
         for key in ("bubble_pos_data", "bubble_extra_data", "bubble_count"):
             assert key in extra
-        assert "blob_color" not in extra
         assert "line_sensitivity" not in extra
 
     def test_config_applier_accepts_gradient_direction(self):
@@ -3084,7 +2967,7 @@ class TestPerModeTechnicalRoundTrip:
         model = SpotifyVisualizerSettings.from_mapping(payload, apply_preset_overlay=False)
         serialized = model.to_dict()
         defaults = SpotifyVisualizerSettings()
-        supported_modes = tuple(mode for mode in PER_MODE_TECHNICAL_MODES if mode != "blob")
+        supported_modes = tuple(PER_MODE_TECHNICAL_MODES)
 
         for mode in supported_modes:
             expected_floor = 0.41 if mode == "spectrum" else defaults.resolve_manual_floor(mode)
@@ -3289,7 +3172,7 @@ class TestPerModeTechnicalControlPresentation:
         controls = tc._build_control(
             tab,
             layout,
-            "blob",
+            "bubble",
             next(defn for defn in tc._BASE_CONTROL_DEFS if defn.control_key == "block_size"),
         )
         combo = controls["block_size"]
@@ -3335,15 +3218,6 @@ class TestPerModeTechnicalControlPresentation:
         assert "spectrum_spectrum_lane_transient_mix" not in config
         assert "bubble_bubble_transient_mix_vocal" not in config
 
-    def test_blob_technical_controls_include_kick_gain_slider(self):
-        from ui.tabs.media import technical_controls as tc
-
-        defs = tc._control_defs_for_mode("blob")
-        config_keys = {defn.config_key for defn in defs}
-
-        assert "kick_lane_gain" in config_keys
-        assert "transient_pulse_gain" not in config_keys
-
     def test_shared_technical_copy_clarifies_recommended_sensitivity_and_noise_floor(self):
         from ui.tabs.media import technical_controls as tc
 
@@ -3360,7 +3234,6 @@ class TestPerModeTechnicalControlPresentation:
         ("mode_key", "expected_percent"),
         [
             ("spectrum", 42),
-            ("blob", 45),
             ("bubble", 50),
             ("sine_wave", 18),
             ("oscilloscope", 15),
@@ -3476,14 +3349,9 @@ class TestVisualizerPresetDefaultResolution:
     def test_from_mapping_uses_first_preset_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
 
-        model = SpotifyVisualizerSettings.from_mapping(
-            {
-                "mode": "sine_wave",
-            }
-        )
+        model = SpotifyVisualizerSettings.from_mapping({"mode": "sine_wave"})
 
         assert model.preset_sine_wave == 0
-        assert model.preset_blob == 0
 
     def test_from_settings_uses_first_preset_for_missing_mode_preset(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -3497,14 +3365,11 @@ class TestVisualizerPresetDefaultResolution:
 
         model = SpotifyVisualizerSettings.from_settings(
             _DummySettings(
-                {
-                    "widgets.spotify_visualizer.mode": "blob",
-                }
+                {"widgets.spotify_visualizer.mode": "bubble"}
             )
         )
 
-        assert model.preset_blob == 0
-        assert model.preset_sine_wave == 0
+        assert model.preset_bubble == 0
 
     def test_get_active_preset_index_uses_first_preset_when_missing(self):
         from core.settings.visualizer_presets import get_active_preset_index
@@ -3516,13 +3381,11 @@ class TestVisualizerPresetDefaultResolution:
         settings = _DummySettings()
 
         assert get_active_preset_index(settings, "sine_wave") == 0
-        assert get_active_preset_index(settings, "blob") == 0
+        assert get_active_preset_index(settings, "bubble") == 0
 
 
 class TestVisualizerModeRegistryContract:
     def test_registry_matches_preset_modes_and_has_stable_preset_keys(self):
-        from core.dev_gates import force_gate
-        force_gate(blob=True)
         from core.settings.visualizer_mode_registry import (
             VISUALIZER_MODE_IDS,
             iter_visualizer_mode_descriptors,
@@ -3561,16 +3424,13 @@ class TestVisualizerModeRegistryContract:
         from core.settings.visualizer_presets import resolve_all_preset_indices_from_mapping
 
         resolved = resolve_all_preset_indices_from_mapping(
-            {
-                "mode": "blob",
-                "preset_blob": 2,
-            }
+            {"mode": "bubble", "preset_bubble": 2}
         )
 
-        assert resolved["preset_blob"] == 2
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
-            if key == "preset_blob":
+            if key == "preset_bubble":
+                assert resolved[key] == 2
                 continue
             assert resolved[key] == 0
 
@@ -3578,18 +3438,16 @@ class TestVisualizerModeRegistryContract:
         from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
         from core.settings.visualizer_presets import resolve_all_preset_indices_from_getter
 
-        data = {
-            "widgets.spotify_visualizer.preset_blob": 2,
-        }
+        data = {"widgets.spotify_visualizer.preset_bubble": 2}
 
         resolved = resolve_all_preset_indices_from_getter(
             lambda key, default=None: data.get(key, default)
         )
 
-        assert resolved["preset_blob"] == 2
         for mode in VISUALIZER_MODE_IDS:
             key = f"preset_{mode}"
-            if key == "preset_blob":
+            if key == "preset_bubble":
+                assert resolved[key] == 2
                 continue
             assert resolved[key] == 0
 
@@ -3648,8 +3506,8 @@ class TestVisualizerSettingsContract:
             "audio_block_size": 384,
         }
         per_mode = {
-            ("blob", "bar_count"): 24,
-            ("blob", "manual_floor"): 0.22,
+            ("spectrum", "bar_count"): 24,
+            ("spectrum", "manual_floor"): 0.22,
             ("bubble", "adaptive_sensitivity"): True,
             ("bubble", "audio_block_size"): 512,
             ("spectrum", "lane_transient_mix"): 0.72,
@@ -3661,10 +3519,9 @@ class TestVisualizerSettingsContract:
             baselines,
         )
 
-        assert kwargs["blob_bar_count"] == 24
-        assert kwargs["bubble_bar_count"] == 41
-        assert kwargs["blob_manual_floor"] == pytest.approx(0.22)
+        assert kwargs["spectrum_bar_count"] == 24
         assert kwargs["bubble_manual_floor"] == pytest.approx(0.18)
+        assert kwargs["spectrum_manual_floor"] == pytest.approx(0.22)
         assert kwargs["bubble_adaptive_sensitivity"] is True
         assert kwargs["bubble_audio_block_size"] == 512
         assert kwargs["oscilloscope_input_gain"] == pytest.approx(1.3)
@@ -3675,26 +3532,6 @@ class TestVisualizerSettingsContract:
         assert kwargs["bubble_transient_mix_bass"] == pytest.approx(0.75)
         assert kwargs["oscilloscope_audio_block_size"] == 384
         assert "bubble_use_raw_energy" not in kwargs
-
-    def test_section_normalizer_drops_retired_live_compat_keys(self):
-        from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
-
-        normalized = normalize_visualizer_section_mapping(
-            {
-                "mode": "blob",
-                "blob_energy_boost": 1.2,
-                "blob_use_raw_energy": True,
-                "blob_input_gain": 1.1,
-                "blob_stretch": 0.46,
-            },
-            apply_preset_overlay=False,
-        )
-
-        assert "blob_energy_boost" not in normalized
-        assert "blob_use_raw_energy" not in normalized
-        assert normalized["blob_input_gain"] == pytest.approx(1.1)
-        assert normalized["blob_stretch"] == pytest.approx(0.46)
-
 
 class TestVisualizerSettingsSnapshotNormalization:
     def test_section_normalizer_preserves_per_mode_rainbow_alias_inputs(self):
@@ -3771,27 +3608,6 @@ class TestVisualizerSettingsSnapshotNormalization:
 
         assert normalized["devcurve_base_level"] == pytest.approx(0.62)
         assert normalized["devcurve_motion_power"] == pytest.approx(1.75)
-
-    def test_model_roundtrip_omits_retired_compat_settings_keys(self):
-        from core.settings.models import SpotifyVisualizerSettings
-
-        model = SpotifyVisualizerSettings.from_mapping(
-            {
-                "mode": "blob",
-                "blob_energy_boost": 1.4,
-                "blob_use_raw_energy": True,
-                "blob_input_gain": 1.2,
-                "blob_stretch": 0.52,
-            },
-            apply_preset_overlay=False,
-        )
-
-        saved = model.to_dict()
-
-        assert "widgets.spotify_visualizer.blob_energy_boost" not in saved
-        assert "widgets.spotify_visualizer.blob_use_raw_energy" not in saved
-        assert saved["widgets.spotify_visualizer.blob_input_gain"] == pytest.approx(1.2)
-        assert saved["widgets.spotify_visualizer.blob_stretch"] == pytest.approx(0.52)
 
     def test_model_roundtrip_preserves_devcurve_keys(self):
         from core.settings.models import SpotifyVisualizerSettings
@@ -4046,7 +3862,6 @@ class TestVisualizerModeBinding:
                 self.rainbow_speed_slider = _Slider(63)
                 self._rainbow_per_mode = {
                     "spectrum": (False, 20),
-                    "blob": (False, 40),
                 }
 
             def _default_str(self, *_args):
@@ -4127,11 +3942,8 @@ class TestVisualizerModeBinding:
         assert preset_tab._rainbow_glow_effect.enabled is False
 
     def test_collect_and_load_visualizer_preset_indices_use_shared_descriptor_contract(self):
-        from core.dev_gates import force_gate, is_blob_enabled
         from core.settings.visualizer_preset_indices import resolve_preset_index_from_mapping
 
-        prior_blob_gate = is_blob_enabled()
-        force_gate(blob=True)
         from ui.tabs.media.visualizer_mode_binding import (
             collect_visualizer_preset_indices,
             load_visualizer_preset_indices,
@@ -4151,7 +3963,6 @@ class TestVisualizerModeBinding:
             _spectrum_preset_slider = _Slider(1)
             _osc_preset_slider = _Slider(0)
             _sine_preset_slider = _Slider(2)
-            _blob_preset_slider = _Slider(3)
             _bubble_preset_slider = _Slider(1)
             _devcurve_preset_slider = _Slider(4)
 
@@ -4164,7 +3975,6 @@ class TestVisualizerModeBinding:
                 "preset_spectrum": 1,
                 "preset_oscilloscope": 0,
                 "preset_sine_wave": 2,
-                "preset_blob": 3,
                 "preset_bubble": 1,
                 "preset_devcurve": 4,
             }
@@ -4175,7 +3985,6 @@ class TestVisualizerModeBinding:
                     "preset_spectrum": 0,
                     "preset_oscilloscope": 2,
                     "preset_sine_wave": 1,
-                    "preset_blob": 0,
                     "preset_bubble": 3,
                 },
             )
@@ -4183,296 +3992,13 @@ class TestVisualizerModeBinding:
             assert tab._spectrum_preset_slider.preset_index() == 0
             assert tab._osc_preset_slider.preset_index() == 2
             assert tab._sine_preset_slider.preset_index() == 1
-            assert tab._blob_preset_slider.preset_index() == 0
             assert tab._bubble_preset_slider.preset_index() == resolve_preset_index_from_mapping(
                 "bubble",
                 {"preset_bubble": 3},
             )
             assert tab._devcurve_preset_slider.preset_index() == 0
         finally:
-            force_gate(blob=prior_blob_gate)
-
-
-class TestBlobSettingsBinding:
-    def test_load_blob_mode_settings_updates_blob_owned_controls(self):
-        from ui.tabs.media.blob_settings_binding import load_blob_mode_settings
-
-        class _Check:
-            def __init__(self):
-                self.checked = None
-
-            def setChecked(self, checked):
-                self.checked = checked
-
-        class _Slider:
-            def __init__(self):
-                self.value = None
-
-            def setValue(self, value):
-                self.value = value
-
-        class _Label:
-            def __init__(self):
-                self.text = None
-
-            def setText(self, text):
-                self.text = text
-
-        class _Combo:
-            def __init__(self):
-                self.index = None
-
-            def setCurrentIndex(self, index):
-                self.index = index
-
-        class _Tab:
-            def __init__(self):
-                self.blob_type_combo = _Combo()
-                self.blob_ghost_enabled = _Check()
-                self.blob_ghost_opacity = _Slider()
-                self.blob_ghost_opacity_label = _Label()
-                self.blob_ghost_decay_slider = _Slider()
-                self.blob_ghost_decay_label = _Label()
-                self.blob_pulse = _Slider()
-                self.blob_pulse_label = _Label()
-                self.blob_pulse_release_ms = _Slider()
-                self.blob_pulse_release_ms_label = _Label()
-                self.blob_stretch = _Slider()
-                self.blob_stretch_label = _Label()
-                self.blob_shaper_base_strength = _Slider()
-                self.blob_shaper_base_strength_label = _Label()
-                self.blob_shaper_idle_motion = _Slider()
-                self.blob_shaper_idle_motion_label = _Label()
-                self.blob_shaper_audio_motion = _Slider()
-                self.blob_shaper_audio_motion_label = _Label()
-                self.blob_inward_liquid_enabled = _Check()
-                self.blob_inward_liquid_reactivity = _Slider()
-                self.blob_inward_liquid_reactivity_label = _Label()
-                self.blob_inward_liquid_max_size = _Slider()
-                self.blob_inward_liquid_max_size_label = _Label()
-                self.blob_glow_drive_mode = _Combo()
-                self.blob_growth = _Slider()
-                self.blob_growth_label = _Label()
-
-            def _config_bool(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_float(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_int(self, _section, config, key, default):
-                return config.get(key, default)
-
-            def _config_str(self, _section, config, key, default):
-                return config.get(key, default)
-
-        tab = _Tab()
-        synced = []
-        load_blob_mode_settings(
-            tab,
-            {
-                "blob_type": "shaped",
-                "blob_shaper_enabled": False,
-                "blob_ghosting_enabled": True,
-                "blob_ghost_alpha": 0.37,
-                "blob_ghost_decay": 0.44,
-                "blob_pulse": 1.23,
-                "blob_pulse_release_ms": 1210,
-                "blob_inward_liquid_enabled": True,
-                "blob_inward_liquid_reactivity": 1.34,
-                "blob_inward_liquid_max_size": 0.31,
-                "blob_stretch": 0.42,
-                "blob_shaper_base_strength": 0.73,
-                "blob_shaper_idle_motion": 0.11,
-                "blob_shaper_audio_motion": 1.48,
-                "blob_glow_drive_mode": "vocal",
-                "blob_growth": 3.10,
-                "blob_color": [1, 2, 3, 4],
-            },
-            sync_color_button=lambda btn, attr: synced.append((btn, attr)),
-        )
-
-        assert tab.blob_ghost_enabled.checked is True
-        assert tab.blob_type_combo.index == 1
-        assert tab.blob_ghost_opacity.value == 37
-        assert tab.blob_ghost_opacity_label.text == "37%"
-        assert tab.blob_ghost_decay_slider.value == 44
-        assert tab.blob_ghost_decay_label.text == "0.44x"
-        assert tab.blob_pulse.value == 123
-        assert tab.blob_pulse_label.text == "1.23x"
-        assert tab.blob_pulse_release_ms.value == 1210
-        assert tab.blob_pulse_release_ms_label.text == "1.21s"
-        assert tab.blob_inward_liquid_enabled.checked is True
-        assert tab.blob_inward_liquid_reactivity.value == 134
-        assert tab.blob_inward_liquid_reactivity_label.text == "134%"
-        assert tab.blob_inward_liquid_max_size.value == 31
-        assert tab.blob_inward_liquid_max_size_label.text == "31%"
-        assert tab.blob_stretch.value == 42
-        assert tab.blob_stretch_label.text == "42%"
-        assert tab.blob_shaper_base_strength.value == 73
-        assert tab.blob_shaper_base_strength_label.text == "73%"
-        assert tab.blob_shaper_idle_motion.value == 11
-        assert tab.blob_shaper_idle_motion_label.text == "11%"
-        assert tab.blob_shaper_audio_motion.value == 148
-        assert tab.blob_shaper_audio_motion_label.text == "148%"
-        assert tab.blob_glow_drive_mode.index == 1
-        assert tab.blob_growth.value == 310
-        assert tab.blob_growth_label.text == "3.1x"
-        assert (tab._blob_color.red(), tab._blob_color.green(), tab._blob_color.blue(), tab._blob_color.alpha()) == (1, 2, 3, 4)
-        assert synced == [
-            ("blob_fill_color_btn", "_blob_color"),
-            ("blob_glow_color_btn", "_blob_glow_color"),
-            ("blob_edge_color_btn", "_blob_edge_color"),
-            ("blob_outline_color_btn", "_blob_outline_color"),
-            ("blob_inward_liquid_color_btn", "_blob_inward_liquid_color"),
-        ]
-
-        load_blob_mode_settings(
-            tab,
-            {"blob_type": "shaped"},
-            sync_color_button=lambda *_args: None,
-        )
-        assert tab.blob_shaper_base_strength.value == 50
-        assert tab.blob_shaper_base_strength_label.text == "50%"
-
-    def test_load_blob_mode_settings_migrates_legacy_toggle_without_overriding_canonical_type(self):
-        from ui.tabs.media.blob_settings_binding import load_blob_mode_settings
-
-        class _Combo:
-            def __init__(self):
-                self.index = None
-                self.blocked = False
-                self.block_history = []
-
-            def setCurrentIndex(self, index):
-                self.index = index
-
-            def blockSignals(self, blocked):
-                previous = self.blocked
-                self.blocked = blocked
-                self.block_history.append(blocked)
-                return previous
-
-        class _Tab:
-            def __init__(self):
-                self.blob_type_combo = _Combo()
-                self.visibility_syncs = 0
-                self._update_blob_type_controls = self._sync
-
-            def _sync(self):
-                self.visibility_syncs += 1
-
-        tab = _Tab()
-        load_blob_mode_settings(
-            tab,
-            {"blob_shaper_enabled": True},
-            sync_color_button=lambda *_args: None,
-        )
-        assert tab.blob_type_combo.index == 1
-
-        load_blob_mode_settings(
-            tab,
-            {"blob_type": "normal", "blob_shaper_enabled": True},
-            sync_color_button=lambda *_args: None,
-        )
-        assert tab.blob_type_combo.index == 0
-        assert tab.blob_type_combo.blocked is False
-        assert tab.blob_type_combo.block_history == [True, False, True, False]
-        assert tab.visibility_syncs == 2
-
-    def test_collect_blob_mode_settings_serializes_blob_owned_state(self):
-        from ui.tabs.media.blob_settings_binding import collect_blob_mode_settings
-
-        class _Check:
-            def __init__(self, checked):
-                self._checked = checked
-
-            def isChecked(self):
-                return self._checked
-
-        class _Slider:
-            def __init__(self, value):
-                self._value = value
-
-            def value(self):
-                return self._value
-
-        class _Combo:
-            def __init__(self, index):
-                self._index = index
-
-            def currentIndex(self):
-                return self._index
-
-        class _Tab:
-            blob_type_combo = _Combo(1)
-            blob_ghost_enabled = _Check(True)
-            blob_ghost_opacity = _Slider(45)
-            blob_ghost_decay_slider = _Slider(38)
-            blob_pulse = _Slider(140)
-            blob_width = _Slider(92)
-            blob_size = _Slider(135)
-            blob_glow_intensity = _Slider(67)
-            blob_glow_reactivity = _Slider(123)
-            blob_glow_drive_mode = _Combo(1)
-            blob_glow_max_size = _Slider(210)
-            blob_reactive_glow = _Check(True)
-            blob_reactive_deformation = _Slider(88)
-            blob_pulse_release_ms = _Slider(1330)
-            blob_inward_liquid_enabled = _Check(True)
-            blob_inward_liquid_reactivity = _Slider(142)
-            blob_inward_liquid_max_size = _Slider(29)
-            blob_constant_wobble = _Slider(80)
-            blob_reactive_wobble = _Slider(290)
-            blob_stretch = _Slider(48)
-            blob_shaper_base_strength = _Slider(64)
-            blob_shaper_idle_motion = _Slider(9)
-            blob_shaper_audio_motion = _Slider(155)
-            blob_growth = _Slider(275)
-            _blob_color = QColor(10, 20, 30, 200)
-            _blob_glow_color = QColor(40, 50, 60, 210)
-            _blob_edge_color = QColor(70, 80, 90, 220)
-            _blob_outline_color = QColor(100, 110, 120, 230)
-            _blob_inward_liquid_color = QColor(130, 140, 150, 240)
-
-        tab = _Tab()
-        payload = collect_blob_mode_settings(tab)
-
-        assert payload["blob_type"] == "shaped"
-        assert "blob_shaper_enabled" not in payload
-        assert payload["blob_ghosting_enabled"] is True
-        assert payload["blob_ghost_alpha"] == pytest.approx(0.45)
-        assert payload["blob_ghost_decay"] == pytest.approx(0.38)
-        assert payload["blob_pulse"] == pytest.approx(1.4)
-        assert payload["blob_glow_drive_mode"] == "vocal"
-        assert payload["blob_color"] == [10, 20, 30, 200]
-        assert payload["blob_glow_color"] == [40, 50, 60, 210]
-        assert payload["blob_edge_color"] == [70, 80, 90, 220]
-        assert payload["blob_outline_color"] == [100, 110, 120, 230]
-        assert payload["blob_pulse_release_ms"] == 1330
-        assert payload["blob_inward_liquid_enabled"] is True
-        assert payload["blob_inward_liquid_reactivity"] == pytest.approx(1.42)
-        assert payload["blob_inward_liquid_max_size"] == pytest.approx(0.29)
-        assert payload["blob_inward_liquid_color"] == [130, 140, 150, 240]
-        assert "blob_reactive_deformation" not in payload
-        assert "blob_constant_wobble" not in payload
-        assert "blob_reactive_wobble" not in payload
-        assert "blob_stretch" not in payload
-        assert payload["blob_shaper_base_strength"] == pytest.approx(0.64)
-        assert payload["blob_shaper_idle_motion"] == pytest.approx(0.09)
-        assert payload["blob_shaper_audio_motion"] == pytest.approx(1.55)
-        assert payload["blob_growth"] == pytest.approx(2.75)
-
-        tab.blob_type_combo = _Combo(0)
-        mighty_payload = collect_blob_mode_settings(tab)
-        assert mighty_payload["blob_type"] == "mighty"
-        assert mighty_payload["blob_reactive_deformation"] == pytest.approx(0.88)
-        assert mighty_payload["blob_constant_wobble"] == pytest.approx(0.80)
-        assert mighty_payload["blob_reactive_wobble"] == pytest.approx(2.90)
-        assert mighty_payload["blob_stretch"] == pytest.approx(0.48)
-        assert "blob_shaper_base_strength" not in mighty_payload
-        assert "blob_shaper_idle_motion" not in mighty_payload
-        assert "blob_shaper_audio_motion" not in mighty_payload
+            pass
 
 
 class TestOscilloscopeSettingsBinding:
@@ -6006,49 +5532,6 @@ class TestVisualizerModeEnum:
 class TestVisualizerPresetRepair:
     """Validate the preset repair helper normalizes legacy payloads."""
 
-    def test_repair_file_sanitizes_blob_stretch_biases(self, tmp_path):
-        import json
-        from tools.visualizer_preset_repair import repair_file
-
-        payload = {
-            "name": "Preset 1 (Test)",
-            "snapshot": {
-                "widgets": {
-                    "spotify_visualizer": {
-                        "mode": "blob",
-                        "blob_stretch_x_bias": 0.25,
-                        "blob_stretch_y_bias": 0.75,
-                    }
-                },
-                "custom_preset_backup": {
-                    "widgets.spotify_visualizer.blob_stretch_x_bias": 0.25,
-                    "widgets.spotify_visualizer.blob_stretch_y_bias": 0.75,
-                },
-            },
-            "widgets": {
-                "spotify_visualizer": {
-                    "blob_stretch_x_bias": 0.25,
-                }
-            },
-        }
-        preset_path = tmp_path / "blob_preset.json"
-        preset_path.write_text(json.dumps(payload), encoding="utf-8")
-
-        backup, stats = repair_file(preset_path, "blob")
-
-        assert backup.exists()
-        assert "snapshot.widgets.spotify_visualizer" in stats["updated_paths"]
-
-        repaired = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = repaired["snapshot"]["widgets"]["spotify_visualizer"]
-        assert sv.get("mode") == "blob"
-        assert "blob_stretch_x_bias" not in sv
-        assert "blob_stretch_y_bias" not in sv
-
-        # custom_preset_backup was intentionally removed from repair_file output
-        # (see visualizer_preset_repair.py lines 205-210) to prevent preset drift.
-        assert "custom_preset_backup" not in repaired.get("snapshot", {})
-
     def test_repair_file_derives_sine_card_adaptation(self, tmp_path):
         import json
         from tools.visualizer_preset_repair import repair_file
@@ -6083,7 +5566,6 @@ class TestVisualizerPresetRepair:
         [
             "sine_wave",
             "bubble",
-            "blob",
             "spectrum",
             "oscilloscope",
         ],

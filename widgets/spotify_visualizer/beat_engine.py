@@ -66,7 +66,6 @@ class _SpotifyBeatEngine(QObject):
         self._waveform: List[float] = [0.0] * 256
         self._waveform_count: int = 256
 
-        # Energy bands for blob
         self._energy_bands: EnergyBands = EnergyBands()
         
         # Smoothing state (moved from widget to reduce UI thread work)
@@ -948,9 +947,9 @@ class _SpotifyBeatEngine(QObject):
         """Return the latest shared floor state for consumers that need context.
 
         The continuous energy bands remain the source of truth; this snapshot is
-        just the shaping context that produced them. Modes like Blob can use it
-        to distinguish real sustained support from temporarily elevated floor
-        pressure without inventing their own settings path.
+        just the shaping context that produced them. Consumers can use it to
+        distinguish real sustained support from temporarily elevated floor
+        pressure without inventing another settings path.
         """
         w = self._audio_worker
         try:
@@ -990,7 +989,7 @@ class _SpotifyBeatEngine(QObject):
 
         Returns per-band transient energy and onset detection state.
         Used by modes that need immediate beat response (Spectrum kick lane,
-        Bubble pulse, Blob deform) without waiting for smoothing/AGC.
+        Bubble pulse) without waiting for smoothing/AGC.
         """
         w = self._audio_worker
         return TransientEnergyBands(

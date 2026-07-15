@@ -56,8 +56,6 @@ SPECIAL_PER_MODE_KEYS: tuple[tuple[str, str, str, Any, Callable[[Any], Any]], ..
     ("spectrum", "lane_transient_mix", "spectrum_lane_transient_mix", 0.65, float),
     ("bubble", "transient_mix_bass", "bubble_transient_mix_bass", 0.75, float),
     ("bubble", "transient_mix_vocal", "bubble_transient_mix_vocal", 0.25, float),
-    ("blob", "transient_mix_bass", "blob_transient_mix_bass", 0.5, float),
-    ("blob", "transient_mix_vocal", "blob_transient_mix_vocal", 0.35, float),
     ("sine_wave", "transient_width_mix", "sine_wave_transient_width_mix", 0.4, float),
     ("oscilloscope", "transient_width_mix", "oscilloscope_transient_width_mix", 0.35, float),
 )
@@ -336,7 +334,6 @@ def migrate_legacy_global_visual_keys(
 
     ghost_mode_key_map = {
         "spectrum": ("spectrum_ghosting_enabled", "spectrum_ghost_alpha", "spectrum_ghost_decay"),
-        "blob": ("blob_ghosting_enabled", "blob_ghost_alpha", "blob_ghost_decay"),
         "bubble": ("bubble_ghosting_enabled", "bubble_ghost_alpha", "bubble_ghost_decay"),
         "sine_wave": ("sine_ghosting_enabled", "sine_ghost_alpha", "sine_ghost_decay"),
         "devcurve": ("devcurve_ghosting_enabled", "devcurve_ghost_alpha", "devcurve_ghost_decay"),

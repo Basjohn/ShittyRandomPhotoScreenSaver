@@ -342,7 +342,6 @@ def estimate_spotify_vis_size(
         {
             "_spectrum_growth": float(vis_settings.get("spectrum_growth", 2.0)),
             "_osc_growth": float(vis_settings.get("osc_growth", 2.0)),
-            "_blob_growth": float(vis_settings.get("blob_growth", 3.5)),
             "_sine_wave_growth": float(vis_settings.get("sine_wave_growth", 2.0)),
             "_bubble_growth": float(vis_settings.get("bubble_growth", 3.0)),
             "_devcurve_growth": float(vis_settings.get("devcurve_growth", 3.5)),

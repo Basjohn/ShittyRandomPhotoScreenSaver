@@ -12,44 +12,47 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved In Code, Runtime Validation Pending)](#R-45)
-2. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
-3. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
-4. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
-5. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
-6. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-7. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-8. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-9. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-10. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-11. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-12. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-13. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-14. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-15. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-16. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-17. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-18. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-19. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-20. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
-21. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-22. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-23. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-24. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-25. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-26. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-27. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-28. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-29. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-30. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-31. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-32. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-33. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-34. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-35. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-36. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-37. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-38. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved In Code, Runtime Validation Pending)](#R-48)
+2. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved In Code, Runtime Validation Pending)](#R-47)
+3. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
+4. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved In Code, Runtime Validation Pending)](#R-45)
+5. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
+6. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
+7. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
+8. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
+9. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
+10. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
+11. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
+12. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
+13. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+14. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+15. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
+16. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+17. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+18. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+19. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+20. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+21. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+22. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+23. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
+24. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+25. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+26. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+27. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+28. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+29. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+30. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+31. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+32. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+33. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+34. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+35. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+36. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+37. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+38. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+39. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+40. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+41. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -72,6 +75,48 @@ This is the long-term anti-regression record for the project, not an active task
 
 ## Recent Entries
 
+<a id="R-48"></a>
+### [R-48] 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure:** a Clock routed to all displays could no longer remain analogue on one display and digital on another. Double-click visibly toggled the selected instance, but the choice was persisted into the shared Clock setting and therefore became the baseline for every display on the next settings event/rebuild.
+- **Root cause:** R-45 correctly removed behavior authority from per-display CUSTOM geometry payloads, but the surviving double-click persistence path still wrote `display_mode` and `clock_analog_mode` into the shared widget section. Removing the stale geometry authority therefore exposed the older global-write assumption and erased a useful mixed-display runtime contract.
+- **Fix:** the Settings value remains the global baseline. Double-click now persists an explicit `display_mode_overrides` entry keyed by the existing stable screen signature, and `ClockWidgetFactory` applies that override only when creating the matching display instance. CUSTOM entries continue to contain only `font_size` and `geometry_variant`; no behavior field was restored to geometry payloads. The local mode and mode-shaped rect still update immediately, and persistence uses `emit_change=False`, so no cross-display rebuild or UI-pressure path was added.
+- **Bars:** Clock tests prove digital-to-analogue and analogue-to-digital CUSTOM transformations preserve the shared baseline while writing only the current screen override; factory coverage proves a matching signature selects the override. The focused Clock/factory/diagnostic suite passed `45/45`.
+- **Runtime validation target:** route one Clock to ALL, double-click only one display, then exercise unrelated Settings refresh, engine rebuild, and restart. Require one analogue and one digital instance, stable per-display geometry, no global mode flip, no duplicate widget creation, and no DT/paint burst.
+
+<a id="R-47"></a>
+### [R-47] 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure:** hotswapping to Oscilloscope produced no visible mode, and starting directly in Oscilloscope left the visualizer absent. Startup eventually logged a reveal-watchdog expiry while waiting for its first valid frame.
+- **Root cause:** Blob retirement correctly deleted the Blob-only portion of the Oscilloscope diagnostic signature, but accidentally removed the entire local `sig` assignment while leaving the shared throttle and assignment references intact. With visualizer diagnostics enabled, every `SpotifyBarsGLOverlay.set_state()` call raised `NameError` after state preparation. The display push failed before startup staging could observe a valid frame; the reviewed run emitted 78 copies of the same frame-boundary exception.
+- **Fix:** restored a Blob-free Oscilloscope signature from supported mode-owned state: line speed, waveform blend, ghost-ring occupancy/delay/alpha, and transient-width mix. The existing bounded diagnostic throttle and render behavior are unchanged. No timer, repaint, retry, fallback, visual retuning, or exception suppression was added.
+- **Bars:** diagnostics-enabled coverage now executes repeated Oscilloscope calls, proves unchanged state is throttled, proves a supported-state change logs again, and would fail on the deleted assignment. The focused Clock/factory/diagnostic suite passed `45/45`; the supported visualizer lock remains required before closure.
+- **Runtime validation target:** start in Oscilloscope and hotswap into it from two supported modes under `--viz --perf`. Require first-frame reveal, continuous frame pushes, bounded `[SPOTIFY_VIS][OSC]` logs, no push traceback/watchdog expiry, and unchanged waveform/ghost/transient visuals.
+
+<a id="R-46"></a>
+### [R-46] 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [ ] AWAITING VALIDATION
+- [x] SOLVED
+
+- **Why retirement was necessary:** Blob was already classified as a failed, soon-to-be-retired mode, but its temporary dev gate left a second-class architecture spread across 115 files, thousands of source matches, 267 collected tests, typed settings, curated presets, runtime transport, renderers, shaders, diagnostics, packaging, and CLI/test escape hatches. Continuing to repair or quarantine that surface would spend shared-visualizer budget on a mode that was not intended to ship.
+- **Migration boundary:** visualizer settings schema version 3 maps a saved/imported `mode: blob` to the registry-owned supported default, strips `blob_*` and `preset_blob` leaves before model normalization, preserves sibling widget data, and never re-emits retired fields. Normal/MC canonical defaults and generated JSON/SST artifacts contain no Blob leaves. Curated tree scanning, manifests, folder/ZIP import, and release mirroring accept only registered modes while still pruning stale retired preset files from managed destinations.
+- **Removal:** deleted the gate, descriptor, defaults/model fields, Settings controls/builders/bindings, presets, CLI option, runtime state and transport, solvers, renderers, shaders, diagnostics, package-facing registrations, dedicated tests, and temporary pytest skip/escape hatch. Shared audio, activation, compositor, animation, card geometry, and the five supported modes were not redesigned or retuned.
+- **Bars:** the migration/absence suite covers plain, dotted, and persisted settings; sibling preservation; clean defaults; no re-emission; and retired preset import/pruning. The supported visualizer reactivity/runtime lock passed before removal and again after production teardown (`17 passed`); the integrated changed-file gate finished at `907 passed, 20 skipped`, and Defaults Foundry/settings/default/manifest/transfer suites remained green. A production-scope search retains only the explicit migration token; historical bug prose remains documentation, not executable ownership.
+- **Guardrail:** Blob may appear only as a migration input or historical record. Do not restore its dev gate, defaults, presets, tests, render branches, shaders, or package assets. Any future visualizer must establish its own active descriptor, settings, visual identity, supported-mode regression bars, and release intent rather than inheriting retired Blob code.
+
 <a id="R-45"></a>
 ### [R-45] 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved In Code, Runtime Validation Pending)
 
@@ -82,7 +127,7 @@ This is the long-term anti-regression record for the project, not an active task
 
 - **Observed failure:** Clock CUSTOM entries captured and replayed `display_mode`. This preserved the digital/analogue-shaped outer rect during restart, but it also made the saved layout a second behavior authority: changing `Use Analogue Clock` in Settings could be reverted by the older CUSTOM payload after the factory had already applied the current setting.
 - **Root cause:** an earlier hot-swap repair correctly established that digital and analogue clocks need different CUSTOM outer shapes, but represented that geometry dependency by storing the behavior setting itself. Ordinary replay then called `set_display_mode()` before applying the resize-derived font, conflating “which shape this rect was authored for” with “which mode the user currently selected.”
-- **Fix:** `clock_font` payloads now contain resize-derived `font_size` plus `geometry_variant`, an outer-shape marker that is never applied as widget behavior. Replay keeps the factory/Settings mode authoritative. If the saved shape marker differs, the manager rebuilds a centered, clamped target-mode rect using the saved CUSTOM font scale, then persists the canonical marker. Legacy `display_mode` payload keys migrate through that one geometry comparison and are removed. Double-click still changes Settings and persists the deliberately rebuilt rect, but writes only `geometry_variant` and font size. No timer, retry, repaint, thread, or broad widget refresh was added.
+- **Fix:** `clock_font` payloads now contain resize-derived `font_size` plus `geometry_variant`, an outer-shape marker that is never applied as widget behavior. Replay keeps the factory/Settings baseline authoritative. If the saved shape marker differs, the manager rebuilds a centered, clamped target-mode rect using the saved CUSTOM font scale, then persists the canonical marker. Legacy `display_mode` payload keys migrate through that one geometry comparison and are removed. The R-48 follow-up preserves double-click as an explicit screen-signature behavior override while the rebuilt CUSTOM payload still writes only `geometry_variant` and font size. No timer, retry, repaint, thread, or broad widget refresh was added.
 - **Bars:** the full CUSTOM manager suite (`94 passed`) proves direct payload application cannot change mode, legacy digital-to-analogue restart rebuilds the exact target rect with base and CUSTOM font sizes intentionally different, and canonical persistence strips the legacy key. The Clock suite (`19 passed`) preserves both double-click rect transformations and setting writes; descriptor/layout integration adds `16 passed`.
 - **Runtime validation target:** in normal and MC builds, place Clock in CUSTOM at a clearly non-default scale. Switch digital/analogue from Settings and by double-click in both directions, restart each time, and require the current setting, centered mode-appropriate rect, position, display route, and scale to survive. `--geo` must show `font_size` plus `geometry_variant`, never `display_mode`, with no repeated migration write, fallback, paint burst, or DT spike.
 

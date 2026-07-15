@@ -522,9 +522,8 @@ class WidgetManager:
             settings.set(VISUALIZER_CUSTOM_STORAGE_KEY, cache)
 
         applied = apply_preset_to_config(mode, next_idx, working_config)
-        # Use REPLACE semantics, not merge — .update() would leave stale
-        # custom mode-specific keys (e.g. blob_shaper_enabled) that the
-        # preset didn't include, causing settings to "stick" across presets.
+        # Use REPLACE semantics so target presets cannot inherit stale keys
+        # from the mode payload they replace.
         restore_visualizer_snapshot(mode, vis_config, applied)
         vis_config[preset_key] = next_idx
 
@@ -1814,7 +1813,6 @@ class WidgetManager:
                 mode_id=vis_mode,
                 card_height=metrics.preferred_height,
                 position_name=position_name,
-                blob_width=float(getattr(vis_widget, "_blob_width", 1.0)),
             )
             return QRect(
                 int(placement.x),

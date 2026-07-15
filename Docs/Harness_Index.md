@@ -36,7 +36,7 @@ python -m pytest tests/test_default_settings_editor.py tests/test_regenerate_sst
   - The editor changes fresh/reset defaults, not the current user's saved settings.
 
 ### WidgetsTab lazy-section and settings-lifetime slice
-- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, hydrated-only normal save collection, the still-loud direct unhydrated-save guard, visualizer-section persistence, dev-gated Blob UI construction, and stale settings-slider QObject lifetime handling.
+- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, hydrated-only normal save collection, the still-loud direct unhydrated-save guard, visualizer-section persistence, and stale settings-slider QObject lifetime handling.
 - Use when:
   - editing `ui/tabs/widgets_tab.py`
   - editing `ui/tabs/widgets_tab_media.py`
@@ -186,12 +186,12 @@ python -m pytest `
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
-### Deprecated Blob retirement corpus
+### Retired visualizer migration guard
 
-- Status: Blob is a failed mode scheduled for removal. Its former creative/runtime architecture lock is retired and is not an acceptance harness.
-- Default behavior: `tests/conftest.py` skips Blob-named tests while retaining guards that production UI remains hidden and defaults do not reintroduce the inactive family.
-- Do not repair, retune, or routinely run the Blob corpus. `--run-deprecated-blob-tests` is available only when explicit teardown forensics need an old oracle before deleting its owner.
-- Removal acceptance is absence-based: migrate saved/imported active `blob` selections to the registry default, strip retired keys without re-emission, remove UI/runtime/shader/preset/package ownership, regenerate defaults/SST artifacts, and pass supported-mode visualizer locks.
+- Purpose: keep removed visualizer modes absent while preserving safe forward migration for installed/imported settings.
+- Tool: `tests/test_visualizer_retired_modes.py`.
+- Acceptance is absence-based: a saved/imported `blob` selection resolves to the registry default, all retired leaves are stripped without re-emission, sibling widgets survive schema migration, and canonical defaults remain clean.
+- Historical Blob creative/runtime tests are deleted and are not acceptance oracles. Use the supported-mode reactivity lock for shared visualizer regression safety.
 
 ### Visualizer distribution harness
 - Purpose: inspect transition-random distribution or mode-selection skew over longer sessions.

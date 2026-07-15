@@ -209,9 +209,7 @@ class _VisualizerLikeTestWidget(_EditableTestWidget):
         super().__init__(parent, font_size=14)
         self._base_height = 80
         self._vis_mode_str = "spectrum"
-        self._blob_width = 1.0
         self._spectrum_growth = 2.0
-        self._blob_growth = 3.5
         self._osc_growth = 2.0
         self._bubble_growth = 3.0
         self._devcurve_growth = 3.0
@@ -3501,8 +3499,8 @@ def test_custom_layout_manager_visualizer_shell_uses_maximum_envelope(qtbot):
 
     state = manager._shell_states["spotify_visualizer"]
     assert state.baseline_global_rect.width() == 320
-    assert state.baseline_global_rect.height() == 280
-    assert state.shell._snapshot.size() == QSize(320, 280)
+    assert state.baseline_global_rect.height() == 240
+    assert state.shell._snapshot.size() == QSize(320, 240)
 
 
 def test_custom_layout_manager_visualizer_shell_qol_preview_only_grows_height(qtbot):
@@ -3531,9 +3529,9 @@ def test_custom_layout_manager_visualizer_shell_qol_preview_only_grows_height(qt
     state = manager._shell_states["spotify_visualizer"]
     assert display.mapFromGlobal(state.baseline_global_rect.topLeft()) == QPoint(70, 360)
     assert display.mapFromGlobal(state.current_global_rect.topLeft()) == QPoint(70, 360)
-    assert state.baseline_global_rect.size() == QSize(300, 280)
-    assert state.current_global_rect.size() == QSize(300, 280)
-    assert state.shell._snapshot.size() == QSize(300, 280)
+    assert state.baseline_global_rect.size() == QSize(300, 240)
+    assert state.current_global_rect.size() == QSize(300, 240)
+    assert state.shell._snapshot.size() == QSize(300, 240)
 
 
 def test_custom_layout_manager_visualizer_shell_prefers_committed_custom_rect_over_stale_live_geometry(qtbot):

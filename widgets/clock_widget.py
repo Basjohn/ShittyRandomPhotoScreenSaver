@@ -30,6 +30,7 @@ from core.performance import widget_paint_sample
 from rendering.custom_layout_contract import (
     clamp_local_rect_to_bounds,
     get_screen_layout_entries_for_screen,
+    get_screen_signature,
     load_custom_layout_map,
     normalize_local_rect,
     write_custom_layout_map,
@@ -892,8 +893,20 @@ class ClockWidget(BaseOverlayWidget):
                         cfg = {}
                     widget_id = str(getattr(self, "_overlay_name", "clock") or "clock")
                     clock_cfg = cfg.get(widget_id, {}) or {}
-                    clock_cfg['clock_analog_mode'] = (new_mode == "analog")
-                    clock_cfg['display_mode'] = new_mode
+                    parent = self.parentWidget()
+                    screen = getattr(parent, "_screen", None) if parent is not None else None
+                    if screen is None:
+                        try:
+                            screen = self.screen()
+                        except Exception:
+                            screen = None
+                    if screen is None:
+                        return
+                    mode_overrides = clock_cfg.get("display_mode_overrides", {})
+                    if not isinstance(mode_overrides, dict):
+                        mode_overrides = {}
+                    mode_overrides[get_screen_signature(screen)] = new_mode
+                    clock_cfg["display_mode_overrides"] = mode_overrides
                     cfg[widget_id] = clock_cfg
                     self._persist_mode_switched_custom_layout(cfg, widget_id, new_mode)
                     if hasattr(sm, "set_widgets_map"):

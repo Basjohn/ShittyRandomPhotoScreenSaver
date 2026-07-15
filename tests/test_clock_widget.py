@@ -583,8 +583,11 @@ def test_clock_double_click_rebuilds_custom_runtime_rect_from_digital_to_analog(
         "width": analog_rect.width() / parent.width(),
         "height": analog_rect.height() / parent.height(),
     }
-    assert settings_stub.widgets_map["clock"]["display_mode"] == "analog"
-    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is True
+    assert settings_stub.widgets_map["clock"]["display_mode"] == "digital"
+    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is False
+    assert settings_stub.widgets_map["clock"]["display_mode_overrides"] == {
+        screen_signature: "analog"
+    }
     assert settings_stub.emit_change_calls == [False]
     assert settings_stub.saved is True
 
@@ -667,7 +670,10 @@ def test_clock_double_click_rebuilds_custom_runtime_rect_from_analog_to_digital(
         "width": digital_rect.width() / parent.width(),
         "height": digital_rect.height() / parent.height(),
     }
-    assert settings_stub.widgets_map["clock"]["display_mode"] == "digital"
-    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is False
+    assert settings_stub.widgets_map["clock"]["display_mode"] == "analog"
+    assert settings_stub.widgets_map["clock"]["clock_analog_mode"] is True
+    assert settings_stub.widgets_map["clock"]["display_mode_overrides"] == {
+        screen_signature: "digital"
+    }
     assert settings_stub.emit_change_calls == [False]
     assert settings_stub.saved is True

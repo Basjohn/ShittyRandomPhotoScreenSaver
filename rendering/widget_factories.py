@@ -20,6 +20,7 @@ from PySide6.QtWidgets import QWidget
 
 from core.logging.logger import get_logger
 from core.settings.settings_manager import SettingsManager
+from rendering.custom_layout_contract import get_screen_signature
 from rendering.widget_setup import parse_color_to_qcolor
 from widgets.base_overlay_widget import BaseOverlayWidget
 
@@ -206,6 +207,10 @@ class ClockWidgetFactory(WidgetFactory):
             
             # Display mode
             display_mode = _resolve_style('display_mode', 'digital')
+            mode_overrides = config.get('display_mode_overrides', {})
+            screen = getattr(parent, '_screen', None)
+            if isinstance(mode_overrides, Mapping) and screen is not None:
+                display_mode = mode_overrides.get(get_screen_signature(screen), display_mode)
             if hasattr(widget, 'set_display_mode'):
                 widget.set_display_mode(display_mode)
             

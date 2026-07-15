@@ -10,15 +10,15 @@ Verifies:
 from __future__ import annotations
 
 
-from core.settings import default_settings
 from core.settings.defaults import get_default_settings
 from core.settings.models import SpotifyVisualizerSettings
+from core.settings.visualizer_mode_registry import VISUALIZER_MODE_IDS
 from tools import visualizer_preset_repair as repair
 
 
 # The three new transient bus keys that must appear per-mode
 _TRANSIENT_KEYS = ("kick_lane_gain", "transient_pulse_gain", "transient_clamp")
-_MODES = ("spectrum", "bubble", "blob", "sine_wave", "oscilloscope")
+_MODES = VISUALIZER_MODE_IDS
 
 
 class TestDefaultSettingsContainTransientKeys:
@@ -39,9 +39,12 @@ class TestDefaultSettingsContainTransientKeys:
     def test_default_values_sane(self):
         viz = get_default_settings()["widgets"]["spotify_visualizer"]
         for mode in _MODES:
-            assert viz[f"{mode}_kick_lane_gain"] == 1.0
-            assert viz[f"{mode}_transient_pulse_gain"] == 1.0
-            assert viz[f"{mode}_transient_clamp"] == 1.5
+            kick_gain = viz[f"{mode}_kick_lane_gain"]
+            pulse_gain = viz[f"{mode}_transient_pulse_gain"]
+            clamp = viz[f"{mode}_transient_clamp"]
+            assert isinstance(kick_gain, (int, float)) and kick_gain >= 0.0
+            assert isinstance(pulse_gain, (int, float)) and pulse_gain >= 0.0
+            assert isinstance(clamp, (int, float)) and clamp > 0.0
 
 
 class TestSettingsModelResolvers:

@@ -10,15 +10,8 @@ from PySide6.QtCore import QSettings, QObject, Signal
 from core.logging.logger import get_logger, is_verbose_logging
 from core.settings.json_store import JsonSettingsStore, determine_storage_path
 from core.settings.models import SpotifyVisualizerSettings
-from core.settings.visualizer_blob_contract import (
-    BLOB_MIGHTY_ONLY_KEYS,
-    BLOB_SHAPED_ONLY_KEYS,
-    BLOB_TYPE_SHAPED,
-    LEGACY_BLOB_SHAPER_KEY,
-    normalize_blob_type,
-    strip_inactive_blob_shaped_payload,
-)
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
+from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     strip_legacy_global_technical_keys,
     strip_legacy_global_visual_keys,
@@ -29,7 +22,6 @@ _WIDGET_DEFAULT_MERGE_SKIP_KEYS: dict[str, frozenset[str]] = {
     # has been normalized from real persisted data. Injecting them during
     # default-merges hides legacy state before its one-time migration runs.
     "spotify_visualizer": frozenset({
-        "blob_type",
         "bubble_gradient_semantics_version",
     }),
 }
@@ -44,7 +36,7 @@ class SettingsManager(QObject):
     settings_changed = Signal(str, object)  # key, new_value
     _STRUCTURED_ROOTS = frozenset({"widgets", "transitions", "ui"})
     _VISUALIZER_SCHEMA_METADATA_KEY = "visualizer_schema_version"
-    _VISUALIZER_SCHEMA_VERSION = 2
+    _VISUALIZER_SCHEMA_VERSION = 3
     _LEGACY_GLOBAL_PRESET_KEYS = frozenset({"preset", "custom_preset_backup"})
     _RETIRED_WIDGET_SHADOW_KEYS = frozenset({
         "intense_shadow",
@@ -448,23 +440,6 @@ class SettingsManager(QObject):
                     # a mapping type that is not a plain dict.
                     section_dict = dict(existing_section)
                     skip_keys = _WIDGET_DEFAULT_MERGE_SKIP_KEYS.get(section_name, frozenset())
-                    if (
-                        section_name == "spotify_visualizer"
-                        and str(section_dict.get("mode", "")).strip().lower() == "blob"
-                    ):
-                        resolved_blob_type = normalize_blob_type(
-                            section_dict.get("blob_type"),
-                            legacy_shaper_enabled=section_dict.get(LEGACY_BLOB_SHAPER_KEY),
-                        )
-                        inactive_blob_keys = (
-                            BLOB_MIGHTY_ONLY_KEYS
-                            if resolved_blob_type == BLOB_TYPE_SHAPED
-                            else BLOB_SHAPED_ONLY_KEYS
-                        )
-                        # Missing inactive subtype fields are intentional, not
-                        # absent defaults.  Re-adding them here causes every
-                        # startup to repair and rewrite the same Blob payload.
-                        skip_keys = frozenset((*skip_keys, *inactive_blob_keys))
                     for k, v in section_defaults.items():
                         if k in skip_keys and k not in section_dict:
                             continue
@@ -823,10 +798,6 @@ class SettingsManager(QObject):
     def set_spotify_visualizer_settings(self, model: SpotifyVisualizerSettings) -> None:
         """Persist one typed visualizer snapshot as an atomic widgets-root write.
 
-        Blob subtype normalization depends on ``blob_type`` and its subtype
-        fields being present in the same input mapping.  Writing the model's
-        dotted keys one at a time lets the currently persisted subtype strip
-        fields for the incoming subtype before ``blob_type`` itself is saved.
         Build the complete section first, then normalize and persist it through
         one widgets-root transaction while preserving every sibling widget.
         """
@@ -1011,22 +982,16 @@ class SettingsManager(QObject):
             elif isinstance(widgets, Mapping):
                 vis_section = widgets.get('spotify_visualizer')  # type: ignore[index]
                 if isinstance(vis_section, Mapping):
-                    repaired_vis = strip_inactive_blob_shaped_payload(vis_section)
+                    repaired_vis = strip_retired_visualizer_settings(vis_section)
                     repaired_vis = strip_legacy_global_technical_keys(repaired_vis)
                     repaired_vis = strip_legacy_global_visual_keys(repaired_vis)
                     if dict(vis_section) != repaired_vis:
                         for key, old_value in dict(vis_section).items():
                             if key in repaired_vis:
                                 continue
-                            if key == LEGACY_BLOB_SHAPER_KEY:
-                                reason = "Migrated retired Blob shaper boolean to blob_type"
-                            elif key in BLOB_SHAPED_ONLY_KEYS:
-                                reason = "Removed inactive Shaped Blob payload from Mighty Blob"
-                            elif key in BLOB_MIGHTY_ONLY_KEYS:
-                                reason = "Removed inactive Mighty Blob payload from Shaped Blob"
-                            else:
-                                reason = "Removed retired legacy global visualizer key"
-                            repairs[f'widgets.spotify_visualizer.{key}'] = reason
+                            repairs[f'widgets.spotify_visualizer.{key}'] = (
+                                "Removed retired visualizer key"
+                            )
                         widgets_copy = dict(widgets)
                         widgets_copy['spotify_visualizer'] = repaired_vis
                         self._store_widgets_root_locked(widgets_copy)

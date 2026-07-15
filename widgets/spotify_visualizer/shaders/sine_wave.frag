@@ -128,7 +128,7 @@ float compute_density_cycles() {
 }
 
 // Returns a thickness multiplier that tapers line width at high density
-// so tightly packed waves don't blob together.
+// so tightly packed waves do not merge together.
 float density_thickness_factor() {
     float cycles = compute_density_cycles();
     return mix(1.0, 0.55, clamp((cycles - 3.0) / 5.0, 0.0, 1.0));

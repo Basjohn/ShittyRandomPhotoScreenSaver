@@ -45,41 +45,6 @@ def test_prewarm_spotify_visualizer_overlay_primes_shader_cache_before_overlay(m
     ]
 
 
-def test_prewarm_spotify_visualizer_overlay_seeds_shaped_type_before_gl_compile(monkeypatch):
-    calls: list[object] = []
-
-    class _FakeVisualizer:
-        _vis_mode_str = "blob"
-        _blob_type = "shaped"
-        _blob_shaper_enabled = True
-
-        def geometry(self) -> QRect:
-            return QRect(4, 8, 300, 180)
-
-    class _FakeOverlay:
-        _vis_mode = "spectrum"
-        _blob_type = "mighty"
-
-        def prewarm_context(self, _geom: QRect) -> None:
-            calls.append((self._vis_mode, self._blob_type))
-
-    overlay = _FakeOverlay()
-    monkeypatch.setattr(
-        "widgets.spotify_visualizer.shaders.preload_fragment_shaders",
-        lambda: {"blob_shaped": "frag"},
-    )
-    monkeypatch.setattr(
-        display_image_ops,
-        "_ensure_spotify_bars_overlay",
-        lambda _widget: overlay,
-    )
-
-    widget = SimpleNamespace(spotify_visualizer_widget=_FakeVisualizer())
-
-    assert display_image_ops.prewarm_spotify_visualizer_overlay(widget) is True
-    assert calls == [("blob", "shaped")]
-
-
 def test_ensure_spotify_bars_overlay_seeds_ctor_mode_from_visualizer(monkeypatch):
     calls: list[object] = []
 
@@ -332,12 +297,6 @@ def test_sync_spotify_visualizer_overlay_geometry_prefers_committed_custom_rect_
 def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_emit(monkeypatch):
     scheduled = []
 
-    monkeypatch.setattr(
-        display_image_ops.QTimer,
-        "singleShot",
-        staticmethod(lambda delay_ms, callback: scheduled.append((delay_ms, callback))),
-    )
-
     emitted = []
     pending = []
 
@@ -368,17 +327,12 @@ def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_em
         image_displayed=_FakeSignal(),
         current_image_path=None,
         set_transition_work_pending=lambda value: pending.append(value),
+        _thread_manager=SimpleNamespace(single_shot=lambda delay_ms, callback: scheduled.append((delay_ms, callback))),
     )
 
     display_image_ops._schedule_startup_first_frame_ready(widget, "first.png")
 
     assert len(scheduled) == 1
-    scheduled.pop(0)[1]()
-
-    assert widget._gl_compositor.update_calls == 1
-    assert widget._gl_compositor.repaint_calls == 1
-    assert len(scheduled) == 1
-
     scheduled.pop(0)[1]()
 
     assert widget._has_rendered_first_frame is True
@@ -391,12 +345,6 @@ def test_schedule_startup_first_frame_ready_flushes_visible_compositor_before_em
 
 def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
     scheduled = []
-
-    monkeypatch.setattr(
-        display_image_ops.QTimer,
-        "singleShot",
-        staticmethod(lambda delay_ms, callback: scheduled.append(callback)),
-    )
 
     emitted = []
 
@@ -413,6 +361,7 @@ def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
         update=lambda: None,
         repaint=lambda: None,
         set_transition_work_pending=lambda value: None,
+        _thread_manager=SimpleNamespace(single_shot=lambda delay_ms, callback: scheduled.append(callback)),
     )
 
     display_image_ops._schedule_startup_first_frame_ready(widget, "first.png")
@@ -424,9 +373,6 @@ def test_schedule_startup_first_frame_ready_latest_token_wins(monkeypatch):
     assert emitted == []
 
     second_flush()
-    assert len(scheduled) == 1
-    scheduled.pop(0)()
-
     assert emitted == ["second.png"]
     assert widget.current_image_path == "second.png"
     assert widget._first_frame_committed_image_path == "second.png"

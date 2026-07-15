@@ -200,15 +200,15 @@ def test_mirror_curated_visualizer_preset_tree_prunes_stale_targets_and_writes_m
 ) -> None:
     source_root = tmp_path / "source" / "visualizer_modes"
     target_root = tmp_path / "target" / "visualizer_modes"
-    source_mode = source_root / "blob"
-    target_mode = target_root / "blob"
+    source_mode = source_root / "bubble"
+    target_mode = target_root / "bubble"
     source_mode.mkdir(parents=True)
     target_mode.mkdir(parents=True)
 
     (source_mode / "preset_1_alpha.json").write_text('{"name":"Alpha"}', encoding="utf-8")
     (source_mode / "preset_2_beta.json").write_text('{"name":"Beta"}', encoding="utf-8")
     (source_root.parent / "visualizer_modes_manifest.json").write_text(
-        '{"managed_curated_files":["blob/preset_1_alpha.json"]}',
+        '{"managed_curated_files":["bubble/preset_1_alpha.json"]}',
         encoding="utf-8",
     )
     (target_mode / "preset_1_alpha.json").write_text('{"name":"Old Alpha"}', encoding="utf-8")
@@ -217,8 +217,8 @@ def test_mirror_curated_visualizer_preset_tree_prunes_stale_targets_and_writes_m
     mirrored = mirror_curated_visualizer_preset_tree(source_root, target_root)
 
     assert mirrored == {
-        "blob/preset_1_alpha.json",
-        "blob/preset_2_beta.json",
+        "bubble/preset_1_alpha.json",
+        "bubble/preset_2_beta.json",
     }
     assert (target_mode / "preset_1_alpha.json").read_text(encoding="utf-8") == '{"name":"Alpha"}'
     assert (target_mode / "preset_2_beta.json").read_text(encoding="utf-8") == '{"name":"Beta"}'

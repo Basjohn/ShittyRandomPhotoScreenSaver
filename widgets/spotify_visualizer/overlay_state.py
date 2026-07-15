@@ -14,7 +14,6 @@ from core.settings.visualizer_mode_registry import (
     get_default_visualizer_mode_id,
     is_mode_active,
 )
-from widgets.spotify_visualizer.blob_pockets import reset_blob_pocket_state
 from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     reset_overlay_spectrum_solid_hysteresis_state,
 )
@@ -24,7 +23,6 @@ logger = get_logger(__name__)
 VALID_OVERLAY_MODES = {
     "spectrum",
     "oscilloscope",
-    "blob",
     "sine_wave",
     "bubble",
     "devcurve",
@@ -41,125 +39,6 @@ def request_mode_reset(overlay: Any, mode: str) -> None:
     overlay._pending_mode_resets.add(normalized)
 
 
-def reset_blob_state(overlay: Any) -> None:
-    overlay._blob_smoothed_energy = 0.0
-    overlay._blob_glow_energy = 0.0
-    overlay._blob_raw_bass_energy = 0.0
-    overlay._blob_raw_mid_energy = 0.0
-    overlay._blob_raw_high_energy = 0.0
-    overlay._blob_raw_overall_energy = 0.0
-    overlay._blob_live_bass_energy = 0.0
-    overlay._blob_live_mid_energy = 0.0
-    overlay._blob_live_high_energy = 0.0
-    overlay._blob_live_overall_energy = 0.0
-    overlay._blob_peak_energy = 0.0
-    overlay._blob_peak_bass = 0.0
-    overlay._blob_peak_mid = 0.0
-    overlay._blob_peak_high = 0.0
-    overlay._blob_peak_overall = 0.0
-    overlay._blob_peak_hold_remaining = 0.0
-    overlay._blob_stage_progress_raw = (-1.0, -1.0, -1.0)
-    overlay._blob_stage_progress_filtered = (0.0, 0.0, 0.0)
-    overlay._blob_stage_progress_ready = False
-    overlay._blob_seed_pending = True
-    overlay._blob_kick_event_strength = 0.0
-    overlay._blob_snare_event_strength = 0.0
-    overlay._blob_kick_event_envelope = 0.0
-    overlay._blob_snare_event_envelope = 0.0
-    overlay._blob_pocket_state = reset_blob_pocket_state(
-        getattr(overlay, "_blob_pocket_state", None)
-    )
-    overlay._blob_diag_last_ts = 0.0
-    overlay._blob_diag_last_sig = None
-    reset_blob_variant_state(overlay)
-
-
-def reset_blob_variant_state(overlay: Any) -> None:
-    """Clear every contour/ghost cache owned by a Blob subtype.
-
-    A Blob type change is a real renderer boundary even though the stable
-    visualizer mode id remains ``blob``.  Neither solver may inherit the
-    other's contour, target, velocity, timestamp, peak silhouette, or pocket
-    history.
-    """
-    overlay._blob_variant_epoch = int(getattr(overlay, "_blob_variant_epoch", 0) or 0) + 1
-    for attr in (
-        "_blob_unshaped_base_profile",
-        "_blob_unshaped_raw_target_profile",
-        "_blob_unshaped_runtime_target_profile",
-        "_blob_unshaped_runtime_profile",
-        "_blob_unshaped_runtime_velocity",
-        "_blob_unshaped_solver_profile",
-        "_blob_unshaped_solver_velocity",
-        "_blob_unshaped_solver_target_profile",
-        "_blob_shaper_runtime_target_profile",
-        "_blob_shaper_runtime_profile",
-        "_blob_shaper_runtime_velocity",
-        "_blob_shaper_runtime_topology",
-        "_blob_runtime_diag_profile",
-        "_blob_profile_transport_sig",
-        "_blob_profile_generation_type",
-        "_blob_shaper_geometry_signature",
-        "_blob_shaper_cached_base_profile",
-        "_blob_shaper_cached_reaction_profile",
-        "_blob_shaper_cached_energy_weights",
-        "_blob_tendril_geometry",
-        "_blob_tendril_motion",
-        "_blob_tendril_target_geometry",
-        "_blob_tendril_target_motion",
-        "_blob_tendril_transport_type",
-    ):
-        setattr(overlay, attr, None)
-    for attr in (
-        "_blob_unshaped_solver_ts",
-        "_blob_shaper_solver_ts",
-        "_blob_runtime_diag_ts",
-        "_blob_tendril_transport_ts",
-    ):
-        setattr(overlay, attr, 0.0)
-    for attr in (
-        "_blob_unshaped_solver_seed",
-        "_blob_shaper_solver_seed",
-    ):
-        setattr(overlay, attr, None)
-    overlay._blob_profile_generation = 0
-    overlay._blob_profile_compute_ms = 0.0
-    overlay._blob_profile_compute_count = 0
-    overlay._blob_profile_compute_total_ms = 0.0
-    overlay._blob_profile_compute_max_ms = 0.0
-    overlay._blob_profile_advance_request_count = 0
-    overlay._blob_profile_skip_count = 0
-    overlay._blob_profile_wall_ts = 0.0
-    overlay._blob_shaper_geometry_build_count = 0
-    overlay._blob_tendril_active_count = 0
-    overlay._blob_tendril_target_active_count = 0
-    overlay._blob_tendril_max_reach = 0.0
-    overlay._blob_tendril_target_max_reach = 0.0
-    overlay._blob_tendril_max_step_reach = 0.0
-    overlay._blob_tendril_max_step_angle = 0.0
-    overlay._blob_tendril_transport_ms = 0.0
-    overlay._blob_tendril_transport_count = 0
-    overlay._blob_tendril_transport_total_ms = 0.0
-    overlay._blob_tendril_transport_max_ms = 0.0
-    overlay._blob_runtime_time = 0.0
-    for attr in (
-        "_blob_stage_input_bass",
-        "_blob_stage_input_mid",
-        "_blob_stage_input_high",
-        "_blob_stage_input_overall",
-    ):
-        setattr(overlay, attr, None)
-    overlay._blob_peak_energy = 0.0
-    overlay._blob_peak_bass = 0.0
-    overlay._blob_peak_mid = 0.0
-    overlay._blob_peak_high = 0.0
-    overlay._blob_peak_overall = 0.0
-    overlay._blob_peak_hold_remaining = 0.0
-    overlay._blob_pocket_state = reset_blob_pocket_state(
-        getattr(overlay, "_blob_pocket_state", None)
-    )
-
-
 def reset_mode_state(overlay: Any, mode: str, *, reason: str) -> None:
     """Cold-reset overlay-local accumulators for a mode handoff."""
     mode_key = str(mode).lower() if mode else "spectrum"
@@ -170,7 +49,6 @@ def reset_mode_state(overlay: Any, mode: str, *, reason: str) -> None:
 
     # Clear every mode bucket because one overlay instance survives runtime
     # mode and preset switches.
-    reset_blob_state(overlay)
     overlay._waveform = []
     overlay._prev_waveform = []
     overlay._ghost_waveform_ring = []

@@ -8,16 +8,20 @@ from pathlib import Path
 import pytest
 
 from core.settings import visualizer_presets as vp
-from core.settings.visualizer_blob_contract import (
-    BLOB_MIGHTY_ONLY_KEYS,
-    BLOB_SHAPED_ONLY_KEYS,
-    BLOB_TYPE_VALUES,
-)
 from core.settings.settings_manager import SettingsManager
 from core.settings import sst_io
-from core.visualizer_preset_manifest import load_curated_visualizer_preset_manifest
 from tools import visualizer_preset_repair as repair
 from ui.tabs.widgets_tab import WidgetsTab
+
+
+@pytest.fixture(autouse=True)
+def _restore_visualizer_preset_registry():
+    original_presets = {mode: list(presets) for mode, presets in vp._PRESETS.items()}
+    original_synced = vp._CURATED_TREE_SYNCED
+    yield
+    vp._PRESETS.clear()
+    vp._PRESETS.update(original_presets)
+    vp._CURATED_TREE_SYNCED = original_synced
 
 
 def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch):
@@ -41,7 +45,6 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
                     "mode": "sine_wave",
                     "sine_wave_effect": 0.42,
                     "rainbow_enabled": True,
-                    "blob_growth": 5.0,
                 },
                 "clock": {"enabled": False},
             }
@@ -58,7 +61,6 @@ def test_snapshot_presets_expand_slots_and_filter_settings(tmp_path, monkeypatch
     # rainbow_enabled migrated to the canonical mode-id scoped key.
     assert glow_burst.settings.get("sine_wave_rainbow_enabled") is True
     assert "rainbow_enabled" not in glow_burst.settings
-    assert "blob_growth" not in glow_burst.settings
 
     # Update global registry temporarily to validate helper behavior
     original = vp._PRESETS.get("sine_wave")
@@ -86,7 +88,7 @@ def test_get_visualizer_presets_dir_uses_shared_programdata_tree_for_frozen_buil
 def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_copy(tmp_path, monkeypatch):
     bundled_root = tmp_path / "bundled" / "presets" / "visualizer_modes"
     shared_root = tmp_path / "ProgramData" / "SRPSS" / "presets" / "visualizer_modes"
-    bundled_mode = bundled_root / "blob"
+    bundled_mode = bundled_root / "spectrum"
     bundled_mode.mkdir(parents=True)
     (bundled_mode / "preset_1_alpha.json").write_text(
         json.dumps({"name": "Preset 1 (Alpha)", "preset_index": 0}),
@@ -100,7 +102,7 @@ def test_frozen_presets_root_bootstraps_shared_programdata_tree_from_bundled_cop
     resolved = vp.get_visualizer_presets_dir()
 
     assert resolved == shared_root
-    assert (shared_root / "blob" / "preset_1_alpha.json").exists()
+    assert (shared_root / "spectrum" / "preset_1_alpha.json").exists()
 
 
 def test_frozen_presets_root_never_falls_back_to_bundled_when_bootstrap_fails(tmp_path, monkeypatch):
@@ -402,20 +404,6 @@ def test_snapshot_widgets_override_custom_backup(tmp_path, monkeypatch):
     assert slot.settings["spectrum_profile_floor"] == 0.3
 
 
-def test_double_prefixed_mode_keys_are_normalized():
-    migrated = vp._migrate_preset_settings(
-        "blob",
-        {
-            "blob_blob_transient_mix_bass": 0.2,
-            "blob_blob_transient_mix_vocal": 0.15,
-        },
-    )
-    assert "blob_blob_transient_mix_bass" not in migrated
-    assert "blob_blob_transient_mix_vocal" not in migrated
-    assert migrated["blob_transient_mix_bass"] == 0.2
-    assert migrated["blob_transient_mix_vocal"] == 0.15
-
-
 def test_double_prefixed_alt_mode_keys_are_normalized():
     migrated = vp._migrate_preset_settings(
         "oscilloscope",
@@ -505,59 +493,6 @@ def test_sst_roundtrip_preserves_versioned_bubble_gradient_direction(tmp_path):
     assert round_tripped["bubble_gradient_semantics_version"] == 2
 
 
-def test_sst_roundtrip_preserves_shaped_blob_directional_nodes(tmp_path):
-    def _make_manager(suffix: str) -> SettingsManager:
-        base = tmp_path / suffix
-        base.mkdir(parents=True, exist_ok=True)
-        return SettingsManager(
-            organization="Test",
-            application=f"BlobShaperSST_{uuid.uuid4().hex}",
-            storage_base_dir=base,
-        )
-
-    source_mgr = _make_manager("src_blob")
-    energy_nodes = [
-        {
-            "type": "bass",
-            "x": 0.84,
-            "y": 0.22,
-            "strength": 0.95,
-            "canvas": "react",
-            "dir_x": -0.41,
-            "dir_y": 0.89,
-            "dir_len": 26.0,
-        }
-    ]
-    source_mgr.set(
-        "widgets.spotify_visualizer",
-        {
-            "mode": "blob",
-            "blob_type": "shaped",
-            "blob_topology": "ring",
-            "blob_ring_thickness": 0.44,
-            "blob_shape_base_nodes": [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]],
-            "blob_shape_reaction_nodes": [[0.0, 1.25], [0.5, 0.74], [1.0, 1.18]],
-            "blob_shape_energy_nodes": energy_nodes,
-        },
-    )
-
-    export_path = tmp_path / "blob_shaper_roundtrip.sst"
-    assert sst_io.export_to_sst(source_mgr, str(export_path))
-
-    target_mgr = _make_manager("dst_blob")
-    assert sst_io.import_from_sst(target_mgr, str(export_path), merge=True)
-
-    round_tripped = target_mgr.get("widgets.spotify_visualizer")
-    assert round_tripped["mode"] == "blob"
-    assert round_tripped["blob_type"] == "shaped"
-    assert "blob_shaper_enabled" not in round_tripped
-    assert round_tripped["blob_topology"] == "ring"
-    assert round_tripped["blob_ring_thickness"] == pytest.approx(0.44)
-    assert round_tripped["blob_shape_base_nodes"] == [[0.0, 0.92], [0.5, 1.08], [1.0, 0.92]]
-    assert round_tripped["blob_shape_reaction_nodes"] == [[0.0, 1.25], [0.5, 0.74], [1.0, 1.18]]
-    assert round_tripped["blob_shape_energy_nodes"] == energy_nodes
-
-
 def test_all_curated_presets_have_unique_keys_and_filtered_settings():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
     known_modes = tuple(vp.MODES)
@@ -622,33 +557,6 @@ def test_repair_tool_payloads_are_marked_as_overrides(tmp_path):
 
     assert lean["visualizer_preset_override"] is True
     assert lean["visualizer_preset_mode"] == mode
-
-
-def test_curated_payload_parser_drops_retired_compat_keys():
-    payload = {
-        "mode": "blob",
-        "preset_index": 0,
-        "visualizer_preset_override": True,
-        "visualizer_preset_mode": "blob",
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_use_raw_energy": True,
-                    "blob_energy_boost": 0.91,
-                    "blob_stretch": 0.41,
-                }
-            }
-        },
-    }
-
-    parsed = vp._parse_preset_payload(Path("preset_1_blob.json"), payload, "blob")
-
-    assert parsed is not None
-    _index, preset = parsed
-    assert "blob_use_raw_energy" not in preset.settings
-    assert "blob_energy_boost" not in preset.settings
-    assert preset.settings["blob_stretch"] == pytest.approx(0.41)
 
 
 def test_curated_payload_parser_prefers_filename_slot_over_payload_index():
@@ -788,106 +696,11 @@ def test_snapshot_override_keeps_curated_slot_name(tmp_path, monkeypatch):
     assert presets[0].settings["bubble_growth"] == pytest.approx(9.0)
 
 
-def test_blob_curated_payload_parser_preserves_directional_shaper_nodes():
-    energy_nodes = [
-        {
-            "type": "bass",
-            "x": 0.82,
-            "y": 0.24,
-            "strength": 0.9,
-            "canvas": "react",
-            "dir_x": -0.35,
-            "dir_y": 0.91,
-            "dir_len": 28.0,
-        }
-    ]
-    payload = {
-        "mode": "blob",
-        "preset_index": 0,
-        "visualizer_preset_override": True,
-        "visualizer_preset_mode": "blob",
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_type": "shaped",
-                    "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.0]],
-                    "blob_shape_reaction_nodes": [[0.0, 1.2], [0.5, 0.8]],
-                    "blob_shape_energy_nodes": energy_nodes,
-                }
-            }
-        },
-    }
-
-    parsed = vp._parse_preset_payload(Path("preset_1_blob.json"), payload, "blob")
-
-    assert parsed is not None
-    _, preset = parsed
-    assert preset.settings["blob_shape_energy_nodes"] == energy_nodes
-
-
-@pytest.mark.qt
-def test_widgets_tab_blob_preset_payload_preserves_directional_shaper_nodes(qt_app, tmp_path):
-    from core.dev_gates import force_gate, is_blob_enabled
-
-    prior_blob_gate = is_blob_enabled()
-    force_gate(blob=True)
-    manager = SettingsManager(
-        organization="Test",
-        application=f"BlobShaperPreset_{uuid.uuid4().hex}",
-        storage_base_dir=tmp_path / "settings",
-    )
-    widgets_cfg = manager.get("widgets", {}) or {}
-    spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
-    spotify_cfg["mode"] = "blob"
-    spotify_cfg["preset_blob"] = 0
-    widgets_cfg = dict(widgets_cfg)
-    widgets_cfg["spotify_visualizer"] = spotify_cfg
-    manager.set("widgets", widgets_cfg)
-
-    tab = WidgetsTab(manager)
-    try:
-        blob_index = tab.vis_mode_combo.findData("blob")
-        assert blob_index >= 0
-        tab.vis_mode_combo.setCurrentIndex(blob_index)
-        tab.blob_type_combo.setCurrentIndex(1)
-
-        base_nodes = [[0.0, 0.9], [0.5, 1.15], [1.0, 0.9]]
-        react_nodes = [[0.0, 1.3], [0.5, 0.7], [1.0, 1.2]]
-        energy_nodes = [
-            {
-                "type": "bass",
-                "x": 0.88,
-                "y": 0.22,
-                "strength": 1.0,
-                "canvas": "react",
-                "dir_x": -0.42,
-                "dir_y": 0.88,
-                "dir_len": 24.0,
-            }
-        ]
-        tab.blob_shape_editor.set_nodes(base_nodes, react_nodes, energy_nodes)
-
-        payload = tab.build_visualizer_preset_payload("blob")
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-
-        assert sv["mode"] == "blob"
-        assert sv["blob_type"] == "shaped"
-        assert "blob_shaper_enabled" not in sv
-        assert sv["blob_shape_base_nodes"] == base_nodes
-        assert sv["blob_shape_reaction_nodes"] == react_nodes
-        assert sv["blob_shape_energy_nodes"] == energy_nodes
-    finally:
-        force_gate(blob=prior_blob_gate)
-        tab.deleteLater()
-
-
 @pytest.mark.parametrize(
     ("mode", "slider_attr", "mode_key", "mode_value"),
     [
         ("spectrum", "_spectrum_preset_slider", "spectrum_growth", 2.9),
         ("bubble", "_bubble_preset_slider", "bubble_growth", 3.2),
-        ("blob", "_blob_preset_slider", "blob_stretch", 0.48),
         ("sine_wave", "_sine_preset_slider", "sine_wave_growth", 1.7),
         ("oscilloscope", "_osc_preset_slider", "osc_growth", 2.4),
     ],
@@ -901,8 +714,6 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
     mode_key,
     mode_value,
 ):
-    from core.dev_gates import force_gate, is_blob_enabled
-
     curated_root = tmp_path / "curated"
     snapshots_root = tmp_path / "snapshots"
     (curated_root / mode).mkdir(parents=True)
@@ -912,9 +723,6 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
     monkeypatch.setattr(vp, "_presets_root", lambda: curated_root)
     monkeypatch.setattr(vp, "_snapshot_presets_root", lambda: snapshots_root)
 
-    prior_blob_gate = is_blob_enabled()
-    if mode == "blob":
-        force_gate(blob=True)
     manager = SettingsManager(
         organization="Test",
         application=f"PresetSaveOverwrite_{uuid.uuid4().hex}",
@@ -971,62 +779,11 @@ def test_save_over_curated_preset_roundtrip_strips_retired_compat_keys(
             for key in preset.settings
         )
     finally:
-        if mode == "blob":
-            force_gate(blob=prior_blob_gate)
         vp._PRESETS[mode] = original_presets
         tab.deleteLater()
 
 
-def test_repair_tool_audit_flags_duplicate_prefixes_and_backup_blocks():
-    payload = {
-        "snapshot": {
-            "custom_preset_backup": {
-                "widgets.spotify_visualizer.blob_blob_transient_mix_bass": 0.5,
-            },
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_blob_transient_mix_bass": 0.5,
-                    "blob_energy_boost": 1.1,
-                }
-            },
-        },
-        "widgets": {
-            "spotify_visualizer": {
-                "mode": "blob",
-            }
-        },
-    }
-
-    report = repair.audit_payload("blob", payload)
-
-    assert report["has_custom_preset_backup"] is True
-    assert report["top_level_visualizer_duplication"] is True
-    assert "blob_blob_transient_mix_bass" in report["duplicate_prefixed_keys"]
-    assert "ghosting_enabled" not in report["deprecated_global_keys"]
-
-
 def test_repair_tool_audit_flags_global_mirrors_and_osc_aliases():
-    blob_payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "ghosting_enabled": True,
-                    "ghost_alpha": 0.3,
-                    "ghost_decay": 0.2,
-                    "blob_ghosting_enabled": True,
-                }
-            }
-        }
-    }
-    blob_report = repair.audit_payload("blob", blob_payload)
-    assert blob_report["deprecated_global_keys"] == [
-        "ghost_alpha",
-        "ghost_decay",
-        "ghosting_enabled",
-    ]
-
     osc_payload = {
         "snapshot": {
             "widgets": {
@@ -1039,25 +796,6 @@ def test_repair_tool_audit_flags_global_mirrors_and_osc_aliases():
     }
     osc_report = repair.audit_payload("oscilloscope", osc_payload)
     assert osc_report["deprecated_mode_alias_keys"] == ["osc_sensitivity"]
-
-
-def test_repair_tool_audit_flags_inactive_shaped_blob_payload():
-    payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_type": "mighty",
-                    "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 0.9]],
-                    "blob_shaper_react_strength": 0.5,
-                }
-            }
-        }
-    }
-
-    report = repair.audit_payload("blob", payload)
-
-    assert report["inactive_blob_shaper_payload"] is True
 
 
 def test_curated_visualizer_payloads_do_not_ship_cross_mode_keys():
@@ -1075,86 +813,6 @@ def test_curated_visualizer_payloads_do_not_ship_cross_mode_keys():
                 problems.append(f"{preset_path.name}: {report['cross_mode_keys']}")
 
     assert not problems, "\n".join(problems)
-
-
-def test_repair_tool_stops_emitting_deprecated_compat_tech_keys():
-    payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_color": "#ff00ff",
-                }
-            }
-        }
-    }
-
-    cleaned, _stats = repair._sanitize_settings("blob", payload)
-
-    assert "blob_energy_boost" not in cleaned
-    assert "blob_use_raw_energy" not in cleaned
-
-
-def test_blob_preset_migration_drops_retired_legacy_keys_without_forward_deriving_new_values():
-    payload = {
-        "blob_stage2_release_ms": 2050,
-        "blob_stage3_release_ms": 2600,
-        "blob_stretch_x_bias": 0.45,
-        "blob_stretch_y_bias": 0.65,
-    }
-
-    migrated = vp._migrate_preset_settings("blob", dict(payload))
-
-    for key in payload:
-        assert key not in migrated
-    assert "blob_pulse_release_ms" not in migrated
-
-
-def test_blob_custom_snapshot_normalization_preserves_active_unshaped_keys():
-    payload = {
-        "mode": "blob",
-        "blob_stage_gain": 1.4,
-        "blob_core_scale": 0.9,
-        "blob_core_floor_bias": 0.2,
-        "blob_stage_bias": -0.1,
-        "blob_stretch_tendency": 0.6,
-        "blob_stretch_inner": 0.08,
-        "blob_stretch_outer": 0.7,
-        "blob_inward_liquid_enabled": True,
-        "blob_inward_liquid_reactivity": 1.5,
-        "blob_inward_liquid_max_size": 0.4,
-        "blob_inward_liquid_color": [100, 150, 255, 200],
-    }
-
-    normalized = vp.build_normalized_custom_snapshot("blob", payload)
-
-    assert normalized["blob_stage_gain"] == pytest.approx(1.4)
-    assert normalized["blob_core_scale"] == pytest.approx(0.9)
-    assert normalized["blob_core_floor_bias"] == pytest.approx(0.2)
-    assert normalized["blob_stage_bias"] == pytest.approx(-0.1)
-    assert normalized["blob_stretch_tendency"] == pytest.approx(0.6)
-    assert normalized["blob_stretch_inner"] == pytest.approx(0.08)
-    assert normalized["blob_stretch_outer"] == pytest.approx(0.7)
-    assert normalized["blob_inward_liquid_enabled"] is True
-
-
-def test_repair_tool_audits_retired_blob_xy_bias_keys_as_deprecated():
-    payload = {
-        "snapshot": {
-            "widgets": {
-                "spotify_visualizer": {
-                    "mode": "blob",
-                    "blob_stretch_x_bias": 0.4,
-                    "blob_stretch_y_bias": 0.7,
-                }
-            }
-        }
-    }
-
-    audit = repair.audit_payload("blob", payload)
-
-    assert "blob_stretch_x_bias" in audit["deprecated_authored_keys"]
-    assert "blob_stretch_y_bias" in audit["deprecated_authored_keys"]
 
 
 def test_repair_tool_keeps_missing_optional_bubble_keys_missing_in_source_authoritative_mode():
@@ -1233,7 +891,7 @@ def test_restore_visualizer_snapshot_clears_mode_technical_keys_absent_from_payl
 
 def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monkeypatch):
     root = tmp_path
-    mode = "blob"
+    mode = "spectrum"
     mode_dir = root / "presets" / "visualizer_modes" / mode
     mode_dir.mkdir(parents=True)
 
@@ -1244,7 +902,7 @@ def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monk
                 "widgets": {
                     "spotify_visualizer": {
                         "mode": mode,
-                        "blob_growth": growth,
+                        "spectrum_growth": growth,
                     }
                 }
             },
@@ -1288,12 +946,12 @@ def test_reindex_curated_presets_fills_gaps_with_markerless_files(tmp_path, monk
     thunder_payload = json.loads((mode_dir / "preset_2_thunder.json").read_text(encoding="utf-8"))
     assert thunder_payload["preset_index"] == 1
     assert thunder_payload["name"] == "Thunder"
-    assert thunder_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 2.0
+    assert thunder_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 2.0
 
     delta_payload = json.loads((mode_dir / "preset_3_delta.json").read_text(encoding="utf-8"))
     assert delta_payload["preset_index"] == 2
     assert delta_payload["name"] == "Preset 4 (Delta)"
-    assert delta_payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] == 4.0
+    assert delta_payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] == 4.0
 
 
 def test_reindex_curated_presets_normalizes_first_remaining_slot_to_preset_1(tmp_path, monkeypatch):
@@ -1547,7 +1205,7 @@ def test_oscilloscope_6_line_preset_roundtrip_preserves_all_line_settings():
 
 def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkeypatch):
     root = tmp_path
-    mode = "blob"
+    mode = "spectrum"
     mode_dir = root / "presets" / "visualizer_modes" / mode
     mode_dir.mkdir(parents=True)
     preset_path = mode_dir / "preset_1_alpha.json"
@@ -1560,7 +1218,7 @@ def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkey
                     "widgets": {
                         "spotify_visualizer": {
                             "mode": mode,
-                            "blob_growth": 1.0,
+                            "spectrum_growth": 1.0,
                         }
                     }
                 },
@@ -1582,7 +1240,7 @@ def test_repair_tool_stores_backups_outside_curated_source_tree(tmp_path, monkey
 
 def test_repair_tool_rotates_only_two_backups_per_preset(tmp_path, monkeypatch):
     root = tmp_path
-    mode = "blob"
+    mode = "spectrum"
     mode_dir = root / "presets" / "visualizer_modes" / mode
     mode_dir.mkdir(parents=True)
     preset_path = mode_dir / "preset_1_alpha.json"
@@ -1595,7 +1253,7 @@ def test_repair_tool_rotates_only_two_backups_per_preset(tmp_path, monkeypatch):
                     "widgets": {
                         "spotify_visualizer": {
                             "mode": mode,
-                            "blob_growth": 1.0,
+                            "spectrum_growth": 1.0,
                         }
                     }
                 },
@@ -1610,7 +1268,7 @@ def test_repair_tool_rotates_only_two_backups_per_preset(tmp_path, monkeypatch):
 
     for idx in range(3):
         payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        payload["snapshot"]["widgets"]["spotify_visualizer"]["blob_growth"] = 1.0 + idx
+        payload["snapshot"]["widgets"]["spotify_visualizer"]["spectrum_growth"] = 1.0 + idx
         preset_path.write_text(json.dumps(payload), encoding="utf-8")
         repair.repair_file(preset_path, mode)
 
@@ -1626,7 +1284,7 @@ def test_repair_tool_undo_state_persists_and_prunes_duplicate_targets(tmp_path, 
     monkeypatch.setattr(repair, "_UNDO_STATE_PATH", repair._BACKUP_ROOT / "undo_state.json")
 
     a = repair.UndoEntry(
-        restore_path=root / "presets" / "visualizer_modes" / "blob" / "preset_1_alpha.json",
+        restore_path=root / "presets" / "visualizer_modes" / "spectrum" / "preset_1_alpha.json",
         backup_path=root / "temp" / "visualizer_preset_backups" / "a.bak",
     )
     a.backup_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1647,7 +1305,7 @@ def test_repair_tool_undo_state_persists_and_prunes_duplicate_targets(tmp_path, 
 
 def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_path, monkeypatch):
     root = tmp_path
-    mode = "blob"
+    mode = "spectrum"
     mode_dir = root / "presets" / "visualizer_modes" / mode
     mode_dir.mkdir(parents=True)
     preset_path = mode_dir / "preset_1_alpha.json"
@@ -1660,7 +1318,7 @@ def test_repair_file_regenerates_shipped_artifacts_for_curated_source_paths(tmp_
                     "widgets": {
                         "spotify_visualizer": {
                             "mode": mode,
-                            "blob_growth": 1.0,
+                            "spectrum_growth": 1.0,
                         }
                     }
                 },
@@ -1721,7 +1379,7 @@ def test_reindex_curated_presets_regenerates_shipped_artifacts_once(tmp_path, mo
 
 def test_primary_visualizer_modes_ship_at_least_one_curated_preset():
     presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
-    required_modes = ("blob", "spectrum", "oscilloscope", "sine_wave")
+    required_modes = tuple(vp.MODES)
 
     for mode in required_modes:
         mode_dir = presets_root / mode
@@ -1756,204 +1414,6 @@ def test_curated_presets_have_unique_slot_numbers_per_mode():
                     f"{seen[preset_index].name} and {preset_path.name}"
                 )
             seen[preset_index] = preset_path
-
-
-def test_curated_blob_presets_do_not_ship_retired_blob_keys():
-    blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
-    retired_keys = {
-        "blob_pulse_cap",
-        "blob_stage2_release_ms",
-        "blob_stage3_release_ms",
-        "blob_stretch_x_bias",
-        "blob_stretch_y_bias",
-        "blob_energy_boost",
-        "blob_use_raw_energy",
-    }
-
-    for preset_path in sorted(blob_root.glob("*.json")):
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        unexpected = retired_keys.intersection(sv.keys())
-        assert not unexpected, f"{preset_path.name} ships retired blob keys: {sorted(unexpected)}"
-
-
-def test_curated_mighty_blob_presets_do_not_ship_shaped_payload():
-    blob_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes" / "blob"
-
-    for preset_path in sorted(blob_root.glob("*.json")):
-        payload = json.loads(preset_path.read_text(encoding="utf-8"))
-        sv = payload["snapshot"]["widgets"]["spotify_visualizer"]
-        assert sv.get("blob_type") in {"mighty", "shaped"}
-        assert "blob_shaper_enabled" not in sv
-        if sv["blob_type"] == "shaped":
-            continue
-        unexpected = BLOB_SHAPED_ONLY_KEYS.intersection(sv.keys())
-        assert not unexpected, (
-            f"{preset_path.name} ships Shaped-only payload while blob_type is mighty: "
-            f"{sorted(unexpected)}"
-        )
-
-
-def test_curated_blob_presets_match_manifest_and_keep_subtype_owned_schema():
-    presets_root = Path(__file__).resolve().parents[1] / "presets" / "visualizer_modes"
-    blob_root = presets_root / "blob"
-    paths = sorted(blob_root.glob("*.json"))
-
-    assert paths, "the curated Blob preset directory must not be empty"
-    tree_entries = {f"blob/{path.name}" for path in paths}
-    manifest_entries = {
-        entry
-        for entry in load_curated_visualizer_preset_manifest(presets_root)
-        if entry.startswith("blob/")
-    }
-    assert manifest_entries == tree_entries
-
-    common_required = {
-        "mode",
-        "monitor",
-        "blob_type",
-        "blob_color",
-        "blob_edge_color",
-        "blob_outline_color",
-        "blob_glow_color",
-        "blob_pulse",
-        "blob_pulse_release_ms",
-        "blob_width",
-        "blob_size",
-        "blob_growth",
-        "blob_reactive_glow",
-        "blob_glow_drive_mode",
-        "blob_glow_intensity",
-        "blob_glow_reactivity",
-        "blob_glow_max_size",
-        "blob_ghosting_enabled",
-        "blob_ghost_alpha",
-        "blob_ghost_decay",
-        "blob_dynamic_floor",
-        "blob_manual_floor",
-        "blob_agc_strength",
-        "blob_input_gain",
-        "blob_kick_lane_gain",
-        "blob_transient_pulse_gain",
-        "blob_transient_clamp",
-        "blob_transient_mix_bass",
-        "blob_transient_mix_vocal",
-        "blob_audio_block_size",
-        "blob_adaptive_sensitivity",
-        "blob_sensitivity",
-        "blob_bar_count",
-        "blob_rainbow_enabled",
-        "blob_rainbow_speed",
-        "blob_bar_fill_color",
-        "blob_bar_border_color",
-        "blob_bar_border_opacity",
-    }
-    mighty_required = {
-        "blob_reactive_deformation",
-        "blob_constant_wobble",
-        "blob_reactive_wobble",
-        "blob_stretch",
-    }
-
-    indices: list[int] = []
-    for path in paths:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        settings = payload["snapshot"]["widgets"]["spotify_visualizer"]
-
-        assert isinstance(payload.get("name"), str) and payload["name"].strip()
-        assert isinstance(payload.get("description"), str)
-        assert payload["mode"] == "blob"
-        assert payload["visualizer_preset_mode"] == "blob"
-        assert payload["visualizer_preset_override"] is True
-        preset_index = payload.get("preset_index")
-        assert (
-            isinstance(preset_index, int)
-            and not isinstance(preset_index, bool)
-            and preset_index >= 0
-        )
-        indices.append(preset_index)
-
-        assert isinstance(settings, dict)
-        assert settings["mode"] == "blob"
-        assert not (common_required - settings.keys()), (
-            f"{path.name} missing common Blob schema fields: "
-            f"{sorted(common_required - settings.keys())}"
-        )
-        assert "blob_shaper_enabled" not in settings
-        assert all(
-            key in {"mode", "monitor"} or key.startswith("blob_")
-            for key in settings
-        )
-
-        blob_type = settings["blob_type"]
-        assert blob_type in BLOB_TYPE_VALUES
-
-        if blob_type == "mighty":
-            missing = mighty_required - settings.keys()
-            assert not missing, f"{path.name} missing Mighty schema fields: {sorted(missing)}"
-            inactive = BLOB_SHAPED_ONLY_KEYS.intersection(settings)
-            assert not inactive, f"{path.name} carries inactive Shaped fields: {sorted(inactive)}"
-            continue
-
-        missing = BLOB_SHAPED_ONLY_KEYS - settings.keys()
-        assert not missing, f"{path.name} missing Shaped schema fields: {sorted(missing)}"
-        inactive = BLOB_MIGHTY_ONLY_KEYS.intersection(settings)
-        assert not inactive, f"{path.name} carries inactive Mighty fields: {sorted(inactive)}"
-        assert settings["blob_topology"] in {"circle", "ring"}
-
-        for profile_key in ("blob_shape_base_nodes", "blob_shape_reaction_nodes"):
-            profile = settings[profile_key]
-            assert isinstance(profile, list)
-            assert all(
-                isinstance(point, list)
-                and len(point) >= 2
-                and all(
-                    isinstance(value, (int, float)) and not isinstance(value, bool)
-                    for value in point[:2]
-                )
-                for point in profile
-            ), f"{path.name} has malformed {profile_key} nodes"
-
-        energy_nodes = settings["blob_shape_energy_nodes"]
-        assert isinstance(energy_nodes, list)
-        assert all(
-            isinstance(node, dict)
-            and {"type", "x", "y", "strength"}.issubset(node)
-            and node["type"] in {"bass", "mid", "vocals", "treble", "transient"}
-            and all(
-                isinstance(node[key], (int, float)) and not isinstance(node[key], bool)
-                for key in ("x", "y", "strength")
-            )
-            for node in energy_nodes
-        ), f"{path.name} has malformed Shaped energy routing nodes"
-
-    assert sorted(indices) == list(range(len(paths)))
-
-
-def test_normalize_visualizer_mode_payload_strips_mighty_shaped_payload():
-    payload = {
-        "mode": "blob",
-        "blob_type": "mighty",
-        "blob_shape_base_nodes": [[0.0, 1.0], [0.5, 1.2]],
-        "blob_shape_reaction_nodes": [[0.0, 1.0], [0.5, 0.8]],
-        "blob_shape_energy_nodes": [{"type": "bass"}],
-        "blob_shaper_base_strength": 1.0,
-        "blob_shaper_react_strength": 0.5,
-        "blob_shaper_idle_motion": 0.18,
-        "blob_shaper_audio_motion": 1.2,
-        "blob_topology": "circle",
-        "blob_ring_thickness": 0.3,
-        "blob_stretch": 0.44,
-    }
-
-    normalized = vp.normalize_visualizer_mode_payload("blob", payload)
-
-    assert normalized["mode"] == "blob"
-    assert normalized["blob_type"] == "mighty"
-    assert normalized["blob_stretch"] == pytest.approx(0.44)
-    assert "blob_shaper_enabled" not in normalized
-    for key in BLOB_SHAPED_ONLY_KEYS:
-        assert key not in normalized
 
 
 def test_curated_visualizer_tree_audits_clean():

@@ -185,7 +185,7 @@ float _hash11(float n) {
     return fract(sin(n) * 43758.5453123);
 }
 
-float _specular_blob(vec2 uv, vec4 slot, int layerId, int sampleCount, float width, float yOffset, float crestBias, float aa) {
+float _specular_lobe(vec2 uv, vec4 slot, int layerId, int sampleCount, float width, float yOffset, float crestBias, float aa) {
     float amp = clamp(slot.z, 0.0, 1.0);
     if (amp <= 1e-4) return 0.0;
     float x = slot.x;
@@ -292,9 +292,9 @@ void main() {
             float specW = clamp(u_devcurve_foreground_specular_width, 0.002, 0.120);
             float yOffset = max(0.010, clamp(u_devcurve_foreground_specular_offset, -0.20, 0.20));
             float crestBias = clamp(u_devcurve_foreground_specular_crest_bias, 0.0, 2.0);
-            float slot0 = _specular_blob(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
-            float slot1 = _specular_blob(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
-            float slot2 = _specular_blob(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot0 = _specular_lobe(uv, u_devcurve_specular_slot0, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot1 = _specular_lobe(uv, u_devcurve_specular_slot1, fgId, sampleCount, specW, yOffset, crestBias, aa);
+            float slot2 = _specular_lobe(uv, u_devcurve_specular_slot2, fgId, sampleCount, specW, yOffset, crestBias, aa);
             float sparkleMask = max(max(slot0, slot1), slot2) * fgInside;
             float clearAt = max(0.006, yOffset * 0.42);
             float clearanceMask = smoothstep(clearAt, clearAt + aa * 0.65, uv.y - yFg);

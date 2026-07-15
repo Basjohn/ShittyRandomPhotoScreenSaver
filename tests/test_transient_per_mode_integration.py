@@ -3,7 +3,6 @@
 Verifies:
   1. Spectrum kick express lane: transient bass boosts bass-zone bars.
   2. Bubble transient pulse: transient bass mixes into bubble pulse energy.
-  3. Blob transient deformation: transient uniforms uploaded to shader.
   4. Sine/Osc heartbeat: transient kick onset lowers trigger gate.
   5. GL overlay: transient_energy stored on overlay for renderer access.
 """
@@ -70,102 +69,6 @@ class _StubEngine:
         return self._eb or _StubEnergyBands()
 
 
-class _BlobKwargsWidget:
-    """Loose widget stub for build_gpu_push_extra_kwargs()."""
-
-    def __init__(self):
-        self._rainbow_enabled = False
-        self._rainbow_speed = 0.5
-        self._rainbow_per_bar = False
-        self._spectrum_ghosting_enabled = True
-        self._spectrum_ghost_alpha = 0.4
-        self._spectrum_ghost_decay = 0.4
-        self._osc_ghosting_enabled = False
-        self._osc_ghost_intensity = 0.4
-        self._blob_ghosting_enabled = False
-        self._blob_ghost_alpha = 0.4
-        self._blob_ghost_decay = 0.3
-        self._sine_ghosting_enabled = True
-        self._sine_ghost_alpha = 0.45
-        self._sine_ghost_decay = 0.3
-        self._bubble_ghosting_enabled = False
-        self._bubble_ghost_alpha = 0.0
-        self._bubble_ghost_decay = 0.4
-        self._sine_heartbeat = 0.0
-        self._heartbeat_intensity = 0.0
-        self._sine_density = 1.0
-        self._sine_displacement = 0.0
-        self._use_raw_energy = False
-        self._sine_glow_enabled = True
-        self._sine_glow_intensity = 0.5
-        self._sine_glow_size = 1.0
-        self._sine_glow_reactivity = 1.0
-        self._sine_glow_color = None
-        self._sine_reactive_glow = True
-        self._sine_sensitivity = 1.0
-        self._sine_smoothing = 0.7
-        self._osc_glow_enabled = True
-        self._osc_glow_intensity = 0.5
-        self._osc_glow_size = 1.0
-        self._osc_glow_reactivity = 1.0
-        self._osc_glow_color = None
-        self._osc_reactive_glow = True
-        self._osc_line_amplitude = 3.0
-        self._osc_smoothing = 0.7
-        self._blob_color = None
-        self._blob_glow_color = None
-        self._blob_edge_color = None
-        self._blob_outline_color = None
-        self._blob_pulse = 1.0
-        self._blob_width = 1.0
-        self._blob_size = 1.0
-        self._blob_glow_intensity = 0.5
-        self._blob_glow_reactivity = 1.0
-        self._blob_glow_max_size = 1.0
-        self._blob_reactive_glow = True
-        self._blob_reactive_deformation = 1.0
-        self._blob_stage_gain = 1.0
-        self._blob_core_scale = 1.0
-        self._blob_core_floor_bias = 0.35
-        self._blob_stage_bias = 0.0
-        self._blob_stage2_release_ms = 900.0
-        self._blob_stage3_release_ms = 1200.0
-        self._blob_constant_wobble = 1.0
-        self._blob_reactive_wobble = 1.0
-        self._blob_stretch_tendency = 0.35
-        self._blob_stretch_inner = 0.5
-        self._blob_stretch_outer = 0.5
-        self._sine_speed = 1.0
-        self._sine_line_dim = False
-        self._sine_line_offset_bias = 0.0
-        self._osc_speed = 1.0
-        self._osc_line_dim = False
-        self._osc_line_offset_bias = 0.0
-        self._osc_vertical_shift = 0
-        self._sine_wave_travel = 0
-        self._sine_card_adaptation = 0.30
-        self._sine_travel_line2 = 0
-        self._sine_travel_line3 = 0
-        self._sine_line1_shift = 0.0
-        self._sine_line2_shift = 0.0
-        self._sine_line3_shift = 0.0
-        self._sine_wave_effect = 0.0
-        self._sine_micro_wobble = 0.0
-        self._sine_crawl_amount = 0.0
-        self._sine_width_reaction = 0.0
-        self._sine_vertical_shift = 0
-        self._sine_line_color = None
-        self._osc_line_color = None
-        self._sine_line_count = 1
-        self._osc_line_count = 1
-        self._sine_line2_color = None
-        self._osc_line2_color = None
-        self._sine_line2_glow_color = None
-        self._osc_line2_glow_color = None
-        self._sine_line3_color = None
-        self._osc_line3_color = None
-        self._sine_line3_glow_color = None
-        self._osc_line3_glow_color = None
 
 
 class _SchedulerEngine(_StubEngine):
@@ -372,36 +275,8 @@ class TestBubbleTransientPulse:
 
 
 # ===========================================================================
-# 3. Blob Transient Deformation (uniform upload)
 # ===========================================================================
 
-class TestBlobTransientUniforms:
-    """Verify transient energy is stored on overlay for blob renderer."""
-
-    def test_transient_energy_stored_on_overlay(self):
-        """Overlay should store transient_energy for renderer access."""
-        te = TransientEnergyBands(
-            bass_transient=0.8,
-            mid_transient=0.3,
-            high_transient=0.1,
-        )
-        # Simulate overlay storage (matching set_state logic)
-        state = {}
-        state['_transient_energy'] = te
-
-        assert state['_transient_energy'].bass_transient == 0.8
-        assert state['_transient_energy'].mid_transient == 0.3
-        assert state['_transient_energy'].high_transient == 0.1
-
-    def test_none_transient_defaults_to_zero(self):
-        """When transient_energy is None, renderer should default to 0."""
-        te = None
-        bass = getattr(te, 'bass_transient', 0.0) if te else 0.0
-        mid = getattr(te, 'mid_transient', 0.0) if te else 0.0
-        high = getattr(te, 'high_transient', 0.0) if te else 0.0
-        assert bass == 0.0
-        assert mid == 0.0
-        assert high == 0.0
 
 
 # ===========================================================================
@@ -492,8 +367,6 @@ class TestTransientMixSettingsModel:
         'spectrum_lane_transient_mix',
         'bubble_transient_mix_bass',
         'bubble_transient_mix_vocal',
-        'blob_transient_mix_bass',
-        'blob_transient_mix_vocal',
         'sine_wave_transient_width_mix',
         'oscilloscope_transient_width_mix',
     )
@@ -505,8 +378,6 @@ class TestTransientMixSettingsModel:
         assert model.spectrum_lane_transient_mix == 0.65
         assert model.bubble_transient_mix_bass == 0.75
         assert model.bubble_transient_mix_vocal == 0.25
-        assert model.blob_transient_mix_bass == 0.5
-        assert model.blob_transient_mix_vocal == 0.35
         assert model.sine_wave_transient_width_mix == 0.4
         assert model.oscilloscope_transient_width_mix == 0.35
 
@@ -518,14 +389,11 @@ class TestTransientMixSettingsModel:
             'mode': 'spectrum',
             'preset_spectrum': vp.get_custom_preset_index('spectrum'),
             'preset_bubble': vp.get_custom_preset_index('bubble'),
-            'preset_blob': vp.get_custom_preset_index('blob'),
             'preset_sine_wave': vp.get_custom_preset_index('sine_wave'),
             'preset_oscilloscope': vp.get_custom_preset_index('oscilloscope'),
             'spectrum_lane_transient_mix': 0.9,
             'bubble_transient_mix_bass': 0.1,
             'bubble_transient_mix_vocal': 0.8,
-            'blob_transient_mix_bass': 0.3,
-            'blob_transient_mix_vocal': 0.7,
             'sine_wave_transient_width_mix': 0.15,
             'oscilloscope_transient_width_mix': 0.95,
         }
@@ -545,8 +413,6 @@ class TestTransientMixSettingsModel:
         assert model.resolve_spectrum_lane_transient_mix() == 0.65
         assert model.resolve_bubble_transient_mix_bass() == 0.75
         assert model.resolve_bubble_transient_mix_vocal() == 0.25
-        assert model.resolve_blob_transient_mix_bass() == 0.5
-        assert model.resolve_blob_transient_mix_vocal() == 0.35
         assert model.resolve_sine_wave_transient_width_mix() == 0.4
         assert model.resolve_oscilloscope_transient_width_mix() == 0.35
 
@@ -613,107 +479,13 @@ class TestBubbleTransientMixWeights:
 
 
 # ===========================================================================
-# 9. Blob Bass/Vocal Transient Mix (§2.3)
 # ===========================================================================
 
-class TestBlobTransientMixWeights:
-    """Verify blob_transient_mix_bass and _vocal modulate blob energy bands."""
-
-    def test_bass_mix_increases_raw_bass(self):
-        """Blob transient bass mix should add transient energy to raw_bass."""
-        raw_bass = 0.4
-        t_bass = 0.6
-        _bmb = 0.5
-        _clamp = 1.5
-        result = min(_clamp, raw_bass + t_bass * _bmb)
-        assert result == 0.7  # 0.4 + 0.6 * 0.5
-
-    def test_vocal_mix_increases_raw_mid(self):
-        """Blob transient vocal mix should add transient energy to raw_mid."""
-        raw_mid = 0.3
-        t_mid = 0.4
-        _bmv = 0.35
-        _clamp = 1.5
-        result = min(_clamp, raw_mid + t_mid * _bmv)
-        assert abs(result - 0.44) < 1e-9  # 0.3 + 0.4 * 0.35
-
-    def test_clamp_limits_blob_mix(self):
-        """Result should not exceed transient_clamp."""
-        raw_bass = 0.9
-        t_bass = 1.0
-        _bmb = 1.0
-        _clamp = 1.2
-        result = min(_clamp, raw_bass + t_bass * _bmb)
-        assert result == _clamp
 
 
 # ===========================================================================
-# 10. Blob Scheduler Event Wiring (§2.4)
 # ===========================================================================
 
-class TestBlobSchedulerEventWiring:
-    """Verify blob GPU kwargs include scheduler-derived event strengths."""
-
-    def test_build_kwargs_includes_blob_event_strengths(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
-
-        sched = TransientEventScheduler()
-        now = time.time()
-        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.8))
-        assert sched.feed(OnsetEvent(timestamp=now + 0.15, event_type='snare', strength=0.55))
-
-        engine = _SchedulerEngine(
-            sched,
-            tb=TransientEnergyBands(bass_transient=0.3, mid_transient=0.2),
-            eb=_StubEnergyBands(bass=0.4, mid=0.2, high=0.1, overall=0.3),
-        )
-        widget = _BlobKwargsWidget()
-
-        kwargs = build_gpu_push_extra_kwargs(widget, 'blob', engine)
-
-        assert abs(kwargs['blob_kick_event_strength'] - 0.8) < 1e-9
-        assert abs(kwargs['blob_snare_event_strength'] - 0.55) < 1e-9
-
-    def test_build_kwargs_zeros_blob_event_strengths_when_scheduler_empty(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.transient_bus import TransientEventScheduler
-
-        engine = _SchedulerEngine(
-            TransientEventScheduler(),
-            tb=TransientEnergyBands(),
-            eb=_StubEnergyBands(),
-        )
-        widget = _BlobKwargsWidget()
-
-        kwargs = build_gpu_push_extra_kwargs(widget, 'blob', engine)
-
-        assert kwargs['blob_kick_event_strength'] == 0.0
-        assert kwargs['blob_snare_event_strength'] == 0.0
-
-    def test_build_kwargs_consumes_blob_events_once_per_mode_snapshot(self):
-        from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
-        from widgets.spotify_visualizer.transient_bus import OnsetEvent, TransientEventScheduler
-
-        sched = TransientEventScheduler()
-        now = time.time()
-        assert sched.feed(OnsetEvent(timestamp=now, event_type='kick', strength=0.8))
-        assert sched.feed(OnsetEvent(timestamp=now + 0.15, event_type='snare', strength=0.55))
-
-        engine = _SchedulerEngine(
-            sched,
-            tb=TransientEnergyBands(bass_transient=0.3, mid_transient=0.2),
-            eb=_StubEnergyBands(bass=0.4, mid=0.2, high=0.1, overall=0.3),
-        )
-        widget = _BlobKwargsWidget()
-
-        first = build_gpu_push_extra_kwargs(widget, 'blob', engine)
-        second = build_gpu_push_extra_kwargs(widget, 'blob', engine)
-
-        assert abs(first['blob_kick_event_strength'] - 0.8) < 1e-9
-        assert abs(first['blob_snare_event_strength'] - 0.55) < 1e-9
-        assert second['blob_kick_event_strength'] == 0.0
-        assert second['blob_snare_event_strength'] == 0.0
 
 
 # ===========================================================================
@@ -737,8 +509,8 @@ class TestLineSchedulerEventWiring:
             tb=TransientEnergyBands(bass_transient=0.2, mid_transient=0.1),
             eb=_StubEnergyBands(bass=0.3, mid=0.2, high=0.1, overall=0.2),
         )
-        widget = _BlobKwargsWidget()
 
+        widget = _ModeKwargsWidget()
         osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
         sine_kwargs = build_gpu_push_extra_kwargs(widget, 'sine_wave', engine)
 
@@ -756,8 +528,8 @@ class TestLineSchedulerEventWiring:
             tb=TransientEnergyBands(),
             eb=_StubEnergyBands(),
         )
-        widget = _BlobKwargsWidget()
 
+        widget = _ModeKwargsWidget()
         osc_kwargs = build_gpu_push_extra_kwargs(widget, 'oscilloscope', engine)
 
         assert osc_kwargs['line_kick_event_strength'] == 0.0
@@ -767,6 +539,98 @@ class TestLineSchedulerEventWiring:
 # ===========================================================================
 # 12. Sine/Osc Transient Width Mix (§2.3)
 # ===========================================================================
+
+class _ModeKwargsWidget:
+    def __init__(self):
+        self._rainbow_enabled = False
+        self._rainbow_speed = 0.5
+        self._rainbow_per_bar = False
+        self._spectrum_ghosting_enabled = True
+        self._spectrum_ghost_alpha = 0.4
+        self._spectrum_ghost_decay = 0.4
+        self._osc_ghosting_enabled = False
+        self._osc_ghost_intensity = 0.4
+        self._osc_ghost_line2_enabled = True
+        self._osc_ghost_line3_enabled = True
+        self._osc_ghost_line4_enabled = True
+        self._osc_ghost_line5_enabled = True
+        self._osc_ghost_line6_enabled = True
+        self._sine_ghosting_enabled = True
+        self._sine_ghost_alpha = 0.45
+        self._sine_ghost_decay = 0.3
+        self._sine_ghost_line2_enabled = True
+        self._sine_ghost_line3_enabled = True
+        self._sine_ghost_line4_enabled = True
+        self._sine_ghost_line5_enabled = True
+        self._sine_ghost_line6_enabled = True
+        self._bubble_ghosting_enabled = False
+        self._bubble_ghost_alpha = 0.0
+        self._bubble_ghost_decay = 0.4
+        self._sine_heartbeat = 0.0
+        self._heartbeat_intensity = 0.0
+        self._sine_density = 1.0
+        self._sine_displacement = 0.0
+        self._use_raw_energy = False
+        self._sine_glow_enabled = True
+        self._sine_glow_intensity = 0.5
+        self._sine_glow_size = 1.0
+        self._sine_glow_reactivity = 1.0
+        self._sine_glow_color = None
+        self._sine_reactive_glow = True
+        self._sine_sensitivity = 1.0
+        self._sine_smoothing = 0.7
+        self._osc_glow_enabled = True
+        self._osc_glow_intensity = 0.5
+        self._osc_glow_size = 1.0
+        self._osc_glow_reactivity = 1.0
+        self._osc_glow_color = None
+        self._osc_reactive_glow = True
+        self._osc_line_amplitude = 3.0
+        self._osc_smoothing = 0.7
+        self._sine_speed = 1.0
+        self._sine_line_dim = False
+        self._sine_line_offset_bias = 0.0
+        self._osc_speed = 1.0
+        self._osc_line_dim = False
+        self._osc_line_offset_bias = 0.0
+        self._osc_vertical_shift = 0
+        self._sine_wave_travel = 0
+        self._sine_card_adaptation = 0.30
+        self._sine_travel_line2 = 0
+        self._sine_travel_line3 = 0
+        self._sine_line1_shift = 0.0
+        self._sine_line2_shift = 0.0
+        self._sine_line3_shift = 0.0
+        self._sine_wave_effect = 0.0
+        self._sine_micro_wobble = 0.0
+        self._sine_crawl_amount = 0.0
+        self._sine_width_reaction = 0.0
+        self._sine_vertical_shift = 0
+        self._sine_line_color = None
+        self._osc_line_color = None
+        self._sine_line_count = 1
+        self._osc_line_count = 1
+        self._sine_line2_color = None
+        self._osc_line2_color = None
+        self._sine_line2_glow_color = None
+        self._osc_line2_glow_color = None
+        self._sine_line3_color = None
+        self._osc_line3_color = None
+        self._sine_line3_glow_color = None
+        self._osc_line3_glow_color = None
+        self._sine_line4_color = None
+        self._osc_line4_color = None
+        self._sine_line4_glow_color = None
+        self._osc_line4_glow_color = None
+        self._sine_line5_color = None
+        self._osc_line5_color = None
+        self._sine_line5_glow_color = None
+        self._osc_line5_glow_color = None
+        self._sine_line6_color = None
+        self._osc_line6_color = None
+        self._sine_line6_glow_color = None
+        self._osc_line6_glow_color = None
+
 
 class TestSineOscTransientWidthMix:
     """Verify sine_wave and osc transient width mix modulate rendered output."""

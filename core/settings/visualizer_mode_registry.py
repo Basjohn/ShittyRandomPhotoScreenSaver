@@ -10,9 +10,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from core.dev_gates import is_blob_enabled
-
-
 @dataclass(frozen=True)
 class VisualizerModeDescriptor:
     mode_id: str
@@ -29,14 +26,11 @@ _ALL_DESCRIPTORS: tuple[VisualizerModeDescriptor, ...] = (
     VisualizerModeDescriptor("spectrum", "Spectrum", "_spectrum_preset_slider", ("spectrum_",)),
     VisualizerModeDescriptor("oscilloscope", "Oscilloscope", "_osc_preset_slider", ("osc_", "oscilloscope_")),
     VisualizerModeDescriptor("sine_wave", "Sine Waves", "_sine_preset_slider", ("sine_", "sine_wave_", "sinewave_")),
-    VisualizerModeDescriptor("blob", "Blob", "_blob_preset_slider", ("blob_",)),
     VisualizerModeDescriptor("bubble", "Bubble", "_bubble_preset_slider", ("bubble_",)),
     VisualizerModeDescriptor("devcurve", "Spline Curve", "_devcurve_preset_slider", ("devcurve_",)),
 )
 
-_GATED_MODES: dict[str, callable] = {
-    "blob": is_blob_enabled,
-}
+_GATED_MODES: dict[str, callable] = {}
 
 def _active_descriptors() -> tuple[VisualizerModeDescriptor, ...]:
     return tuple(d for d in _ALL_DESCRIPTORS if d.mode_id not in _GATED_MODES or _GATED_MODES[d.mode_id]())

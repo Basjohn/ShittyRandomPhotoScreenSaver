@@ -5,15 +5,12 @@ from copy import deepcopy
 from typing import Any, Dict, Mapping
 
 from core.settings.models import SpotifyVisualizerSettings
-from core.settings.visualizer_blob_contract import (
-    migrate_blob_type_mapping,
-    strip_inactive_blob_shaped_payload,
-)
 from core.settings.visualizer_mode_registry import (
     VISUALIZER_MODE_IDS,
     coerce_visualizer_mode_id,
     get_setting_prefixes,
 )
+from core.settings.visualizer_retired_modes import strip_retired_visualizer_settings
 from core.settings.visualizer_settings_contract import (
     migrate_legacy_global_visual_keys,
     strip_legacy_global_technical_keys,
@@ -160,7 +157,7 @@ def normalize_visualizer_section_mapping(
     if not isinstance(data, Mapping):
         return {}
 
-    migrated = migrate_blob_type_mapping(data, prefix=prefix)
+    migrated = strip_retired_visualizer_settings(data, prefix=prefix)
     migrated = _forward_migrate_alias_keys(migrated, prefix=prefix)
     migrated = strip_legacy_global_technical_keys(migrated, prefix=prefix)
     migrated = migrate_legacy_global_visual_keys(migrated, prefix=prefix)
@@ -179,7 +176,7 @@ def normalize_visualizer_section_mapping(
             continue
         normalized[key[len(prefix_with_sep):]] = deepcopy(value)
     normalized = _resolve_per_mode_rainbow_mapping(migrated, normalized, prefix=prefix)
-    return strip_inactive_blob_shaped_payload(normalized, prefix=prefix)
+    return strip_retired_visualizer_settings(normalized, prefix=prefix)
 
 
 def normalize_visualizer_mode_payload(

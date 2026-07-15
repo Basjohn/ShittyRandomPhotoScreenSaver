@@ -415,48 +415,37 @@ def test_runtime_cycle_purges_stale_mode_keys_on_preset_switch(settings_manager,
     Regression test for the call-site MERGE bug: apply_preset_to_config correctly
     CLEAR+APPLYs on its copy, but the caller used .update() which never removed
     keys absent from the applied result. This caused subtype-owned fields from
-    a Shaped Custom Blob to persist into Mighty curated presets.
+    a Custom spectrum-only key to persist into a curated preset.
     """
     wm = WidgetManager(_make_widget_manager_parent(), resource_manager=None)
     wm._attach_settings_manager(settings_manager)
     wm._refresh_spotify_visualizer_config = MagicMock()
 
-    custom_index = get_custom_preset_index("blob")
-    preset_count = get_preset_count("blob")
+    custom_index = get_custom_preset_index("spectrum")
+    preset_count = get_preset_count("spectrum")
     assert preset_count >= 2
 
     widgets_cfg = settings_manager.get("widgets", {}) or {}
     spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
     spotify_cfg.update({
-        "mode": "blob",
-        "preset_blob": custom_index,
-        "blob_type": "shaped",
-        "blob_shape_base_nodes": [[0.0, 0.8], [0.5, 1.2]],
-        "blob_stretch": 0.5,
-        "blob_color": [255, 0, 128, 255],
-        "blob_some_custom_only_key": 42,
+        "mode": "spectrum",
+        "preset_spectrum": custom_index,
+        "spectrum_some_custom_only_key": 42,
     })
     widgets_cfg = dict(widgets_cfg)
     widgets_cfg["spotify_visualizer"] = spotify_cfg
     settings_manager.set("widgets", widgets_cfg)
 
-    assert wm.cycle_visualizer_preset("blob", 1) is True
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
 
     updated_widgets = settings_manager.get("widgets", {}) or {}
     updated_vis = updated_widgets.get("spotify_visualizer", {}) or {}
 
-    assert updated_vis.get("preset_blob") == 0
+    assert updated_vis.get("preset_spectrum") == 0
 
-    assert "blob_some_custom_only_key" not in updated_vis, (
-        "Stale custom-only blob key survived preset switch — "
+    assert "spectrum_some_custom_only_key" not in updated_vis, (
+        "Stale custom-only spectrum key survived preset switch — "
         "call-site merge bug is back"
-    )
-
-    assert updated_vis.get("blob_type") == "mighty"
-    assert "blob_shaper_enabled" not in updated_vis
-    assert "blob_shape_base_nodes" not in updated_vis, (
-        "Shaped Custom contour payload survived into a Mighty curated preset — "
-        "call-site replace semantics regressed"
     )
 
 
@@ -466,31 +455,31 @@ def test_runtime_cycle_custom_roundtrip_preserves_known_custom_keys(settings_man
     wm._attach_settings_manager(settings_manager)
     wm._refresh_spotify_visualizer_config = MagicMock()
 
-    custom_index = get_custom_preset_index("blob")
+    custom_index = get_custom_preset_index("spectrum")
 
     widgets_cfg = settings_manager.get("widgets", {}) or {}
     spotify_cfg = dict(widgets_cfg.get("spotify_visualizer", {}) or {})
     spotify_cfg.update({
-        "mode": "blob",
-        "preset_blob": custom_index,
-        "blob_stretch": 0.33,
-        "blob_constant_wobble": 1.42,
+        "mode": "spectrum",
+        "preset_spectrum": custom_index,
+        "spectrum_growth": 1.42,
+        "spectrum_glow_intensity": 0.33,
     })
     widgets_cfg = dict(widgets_cfg)
     widgets_cfg["spotify_visualizer"] = spotify_cfg
     settings_manager.set("widgets", widgets_cfg)
 
-    assert wm.cycle_visualizer_preset("blob", 1) is True
+    assert wm.cycle_visualizer_preset("spectrum", 1) is True
 
-    assert wm.cycle_visualizer_preset("blob", -1) is True
+    assert wm.cycle_visualizer_preset("spectrum", -1) is True
 
     restored = (settings_manager.get("widgets", {}) or {}).get("spotify_visualizer", {}) or {}
-    assert restored.get("preset_blob") == custom_index
-    assert restored.get("blob_stretch") == pytest.approx(0.33), (
-        "Custom snapshot should restore blob_stretch after round-trip"
+    assert restored.get("preset_spectrum") == custom_index
+    assert restored.get("spectrum_glow_intensity") == pytest.approx(0.33), (
+        "Custom snapshot should restore spectrum_glow_intensity after round-trip"
     )
-    assert restored.get("blob_constant_wobble") == pytest.approx(1.42), (
-        "Custom snapshot should restore blob_constant_wobble after round-trip"
+    assert restored.get("spectrum_growth") == pytest.approx(1.42), (
+        "Custom snapshot should restore spectrum_growth after round-trip"
     )
 
 

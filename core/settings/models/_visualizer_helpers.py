@@ -94,7 +94,6 @@ def _normalize_spectrum_lane_strengths(value: Any, defaults: Mapping[str, float]
 PER_MODE_TECHNICAL_MODES: Tuple[str, ...] = (
     "spectrum",
     "bubble",
-    "blob",
     "sine_wave",
     "oscilloscope",
     "devcurve",

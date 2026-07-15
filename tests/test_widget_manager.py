@@ -1367,7 +1367,6 @@ class TestStartupCoordination:
             def __init__(self):
                 self._vis_mode_str = "devcurve"
                 self._base_height = 80
-                self._blob_width = 1.0
 
         parent = MagicMock()
         parent.width.return_value = 2560
@@ -1417,7 +1416,6 @@ class TestStartupCoordination:
             def __init__(self):
                 self._vis_mode_str = "devcurve"
                 self._base_height = 80
-                self._blob_width = 1.0
 
         parent = MagicMock()
         parent.width.return_value = 2560
@@ -1842,11 +1840,9 @@ class TestSettingsRouting:
                 self._base_height = 80
                 self._spectrum_growth = 2.0
                 self._osc_growth = 2.0
-                self._blob_growth = 3.5
                 self._sine_wave_growth = 2.0
                 self._bubble_growth = 3.0
                 self._devcurve_growth = 3.5
-                self._blob_width = 1.0
                 self._geometry = None
                 self._style = None
                 self._model = None
@@ -1858,11 +1854,9 @@ class TestSettingsRouting:
                 self._vis_mode_str = kwargs["mode"]
                 self._spectrum_growth = kwargs["spectrum_growth"]
                 self._osc_growth = kwargs["osc_growth"]
-                self._blob_growth = kwargs["blob_growth"]
                 self._sine_wave_growth = kwargs["sine_wave_growth"]
                 self._bubble_growth = kwargs["bubble_growth"]
                 self._devcurve_growth = kwargs["devcurve_growth"]
-                self._blob_width = kwargs["blob_width"]
 
             def set_bar_style(self, **kwargs):
                 self._style = dict(kwargs)
@@ -1908,79 +1902,6 @@ class TestSettingsRouting:
         assert vis._bubble_growth == pytest.approx(4.5)
         assert vis._geometry == (100, 320, 300, 360)
 
-    def test_refresh_spotify_visualizer_config_repositions_blob_width_contract(self):
-        from PySide6.QtCore import QRect
-        from core.settings.visualizer_presets import get_custom_preset_index
-        from rendering.widget_manager import WidgetManager
-
-        class _FakeVisualizer:
-            def __init__(self):
-                self._vis_mode_str = "spectrum"
-                self._base_height = 80
-                self._spectrum_growth = 2.0
-                self._osc_growth = 2.0
-                self._blob_growth = 3.5
-                self._sine_wave_growth = 2.0
-                self._bubble_growth = 3.0
-                self._devcurve_growth = 3.5
-                self._blob_width = 1.0
-                self._geometry = None
-
-            def set_settings_model(self, model):
-                self._model = model
-
-            def apply_vis_mode_config(self, **kwargs):
-                self._vis_mode_str = kwargs["mode"]
-                self._spectrum_growth = kwargs["spectrum_growth"]
-                self._osc_growth = kwargs["osc_growth"]
-                self._blob_growth = kwargs["blob_growth"]
-                self._sine_wave_growth = kwargs["sine_wave_growth"]
-                self._bubble_growth = kwargs["bubble_growth"]
-                self._devcurve_growth = kwargs["devcurve_growth"]
-                self._blob_width = kwargs["blob_width"]
-
-            def set_bar_style(self, **kwargs):
-                pass
-
-            def setGeometry(self, x, y, w, h):
-                self._geometry = (x, y, w, h)
-
-            def raise_(self):
-                pass
-
-        class _FakeMedia:
-            def __init__(self):
-                self._position = SimpleNamespace(name="BOTTOM_LEFT")
-
-            def geometry(self):
-                return QRect(100, 700, 300, 100)
-
-        parent = MagicMock()
-        manager = WidgetManager(parent)
-        vis = _FakeVisualizer()
-        media = _FakeMedia()
-        manager._widgets["spotify_visualizer"] = vis
-
-        widgets_cfg = {
-            "spotify_visualizer": {
-                "enabled": True,
-                "mode": "blob",
-                "preset_blob": get_custom_preset_index("blob"),
-                "blob_growth": 3.5,
-                "blob_width": 0.5,
-            },
-            "media": {
-                "show_background": True,
-            },
-        }
-
-        manager._refresh_spotify_visualizer_config(widgets_cfg)
-        manager.position_spotify_visualizer(vis, media, 1920, 1080)
-
-        assert vis._vis_mode_str == "blob"
-        assert vis._blob_width == pytest.approx(0.5)
-        assert vis._geometry == (175, 400, 150, 280)
-
     def test_position_spotify_visualizer_honors_custom_rect_even_if_settings_snapshot_is_stale(self):
         from PySide6.QtCore import QRect
         from rendering.widget_manager import WidgetManager
@@ -1995,9 +1916,7 @@ class TestSettingsRouting:
                 self._custom_layout_visualizer_scale_payload = {"width_scale": 1.0, "height_scale": 1.0}
                 self._vis_mode_str = "spectrum"
                 self._base_height = 80
-                self._blob_width = 1.0
                 self._spectrum_growth = 2.0
-                self._blob_growth = 3.5
                 self._osc_growth = 2.0
                 self._bubble_growth = 3.0
                 self._devcurve_growth = 3.0
@@ -2043,11 +1962,9 @@ class TestSettingsRouting:
             def __init__(self):
                 self._custom_layout_local_rect = QRect(210, 310, 420, 280)
                 self._custom_layout_visualizer_scale_payload = {"width_scale": 1.5, "height_scale": 1.25}
-                self._vis_mode_str = "blob"
+                self._vis_mode_str = "bubble"
                 self._base_height = 80
-                self._blob_width = 0.5
                 self._spectrum_growth = 2.0
-                self._blob_growth = 3.5
                 self._osc_growth = 2.0
                 self._bubble_growth = 3.0
                 self._devcurve_growth = 3.0
@@ -2089,11 +2006,9 @@ class TestSettingsRouting:
 
         class _FakeVisualizer:
             def __init__(self):
-                self._vis_mode_str = "blob"
+                self._vis_mode_str = "bubble"
                 self._base_height = 80
-                self._blob_width = 0.5
                 self._spectrum_growth = 2.0
-                self._blob_growth = 3.5
                 self._osc_growth = 2.0
                 self._bubble_growth = 3.0
                 self._devcurve_growth = 3.0

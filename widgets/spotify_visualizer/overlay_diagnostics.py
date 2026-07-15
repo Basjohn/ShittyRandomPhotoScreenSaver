@@ -86,7 +86,6 @@ def maybe_log_oscilloscope_diagnostics(overlay: Any, logger: logging.Logger) -> 
         return
     now_diag = time.time()
     sig = (
-        str(getattr(overlay, "_blob_type", "mighty")),
         round(float(getattr(overlay, "_line_speed", 0.0)), 3),
         round(float(getattr(overlay, "_osc_last_waveform_blend_alpha", 0.0)), 3),
         int(len(getattr(overlay, "_ghost_waveform_ring", []) or [])),
@@ -150,90 +149,3 @@ def maybe_log_sine_idle_state(overlay: Any, logger: logging.Logger, *, dt_second
         int(overlay._line_count),
     )
     overlay._last_sine_idle_diag_ts = now_diag
-
-
-def maybe_log_blob_diagnostics(
-    overlay: Any,
-    logger: logging.Logger,
-    *,
-    dt_seconds: float,
-    blob_dt: float,
-    kick_raw: float,
-    snare_raw: float,
-    raw_live: tuple[float, float, float, float],
-    filtered_live: tuple[float, float, float, float],
-    prev_smoothed: float,
-    raw_e: float,
-    smoothed_e: float,
-    stage_raw: tuple[float, float, float],
-    stage_filtered: tuple[float, float, float],
-    prev_stage_filtered: tuple[float, float, float],
-) -> None:
-    if not is_viz_diagnostics_enabled() or overlay._vis_mode != "blob":
-        return
-    now_ts = time.time()
-    hitch_clamped = dt_seconds > (blob_dt + 0.020)
-    energy_jump = abs(raw_e - prev_smoothed) > 0.18 or abs(smoothed_e - prev_smoothed) > 0.14
-    stage_jump = max(abs(cur - prev) for cur, prev in zip(stage_filtered, prev_stage_filtered)) > 0.20
-    hot_event = kick_raw > 0.55 or snare_raw > 0.55
-    sig = (
-        round(raw_e, 2),
-        round(smoothed_e, 2),
-        round(overlay._blob_kick_event_strength, 2),
-        round(overlay._blob_snare_event_strength, 2),
-        tuple(round(v, 2) for v in stage_filtered),
-    )
-    should_log = hitch_clamped or energy_jump or stage_jump or hot_event
-    if not should_log and (now_ts - overlay._blob_diag_last_ts) < 0.75:
-        return
-    if not should_log and sig == overlay._blob_diag_last_sig:
-        return
-    logger.debug(
-        (
-            "[SPOTIFY_VIS][BLOB] type=%s dt=%.3f blob_dt=%.3f kick=%.2f/%.2f "
-            "snare=%.2f/%.2f base=(%.3f,%.3f,%.3f,%.3f) "
-            "trans=(%.3f,%.3f,%.3f) raw_live=(%.3f,%.3f,%.3f,%.3f) "
-            "live=(%.3f,%.3f,%.3f,%.3f) smooth=%.3f->%.3f "
-            "stage_raw=(%.2f,%.2f,%.2f) stage_filt=(%.2f,%.2f,%.2f) "
-            "stage_prev=(%.2f,%.2f,%.2f) flags[hitch=%s energy=%s stage=%s hot=%s]"
-        ),
-        str(getattr(overlay, "_blob_type", "mighty")),
-        dt_seconds,
-        blob_dt,
-        kick_raw,
-        overlay._blob_kick_event_strength,
-        snare_raw,
-        overlay._blob_snare_event_strength,
-        float(getattr(overlay, "_blob_diag_base_bass", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_base_mid", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_base_high", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_base_overall", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_transient_bass", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_transient_mid", 0.0) or 0.0),
-        float(getattr(overlay, "_blob_diag_transient_high", 0.0) or 0.0),
-        raw_live[0],
-        raw_live[1],
-        raw_live[2],
-        raw_live[3],
-        filtered_live[0],
-        filtered_live[1],
-        filtered_live[2],
-        filtered_live[3],
-        prev_smoothed,
-        smoothed_e,
-        stage_raw[0],
-        stage_raw[1],
-        stage_raw[2],
-        stage_filtered[0],
-        stage_filtered[1],
-        stage_filtered[2],
-        prev_stage_filtered[0],
-        prev_stage_filtered[1],
-        prev_stage_filtered[2],
-        hitch_clamped,
-        energy_jump,
-        stage_jump,
-        hot_event,
-    )
-    overlay._blob_diag_last_ts = now_ts
-    overlay._blob_diag_last_sig = sig

@@ -47,7 +47,6 @@ from core.settings.visualizer_settings_contract import (
     normalize_spectrum_render_mode,
     strip_legacy_global_technical_keys,
 )
-from core.settings.visualizer_blob_contract import migrate_blob_type_mapping
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_mode_payload
 from core.settings.visualizer_settings_snapshot import normalize_visualizer_section_mapping
 
@@ -579,8 +578,8 @@ def _filter_settings_for_mode(mode: str, sv_settings: Mapping[str, Any]) -> Dict
 
 def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, Any]:
     """Apply forward-migrations for removed/renamed settings keys."""
-    # Collapse accidental double-prefixed keys such as blob_blob_* or
-    # oscilloscope_oscilloscope_* that older repair/tooling flows allowed through.
+    # Collapse accidental double-prefixed keys that older repair/tooling flows
+    # allowed through.
     for _prefix in MODE_KEY_PREFIXES.get(mode, [""]):
         if not _prefix:
             continue
@@ -602,20 +601,6 @@ def _migrate_preset_settings(mode: str, settings: Dict[str, Any]) -> Dict[str, A
         settings.pop("sine_min_height", None)
         settings.pop("sine_max_height", None)
         settings.pop("sine_height_tendency", None)
-
-    # Blob legacy authored/runtime keys are retired. Do not forward-migrate
-    # them into modern presets; source-authoritative preset payloads should
-    # carry only the current Blob contract.
-    if mode == "blob":
-        settings = migrate_blob_type_mapping(settings)
-        for retired_key in (
-            "blob_pulse_cap",
-            "blob_stage2_release_ms",
-            "blob_stage3_release_ms",
-            "blob_stretch_x_bias",
-            "blob_stretch_y_bias",
-        ):
-            settings.pop(retired_key, None)
 
     # spectrum_bar_profile → removed (curved is now always-on, shaping is parameterized)
     if mode == "spectrum":

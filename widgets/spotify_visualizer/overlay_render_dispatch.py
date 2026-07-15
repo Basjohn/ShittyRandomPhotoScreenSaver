@@ -1,20 +1,8 @@
 from __future__ import annotations
 
-from core.settings.visualizer_blob_contract import (
-    BLOB_TYPE_SHAPED,
-    normalize_blob_type,
-)
-
-
 def resolve_render_program_key(overlay, mode: str) -> str:
     """Resolve a stable mode id to its concrete GL renderer program."""
-    if mode != "blob":
-        return mode
-    blob_type = normalize_blob_type(
-        getattr(overlay, "_blob_type", None),
-        legacy_shaper_enabled=getattr(overlay, "_blob_shaper_enabled", None),
-    )
-    return "blob_shaped" if blob_type == BLOB_TYPE_SHAPED else "blob_mighty"
+    return mode
 
 
 def resolve_mode_program(overlay, gl, mode: str, logger):
