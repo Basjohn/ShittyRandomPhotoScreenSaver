@@ -15,8 +15,9 @@ def _solid_qimage(width: int, height: int, color: str) -> QImage:
 
 
 class _FakeCache:
-    def __init__(self, store=None):
+    def __init__(self, store=None, max_memory_bytes=0):
         self.store = dict(store or {})
+        self.max_memory_bytes = max_memory_bytes
 
     def get(self, key):
         return self.store.get(key)
@@ -146,6 +147,7 @@ def test_scaled_prefetch_requests_refuse_paths_without_raw_producers(qt_app):
         "raw_pending": 0,
         "scaled_inflight": 0,
         "scaled_pending": 0,
+        "streamed_raw": 0,
     }
 
 
@@ -179,6 +181,7 @@ def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
         "raw_pending": 3,
         "scaled_inflight": 0,
         "scaled_pending": 5,
+        "streamed_raw": 0,
     }
 
     first_callback = threads.io_callbacks[0][2]
@@ -192,6 +195,7 @@ def test_prefetch_keeps_raw_backlog_for_full_preview_window(qt_app):
         "raw_pending": 2,
         "scaled_inflight": 1,
         "scaled_pending": 4,
+        "streamed_raw": 0,
     }
 
 
@@ -226,6 +230,7 @@ def test_scaled_prefetch_registration_skips_during_transition_cooldown(qt_app):
         "raw_pending": 0,
         "scaled_inflight": 0,
         "scaled_pending": 0,
+        "streamed_raw": 0,
     }
     assert threads.compute_callbacks == []
 
@@ -263,6 +268,105 @@ def test_prefetch_registration_survives_transition_cooldown(qt_app):
         "raw_pending": 1,
         "scaled_inflight": 0,
         "scaled_pending": 1,
+        "streamed_raw": 0,
     }
     assert threads.io_callbacks == []
     assert threads.compute_callbacks == []
+
+
+def test_oversized_raw_prefetch_streams_to_scaler_without_entering_lru(qt_app):
+    raw_path = r"C:\wall\huge.png"
+    cache = _FakeCache(max_memory_bytes=8 * 1024 * 1024)
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+
+    prefetcher.prefetch_paths([raw_path])
+    queued = prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "huge-scaled",
+                "width": 640,
+                "height": 360,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
+    )
+
+    assert queued == 1
+    io_callback = threads.io_callbacks[0][2]
+    io_callback(SimpleNamespace(success=True, result=_solid_qimage(1024, 1024, "blue")))
+
+    assert raw_path not in cache.store
+    assert len(threads.compute_callbacks) == 1
+    assert prefetcher.snapshot_state()["streamed_raw"] == 1
+
+    compute, callback = threads.compute_callbacks[0]
+    payload = compute()
+    assert payload is not None
+    key, pixmap = payload
+    assert key == "huge-scaled"
+    assert (pixmap.width(), pixmap.height()) == (640, 360)
+
+    callback(SimpleNamespace(success=True, result=payload))
+
+    assert "huge-scaled" in cache.store
+    assert prefetcher.snapshot_state()["streamed_raw"] == 0
+
+
+def test_oversized_raw_prefetch_stays_alive_until_all_scaled_consumers_finish(qt_app):
+    raw_path = r"C:\wall\huge-multi.png"
+    cache = _FakeCache(max_memory_bytes=8 * 1024 * 1024)
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+
+    prefetcher.prefetch_paths([raw_path])
+    queued = prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "huge-wide",
+                "width": 640,
+                "height": 360,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            },
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "huge-tall",
+                "width": 360,
+                "height": 640,
+                "display_mode": DisplayMode.FIT,
+                "use_lanczos": False,
+                "sharpen": False,
+            },
+        ]
+    )
+
+    assert queued == 2
+    threads.io_callbacks[0][2](
+        SimpleNamespace(success=True, result=_solid_qimage(1024, 1024, "blue"))
+    )
+    assert len(threads.compute_callbacks) == 1
+    assert prefetcher.snapshot_state()["streamed_raw"] == 1
+
+    first_compute, first_callback = threads.compute_callbacks[0]
+    first_payload = first_compute()
+    first_callback(SimpleNamespace(success=True, result=first_payload))
+
+    assert len(threads.compute_callbacks) == 2
+    assert prefetcher.snapshot_state()["streamed_raw"] == 1
+
+    second_compute, second_callback = threads.compute_callbacks[1]
+    second_payload = second_compute()
+    second_callback(SimpleNamespace(success=True, result=second_payload))
+
+    assert {"huge-wide", "huge-tall"}.issubset(cache.store)
+    assert raw_path not in cache.store
+    assert prefetcher.snapshot_state()["streamed_raw"] == 0

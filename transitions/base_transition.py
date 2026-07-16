@@ -326,6 +326,16 @@ class BaseTransition(QObject, metaclass=QABCMeta):
             getattr(self, "_widget", None),
             expected_duration_ms=expected_duration_ms,
         )
+
+    def _accept_compositor_animation_id(self, animation_id: Optional[str]) -> bool:
+        """Reject compositor starts that never acquired an animation."""
+        if animation_id:
+            return True
+        logger.error(
+            "[TRANSITION][REFUSED] Compositor returned no animation id transition=%s",
+            self.__class__.__name__,
+        )
+        return False
     
     def _mark_end(self) -> None:
         """Mark transition end time and log performance metrics.

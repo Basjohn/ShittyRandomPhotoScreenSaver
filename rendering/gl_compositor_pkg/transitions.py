@@ -48,6 +48,22 @@ except Exception:  # pragma: no cover - shiboken may be unavailable in some test
     Shiboken = None
 
 
+def _notify_deferred_start_failure(widget, transition_label: str, reason: str) -> None:
+    """Return a failed deferred start to the display's transactional path."""
+
+    parent = widget.parent()
+    callback = getattr(parent, "_on_deferred_transition_start_failed", None)
+    if callable(callback):
+        callback(transition_label, reason)
+        return
+    logger.error(
+        "[TRANSITION][BLOCKED] Deferred compositor start failed without display callback "
+        "transition=%s reason=%s",
+        transition_label,
+        reason,
+    )
+
+
 def _start_with_desync(
     widget,
     *,
@@ -59,9 +75,10 @@ def _start_with_desync(
     """Spread transition-start overhead without changing perceived pacing."""
     delay_ms, compensated_duration = widget._apply_desync_strategy(duration_ms)
     if delay_ms <= 0:
-        if on_started is not None:
+        animation_id = starter(compensated_duration)
+        if animation_id and on_started is not None:
             on_started(compensated_duration)
-        return starter(compensated_duration)
+        return animation_id
 
     widget_ref = weakref.ref(widget)
     scheduled_generation = getattr(widget, "_transition_animation_generation", 0)
@@ -89,14 +106,31 @@ def _start_with_desync(
                     transition_label,
                 )
                 return
+            animation_id = starter(compensated_duration)
+            if not animation_id:
+                logger.error(
+                    "[TRANSITION][DEFER] Deferred compositor animation refused "
+                    "transition=%s",
+                    transition_label,
+                )
+                _notify_deferred_start_failure(
+                    target,
+                    transition_label,
+                    "deferred_animation_refused",
+                )
+                return
             if on_started is not None:
                 on_started(compensated_duration)
-            starter(compensated_duration)
         except Exception:
-            logger.debug(
+            logger.error(
                 "[GL COMPOSITOR] Deferred %s start failed after desync delay",
                 transition_label,
                 exc_info=True,
+            )
+            _notify_deferred_start_failure(
+                target,
+                transition_label,
+                "deferred_animation_exception",
             )
 
     try:

@@ -228,6 +228,7 @@ class TestDisplayManagerDeferredUrls:
         fake_display._pending_reddit_url_prequeued = False
         fake_display.clear = MagicMock()
         fake_display.close = MagicMock()
+        fake_display.cleanup_for_teardown = MagicMock()
         fake_display.deleteLater = MagicMock()
 
         manager.displays = [fake_display]
@@ -236,6 +237,7 @@ class TestDisplayManagerDeferredUrls:
 
         assert fake_display._pending_reddit_url is None
         assert fake_display._pending_reddit_url_prequeued is False
+        fake_display.cleanup_for_teardown.assert_called_once_with()
         urls = manager.take_deferred_reddit_urls()
         assert urls == ["https://example.com/pending"]
 
@@ -258,6 +260,7 @@ class TestDisplayManagerDeferredUrls:
         fake_display._pending_reddit_url_prequeued = True
         fake_display.clear = MagicMock()
         fake_display.close = MagicMock()
+        fake_display.cleanup_for_teardown = MagicMock()
         fake_display.deleteLater = MagicMock()
 
         manager.displays = [fake_display]
@@ -268,6 +271,7 @@ class TestDisplayManagerDeferredUrls:
         assert urls == []
         assert fake_display._pending_reddit_url is None
         assert fake_display._pending_reddit_url_prequeued is False
+        fake_display.cleanup_for_teardown.assert_called_once_with()
 
 
 class TestCleanQueueFlow:

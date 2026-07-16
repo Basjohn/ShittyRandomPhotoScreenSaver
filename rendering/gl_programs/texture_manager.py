@@ -51,6 +51,46 @@ class PBOEntry:
     resource_id: str | None = None
 
 
+@dataclass(slots=True)
+class ImageUploadView:
+    """Keep an image buffer and any ctypes address owner alive for one upload."""
+
+    data: Any
+    size: int
+    address: int | None
+    address_owner: Any | None
+    direct: bool
+
+
+def _prepare_image_upload_view(image: QImage) -> ImageUploadView:
+    """Expose converted QImage bytes without a full Python copy when possible."""
+    size = int(image.sizeInBytes())
+    try:
+        data = image.bits()
+        address_owner = (ctypes.c_ubyte * size).from_buffer(data)
+        return ImageUploadView(
+            data=data,
+            size=size,
+            address=ctypes.addressof(address_owner),
+            address_owner=address_owner,
+            direct=True,
+        )
+    except Exception:
+        ptr = image.constBits()
+        if hasattr(ptr, "setsize"):
+            ptr.setsize(size)
+            data = bytes(ptr)
+        else:
+            data = ptr.tobytes()
+        return ImageUploadView(
+            data=data,
+            size=len(data),
+            address=None,
+            address_owner=None,
+            direct=False,
+        )
+
+
 class GLTextureManager:
     """Manages OpenGL textures for image display.
     
@@ -149,18 +189,13 @@ class GLTextureManager:
         # Get image data
         _copy_start = time.perf_counter()
         try:
-            ptr = image.constBits()
-            if hasattr(ptr, "setsize"):
-                ptr.setsize(image.sizeInBytes())
-                data = bytes(ptr)
-            else:
-                data = ptr.tobytes()
+            upload_view = _prepare_image_upload_view(image)
         except Exception:
             logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
             return 0
         _copy_ms = (time.perf_counter() - _copy_start) * 1000.0
         
-        data_size = len(data)
+        data_size = upload_view.size
         tex = gl.glGenTextures(1)
         tex_id = int(tex)
         
@@ -179,15 +214,45 @@ class GLTextureManager:
                         gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, None, gl.GL_STREAM_DRAW)
                         mapped_ptr = gl.glMapBuffer(gl.GL_PIXEL_UNPACK_BUFFER, gl.GL_WRITE_ONLY)
                         if mapped_ptr:
-                            ctypes.memmove(mapped_ptr, data, data_size)
-                            gl.glUnmapBuffer(gl.GL_PIXEL_UNPACK_BUFFER)
+                            source = (
+                                upload_view.address
+                                if upload_view.address is not None
+                                else upload_view.data
+                            )
+                            try:
+                                ctypes.memmove(mapped_ptr, source, data_size)
+                            finally:
+                                gl.glUnmapBuffer(gl.GL_PIXEL_UNPACK_BUFFER)
                             use_pbo = True
                         else:
-                            gl.glBufferSubData(gl.GL_PIXEL_UNPACK_BUFFER, 0, data_size, data)
+                            try:
+                                gl.glBufferSubData(
+                                    gl.GL_PIXEL_UNPACK_BUFFER,
+                                    0,
+                                    data_size,
+                                    upload_view.data,
+                                )
+                            except Exception:
+                                gl.glBufferSubData(
+                                    gl.GL_PIXEL_UNPACK_BUFFER,
+                                    0,
+                                    data_size,
+                                    bytes(upload_view.data),
+                                )
                             use_pbo = True
                     except Exception as e:
                         logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
+                        fallback_data = (
+                            upload_view.data
+                            if isinstance(upload_view.data, bytes)
+                            else bytes(upload_view.data)
+                        )
+                        gl.glBufferData(
+                            gl.GL_PIXEL_UNPACK_BUFFER,
+                            data_size,
+                            fallback_data,
+                            gl.GL_STREAM_DRAW,
+                        )
                         use_pbo = True
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
@@ -219,9 +284,14 @@ class GLTextureManager:
                     gl.GL_BGRA, gl.GL_UNSIGNED_BYTE, None
                 )
             else:
+                fallback_data = (
+                    upload_view.data
+                    if isinstance(upload_view.data, bytes)
+                    else bytes(upload_view.data)
+                )
                 gl.glTexImage2D(
                     gl.GL_TEXTURE_2D, 0, gl.GL_RGBA8, w, h, 0,
-                    gl.GL_BGRA, gl.GL_UNSIGNED_BYTE, data
+                    gl.GL_BGRA, gl.GL_UNSIGNED_BYTE, fallback_data
                 )
         except Exception:
             logger.debug("[GL TEXTURE] Upload failed", exc_info=True)
@@ -252,7 +322,7 @@ class GLTextureManager:
             logger.warning(
                 "[PERF] [GL TEXTURE] Slow upload: %.2fms "
                 "(%dx%d, pbo=%s, convert=%.2fms, copy=%.2fms, "
-                "pbo_stage=%.2fms, tex_upload=%.2fms)",
+                "pbo_stage=%.2fms, tex_upload=%.2fms, direct=%s)",
                 _upload_elapsed,
                 w,
                 h,
@@ -261,6 +331,7 @@ class GLTextureManager:
                 _copy_ms,
                 _pbo_stage_ms,
                 _tex_upload_ms,
+                upload_view.direct,
             )
         
         # Register texture with ResourceManager for VRAM leak prevention

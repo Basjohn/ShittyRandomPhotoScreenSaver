@@ -100,6 +100,8 @@ class GLCompositorWarpTransition(BaseTransition):
             on_finished=_on_finished,
             on_started=self._mark_compositor_actual_start,
         )
+        if not self._accept_compositor_animation_id(self._animation_id):
+            return False
 
         self._set_state(TransitionState.RUNNING)
         self.started.emit()

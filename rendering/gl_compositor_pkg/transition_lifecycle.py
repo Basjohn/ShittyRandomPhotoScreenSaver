@@ -36,93 +36,34 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._current_anim_id = None
 
     new_pm: Optional[QPixmap] = None
-    if widget._crossfade is not None:
-        try:
-            new_pm = widget._crossfade.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-    elif widget._slide is not None:
-        try:
-            new_pm = widget._slide.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-    elif widget._wipe is not None:
-        try:
-            new_pm = widget._wipe.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-    elif widget._blockflip is not None:
-        try:
-            new_pm = widget._blockflip.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-    elif widget._blinds is not None:
-        try:
-            new_pm = widget._blinds.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-    elif widget._diffuse is not None:
-        try:
-            new_pm = widget._diffuse.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
+    if snap_to_new:
+        for attr_name in (
+            "_crossfade",
+            "_slide",
+            "_wipe",
+            "_warp",
+            "_blockflip",
+            "_blockspin",
+            "_blinds",
+            "_diffuse",
+            "_raindrops",
+            "_crumble",
+            "_particle",
+            "_burn",
+        ):
+            state = getattr(widget, attr_name, None)
+            if state is None:
+                continue
+            try:
+                new_pm = state.new_pixmap
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            if new_pm is not None:
+                break
 
-    if new_pm is None and widget._raindrops is not None:
-        try:
-            new_pm = widget._raindrops.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-
-    if new_pm is None and widget._blockspin is not None:
-        try:
-            new_pm = widget._blockspin.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-
-    if new_pm is None and widget._warp is not None:
-        try:
-            new_pm = widget._warp.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-
-    if new_pm is None and widget._crumble is not None:
-        try:
-            new_pm = widget._crumble.new_pixmap
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            new_pm = None
-
-    # NOTE: _shooting_stars and _shuffle snap-to-new removed - these transitions are retired.
-
+    widget._clear_all_transitions()
     if snap_to_new and new_pm is not None:
         widget._base_pixmap = new_pm
-
-    widget._crossfade = None
-    widget._slide = None
-    widget._wipe = None
-    widget._warp = None
-    widget._blockflip = None
-    widget._blockspin = None
-    widget._blinds = None
-    widget._diffuse = None
-    widget._raindrops = None
-    widget._crumble = None
-
-    # Ensure any transition textures are freed when a transition is
-    # cancelled so we do not leak VRAM across many rotations.
-    try:
-        widget._release_transition_textures()
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to release blockspin textures on cancel", exc_info=True)
     widget.update()
 
 # ------------------------------------------------------------------

@@ -200,6 +200,9 @@ def test_show_next_image_does_not_prepare_random_choice_for_empty_queue_result()
         display_manager=display_manager,
         _loading_lock=lock,
         _loading_in_progress=False,
+        _deferred_next_image_requested=False,
+        _deferred_next_image_resume_in_progress=False,
+        _display_transition_work_busy=lambda: False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
         _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
         thread_manager=None,
@@ -230,6 +233,9 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
         display_manager=display_manager,
         _loading_lock=lock,
         _loading_in_progress=False,
+        _deferred_next_image_requested=False,
+        _deferred_next_image_resume_in_progress=False,
+        _display_transition_work_busy=lambda: False,
         _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
         _load_and_display_image=lambda _image_meta: calls.__setitem__("load", calls["load"] + 1) or True,
         thread_manager=None,
@@ -241,3 +247,67 @@ def test_show_next_image_prepares_random_choice_once_for_accepted_image_batch() 
     assert calls["load"] == 1
     assert calls["pending"] == [True]
     assert engine._current_image is image_meta
+
+
+def test_show_next_image_defers_before_queue_advance_while_transition_busy() -> None:
+    calls = {"next": 0, "prepare": 0}
+
+    class _Queue:
+        def next(self):
+            calls["next"] += 1
+            return {"path": "must-not-advance.jpg"}
+
+    display_manager = SimpleNamespace(
+        has_running_transition=lambda: True,
+        has_transition_work_pending=lambda: True,
+    )
+    engine = SimpleNamespace(
+        image_queue=_Queue(),
+        display_manager=display_manager,
+        _loading_lock=threading.Lock(),
+        _loading_in_progress=False,
+        _deferred_next_image_requested=False,
+        _deferred_next_image_reason=None,
+        _deferred_next_image_resume_in_progress=False,
+        _prepare_random_transition_if_needed=lambda: calls.__setitem__("prepare", calls["prepare"] + 1),
+    )
+    engine._display_transition_work_busy = lambda: ScreensaverEngine._display_transition_work_busy(engine)
+    engine._defer_next_image_request = lambda reason: ScreensaverEngine._defer_next_image_request(engine, reason)
+
+    assert ScreensaverEngine._show_next_image(engine) is False
+    assert calls == {"next": 0, "prepare": 0}
+    assert engine._deferred_next_image_requested is True
+    assert engine._deferred_next_image_reason == "transition_work_pending"
+
+
+def test_deferred_next_image_resumes_once_after_display_becomes_idle() -> None:
+    scheduled = []
+    calls = {"show": 0}
+    display_manager = SimpleNamespace(
+        has_running_transition=lambda: False,
+        has_transition_work_pending=lambda: False,
+    )
+    engine = SimpleNamespace(
+        display_manager=display_manager,
+        thread_manager=SimpleNamespace(
+            single_shot=lambda delay_ms, callback: scheduled.append((delay_ms, callback))
+        ),
+        _loading_in_progress=False,
+        _deferred_next_image_requested=True,
+        _deferred_next_image_reason="transition_work_pending",
+        _deferred_next_image_resume_scheduled=False,
+        _deferred_next_image_resume_in_progress=False,
+        _show_next_image=lambda: calls.__setitem__("show", calls["show"] + 1) or True,
+    )
+    engine._display_transition_work_busy = lambda: ScreensaverEngine._display_transition_work_busy(engine)
+
+    assert ScreensaverEngine._resume_deferred_next_image_if_ready(engine, "transition_completed") is True
+    assert len(scheduled) == 1
+    assert scheduled[0][0] == 0
+
+    scheduled[0][1]()
+
+    assert calls["show"] == 1
+    assert engine._deferred_next_image_requested is False
+    assert engine._deferred_next_image_reason is None
+    assert engine._deferred_next_image_resume_scheduled is False

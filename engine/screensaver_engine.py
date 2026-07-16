@@ -164,6 +164,10 @@ class ScreensaverEngine(QObject):
         self._sources_changed_during_settings: bool = False
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
+        self._deferred_next_image_requested: bool = False
+        self._deferred_next_image_reason: Optional[str] = None
+        self._deferred_next_image_resume_scheduled: bool = False
+        self._deferred_next_image_resume_in_progress: bool = False
         # Per-display image history for multi-monitor "previous" support.
         # Each entry is a list of ImageMetadata, one per display, representing
         # what was shown during that rotation.  Newest entry is at the end.
@@ -634,6 +638,13 @@ class ScreensaverEngine(QObject):
         from engine.image_pipeline import notify_transition_complete
 
         notify_transition_complete(self, screen_index)
+        self._resume_deferred_next_image_if_ready("transition_completed")
+
+    def _on_display_image_displayed(self, screen_index: int, _image_path: str) -> None:
+        """Resume a coalesced image request after first-frame or transition commit."""
+        self._resume_deferred_next_image_if_ready(
+            f"image_displayed:{screen_index}"
+        )
 
     def _initialize_display(self) -> bool:
         """Initialize display manager."""
@@ -660,6 +671,7 @@ class ScreensaverEngine(QObject):
             # Connect exit signal
             self.display_manager.exit_requested.connect(self._on_exit_requested)
             self.display_manager.transition_completed.connect(self._on_display_transition_completed)
+            self.display_manager.image_displayed.connect(self._on_display_image_displayed)
             
             # Connect hotkey signals
             self.display_manager.previous_requested.connect(self._on_previous_requested)
@@ -875,12 +887,23 @@ class ScreensaverEngine(QObject):
         if not self.image_queue or not self.display_manager:
             logger.warning("[FALLBACK] Queue or display not initialized")
             return False
+
+        if (
+            self._deferred_next_image_requested
+            and not self._deferred_next_image_resume_in_progress
+        ):
+            logger.debug(
+                "[TRANSITION][DEFER] Coalesced next-image request while one deferred intent is pending"
+            )
+            return False
+
+        if self._display_transition_work_busy():
+            return self._defer_next_image_request("transition_work_pending")
         
         # FIX: Atomic check-and-set for loading flag to prevent race condition
         with self._loading_lock:
             if self._loading_in_progress:
-                logger.debug("Image load already in progress, skipping")
-                return False
+                return self._defer_next_image_request("image_load_in_progress")
             # Set flag inside lock to make check-and-set atomic
             self._loading_in_progress = True
             try:
@@ -934,6 +957,92 @@ class ScreensaverEngine(QObject):
                     mark_pending(False)
             except Exception as pending_exc:
                 logger.debug("[TRANSITION] Failed to clear transition work pending: %s", pending_exc)
+            return False
+
+    def _display_transition_work_busy(self) -> bool:
+        manager = self.display_manager
+        if manager is None:
+            return False
+        for attr_name in ("has_running_transition", "has_transition_work_pending"):
+            reader = getattr(manager, attr_name, None)
+            if not callable(reader):
+                continue
+            try:
+                if reader():
+                    return True
+            except Exception as e:
+                logger.debug(
+                    "[TRANSITION] Failed to inspect display transition state via %s: %s",
+                    attr_name,
+                    e,
+                )
+        return False
+
+    def _defer_next_image_request(self, reason: str) -> bool:
+        already_pending = self._deferred_next_image_requested
+        self._deferred_next_image_requested = True
+        self._deferred_next_image_reason = str(reason)
+        if already_pending:
+            logger.debug(
+                "[TRANSITION][DEFER] Coalesced next-image request reason=%s",
+                reason,
+            )
+        else:
+            logger.info(
+                "[TRANSITION][DEFER] Next-image request retained without queue advance reason=%s",
+                reason,
+            )
+        return False
+
+    def _resume_deferred_next_image_if_ready(self, trigger: str) -> bool:
+        """Admit one retained request after all display/image work is idle."""
+
+        if not self._deferred_next_image_requested:
+            return False
+        if self._deferred_next_image_resume_scheduled:
+            return False
+
+        # Display callbacks are synchronous with image handoff. Queue the
+        # readiness check so it observes the loading flag after the current UI
+        # stack has reconciled it.
+        self._deferred_next_image_resume_scheduled = True
+
+        def _resume() -> None:
+            self._deferred_next_image_resume_scheduled = False
+            if not self._deferred_next_image_requested:
+                return
+            if self._loading_in_progress or self._display_transition_work_busy():
+                return
+
+            reason = self._deferred_next_image_reason or "unspecified"
+            self._deferred_next_image_requested = False
+            self._deferred_next_image_reason = None
+            self._deferred_next_image_resume_in_progress = True
+            try:
+                logger.info(
+                    "[TRANSITION][DEFER] Resuming retained next-image request trigger=%s original_reason=%s",
+                    trigger,
+                    reason,
+                )
+                self._show_next_image()
+            finally:
+                self._deferred_next_image_resume_in_progress = False
+
+        scheduler = self.thread_manager
+        try:
+            if scheduler is not None and hasattr(scheduler, "single_shot"):
+                scheduler.single_shot(0, _resume)
+            else:
+                from core.threading.manager import ThreadManager
+
+                ThreadManager.single_shot(0, _resume)
+            return True
+        except Exception:
+            self._deferred_next_image_resume_scheduled = False
+            logger.warning(
+                "[TRANSITION][DEFER] Managed resume scheduling failed; retaining request",
+                exc_info=True,
+            )
             return False
 
     def _schedule_startup_first_image_retry(self, attempt: int = 1) -> None:

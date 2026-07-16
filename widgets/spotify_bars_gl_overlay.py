@@ -64,6 +64,28 @@ from widgets.base_overlay_widget import (
 
 logger = get_logger(__name__)
 
+_PERF_MICROGAP_CONTEXTS = (
+    "transition_active",
+    "just_ended",
+    "mode_handoff",
+    "steady_idle",
+)
+_PERF_MICROGAP_BUCKET_UPPER_MS = (
+    8.0,
+    12.0,
+    16.0,
+    24.0,
+    33.0,
+    50.0,
+    75.0,
+    100.0,
+    150.0,
+    250.0,
+    500.0,
+    1000.0,
+)
+_PERF_JUST_ENDED_SECONDS = 0.75
+
 _ARRAY_UNIFORM_NAMES = {
     "u_bars",
     "u_peaks",
@@ -105,6 +127,33 @@ def prioritized_visualizer_compile_order(active_mode: str, available_modes: Sequ
         ordered.append(mode)
         seen.add(mode)
     return ordered
+
+
+def _perf_histogram_bucket_index(value_ms: float) -> int:
+    for index, upper_ms in enumerate(_PERF_MICROGAP_BUCKET_UPPER_MS):
+        if value_ms <= upper_ms:
+            return index
+    return len(_PERF_MICROGAP_BUCKET_UPPER_MS)
+
+
+def _perf_histogram_percentile_ms(
+    histogram: Sequence[int],
+    sample_count: int,
+    maximum_ms: float,
+    percentile: float = 0.95,
+) -> float:
+    if sample_count <= 0:
+        return 0.0
+    rank = max(1, int((sample_count * percentile) + 0.999999))
+    cumulative = 0
+    for index, count in enumerate(histogram):
+        cumulative += int(count)
+        if cumulative < rank:
+            continue
+        if index < len(_PERF_MICROGAP_BUCKET_UPPER_MS):
+            return _PERF_MICROGAP_BUCKET_UPPER_MS[index]
+        return maximum_ms
+    return maximum_ms
 
 
 class SpotifyBarsGLOverlay(QOpenGLWidget):
@@ -154,7 +203,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_paint_count: int = 0
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
+        self._perf_metrics_enabled: bool = is_perf_metrics_enabled()
         self._perf_last_log_ts: float = time.monotonic()
+        perf_context_count = len(_PERF_MICROGAP_CONTEXTS)
+        perf_bucket_count = len(_PERF_MICROGAP_BUCKET_UPPER_MS) + 1
+        self._perf_gap_histograms: List[List[int]] = [
+            [0] * perf_bucket_count for _ in range(perf_context_count)
+        ]
+        self._perf_wait_histograms: List[List[int]] = [
+            [0] * perf_bucket_count for _ in range(perf_context_count)
+        ]
+        self._perf_gap_counts: List[int] = [0] * perf_context_count
+        self._perf_wait_counts: List[int] = [0] * perf_context_count
+        self._perf_gap_max_ms: List[float] = [0.0] * perf_context_count
+        self._perf_wait_max_ms: List[float] = [0.0] * perf_context_count
+        self._perf_last_paint_ts: float = 0.0
+        self._perf_last_transition_active_ts: float = 0.0
+        self._perf_oldest_unpainted_update_ts: float = 0.0
+        self._perf_oldest_unpainted_context: int = -1
         
         # Active visualization mode
         self._vis_mode: str = coerce_visualizer_mode_id(initial_mode)
@@ -430,8 +496,122 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 return None
         return None
 
+    def _perf_microgap_context_index(self, now: float | None = None) -> int:
+        parent = self.parent()
+        if parent is None:
+            return 3
+
+        visualizer = getattr(parent, "spotify_visualizer_widget", None)
+        mode_handoff = False
+        if visualizer is not None:
+            if int(getattr(visualizer, "_mode_transition_phase", 0) or 0) != 0:
+                mode_handoff = True
+            elif getattr(visualizer, "_mode_transition_pending", None) is not None:
+                mode_handoff = True
+
+        transition_active = bool(
+            getattr(parent, "_transition_work_pending", False)
+        )
+        if not transition_active:
+            has_running_transition = getattr(parent, "has_running_transition", None)
+            if callable(has_running_transition):
+                try:
+                    transition_active = bool(has_running_transition())
+                except Exception:
+                    transition_active = False
+        sample_ts = now if now is not None else time.monotonic()
+        if transition_active:
+            self._perf_last_transition_active_ts = sample_ts
+        if mode_handoff:
+            return 2
+        if transition_active:
+            return 0
+        if (
+            self._perf_last_transition_active_ts > 0.0
+            and 0.0
+            <= (sample_ts - self._perf_last_transition_active_ts)
+            <= _PERF_JUST_ENDED_SECONDS
+        ):
+            return 1
+        return 3
+
+    def _record_perf_microgap_sample(
+        self,
+        histograms: List[List[int]],
+        counts: List[int],
+        maxima: List[float],
+        context_index: int,
+        value_ms: float,
+    ) -> None:
+        if value_ms < 0.0:
+            return
+        bucket_index = _perf_histogram_bucket_index(value_ms)
+        histograms[context_index][bucket_index] += 1
+        counts[context_index] += 1
+        if value_ms > maxima[context_index]:
+            maxima[context_index] = value_ms
+
+    def _record_perf_update_request(self) -> None:
+        if not self._enabled or not self.isVisible():
+            self._reset_perf_delivery_origin()
+            return
+        if self._perf_oldest_unpainted_update_ts > 0.0:
+            return
+        now = time.monotonic()
+        self._perf_oldest_unpainted_update_ts = now
+        self._perf_oldest_unpainted_context = self._perf_microgap_context_index(now)
+
+    def _reset_perf_delivery_origin(self) -> None:
+        self._perf_last_paint_ts = 0.0
+        self._perf_last_transition_active_ts = 0.0
+        self._perf_oldest_unpainted_update_ts = 0.0
+        self._perf_oldest_unpainted_context = -1
+
+    def _record_perf_paint_delivery(self) -> None:
+        if not self._enabled or not self.isVisible():
+            self._reset_perf_delivery_origin()
+            return
+        now = time.monotonic()
+        context_index = self._perf_microgap_context_index(now)
+        if self._perf_last_paint_ts > 0.0:
+            self._record_perf_microgap_sample(
+                self._perf_gap_histograms,
+                self._perf_gap_counts,
+                self._perf_gap_max_ms,
+                context_index,
+                (now - self._perf_last_paint_ts) * 1000.0,
+            )
+        self._perf_last_paint_ts = now
+
+        if self._perf_oldest_unpainted_update_ts <= 0.0:
+            return
+        accepted_context = self._perf_oldest_unpainted_context
+        if accepted_context < 0 or accepted_context >= len(_PERF_MICROGAP_CONTEXTS):
+            accepted_context = context_index
+        self._record_perf_microgap_sample(
+            self._perf_wait_histograms,
+            self._perf_wait_counts,
+            self._perf_wait_max_ms,
+            accepted_context,
+            (now - self._perf_oldest_unpainted_update_ts) * 1000.0,
+        )
+        self._perf_oldest_unpainted_update_ts = 0.0
+        self._perf_oldest_unpainted_context = -1
+
+    def _reset_perf_microgap_window(self) -> None:
+        for context_index in range(len(_PERF_MICROGAP_CONTEXTS)):
+            self._perf_gap_counts[context_index] = 0
+            self._perf_wait_counts[context_index] = 0
+            self._perf_gap_max_ms[context_index] = 0.0
+            self._perf_wait_max_ms[context_index] = 0.0
+            gap_histogram = self._perf_gap_histograms[context_index]
+            wait_histogram = self._perf_wait_histograms[context_index]
+            for bucket_index in range(len(gap_histogram)):
+                gap_histogram[bucket_index] = 0
+                wait_histogram[bucket_index] = 0
+
     def _maybe_log_perf_counters(self, *, reason: str) -> None:
-        if not is_perf_metrics_enabled():
+        if not self._perf_metrics_enabled:
             return
         now = time.monotonic()
         elapsed = now - self._perf_last_log_ts
@@ -454,16 +634,61 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._enabled,
             self._playing,
         )
+        pending_context = self._perf_oldest_unpainted_context
+        pending_wait_ms = (
+            max(0.0, (now - self._perf_oldest_unpainted_update_ts) * 1000.0)
+            if self._perf_oldest_unpainted_update_ts > 0.0
+            else 0.0
+        )
+        for context_index, context_name in enumerate(_PERF_MICROGAP_CONTEXTS):
+            gap_count = self._perf_gap_counts[context_index]
+            wait_count = self._perf_wait_counts[context_index]
+            context_pending_wait_ms = (
+                pending_wait_ms if pending_context == context_index else 0.0
+            )
+            if gap_count <= 0 and wait_count <= 0 and context_pending_wait_ms <= 0.0:
+                continue
+            logger.info(
+                "[PERF][SPOTIFY_VIS][MICROGAP] reason=%s screen=%s mode=%s "
+                "context=%s gap_samples=%d gap_p95_ms=%.1f gap_max_ms=%.1f "
+                "wait_samples=%d wait_p95_ms=%.1f wait_max_ms=%.1f "
+                "pending_wait_ms=%.1f visible=%s enabled=%s playing=%s",
+                reason,
+                screen if screen is not None else "<unknown>",
+                self._vis_mode,
+                context_name,
+                gap_count,
+                _perf_histogram_percentile_ms(
+                    self._perf_gap_histograms[context_index],
+                    gap_count,
+                    self._perf_gap_max_ms[context_index],
+                ),
+                self._perf_gap_max_ms[context_index],
+                wait_count,
+                _perf_histogram_percentile_ms(
+                    self._perf_wait_histograms[context_index],
+                    wait_count,
+                    self._perf_wait_max_ms[context_index],
+                ),
+                self._perf_wait_max_ms[context_index],
+                context_pending_wait_ms,
+                self.isVisible(),
+                self._enabled,
+                self._playing,
+            )
         self._perf_set_state_count = 0
         self._perf_paint_count = 0
         self._perf_update_request_count = 0
         self._perf_geometry_change_count = 0
+        self._reset_perf_microgap_window()
         self._perf_last_log_ts = now
 
     def _request_frame_update(self, *, force: bool = False) -> None:
         del force
         self._perf_update_request_count += 1
         self.update()
+        if self._perf_metrics_enabled:
+            self._record_perf_update_request()
 
     # ------------------------------------------------------------------
     # Public API
@@ -1305,6 +1530,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         """Reset overlay state and clear the GL backing buffer."""
 
         self._enabled = False
+        if self._perf_metrics_enabled:
+            self._reset_perf_delivery_origin()
         self._bars = []
         self._bar_count = 0
         self._segments = 0
@@ -1375,6 +1602,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
     def paintGL(self) -> None:  # type: ignore[override]
         self._perf_paint_count += 1
+        if self._perf_metrics_enabled:
+            self._record_perf_paint_delivery()
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking

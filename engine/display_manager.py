@@ -45,6 +45,7 @@ class DisplayManager(QObject):
     monitors_changed = Signal(int)  # new monitor count
     displays_ready = Signal(int)  # startup generation ready for image replay
     transition_completed = Signal(int)  # screen index
+    image_displayed = Signal(int, str)  # screen index, image path
     previous_requested = Signal()  # Z key - go to previous image
     next_requested = Signal()  # X key - go to next image
     cycle_transition_requested = Signal()  # C key - cycle transition mode
@@ -542,6 +543,7 @@ class DisplayManager(QObject):
         """Handle image displayed event."""
         self.current_images[screen_index] = image_path
         logger.debug(f"Image displayed on screen {screen_index}: {image_path}")
+        self.image_displayed.emit(screen_index, image_path)
     
     def set_process_supervisor(self, supervisor) -> None:
         """Set the ProcessSupervisor on all display widgets.
@@ -962,6 +964,18 @@ class DisplayManager(QObject):
                         exc_info=True,
                     )
                 display.close()
+                cleanup_for_teardown = getattr(display, "cleanup_for_teardown", None)
+                if callable(cleanup_for_teardown):
+                    try:
+                        cleanup_for_teardown()
+                    except Exception as e:
+                        logger.warning(
+                            "Display teardown failed (index=%d, screen_index=%s): %s",
+                            idx,
+                            screen_index,
+                            e,
+                            exc_info=True,
+                        )
                 display.deleteLater()
             except Exception as e:
                 logger.warning(

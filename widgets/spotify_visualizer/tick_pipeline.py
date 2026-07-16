@@ -857,24 +857,47 @@ def push_gpu_frame(
 
     effective_fade = 0.0 if primer_problems else fade
 
-    used_gpu = parent.push_spotify_visualizer_frame(
-        bars=list(widget._display_bars),
-        bar_count=widget._bar_count,
-        segments=widget._dynamic_bar_segments(),
-        fill_color=widget._bar_fill_color,
-        border_color=widget._bar_border_color,
-        fade=effective_fade,
-        playing=widget._spotify_playing,
-        ghosting_enabled=widget._ghosting_enabled,
-        ghost_alpha=widget._ghost_alpha,
-        ghost_decay=widget._ghost_decay_rate,
-        vis_mode=mode_str,
-        single_piece=widget._spectrum_single_piece,
-        slanted=False,
-        border_radius=widget._spectrum_border_radius,
-        border_width_px=border_width_px,
-        **extra,
-    )
+    extra['single_piece'] = widget._spectrum_single_piece
+    extra['slanted'] = False
+    extra['border_radius'] = widget._spectrum_border_radius
+
+    push_packet = getattr(parent, "push_spotify_visualizer_frame_packet", None)
+    if callable(push_packet):
+        from widgets.spotify_visualizer.frame_transport import VisualizerFramePacket
+
+        packet = getattr(widget, "_gpu_frame_packet", None)
+        if not isinstance(packet, VisualizerFramePacket):
+            packet = VisualizerFramePacket()
+            widget._gpu_frame_packet = packet
+        packet.bars = widget._display_bars
+        packet.bar_count = widget._bar_count
+        packet.segments = widget._dynamic_bar_segments()
+        packet.fill_color = widget._bar_fill_color
+        packet.border_color = widget._bar_border_color
+        packet.fade = effective_fade
+        packet.playing = widget._spotify_playing
+        packet.ghosting_enabled = widget._ghosting_enabled
+        packet.ghost_alpha = widget._ghost_alpha
+        packet.ghost_decay = widget._ghost_decay_rate
+        packet.vis_mode = mode_str
+        packet.extra_kwargs = extra
+        used_gpu = push_packet(packet)
+    else:
+        used_gpu = parent.push_spotify_visualizer_frame(
+            bars=widget._display_bars,
+            bar_count=widget._bar_count,
+            segments=widget._dynamic_bar_segments(),
+            fill_color=widget._bar_fill_color,
+            border_color=widget._bar_border_color,
+            fade=effective_fade,
+            playing=widget._spotify_playing,
+            ghosting_enabled=widget._ghosting_enabled,
+            ghost_alpha=widget._ghost_alpha,
+            ghost_decay=widget._ghost_decay_rate,
+            vis_mode=mode_str,
+            border_width_px=border_width_px,
+            **extra,
+        )
     _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
     if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
         logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
@@ -1068,7 +1091,7 @@ def log_audio_latency_metrics(
         return
 
     force_logging = bool(force_reason)
-    if not force_logging and not bool(getattr(widget, "_spotify_playing", True)):
+    if not bool(getattr(widget, "_spotify_playing", True)):
         return
     ready = _ensure_latency_logging_ready(widget, engine, last_audio_ts=last_audio_ts)
     if not ready and not force_logging:

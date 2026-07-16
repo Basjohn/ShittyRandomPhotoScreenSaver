@@ -274,12 +274,62 @@ def acquire_safe_warmup_context(
 
 def _compile_transition_program(widget, program_name: str, program_attr: str, uniforms_attr: str) -> bool:
     cache = get_program_cache()
-    program_id = cache.get_program(program_name)
-    if program_id is None:
+    for attempt in range(2):
+        program_id = cache.get_program(program_name)
+        if program_id is None:
+            return False
+        if _validate_current_program_binding(program_id):
+            setattr(widget._gl_pipeline, program_attr, program_id)
+            setattr(widget._gl_pipeline, uniforms_attr, cache.get_uniforms(program_name))
+            return True
+        cache.invalidate_program(program_name)
+        if attempt == 0:
+            logger.warning(
+                "[GL CACHE][REPAIR] Recompiling invalid current-share-group binding program=%s",
+                program_name,
+            )
+    return False
+
+
+def _gl_int(value: object) -> int:
+    try:
+        item = getattr(value, "item", None)
+        if callable(item):
+            return int(item())
+        return int(value)
+    except Exception:
+        return 0
+
+
+def _validate_current_program_binding(program_id: int) -> bool:
+    """Prove a cached program can become current before transition admission."""
+
+    if gl is None:
         return False
-    setattr(widget._gl_pipeline, program_attr, program_id)
-    setattr(widget._gl_pipeline, uniforms_attr, cache.get_uniforms(program_name))
-    return True
+    get_current = getattr(gl, "glGetIntegerv", None)
+    use_program = getattr(gl, "glUseProgram", None)
+    current_program_enum = getattr(gl, "GL_CURRENT_PROGRAM", None)
+    if not callable(get_current) or not callable(use_program) or current_program_enum is None:
+        # Minimal test doubles do not expose the full validation API.
+        return True
+
+    previous_program = 0
+    try:
+        previous_program = _gl_int(get_current(current_program_enum))
+        use_program(int(program_id))
+        return _gl_int(get_current(current_program_enum)) == int(program_id)
+    except Exception:
+        logger.debug(
+            "[GL CACHE] Program admission validation failed program=%s",
+            program_id,
+            exc_info=True,
+        )
+        return False
+    finally:
+        try:
+            use_program(previous_program)
+        except Exception:
+            logger.debug("[GL CACHE] Failed to restore prior GL program after admission check", exc_info=True)
 
 
 def _resolve_transition_program_binding(identity: object) -> tuple[str, str, str] | None:
@@ -298,8 +348,6 @@ def _bind_transition_program_for_identity(widget, identity: object) -> bool:
     if widget._gl_pipeline is None:
         return False
     program_name, program_attr, uniforms_attr = binding
-    if getattr(widget._gl_pipeline, program_attr, 0):
-        return True
     return _compile_transition_program(
         widget,
         program_name,
@@ -325,9 +373,6 @@ def ensure_transition_program_ready(widget, identity: object) -> bool:
         return False
     binding = _resolve_transition_program_binding(identity)
     if binding is None:
-        return True
-    _, program_attr, _ = binding
-    if getattr(widget._gl_pipeline, program_attr, 0):
         return True
 
     try:
@@ -734,19 +779,14 @@ def cleanup_gl_pipeline(widget) -> None:
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to cleanup texture manager", exc_info=True)
 
-        # Delete shader programs
-        program_attrs = [
-            "basic_program", "raindrops_program", "warp_program", "diffuse_program",
-            "blockflip_program", "crossfade_program", "slide_program",
-            "wipe_program", "blinds_program", "crumble_program", "particle_program", "burn_program",
-        ]
+        # The card-flip program is compositor-owned. Transition programs are
+        # cache/share-group-owned and are released once at final engine exit.
         try:
-            for attr in program_attrs:
-                prog_id = getattr(widget._gl_pipeline, attr, 0)
-                if prog_id:
-                    gl.glDeleteProgram(int(prog_id))
+            prog_id = getattr(widget._gl_pipeline, "basic_program", 0)
+            if prog_id and gl.glIsProgram(int(prog_id)):
+                gl.glDeleteProgram(int(prog_id))
         except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
+            logger.debug("[GL COMPOSITOR] Failed to delete private card-flip program", exc_info=True)
 
         # GeometryManager owns its VAO/VBO registrations and performs exactly
         # one managed release per handle.

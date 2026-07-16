@@ -34,6 +34,18 @@ def _cache_trace(message: str, *args: Any) -> None:
         logger.info("[CACHE] " + message, *args)
 
 
+def _should_stream_raw_image(cache: ImageCache, image: QImage) -> bool:
+    """Keep a single oversized prefetch decode from flushing the shared LRU."""
+    if image.isNull():
+        return False
+    try:
+        cache_budget = int(getattr(cache, "max_memory_bytes", 0) or 0)
+        image_bytes = int(image.sizeInBytes())
+    except Exception:
+        return False
+    return cache_budget > 0 and image_bytes > (cache_budget // 4)
+
+
 class ImagePrefetcher:
     def __init__(
         self,
@@ -49,8 +61,10 @@ class ImagePrefetcher:
         self._pending_raw_paths: deque[str] = deque()
         self._pending_raw_keys: Set[str] = set()
         self._scaled_inflight: Set[str] = set()
+        self._scaled_inflight_paths: Dict[str, str] = {}
         self._pending_scaled_requests: List[Dict[str, Any]] = []
         self._pending_scaled_keys: Set[str] = set()
+        self._streamed_raw_paths: Set[str] = set()
         self._lock = threading.Lock()
         # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
@@ -107,6 +121,7 @@ class ImagePrefetcher:
                 "raw_pending": len(self._pending_raw_paths),
                 "scaled_inflight": len(self._scaled_inflight),
                 "scaled_pending": len(self._pending_scaled_requests),
+                "streamed_raw": len(self._streamed_raw_paths),
             }
     
     def clear_inflight(self) -> None:
@@ -116,8 +131,10 @@ class ImagePrefetcher:
             self._pending_raw_paths.clear()
             self._pending_raw_keys.clear()
             self._scaled_inflight.clear()
+            self._scaled_inflight_paths.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
+            self._streamed_raw_paths.clear()
         if is_verbose_logging():
             logger.debug("Prefetcher inflight set cleared")
         _cache_trace("Cleared inflight and pending prefetch state")
@@ -139,7 +156,12 @@ class ImagePrefetcher:
             for p in paths:
                 if not p:
                     continue
-                if self._cache.contains(p) or p in self._inflight or p in self._pending_raw_keys:
+                if (
+                    self._cache.contains(p)
+                    or p in self._inflight
+                    or p in self._pending_raw_keys
+                    or p in self._streamed_raw_paths
+                ):
                     skipped_count += 1
                     continue
                 if active_slots > 0:
@@ -172,7 +194,12 @@ class ImagePrefetcher:
             while active_slots > 0 and self._pending_raw_paths:
                 path = self._pending_raw_paths.popleft()
                 self._pending_raw_keys.discard(path)
-                if not path or self._cache.contains(path) or path in self._inflight:
+                if (
+                    not path
+                    or self._cache.contains(path)
+                    or path in self._inflight
+                    or path in self._streamed_raw_paths
+                ):
                     continue
                 self._inflight.add(path)
                 submissions.append(path)
@@ -206,7 +233,11 @@ class ImagePrefetcher:
                     continue
                 if self._cache.contains(cache_key):
                     continue
-                raw_has_producer = raw_path in self._inflight or raw_path in self._pending_raw_keys
+                raw_has_producer = (
+                    raw_path in self._inflight
+                    or raw_path in self._pending_raw_keys
+                    or raw_path in self._streamed_raw_paths
+                )
                 if not self._cache.contains(raw_path) and not raw_has_producer:
                     skipped_without_raw += 1
                     continue
@@ -243,10 +274,37 @@ class ImagePrefetcher:
                 img: Optional[QImage] = res.result if res and res.success else None
                 if img is not None:
                     try:
-                        self._cache.put(path, img)
-                        cached = True
-                        if is_verbose_logging():
-                            logger.debug(f"Prefetched and cached: {path}")
+                        if _should_stream_raw_image(self._cache, img):
+                            attached = 0
+                            with self._lock:
+                                for request in self._pending_scaled_requests:
+                                    if request.get("path") != path:
+                                        continue
+                                    request["_source_image"] = img
+                                    attached += 1
+                                if attached:
+                                    self._streamed_raw_paths.add(path)
+                            if attached:
+                                cached = True
+                                _cache_trace(
+                                    "Streaming oversized raw prefetch directly to scaled tasks "
+                                    "path=%s bytes=%d requests=%d",
+                                    path,
+                                    int(img.sizeInBytes()),
+                                    attached,
+                                )
+                            else:
+                                _cache_trace(
+                                    "Discarded oversized raw prefetch with no scaled consumer "
+                                    "path=%s bytes=%d",
+                                    path,
+                                    int(img.sizeInBytes()),
+                                )
+                        else:
+                            self._cache.put(path, img)
+                            cached = True
+                            if is_verbose_logging():
+                                logger.debug(f"Prefetched and cached: {path}")
                     except Exception as e:
                         logger.debug("[MISC] Exception suppressed: %s", e)
             finally:
@@ -295,7 +353,12 @@ class ImagePrefetcher:
                     break
                 if idx in selected_indices:
                     continue
-                if self._cache.contains(str(pending.get("path") or "")):
+                source_image = pending.get("_source_image")
+                has_streamed_source = (
+                    isinstance(source_image, QImage)
+                    and not source_image.isNull()
+                )
+                if has_streamed_source or self._cache.contains(str(pending.get("path") or "")):
                     selected_indices.append(idx)
 
             if not selected_indices:
@@ -304,8 +367,10 @@ class ImagePrefetcher:
             for idx in reversed(selected_indices):
                 request = self._pending_scaled_requests.pop(idx)
                 cache_key = str(request.get("cache_key") or "")
+                raw_path = str(request.get("path") or "")
                 self._pending_scaled_keys.discard(cache_key)
                 self._scaled_inflight.add(cache_key)
+                self._scaled_inflight_paths[cache_key] = raw_path
                 requests_to_submit.append(request)
 
             requests_to_submit.reverse()
@@ -332,7 +397,9 @@ class ImagePrefetcher:
 
         def _compute_scaled_variant() -> Optional[tuple[str, QPixmap]]:
             try:
-                base = self._cache.get(raw_path)
+                base = request.get("_source_image")
+                if not isinstance(base, QImage) or base.isNull():
+                    base = self._cache.get(raw_path)
                 if isinstance(base, QPixmap) and not base.isNull():
                     base = base.toImage()
                 if not isinstance(base, QImage) or base.isNull():
@@ -379,8 +446,7 @@ class ImagePrefetcher:
                         display_mode.value,
                     )
             finally:
-                with self._lock:
-                    self._scaled_inflight.discard(cache_key)
+                self._finish_scaled_request(cache_key, raw_path)
                 self._pump_scaled_prefetch()
 
         try:
@@ -391,6 +457,17 @@ class ImagePrefetcher:
             )
         except Exception as e:
             logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)
-            with self._lock:
-                self._scaled_inflight.discard(cache_key)
+            self._finish_scaled_request(cache_key, raw_path)
             self._pump_scaled_prefetch()
+
+    def _finish_scaled_request(self, cache_key: str, raw_path: str) -> None:
+        with self._lock:
+            self._scaled_inflight.discard(cache_key)
+            self._scaled_inflight_paths.pop(cache_key, None)
+            has_pending = any(
+                str(request.get("path") or "") == raw_path
+                for request in self._pending_scaled_requests
+            )
+            has_inflight = raw_path in self._scaled_inflight_paths.values()
+            if not has_pending and not has_inflight:
+                self._streamed_raw_paths.discard(raw_path)

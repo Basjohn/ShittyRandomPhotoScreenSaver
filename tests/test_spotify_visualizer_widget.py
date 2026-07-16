@@ -669,6 +669,42 @@ def test_latency_logging_suppresses_paused_idle_stale_audio_noise(monkeypatch):
     assert calls == []
 
 
+def test_latency_logging_suppresses_forced_transition_probe_while_paused(monkeypatch):
+    engine = SimpleNamespace(
+        _last_audio_ts=5.0,
+        _last_smooth_ts=5.0,
+        get_generation_id=lambda: 8,
+        get_latest_generation_with_frame=lambda: 8,
+    )
+    widget = SimpleNamespace(
+        _enabled=True,
+        _spotify_playing=False,
+        _latency_audio_ready=True,
+        _latency_activation_started_ts=1.0,
+        _latency_last_log_ts=0.0,
+        _latency_log_interval=10.0,
+        _latency_error_ms=150.0,
+        _latency_warn_ms=80.0,
+        _latency_last_signature=None,
+        _mode_transition_phase=0,
+        _vis_mode_str="bubble",
+        _mode_transition_pending=None,
+    )
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(tick_pipeline, "is_viz_logging_enabled", lambda: True)
+    monkeypatch.setattr(tick_pipeline.logger, "error", lambda msg: calls.append(("error", msg)))
+    monkeypatch.setattr(tick_pipeline.logger, "warning", lambda msg: calls.append(("warning", msg)))
+
+    tick_pipeline.log_audio_latency_metrics(
+        widget,
+        engine,
+        now_ts=3605.0,
+        force_reason="transition_start",
+    )
+
+    assert calls == []
+
+
 def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
     engine = SimpleNamespace(
         _last_audio_ts=5.0,
@@ -678,6 +714,7 @@ def test_latency_logging_force_probe_remains_active_before_ready(monkeypatch):
     )
     widget = SimpleNamespace(
         _enabled=True,
+        _spotify_playing=True,
         _latency_audio_ready=False,
         _latency_activation_started_ts=10.0,
         _latency_last_log_ts=0.0,
@@ -1170,6 +1207,33 @@ def test_spectrum_gpu_push_extras_dict_is_reused(qt_app, qtbot, monkeypatch):
     assert second["heartbeat_intensity"] == pytest.approx(0.75)
 
 
+@pytest.mark.qt
+def test_gpu_push_extras_are_reused_per_mode_without_cross_mode_aliasing(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+
+    engine = _FakeEngine(bar_count=24)
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    widget._engine = engine
+
+    sine_first = config_applier.build_gpu_push_extra_kwargs(widget, "sine_wave", engine)
+    sine_id = id(sine_first)
+    bubble_first = config_applier.build_gpu_push_extra_kwargs(widget, "bubble", engine)
+    bubble_id = id(bubble_first)
+    sine_second = config_applier.build_gpu_push_extra_kwargs(widget, "sine_wave", engine)
+    bubble_second = config_applier.build_gpu_push_extra_kwargs(widget, "bubble", engine)
+
+    assert id(sine_second) == sine_id
+    assert id(bubble_second) == bubble_id
+    assert sine_id != bubble_id
+    assert "line_count" in sine_second
+    assert "bubble_count" not in sine_second
+    assert "bubble_count" in bubble_second
+    assert "line_count" not in bubble_second
+
+
 class _OverlayStub:
     def __init__(self) -> None:
         self.reset_requests: list[str] = []
@@ -1248,6 +1312,31 @@ class _PrimingDisplayParent(QWidget):
 
     def reset_pushes(self) -> None:
         self.frames.clear()
+
+
+class _PacketPrimingDisplayParent(_PrimingDisplayParent):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.packet_ids: list[int] = []
+
+    def push_spotify_visualizer_frame_packet(self, packet):
+        self.packet_ids.append(id(packet))
+        frame = {
+            "bars": list(packet.bars),
+            "bar_count": packet.bar_count,
+            "segments": packet.segments,
+            "fade": packet.fade,
+            "playing": packet.playing,
+            "vis_mode": packet.vis_mode,
+            **dict(packet.extra_kwargs),
+        }
+        self.frames.append(frame)
+        overlay = self._spotify_bars_overlay
+        overlay._vis_mode = packet.vis_mode
+        overlay._activation_id = packet.extra_kwargs.get("activation_id")
+        overlay._engine_generation = packet.extra_kwargs.get("engine_generation")
+        overlay._pending_mode_resets.discard(overlay._vis_mode)
+        return True
 
 
 class _BubbleDispatchThreadManager:
@@ -4416,6 +4505,60 @@ def test_first_frame_uses_hidden_primer_until_overlay_matches_current_activation
     assert widget._has_pushed_first_frame is True
     assert widget._waiting_for_fresh_frame is False
     assert reasons == ["before_first_overlay_push", "after_first_overlay_push"]
+
+
+@pytest.mark.qt
+def test_packet_path_keeps_first_frame_hidden_until_current_activation_matches(qt_app, qtbot):
+    parent = _PacketPrimingDisplayParent()
+    qtbot.addWidget(parent)
+
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=6)
+    qtbot.addWidget(widget)
+    engine = _FakeEngine(bar_count=6)
+    engine._generation_id = 12
+    engine._activation_id = 34
+    engine._latest_generation_with_frame = 12
+    engine._latest_generation_with_waveform = 12
+    widget._engine = engine
+    widget._enabled = True
+    widget._spotify_playing = True
+    widget._vis_mode = VisualizerMode.BUBBLE
+    widget._display_bars = [0.35] * 6
+    widget._display_bars_source_generation = 12
+    widget._display_bars_source_activation = 34
+    widget._pending_engine_generation = 12
+    widget._pending_engine_activation_id = 34
+    widget._waiting_for_fresh_engine_frame = False
+    widget._waiting_for_fresh_frame = True
+
+    assert tick_pipeline.push_gpu_frame(
+        widget,
+        parent,
+        time.time(),
+        changed=True,
+        first_frame=True,
+    ) is True
+    assert parent.frames[0]["fade"] == pytest.approx(0.0)
+    assert widget._has_pushed_first_frame is False
+    assert widget._waiting_for_fresh_frame is True
+
+    parent._spotify_bars_overlay._vis_mode = "bubble"
+    parent._spotify_bars_overlay._activation_id = 34
+    parent._spotify_bars_overlay._engine_generation = 12
+    parent._spotify_bars_overlay._pending_mode_resets.clear()
+
+    assert tick_pipeline.push_gpu_frame(
+        widget,
+        parent,
+        time.time(),
+        changed=True,
+        first_frame=True,
+    ) is True
+    assert parent.frames[1]["activation_id"] == 34
+    assert parent.frames[1]["engine_generation"] == 12
+    assert widget._has_pushed_first_frame is True
+    assert widget._waiting_for_fresh_frame is False
+    assert len(set(parent.packet_ids)) == 1
 
 
 @pytest.mark.qt
@@ -8996,6 +9139,54 @@ def test_destroy_parent_overlay_still_destroys_overlay(qt_app, qtbot):
     assert stub.hide_calls == 1
     assert stub.cleanup_calls == 1
     assert stub.delete_calls == 1
+
+
+@pytest.mark.qt
+def test_cleanup_destroys_parent_overlay_once(qt_app, qtbot):
+    class _EngineStub:
+        def __init__(self) -> None:
+            self.release_calls = 0
+
+        def release(self) -> None:
+            self.release_calls += 1
+
+    class _OverlayStub(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self.cleanup_calls = 0
+            self.delete_calls = 0
+
+        def clear_overlay_buffer(self) -> None:
+            pass
+
+        def cleanup_gl(self) -> None:
+            self.cleanup_calls += 1
+
+        def deleteLater(self) -> None:  # type: ignore[override]
+            self.delete_calls += 1
+
+    class _OverlayParent(QWidget):
+        def __init__(self) -> None:
+            super().__init__()
+            self._spotify_bars_overlay = _OverlayStub()
+            self._pixel_shift_manager = None
+
+    parent = _OverlayParent()
+    qtbot.addWidget(parent)
+    overlay = parent._spotify_bars_overlay
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=8)
+    qtbot.addWidget(widget)
+    engine = _EngineStub()
+    widget._engine = engine
+    widget._enabled = True
+
+    widget.cleanup()
+    widget.cleanup()
+
+    assert parent._spotify_bars_overlay is None
+    assert engine.release_calls == 1
+    assert overlay.cleanup_calls == 1
+    assert overlay.delete_calls == 1
 
 
 @pytest.mark.qt

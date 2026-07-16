@@ -301,6 +301,12 @@ class DisplayWidget(QWidget):
         self._transition_watchdog_started_at: float = 0.0
         self._pending_transition_finish_args: Optional[Tuple[QPixmap, QPixmap, str, bool, Optional[QPixmap]]] = None
         self._transition_skip_count: int = 0
+        self._transition_defer_count: int = 0
+        self._deferred_processed_image: Optional[Tuple[QPixmap, QPixmap, str]] = None
+        self._deferred_processed_image_retry_token: int = 0
+        self._deferred_processed_image_retry_attempts: int = 0
+        self._deferred_processed_image_retry_scheduled: bool = False
+        self._deferred_processed_image_retry_in_progress: bool = False
         self._overlay_fade_expected: set[str] = set()
         self._overlay_fade_pending: Dict[str, Callable[[], None]] = {}
         self._overlay_fade_started: bool = False
@@ -501,6 +507,7 @@ class DisplayWidget(QWidget):
         self._backend_fallback_message: Optional[str] = None
         self._has_rendered_first_frame = False
         self._gl_compositor: Optional[GLCompositorWidget] = None
+        self._destroy_cleanup_done = False
         self._init_renderer_backend()
         
         # Initialize transition factory (delegates transition creation logic)
@@ -998,6 +1005,16 @@ class DisplayWidget(QWidget):
         from rendering.display_image_ops import _on_transition_finished
         _on_transition_finished(self, *args, **kwargs)
 
+    def _on_deferred_transition_start_failed(
+        self,
+        transition_label: str,
+        reason: str,
+    ) -> None:
+        """Return failed deferred compositor work to the retained-frame path."""
+        from rendering.display_image_ops import _on_deferred_transition_start_failed
+
+        _on_deferred_transition_start_failed(self, transition_label, reason)
+
     def _warm_transition_if_needed(
         self,
         compositor: Optional[GLCompositorWidget],
@@ -1090,6 +1107,11 @@ class DisplayWidget(QWidget):
         from rendering.display_image_ops import push_spotify_visualizer_frame
         return push_spotify_visualizer_frame(self, **kwargs)
 
+    def push_spotify_visualizer_frame_packet(self, packet):
+        """Push a reusable visualizer frame packet without intermediate maps."""
+        from rendering.display_image_ops import push_spotify_visualizer_frame_packet
+        return push_spotify_visualizer_frame_packet(self, packet)
+
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
         """Handle mouse double click."""
         if self._should_suppress_runtime_pointer_input("mouseDoubleClickEvent"):
@@ -1171,15 +1193,24 @@ class DisplayWidget(QWidget):
         finally:
             self._render_surface = None
 
-    def _cleanup_widget(self) -> None:
+    def _cleanup_widget(
+        self,
+        attr_name: str,
+        tag: str,
+        stop_method: str = "cleanup",
+    ) -> None:
         """Delegates to rendering.display_gl_init."""
         from rendering.display_gl_init import cleanup_widget
-        cleanup_widget(self)
+        cleanup_widget(self, attr_name, tag, stop_method)
 
     def _on_destroyed(self, *_args) -> None:
         """Delegates to rendering.display_cleanup."""
         from rendering.display_cleanup import on_destroyed
         on_destroyed(self, *_args)
+
+    def cleanup_for_teardown(self) -> None:
+        """Release display-owned resources while child GL contexts are still valid."""
+        self._on_destroyed()
 
     def _update_backend_fallback_overlay(self) -> None:
         """Show or hide diagnostic overlay based on backend selection state."""
@@ -1512,11 +1543,6 @@ class DisplayWidget(QWidget):
                 logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
         
         super().closeEvent(event)
-
-    def _on_destroyed(self) -> None:
-        """Delegates to rendering.display_gl_init."""
-        from rendering.display_gl_init import on_destroyed
-        on_destroyed(self)
 
     def _resolve_media_widget_for_transport(self) -> Optional[MediaWidget]:
         """Return the best media widget candidate across active displays."""
@@ -2035,6 +2061,7 @@ class DisplayWidget(QWidget):
             'has_image': self.current_pixmap is not None,
             'has_error': self.error_message is not None,
             'transition_skip_count': self._transition_skip_count,
+            'transition_defer_count': self._transition_defer_count,
         }
 
     def get_transition_skip_count(self) -> int:

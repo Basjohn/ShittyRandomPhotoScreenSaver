@@ -293,6 +293,41 @@ class TransitionController(QObject):
         
         self._cancel_watchdog()
         self._clear_overlay_timeout()
+
+    def abort_current_preserving_old(self, reason: str) -> None:
+        """Abort failed work without committing the uncompleted destination."""
+
+        transition = self._current_transition
+        compositor = getattr(self._parent, "_gl_compositor", None)
+        if compositor is not None and hasattr(compositor, "cancel_current_transition"):
+            try:
+                compositor.cancel_current_transition(snap_to_new=False)
+            except Exception:
+                logger.debug(
+                    "[TRANSITION] Failed to cancel compositor while preserving old frame",
+                    exc_info=True,
+                )
+
+        if transition is not None:
+            # GL transition cleanup historically snaps to the destination.
+            # Detach the compositor after the explicit preserve-old cancel.
+            try:
+                setattr(transition, "_compositor", None)
+                setattr(transition, "_animation_id", None)
+            except Exception:
+                logger.debug(
+                    "[TRANSITION] Failed to detach refused compositor transition",
+                    exc_info=True,
+                )
+            self._cleanup_transition(transition)
+        else:
+            self._current_overlay_key = None
+            self._transition_started_at = 0.0
+            self._pending_finish_args = None
+            self._cancel_watchdog()
+
+        self._clear_overlay_timeout()
+        self.transition_cancelled.emit(reason)
     
     def on_transition_finished(self) -> None:
         """Handle transition completion.
@@ -423,31 +458,12 @@ class TransitionController(QObject):
             transition_name, elapsed, self._watchdog_overlay_key,
         )
         
-        transition = self._current_transition
         self._cancel_watchdog()
-        
-        # Force cleanup the stuck transition with snap_to_new to avoid visual pops
-        if transition:
-            # Signal compositor to snap to new image
-            try:
-                compositor = getattr(self._parent, "_compositor", None)
-                if compositor is not None and hasattr(compositor, "cancel_current_transition"):
-                    compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-            
-            try:
-                transition.stop()
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-            try:
-                transition.cleanup()
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-            if self._current_transition is transition:
-                self._current_transition = None
-        
-        self.transition_cancelled.emit("watchdog_timeout")
+        callback = getattr(self._parent, "_on_deferred_transition_start_failed", None)
+        if callable(callback):
+            callback(transition_name, "watchdog_timeout")
+            return
+        self.abort_current_preserving_old("watchdog_timeout")
     
     # =========================================================================
     # Pending Finish Args

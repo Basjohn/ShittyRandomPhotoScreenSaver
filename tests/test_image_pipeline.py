@@ -129,7 +129,8 @@ def test_cache_fallback_diagnostics_include_prefetcher_state():
     engine = SimpleNamespace(_prefetcher=prefetcher)
 
     assert _describe_prefetcher_state(engine) == (
-        "prefetch_state=raw_inflight:1,raw_pending:4,scaled_inflight:2,scaled_pending:3"
+        "prefetch_state=raw_inflight:1,raw_pending:4,scaled_inflight:2,"
+        "scaled_pending:3,streamed_raw:0"
     )
 
 

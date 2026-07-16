@@ -702,10 +702,20 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
 
 
-def _build_shared_visualizer_extras(widget: Any) -> Dict[str, Any]:
-    """Return cross-mode visual extras that all GPU paths understand."""
-    extra: Dict[str, Any] = {}
-    _populate_shared_visualizer_extras(extra, widget)
+def _reusable_gpu_extras(widget: Any, mode_str: str) -> Dict[str, Any]:
+    """Return the widget-owned extras mapping for one visualization mode."""
+    cache = getattr(widget, '_gpu_push_extras_by_mode', None)
+    if not isinstance(cache, dict):
+        cache = {}
+        widget._gpu_push_extras_by_mode = cache
+
+    extra = cache.get(mode_str)
+    if not isinstance(extra, dict):
+        extra = {}
+        cache[mode_str] = extra
+
+    if mode_str == 'spectrum':
+        widget._spectrum_gpu_push_extras = extra
     return extra
 
 
@@ -871,17 +881,9 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
     """Build the mode-local GPU extras payload for the compositor overlay."""
-    if mode_str == 'spectrum':
-        extra = getattr(widget, '_spectrum_gpu_push_extras', None)
-        if not isinstance(extra, dict):
-            extra = {}
-            widget._spectrum_gpu_push_extras = extra
-        extra.clear()
-        _populate_shared_visualizer_extras(extra, widget)
-        _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
-        return extra
-
-    extra = _build_shared_visualizer_extras(widget)
+    extra = _reusable_gpu_extras(widget, mode_str)
+    extra.clear()
+    _populate_shared_visualizer_extras(extra, widget)
     _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
     if mode_str in {'sine_wave', 'oscilloscope'}:
         _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))

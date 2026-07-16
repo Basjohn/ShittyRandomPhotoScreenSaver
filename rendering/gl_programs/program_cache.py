@@ -4,12 +4,9 @@ This module replaces the scattered module-level globals in gl_compositor.py
 with a proper cache class that manages lazy loading, compilation tracking,
 and cleanup of all shader programs.
 
-IMPORTANT: OpenGL program IDs are tied to the current GL context (or share
-group). In test runs we create many QOpenGLWidget contexts; cached IDs can
-become invalid when a new context is made current.
-
-GLProgramCache therefore validates cached program IDs via ``glIsProgram``
-in the current context and recompiles/recaches uniforms when IDs are stale.
+IMPORTANT: OpenGL program IDs are scoped to a GL context share group. Numeric
+IDs can be reused by unrelated programs after context recreation, so cache
+identity is the verified share group rather than the numeric handle alone.
 
 Phase 1 of GLCompositor refactor - see audits/REFACTOR_GL_COMPOSITOR.md
 """
@@ -17,7 +14,8 @@ Phase 1 of GLCompositor refactor - see audits/REFACTOR_GL_COMPOSITOR.md
 from __future__ import annotations
 
 import logging
-from typing import Dict, Optional, Set, TYPE_CHECKING
+from dataclasses import dataclass, field
+from typing import Dict, Hashable, Optional, Set, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rendering.gl_programs.base_program import BaseGLProgram
@@ -25,13 +23,67 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class _ProgramBucket:
+    """Programs and uniforms owned by one verified OpenGL share group."""
+
+    programs: Dict[str, int] = field(default_factory=dict)
+    uniforms: Dict[str, Dict[str, int]] = field(default_factory=dict)
+    initialized: Set[str] = field(default_factory=set)
+    failed: Set[str] = field(default_factory=set)
+
+
+def _load_gl():
+    from OpenGL import GL as gl  # type: ignore
+
+    return gl
+
+
+def _qt_cpp_pointer(obj: object) -> int:
+    try:
+        import shiboken6
+
+        pointer = shiboken6.getCppPointer(obj)
+        if pointer:
+            return int(pointer[0])
+    except Exception:
+        pass
+    return id(obj)
+
+
+def _qt_object_is_valid(obj: object | None) -> bool:
+    if obj is None:
+        return False
+    try:
+        import shiboken6
+
+        return bool(shiboken6.isValid(obj))
+    except Exception:
+        return True
+
+
+def _current_share_group_identity() -> tuple[Hashable, object | None]:
+    """Return a stable key and wrapper for the current GL share group."""
+
+    try:
+        from PySide6.QtGui import QOpenGLContext
+
+        context = QOpenGLContext.currentContext()
+        if context is None:
+            return ("no_context", 0), None
+        share_group = context.shareGroup()
+        if share_group is not None:
+            return ("share_group", _qt_cpp_pointer(share_group)), share_group
+        return ("context", _qt_cpp_pointer(context)), context
+    except Exception:
+        return ("no_context", 0), None
+
+
 class GLProgramCache:
     """Manages compiled shader programs with lazy initialization.
     
-    Centralizes all shader compilation, caching, and cleanup.
-    Handles compilation errors with fallback notification.
-
-    Note: program IDs are context-specific; see module docstring.
+    Compiled handles and uniforms are bucketed by the current verified OpenGL
+    share group. Compositor pipelines hold non-owning bindings.
     
     Usage:
         cache = GLProgramCache()
@@ -57,14 +109,37 @@ class GLProgramCache:
     def __init__(self):
         # Program instances (BaseGLProgram subclasses)
         self._program_instances: Dict[str, "BaseGLProgram"] = {}
-        # Compiled GL program IDs
-        self._programs: Dict[str, int] = {}
-        # Cached uniform locations per program
-        self._uniforms: Dict[str, Dict[str, int]] = {}
-        # Track which programs have been initialized
-        self._initialized: Set[str] = set()
-        # Track which programs failed to compile
-        self._failed: Set[str] = set()
+        self._buckets: Dict[Hashable, _ProgramBucket] = {}
+        self._group_wrappers: Dict[Hashable, object] = {}
+
+    def _get_bucket(self, *, create: bool = True) -> tuple[Hashable, Optional[_ProgramBucket]]:
+        key, wrapper = _current_share_group_identity()
+        existing_wrapper = self._group_wrappers.get(key)
+        if existing_wrapper is not None and not _qt_object_is_valid(existing_wrapper):
+            # A C++ pointer can eventually be reused after its old share group
+            # dies. Never let that resurrect the old numeric program IDs.
+            self._buckets.pop(key, None)
+            self._group_wrappers.pop(key, None)
+            existing_wrapper = None
+
+        if wrapper is not None and existing_wrapper is None:
+            self._group_wrappers[key] = wrapper
+
+        bucket = self._buckets.get(key)
+        if bucket is None and create:
+            bucket = _ProgramBucket()
+            self._buckets[key] = bucket
+        return key, bucket
+
+    @staticmethod
+    def _program_is_valid(gl, program_id: int) -> bool:
+        try:
+            if not gl.glIsProgram(int(program_id)):
+                return False
+            link_status = gl.glGetProgramiv(int(program_id), gl.GL_LINK_STATUS)
+            return bool(link_status)
+        except Exception:
+            return False
     
     def get_program_instance(self, name: str) -> Optional["BaseGLProgram"]:
         """Get the program helper instance (lazy-loaded).
@@ -128,55 +203,49 @@ class GLProgramCache:
         Returns the GL program ID, or None if compilation failed.
         Must be called with a valid GL context.
         """
-        if name in self._failed:
+        _, bucket = self._get_bucket()
+        if bucket is None:
             return None
 
-        if name in self._programs:
-            program_id = self._programs.get(name)
+        if name in bucket.failed:
+            return None
+
+        if name in bucket.programs:
+            program_id = bucket.programs.get(name)
             if program_id is None:
                 return None
 
-            # Program IDs are per-GL-context (or per share-group). In test
-            # runs we create many QOpenGLWidget contexts; if they are not
-            # sharing resources, previously cached IDs become invalid.
-            # Validate against the current context and recompile if needed.
             try:
-                from OpenGL import GL as gl  # type: ignore
-
-                try:
-                    if not gl.glIsProgram(int(program_id)):
-                        self._programs.pop(name, None)
-                        self._uniforms.pop(name, None)
-                        self._initialized.discard(name)
-                    else:
-                        return int(program_id)
-                except Exception:
-                    # If we cannot validate, assume the cached program is OK.
+                gl = _load_gl()
+                if self._program_is_valid(gl, int(program_id)):
                     return int(program_id)
-            except Exception as e:
-                logger.debug("[MISC] Exception suppressed: %s", e)
-                return int(program_id)
+            except Exception:
+                logger.debug("[GL CACHE] Failed to validate cached %s program", name, exc_info=True)
+
+            bucket.programs.pop(name, None)
+            bucket.uniforms.pop(name, None)
+            bucket.initialized.discard(name)
 
         # Need to compile
         instance = self.get_program_instance(name)
         if instance is None:
-            self._failed.add(name)
+            bucket.failed.add(name)
             return None
         
         try:
             program_id = instance.create_program()
-            self._programs[name] = program_id
-            self._initialized.add(name)
+            bucket.programs[name] = program_id
+            bucket.initialized.add(name)
             
             # Cache uniforms
             uniforms = instance.cache_uniforms(program_id)
-            self._uniforms[name] = uniforms
+            bucket.uniforms[name] = uniforms
             
             logger.info("[GL CACHE] Compiled %s program: %d", name, program_id)
             return program_id
         except Exception as e:
             logger.error("[GL CACHE] Failed to compile %s: %s", name, e)
-            self._failed.add(name)
+            bucket.failed.add(name)
             return None
     
     def get_uniforms(self, name: str) -> Dict[str, int]:
@@ -184,20 +253,27 @@ class GLProgramCache:
         
         Returns empty dict if program not compiled or failed.
         """
-        return self._uniforms.get(name, {})
+        _, bucket = self._get_bucket(create=False)
+        if bucket is None:
+            return {}
+        return bucket.uniforms.get(name, {})
     
     def is_available(self, name: str) -> bool:
         """Check if program is available (compiled or can be compiled)."""
-        if name in self._failed:
+        _, bucket = self._get_bucket()
+        if bucket is None:
             return False
-        if name in self._programs:
+        if name in bucket.failed:
+            return False
+        if name in bucket.programs:
             return True
         # Check if we can load the instance
         return self.get_program_instance(name) is not None
     
     def is_compiled(self, name: str) -> bool:
         """Check if program has been compiled."""
-        return name in self._programs
+        _, bucket = self._get_bucket(create=False)
+        return bool(bucket is not None and name in bucket.programs)
     
     def precompile_all(self) -> Dict[str, bool]:
         """Precompile all programs. Returns success status per program.
@@ -215,38 +291,67 @@ class GLProgramCache:
             results[name] = program is not None
         return results
     
-    def cleanup(self) -> None:
-        """Delete all programs and clear caches.
-        
-        Must be called with a valid GL context.
-        """
+    def invalidate_program(self, name: str) -> None:
+        """Forget one current-share-group binding without deleting its handle."""
+
+        _, bucket = self._get_bucket(create=False)
+        if bucket is None:
+            return
+        bucket.programs.pop(name, None)
+        bucket.uniforms.pop(name, None)
+        bucket.initialized.discard(name)
+        bucket.failed.discard(name)
+
+    def cleanup_current_group(self) -> int:
+        """Delete programs for the current share group exactly once."""
+
+        key, bucket = self._get_bucket(create=False)
+        if bucket is None:
+            return 0
+
         try:
-            from OpenGL import GL as gl
-        except ImportError:
+            gl = _load_gl()
+        except Exception:
             gl = None
-        
+
+        deleted = 0
         if gl is not None:
-            for name, program_id in self._programs.items():
+            for name, program_id in list(bucket.programs.items()):
                 try:
-                    gl.glDeleteProgram(program_id)
+                    if self._program_is_valid(gl, int(program_id)):
+                        gl.glDeleteProgram(int(program_id))
+                        deleted += 1
                     logger.debug("[GL CACHE] Deleted program %s: %d", name, program_id)
                 except Exception as e:
                     logger.debug("[GL CACHE] Failed to delete %s: %s", name, e)
-        
-        self._programs.clear()
-        self._uniforms.clear()
-        self._initialized.clear()
-        self._failed.clear()
+
+        self._buckets.pop(key, None)
+        self._group_wrappers.pop(key, None)
+        return deleted
+
+    def cleanup(self) -> None:
+        """Delete the current share group's programs and abandon dead groups."""
+
+        self.cleanup_current_group()
+        if self._buckets:
+            logger.debug(
+                "[GL CACHE] Abandoning %d non-current/dead share-group bucket(s)",
+                len(self._buckets),
+            )
+        self._buckets.clear()
+        self._group_wrappers.clear()
         self._program_instances.clear()
         logger.debug("[GL CACHE] All programs cleaned up")
     
     def get_failed_programs(self) -> Set[str]:
         """Get set of programs that failed to compile."""
-        return self._failed.copy()
+        _, bucket = self._get_bucket(create=False)
+        return bucket.failed.copy() if bucket is not None else set()
     
     def get_compiled_programs(self) -> Set[str]:
         """Get set of successfully compiled programs."""
-        return self._initialized.copy()
+        _, bucket = self._get_bucket(create=False)
+        return bucket.initialized.copy() if bucket is not None else set()
 
 
 # Module-level singleton instance for backward compatibility

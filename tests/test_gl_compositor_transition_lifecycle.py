@@ -66,6 +66,8 @@ def _setup_compositor(monkeypatch) -> tuple[QWidget, GLCompositorWidget]:
     monkeypatch.setattr(comp, "_release_transition_textures", lambda *a, **k: None)
     monkeypatch.setattr(comp, "_start_render_timer", lambda *a, **k: None)
     monkeypatch.setattr(comp, "_stop_render_timer", lambda *a, **k: None)
+    # These lifecycle tests exercise animation ownership, not real GL admission.
+    monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda _identity: True)
     comp._desync_delay_ms = 0
     return parent, comp
 
@@ -358,6 +360,51 @@ def test_non_crossfade_transition_uses_shared_desync_start(qt_app, monkeypatch):
     assert scheduled == [75]
     assert started == []
     assert start_calls == []
+
+    anim_mgr.cancel_all()
+    anim_mgr.stop()
+
+
+@pytest.mark.qt_no_exception_capture
+def test_deferred_desync_refusal_returns_to_display_without_false_start(qt_app, monkeypatch):
+    parent, comp = _setup_compositor(monkeypatch)
+    anim_mgr = AnimationManager(fps=60)
+    old_pm = solid_pixmap(64, 64, Qt.GlobalColor.red)
+    new_pm = solid_pixmap(64, 64, Qt.GlobalColor.blue)
+
+    scheduled: list[object] = []
+    started: list[int] = []
+    failures: list[tuple[str, str]] = []
+    parent._on_deferred_transition_start_failed = (
+        lambda label, reason: failures.append((label, reason))
+    )
+    monkeypatch.setattr(comp, "_apply_desync_strategy", lambda duration_ms: (75, duration_ms + 75))
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.transitions.ThreadManager.single_shot",
+        staticmethod(lambda _delay, callback: scheduled.append(callback)),
+    )
+    monkeypatch.setattr(comp, "_clear_all_transitions", lambda: None)
+    monkeypatch.setattr(comp, "_prepare_wipe_textures", lambda: True)
+    monkeypatch.setattr(comp, "_pre_upload_textures", lambda _prep: None)
+    monkeypatch.setattr(comp, "_start_transition_animation", lambda *_args, **_kwargs: None)
+
+    token = comp.start_wipe(
+        old_pm,
+        new_pm,
+        direction=WipeDirection.LEFT_TO_RIGHT,
+        duration_ms=120,
+        easing=EasingCurve.LINEAR,
+        animation_manager=anim_mgr,
+        on_finished=None,
+        on_started=lambda duration_ms: started.append(duration_ms),
+    )
+
+    assert token is not None
+    assert len(scheduled) == 1
+    scheduled[0]()
+
+    assert started == []
+    assert failures == [("wipe", "deferred_animation_refused")]
 
     anim_mgr.cancel_all()
     anim_mgr.stop()

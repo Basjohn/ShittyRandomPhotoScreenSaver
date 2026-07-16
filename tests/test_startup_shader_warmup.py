@@ -181,7 +181,7 @@ def test_transition_program_ensure_binds_compositor_class(monkeypatch) -> None:
     assert widget._gl_pipeline.burn_uniforms == {"uProgress": 5}
 
 
-def test_transition_program_ensure_skips_make_current_when_already_bound(monkeypatch) -> None:
+def test_transition_program_ensure_revalidates_already_bound_program(monkeypatch) -> None:
     class _StubPipeline:
         initialized = True
         slide_program = 456
@@ -200,12 +200,27 @@ def test_transition_program_ensure_skips_make_current_when_already_bound(monkeyp
         def doneCurrent(self):
             self.done_current_calls += 1
 
+    class _StubCache:
+        def get_program(self, name):
+            assert name == "slide"
+            return 789
+
+        def get_uniforms(self, name):
+            assert name == "slide"
+            return {"uProgress": 9}
+
     monkeypatch.setattr("rendering.gl_compositor_pkg.gl_lifecycle.gl", object())
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.get_program_cache",
+        lambda: _StubCache(),
+    )
 
     widget = _StubWidget()
     assert ensure_transition_program_ready(widget, "slide") is True
-    assert widget.make_current_calls == 0
-    assert widget.done_current_calls == 0
+    assert widget._gl_pipeline.slide_program == 789
+    assert widget._gl_pipeline.slide_uniforms == {"uProgress": 9}
+    assert widget.make_current_calls == 1
+    assert widget.done_current_calls == 1
 
 
 def test_transition_program_ensure_skips_make_current_for_unknown_identity(monkeypatch) -> None:

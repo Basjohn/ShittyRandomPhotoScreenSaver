@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtWidgets import QApplication, QWidget
 
 from rendering.gl_compositor import GLCompositorWidget, gl as _gl
+from rendering.gl_compositor_pkg import gl_lifecycle
 
 
 @pytest.fixture
@@ -102,4 +103,57 @@ def test_gl_compositor_cleanup_releases_pipeline_when_gl_available(qapp):
 
     # Second cleanup must be a no-op from the pipeline's perspective.
     comp.cleanup()
+
+
+def test_compositor_cleanup_deletes_only_private_program(monkeypatch):
+    deleted: list[int] = []
+
+    class _FakeGL:
+        @staticmethod
+        def glIsProgram(_program_id):
+            return True
+
+        @staticmethod
+        def glDeleteProgram(program_id):
+            deleted.append(int(program_id))
+
+    class _Pipeline:
+        basic_program = 11
+        warp_program = 22
+
+    class _Manager:
+        def cleanup(self):
+            return None
+
+    class _Widget:
+        def __init__(self):
+            self._gl_pipeline = _Pipeline()
+            self._texture_manager = _Manager()
+            self._geometry_manager = _Manager()
+            self._startup_transition_warm_queue = []
+            self._startup_transition_resource_warm_queue = []
+            self._startup_transition_resource_warm_types = set()
+            self._deferred_warmup_context = None
+            self._deferred_warmup_surface = None
+            self.reset_calls = 0
+
+        def isValid(self):
+            return True
+
+        def makeCurrent(self):
+            return None
+
+        def doneCurrent(self):
+            return None
+
+        def _reset_pipeline_state(self):
+            self.reset_calls += 1
+
+    monkeypatch.setattr(gl_lifecycle, "gl", _FakeGL())
+
+    widget = _Widget()
+    gl_lifecycle.cleanup_gl_pipeline(widget)
+
+    assert deleted == [11]
+    assert widget.reset_calls == 1
 

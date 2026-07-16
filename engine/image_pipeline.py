@@ -372,7 +372,8 @@ def _describe_prefetcher_state(engine: ScreensaverEngine) -> str:
         f"raw_inflight:{int(snapshot.get('raw_inflight', 0))},"
         f"raw_pending:{int(snapshot.get('raw_pending', 0))},"
         f"scaled_inflight:{int(snapshot.get('scaled_inflight', 0))},"
-        f"scaled_pending:{int(snapshot.get('scaled_pending', 0))}"
+        f"scaled_pending:{int(snapshot.get('scaled_pending', 0))},"
+        f"streamed_raw:{int(snapshot.get('streamed_raw', 0))}"
     )
 
 

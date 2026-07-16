@@ -124,12 +124,29 @@ def _get_burn_program():
     return get_program_cache().get_program_instance(GLProgramCache.BURN)
 
 
-def cleanup_global_shader_programs() -> None:
-    """Clear all shader program instances via the centralized cache.
-    
-    Call this on application shutdown to ensure GL resources are released.
-    This is safe to call even if programs were never loaded.
-    """
+def cleanup_global_shader_programs(displays=None) -> None:
+    """Release cache-owned programs once per live share group at final exit."""
+
+    cache = get_program_cache()
+    for owner in displays or ():
+        compositor = getattr(owner, "_gl_compositor", owner)
+        if compositor is None:
+            continue
+        try:
+            compositor.makeCurrent()
+            deleted = cache.cleanup_current_group()
+            if deleted:
+                logger.debug(
+                    "[GL CACHE] Released %d transition program(s) through live compositor context",
+                    deleted,
+                )
+        except Exception:
+            logger.debug("[GL CACHE] Live-context transition program cleanup failed", exc_info=True)
+        finally:
+            try:
+                compositor.doneCurrent()
+            except Exception:
+                pass
     cleanup_program_cache()
 
 
@@ -824,8 +841,10 @@ class GLCompositorWidget(QOpenGLWidget):
         self._render_shutdown_requested = False
         self._transition_animation_generation += 1
         animation_generation = self._transition_animation_generation
-        if transition_label:
-            self._ensure_transition_program_ready(transition_label)
+        if transition_label and not self._ensure_transition_program_ready(transition_label):
+            raise RuntimeError(
+                f"Transition program admission failed for {transition_label}"
+            )
         duration_sec = max(0.001, duration_ms / 1000.0)
         
         # Create frame state and wake paint immediately.  Paint cadence and
@@ -1533,6 +1552,31 @@ class GLCompositorWidget(QOpenGLWidget):
         ]
         for attr in program_attrs:
             setattr(self._gl_pipeline, attr, 0)
+        for attr in (
+            "raindrops_uniforms",
+            "warp_uniforms",
+            "diffuse_uniforms",
+            "blockflip_uniforms",
+            "crossfade_uniforms",
+            "slide_uniforms",
+            "wipe_uniforms",
+            "blinds_uniforms",
+            "crumble_uniforms",
+            "particle_uniforms",
+            "burn_uniforms",
+        ):
+            setattr(self._gl_pipeline, attr, {})
+        for attr in (
+            "u_angle_loc",
+            "u_aspect_loc",
+            "u_old_tex_loc",
+            "u_new_tex_loc",
+            "u_spec_dir_loc",
+            "u_axis_mode_loc",
+            "u_block_rect_loc",
+            "u_block_uv_rect_loc",
+        ):
+            setattr(self._gl_pipeline, attr, -1)
         self._gl_pipeline.quad_vao = 0
         self._gl_pipeline.quad_vbo = 0
         self._gl_pipeline.box_vao = 0

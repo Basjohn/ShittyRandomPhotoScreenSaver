@@ -1,6 +1,6 @@
 # Visualizer Change Checklist
 
-Last updated: 2026-06-30
+Last updated: 2026-07-16
 
 Use this checklist whenever visualizer settings, presets, activation, runtime transport, renderer behavior, or card geometry changes.
 
@@ -27,7 +27,8 @@ Use this checklist whenever visualizer settings, presets, activation, runtime tr
 ## 4. Runtime Bridge
 - Activation must use `resolve_visualizer_activation_payload()`.
 - Runtime config application belongs in `widgets/spotify_visualizer/config_applier.py`, `activation_runtime.py`, `technical_config.py`, and `runtime_config.py`.
-- Overlay transport belongs in `widgets/spotify_bars_gl_overlay.py` and the extracted overlay helpers.
+- Accepted-frame packet ownership belongs in `widgets/spotify_visualizer/frame_transport.py` and `tick_pipeline.py`; display routing belongs in `rendering/display_image_ops.py`; final state copy/clamp/render ownership belongs in `widgets/spotify_bars_gl_overlay.py` and its extracted helpers.
+- Reused frame packets and mode-local extras are synchronous scratch storage. Run generation/activation/required-waveform and hidden-primer checks before filling/pushing them, clear extras before reuse, and never queue or retain a mutable packet.
 - Renderer math belongs in the mode renderer/shader files.
 - Visualizer ticks stay owned by the dedicated recurring timer, not transition animation callbacks.
 
@@ -46,6 +47,9 @@ Add or update focused coverage for:
 - preset parse/apply/import/export behavior,
 - mode switch/preset switch reset isolation,
 - first-frame/fresh-frame authority when touched,
+- packet reuse without stale mode/source keys or delayed retention,
+- paused latency suppression without masking a live playing probe,
+- passive overlay paint-gap/accepted-update telemetry without new repaint, timer, packet, GL-query, or allocation pressure when that seam changes,
 - and authored curated preset runtime oracles when the visible mode behavior changes.
 
 Before touching shared visualizer/audio/activation/render/transition paths, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`; rerun it after the change.

@@ -7,6 +7,44 @@ Tests cover:
 - ResourceManager GL handle tracking
 """
 import pytest
+from PySide6.QtGui import QImage
+
+
+def test_image_upload_view_uses_direct_contiguous_qimage_buffer():
+    from rendering.gl_programs.texture_manager import _prepare_image_upload_view
+
+    image = QImage(8, 8, QImage.Format.Format_ARGB32)
+    image.fill(0xFF336699)
+
+    upload = _prepare_image_upload_view(image)
+
+    assert upload.direct is True
+    assert upload.address is not None and upload.address > 0
+    assert upload.address_owner is not None
+    assert upload.size == image.sizeInBytes()
+    assert upload.data.nbytes == image.sizeInBytes()
+
+
+def test_image_upload_view_falls_back_to_owned_bytes():
+    from rendering.gl_programs.texture_manager import _prepare_image_upload_view
+
+    class _FakeImage:
+        def bits(self):
+            raise TypeError("read-only binding")
+
+        def constBits(self):
+            return memoryview(b"\x01\x02\x03\x04")
+
+        def sizeInBytes(self):
+            return 4
+
+    upload = _prepare_image_upload_view(_FakeImage())
+
+    assert upload.direct is False
+    assert upload.address is None
+    assert upload.address_owner is None
+    assert upload.data == b"\x01\x02\x03\x04"
+    assert upload.size == 4
 
 
 class TestPBOPoolManagement:

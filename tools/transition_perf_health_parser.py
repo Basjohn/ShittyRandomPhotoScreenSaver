@@ -28,6 +28,7 @@ _SPOTIFY_SEVERE_LATENCY_RE = re.compile(r"\[!!!!\]\[SPOTIFY_VIS\]\[LATENCY\] lag
 _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=(?P<dt_ms>[0-9.]+)")
 _SPOTIFY_TICK_PHASE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick phase breakdown (?P<detail>.*)")
 _SPOTIFY_OVERLAY_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\](?P<detail>.*)")
+_SPOTIFY_OVERLAY_MICROGAP_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[MICROGAP\](?P<detail>.*)")
 _SPOTIFY_VIS_SYNC_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[VIS_SYNC\](?P<detail>.*)")
 _MEDIA_EMIT_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\] emit_media_update(?P<detail>.*)")
 _MEDIA_REFRESH_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\]\[REFRESH\](?P<detail>.*)")
@@ -47,7 +48,8 @@ _SLOW_TEXTURE_UPLOAD_RE = re.compile(
     r"\((?P<width>\d+)x(?P<height>\d+), pbo=(?P<pbo>True|False)"
     r"(?:, convert=(?P<convert_ms>[0-9.]+)ms, copy=(?P<copy_ms>[0-9.]+)ms, "
     r"pbo_stage=(?P<pbo_stage_ms>[0-9.]+)ms, "
-    r"tex_upload=(?P<tex_upload_ms>[0-9.]+)ms)?\)"
+    r"tex_upload=(?P<tex_upload_ms>[0-9.]+)ms"
+    r"(?:, direct=(?P<direct>True|False))?)?\)"
 )
 _GL_TEXTURE_CACHE_RE = re.compile(
     r"\[PERF\] \[GL TEXTURE CACHE\] cleanup (?P<payload>.*)"
@@ -78,6 +80,20 @@ _VISUALIZER_SAFEGUARD_FAILURE_RE = re.compile(
     r"\[FIRST_FRAME_GUARD\].*(?:failed|expired|timeout|stale)|"
     r"\[PARITY\].*(?:failed|mismatch))",
     re.IGNORECASE,
+)
+_TRANSITION_START_REFUSAL_RE = re.compile(
+    r"(?:Transition failed to start|Transition refused/failed to start)"
+)
+_TRANSITION_INSTANT_COMMIT_RE = re.compile(r"displaying final image immediately")
+_TRANSITION_REQUEST_DROP_RE = re.compile(
+    r"Transition in progress - skipping (?:image )?request"
+)
+_GL_PROGRAM_LIFECYCLE_ERROR_RE = re.compile(
+    r"(?:Failed to delete (?:shader program|private card-flip program)|"
+    r"glDeleteProgram\(\d+\).*GL_INVALID_VALUE|"
+    r"Transition program admission failed|"
+    r"glUniform\w*\(\d+.*GL_INVALID_OPERATION|"
+    r"baseOperation\s*=\s*gl(?:DeleteProgram|Uniform\w*))"
 )
 
 
@@ -151,6 +167,8 @@ class VisualizerTimingWarning:
     value_ms: float
     line: str = ""
     timestamp: str | None = None
+    mode: str | None = None
+    trigger: str | None = None
 
 
 @dataclass(frozen=True)
@@ -272,6 +290,7 @@ class TextureUploadWarning:
     copy_ms: float | None = None
     pbo_stage_ms: float | None = None
     tex_upload_ms: float | None = None
+    direct: bool | None = None
     line: str = ""
 
     @property
@@ -386,6 +405,26 @@ class SpotifyOverlayPerfWindow:
 
 
 @dataclass(frozen=True)
+class SpotifyOverlayMicrogapWindow:
+    timestamp: str | None
+    reason: str
+    screen: int | None
+    mode: str
+    context: str
+    gap_samples: int
+    gap_p95_ms: float
+    gap_max_ms: float
+    wait_samples: int
+    wait_p95_ms: float
+    wait_max_ms: float
+    pending_wait_ms: float
+    visible: bool
+    enabled: bool
+    playing: bool | None = None
+    line: str = ""
+
+
+@dataclass(frozen=True)
 class TimelineMarker:
     timestamp: str | None
     kind: str
@@ -408,6 +447,10 @@ class PerfHealthReport:
     windows: list[MetricWindow] = field(default_factory=list)
     cache_fallbacks: list[CacheFallback] = field(default_factory=list)
     shader_fallbacks: list[str] = field(default_factory=list)
+    transition_start_refusals: list[str] = field(default_factory=list)
+    transition_instant_commits: list[str] = field(default_factory=list)
+    transition_request_drops: list[str] = field(default_factory=list)
+    gl_program_lifecycle_errors: list[str] = field(default_factory=list)
     gl_swap_interval_warnings: list[str] = field(default_factory=list)
     pending_paint_requeues: list[str] = field(default_factory=list)
     pending_paint_stalls: list[str] = field(default_factory=list)
@@ -424,6 +467,7 @@ class PerfHealthReport:
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
     spotify_topology_events: list[SpotifyTopologyEvent] = field(default_factory=list)
     spotify_overlay_perf_windows: list[SpotifyOverlayPerfWindow] = field(default_factory=list)
+    spotify_overlay_microgap_windows: list[SpotifyOverlayMicrogapWindow] = field(default_factory=list)
     startup_first_frame_exposures: list[StartupFirstFrameExposure] = field(default_factory=list)
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
 
@@ -771,6 +815,33 @@ class PerfHealthReport:
         return under_delivered
 
     @property
+    def spotify_overlay_microgap_anomalies(self) -> list[SpotifyOverlayMicrogapWindow]:
+        """Short delivery gaps hidden by otherwise healthy ten-second averages."""
+        anomalous: list[SpotifyOverlayMicrogapWindow] = []
+        for window in self.spotify_overlay_microgap_windows:
+            if not window.visible or not window.enabled:
+                continue
+            target = max(1.0, float(self._target_fps_for_screen(window.screen)))
+            frame_ms = 1000.0 / target
+            repeated_gap_limit = max(24.0, frame_ms * 2.0)
+            repeated_wait_limit = max(16.0, frame_ms * 1.5)
+            if (
+                window.gap_max_ms >= 100.0
+                or window.wait_max_ms >= 50.0
+                or window.pending_wait_ms >= 100.0
+                or (
+                    window.gap_samples >= 5
+                    and window.gap_p95_ms > repeated_gap_limit
+                )
+                or (
+                    window.wait_samples >= 5
+                    and window.wait_p95_ms > repeated_wait_limit
+                )
+            ):
+                anomalous.append(window)
+        return anomalous
+
+    @property
     def low_refresh_under_target(self) -> list[MetricWindow]:
         return [
             window
@@ -848,19 +919,58 @@ class PerfHealthReport:
 
     @property
     def significant_visualizer_timing_warnings(self) -> list[VisualizerTimingWarning]:
+        paused_forced_ids = {
+            id(warning)
+            for warning in self.paused_forced_visualizer_latency_warnings
+        }
         return [
             warning
             for warning in self.visualizer_timing_warnings
-            if warning.value_ms >= 40.0
+            if warning.value_ms >= 40.0 and id(warning) not in paused_forced_ids
         ]
 
     @property
     def severe_visualizer_latency_warnings(self) -> list[VisualizerTimingWarning]:
+        paused_forced_ids = {
+            id(warning)
+            for warning in self.paused_forced_visualizer_latency_warnings
+        }
         return [
             warning
             for warning in self.visualizer_timing_warnings
             if warning.kind == "severe_latency" or warning.value_ms >= 500.0
+            if id(warning) not in paused_forced_ids
         ]
+
+    @property
+    def paused_forced_visualizer_latency_warnings(self) -> list[VisualizerTimingWarning]:
+        """Transition probes that sampled intentionally paused audio authority."""
+        paused: list[VisualizerTimingWarning] = []
+        for warning in self.visualizer_timing_warnings:
+            if warning.kind not in {"latency", "severe_latency"}:
+                continue
+            if not str(warning.trigger or "").startswith("transition_"):
+                continue
+            warning_seconds = _timestamp_seconds(warning.timestamp)
+            if warning_seconds is None:
+                continue
+            nearest: tuple[float, SpotifyOverlayPerfWindow] | None = None
+            for window in self.spotify_overlay_perf_windows:
+                if window.playing is None:
+                    continue
+                if warning.mode and window.mode != warning.mode:
+                    continue
+                window_seconds = _timestamp_seconds(window.timestamp)
+                if window_seconds is None:
+                    continue
+                distance = abs(window_seconds - warning_seconds)
+                if distance > 12.0:
+                    continue
+                if nearest is None or distance < nearest[0]:
+                    nearest = (distance, window)
+            if nearest is not None and nearest[1].playing is False:
+                paused.append(warning)
+        return paused
 
     @property
     def slow_texture_uploads(self) -> list[TextureUploadWarning]:
@@ -908,6 +1018,11 @@ class PerfHealthReport:
             messages.append(
                 "spotify visualizer overlay under-delivered despite healthy feed: "
                 f"{len(self.spotify_overlay_under_delivery_windows)}"
+            )
+        if self.spotify_overlay_microgap_anomalies:
+            messages.append(
+                "spotify visualizer overlay delivery microgaps exceeded the owner cadence: "
+                f"{len(self.spotify_overlay_microgap_anomalies)}"
             )
         if self.high_target_near_sixty:
             messages.append(
@@ -973,6 +1088,26 @@ class PerfHealthReport:
             )
         if self.shader_fallbacks:
             messages.append(f"shader fallbacks present: {len(self.shader_fallbacks)}")
+        if self.transition_start_refusals:
+            messages.append(
+                "transition starts were refused after image preparation: "
+                f"{len(self.transition_start_refusals)}"
+            )
+        if self.transition_instant_commits:
+            messages.append(
+                "refused transitions committed the final image without animation: "
+                f"{len(self.transition_instant_commits)}"
+            )
+        if self.transition_request_drops:
+            messages.append(
+                "image requests were dropped while transitions were active: "
+                f"{len(self.transition_request_drops)}"
+            )
+        if self.gl_program_lifecycle_errors:
+            messages.append(
+                "GL program ownership/binding lifecycle errors present: "
+                f"{len(self.gl_program_lifecycle_errors)}"
+            )
         if self.gl_swap_interval_warnings:
             messages.append(
                 "GL contexts may still be swap-interval constrained despite timer-only policy: "
@@ -1304,6 +1439,34 @@ def _spotify_overlay_perf_from_line(line: str, detail: str) -> SpotifyOverlayPer
     )
 
 
+def _spotify_overlay_microgap_from_line(
+    line: str,
+    detail: str,
+) -> SpotifyOverlayMicrogapWindow | None:
+    parts = _parse_kv_payload(detail)
+    context = parts.get("context")
+    if not context:
+        return None
+    return SpotifyOverlayMicrogapWindow(
+        timestamp=_timestamp_from_line(line),
+        reason=parts.get("reason", "unknown"),
+        screen=_parse_int(parts.get("screen")),
+        mode=parts.get("mode", "unknown"),
+        context=context,
+        gap_samples=_parse_int(parts.get("gap_samples")) or 0,
+        gap_p95_ms=_parse_float(parts.get("gap_p95_ms")) or 0.0,
+        gap_max_ms=_parse_float(parts.get("gap_max_ms")) or 0.0,
+        wait_samples=_parse_int(parts.get("wait_samples")) or 0,
+        wait_p95_ms=_parse_float(parts.get("wait_p95_ms")) or 0.0,
+        wait_max_ms=_parse_float(parts.get("wait_max_ms")) or 0.0,
+        pending_wait_ms=_parse_float(parts.get("pending_wait_ms")) or 0.0,
+        visible=_parse_bool(parts.get("visible")),
+        enabled=_parse_bool(parts.get("enabled")),
+        playing=_parse_optional_bool(parts.get("playing")),
+        line=line,
+    )
+
+
 def _spotify_tick_phase_from_line(line: str, detail: str) -> VisualizerTickPhaseBreakdown | None:
     parts = _parse_kv_payload(detail)
     total_ms = _parse_float(parts.get("total_ms"))
@@ -1352,6 +1515,47 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
     for raw in lines:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
+
+        if _TRANSITION_START_REFUSAL_RE.search(line):
+            report.transition_start_refusals.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "transition_start_refusal",
+                    "prepared transition did not start",
+                    line,
+                )
+            )
+        if _TRANSITION_INSTANT_COMMIT_RE.search(line):
+            report.transition_instant_commits.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "transition_instant_commit",
+                    "final image committed without transition",
+                    line,
+                )
+            )
+        if _TRANSITION_REQUEST_DROP_RE.search(line):
+            report.transition_request_drops.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "transition_request_drop",
+                    "active transition dropped image request",
+                    line,
+                )
+            )
+        if _GL_PROGRAM_LIFECYCLE_ERROR_RE.search(line):
+            report.gl_program_lifecycle_errors.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "gl_program_lifecycle_error",
+                    "program delete/bind/uniform ownership failure",
+                    line,
+                )
+            )
 
         texture_cache_match = _GL_TEXTURE_CACHE_RE.search(line)
         if texture_cache_match:
@@ -1546,8 +1750,16 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
         if severe_spotify_latency:
             lag_ms = _parse_float(severe_spotify_latency.group("lag_ms"))
             if lag_ms is not None:
+                latency_parts = _parse_kv_payload(line)
                 report.visualizer_timing_warnings.append(
-                    VisualizerTimingWarning("severe_latency", lag_ms, line, timestamp)
+                    VisualizerTimingWarning(
+                        "severe_latency",
+                        lag_ms,
+                        line,
+                        timestamp,
+                        latency_parts.get("mode"),
+                        latency_parts.get("trigger"),
+                    )
                 )
                 report.timeline_markers.append(
                     TimelineMarker(timestamp, "spotify_severe_latency", f"lag_ms={lag_ms:.1f}", line)
@@ -1558,8 +1770,16 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
         if spotify_latency:
             lag_ms = _parse_float(spotify_latency.group("lag_ms"))
             if lag_ms is not None:
+                latency_parts = _parse_kv_payload(line)
                 report.visualizer_timing_warnings.append(
-                    VisualizerTimingWarning("latency", lag_ms, line, timestamp)
+                    VisualizerTimingWarning(
+                        "latency",
+                        lag_ms,
+                        line,
+                        timestamp,
+                        latency_parts.get("mode"),
+                        latency_parts.get("trigger"),
+                    )
                 )
                 report.timeline_markers.append(
                     TimelineMarker(timestamp, "spotify_latency", f"lag_ms={lag_ms:.1f}", line)
@@ -1606,6 +1826,24 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                 report.spotify_overlay_perf_windows.append(overlay_window)
             report.timeline_markers.append(
                 TimelineMarker(timestamp, "spotify_overlay_perf", spotify_overlay_perf.group("detail").strip(), line)
+            )
+            continue
+
+        spotify_overlay_microgap = _SPOTIFY_OVERLAY_MICROGAP_RE.search(line)
+        if spotify_overlay_microgap:
+            microgap_window = _spotify_overlay_microgap_from_line(
+                line,
+                spotify_overlay_microgap.group("detail"),
+            )
+            if microgap_window is not None:
+                report.spotify_overlay_microgap_windows.append(microgap_window)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "spotify_overlay_microgap",
+                    spotify_overlay_microgap.group("detail").strip(),
+                    line,
+                )
             )
             continue
 
@@ -1660,6 +1898,7 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                         tex_upload_ms=_parse_float(
                             texture_upload.group("tex_upload_ms")
                         ),
+                        direct=_parse_optional_bool(texture_upload.group("direct")),
                         line=line,
                     )
                 )
@@ -1786,6 +2025,27 @@ def parse_perf_health_logs(paths: Iterable[Path]) -> PerfHealthReport:
     )
 
 
+def _resolve_log_paths(
+    primary: Path,
+    extra_logs: Iterable[Path],
+    usage_log: Path | None,
+) -> list[Path]:
+    """Merge high-signal companion logs without requiring manual sidecar flags."""
+
+    paths = [primary, *extra_logs]
+    main_log = primary.with_name("screensaver.log")
+    if main_log.exists() and main_log not in paths:
+        paths.append(main_log)
+    verbose_log = primary.with_name("screensaver_verbose.log")
+    if verbose_log.exists() and verbose_log not in paths:
+        paths.append(verbose_log)
+
+    resolved_usage = usage_log or primary.with_name("screensaver_usage.log")
+    if resolved_usage.exists() and resolved_usage not in paths:
+        paths.append(resolved_usage)
+    return paths
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Summarize transition/display perf anomalies and cache fallback producer gaps."
@@ -1841,13 +2101,11 @@ def _print_samples(title: str, samples: list[object], max_samples: int) -> None:
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
-    log_paths: list[Path] = [args.log, *args.extra_log]
     usage_log = args.usage_log or args.log.with_name("screensaver_usage.log")
-    if usage_log.exists() and usage_log not in log_paths:
-        log_paths.append(usage_log)
-    elif args.usage_log is not None and not usage_log.exists():
+    if args.usage_log is not None and not usage_log.exists():
         print(f"Log file not found: {usage_log}")
         return 1
+    log_paths = _resolve_log_paths(args.log, args.extra_log, args.usage_log)
     for log_path in log_paths:
         if not log_path.exists() or not log_path.is_file():
             print(f"Log file not found: {log_path}")
@@ -1862,6 +2120,10 @@ def main() -> int:
     print(f"Metric windows: {len(report.windows)}")
     print(f"Cache worker fallbacks: {len(report.cache_fallbacks)}")
     print(f"Shader fallbacks: {len(report.shader_fallbacks)}")
+    print(f"Transition start refusals: {len(report.transition_start_refusals)}")
+    print(f"Transition instant commits: {len(report.transition_instant_commits)}")
+    print(f"Transition request drops: {len(report.transition_request_drops)}")
+    print(f"GL program lifecycle errors: {len(report.gl_program_lifecycle_errors)}")
     print(f"GL swap-interval warnings: {len(report.gl_swap_interval_warnings)}")
     print(f"Pending paint requeues: {len(report.pending_paint_requeues)}")
     print(f"Pending paint stalls: {len(report.pending_paint_stalls)}")
@@ -1869,6 +2131,10 @@ def main() -> int:
     print(f"Timer gaps: {len(report.timer_gaps)}")
     print(f"MediaWidget slow refreshes: {len(report.media_refresh_warnings)}")
     print(f"Spotify visualizer timing warnings: {len(report.visualizer_timing_warnings)}")
+    print(
+        "Paused forced-probe latency diagnostics: "
+        f"{len(report.paused_forced_visualizer_latency_warnings)}"
+    )
     print(f"Visualizer safeguard failures: {len(report.visualizer_safeguard_failures)}")
     print(f"Whole-process usage samples: {len(report.usage_samples)}")
     print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
@@ -1881,6 +2147,8 @@ def main() -> int:
     print(f"Spotify topology events: {len(report.spotify_topology_events)}")
     print(f"Spotify overlay perf windows: {len(report.spotify_overlay_perf_windows)}")
     print(f"Spotify overlay under-delivery windows: {len(report.spotify_overlay_under_delivery_windows)}")
+    print(f"Spotify overlay microgap windows: {len(report.spotify_overlay_microgap_windows)}")
+    print(f"Spotify overlay microgap anomalies: {len(report.spotify_overlay_microgap_anomalies)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
     if report.usage_samples:
         growth_baseline_index = 1 if len(report.usage_samples) >= 3 else 0
@@ -1997,6 +2265,11 @@ def main() -> int:
         report.spotify_overlay_under_delivery_windows,
         args.max_samples,
     )
+    _print_samples(
+        "Spotify visualizer overlay delivery microgaps",
+        report.spotify_overlay_microgap_anomalies,
+        args.max_samples,
+    )
     _print_samples("High-refresh near-60 windows", report.high_target_near_sixty, args.max_samples)
     _print_samples(
         "High-refresh stable-divisor windows",
@@ -2048,6 +2321,11 @@ def main() -> int:
         report.severe_visualizer_latency_warnings,
         args.max_samples,
     )
+    _print_samples(
+        "Paused forced-probe latency diagnostics",
+        report.paused_forced_visualizer_latency_warnings,
+        args.max_samples,
+    )
     _print_samples("Slow GL texture uploads", report.slow_texture_uploads, args.max_samples)
     _print_samples(
         "Excessive GL texture cache cleanups",
@@ -2064,6 +2342,26 @@ def main() -> int:
     _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)
     _print_samples("Shader fallbacks", report.shader_fallbacks, args.max_samples)
+    _print_samples(
+        "Transition start refusals",
+        report.transition_start_refusals,
+        args.max_samples,
+    )
+    _print_samples(
+        "Transition instant commits",
+        report.transition_instant_commits,
+        args.max_samples,
+    )
+    _print_samples(
+        "Transition request drops",
+        report.transition_request_drops,
+        args.max_samples,
+    )
+    _print_samples(
+        "GL program lifecycle errors",
+        report.gl_program_lifecycle_errors,
+        args.max_samples,
+    )
     _print_samples("GL swap-interval warnings", report.gl_swap_interval_warnings, args.max_samples)
     _print_samples("Pending paint requeues", report.pending_paint_requeues, args.max_samples)
     _print_samples("Pending paint stalls", report.pending_paint_stalls, args.max_samples)

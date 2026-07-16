@@ -495,6 +495,10 @@ class SpotifyVisualizerWidget(QWidget):
         self._target_timer_interval_ms: int = 16
         self._current_timer_interval_ms: int = 16
         self._spectrum_gpu_push_extras: Dict[str, Any] = {}
+        self._gpu_push_extras_by_mode: Dict[str, Dict[str, Any]] = {
+            "spectrum": self._spectrum_gpu_push_extras,
+        }
+        self._gpu_frame_packet = None
         self._last_gpu_fade_sent: float = -1.0
         self._last_gpu_geom: Optional[QRect] = None
         # Reset/fresh-frame handoff tracking must exist from construction so
@@ -1585,7 +1589,7 @@ class SpotifyVisualizerWidget(QWidget):
         stop_legacy(self)
 
     def cleanup(self) -> None:
-        self.stop()
+        self._cleanup_impl()
 
     # ------------------------------------------------------------------
     # UI and painting

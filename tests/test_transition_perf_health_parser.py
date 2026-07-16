@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from tools.transition_perf_health_parser import parse_perf_health_lines, parse_perf_health_logs
+from tools.transition_perf_health_parser import (
+    _resolve_log_paths,
+    parse_perf_health_lines,
+    parse_perf_health_logs,
+)
 
 
 def _usage_line(
@@ -274,6 +278,70 @@ def test_perf_health_allows_restored_smooth_overlay_feed_above_low_refresh_targe
     assert report.spotify_overlay_overpaint_windows == []
     assert report.spotify_overlay_under_delivery_windows == []
     assert report.anomalies == []
+
+
+def test_perf_health_parses_and_flags_overlay_microgap_hidden_by_healthy_average():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=600, avg_fps=60.0, dt_min=15.50ms, dt_max=20.00ms, "
+            "stalls=0, target=60Hz, outcome=running",
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=paintGL screen=1 mode=bubble "
+            "elapsed_ms=10000.0 set_state=900 paint=598 update_requests=900 "
+            "geometry_changes=0 visible=True enabled=True playing=True",
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][MICROGAP] reason=paintGL screen=1 mode=bubble "
+            "context=transition_active gap_samples=597 gap_p95_ms=24.0 gap_max_ms=121.4 "
+            "wait_samples=598 wait_p95_ms=16.0 wait_max_ms=64.2 pending_wait_ms=0.0 "
+            "visible=True enabled=True playing=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_perf_windows) == 1
+    assert report.spotify_overlay_under_delivery_windows == []
+    assert len(report.spotify_overlay_microgap_windows) == 1
+    microgap = report.spotify_overlay_microgap_windows[0]
+    assert microgap.context == "transition_active"
+    assert microgap.gap_max_ms == 121.4
+    assert microgap.wait_max_ms == 64.2
+    assert report.spotify_overlay_microgap_anomalies == [microgap]
+    assert any("delivery microgaps" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_allows_bounded_overlay_microgaps_at_owner_cadence():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - rendering.gl - INFO - [PERF] [GL RENDER] Timer metrics: "
+            "screen=1, frames=600, avg_fps=60.0, dt_min=15.50ms, dt_max=20.00ms, "
+            "stalls=0, target=60Hz, outcome=running",
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][MICROGAP] reason=paintGL screen=1 mode=bubble "
+            "context=steady_idle gap_samples=598 gap_p95_ms=24.0 gap_max_ms=33.0 "
+            "wait_samples=598 wait_p95_ms=16.0 wait_max_ms=24.0 pending_wait_ms=0.0 "
+            "visible=True enabled=True playing=False",
+        ]
+    )
+
+    assert len(report.spotify_overlay_microgap_windows) == 1
+    assert report.spotify_overlay_microgap_windows[0].playing is False
+    assert report.spotify_overlay_microgap_anomalies == []
+    assert report.anomalies == []
+
+
+def test_perf_health_flags_oldest_overlay_update_still_waiting_for_paint():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][MICROGAP] reason=set_state screen=0 mode=spectrum "
+            "context=mode_handoff gap_samples=0 gap_p95_ms=0.0 gap_max_ms=0.0 "
+            "wait_samples=0 wait_p95_ms=0.0 wait_max_ms=0.0 pending_wait_ms=126.0 "
+            "visible=True enabled=True playing=True",
+        ]
+    )
+
+    assert len(report.spotify_overlay_microgap_anomalies) == 1
+    assert report.spotify_overlay_microgap_anomalies[0].context == "mode_handoff"
 
 
 def test_perf_health_parses_usage_availability_without_treating_na_as_zero():
@@ -752,6 +820,43 @@ def test_perf_health_flags_severe_spotify_visualizer_latency_as_own_anomaly():
     assert any("severe latency" in anomaly for anomaly in report.anomalies)
 
 
+def test_perf_health_classifies_paused_transition_latency_probe_separately():
+    report = parse_perf_health_lines(
+        [
+            "21:03:20 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=spectrum "
+            "elapsed_ms=10000.0 set_state=750 paint=748 update_requests=750 "
+            "geometry_changes=0 visible=True enabled=True playing=False",
+            "21:03:24 - widgets.spotify_visualizer.tick_pipeline - ERROR - "
+            "[!!!!][SPOTIFY_VIS][LATENCY] lag_ms=1805.4 mode=spectrum "
+            "transition_phase=0 pending=<none> trigger=transition_end",
+        ]
+    )
+
+    assert len(report.paused_forced_visualizer_latency_warnings) == 1
+    assert report.significant_visualizer_timing_warnings == []
+    assert report.severe_visualizer_latency_warnings == []
+    assert report.anomalies == []
+
+
+def test_perf_health_keeps_live_transition_latency_probe_severe():
+    report = parse_perf_health_lines(
+        [
+            "21:03:20 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=set_state screen=1 mode=spectrum "
+            "elapsed_ms=10000.0 set_state=750 paint=748 update_requests=750 "
+            "geometry_changes=0 visible=True enabled=True playing=True",
+            "21:03:24 - widgets.spotify_visualizer.tick_pipeline - ERROR - "
+            "[!!!!][SPOTIFY_VIS][LATENCY] lag_ms=1805.4 mode=spectrum "
+            "transition_phase=0 pending=<none> trigger=transition_end",
+        ]
+    )
+
+    assert report.paused_forced_visualizer_latency_warnings == []
+    assert len(report.severe_visualizer_latency_warnings) == 1
+    assert any("severe latency" in anomaly for anomaly in report.anomalies)
+
+
 def test_perf_health_flags_slow_texture_uploads_as_own_anomaly():
     report = parse_perf_health_lines(
         [
@@ -784,6 +889,22 @@ def test_perf_health_parses_slow_texture_upload_phase_breakdown():
     assert upload.pbo_stage_ms == 5.45
     assert upload.tex_upload_ms == 15.60
     assert upload.dominant_phase == ("tex_upload", 15.60)
+    assert upload.direct is None
+
+
+def test_perf_health_parses_direct_texture_upload_buffer_path():
+    report = parse_perf_health_lines(
+        [
+            "21:02:44 - rendering.gl_programs.texture_manager - WARNING - "
+            "[PERF] [GL TEXTURE] Slow upload: 20.75ms "
+            "(3840x2160, pbo=True, convert=10.20ms, copy=0.05ms, "
+            "pbo_stage=9.90ms, tex_upload=0.30ms, direct=True)"
+        ]
+    )
+
+    upload = report.slow_texture_uploads[0]
+    assert upload.direct is True
+    assert upload.copy_ms == 0.05
 
 
 def test_perf_health_enforces_bounded_gl_texture_cache_cleanup_contract():
@@ -915,4 +1036,47 @@ def test_perf_health_collects_timeline_markers_for_collapse_correlation():
         "display_lifecycle",
         "geometry_save",
         "frame_budget_spike",
+    ]
+
+
+def test_perf_health_flags_transition_drop_instant_commit_and_program_poisoning():
+    report = parse_perf_health_lines(
+        [
+            "15:21:31 - rendering.gl_compositor - ERROR - "
+            "glDeleteProgram(17) GL_INVALID_VALUE",
+            "15:21:33 - rendering.gl - ERROR - "
+            "glUniform1f(4, 0.5) GL_INVALID_OPERATION",
+            "15:22:10 - rendering.transition_controller - WARNING - "
+            "Transition failed to start",
+            "15:22:10 - rendering.display_image_ops - ERROR - "
+            "[TRANSITION][ERROR] Transition refused/failed to start; displaying final image immediately",
+            "15:23:21 - rendering.display_image_ops - DEBUG - "
+            "Transition in progress - skipping image request (skip_count=1)",
+        ]
+    )
+
+    assert len(report.transition_start_refusals) == 2
+    assert len(report.transition_instant_commits) == 1
+    assert len(report.transition_request_drops) == 1
+    assert len(report.gl_program_lifecycle_errors) == 2
+    assert any("without animation" in item for item in report.anomalies)
+    assert any("dropped" in item for item in report.anomalies)
+    assert any("ownership/binding" in item for item in report.anomalies)
+
+
+def test_perf_health_default_companions_include_main_and_usage_logs(tmp_path):
+    perf_log = tmp_path / "screensaver_perf.log"
+    main_log = tmp_path / "screensaver.log"
+    verbose_log = tmp_path / "screensaver_verbose.log"
+    usage_log = tmp_path / "screensaver_usage.log"
+    perf_log.write_text("", encoding="utf-8")
+    main_log.write_text("", encoding="utf-8")
+    verbose_log.write_text("", encoding="utf-8")
+    usage_log.write_text("", encoding="utf-8")
+
+    assert _resolve_log_paths(perf_log, [], None) == [
+        perf_log,
+        main_log,
+        verbose_log,
+        usage_log,
     ]

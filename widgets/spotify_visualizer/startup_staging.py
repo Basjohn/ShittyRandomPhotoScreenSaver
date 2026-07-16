@@ -386,9 +386,22 @@ def deactivate_impl(widget: Any) -> None:
 
 def cleanup_impl(widget: Any) -> None:
     """Clean up visualizer resources — lifecycle hook."""
-    deactivate_impl(widget)
+    was_enabled = bool(widget._enabled)
+    stop_legacy(widget)
+    if not was_enabled:
+        cancel_pending_startup_reveal(widget)
+        try:
+            widget.detach_from_animation_manager()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to detach from AnimationManager during cleanup", exc_info=True)
+        if widget._bars_timer is not None:
+            try:
+                widget._bars_timer.stop()
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to stop bars timer during cleanup", exc_info=True)
+            widget._bars_timer = None
+        widget._using_animation_ticks = False
     widget._engine = None
-    # Free GL handles on the bars overlay to prevent VRAM leaks
     widget._destroy_parent_overlay(reason="cleanup_impl")
     logger.debug("[LIFECYCLE] SpotifyVisualizerWidget cleaned up")
 

@@ -163,6 +163,14 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
             if exit_app:
                 # Exiting app - full cleanup
                 try:
+                    from rendering.gl_compositor import cleanup_global_shader_programs
+
+                    cleanup_global_shader_programs(
+                        getattr(engine.display_manager, "displays", ())
+                    )
+                except Exception as e:
+                    logger.debug("Final live-context shader cleanup skipped: %s", e, exc_info=True)
+                try:
                     engine.display_manager.cleanup()
                     logger.debug("Displays cleared and cleaned up")
                 except Exception as e:
@@ -182,6 +190,10 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
 
         # Stop any pending image loads
         engine._loading_in_progress = False
+        engine._deferred_next_image_requested = False
+        engine._deferred_next_image_reason = None
+        engine._deferred_next_image_resume_scheduled = False
+        engine._deferred_next_image_resume_in_progress = False
 
         try:
             from core.windows import reddit_helper_runtime

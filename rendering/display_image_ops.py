@@ -32,11 +32,14 @@ from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_
 from rendering.gl_compositor import GLCompositorWidget
 from transitions.overlay_manager import GL_OVERLAY_KEYS
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+from widgets.spotify_visualizer.frame_transport import VisualizerFramePacket
 
 from rendering.display_widget import _describe_pixmap
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+_TRANSITION_ADMISSION_RETRY_DELAYS_MS = (125, 375, 1000, 2500)
 
 
 def _raise_runtime_widgets_above_compositor(widget, *, stage: str) -> None:
@@ -143,6 +146,290 @@ def _schedule_startup_first_frame_ready(widget, image_path: str) -> None:
     _complete_when_current()
 
 
+def _is_live_widget(widget) -> bool:
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(widget))
+    except Exception:
+        return False
+
+
+def _clear_deferred_processed_image(widget, *, clear_pending: bool = False) -> None:
+    """Release one retained prepared frame and invalidate scheduled retries."""
+
+    widget._deferred_processed_image_retry_token = (
+        int(getattr(widget, "_deferred_processed_image_retry_token", 0)) + 1
+    )
+    widget._deferred_processed_image = None
+    widget._deferred_processed_image_retry_attempts = 0
+    widget._deferred_processed_image_retry_scheduled = False
+    widget._deferred_processed_image_retry_in_progress = False
+    if clear_pending and hasattr(widget, "set_transition_work_pending"):
+        widget.set_transition_work_pending(False)
+
+
+def _restore_visible_pixmap(widget, previous_pixmap: Optional[QPixmap]) -> None:
+    """Restore the last committed frame after transition admission refuses."""
+
+    widget.current_pixmap = previous_pixmap
+    widget.previous_pixmap = None
+    widget._seed_pixmap = previous_pixmap
+    widget._last_pixmap_seed_ts = time.monotonic()
+
+    presenter = getattr(widget, "_image_presenter", None)
+    if presenter is not None and previous_pixmap is not None:
+        try:
+            presenter.set_current(previous_pixmap, update_seed=True)
+        except Exception:
+            logger.debug(
+                "[DISPLAY_WIDGET] Failed to restore presenter after transition refusal",
+                exc_info=True,
+            )
+
+    comp = getattr(widget, "_gl_compositor", None)
+    if comp is not None and previous_pixmap is not None:
+        try:
+            comp.set_base_pixmap(previous_pixmap)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Failed to restore committed base frame",
+                exc_info=True,
+            )
+    try:
+        widget.update()
+    except Exception:
+        logger.debug(
+            "[DISPLAY_WIDGET] Failed to repaint restored committed frame",
+            exc_info=True,
+        )
+
+
+def _schedule_deferred_processed_image_retry(
+    widget,
+    *,
+    reason: str,
+    immediate: bool = False,
+) -> bool:
+    """Retry one retained frame without creating a paint-owned retry loop."""
+
+    payload = getattr(widget, "_deferred_processed_image", None)
+    if payload is None:
+        return False
+    if bool(getattr(widget, "_deferred_processed_image_retry_scheduled", False)):
+        return False
+    if widget.has_running_transition():
+        return False
+
+    attempts = int(getattr(widget, "_deferred_processed_image_retry_attempts", 0))
+    if attempts >= len(_TRANSITION_ADMISSION_RETRY_DELAYS_MS):
+        logger.error(
+            "[TRANSITION][BLOCKED] Prepared frame remains deferred after admission retries "
+            "screen=%s image=%s attempts=%s reason=%s",
+            getattr(widget, "screen_index", "?"),
+            payload[2],
+            attempts,
+            reason,
+        )
+        return False
+
+    delay_ms = 0 if immediate else _TRANSITION_ADMISSION_RETRY_DELAYS_MS[attempts]
+    token = int(getattr(widget, "_deferred_processed_image_retry_token", 0)) + 1
+    widget._deferred_processed_image_retry_token = token
+    widget._deferred_processed_image_retry_scheduled = True
+    widget_ref = weakref.ref(widget)
+
+    def _retry() -> None:
+        target = widget_ref()
+        if target is None or not _is_live_widget(target):
+            return
+        if token != int(getattr(target, "_deferred_processed_image_retry_token", 0)):
+            return
+        target._deferred_processed_image_retry_scheduled = False
+        if target.has_running_transition():
+            return
+
+        retained = getattr(target, "_deferred_processed_image", None)
+        if retained is None:
+            return
+        target._deferred_processed_image = None
+        target._deferred_processed_image_retry_in_progress = True
+        try:
+            set_processed_image(target, retained[0], retained[1], retained[2])
+        finally:
+            target._deferred_processed_image_retry_in_progress = False
+
+    scheduler = getattr(widget, "_thread_manager", None)
+    try:
+        if scheduler is not None and hasattr(scheduler, "single_shot"):
+            scheduler.single_shot(delay_ms, _retry)
+        else:
+            from core.threading.manager import ThreadManager
+
+            ThreadManager.single_shot(delay_ms, _retry)
+        logger.warning(
+            "[TRANSITION][DEFER] Prepared frame retry armed screen=%s image=%s "
+            "delay_ms=%s attempt=%s reason=%s",
+            getattr(widget, "screen_index", "?"),
+            payload[2],
+            delay_ms,
+            attempts + 1,
+            reason,
+        )
+        return True
+    except Exception:
+        widget._deferred_processed_image_retry_scheduled = False
+        logger.error(
+            "[TRANSITION][BLOCKED] Failed to schedule retained prepared frame screen=%s",
+            getattr(widget, "screen_index", "?"),
+            exc_info=True,
+        )
+        return False
+
+
+def _stage_deferred_processed_image(
+    widget,
+    processed_pixmap: QPixmap,
+    original_pixmap: QPixmap,
+    image_path: str,
+    *,
+    reason: str,
+    schedule_retry: bool,
+) -> None:
+    """Retain the first accepted prepared frame while the old image stays visible."""
+
+    existing = getattr(widget, "_deferred_processed_image", None)
+    if existing is None:
+        widget._deferred_processed_image = (
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+        )
+        widget._transition_defer_count = (
+            int(getattr(widget, "_transition_defer_count", 0)) + 1
+        )
+    elif existing[2] != image_path:
+        logger.error(
+            "[TRANSITION][ERROR] Additional prepared frame arrived while one was already retained; "
+            "preserving first accepted frame screen=%s retained=%s rejected=%s",
+            getattr(widget, "screen_index", "?"),
+            existing[2],
+            image_path,
+        )
+
+    if bool(getattr(widget, "_deferred_processed_image_retry_in_progress", False)):
+        widget._deferred_processed_image_retry_attempts = (
+            int(getattr(widget, "_deferred_processed_image_retry_attempts", 0)) + 1
+        )
+
+    if hasattr(widget, "set_transition_work_pending"):
+        widget.set_transition_work_pending(True)
+    logger.warning(
+        "[TRANSITION][DEFER] Prepared frame retained behind committed image "
+        "screen=%s image=%s reason=%s",
+        getattr(widget, "screen_index", "?"),
+        image_path,
+        reason,
+    )
+    if schedule_retry:
+        _schedule_deferred_processed_image_retry(widget, reason=reason)
+
+
+def _ensure_transition_admitted(widget, transition) -> bool:
+    """Prove compositor program readiness before visible state can change."""
+
+    transition_name = transition.__class__.__name__
+    if not transition_name.startswith("GLCompositor"):
+        return True
+    comp = getattr(widget, "_gl_compositor", None)
+    if not isinstance(comp, GLCompositorWidget):
+        return False
+    try:
+        return bool(
+            comp._ensure_gl_pipeline_ready()
+            and comp._ensure_transition_program_ready(transition_name)
+        )
+    except Exception:
+        logger.debug(
+            "[TRANSITION] Compositor admission preflight failed for %s",
+            transition_name,
+            exc_info=True,
+        )
+        return False
+
+
+def _on_deferred_transition_start_failed(
+    widget,
+    transition_label: str,
+    reason: str,
+) -> None:
+    """Roll a delayed compositor refusal back without exposing its destination."""
+
+    if not _is_live_widget(widget) or bool(
+        getattr(widget, "_render_shutdown_requested", False)
+    ):
+        return
+
+    payload = getattr(widget, "_pending_transition_finish_args", None)
+    previous_pixmap = getattr(widget, "previous_pixmap", None)
+    logger.error(
+        "[TRANSITION][DEFER] Compositor work failed after acceptance; preserving old frame "
+        "screen=%s transition=%s reason=%s image=%s",
+        getattr(widget, "screen_index", "?"),
+        transition_label,
+        reason,
+        payload[2] if payload else "<none>",
+    )
+
+    controller = getattr(widget, "_transition_controller", None)
+    if controller is not None:
+        controller.abort_current_preserving_old(reason)
+    else:
+        compositor = getattr(widget, "_gl_compositor", None)
+        if compositor is not None:
+            try:
+                compositor.cancel_current_transition(snap_to_new=False)
+            except Exception:
+                logger.debug(
+                    "[TRANSITION] Failed to cancel compositor after deferred refusal",
+                    exc_info=True,
+                )
+
+    widget._current_transition = None
+    widget._current_transition_overlay_key = None
+    widget._current_transition_started_at = 0.0
+    widget._current_transition_expected_duration_ms = 0
+    widget._current_transition_name = None
+    widget._current_transition_first_run = False
+    widget._pending_transition_finish_args = None
+    widget._cancel_transition_watchdog()
+    _restore_visible_pixmap(widget, previous_pixmap)
+    _raise_runtime_widgets_above_compositor(
+        widget,
+        stage="deferred_transition_refused",
+    )
+
+    if payload is None:
+        if hasattr(widget, "set_transition_work_pending"):
+            widget.set_transition_work_pending(False)
+        logger.error(
+            "[TRANSITION][BLOCKED] Deferred transition failure had no retained payload "
+            "screen=%s transition=%s",
+            getattr(widget, "screen_index", "?"),
+            transition_label,
+        )
+        return
+
+    _stage_deferred_processed_image(
+        widget,
+        payload[0],
+        payload[1],
+        payload[2],
+        reason=reason,
+        schedule_retry=True,
+    )
+
+
 def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
                        image_path: str = "") -> None:
     """Display an already-processed image with transition.
@@ -157,14 +444,29 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         original_pixmap: Original unprocessed pixmap (for reference)
         image_path: Path to image (for logging/events)
     """
-    # If a transition is already running, skip this call (single-skip policy)
+    if (
+        getattr(widget, "_deferred_processed_image", None) is not None
+        and not bool(getattr(widget, "_deferred_processed_image_retry_in_progress", False))
+    ):
+        _stage_deferred_processed_image(
+            widget,
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+            reason="retained_frame_already_pending",
+            schedule_retry=False,
+        )
+        return
+
+    # A prepared frame is retained until the active transition finishes.
     if widget.has_running_transition():
-        if hasattr(widget, "set_transition_work_pending"):
-            widget.set_transition_work_pending(False)
-        widget._transition_skip_count += 1
-        logger.debug(
-            "Transition in progress - skipping image request (skip_count=%s)",
-            widget._transition_skip_count,
+        _stage_deferred_processed_image(
+            widget,
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+            reason="transition_in_progress",
+            schedule_retry=False,
         )
         return
 
@@ -276,6 +578,29 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         if use_transition:
             transition = widget._create_transition()
             if transition:
+                if not _ensure_transition_admitted(widget, transition):
+                    try:
+                        transition.cleanup()
+                    except Exception:
+                        logger.debug(
+                            "[TRANSITION] Failed to cleanup unadmitted transition",
+                            exc_info=True,
+                        )
+                    _restore_visible_pixmap(widget, previous_pixmap_ref)
+                    _raise_runtime_widgets_above_compositor(
+                        widget,
+                        stage="transition_admission_refused",
+                    )
+                    _stage_deferred_processed_image(
+                        widget,
+                        processed_pixmap,
+                        original_pixmap,
+                        image_path,
+                        reason="program_admission_refused",
+                        schedule_retry=True,
+                    )
+                    return
+
                 # Set previous pixmap for transition
                 widget.previous_pixmap = previous_pixmap_ref or processed_pixmap
                 
@@ -307,7 +632,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                 self_ref = weakref.ref(widget)
                 def _finish_handler(np=processed_pixmap, op=original_pixmap, ip=image_path, ref=self_ref):
                     widget = ref()
-                    if widget is None or not Shiboken.isValid(widget):
+                    if widget is None or not _is_live_widget(widget):
                         return
                     try:
                         widget._pending_transition_finish_args = (np, op, ip, False, None)
@@ -342,6 +667,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         widget._current_transition_name not in widget._warmed_transition_types
                         and widget._current_transition_name not in widget._prewarmed_transition_types
                     )
+                    _clear_deferred_processed_image(widget)
                     if hasattr(widget, "set_transition_work_pending"):
                         widget.set_transition_work_pending(False)
                     if is_perf_metrics_enabled():
@@ -359,23 +685,44 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     return
                 else:
                     logger.error(
-                        "[TRANSITION][ERROR] Transition refused/failed to start; displaying final image immediately "
+                        "[TRANSITION][DEFER] Transition refused/failed to start; retaining committed image "
                         "screen=%s transition=%s overlay=%s",
                         getattr(widget, "screen_index", "?"),
                         transition.__class__.__name__,
                         overlay_key or "<none>",
                     )
-                    transition.cleanup()
+                    if widget._transition_controller is None:
+                        transition.cleanup()
                     widget._current_transition = None
                     widget._current_transition_name = None
                     widget._current_transition_first_run = False
                     widget._pending_transition_finish_args = None
+                    widget._cancel_transition_watchdog()
+                    _restore_visible_pixmap(widget, previous_pixmap_ref)
                     _raise_runtime_widgets_above_compositor(widget, stage="transition_refused")
-                    use_transition = False
+                    _stage_deferred_processed_image(
+                        widget,
+                        processed_pixmap,
+                        original_pixmap,
+                        image_path,
+                        reason="transition_start_refused",
+                        schedule_retry=True,
+                    )
+                    return
             else:
-                use_transition = False
+                _restore_visible_pixmap(widget, previous_pixmap_ref)
+                _stage_deferred_processed_image(
+                    widget,
+                    processed_pixmap,
+                    original_pixmap,
+                    image_path,
+                    reason="transition_factory_unavailable",
+                    schedule_retry=True,
+                )
+                return
 
         if not use_transition:
+            _clear_deferred_processed_image(widget)
             widget._pending_transition_finish_args = None
             widget._cancel_transition_watchdog()
             # No transition - display immediately
@@ -472,6 +819,12 @@ def _on_transition_finished(
         logger.debug("[DISPLAY_WIDGET] Transition completed signal failed: %s", e)
     widget.image_displayed.emit(image_path)
     widget._pending_transition_finish_args = None
+    if getattr(widget, "_deferred_processed_image", None) is not None:
+        _schedule_deferred_processed_image_retry(
+            widget,
+            reason="prior_transition_completed",
+            immediate=True,
+        )
 
 def push_spotify_visualizer_frame(
     widget,
@@ -543,7 +896,64 @@ def push_spotify_visualizer_frame(
         vis_mode=vis_mode,
         visible=True,
         border_width_px=border_width,
-        **extra_kwargs,
+        extra_kwargs=extra_kwargs,
+    )
+
+
+def push_spotify_visualizer_frame_packet(
+    widget,
+    packet: VisualizerFramePacket,
+) -> bool:
+    """Push a reusable frame packet through the real DisplayWidget fast path."""
+    vis = getattr(widget, "spotify_visualizer_widget", None)
+    if vis is None:
+        return False
+
+    allow_hidden_startup_priming = False
+    try:
+        if not vis.isVisible():
+            allow_hidden_startup_priming = bool(
+                getattr(vis, "_startup_reveal_pending", False)
+                or getattr(vis, "_waiting_for_fresh_frame", False)
+                or getattr(vis, "_waiting_for_fresh_engine_frame", False)
+            )
+            if not allow_hidden_startup_priming:
+                return False
+    except Exception as e:
+        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        return False
+
+    geom = _resolve_spotify_visualizer_overlay_rect(vis)
+    if geom is None or geom.width() <= 0 or geom.height() <= 0:
+        return False
+
+    overlay = _ensure_spotify_bars_overlay(widget)
+    if overlay is None:
+        return False
+
+    try:
+        border_width = int(vis._border_width)
+    except Exception:
+        border_width = 0
+
+    return _push_spotify_bars_overlay_state(
+        widget,
+        overlay=overlay,
+        geom=geom,
+        bars=packet.bars,
+        bar_count=packet.bar_count,
+        segments=packet.segments,
+        fill_color=packet.fill_color,
+        border_color=packet.border_color,
+        fade=packet.fade,
+        playing=packet.playing,
+        ghosting_enabled=packet.ghosting_enabled,
+        ghost_alpha=packet.ghost_alpha,
+        ghost_decay=packet.ghost_decay,
+        vis_mode=packet.vis_mode,
+        visible=True,
+        border_width_px=border_width,
+        extra_kwargs=packet.extra_kwargs,
     )
 
 
@@ -754,26 +1164,15 @@ def _push_spotify_bars_overlay_state(
     ghost_decay=-1.0,
     vis_mode="spectrum",
     visible=True,
-    **extra_kwargs,
+    border_width_px=0,
+    extra_kwargs=None,
 ) -> bool:
-    try:
-        overlay_kwargs = {
-            "rect": geom,
-            "bars": bars,
-            "bar_count": bar_count,
-            "segments": segments,
-            "fill_color": fill_color,
-            "border_color": border_color,
-            "fade": fade,
-            "playing": playing,
-            "visible": visible,
-            "ghosting_enabled": ghosting_enabled,
-            "ghost_alpha": ghost_alpha,
-            "ghost_decay": ghost_decay,
-            "vis_mode": vis_mode,
-        }
-        overlay_kwargs.update(extra_kwargs)
+    extras = extra_kwargs if isinstance(extra_kwargs, dict) else {}
+    if "border_width_px" in extras:
+        extras = dict(extras)
+        extras.pop("border_width_px", None)
 
+    try:
         try:
             vis = getattr(widget, "spotify_visualizer_widget", None)
             if vis is not None and hasattr(overlay, "set_painted_frame_shadow_enabled"):
@@ -782,7 +1181,23 @@ def _push_spotify_bars_overlay_state(
             logger.debug("[SPOTIFY_VIS] Failed to sync GL stencil shadow state", exc_info=True)
 
         try:
-            overlay.set_state(**overlay_kwargs)
+            overlay.set_state(
+                rect=geom,
+                bars=bars,
+                bar_count=bar_count,
+                segments=segments,
+                fill_color=fill_color,
+                border_color=border_color,
+                fade=fade,
+                playing=playing,
+                visible=visible,
+                ghosting_enabled=ghosting_enabled,
+                ghost_alpha=ghost_alpha,
+                ghost_decay=ghost_decay,
+                vis_mode=vis_mode,
+                border_width_px=border_width_px,
+                **extras,
+            )
         except TypeError as exc:
             # Fallback: strip keys the current overlay implementation does not accept.
             unexpected = []
@@ -794,9 +1209,26 @@ def _push_spotify_bars_overlay_state(
                 if start != -1 and end != -1:
                     unexpected.append(msg[start + 1:end])
             if unexpected:
+                fallback_extras = dict(extras)
                 for key in unexpected:
-                    overlay_kwargs.pop(key, None)
-                overlay.set_state(**overlay_kwargs)
+                    fallback_extras.pop(key, None)
+                overlay.set_state(
+                    rect=geom,
+                    bars=bars,
+                    bar_count=bar_count,
+                    segments=segments,
+                    fill_color=fill_color,
+                    border_color=border_color,
+                    fade=fade,
+                    playing=playing,
+                    visible=visible,
+                    ghosting_enabled=ghosting_enabled,
+                    ghost_alpha=ghost_alpha,
+                    ghost_decay=ghost_decay,
+                    vis_mode=vis_mode,
+                    border_width_px=border_width_px,
+                    **fallback_extras,
+                )
             else:
                 raise
     except Exception:

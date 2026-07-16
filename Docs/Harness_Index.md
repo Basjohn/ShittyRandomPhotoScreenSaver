@@ -162,6 +162,7 @@ python tools/media_key_reality_harness.py --profile-mode mirrored --scenario foc
   - editing visualizer tick/render/audio feed plumbing
   - changing mode activation/reset/first-frame behavior
   - changing overlay payloads or transition handoff
+  - reusing or splitting accepted-frame packet/static config storage
   - changing shared perf paths that could alter visualizer timing
   - adding or changing `--usage`/resource telemetry that could create cadence or logging pressure
 - Typical command:
@@ -184,6 +185,7 @@ python -m pytest `
   - `Oscilloscope` is now part of the accepted lock after its mode-owned waveform/ghost/glow pass; keep future changes mode-owned unless a shared seam is proven.
   - Paused `Oscilloscope`, Bubble, Sine, and Dev Curve intentionally use idle reveal and clear the fresh-engine wait; paused Spectrum retains the fresh-engine wait. A shared parameterized test must not flatten those distinct contracts.
   - A lone `[FIRST_FRAME_PRIMER]` is expected remediation when the overlay still owns an old generation/activation before the first authoritative push. Escalate only when current source authority does not replace it, or when `FIRST_FRAME_GUARD`, `PARITY`, technical replay, fallback, or stale-commit evidence also fails.
+  - Reusable visualizer packets are synchronous scratch storage. The lock must keep generation/activation/required-waveform checks ahead of packet delivery, preserve hidden-primer `fade=0`, and prove the same packet can be reused without carrying stale mode/source keys.
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
@@ -222,7 +224,7 @@ python tools/bubble_parity_harness.py --preset preset_9_deap_sea_experimental.js
 ## Performance / Metrics
 
 ### Image cache / prewarm producer contract
-- Purpose: guard the transition-adjacent image prewarm path so scaled warmups cannot orphan work, skip later preview images only because active IO slots are full, hide fallback state from `--cache` logs, or reintroduce raw `QTimer.singleShot` delayed work outside the ThreadManager seam.
+- Purpose: guard the transition-adjacent image prewarm path so scaled warmups cannot orphan work, skip later preview images only because active IO slots are full, hide fallback state from `--cache` logs, admit one oversized raw decode that flushes the prepared LRU window, or reintroduce raw `QTimer.singleShot` delayed work outside the ThreadManager seam.
 - Use when:
   - editing `utils/image_prefetcher.py`
   - editing `engine/image_pipeline.py` cache/prefetch scheduling
@@ -248,6 +250,7 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
   - CPU, memory, thread/handle, GPU, or VRAM pressure must be correlated with cadence loss
   - mixed-refresh transition windows need a fail-fast health check
   - Spotify visualizer overlay paint/update cadence needs to be checked for both overpaint and under-delivery against the owning display target
+  - short Spotify overlay paint-delivery gaps or accepted-update waits may be hidden by healthy ten-second average throughput
   - cache fallback warnings need producer-state classification
   - pending paint/update delivery needs to be distinguished from render timer cadence and queued-dispatch coalescing
 - Transition/cache health commands:
@@ -260,16 +263,17 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log -
 ```
 - Start runtime collection with `--usage`; combine it with `--perf --viz` when diagnosing visualizer/cadence pressure. The parser auto-merges `screensaver_usage.log` beside the primary `screensaver_perf.log` when present, while `--usage-log` selects an explicit sidecar.
 - `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager submitted/completed/failed activity, app-shared ResourceManager totals and GL texture/VBO/VAO/program registrations, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero.
-- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, primed-baseline RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager/texture-registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. Correlation is evidence, not automatic root-cause proof.
+- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, primed-baseline RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager/texture-registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, direct-vs-owned upload staging, transition start refusals, instant destination commits, dropped next-image requests, GL program lifecycle/binding errors, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. It also parses the overlay's fixed-memory `[MICROGAP]` summaries by owning screen and `transition_active` / `just_ended` / `mode_handoff` / `steady_idle` context, so a healthy average cannot hide a `100+ ms` paint gap, delivered wait, or still-pending accepted update. Historical paused transition probes are reported separately and excluded from live severe latency; playing probes remain severe. Correlation is evidence, not automatic root-cause proof.
 - Focused implementation bar:
 ```powershell
-python -m pytest tests/test_usage_sampler.py tests/test_resource_manager.py tests/test_gl_texture_streaming.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
+python -m pytest tests/test_usage_sampler.py tests/test_resource_manager.py tests/test_display_cleanup.py tests/test_gl_texture_streaming.py tests/test_image_prefetcher.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
 ```
-- Non-interference is mandatory: no tray probe, unmanaged thread, per-frame query, UI-thread collection/logging, repaint/update, mode retuning, source-cadence change, or automatic quality reduction. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
-- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
+- Non-interference is mandatory: no tray probe, unmanaged thread, per-frame OS/GL query, extra UI-thread timer, repaint/update, mode retuning, source-cadence change, or automatic quality reduction. Overlay microgap collection is `--perf`-only, uses preallocated fixed buckets and the existing ten-second summary, and retains only one oldest accepted-but-unpainted timestamp. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
+- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, Spotify overlay microgaps/waits that exceed owner-cadence thresholds, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Use `--extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log` when investigating Spotify/media/visualizer topology; the perf sidecar owns render/paint cadence, the viz sidecar owns visualizer creation/display ownership, and the main log carries media/fallback context.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.
 - For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.
+- A healthy no-skip run must keep `Transition start refusals`, `Transition instant commits`, `Transition request drops`, and `GL program lifecycle errors` at zero. If one appears, inspect the main/verbose companions even when average FPS remains acceptable.
 
 ## Maintenance
 - If a harness becomes part of a real recurring workflow, add it here and link the relevant bug/history doc.

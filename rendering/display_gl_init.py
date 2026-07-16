@@ -190,27 +190,25 @@ def cleanup_widget(widget, attr_name: str, tag: str, stop_method: str = "cleanup
         tag: Log tag for debug messages (e.g., "MEDIA")
         stop_method: Method to call for cleanup ("cleanup", "stop", or None)
     """
+    owner = widget
     try:
-        widget = getattr(widget, attr_name, None)
-        if widget is None:
+        target = getattr(owner, attr_name, None)
+        if target is None:
             return
         if stop_method:
-            method = getattr(widget, stop_method, None)
+            method = getattr(target, stop_method, None)
             if callable(method):
                 try:
                     method()
                 except Exception as e:
                     logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            widget.hide()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        setattr(widget, attr_name, None)
+        hide = getattr(target, "hide", None)
+        if callable(hide):
+            try:
+                hide()
+            except Exception as e:
+                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        setattr(owner, attr_name, None)
     except Exception as e:
         logger.debug("[%s] Failed to cleanup in _on_destroyed: %s", tag, e, exc_info=True)
-
-def on_destroyed(widget) -> None:
-    """Cleanup when widget is destroyed."""
-    # Widget cleanup handled by other methods
-    pass
 

@@ -139,6 +139,7 @@ class TestDisplayTransitions:
             cfg = {}
         if transition_type is not None:
             cfg["type"] = transition_type
+            cfg["random_always"] = transition_type == "Random"
         if duration_ms is not None:
             cfg["duration_ms"] = duration_ms
             target_type = transition_type or cfg.get("type")
@@ -202,10 +203,33 @@ class TestDisplayTransitions:
         # is covered by runtime integration, not unit tests.
         assert display_widget.current_pixmap is not None
 
-    def test_transition_cleanup_on_clear(self, qt_app, display_widget, test_pixmap, test_pixmap2):
+    def test_transition_cleanup_on_clear(
+        self,
+        qt_app,
+        display_widget,
+        test_pixmap,
+        test_pixmap2,
+        monkeypatch,
+    ):
         """Clearing the widget should stop a long-running transition."""
+        monkeypatch.setattr(
+            "rendering.display_image_ops._ensure_transition_admitted",
+            lambda *_args, **_kwargs: True,
+        )
+        monkeypatch.setattr(
+            "transitions.base_transition.BaseTransition._accept_compositor_animation_id",
+            lambda *_args, **_kwargs: True,
+        )
         self._set_transitions(display_widget.settings_manager, transition_type="Slide", duration_ms=2000)
         display_widget.set_image(test_pixmap, "test1.png")
+        qt_app.processEvents()
+        compositor = display_widget._gl_compositor
+        assert compositor is not None
+        monkeypatch.setattr(
+            compositor,
+            "_start_transition_animation",
+            lambda *_args, **_kwargs: "test-animation",
+        )
         display_widget.set_image(test_pixmap2, "test2.png")
         assert display_widget._current_transition is not None
         display_widget.clear()
@@ -942,6 +966,7 @@ class TestDisplayManagerSync:
                 self.custom_layout_reload_requested = _FakeSignal()
                 self.monitors_changed = _FakeSignal()
                 self.displays_ready = _FakeSignal()
+                self.image_displayed = _FakeSignal()
                 created_managers.append(self)
 
             def initialize_displays(self):
@@ -979,6 +1004,7 @@ class TestDisplayManagerSync:
             _on_custom_layout_reload_requested=Mock(),
             _on_monitors_changed=monitor_handler,
             _on_displays_ready=Mock(),
+            _on_display_image_displayed=Mock(),
             _on_settings_changed=settings_handler,
         )
 
@@ -1066,6 +1092,7 @@ class TestSpotifyWidgetIntegration:
             monkeypatch.setattr(media, "isVisible", lambda: True, raising=False)
             vis._enabled = True
             vis._startup_secondary_stage_pending = False
+            vol._spotify_secondary_stage_started = True
             display._overlay_fade_started = True
             display._spotify_secondary_not_before_ts = 0.0
             media._notify_spotify_widgets_visibility()

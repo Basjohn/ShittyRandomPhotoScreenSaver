@@ -18,6 +18,10 @@ logger = get_logger(__name__)
 
 def on_destroyed(widget: "DisplayWidget", *_args) -> None:
     """Ensure active transitions are stopped when the widget is destroyed."""
+    if bool(getattr(widget, "_destroy_cleanup_done", False)):
+        return
+    widget._destroy_cleanup_done = True
+
     # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
     # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
     if widget.settings_manager and widget._settings_listener_connected:
@@ -42,7 +46,9 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    widget._destroy_render_surface()
+    # The visualizer owns a child QOpenGLWidget. Release it before tearing down
+    # the display compositor or render surface so its context is still valid.
+    widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "cleanup")
 
     # Ensure compositor is torn down cleanly
     try:
@@ -60,8 +66,9 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
         logger.debug("[GL COMPOSITOR] Teardown failed: %s", e, exc_info=True)
         widget._gl_compositor = None
 
+    widget._destroy_render_surface()
+
     # Cleanup all overlay widgets using helper
-    widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "stop")
     widget._cleanup_widget("media_widget", "MEDIA", "cleanup")
     widget._cleanup_widget("weather_widget", "WEATHER", "cleanup")
     widget._cleanup_widget("reddit_widget", "REDDIT", "cleanup")
@@ -80,6 +87,9 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
 
     # Stop and clean up any active transition via TransitionController
     try:
+        from rendering.display_image_ops import _clear_deferred_processed_image
+
+        _clear_deferred_processed_image(widget, clear_pending=True)
         if widget._transition_controller is not None:
             widget._transition_controller.stop_current()
         elif widget._current_transition:
