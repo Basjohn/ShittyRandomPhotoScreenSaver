@@ -87,6 +87,40 @@ def test_resolve_mode_program_lazily_compiles_missing_mode(monkeypatch):
     assert not logger.warning_messages
 
 
+def test_compositor_missing_mode_never_compiles_on_visible_paint(monkeypatch):
+    logger = _CaptureLogger()
+    gl = _FakeGL()
+    overlay = SimpleNamespace(
+        _gl_programs={},
+        _surface_host=SimpleNamespace(render_surface_kind="compositor"),
+        _unavailable_program_warnings=set(),
+        _compile_gl_mode_program=lambda *_args: (_ for _ in ()).throw(
+            AssertionError("compositor shaders must compile during hidden prewarm")
+        ),
+    )
+    monkeypatch.setattr(
+        "widgets.spotify_visualizer.shaders.load_fragment_shader",
+        lambda _mode: (_ for _ in ()).throw(
+            AssertionError("visible compositor paint must not load shader source")
+        ),
+    )
+
+    assert overlay_dispatch.resolve_mode_program(
+        overlay,
+        gl,
+        "bubble",
+        logger,
+    ) is None
+    assert overlay_dispatch.resolve_mode_program(
+        overlay,
+        gl,
+        "bubble",
+        logger,
+    ) is None
+    assert gl.calls == []
+    assert len(logger.warning_messages) == 1
+
+
 def test_dispatch_mode_uniforms_delegates_to_renderer_registry(monkeypatch):
     calls = {}
 

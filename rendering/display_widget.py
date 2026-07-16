@@ -44,7 +44,6 @@ from widgets.media_widget import MediaWidget
 from widgets.reddit_widget import RedditWidget
 from widgets.pixel_shift_manager import PixelShiftManager
 from widgets.spotify_visualizer_widget import SpotifyVisualizerWidget
-from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_volume_widget import SpotifyVolumeWidget
 from widgets.context_menu import ScreensaverContextMenu
 from widgets.cursor_halo import CursorHaloWidget
@@ -256,7 +255,10 @@ class DisplayWidget(QWidget):
         self.media_widget: Optional[MediaWidget] = None
         self.spotify_visualizer_widget: Optional[SpotifyVisualizerWidget] = None
         self.spotify_volume_widget: Optional[SpotifyVolumeWidget] = None
-        self._spotify_bars_overlay: Optional[SpotifyBarsGLOverlay] = None
+        # Overlay-compatible renderer target: compositor layer by default,
+        # legacy child QOpenGLWidget only for explicit/necessary fallback.
+        self._spotify_bars_overlay: Optional[Any] = None
+        self._spotify_visualizer_surface_terminal_reason = ""
         self.reddit_widget: Optional[RedditWidget] = None
         self.reddit2_widget: Optional[RedditWidget] = None
         self._pixel_shift_manager: Optional[PixelShiftManager] = None

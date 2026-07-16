@@ -579,7 +579,9 @@ class TestSpotifyOverlayGLLifecycle:
             _gl_program_rids={"bubble": "program_101", "spectrum": "program_102"},
             _gl_uniforms={"bubble": {}, "spectrum": {}},
             _gl_program=101,
-            _gl_mask_program=None,
+            _gl_mask_program=103,
+            _gl_mask_program_rid="mask_103",
+            _gl_mask_uniforms={"u_card_rect": 1, "u_radius": 2},
             _gl_vbo=201,
             _gl_vao=202,
             _gl_vbo_rid="vbo_201",
@@ -592,10 +594,13 @@ class TestSpotifyOverlayGLLifecycle:
         assert resource_manager.released == [
             ("program_101", True, True),
             ("program_102", True, True),
+            ("mask_103", True, True),
             ("vbo_201", True, True),
             ("vao_202", True, True),
         ]
         assert fake_overlay._gl_programs == {}
+        assert fake_overlay._gl_mask_program is None
+        assert fake_overlay._gl_mask_uniforms == {}
         assert fake_overlay._gl_vbo is None
         assert fake_overlay._gl_vao is None
 

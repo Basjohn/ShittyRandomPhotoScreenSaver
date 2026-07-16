@@ -27,10 +27,11 @@ from rendering.adaptive_timer import (
     AdaptiveTimerConfig,
     _mark_widget_update_consumed,
     _mark_widget_update_dispatched,
+    _queue_safe_widget_update,
 )
 
-from PySide6.QtCore import Qt, QPoint, QRect, Slot
-from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage, QColor
+from PySide6.QtCore import Qt, QPoint, QRect, QEvent, Slot
+from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
@@ -77,6 +78,16 @@ from rendering.gl_transition_renderer import GLTransitionRenderer
 from rendering.gl_error_handler import get_gl_error_handler
 from rendering.gl_state_manager import GLStateManager, GLContextState
 from rendering.transition_registry import get_transition_program_map
+
+
+_PHYSICAL_SURFACE_CHANGE_EVENTS = frozenset(
+    value
+    for value in (
+        getattr(QEvent.Type, "DevicePixelRatioChange", None),
+        getattr(QEvent.Type, "ScreenChangeInternal", None),
+    )
+    if value is not None
+)
 
 
 def _get_blockflip_program():
@@ -318,17 +329,10 @@ class GLCompositorWidget(QOpenGLWidget):
         self._debug_overlay_cache_key = None
         self._debug_overlay_cache_image: Optional[QImage] = None
 
-        # Smoothed Spotify visualiser state pushed from DisplayWidget. When
-        # present, bars are rendered as a thin overlay above the current
-        # image/transition but below the PERF HUD.
-        self._spotify_vis_enabled: bool = False
-        self._spotify_vis_rect: Optional[QRect] = None
-        self._spotify_vis_bars = None
-        self._spotify_vis_bar_count: int = 10
-        self._spotify_vis_segments: int = 5
-        self._spotify_vis_fill_color: Optional[QColor] = None
-        self._spotify_vis_border_color: Optional[QColor] = None
-        self._spotify_vis_fade: float = 0.0
+        # Normal Spotify visualizer rendering is owned by this compositor
+        # through a card-sized FBO. Software/rollback uses the shared-renderer
+        # child adapter rather than a lower-fidelity simple-bar substitute.
+        self._spotify_visualizer_layer = None
         
         # GL-based dimming overlay. Rendered AFTER the wallpaper/transition
         # but BEFORE widgets (which are Qt siblings above the compositor).
@@ -368,6 +372,48 @@ class GLCompositorWidget(QOpenGLWidget):
                 old_enabled, enabled, old_opacity * 100, self._dimming_opacity * 100
             )
         self.update()
+
+    def request_scene_update(self) -> bool:
+        """Request one compositor paint without building a second paint loop.
+
+        Visualizer packets can arrive independently of transition cadence.
+        Coalesce them with the compositor's existing pending-paint authority so
+        the newest state is painted once rather than queuing one UI event per
+        producer update.
+        """
+
+        if bool(getattr(self, "_render_shutdown_requested", False)):
+            return False
+        try:
+            if bool(getattr(self, "_srpss_timer_update_pending", False)):
+                return False
+        except Exception:
+            pass
+        return bool(_queue_safe_widget_update(self))
+
+    def invalidate_physical_surface_cache(self, *, reason: str) -> None:
+        """Invalidate DPR/viewport-derived state without dropping visible content."""
+
+        self._cached_viewport = None
+        self._cached_widget_size = None
+        layer = getattr(self, "_spotify_visualizer_layer", None)
+        if layer is not None:
+            invalidate = getattr(layer, "invalidate_surface_metrics", None)
+            if callable(invalidate):
+                invalidate(reason=reason)
+                return
+        if hasattr(self, "_render_shutdown_requested"):
+            self.request_scene_update()
+
+    def event(self, event) -> bool:  # type: ignore[override]
+        event_type = event.type()
+        if event_type in _PHYSICAL_SURFACE_CHANGE_EVENTS:
+            self.invalidate_physical_surface_cache(reason=str(event_type))
+        return super().event(event)
+
+    def resizeGL(self, width: int, height: int) -> None:  # type: ignore[override]
+        del width, height
+        self.invalidate_physical_surface_cache(reason="resizeGL")
 
     def _get_render_progress(self, fallback: float = 0.0) -> float:
         """Get interpolated progress for rendering.
@@ -739,22 +785,6 @@ class GLCompositorWidget(QOpenGLWidget):
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
             self.update()
-
-    def set_spotify_visualizer_state(
-        self,
-        rect: QRect,
-        bars,
-        bar_count: int,
-        segments: int,
-        fill_color: QColor,
-        border_color: QColor,
-        fade: float,
-        playing: bool,
-        visible: bool,
-    ) -> None:
-        """Delegates to rendering.gl_compositor_pkg.transition_lifecycle."""
-        from rendering.gl_compositor_pkg.transition_lifecycle import set_spotify_visualizer_state
-        return set_spotify_visualizer_state(self, rect, bars, bar_count, segments, fill_color, border_color, fade, playing, visible)
 
     def _clear_all_transitions(self) -> None:
         """Clear all transition states."""
@@ -1532,7 +1562,16 @@ class GLCompositorWidget(QOpenGLWidget):
     def initializeGL(self) -> None:  # type: ignore[override]
         """Delegates to rendering.gl_compositor_pkg.gl_lifecycle."""
         from rendering.gl_compositor_pkg.gl_lifecycle import handle_initializeGL
-        return handle_initializeGL(self)
+        handle_initializeGL(self)
+        layer = self._spotify_visualizer_layer
+        if layer is not None and self._gl_state.is_ready():
+            try:
+                layer.initialize_gl()
+            except Exception:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Failed to initialize visualizer layer",
+                    exc_info=True,
+                )
 
     def _init_gl_pipeline(self) -> None:
         """Delegates to rendering.gl_compositor_pkg.gl_lifecycle."""
@@ -1600,12 +1639,61 @@ class GLCompositorWidget(QOpenGLWidget):
         # Transition to DESTROYING state
         self._gl_state.transition(GLContextState.DESTROYING)
         try:
+            layer = self._spotify_visualizer_layer
+            if layer is not None:
+                try:
+                    layer.cleanup_gl()
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Compositor visualizer cleanup failed",
+                        exc_info=True,
+                    )
+                self._spotify_visualizer_layer = None
             self._cleanup_gl_pipeline()
         except Exception:
             logger.debug("[GL COMPOSITOR] cleanup() failed", exc_info=True)
         finally:
             # Transition to DESTROYED state
             self._gl_state.transition(GLContextState.DESTROYED)
+
+    def get_or_create_spotify_visualizer_layer(
+        self,
+        *,
+        initial_mode: str | None = None,
+    ):
+        """Return the compositor-owned visualizer renderer target."""
+
+        layer = self._spotify_visualizer_layer
+        if layer is not None and not bool(getattr(layer, "_retired", False)):
+            if initial_mode:
+                try:
+                    layer._vis_mode = initial_mode
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to update compositor layer startup mode",
+                        exc_info=True,
+                    )
+            return layer
+        from rendering.gl_compositor_pkg.spotify_visualizer_layer import (
+            CompositorSpotifyVisualizerLayer,
+        )
+
+        layer = CompositorSpotifyVisualizerLayer(self, initial_mode=initial_mode)
+        self._spotify_visualizer_layer = layer
+        return layer
+
+    def paint_spotify_visualizer_layer(self, painter: QPainter) -> bool:
+        layer = self._spotify_visualizer_layer
+        if layer is None:
+            return False
+        try:
+            return bool(layer.paint(painter))
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Visualizer scene paint failed",
+                exc_info=True,
+            )
+            return False
     
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.
@@ -1898,11 +1986,6 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.overlays import paint_debug_overlay
         paint_debug_overlay(self, painter)
 
-    def _paint_spotify_visualizer(self, painter: QPainter) -> None:
-        """Delegates to gl_compositor_pkg.overlays."""
-        from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
-        paint_spotify_visualizer(self, painter)
-
     def _render_debug_overlay_image(self) -> Optional[QImage]:
         """Delegates to gl_compositor_pkg.overlays."""
         from rendering.gl_compositor_pkg.overlays import render_debug_overlay_image
@@ -1939,10 +2022,6 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.paint import paintGL_impl
         return paintGL_impl(self)
 
-    def _paint_spotify_visualizer_gl(self) -> None:
-        from rendering.gl_compositor_pkg.shader_dispatch import paint_spotify_visualizer_gl
-        paint_spotify_visualizer_gl(self)
-
     def _paint_dimming(self, painter: QPainter) -> None:
         """Paint the dimming overlay if enabled (QPainter fallback path)."""
         if not self._dimming_enabled or self._dimming_opacity <= 0.0:
@@ -1954,9 +2033,4 @@ class GLCompositorWidget(QOpenGLWidget):
             painter.restore()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-
-    def _paint_dimming_gl(self) -> None:
-        """Delegates to gl_compositor_pkg.overlays."""
-        from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
-        paint_dimming_gl(self)
 

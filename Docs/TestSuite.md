@@ -52,17 +52,23 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_image_prefetcher.py`
   Full preview-window producer scheduling, cooldown-safe scaled registration, and direct-to-scaled lifetime/cleanup for raw decodes larger than one quarter of the shared cache budget without LRU admission.
 - `tests/test_display_cleanup.py`
-  Display child cleanup clears owner attributes, final visualizer cleanup precedes compositor teardown, explicit destroy cleanup is idempotent, and compositor teardown precedes render-surface destruction.
+  Display renderer-target cleanup clears owner attributes, final visualizer cleanup precedes compositor teardown, explicit destroy cleanup is idempotent, and compositor teardown precedes render-surface destruction.
 - `tests/test_gl_texture_streaming.py`
-  GL texture/PBO/geometry/visualizer-native ownership: four-texture active-plus-adjacent cache bounds, active-pair-safe eviction, one grow-only PBO replacement, exact converted-QImage direct-buffer staging plus owned-bytes fallback, partial allocation/registration/initialization cleanup, valid-context ResourceManager deletion, invalid-context abandonment, and exactly-once Spotify overlay program/VAO/VBO release.
+  GL texture/PBO/geometry/visualizer-native ownership: four-texture active-plus-adjacent cache bounds, active-pair-safe eviction, one grow-only PBO replacement, exact converted-QImage direct-buffer staging plus owned-bytes fallback, partial allocation/registration/initialization cleanup, valid-context ResourceManager deletion, invalid-context abandonment, and exactly-once visualizer renderer program/VAO/VBO release.
 - `tests/test_resource_manager.py`
-  Central resource registration/cleanup, app-shared ownership, native-handle tracking, and explicit `unregister(..., cleanup=False)` behavior for already-released or context-invalid native resources.
+  Central resource registration/cleanup, app-shared ownership, GL texture/VBO/VAO/program/framebuffer/renderbuffer accounting, native-handle tracking, and explicit `unregister(..., cleanup=False)` behavior for already-released or context-invalid native resources.
 - `tests/test_usage_sampler.py`
-  Low-pressure whole-process sampler collection/logging, overlap/cadence guards, ThreadManager snapshots, app-shared ResourceManager/GL registration fields, and shutdown behavior without UI-thread OS collection.
+  Low-pressure whole-process sampler collection/logging, overlap/cadence guards, ThreadManager snapshots, app-shared ResourceManager GL texture/VBO/VAO/program/framebuffer/renderbuffer fields, and shutdown behavior without UI-thread OS collection.
 - `tests/test_transition_perf_health_parser.py`
-  Render/paint/visualizer/cache/settings health parsing plus transition refusal/instant-commit/request-drop/program-lifecycle detection, usage-sidecar primed CPU/memory/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-growth, bounded texture-cache cleanup, direct upload telemetry, live-versus-historical-paused visualizer latency classification, and context-aware overlay microgap/accepted-update-wait detection even when aggregate throughput remains healthy.
+  Render/paint/visualizer/cache/settings health parsing plus transition refusal/instant-commit/request-drop/program-lifecycle detection, usage-sidecar primed CPU/memory/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-growth, bounded texture-cache cleanup, direct upload telemetry, compositor-vs-legacy visualizer selection, compositor FBO churn/render-failure/last-good counters, live-versus-historical-paused visualizer latency classification, and context-aware renderer microgap/accepted-update-wait detection even when aggregate throughput remains healthy.
 - `tests/test_spotify_overlay_repaint_contract.py`
-  Spotify child-GL repaint authority remains `set_state()`-owned, `paintGL()` never self-schedules, passive microgap hooks stay attached to accepted update and paint delivery, fixed-bucket p95 calculation remains bounded, and transition/mode-handoff context classification stays distinct.
+  Shared legacy/compositor renderer identity, accepted-state-owned repaint authority, no self-scheduling from legacy `paintGL()`, passive microgap hooks attached to accepted update and paint delivery, bounded fixed-bucket p95 calculation, and distinct transition/mode-handoff classification.
+- `tests/test_spotify_compositor_layer.py`
+  Single-surface default/explicit rollback selection, strict no-legacy behavior for transient or unexpected normal-path failures, hard pre-reveal fallback classification, display-generation terminal-reason publication and startup retry suppression, hidden all-mode prewarm, no visible-path mode compilation, double-FBO size/DPR reuse, transactional stencil-only allocation, old-front retention until the first resized generation publishes, explicit-clear retirement of retained frames, partial composite-program cleanup, required-mask refusal, generation-based front-texture reuse, last-good scaling, bounded no-timer prepare backoff, scene-update coalescing, exact card asset reuse, and compositor ResourceManager ownership.
+- `tests/test_gl_compositor_overlays.py`
+  One ordered post-image QPainter scene for dimming, compositor visualizer, and PERF HUD across idle and every transition path, with no lower-fidelity visualizer substitute.
+- `tests/test_overlay_render_dispatch.py`
+  Cached mode-program resolution, legacy-only incremental compile compatibility, compositor refusal to compile from visible paint, and renderer-owned uniform dispatch.
 - `tests/test_steam_credentials.py`
   Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys/metadata routing, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
 - `tests/test_steam_openid.py`
@@ -179,7 +185,7 @@ Keep these regression-focused files discoverable and up to date when their bug f
 - `tests/test_stencil_mask_alignment.py`
   GL stencil mask/card-boundary alignment for the painted-card visualizer path.
 - `tests/test_startup_shader_warmup.py`
-  Startup shader/program warmup policy: minimal transition startup subset and active-mode-first visualizer shader compile ordering.
+  Startup shader/program warmup policy: minimal transition startup subset, hidden all-supported-mode compositor visualizer prewarm, and active-mode-first incremental compile only for the explicit legacy adapter.
 
 ## 4. Visualizer Test Expectations
 When changing visualizer settings/contracts, include tests for:
@@ -193,7 +199,7 @@ When changing visualizer settings/contracts, include tests for:
 - reset-order / stale-generation gating when touching mode-reset, activation, or overlay-handoff code.
 - Retired visualizer behavior tests are not retained as creative or runtime oracles. Safe migration, production absence, and unchanged supported-mode bars are the contract.
 - **Poison-log interpretation** (`tests/test_spotify_visualizer_widget.py`, `tests/test_spotify_visualizer_mode_transition.py`, `tests/test_ghost_isolation.py`): `[FIRST_FRAME_PRIMER]` alone means stale overlay ownership was detected before the authoritative first push. It becomes failure evidence only when current generation/activation does not replace it or guard/parity/technical-replay/fallback/stale-commit checks fail. Likewise, cached `[PERF][SPOTIFY_VIS][BUBBLE]` lines after a mode switch are telemetry-only unless Bubble simulation, drift, or dispatch also continues.
-- **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to `paintGL()` mask uniforms, card inset math, or border-width handling in `SpotifyBarsGLOverlay`.
+- **Stencil mask alignment** (`tests/test_stencil_mask_alignment.py`): validates that the shared renderer's GL stencil mask exactly matches the visible card boundary (rounded corners included) and does not bleed outside the card fill or over the centred pen stroke. Must pass after any change to mask uniforms, card inset math, border-width handling, compositor FBO hosting, or the legacy adapter.
 - **Outer card geometry policy** (`tests/test_visualizer_card_geometry.py`): validates that supported mode/preset-owned growth still drives preferred outer dimensions and top/bottom anchor placement remains correct independently of stencil-shell behavior.
 - **CUSTOM adaptive visualizer sizing** (`tests/test_custom_layout_manager.py`, `tests/test_widget_manager.py`, `tests/test_visualizer_card_geometry.py`): validates that visualizer CUSTOM edit shells use a maximum-envelope footprint for safe alignment, saved CUSTOM payload stores width/height scales, and runtime re-resolves the live mode/preset card size instead of freezing the first captured CUSTOM rect dimensions.
 - **First visible activation parity** (`tests/test_spotify_visualizer_widget.py`): validates that the first authoritative visible GPU frame after hot mode switch or preset cycle matches a fresh-activation oracle under the same synthetic audio and preset-owned technical values, so poisoned runtime state or entry-point drift cannot hide behind worker-only tests.

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import List, Sequence, Optional, Set
+from typing import Any, List, Sequence, Optional, Set
 
-import logging
 import numpy as np
 import time
 from PySide6.QtCore import Qt, QRect, QTimer
@@ -54,7 +53,6 @@ from widgets.spotify_visualizer.oscilloscope_contract import (
 )
 from widgets.spotify_visualizer.overlay_frame_shell import (
     clear_overlay_backbuffer,
-    render_overlay_frame,
     resolve_frame_fade,
 )
 from widgets.spotify_visualizer.signal_contract import soft_ceiling
@@ -129,6 +127,18 @@ def prioritized_visualizer_compile_order(active_mode: str, available_modes: Sequ
     return ordered
 
 
+def _visualizer_startup_compile_targets(
+    surface_kind: str,
+    compile_order: Sequence[str],
+) -> List[str]:
+    """Return programs compiled before first reveal for a renderer surface."""
+
+    ordered = list(compile_order)
+    if str(surface_kind or "").strip().lower() == "compositor":
+        return ordered
+    return ordered[:1]
+
+
 def _perf_histogram_bucket_index(value_ms: float) -> int:
     for index, upper_ms in enumerate(_PERF_MICROGAP_BUCKET_UPPER_MS):
         if value_ms <= upper_ms:
@@ -156,40 +166,26 @@ def _perf_histogram_percentile_ms(
     return maximum_ms
 
 
-class SpotifyBarsGLOverlay(QOpenGLWidget):
-    """Small GL surface that renders the Spotify bar field.
+class SpotifyVisualizerGLRenderer:
+    """Context-agnostic Spotify visualizer state and shader renderer.
 
-    This overlay is parented to ``DisplayWidget`` and positioned so that it
-    exactly covers the Spotify visualiser card. The card itself (background,
-    border, fade, shadow) continues to be drawn by ``SpotifyVisualizerWidget``;
-    this class is responsible only for the bar geometry.
+    The renderer owns visualizer state and context-local GL handles, but it
+    does not own a Qt surface. ``surface_host`` supplies the small surface
+    protocol needed for repaint, geometry, DPR, and current-context access.
+    ``SpotifyBarsGLOverlay`` remains a legacy adapter over this renderer while
+    the display compositor hosts the normal single-surface path.
     """
 
-    def __init__(self, parent=None, initial_mode: str | None = None) -> None:  # type: ignore[override]
-        super().__init__(parent)
+    def __init__(self, surface_host: Any = None, initial_mode: str | None = None) -> None:
+        resolved_host = self if surface_host is None else surface_host
+        if bool(getattr(self, "_visualizer_renderer_core_initialized", False)):
+            self._surface_host = resolved_host
+            if initial_mode is not None:
+                self._vis_mode = coerce_visualizer_mode_id(initial_mode)
+            return
+        self._visualizer_renderer_core_initialized = True
+        self._surface_host = resolved_host
         self._painted_frame_shadow_enabled: bool = True
-
-        apply_widget_surface_format(self, reason="spotify_bars_overlay")
-
-        # CRITICAL: Hide immediately at construction to prevent startup flash.
-        # The widget will be shown later when set_state() is called with fade > 0.
-        # This must happen BEFORE any other setup to avoid a visible frame.
-        try:
-            self.hide()
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-
-        try:
-            self.setAutoFillBackground(False)
-            self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-            self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-        try:
-            self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
-        except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
 
         self._enabled: bool = False
         self._bars: List[float] = []
@@ -203,6 +199,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_paint_count: int = 0
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
+        self._state_generation: int = 0
         self._perf_metrics_enabled: bool = is_perf_metrics_enabled()
         self._perf_last_log_ts: float = time.monotonic()
         perf_context_count = len(_PERF_MICROGAP_CONTEXTS)
@@ -461,6 +458,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._gl_vbo: Optional[int] = None
         # Rounded-rect stencil mask program for painted-card corner clipping
         self._gl_mask_program: Optional[int] = None
+        self._gl_mask_program_rid = None
+        self._gl_mask_uniforms: dict[str, int] = {}
+        self._unavailable_program_warnings: set[str] = set()
         # Legacy single-program aliases for backward compat with ResourceManager
         self._gl_program = None
         self._gl_program_rid = None
@@ -476,6 +476,87 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # Centralized GL state manager for robust state tracking
         self._gl_state = GLStateManager(f"spotify_bars_{id(self)}")
 
+    # ------------------------------------------------------------------
+    # Surface host protocol
+    # ------------------------------------------------------------------
+
+    def _surface_parent(self):
+        parent = getattr(self._surface_host, "parent", None)
+        return parent() if callable(parent) else None
+
+    def _surface_is_visible(self) -> bool:
+        visible = getattr(self._surface_host, "isVisible", None)
+        return bool(visible()) if callable(visible) else False
+
+    def _surface_update(self) -> None:
+        update = getattr(self._surface_host, "update", None)
+        if callable(update):
+            update()
+
+    def _surface_geometry(self) -> QRect:
+        geometry = getattr(self._surface_host, "geometry", None)
+        if callable(geometry):
+            return QRect(geometry())
+        return QRect()
+
+    def _surface_set_geometry(self, rect: QRect) -> None:
+        setter = getattr(self._surface_host, "setGeometry", None)
+        if callable(setter):
+            setter(QRect(rect))
+
+    def _surface_rect(self) -> QRect:
+        rect = getattr(self._surface_host, "rect", None)
+        if callable(rect):
+            return QRect(rect())
+        geometry = self._surface_geometry()
+        return QRect(0, 0, geometry.width(), geometry.height())
+
+    def _surface_show(self) -> None:
+        show = getattr(self._surface_host, "show", None)
+        if callable(show):
+            show()
+
+    def _surface_hide(self) -> None:
+        hide = getattr(self._surface_host, "hide", None)
+        if callable(hide):
+            hide()
+
+    def _surface_make_current(self) -> None:
+        make_current = getattr(self._surface_host, "makeCurrent", None)
+        if callable(make_current):
+            make_current()
+
+    def _surface_done_current(self) -> None:
+        done_current = getattr(self._surface_host, "doneCurrent", None)
+        if callable(done_current):
+            done_current()
+
+    def _surface_window_handle(self):
+        window_handle = getattr(self._surface_host, "windowHandle", None)
+        return window_handle() if callable(window_handle) else None
+
+    def _surface_device_pixel_ratio(self) -> float:
+        ratio = getattr(self._surface_host, "devicePixelRatioF", None)
+        if callable(ratio):
+            return float(ratio())
+        return 1.0
+
+    def _surface_timer_parent(self):
+        timer_parent = getattr(self._surface_host, "timer_parent", None)
+        if callable(timer_parent):
+            return timer_parent()
+        return self._surface_host
+
+    def _surface_force_initialize(self) -> None:
+        initialize = getattr(self._surface_host, "force_renderer_initialize", None)
+        if callable(initialize):
+            initialize()
+
+    def _surface_clear_backbuffer(self) -> None:
+        clear = getattr(self._surface_host, "clear_renderer_backbuffer", None)
+        if callable(clear):
+            clear()
+
     def request_mode_reset(self, mode: str) -> None:
         """Schedule a manual reset for ``mode`` prior to the next frame push."""
         request_overlay_mode_reset(self, mode)
@@ -485,7 +566,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         reset_overlay_mode_state(self, mode, reason=reason)
 
     def _perf_screen_index(self) -> int | None:
-        parent = self.parent()
+        resolve_parent = getattr(self, "_surface_parent", None)
+        if callable(resolve_parent):
+            parent = resolve_parent()
+        else:
+            parent_getter = getattr(self, "parent", None)
+            parent = parent_getter() if callable(parent_getter) else None
         for attr in ("_screen_index", "screen_index"):
             value = getattr(parent, attr, None)
             if value is None:
@@ -497,7 +583,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         return None
 
     def _perf_microgap_context_index(self, now: float | None = None) -> int:
-        parent = self.parent()
+        resolve_parent = getattr(self, "_surface_parent", None)
+        if callable(resolve_parent):
+            parent = resolve_parent()
+        else:
+            parent_getter = getattr(self, "parent", None)
+            parent = parent_getter() if callable(parent_getter) else None
         if parent is None:
             return 3
 
@@ -552,7 +643,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             maxima[context_index] = value_ms
 
     def _record_perf_update_request(self) -> None:
-        if not self._enabled or not self.isVisible():
+        resolve_visible = getattr(self, "_surface_is_visible", None)
+        visible = (
+            bool(resolve_visible())
+            if callable(resolve_visible)
+            else bool(getattr(self, "isVisible", lambda: False)())
+        )
+        if not self._enabled or not visible:
             self._reset_perf_delivery_origin()
             return
         if self._perf_oldest_unpainted_update_ts > 0.0:
@@ -568,7 +665,13 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._perf_oldest_unpainted_context = -1
 
     def _record_perf_paint_delivery(self) -> None:
-        if not self._enabled or not self.isVisible():
+        resolve_visible = getattr(self, "_surface_is_visible", None)
+        visible = (
+            bool(resolve_visible())
+            if callable(resolve_visible)
+            else bool(getattr(self, "isVisible", lambda: False)())
+        )
+        if not self._enabled or not visible:
             self._reset_perf_delivery_origin()
             return
         now = time.monotonic()
@@ -618,11 +721,44 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if elapsed < 10.0:
             return
         screen = self._perf_screen_index()
+        surface_kind = str(
+            getattr(self._surface_host, "render_surface_kind", "legacy_child")
+            or "legacy_child"
+        )
+        fbo_resizes = 0
+        render_failures = 0
+        retained_last_good = 0
+        fbo_renders = 0
+        texture_reuses = 0
+        take_surface_counters = getattr(
+            self._surface_host,
+            "take_perf_window_counters",
+            None,
+        )
+        if callable(take_surface_counters):
+            try:
+                surface_counters = tuple(take_surface_counters())
+                if len(surface_counters) >= 3:
+                    (
+                        fbo_resizes,
+                        render_failures,
+                        retained_last_good,
+                    ) = surface_counters[:3]
+                if len(surface_counters) >= 5:
+                    fbo_renders, texture_reuses = surface_counters[3:5]
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to collect renderer-surface perf counters",
+                    exc_info=True,
+                )
         logger.info(
-            "[PERF][SPOTIFY_VIS][OVERLAY] reason=%s screen=%s mode=%s elapsed_ms=%.1f "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=%s surface=%s screen=%s mode=%s elapsed_ms=%.1f "
             "set_state=%d paint=%d update_requests=%d geometry_changes=%d "
+            "fbo_resizes=%d fbo_renders=%d texture_reuses=%d "
+            "render_failures=%d retained_last_good=%d "
             "visible=%s enabled=%s playing=%s",
             reason,
+            surface_kind,
             screen if screen is not None else "<unknown>",
             self._vis_mode,
             elapsed * 1000.0,
@@ -630,7 +766,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             self._perf_paint_count,
             self._perf_update_request_count,
             self._perf_geometry_change_count,
-            self.isVisible(),
+            fbo_resizes,
+            fbo_renders,
+            texture_reuses,
+            render_failures,
+            retained_last_good,
+            self._surface_is_visible(),
             self._enabled,
             self._playing,
         )
@@ -649,11 +790,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             if gap_count <= 0 and wait_count <= 0 and context_pending_wait_ms <= 0.0:
                 continue
             logger.info(
-                "[PERF][SPOTIFY_VIS][MICROGAP] reason=%s screen=%s mode=%s "
+                "[PERF][SPOTIFY_VIS][MICROGAP] reason=%s surface=%s screen=%s mode=%s "
                 "context=%s gap_samples=%d gap_p95_ms=%.1f gap_max_ms=%.1f "
                 "wait_samples=%d wait_p95_ms=%.1f wait_max_ms=%.1f "
                 "pending_wait_ms=%.1f visible=%s enabled=%s playing=%s",
                 reason,
+                surface_kind,
                 screen if screen is not None else "<unknown>",
                 self._vis_mode,
                 context_name,
@@ -672,7 +814,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 ),
                 self._perf_wait_max_ms[context_index],
                 context_pending_wait_ms,
-                self.isVisible(),
+                self._surface_is_visible(),
                 self._enabled,
                 self._playing,
             )
@@ -686,7 +828,7 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
     def _request_frame_update(self, *, force: bool = False) -> None:
         del force
         self._perf_update_request_count += 1
-        self.update()
+        self._surface_update()
         if self._perf_metrics_enabled:
             self._record_perf_update_request()
 
@@ -696,6 +838,16 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
     def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
         self._painted_frame_shadow_enabled = bool(enabled)
+
+    def is_intentionally_transparent_frame(self) -> bool:
+        """Return whether the current state intentionally publishes transparency."""
+
+        if not self._enabled:
+            return True
+        try:
+            return float(self._fade) <= 0.0
+        except Exception:
+            return True
 
     def set_state(
         self,
@@ -1452,12 +1604,12 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         try:
             cur_geom = None
             try:
-                cur_geom = self.geometry()
+                cur_geom = self._surface_geometry()
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
                 cur_geom = None
             if cur_geom is None or cur_geom != rect:
-                self.setGeometry(rect)
+                self._surface_set_geometry(rect)
                 self._perf_geometry_change_count += 1
                 geometry_changed = True
         except Exception:
@@ -1476,9 +1628,9 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
                 # The bars should fade in smoothly, not appear instantly on first
                 # set_state call. This defers the expensive show() until the fade
                 # animation actually starts.
-                if not self.isVisible() and self._fade > 0.0:
+                if not self._surface_is_visible() and self._fade > 0.0:
                     # Only show once when first becoming visible AND fading in
-                    self.show()
+                    self._surface_show()
                     became_visible = True
                 # Skip raise_() entirely - it's expensive and unnecessary
                 # The overlay is created on top and stays there
@@ -1487,19 +1639,20 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
         _update_start = time.time()
+        self._state_generation += 1
         self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0
         self._maybe_log_perf_counters(reason="set_state")
         
         if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
-            logger.warning("[PERF] [SPOTIFY_BARS_GL] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
+            logger.warning("[PERF] [SPOTIFY_VIS][RENDERER] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
                           _geom_elapsed, _show_elapsed, _update_elapsed)
 
     def prewarm_context(self, rect: QRect) -> None:
         """Pre-create the GL context and shader pipeline off the visible hot path."""
 
         try:
-            self.setGeometry(rect)
+            self._surface_set_geometry(rect)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry during prewarm", exc_info=True)
 
@@ -1507,29 +1660,21 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         self._fade = 0.0
 
         try:
-            if not self.isVisible():
-                self.show()
-            self.update()
-            # Force the QOpenGLWidget to realise its GL surface now instead
-            # of waiting until the visualizer's staged reveal window. This
-            # shifts context creation + shader compilation into the shared
-            # startup prewarm phase.
+            if not self._surface_is_visible():
+                self._surface_show()
+            self._surface_update()
+            # Force the owning surface to realise the renderer off the visible
+            # hot path. Legacy and compositor hosts implement this differently.
             if not self._gl_state.is_ready() and not self._gl_state.is_error():
-                try:
-                    self.grabFramebuffer()
-                except Exception:
-                    logger.warning(
-                        "[SPOTIFY_VIS][FALLBACK] grabFramebuffer prewarm fallback triggered",
-                        exc_info=True,
-                    )
-                    self.repaint()
+                self._surface_force_initialize()
         except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to prewarm SpotifyBarsGLOverlay", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to prewarm visualizer renderer", exc_info=True)
 
     def clear_overlay_buffer(self) -> None:
         """Reset overlay state and clear the GL backing buffer."""
 
         self._enabled = False
+        self._state_generation += 1
         if self._perf_metrics_enabled:
             self._reset_perf_delivery_origin()
         self._bars = []
@@ -1549,19 +1694,11 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         if self._gl_state.is_ready():
             try:
-                self.makeCurrent()
-                gl.glDisable(gl.GL_SCISSOR_TEST)
-                gl.glClearColor(0.0, 0.0, 0.0, 0.0)
-                gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+                self._surface_clear_backbuffer()
             except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to clear overlay buffer", exc_info=True)
-            finally:
-                try:
-                    self.doneCurrent()
-                except Exception:
-                    pass
+                logger.debug("[SPOTIFY_VIS] Failed to clear renderer buffer", exc_info=True)
 
-        self.update()
+        self._surface_update()
 
     # ------------------------------------------------------------------
     # GL State Management Helpers
@@ -1576,10 +1713,10 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         return self._gl_state.get_state()
 
     # ------------------------------------------------------------------
-    # QOpenGLWidget hooks
+    # GL renderer hooks
     # ------------------------------------------------------------------
 
-    def initializeGL(self) -> None:  # type: ignore[override]
+    def initialize_renderer_gl(self) -> None:
         """Create the small shader pipeline used for bar rendering.
 
         Any failure here is treated as non-fatal – the widget will skip
@@ -1595,24 +1732,24 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             # Transition to READY state on success
             self._gl_state.transition(GLContextState.READY)
         except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Failed to initialise GL pipeline for SpotifyBarsGLOverlay", exc_info=True)
+            logger.debug("[SPOTIFY_VIS] Failed to initialise visualizer GL pipeline", exc_info=True)
             self._gl_state.transition(GLContextState.ERROR, str(e))
         
         # GLStateManager now tracks initialization state - no separate flag needed
 
-    def paintGL(self) -> None:  # type: ignore[override]
+    def render_current_framebuffer(self, rect: QRect | None = None) -> bool:
         self._perf_paint_count += 1
         if self._perf_metrics_enabled:
             self._record_perf_paint_delivery()
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
         # Use GLStateManager for proper state tracking
-        if not self._gl_state.is_ready() and not self._gl_state.is_error():
-            return
+        if not self._gl_state.is_ready():
+            return False
 
-        rect = self.rect()
+        rect = QRect(rect) if isinstance(rect, QRect) else self._surface_rect()
         if rect.width() <= 0 or rect.height() <= 0:
-            return
+            return False
 
         # Always clear the backing buffer so stale frames do not linger when
         # the overlay is disabled between mode switches.
@@ -1620,16 +1757,30 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
 
         fade = resolve_frame_fade(self, logger)
         if fade is None:
-            return
+            return False
 
-        render_overlay_frame(self, rect, fade, self._render_with_shader)
+        stencil_active = self._begin_painted_card_stencil_clip(rect)
+        if self._painted_frame_shadow_enabled and not stencil_active:
+            return False
+        try:
+            rendered = bool(self._render_with_shader(rect, fade))
+        finally:
+            self._end_painted_card_stencil_clip(stencil_active)
 
         # set_state() is the repaint authority.  Scheduling from paintGL()
         # creates a child-GL self-loop that can overdrive the owning display.
         self._maybe_log_perf_counters(reason="paintGL")
+        return rendered
 
     def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:
         if not self._painted_frame_shadow_enabled:
+            return False
+        if not self._gl_mask_program or not self._gl_vao:
+            if "rounded_card_mask" not in self._unavailable_program_warnings:
+                self._unavailable_program_warnings.add("rounded_card_mask")
+                logger.error(
+                    "[SPOTIFY_VIS] Rounded-card mask unavailable; refusing unmasked render"
+                )
             return False
         try:
             gl.glEnable(gl.GL_STENCIL_TEST)
@@ -1639,15 +1790,27 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
             gl.glStencilFunc(gl.GL_ALWAYS, 1, 0xFF)
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_REPLACE)
 
-            if self._gl_mask_program and self._gl_vao:
-                self._draw_painted_card_stencil_mask(rect)
+            self._draw_painted_card_stencil_mask(rect)
 
             gl.glColorMask(True, True, True, True)
             gl.glStencilFunc(gl.GL_EQUAL, 1, 0xFF)
             gl.glStencilOp(gl.GL_KEEP, gl.GL_KEEP, gl.GL_KEEP)
             return True
         except Exception as e:
-            logger.debug("[SPOTIFY_VIS] Stencil mask setup failed: %s", e)
+            try:
+                gl.glColorMask(True, True, True, True)
+                gl.glStencilMask(0x00)
+                gl.glDisable(gl.GL_STENCIL_TEST)
+                gl.glBindVertexArray(0)
+                gl.glUseProgram(0)
+            except Exception:
+                pass
+            if "rounded_card_mask_runtime" not in self._unavailable_program_warnings:
+                self._unavailable_program_warnings.add("rounded_card_mask_runtime")
+                logger.error(
+                    "[SPOTIFY_VIS] Stencil mask setup failed; refusing unmasked render: %s",
+                    e,
+                )
             return False
 
     def _draw_painted_card_stencil_mask(self, rect: QRect) -> None:
@@ -1662,8 +1825,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         )
 
         gl.glUseProgram(self._gl_mask_program)
-        loc_rect = gl.glGetUniformLocation(self._gl_mask_program, "u_card_rect")
-        loc_radius = gl.glGetUniformLocation(self._gl_mask_program, "u_radius")
+        loc_rect = self._gl_mask_uniforms.get("u_card_rect", -1)
+        loc_radius = self._gl_mask_uniforms.get("u_radius", -1)
         gl.glUniform4f(
             loc_rect,
             uniforms.rect_x_px,
@@ -1769,55 +1932,45 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         if not frag_sources:
             raise RuntimeError("No visualizer shaders could be loaded")
 
-        vs_source = SHARED_VERTEX_SHADER
-
-        # Compile the shared vertex shader once
-        vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
-        _gl.glShaderSource(vs, vs_source)
-        _gl.glCompileShader(vs)
-        if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
-            info = _gl.glGetShaderInfoLog(vs)
-            raise RuntimeError(f"Vertex shader compile failed: {info}")
-
         startup_program_key = resolve_render_program_key(self, self._vis_mode)
-        compile_order = prioritized_visualizer_compile_order(startup_program_key, list(frag_sources.keys()))
-        active_mode = compile_order[0] if compile_order else startup_program_key
-        if active_mode and active_mode in frag_sources:
-            self._compile_gl_mode_program(active_mode, frag_sources[active_mode], vs, _gl)
-
-        _gl.glDeleteShader(vs)
-
-        if not self._gl_programs:
-            raise RuntimeError("No visualizer shader programs compiled successfully")
-
-        # Legacy alias for backward compat checks
-        self._gl_program = next(iter(self._gl_programs.values()))
-
-        # Create shared VAO/VBO (fullscreen quad, reused by all modes)
-        vao = _gl.glGenVertexArrays(1)
-        vbo = _gl.glGenBuffers(1)
-
-        _gl.glBindVertexArray(vao)
-        _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, vbo)
-        vertices = np.array(
-            [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0],
-            dtype="float32",
+        compile_order = prioritized_visualizer_compile_order(
+            startup_program_key,
+            list(frag_sources.keys()),
         )
-        _gl.glBufferData(
-            _gl.GL_ARRAY_BUFFER,
-            int(vertices.nbytes),
-            vertices,
-            _gl.GL_STATIC_DRAW,
+        surface_kind = str(
+            getattr(self._surface_host, "render_surface_kind", "legacy_child")
+            or "legacy_child"
         )
-        _gl.glEnableVertexAttribArray(0)
-        _gl.glVertexAttribPointer(0, 2, _gl.GL_FLOAT, False, 0, None)
-        _gl.glBindVertexArray(0)
+        compile_targets = _visualizer_startup_compile_targets(
+            surface_kind,
+            compile_order,
+        )
 
-        self._gl_vao = vao
-        self._gl_vbo = vbo
+        # The compositor remains hidden during prewarm, so compile every
+        # supported mode in one current-context pass. The explicit legacy
+        # adapter retains its old incremental warmup to minimize rollback cost.
+        vs = 0
+        try:
+            vs = int(_gl.glCreateShader(_gl.GL_VERTEX_SHADER))
+            _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
+            _gl.glCompileShader(vs)
+            if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
+                info = _gl.glGetShaderInfoLog(vs)
+                raise RuntimeError(f"Vertex shader compile failed: {info}")
 
-        # --- Compile rounded-rect stencil mask shader (reuses shared vertex shader) ---
-        _MASK_FRAGMENT_SHADER = """#version 330 core
+            for mode in compile_targets:
+                if mode in frag_sources:
+                    self._compile_gl_mode_program(mode, frag_sources[mode], vs, _gl)
+
+            if startup_program_key not in self._gl_programs:
+                raise RuntimeError(
+                    f"Startup visualizer shader unavailable: {startup_program_key}"
+                )
+
+            # --- Compile rounded-rect stencil mask shader. ---
+            # The mask is required for accepted card fidelity; do not render a
+            # visually bleeding substitute if its program cannot be built.
+            mask_fragment_shader = """#version 330 core
 in vec2 v_uv;
 out vec4 fragColor;
 uniform vec4 u_card_rect;
@@ -1836,30 +1989,86 @@ void main() {
     fragColor = vec4(1.0);
 }
 """
-        try:
-            fs_mask = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
-            _gl.glShaderSource(fs_mask, _MASK_FRAGMENT_SHADER)
-            _gl.glCompileShader(fs_mask)
-            if not _gl.glGetShaderiv(fs_mask, _gl.GL_COMPILE_STATUS):
-                info = _gl.glGetShaderInfoLog(fs_mask)
-                logger.warning("[SPOTIFY_VIS] Mask fragment shader compile failed: %s", info)
-                _gl.glDeleteShader(fs_mask)
-            else:
-                prog_mask = _gl.glCreateProgram()
+            fs_mask = 0
+            prog_mask = 0
+            try:
+                fs_mask = int(_gl.glCreateShader(_gl.GL_FRAGMENT_SHADER))
+                _gl.glShaderSource(fs_mask, mask_fragment_shader)
+                _gl.glCompileShader(fs_mask)
+                if not _gl.glGetShaderiv(fs_mask, _gl.GL_COMPILE_STATUS):
+                    info = _gl.glGetShaderInfoLog(fs_mask)
+                    raise RuntimeError(f"Mask fragment shader compile failed: {info}")
+
+                prog_mask = int(_gl.glCreateProgram())
                 _gl.glAttachShader(prog_mask, vs)
                 _gl.glAttachShader(prog_mask, fs_mask)
                 _gl.glLinkProgram(prog_mask)
-                _gl.glDeleteShader(fs_mask)
-                if _gl.glGetProgramiv(prog_mask, _gl.GL_LINK_STATUS):
-                    self._gl_mask_program = prog_mask
-                else:
+                if not _gl.glGetProgramiv(prog_mask, _gl.GL_LINK_STATUS):
                     info = _gl.glGetProgramInfoLog(prog_mask)
-                    logger.warning("[SPOTIFY_VIS] Mask program link failed: %s", info)
-                    _gl.glDeleteProgram(prog_mask)
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Mask shader setup failed", exc_info=True)
+                    raise RuntimeError(f"Mask program link failed: {info}")
 
-        # Register GL handles with ResourceManager for VRAM leak prevention
+                self._gl_mask_program = prog_mask
+                self._gl_mask_uniforms = {
+                    "u_card_rect": int(
+                        _gl.glGetUniformLocation(prog_mask, "u_card_rect")
+                    ),
+                    "u_radius": int(
+                        _gl.glGetUniformLocation(prog_mask, "u_radius")
+                    ),
+                }
+                self._register_gl_mask_program_handle(prog_mask)
+                prog_mask = 0
+            finally:
+                if fs_mask:
+                    _gl.glDeleteShader(fs_mask)
+                if prog_mask:
+                    _gl.glDeleteProgram(prog_mask)
+        finally:
+            if vs:
+                _gl.glDeleteShader(vs)
+
+        # Legacy alias for backward compatibility checks.
+        self._gl_program = self._gl_programs[startup_program_key]
+
+        # Create shared VAO/VBO transactionally so a failed buffer upload
+        # cannot strand an untracked native handle.
+        vao = 0
+        vbo = 0
+        try:
+            vao = int(_gl.glGenVertexArrays(1))
+            vbo = int(_gl.glGenBuffers(1))
+            _gl.glBindVertexArray(vao)
+            _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, vbo)
+            vertices = np.array(
+                [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0],
+                dtype="float32",
+            )
+            _gl.glBufferData(
+                _gl.GL_ARRAY_BUFFER,
+                int(vertices.nbytes),
+                vertices,
+                _gl.GL_STATIC_DRAW,
+            )
+            _gl.glEnableVertexAttribArray(0)
+            _gl.glVertexAttribPointer(0, 2, _gl.GL_FLOAT, False, 0, None)
+            _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, 0)
+            _gl.glBindVertexArray(0)
+        except Exception:
+            try:
+                _gl.glBindBuffer(_gl.GL_ARRAY_BUFFER, 0)
+                _gl.glBindVertexArray(0)
+            except Exception:
+                pass
+            if vbo:
+                _gl.glDeleteBuffers(1, [vbo])
+            if vao:
+                _gl.glDeleteVertexArrays(1, [vao])
+            raise
+
+        self._gl_vao = vao
+        self._gl_vbo = vbo
+
+        # Register GL handles with ResourceManager for VRAM leak prevention.
         try:
             from core.resources.manager import ResourceManager
             from OpenGL import GL as _gl_mod
@@ -1868,51 +2077,60 @@ void main() {
             self._gl_vao_rid = rm.register_gl_handle(
                 vao, "vao",
                 lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
-                description="SpotifyBarsGLOverlay VAO",
+                description="Spotify visualizer renderer VAO",
                 group="spotify_vis_gl",
             )
             self._gl_vbo_rid = rm.register_gl_handle(
                 vbo, "vbo",
                 lambda h, _g=_gl_mod: _g.glDeleteBuffers(1, [h]),
-                description="SpotifyBarsGLOverlay VBO",
+                description="Spotify visualizer renderer VBO",
                 group="spotify_vis_gl",
             )
             logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to register GL handles: %s", e)
 
+        unavailable_modes = [
+            mode
+            for mode in compile_order
+            if mode in frag_sources and mode not in self._gl_programs
+        ]
+        deferred_modes = unavailable_modes if surface_kind == "legacy_child" else []
         logger.info(
-            "[SPOTIFY_VIS] Startup shader ready: active_mode=%s program=%s compiled=%s pending=%s",
+            "[SPOTIFY_VIS] Startup shader ready: surface=%s active_mode=%s program=%s "
+            "compiled=%s pending=%s unavailable=%s",
+            surface_kind,
             self._vis_mode,
             startup_program_key,
             ", ".join(sorted(self._gl_programs.keys())),
-            ", ".join(mode for mode in compile_order[1:] if mode not in self._gl_programs),
+            ", ".join(deferred_modes) or "<none>",
+            ", ".join(unavailable_modes) or "<none>",
         )
-        self._schedule_gl_program_warmup_queue([mode for mode in compile_order[1:] if mode in frag_sources])
+        if deferred_modes:
+            self._schedule_gl_program_warmup_queue(deferred_modes)
 
     def _compile_gl_mode_program(self, mode: str, fs_source: str, vs: int, _gl) -> bool:
         if mode in self._gl_programs:
             return True
+        fs = 0
+        prog = 0
         try:
-            fs = _gl.glCreateShader(_gl.GL_FRAGMENT_SHADER)
+            fs = int(_gl.glCreateShader(_gl.GL_FRAGMENT_SHADER))
             _gl.glShaderSource(fs, fs_source)
             _gl.glCompileShader(fs)
             if not _gl.glGetShaderiv(fs, _gl.GL_COMPILE_STATUS):
                 info = _gl.glGetShaderInfoLog(fs)
                 logger.warning("[SPOTIFY_VIS] %s frag shader compile failed: %s", mode, info)
-                _gl.glDeleteShader(fs)
                 return False
 
-            prog = _gl.glCreateProgram()
+            prog = int(_gl.glCreateProgram())
             _gl.glAttachShader(prog, vs)
             _gl.glAttachShader(prog, fs)
             _gl.glLinkProgram(prog)
-            _gl.glDeleteShader(fs)
 
             if not _gl.glGetProgramiv(prog, _gl.GL_LINK_STATUS):
                 info = _gl.glGetProgramInfoLog(prog)
                 logger.warning("[SPOTIFY_VIS] %s program link failed: %s", mode, info)
-                _gl.glDeleteProgram(prog)
                 return False
 
             uniforms = {}
@@ -1976,10 +2194,16 @@ void main() {
             if self._gl_program is None:
                 self._gl_program = prog
             self._register_gl_program_handle(mode, prog)
+            prog = 0
             return True
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to compile %s shader", mode, exc_info=True)
             return False
+        finally:
+            if fs:
+                _gl.glDeleteShader(fs)
+            if prog:
+                _gl.glDeleteProgram(prog)
 
     def _register_gl_program_handle(self, mode: str, prog: int) -> None:
         try:
@@ -1990,13 +2214,33 @@ void main() {
             rid = rm.register_gl_handle(
                 prog, "program",
                 lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
-                description=f"SpotifyBarsGLOverlay {mode} shader",
+                description=f"Spotify visualizer {mode} shader",
                 group="spotify_vis_gl",
             )
             self._gl_program_rids[mode] = rid
             self._gl_resource_manager = rm
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to register %s GL handle: %s", mode, e)
+
+    def _register_gl_mask_program_handle(self, prog: int) -> None:
+        try:
+            from core.resources.manager import ResourceManager
+            from OpenGL import GL as _gl_mod
+
+            rm = ResourceManager.get_or_create_app_shared()
+            self._gl_mask_program_rid = rm.register_gl_handle(
+                prog,
+                "program",
+                lambda handle, _g=_gl_mod: _g.glDeleteProgram(handle),
+                description="Spotify visualizer rounded-card mask shader",
+                group="spotify_vis_gl",
+            )
+            self._gl_resource_manager = rm
+        except Exception as exc:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to register mask GL handle: %s",
+                exc,
+            )
 
     def _warm_next_gl_program(self) -> None:
         if self._gl_disabled or not self._gl_program_warm_queue:
@@ -2006,9 +2250,10 @@ void main() {
             return
         from OpenGL import GL as _gl
         from widgets.spotify_visualizer.shaders import SHARED_VERTEX_SHADER, load_fragment_shader
+        vs = 0
         try:
-            self.makeCurrent()
-            vs = _gl.glCreateShader(_gl.GL_VERTEX_SHADER)
+            self._surface_make_current()
+            vs = int(_gl.glCreateShader(_gl.GL_VERTEX_SHADER))
             _gl.glShaderSource(vs, SHARED_VERTEX_SHADER)
             _gl.glCompileShader(vs)
             if not _gl.glGetShaderiv(vs, _gl.GL_COMPILE_STATUS):
@@ -2018,12 +2263,19 @@ void main() {
             fs_source = load_fragment_shader(mode)
             if fs_source:
                 self._compile_gl_mode_program(mode, fs_source, vs, _gl)
-            _gl.glDeleteShader(vs)
         except Exception:
             logger.debug("[SPOTIFY_VIS] Deferred program warmup failed", exc_info=True)
         finally:
+            if vs:
+                try:
+                    _gl.glDeleteShader(vs)
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to delete deferred warmup vertex shader",
+                        exc_info=True,
+                    )
             try:
-                self.doneCurrent()
+                self._surface_done_current()
             except Exception:
                 logger.debug("[SPOTIFY_VIS] doneCurrent failed after deferred shader warmup", exc_info=True)
         if self._gl_program_warm_queue:
@@ -2035,12 +2287,12 @@ void main() {
         if not queue:
             return
         if self._gl_program_warm_timer is None:
-            self._gl_program_warm_timer = QTimer(self)
+            self._gl_program_warm_timer = QTimer(self._surface_timer_parent())
             self._gl_program_warm_timer.setSingleShot(True)
             self._gl_program_warm_timer.timeout.connect(self._warm_next_gl_program)
         self._gl_program_warm_timer.start(140)
 
-    def cleanup_gl(self) -> None:
+    def cleanup_gl(self, *, context_current: bool = False) -> None:
         """Delete all GL handles (programs, VAO, VBO) to prevent VRAM leaks."""
 
         try:
@@ -2048,11 +2300,17 @@ void main() {
         except ImportError:
             return
 
-        ctx_acquired = False
-        if self._gl_state.is_ready():
+        ctx_acquired = bool(context_current)
+        owns_context = False
+        if not context_current and self._gl_state.is_ready():
             try:
-                self.makeCurrent()
+                make_current = getattr(self, "_surface_make_current", None)
+                if callable(make_current):
+                    make_current()
+                else:
+                    self.makeCurrent()
                 ctx_acquired = True
+                owns_context = True
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to make GL context current for cleanup: %s", e)
 
@@ -2094,6 +2352,14 @@ void main() {
                     self._gl_program_warm_timer.stop()
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to stop deferred warm timer: %s", e)
+                try:
+                    self._gl_program_warm_timer.deleteLater()
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to retire deferred warm timer",
+                        exc_info=True,
+                    )
+                self._gl_program_warm_timer = None
             self._gl_program_warm_queue = []
             for mode, prog in list(self._gl_programs.items()):
                 try:
@@ -2110,11 +2376,16 @@ void main() {
 
             if self._gl_mask_program is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteProgram(self._gl_mask_program)
+                    _release_registered(
+                        self._gl_mask_program,
+                        self._gl_mask_program_rid,
+                        _gl.glDeleteProgram,
+                    )
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete mask program: %s", e)
                 self._gl_mask_program = None
+                self._gl_mask_program_rid = None
+                self._gl_mask_uniforms = {}
 
             if self._gl_vbo is not None:
                 try:
@@ -2138,9 +2409,13 @@ void main() {
                     logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
                 self._gl_vao = None
         finally:
-            if ctx_acquired:
+            if owns_context:
                 try:
-                    self.doneCurrent()
+                    done_current = getattr(self, "_surface_done_current", None)
+                    if callable(done_current):
+                        done_current()
+                    else:
+                        self.doneCurrent()
                 except Exception:
                     pass
 
@@ -2158,16 +2433,39 @@ void main() {
                         exc_info=True,
                     )
         self._gl_program_rids.clear()
+        self._gl_mask_program_rid = None
+        self._gl_mask_uniforms = {}
+        unavailable_warnings = getattr(
+            self,
+            "_unavailable_program_warnings",
+            None,
+        )
+        if isinstance(unavailable_warnings, set):
+            unavailable_warnings.clear()
         self._gl_vao_rid = None
         self._gl_vbo_rid = None
         self._gl_resource_manager = None
+        get_state = getattr(self._gl_state, "get_state", None)
+        transition = getattr(self._gl_state, "transition", None)
+        if callable(get_state) and callable(transition):
+            state = get_state()
+            if state not in {GLContextState.DESTROYING, GLContextState.DESTROYED}:
+                if state in {
+                    GLContextState.READY,
+                    GLContextState.ERROR,
+                    GLContextState.CONTEXT_LOST,
+                }:
+                    transition(GLContextState.DESTROYING)
+                    transition(GLContextState.DESTROYED)
+                else:
+                    transition(GLContextState.DESTROYED)
         logger.debug("[SPOTIFY_VIS] GL handles cleaned up")
 
     def _get_dpr(self) -> float:
         """Resolve device pixel ratio for the backing FBO."""
         dpr = 1.0
         try:
-            win = self.windowHandle()
+            win = self._surface_window_handle()
         except Exception:
             win = None
         if win is not None:
@@ -2177,7 +2475,7 @@ void main() {
                 dpr = 1.0
         else:
             try:
-                dpr = float(self.devicePixelRatioF())
+                dpr = self._surface_device_pixel_ratio()
             except Exception:
                 dpr = 1.0
         if dpr <= 0.0:
@@ -2239,5 +2537,70 @@ void main() {
             return False
 
         return True
+
+
+class SpotifyBarsGLOverlay(QOpenGLWidget, SpotifyVisualizerGLRenderer):
+    """Legacy child-surface adapter over ``SpotifyVisualizerGLRenderer``.
+
+    The normal runtime path is owned by the display compositor. This class
+    remains intentionally thin so rollback uses the exact same renderer state,
+    shaders, stencil, and cleanup implementation instead of a fork.
+    """
+
+    render_surface_kind = "legacy_child"
+
+    def __init__(self, parent=None, initial_mode: str | None = None) -> None:  # type: ignore[override]
+        QOpenGLWidget.__init__(self, parent)
+        apply_widget_surface_format(self, reason="spotify_bars_overlay")
+
+        # Hide before any state can become visible. The accepted frame/fade
+        # handoff decides when this rollback surface may first be shown.
+        self.hide()
+        self.setAutoFillBackground(False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_AlwaysStackOnTop, True)
+        try:
+            self.setUpdateBehavior(QOpenGLWidget.UpdateBehavior.NoPartialUpdate)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to apply legacy overlay update behavior", exc_info=True)
+
+        SpotifyVisualizerGLRenderer.__init__(
+            self,
+            surface_host=self,
+            initial_mode=initial_mode,
+        )
+
+    def timer_parent(self):
+        return self
+
+    @staticmethod
+    def take_perf_window_counters() -> tuple[int, int, int, int, int]:
+        return (0, 0, 0, 0, 0)
+
+    def force_renderer_initialize(self) -> None:
+        try:
+            self.grabFramebuffer()
+        except Exception:
+            logger.warning(
+                "[SPOTIFY_VIS][FALLBACK] Legacy grabFramebuffer prewarm fallback triggered",
+                exc_info=True,
+            )
+            self.repaint()
+
+    def clear_renderer_backbuffer(self) -> None:
+        self.makeCurrent()
+        try:
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glClearColor(0.0, 0.0, 0.0, 0.0)
+            gl.glClear(gl.GL_COLOR_BUFFER_BIT)
+        finally:
+            self.doneCurrent()
+
+    def initializeGL(self) -> None:  # type: ignore[override]
+        self.initialize_renderer_gl()
+
+    def paintGL(self) -> None:  # type: ignore[override]
+        self.render_current_framebuffer(self.rect())
 
 

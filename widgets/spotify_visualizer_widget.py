@@ -500,6 +500,7 @@ class SpotifyVisualizerWidget(QWidget):
         }
         self._gpu_frame_packet = None
         self._last_gpu_fade_sent: float = -1.0
+        self._compositor_visualizer_active: bool = False
         self._last_gpu_geom: Optional[QRect] = None
         # Reset/fresh-frame handoff tracking must exist from construction so
         # the recurring UI tick cannot crash before any mode-reset helpers run.
@@ -1349,6 +1350,38 @@ class SpotifyVisualizerWidget(QWidget):
         from widgets.spotify_visualizer.card_paint import update_card_style
         update_card_style(self)
 
+    def set_compositor_visualizer_active(self, active: bool) -> None:
+        """Switch card painting between the display compositor and QWidget."""
+
+        resolved = bool(active)
+        if self._compositor_visualizer_active == resolved:
+            return
+        self._compositor_visualizer_active = resolved
+        self._invalidate_painted_frame_shadow_cache()
+        self._update_card_style()
+        self.update()
+
+    def _set_compositor_fade_progress(self, progress: float) -> None:
+        """Request one compositor frame for the shared visualizer fade."""
+
+        if not self._compositor_visualizer_active:
+            return
+        try:
+            self._shadowfade_progress = max(0.0, min(1.0, float(progress)))
+        except Exception:
+            self._shadowfade_progress = 0.0
+        parent = self.parent()
+        compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
+        if compositor is not None:
+            try:
+                requester = getattr(compositor, "request_scene_update", None)
+                if callable(requester):
+                    requester()
+                else:
+                    compositor.update()
+            except RuntimeError:
+                pass
+
     def set_bar_style(self, *, bg_color: QColor, bg_opacity: float, border_color: QColor, border_width: Optional[int] = None,
                       show_background: bool = True) -> None:
         self._bg_color = QColor(bg_color)
@@ -1851,6 +1884,18 @@ class SpotifyVisualizerWidget(QWidget):
         on_tick(self)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # type: ignore[override]
+        if self._compositor_visualizer_active:
+            # Clear any backing-store pixels left by the legacy QWidget path.
+            painter = QPainter(self)
+            try:
+                painter.setCompositionMode(
+                    QPainter.CompositionMode.CompositionMode_Source
+                )
+                painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
+            finally:
+                painter.end()
+            return
+
         if self.uses_painted_frame_shadow():
             self._paint_painted_frame_shadow()
         else:

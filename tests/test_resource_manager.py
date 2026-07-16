@@ -222,6 +222,8 @@ class TestResourceCleanup:
 
         plain = TestResource()
         texture = TestResource()
+        framebuffer = TestResource()
+        renderbuffer = TestResource()
         manager.register(plain, ResourceType.UNKNOWN, "plain")
         manager.register(
             texture,
@@ -229,14 +231,28 @@ class TestResourceCleanup:
             "texture",
             gl_handle_type="texture",
         )
+        manager.register(
+            framebuffer,
+            ResourceType.NATIVE_HANDLE,
+            "framebuffer",
+            gl_handle_type="framebuffer",
+        )
+        manager.register(
+            renderbuffer,
+            ResourceType.NATIVE_HANDLE,
+            "renderbuffer",
+            gl_handle_type="renderbuffer",
+        )
 
         assert manager.get_usage_counts() == {
-            "total": 2,
-            "gl_total": 1,
+            "total": 4,
+            "gl_total": 3,
             "gl_texture": 1,
             "gl_vbo": 0,
             "gl_vao": 0,
             "gl_program": 0,
+            "gl_framebuffer": 1,
+            "gl_renderbuffer": 1,
         }
 
     def test_cleanup_all_idempotent(self):

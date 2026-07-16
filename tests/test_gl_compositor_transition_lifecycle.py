@@ -173,6 +173,11 @@ def test_gl_prewarm_initializes_shared_compositor(qtbot):
     except Exception:
         pytest.skip("GL context not available for GLCompositorWidget prewarm")
     finally:
+        try:
+            comp.doneCurrent()
+        except Exception:
+            pass
+        widget.cleanup_for_teardown()
         widget.close()
 
 

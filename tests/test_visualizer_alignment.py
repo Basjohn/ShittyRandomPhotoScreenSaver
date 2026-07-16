@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout
 
 from ui.tabs.media.spectrum_builder import build_spectrum_ui
@@ -16,10 +17,11 @@ def qt_app():
     return app
 
 
-class DummyTab:
+class DummyTab(QObject):
     """Lightweight stand-in for WidgetsTab used to exercise builder wiring."""
 
     def __init__(self, initial_adv_state: dict[str, bool] | None = None) -> None:
+        super().__init__()
         self._preset_slider_changing = False
         self._spotify_vis_fill_color = None
         self._spotify_vis_border_color = None

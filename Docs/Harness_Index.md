@@ -189,6 +189,55 @@ python -m pytest `
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
+### Single-surface compositor visualizer gate
+- Purpose: protect the one-realized-GL-surface-per-display architecture without allowing legacy or a lower-fidelity substitute to hide incomplete compositor work.
+- Use when:
+  - editing `GLCompositorWidget`, compositor overlay order, or display teardown
+  - editing `SpotifyVisualizerGLRenderer`, the compositor visualizer layer, startup prewarm, or renderer-target routing
+  - changing visualizer FBO/DPR/CUSTOM snapshot behavior
+  - changing fallback, last-good retention, shader warmup, stencil, or ResourceManager GL ownership
+- Focused command:
+```powershell
+python -m pytest `
+  tests/test_spotify_compositor_layer.py `
+  tests/test_gl_compositor_overlays.py `
+  tests/test_overlay_render_dispatch.py `
+  tests/test_spotify_overlay_repaint_contract.py `
+  tests/test_display_image_ops.py `
+  -q --tb=short
+```
+- Broader ownership command:
+```powershell
+python -m pytest `
+  tests/test_gl_compositor_transitions.py `
+  tests/test_gl_compositor_transition_lifecycle.py `
+  tests/test_display_image_ops.py `
+  tests/test_custom_layout_manager.py `
+  tests/test_gl_texture_streaming.py `
+  tests/test_resource_manager.py `
+  tests/test_usage_sampler.py `
+  tests/test_transition_perf_health_parser.py `
+  -q --tb=short
+```
+- Normal runtime command: launch the packaged build with `SRPSS_SINGLE_SURFACE_VISUALIZER` unset or `1` and use `--perf --viz --usage --cache --life --geo`. A healthy normal run must select `target=compositor`, must not create `legacy_child`, must not compile a missing visualizer mode from visible paint, and must report zero compositor renderer failures. Any `Startup renderer reached a terminal hidden state` line is failure evidence and must appear once for that display generation without repeated 16ms readiness scheduling. FBO resize counters may advance only for startup, real logical-size changes, or DPR/screen changes; unchanged-generation texture reuse should grow when compositor paint cadence exceeds accepted visualizer generations.
+- Explicit rollback command: set `$env:SRPSS_SINGLE_SURFACE_VISUALIZER='0'` before launching the same scenario. The only expected legacy reason is `explicit_rollback`; unset the variable before returning to normal validation. A deliberate software backend may report `software_backend`. Any `hard_fallback_*` reason is authorized only before reveal but remains failure evidence, not a passing normal result.
+- Runtime acceptance:
+  - cover every supported mode, live/paused state, all transition families, idle rendering, mode/preset hotswap, mixed refresh, 100-200% DPR, portrait/landscape, CUSTOM move/resize/save/cancel/reset, Settings restart, topology reduction/return, and final teardown
+  - require no flash, blank card, stale frame, unclipped visualizer, sudden transition commit, repaint rescue, post-reveal surface switch, or fidelity/cadence/reactivity reduction
+  - parse ordinary and deliberately externally loaded windows separately
+  - compare against the pre-overhaul baseline only after the new ResourceManager texture/VBO/VAO/program/framebuffer/renderbuffer plateau is established
+- Parser command:
+```powershell
+python tools/transition_perf_health_parser.py `
+  --log logs\screensaver_perf.log `
+  --usage-log logs\screensaver_usage.log `
+  --extra-log logs\screensaver_spotify_vis.log `
+  --extra-log logs\screensaver.log `
+  --max-samples 20 `
+  --timeline `
+  --fail-on-anomaly
+```
+
 ### Retired visualizer migration guard
 
 - Purpose: keep removed visualizer modes absent while preserving safe forward migration for installed/imported settings.
@@ -262,16 +311,16 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --
 python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
 ```
 - Start runtime collection with `--usage`; combine it with `--perf --viz` when diagnosing visualizer/cadence pressure. The parser auto-merges `screensaver_usage.log` beside the primary `screensaver_perf.log` when present, while `--usage-log` selects an explicit sidecar.
-- `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager submitted/completed/failed activity, app-shared ResourceManager totals and GL texture/VBO/VAO/program registrations, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero.
-- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, primed-baseline RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager/texture-registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, direct-vs-owned upload staging, transition start refusals, instant destination commits, dropped next-image requests, GL program lifecycle/binding errors, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. It also parses the overlay's fixed-memory `[MICROGAP]` summaries by owning screen and `transition_active` / `just_ended` / `mode_handoff` / `steady_idle` context, so a healthy average cannot hide a `100+ ms` paint gap, delivered wait, or still-pending accepted update. Historical paused transition probes are reported separately and excluded from live severe latency; playing probes remain severe. Correlation is evidence, not automatic root-cause proof.
+- `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager submitted/completed/failed activity, app-shared ResourceManager totals and GL texture/VBO/VAO/program/framebuffer/renderbuffer registrations, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero. Current caveat: nonblocking psutil system-CPU baselines are calling-thread-owned while samples may execute on different IO workers, so an isolated `cpu_system_pct=0.0` can be an unprimed worker sample and must be treated as unknown until the collector-owned delta task in `Current_Plan.md` lands.
+- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, primed-baseline RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, direct-vs-owned upload staging, transition start refusals, instant destination commits, dropped next-image requests, GL program lifecycle/binding errors, first-frame/reactivity safeguard failures, unexpected legacy visualizer selection, compositor visualizer render failures/FBO churn, and usage samples close to visualizer timing warnings. It also parses fixed-memory `[MICROGAP]` summaries by owning screen/surface and `transition_active` / `just_ended` / `mode_handoff` / `steady_idle` context, so a healthy average cannot hide a `100+ ms` paint gap, delivered wait, or still-pending accepted update. Historical paused transition probes are reported separately and excluded from live severe latency; playing probes remain severe. Correlation is evidence, not automatic root-cause proof.
 - Focused implementation bar:
 ```powershell
 python -m pytest tests/test_usage_sampler.py tests/test_resource_manager.py tests/test_display_cleanup.py tests/test_gl_texture_streaming.py tests/test_image_prefetcher.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
 ```
-- Non-interference is mandatory: no tray probe, unmanaged thread, per-frame OS/GL query, extra UI-thread timer, repaint/update, mode retuning, source-cadence change, or automatic quality reduction. Overlay microgap collection is `--perf`-only, uses preallocated fixed buckets and the existing ten-second summary, and retains only one oldest accepted-but-unpainted timestamp. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
+- Non-interference is mandatory: no tray probe, unmanaged thread, per-frame OS/GL query, extra UI-thread timer, repaint/update rescue, mode retuning, source-cadence change, or automatic quality reduction. Renderer microgap collection is `--perf`-only, uses preallocated fixed buckets and the existing ten-second summary, and retains only one oldest accepted-but-unpainted timestamp. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
 - Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, Spotify overlay microgaps/waits that exceed owner-cadence thresholds, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Use `--extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log` when investigating Spotify/media/visualizer topology; the perf sidecar owns render/paint cadence, the viz sidecar owns visualizer creation/display ownership, and the main log carries media/fallback context.
-- Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence.
+- Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence. Preserve explicit ordinary/settings-rebuild/external-load scenario boundaries in the run notes; the parser cannot infer unrelated application load from SRPSS logs alone.
 - For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.
 - A healthy no-skip run must keep `Transition start refusals`, `Transition instant commits`, `Transition request drops`, and `GL program lifecycle errors` at zero. If one appears, inspect the main/verbose companions even when average FPS remains acceptable.
 

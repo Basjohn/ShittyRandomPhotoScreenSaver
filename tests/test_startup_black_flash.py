@@ -41,6 +41,10 @@ class DummySettings:
             return cur
         return default
 
+    def get_widgets_map(self):
+        widgets = self.get("widgets", {})
+        return widgets if isinstance(widgets, dict) else {}
+
 
 @pytest.fixture
 def qapp():

@@ -15,6 +15,22 @@ from core.threading.manager import ThreadManager
 
 logger = get_logger(__name__)
 
+try:
+    from shiboken6 import Shiboken
+except Exception:  # pragma: no cover - unavailable in lightweight tooling
+    Shiboken = None
+
+
+def _qt_object_is_valid(obj: Any) -> bool:
+    if obj is None:
+        return False
+    if Shiboken is None:
+        return True
+    try:
+        return bool(Shiboken.isValid(obj))
+    except Exception:
+        return True
+
 
 def _schedule_startup_stage(delay_ms: int, callback) -> None:
     """Route startup reveal delays through the app-owned scheduling seam."""
@@ -113,17 +129,122 @@ def is_parent_secondary_stage_ready(widget: Any) -> bool:
     return time.monotonic() >= not_before_ts
 
 
-def prewarm_parent_overlay(widget: Any) -> None:
+def prewarm_parent_overlay(widget: Any) -> bool:
     """Pre-create the GL overlay so first-frame latency is lower."""
     parent = widget.parent()
     if parent is None:
-        return
+        return False
     try:
         from rendering.display_image_ops import prewarm_spotify_visualizer_overlay
 
-        prewarm_spotify_visualizer_overlay(parent)
+        return bool(prewarm_spotify_visualizer_overlay(parent))
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to prewarm parent GL overlay", exc_info=True)
+        return False
+
+
+def parent_renderer_startup_retry_allowed(widget: Any) -> bool:
+    """Return whether another short hidden renderer-prewarm attempt is useful."""
+
+    parent = widget.parent()
+    if parent is None:
+        return False
+    if not (
+        hasattr(parent, "_spotify_bars_overlay")
+        or hasattr(parent, "_gl_compositor")
+    ):
+        # Lightweight previews/tests and non-display hosts do not participate
+        # in the display renderer-target contract.
+        return False
+    if str(
+        getattr(parent, "_spotify_visualizer_surface_terminal_reason", "") or ""
+    ).strip():
+        return False
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    if overlay is not None:
+        retry_check = getattr(overlay, "startup_retry_allowed", None)
+        if callable(retry_check):
+            try:
+                return bool(retry_check())
+            except Exception:
+                return False
+        state_getter = getattr(overlay, "get_gl_state", None)
+        if callable(state_getter):
+            try:
+                state = state_getter()
+                state_name = str(getattr(state, "name", state)).upper()
+            except Exception:
+                state_name = ""
+            if state_name in {"ERROR", "CONTEXT_LOST", "DESTROYING", "DESTROYED"}:
+                return False
+        return True
+
+    compositor = getattr(parent, "_gl_compositor", None)
+    if compositor is None:
+        return False
+    state_getter = getattr(compositor, "get_gl_state", None)
+    if not callable(state_getter):
+        return True
+    try:
+        state = state_getter()
+        state_name = str(getattr(state, "name", state)).upper()
+    except Exception:
+        return True
+    return state_name not in {"ERROR", "CONTEXT_LOST", "DESTROYING", "DESTROYED"}
+
+
+def is_parent_renderer_ready(widget: Any) -> bool:
+    """Gate reveal on a realised compositor frame target.
+
+    Legacy/software targets do not expose ``is_render_ready`` and retain their
+    existing startup behavior. A compositor target that is merely early keeps
+    ownership and retries rather than creating another GL surface.
+    """
+
+    parent = widget.parent()
+    if parent is None:
+        return True
+    if not (
+        hasattr(parent, "_spotify_bars_overlay")
+        or hasattr(parent, "_gl_compositor")
+    ):
+        return True
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    if overlay is None:
+        prewarm_parent_overlay(widget)
+        overlay = getattr(parent, "_spotify_bars_overlay", None)
+    if str(getattr(overlay, "render_surface_kind", "")) != "compositor":
+        if overlay is None:
+            return False
+        readiness = getattr(overlay, "is_gl_ready", None)
+        if not callable(readiness):
+            return True
+        try:
+            return bool(readiness())
+        except Exception:
+            return False
+    readiness = getattr(overlay, "is_render_ready", None)
+    if not callable(readiness):
+        return overlay is not None
+    try:
+        if bool(readiness()):
+            return True
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to inspect compositor renderer readiness",
+            exc_info=True,
+        )
+    if not parent_renderer_startup_retry_allowed(widget):
+        return False
+    prewarm_parent_overlay(widget)
+    overlay = getattr(parent, "_spotify_bars_overlay", None)
+    readiness = getattr(overlay, "is_render_ready", None)
+    if not callable(readiness):
+        return overlay is not None
+    try:
+        return bool(readiness())
+    except Exception:
+        return False
 
 
 def finish_staged_startup_reveal(
@@ -132,6 +253,8 @@ def finish_staged_startup_reveal(
     reason: str,
 ) -> None:
     """Complete the staged startup reveal if all preconditions are met."""
+    if not _qt_object_is_valid(widget):
+        return
     if not widget._enabled or not widget._startup_reveal_pending:
         return
     if not is_anchor_visible(widget):
@@ -144,6 +267,31 @@ def finish_staged_startup_reveal(
     ):
         return
     if widget._waiting_for_fresh_frame:
+        return
+    if not is_parent_renderer_ready(widget):
+        if parent_renderer_startup_retry_allowed(widget):
+            schedule_ready_driven_startup_reveal(widget, delay_ms=16)
+        elif not bool(getattr(widget, "_startup_renderer_terminal_logged", False)):
+            widget._startup_renderer_terminal_logged = True
+            parent_getter = getattr(widget, "parent", None)
+            parent = parent_getter() if callable(parent_getter) else None
+            terminal_reason = (
+                str(
+                    getattr(
+                        parent,
+                        "_spotify_visualizer_surface_terminal_reason",
+                        "",
+                    )
+                    or ""
+                ).strip()
+                if parent is not None
+                else ""
+            )
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Startup renderer reached a terminal "
+                "hidden state reason=%s; rapid readiness retries are disabled",
+                terminal_reason or "renderer_state",
+            )
         return
     try:
         not_before_ts = float(getattr(widget, "_startup_reveal_not_before_ts", 0.0) or 0.0)
@@ -180,6 +328,8 @@ def schedule_ready_driven_startup_reveal(widget: Any, *, delay_ms: int) -> None:
     widget._startup_reveal_ready_token = token
 
     def _maybe_reveal() -> None:
+        if not _qt_object_is_valid(widget):
+            return
         if token != widget._startup_reveal_token:
             return
         widget._startup_reveal_ready_token = -1
@@ -200,6 +350,8 @@ def schedule_startup_reveal_watchdog(widget: Any) -> None:
     token = widget._startup_reveal_token
 
     def _maybe_reveal() -> None:
+        if not _qt_object_is_valid(widget):
+            return
         if token != widget._startup_reveal_token:
             return
         finish_staged_startup_reveal(widget, reason="startup_watchdog")
@@ -313,6 +465,7 @@ def begin_hot_start(widget: Any, *, reason: str, reset_reason: str) -> None:
     elif widget._animation_manager is not None and widget._anim_listener_id is not None:
         widget._using_animation_ticks = True
 
+    widget._startup_renderer_terminal_logged = False
     prewarm_parent_overlay(widget)
     widget._startup_reveal_pending = True
     schedule_startup_reveal_watchdog(widget)

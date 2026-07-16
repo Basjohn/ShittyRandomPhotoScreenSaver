@@ -468,6 +468,8 @@ class UsageTelemetryService:
                 "rm_gl_vbo": None,
                 "rm_gl_vao": None,
                 "rm_gl_program": None,
+                "rm_gl_framebuffer": None,
+                "rm_gl_renderbuffer": None,
             }
         try:
             get_usage_counts = getattr(manager, "get_usage_counts", None)
@@ -480,6 +482,8 @@ class UsageTelemetryService:
                     "rm_gl_vbo": int(counts.get("gl_vbo", 0) or 0),
                     "rm_gl_vao": int(counts.get("gl_vao", 0) or 0),
                     "rm_gl_program": int(counts.get("gl_program", 0) or 0),
+                    "rm_gl_framebuffer": int(counts.get("gl_framebuffer", 0) or 0),
+                    "rm_gl_renderbuffer": int(counts.get("gl_renderbuffer", 0) or 0),
                 }
             gl_stats = manager.get_gl_stats()
             return {
@@ -489,6 +493,8 @@ class UsageTelemetryService:
                 "rm_gl_vbo": int(gl_stats.get("vbo", 0) or 0),
                 "rm_gl_vao": int(gl_stats.get("vao", 0) or 0),
                 "rm_gl_program": int(gl_stats.get("program", 0) or 0),
+                "rm_gl_framebuffer": int(gl_stats.get("framebuffer", 0) or 0),
+                "rm_gl_renderbuffer": int(gl_stats.get("renderbuffer", 0) or 0),
             }
         except Exception:
             return {
@@ -498,6 +504,8 @@ class UsageTelemetryService:
                 "rm_gl_vbo": None,
                 "rm_gl_vao": None,
                 "rm_gl_program": None,
+                "rm_gl_framebuffer": None,
+                "rm_gl_renderbuffer": None,
             }
 
     def _collect_and_log(
@@ -522,7 +530,8 @@ class UsageTelemetryService:
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
                 "rm_total=%s rm_gl_total=%s rm_gl_texture=%s rm_gl_vbo=%s "
-                "rm_gl_vao=%s rm_gl_program=%s "
+                "rm_gl_vao=%s rm_gl_program=%s rm_gl_framebuffer=%s "
+                "rm_gl_renderbuffer=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d",
@@ -558,6 +567,8 @@ class UsageTelemetryService:
                 _fmt(resources["rm_gl_vbo"]),
                 _fmt(resources["rm_gl_vao"]),
                 _fmt(resources["rm_gl_program"]),
+                _fmt(resources["rm_gl_framebuffer"]),
+                _fmt(resources["rm_gl_renderbuffer"]),
                 threads["tm_active"],
                 threads["tm_io_max"],
                 threads["tm_compute_max"],

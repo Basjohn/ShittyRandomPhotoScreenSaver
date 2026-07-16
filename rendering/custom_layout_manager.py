@@ -1353,6 +1353,37 @@ class CustomLayoutManager:
         capture_size = QSize(canvas_size) if isinstance(canvas_size, QSize) and not canvas_size.isEmpty() else local_rect.size()
         snapshot = QPixmap(max(1, capture_size.width()), max(1, capture_size.height()))
         snapshot.fill(Qt.GlobalColor.transparent)
+
+        overlay = getattr(self._display, "_spotify_bars_overlay", None)
+        compositor_snapshot = (
+            getattr(overlay, "grab_composited_snapshot", None)
+            if overlay is not None
+            else None
+        )
+        if callable(compositor_snapshot):
+            try:
+                image = compositor_snapshot()
+            except Exception:
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Failed to capture compositor visualizer snapshot",
+                    exc_info=True,
+                )
+                image = None
+            if image is not None and not image.isNull():
+                try:
+                    overlay_geom = overlay.geometry()
+                except Exception:
+                    overlay_geom = QRect(local_rect)
+                painter = QPainter(snapshot)
+                try:
+                    painter.drawImage(
+                        overlay_geom.topLeft() - local_rect.topLeft(),
+                        image,
+                    )
+                finally:
+                    painter.end()
+                return snapshot
+
         widget_snapshot = widget.grab()
         if not widget_snapshot.isNull():
             painter = QPainter(snapshot)
@@ -1361,7 +1392,6 @@ class CustomLayoutManager:
             finally:
                 painter.end()
 
-        overlay = getattr(self._display, "_spotify_bars_overlay", None)
         if overlay is None:
             return snapshot
 

@@ -923,8 +923,12 @@ def push_gpu_frame(
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             widget._last_gpu_geom = None
-        # Card/background/shadow still repaint via stylesheet
-        if need_card_update:
+        # The compositor path already received this frame and owns the card
+        # fade. Do not also invalidate the transparent coordinator backing
+        # store during every fade tick.
+        if need_card_update and not bool(
+            getattr(widget, "_compositor_visualizer_active", False)
+        ):
             widget.update()
         if not primer_problems:
             widget._has_pushed_first_frame = True

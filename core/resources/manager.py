@@ -279,7 +279,8 @@ class ResourceManager:
         
         Args:
             handle: The GL handle (integer from glGen*/glCreate*)
-            handle_type: Type of handle ("vao", "vbo", "texture", "program", "shader")
+            handle_type: Type of handle ("vao", "vbo", "texture", "program",
+                "shader", "framebuffer", "renderbuffer")
             cleanup_func: Function to delete the handle (e.g., lambda h: gl.glDeleteBuffers(1, [h]))
             description: Human-readable description
             group: Resource group for batch cleanup (default "gl")
@@ -421,6 +422,8 @@ class ResourceManager:
             "texture": 0,
             "program": 0,
             "shader": 0,
+            "framebuffer": 0,
+            "renderbuffer": 0,
             "total": 0,
         }
         for info in self._resources.values():
@@ -448,6 +451,8 @@ class ResourceManager:
                 "gl_vbo": gl_stats["vbo"],
                 "gl_vao": gl_stats["vao"],
                 "gl_program": gl_stats["program"],
+                "gl_framebuffer": gl_stats["framebuffer"],
+                "gl_renderbuffer": gl_stats["renderbuffer"],
             }
     
     def get(self, resource_id: str) -> Optional[Any]:

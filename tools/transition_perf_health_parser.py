@@ -29,6 +29,10 @@ _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=
 _SPOTIFY_TICK_PHASE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick phase breakdown (?P<detail>.*)")
 _SPOTIFY_OVERLAY_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\](?P<detail>.*)")
 _SPOTIFY_OVERLAY_MICROGAP_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[MICROGAP\](?P<detail>.*)")
+_SPOTIFY_SURFACE_RE = re.compile(
+    r"\[SPOTIFY_VIS\]\[SURFACE\] Renderer target=(?P<target>\S+) "
+    r"reason=(?P<reason>\S+) screen=(?P<screen>\S+)"
+)
 _SPOTIFY_VIS_SYNC_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[VIS_SYNC\](?P<detail>.*)")
 _MEDIA_EMIT_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\] emit_media_update(?P<detail>.*)")
 _MEDIA_REFRESH_PERF_RE = re.compile(r"\[PERF\]\[MEDIA_WIDGET\]\[REFRESH\](?P<detail>.*)")
@@ -198,6 +202,8 @@ class UsageSample:
     rm_gl_vbo: int | None = None
     rm_gl_vao: int | None = None
     rm_gl_program: int | None = None
+    rm_gl_framebuffer: int | None = None
+    rm_gl_renderbuffer: int | None = None
     tm_io_submitted: int | None = None
     tm_io_completed: int | None = None
     tm_io_failed: int | None = None
@@ -357,6 +363,15 @@ class SpotifyTopologyEvent:
 
 
 @dataclass(frozen=True)
+class SpotifySurfaceSelection:
+    timestamp: str | None
+    target: str
+    reason: str
+    screen: int | None
+    line: str = ""
+
+
+@dataclass(frozen=True)
 class SpotifyTopologyStarvation:
     starvation: PaintDeliveryStarvation
     visualizer: SpotifyTopologyEvent
@@ -377,11 +392,17 @@ class SpotifyOverlayPerfWindow:
     reason: str
     screen: int | None
     mode: str
+    surface: str
     elapsed_ms: float
     set_state_count: int
     paint_count: int
     update_request_count: int
     geometry_change_count: int
+    fbo_resize_count: int
+    fbo_render_count: int
+    texture_reuse_count: int
+    render_failure_count: int
+    retained_last_good_count: int
     visible: bool
     enabled: bool
     playing: bool | None = None
@@ -410,6 +431,7 @@ class SpotifyOverlayMicrogapWindow:
     reason: str
     screen: int | None
     mode: str
+    surface: str
     context: str
     gap_samples: int
     gap_p95_ms: float
@@ -466,6 +488,7 @@ class PerfHealthReport:
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
     spotify_topology_events: list[SpotifyTopologyEvent] = field(default_factory=list)
+    spotify_surface_selections: list[SpotifySurfaceSelection] = field(default_factory=list)
     spotify_overlay_perf_windows: list[SpotifyOverlayPerfWindow] = field(default_factory=list)
     spotify_overlay_microgap_windows: list[SpotifyOverlayMicrogapWindow] = field(default_factory=list)
     startup_first_frame_exposures: list[StartupFirstFrameExposure] = field(default_factory=list)
@@ -842,6 +865,39 @@ class PerfHealthReport:
         return anomalous
 
     @property
+    def unexpected_spotify_legacy_surfaces(self) -> list[SpotifySurfaceSelection]:
+        expected_reasons = {"explicit_rollback", "software_backend"}
+        return [
+            selection
+            for selection in self.spotify_surface_selections
+            if selection.target == "legacy_child"
+            and selection.reason not in expected_reasons
+        ]
+
+    @property
+    def spotify_compositor_render_failure_windows(self) -> list[SpotifyOverlayPerfWindow]:
+        """Single-surface windows where a visualizer render failed.
+
+        Last-good retention protects fidelity from a visible blank or sudden
+        disappearance, but it must not turn renderer failures into silent
+        success.
+        """
+        return [
+            window
+            for window in self.spotify_overlay_perf_windows
+            if window.surface == "compositor" and window.render_failure_count > 0
+        ]
+
+    @property
+    def spotify_compositor_fbo_churn_windows(self) -> list[SpotifyOverlayPerfWindow]:
+        """Compositor windows that rebuilt card buffers more than lifecycle needs."""
+        return [
+            window
+            for window in self.spotify_overlay_perf_windows
+            if window.surface == "compositor" and window.fbo_resize_count > 1
+        ]
+
+    @property
     def low_refresh_under_target(self) -> list[MetricWindow]:
         return [
             window
@@ -1023,6 +1079,21 @@ class PerfHealthReport:
             messages.append(
                 "spotify visualizer overlay delivery microgaps exceeded the owner cadence: "
                 f"{len(self.spotify_overlay_microgap_anomalies)}"
+            )
+        if self.spotify_compositor_render_failure_windows:
+            messages.append(
+                "spotify compositor visualizer renderer failures retained or dropped frames: "
+                f"{len(self.spotify_compositor_render_failure_windows)}"
+            )
+        if self.spotify_compositor_fbo_churn_windows:
+            messages.append(
+                "spotify compositor visualizer framebuffer churn exceeded lifecycle needs: "
+                f"{len(self.spotify_compositor_fbo_churn_windows)}"
+            )
+        if self.unexpected_spotify_legacy_surfaces:
+            messages.append(
+                "unexpected spotify legacy visualizer surfaces were activated: "
+                f"{len(self.unexpected_spotify_legacy_surfaces)}"
             )
         if self.high_target_near_sixty:
             messages.append(
@@ -1295,6 +1366,8 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         rm_gl_vbo=_parse_int(parts.get("rm_gl_vbo")),
         rm_gl_vao=_parse_int(parts.get("rm_gl_vao")),
         rm_gl_program=_parse_int(parts.get("rm_gl_program")),
+        rm_gl_framebuffer=_parse_int(parts.get("rm_gl_framebuffer")),
+        rm_gl_renderbuffer=_parse_int(parts.get("rm_gl_renderbuffer")),
         tm_io_submitted=_parse_int(parts.get("tm_io_submitted")),
         tm_io_completed=_parse_int(parts.get("tm_io_completed")),
         tm_io_failed=_parse_int(parts.get("tm_io_failed")),
@@ -1427,11 +1500,17 @@ def _spotify_overlay_perf_from_line(line: str, detail: str) -> SpotifyOverlayPer
         reason=parts.get("reason", "unknown"),
         screen=_parse_int(parts.get("screen")),
         mode=parts.get("mode", "unknown"),
+        surface=parts.get("surface", "legacy_child"),
         elapsed_ms=elapsed_ms,
         set_state_count=_parse_int(parts.get("set_state")) or 0,
         paint_count=_parse_int(parts.get("paint")) or 0,
         update_request_count=_parse_int(parts.get("update_requests")) or 0,
         geometry_change_count=_parse_int(parts.get("geometry_changes")) or 0,
+        fbo_resize_count=_parse_int(parts.get("fbo_resizes")) or 0,
+        fbo_render_count=_parse_int(parts.get("fbo_renders")) or 0,
+        texture_reuse_count=_parse_int(parts.get("texture_reuses")) or 0,
+        render_failure_count=_parse_int(parts.get("render_failures")) or 0,
+        retained_last_good_count=_parse_int(parts.get("retained_last_good")) or 0,
         visible=_parse_bool(parts.get("visible")),
         enabled=_parse_bool(parts.get("enabled")),
         playing=_parse_optional_bool(parts.get("playing")),
@@ -1452,6 +1531,7 @@ def _spotify_overlay_microgap_from_line(
         reason=parts.get("reason", "unknown"),
         screen=_parse_int(parts.get("screen")),
         mode=parts.get("mode", "unknown"),
+        surface=parts.get("surface", "legacy_child"),
         context=context,
         gap_samples=_parse_int(parts.get("gap_samples")) or 0,
         gap_p95_ms=_parse_float(parts.get("gap_p95_ms")) or 0.0,
@@ -1515,6 +1595,25 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
     for raw in lines:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
+
+        spotify_surface = _SPOTIFY_SURFACE_RE.search(line)
+        if spotify_surface:
+            selection = SpotifySurfaceSelection(
+                timestamp=timestamp,
+                target=spotify_surface.group("target"),
+                reason=spotify_surface.group("reason"),
+                screen=_parse_int(spotify_surface.group("screen")),
+                line=line,
+            )
+            report.spotify_surface_selections.append(selection)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "spotify_visualizer_surface",
+                    f"target={selection.target} reason={selection.reason} screen={selection.screen}",
+                    line,
+                )
+            )
 
         if _TRANSITION_START_REFUSAL_RE.search(line):
             report.transition_start_refusals.append(line)
@@ -2145,10 +2244,28 @@ def main() -> int:
     print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
     print(f"Spotify visualizer CUSTOM bucket repairs: {len(report.visualizer_custom_bucket_repairs)}")
     print(f"Spotify topology events: {len(report.spotify_topology_events)}")
+    print(f"Spotify visualizer surface selections: {len(report.spotify_surface_selections)}")
+    print(f"Unexpected Spotify legacy surfaces: {len(report.unexpected_spotify_legacy_surfaces)}")
     print(f"Spotify overlay perf windows: {len(report.spotify_overlay_perf_windows)}")
+    print(
+        "Spotify compositor perf windows: "
+        f"{sum(window.surface == 'compositor' for window in report.spotify_overlay_perf_windows)}"
+    )
+    print(
+        "Spotify legacy-child perf windows: "
+        f"{sum(window.surface == 'legacy_child' for window in report.spotify_overlay_perf_windows)}"
+    )
     print(f"Spotify overlay under-delivery windows: {len(report.spotify_overlay_under_delivery_windows)}")
     print(f"Spotify overlay microgap windows: {len(report.spotify_overlay_microgap_windows)}")
     print(f"Spotify overlay microgap anomalies: {len(report.spotify_overlay_microgap_anomalies)}")
+    print(
+        "Spotify compositor render-failure windows: "
+        f"{len(report.spotify_compositor_render_failure_windows)}"
+    )
+    print(
+        "Spotify compositor FBO-churn windows: "
+        f"{len(report.spotify_compositor_fbo_churn_windows)}"
+    )
     print(f"Timeline markers: {len(report.timeline_markers)}")
     if report.usage_samples:
         growth_baseline_index = 1 if len(report.usage_samples) >= 3 else 0
@@ -2268,6 +2385,21 @@ def main() -> int:
     _print_samples(
         "Spotify visualizer overlay delivery microgaps",
         report.spotify_overlay_microgap_anomalies,
+        args.max_samples,
+    )
+    _print_samples(
+        "Spotify compositor visualizer render failures",
+        report.spotify_compositor_render_failure_windows,
+        args.max_samples,
+    )
+    _print_samples(
+        "Spotify compositor visualizer framebuffer churn",
+        report.spotify_compositor_fbo_churn_windows,
+        args.max_samples,
+    )
+    _print_samples(
+        "Unexpected Spotify legacy visualizer surfaces",
+        report.unexpected_spotify_legacy_surfaces,
         args.max_samples,
     )
     _print_samples("High-refresh near-60 windows", report.high_target_near_sixty, args.max_samples)

@@ -21,7 +21,7 @@ from core.logging.logger import get_logger, is_perf_metrics_enabled
 from rendering.adaptive_timer import _mark_widget_update_consumed
 from rendering.gl_compositor_pkg.overlays import (
     paint_debug_overlay,
-    paint_spotify_visualizer,
+    paint_visualizer_scene,
 )
 
 if TYPE_CHECKING:
@@ -252,7 +252,7 @@ def paintGL_impl(widget) -> None:
             target = widget.rect()
             widget._transition_renderer.render_base_image(painter, target, widget._base_pixmap)
             widget._paint_dimming(painter)
-            paint_spotify_visualizer(widget, painter)
+            paint_visualizer_scene(widget, painter)
             paint_debug_overlay(widget, painter)
         finally:
             painter.end()

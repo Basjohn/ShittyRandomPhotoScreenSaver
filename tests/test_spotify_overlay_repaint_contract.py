@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from widgets.spotify_bars_gl_overlay import (
     SpotifyBarsGLOverlay,
+    SpotifyVisualizerGLRenderer,
     _PERF_MICROGAP_BUCKET_UPPER_MS,
     _perf_histogram_bucket_index,
     _perf_histogram_percentile_ms,
@@ -58,19 +59,33 @@ def test_spotify_overlay_paintgl_does_not_self_schedule_repaint():
         for node in tree.body
         if isinstance(node, ast.ClassDef) and node.name == "SpotifyBarsGLOverlay"
     )
+    renderer_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "SpotifyVisualizerGLRenderer"
+    )
 
     paint_gl = _method_tree(overlay_class, "paintGL")
-    set_state = _method_tree(overlay_class, "set_state")
-    request_frame_update = _method_tree(overlay_class, "_request_frame_update")
+    set_state = _method_tree(renderer_class, "set_state")
+    request_frame_update = _method_tree(renderer_class, "_request_frame_update")
+    render_current_framebuffer = _method_tree(
+        renderer_class,
+        "render_current_framebuffer",
+    )
 
     assert not _calls_self_update(paint_gl)
+    assert _calls_method(paint_gl, "render_current_framebuffer")
     assert not _calls_self_update(set_state)
     assert _calls_method(set_state, "_request_frame_update")
-    assert _calls_self_update(request_frame_update)
+    assert _calls_method(request_frame_update, "_surface_update")
     assert _calls_method(request_frame_update, "_record_perf_update_request")
-    assert _calls_method(paint_gl, "_record_perf_paint_delivery")
+    assert _calls_method(render_current_framebuffer, "_record_perf_paint_delivery")
     assert not _references_attribute(request_frame_update, "_owner_target_fps")
     assert not _references_attribute(request_frame_update, "_update_pending")
+
+
+def test_legacy_overlay_and_compositor_share_the_same_renderer_contract():
+    assert issubclass(SpotifyBarsGLOverlay, SpotifyVisualizerGLRenderer)
 
 
 def test_spotify_overlay_microgap_histogram_keeps_fixed_bucket_percentile():

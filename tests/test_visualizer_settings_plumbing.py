@@ -2760,6 +2760,11 @@ class TestDisplayFramePush:
                 self.last_kwargs = dict(kwargs)
 
         monkeypatch.setattr(display_image_ops, "SpotifyBarsGLOverlay", FakeOverlay)
+        monkeypatch.setattr(
+            display_image_ops,
+            "single_surface_visualizer_enabled",
+            lambda: False,
+        )
 
         class FakeVis:
             def isVisible(self):

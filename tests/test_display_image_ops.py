@@ -67,6 +67,11 @@ def test_ensure_spotify_bars_overlay_seeds_ctor_mode_from_visualizer(monkeypatch
             return None
 
     monkeypatch.setattr(display_image_ops, "SpotifyBarsGLOverlay", _FakeOverlay)
+    monkeypatch.setattr(
+        display_image_ops,
+        "single_surface_visualizer_enabled",
+        lambda: False,
+    )
 
     widget = _FakeWidget()
     overlay = display_image_ops._ensure_spotify_bars_overlay(widget)

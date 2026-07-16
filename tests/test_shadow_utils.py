@@ -61,6 +61,38 @@ def test_shared_fade_honors_explicit_duration_override(qt_app, qtbot):
     assert anim.duration() == 321
 
 
+@pytest.mark.qt
+def test_compositor_visualizer_fade_uses_shared_curve_without_graphics_effect(qt_app, qtbot):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+
+    widget = QWidget(parent)
+    qtbot.addWidget(widget)
+    widget._compositor_visualizer_active = True
+    samples: list[float] = []
+    widget._set_compositor_fade_progress = lambda value: samples.append(float(value))
+
+    ShadowFadeProfile.start_fade_in(
+        widget,
+        {"enabled": True},
+        duration_ms=200,
+        has_background_frame=True,
+    )
+
+    assert widget.isVisible() is True
+    assert widget.graphicsEffect() is None
+    assert samples[0] == pytest.approx(0.0)
+
+    anim = widget._shadowfade_anim
+    anim.setCurrentTime(100)
+    assert 0.0 < samples[-1] < 1.0
+
+    anim.setCurrentTime(200)
+    assert samples[-1] == pytest.approx(1.0)
+    assert widget._shadowfade_completed is True
+
+
 def test_shadow_tuning_payload_backfills_new_sections_without_clobbering_existing_values(tmp_path):
     from core.settings import shadow_tuning
 
@@ -79,7 +111,7 @@ def test_shadow_tuning_payload_backfills_new_sections_without_clobbering_existin
     assert payload["text_large"]["offset_x"] == shadow_tuning._TEXT_LARGE_DEFAULTS["offset_x"]
     assert payload["header"]["alpha"] == 70
     assert "icon" in payload
-    assert payload["icon"]["alpha"] == 67
+    assert payload["icon"]["alpha"] == shadow_tuning._ICON_DEFAULTS["alpha"]
     assert payload["icon"]["scale"] == shadow_tuning._ICON_DEFAULTS["scale"]
     assert "control" in payload
     assert payload["control"]["spread"] == shadow_tuning._CONTROL_DEFAULTS["spread"]

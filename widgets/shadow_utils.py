@@ -171,6 +171,14 @@ class ShadowFadeProfile:
         resolved_duration_ms = (
             cls.default_duration_ms() if duration_ms is None else max(0, int(duration_ms))
         )
+        compositor_fade_hook = getattr(
+            widget,
+            "_set_compositor_fade_progress",
+            None,
+        )
+        use_compositor_fade = callable(compositor_fade_hook) and bool(
+            getattr(widget, "_compositor_visualizer_active", False)
+        )
 
         try:
             # Stop any in-flight fade animation created by this helper.
@@ -181,15 +189,23 @@ class ShadowFadeProfile:
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
 
-            effect = getattr(widget, "_shadowfade_effect", None)
-            if not isinstance(effect, QGraphicsOpacityEffect):
-                effect = QGraphicsOpacityEffect(widget)
-                setattr(widget, "_shadowfade_effect", effect)
+            effect = None
+            if use_compositor_fade:
+                try:
+                    widget.setGraphicsEffect(None)
+                except Exception:
+                    pass
+                setattr(widget, "_shadowfade_effect", None)
+            else:
+                effect = getattr(widget, "_shadowfade_effect", None)
+                if not isinstance(effect, QGraphicsOpacityEffect):
+                    effect = QGraphicsOpacityEffect(widget)
+                    setattr(widget, "_shadowfade_effect", effect)
 
-            # Start fully transparent so we never briefly flash at full
-            # opacity before the fade is visible.
-            effect.setOpacity(0.0)
-            widget.setGraphicsEffect(effect)
+                # Start fully transparent so we never briefly flash at full
+                # opacity before the fade is visible.
+                effect.setOpacity(0.0)
+                widget.setGraphicsEffect(effect)
 
             if is_verbose_logging():
                 logger.debug(
@@ -213,6 +229,8 @@ class ShadowFadeProfile:
                 setattr(widget, "_shadowfade_progress", 0.0)
             except Exception as e:
                 logger.debug("[SHADOW] Exception suppressed: %s", e)
+            if use_compositor_fade:
+                compositor_fade_hook(0.0)
             try:
                 setattr(widget, "_shadowfade_completed", False)
             except Exception as e:
@@ -229,7 +247,7 @@ class ShadowFadeProfile:
                 pass
 
             def _on_value_changed(value: float) -> None:
-                if not Shiboken.isValid(effect):
+                if effect is not None and not Shiboken.isValid(effect):
                     return
                 try:
                     f = float(value)
@@ -237,10 +255,11 @@ class ShadowFadeProfile:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
                     f = 0.0
 
-                try:
-                    effect.setOpacity(f)
-                except Exception as e:
-                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if effect is not None:
+                    try:
+                        effect.setOpacity(f)
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed: %s", e)
                 # Expose the instantaneous fade progress on the widget so
                 # GPU clients (e.g. GL compositor overlays) can track the
                 # same curve without duplicating easing logic.
@@ -248,14 +267,17 @@ class ShadowFadeProfile:
                     setattr(widget, "_shadowfade_progress", f)
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if use_compositor_fade:
+                    compositor_fade_hook(f)
 
             anim.valueChanged.connect(_on_value_changed)
 
             def _on_finished() -> None:
-                try:
-                    widget.setGraphicsEffect(None)
-                except Exception as e:
-                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if effect is not None:
+                    try:
+                        widget.setGraphicsEffect(None)
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed: %s", e)
 
                 try:
                     setattr(widget, "_shadowfade_anim", None)
@@ -273,6 +295,8 @@ class ShadowFadeProfile:
                     setattr(widget, "_shadowfade_progress", 1.0)
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
+                if use_compositor_fade:
+                    compositor_fade_hook(1.0)
                 # Mark fade as completed so GPU overlays know they can show
                 # even if _shadowfade_progress is later cleared or unavailable.
                 try:
@@ -332,9 +356,26 @@ class ShadowFadeProfile:
                     on_complete()
                 return
 
-            opacity_effect = QGraphicsOpacityEffect(widget)
-            opacity_effect.setOpacity(1.0)
-            widget.setGraphicsEffect(opacity_effect)
+            compositor_fade_hook = getattr(
+                widget,
+                "_set_compositor_fade_progress",
+                None,
+            )
+            use_compositor_fade = callable(compositor_fade_hook) and bool(
+                getattr(widget, "_compositor_visualizer_active", False)
+            )
+            opacity_effect = None
+            if use_compositor_fade:
+                try:
+                    widget.setGraphicsEffect(None)
+                except Exception:
+                    pass
+                compositor_fade_hook(1.0)
+            else:
+                opacity_effect = QGraphicsOpacityEffect(widget)
+                opacity_effect.setOpacity(1.0)
+                widget.setGraphicsEffect(opacity_effect)
+            setattr(widget, "_shadowfade_progress", 1.0)
 
             anim = QVariantAnimation(widget)
             anim.setDuration(max(0, int(duration_ms)))
@@ -346,18 +387,30 @@ class ShadowFadeProfile:
                 logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             def _on_value_changed(value: float) -> None:
-                if not Shiboken.isValid(opacity_effect):
+                if opacity_effect is not None and not Shiboken.isValid(opacity_effect):
                     return
                 try:
-                    opacity_effect.setOpacity(max(0.0, min(1.0, float(value))))
+                    resolved = max(0.0, min(1.0, float(value)))
+                    if opacity_effect is not None:
+                        opacity_effect.setOpacity(resolved)
+                    setattr(widget, "_shadowfade_progress", resolved)
+                    if use_compositor_fade:
+                        compositor_fade_hook(resolved)
                 except Exception as e:
                     logger.debug("[SHADOW] Exception suppressed: %s", e)
 
             def _on_finished() -> None:
+                if opacity_effect is not None:
+                    try:
+                        widget.setGraphicsEffect(None)
+                    except Exception as e:
+                        logger.debug("[SHADOW] Exception suppressed: %s", e)
                 try:
-                    widget.setGraphicsEffect(None)
-                except Exception as e:
-                    logger.debug("[SHADOW] Exception suppressed: %s", e)
+                    setattr(widget, "_shadowfade_progress", 0.0)
+                    if use_compositor_fade:
+                        compositor_fade_hook(0.0)
+                except Exception:
+                    logger.debug("[SHADOW] Failed to finalize compositor fade-out", exc_info=True)
                 try:
                     widget.hide()
                 except Exception as e:

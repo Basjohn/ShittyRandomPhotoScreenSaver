@@ -348,7 +348,7 @@ def sync_visibility_with_anchor(widget: Any) -> None:
 
 
 def destroy_parent_overlay(widget: Any, *, reason: str) -> None:
-    """Destroy the GL bars overlay and clean up its resources."""
+    """Destroy the active visualizer renderer target and its GL resources."""
     parent = widget.parent()
     if parent is None:
         logger.warning("[SPOTIFY_VIS] Overlay destroy requested without parent (reason=%s)", reason)
@@ -360,8 +360,9 @@ def destroy_parent_overlay(widget: Any, *, reason: str) -> None:
         return
 
     logger.debug(
-        "[SPOTIFY_VIS] Destroying SpotifyBarsGLOverlay (reason=%s id=%s)",
+        "[SPOTIFY_VIS] Destroying renderer target (reason=%s kind=%s id=%s)",
         reason,
+        type(overlay).__name__,
         hex(id(overlay)),
     )
 
@@ -412,7 +413,7 @@ def destroy_parent_overlay(widget: Any, *, reason: str) -> None:
 
 
 def clear_parent_overlay_runtime(widget: Any, *, reason: str) -> None:
-    """Blank and hide the GL bars overlay without destroying the GL object.
+    """Blank and hide the renderer target without destroying its GL objects.
 
     This preserves the expensive GL/shader setup across mode and preset
     resets while still forcing the same cold runtime handoff before the next
@@ -429,8 +430,9 @@ def clear_parent_overlay_runtime(widget: Any, *, reason: str) -> None:
         return
 
     logger.debug(
-        "[SPOTIFY_VIS] Clearing SpotifyBarsGLOverlay runtime state (reason=%s id=%s)",
+        "[SPOTIFY_VIS] Clearing renderer runtime state (reason=%s kind=%s id=%s)",
         reason,
+        type(overlay).__name__,
         hex(id(overlay)),
     )
 

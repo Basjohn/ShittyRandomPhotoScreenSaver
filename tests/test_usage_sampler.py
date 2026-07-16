@@ -106,11 +106,13 @@ class _ResourceManager:
         self.snapshot_calls += 1
         return {
             "total": 24,
-            "gl_total": 12,
+            "gl_total": 14,
             "gl_texture": 6,
             "gl_vbo": 2,
             "gl_vao": 2,
             "gl_program": 2,
+            "gl_framebuffer": 1,
+            "gl_renderbuffer": 1,
         }
 
 
@@ -134,8 +136,10 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "gpu_busy_pct=67.0" in sample
     assert "vram_dedicated_mb=512.0" in sample
     assert "rm_total=24" in sample
-    assert "rm_gl_total=12" in sample
+    assert "rm_gl_total=14" in sample
     assert "rm_gl_texture=6" in sample
+    assert "rm_gl_framebuffer=1" in sample
+    assert "rm_gl_renderbuffer=1" in sample
     assert "tm_active=1" in sample
     assert resources.snapshot_calls == 1
 

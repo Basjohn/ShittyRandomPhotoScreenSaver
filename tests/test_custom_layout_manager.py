@@ -2702,10 +2702,13 @@ def test_custom_layout_manager_visualizer_shell_snapshot_uses_display_composite(
     visualizer = _VisualizerLikeTestWidget(display)
     display.spotify_visualizer_widget = visualizer
     class _OverlayStub(QWidget):
-        def grabFramebuffer(self):
+        def grab_composited_snapshot(self):
             pm = QPixmap(max(1, self.width()), max(1, self.height()))
             pm.fill(QColor(40, 120, 240, 180))
             return pm.toImage()
+
+        def grabFramebuffer(self):
+            raise AssertionError("legacy framebuffer capture should not be used")
 
     overlay = _OverlayStub(display)
     overlay.setGeometry(visualizer.geometry())

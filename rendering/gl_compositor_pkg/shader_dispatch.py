@@ -373,23 +373,11 @@ def paint_debug_overlay_gl(comp: "GLCompositorWidget") -> None:
         painter.end()
 
 
-def paint_spotify_visualizer_gl(comp: "GLCompositorWidget") -> None:
-    if not comp._spotify_vis_enabled:
-        return
-    from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
-    painter = QPainter(comp)
-    try:
-        paint_spotify_visualizer(comp, painter)
-    finally:
-        painter.end()
-
-
 def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
-    """Paint QPainter-owned overlays in one session after shader rendering.
+    """Paint the complete QPainter scene overlay in one post-shader session.
 
-    This keeps debug HUD and Spotify card overlays from opening separate
-    QPainter sessions on the same GL frame, which can add avoidable churn
-    under PERF runs and multi-display transitions.
+    Dimming, the Spotify visualizer card/layer, and the debug HUD retain their
+    established order without opening separate painter/native-state cycles.
     """
     debug_image = None
     if is_perf_metrics_enabled():
@@ -397,17 +385,27 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
 
         debug_image = render_debug_overlay_image(comp)
 
-    if not comp._spotify_vis_enabled and debug_image is None:
+    try:
+        dimming_opacity = float(getattr(comp, "_dimming_opacity", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        dimming_opacity = 0.0
+    has_dimming = bool(
+        getattr(comp, "_dimming_enabled", False) and dimming_opacity > 0.0
+    )
+    has_visualizer = getattr(comp, "_spotify_visualizer_layer", None) is not None
+    if not has_dimming and not has_visualizer and debug_image is None:
         return
 
     gl.glUseProgram(0)
 
     painter = QPainter(comp)
     try:
-        if comp._spotify_vis_enabled:
-            from rendering.gl_compositor_pkg.overlays import paint_spotify_visualizer
+        if has_dimming:
+            comp._paint_dimming(painter)
+        if has_visualizer:
+            from rendering.gl_compositor_pkg.overlays import paint_visualizer_scene
 
-            paint_spotify_visualizer(comp, painter)
+            paint_visualizer_scene(comp, painter)
         if debug_image is not None:
             painter.drawImage(0, 0, debug_image)
     finally:
@@ -426,8 +424,6 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
             _record_shader_path_failure(comp, name, "texture_prep_failed")
             return False
         paint_fn(target)
-        from rendering.gl_compositor_pkg.overlays import paint_dimming_gl
-        paint_dimming_gl(comp)
         paint_qpainter_overlays_gl(comp)
         try:
             comp._last_shader_path_failure = ""

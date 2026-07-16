@@ -38,7 +38,8 @@ def _usage_line(
         f"gpu_busy_pct={gpu} gpu_engine_sum_pct={gpu} vram_supported=1 "
         f"vram_dedicated_mb={vram} vram_shared_mb=64.0 rm_total={rm_total} "
         f"rm_gl_total={rm_gl_total} rm_gl_texture={rm_gl_texture} "
-        "rm_gl_vbo=na rm_gl_vao=na rm_gl_program=na tm_active=1 tm_io_max=4 "
+        "rm_gl_vbo=na rm_gl_vao=na rm_gl_program=na rm_gl_framebuffer=na "
+        "rm_gl_renderbuffer=na tm_active=1 tm_io_max=4 "
         "tm_compute_max=3 tm_io_submitted=7 tm_io_completed=6 tm_io_failed=0 "
         f"tm_compute_submitted={compute_submitted} "
         f"tm_compute_completed={compute_completed} tm_compute_failed=0"
@@ -256,6 +257,7 @@ def test_perf_health_allows_spotify_overlay_near_owner_display_target():
     )
 
     assert len(report.spotify_overlay_perf_windows) == 1
+    assert report.spotify_overlay_perf_windows[0].surface == "legacy_child"
     assert report.spotify_overlay_overpaint_windows == []
     assert report.anomalies == []
 
@@ -307,6 +309,73 @@ def test_perf_health_parses_and_flags_overlay_microgap_hidden_by_healthy_average
     assert microgap.wait_max_ms == 64.2
     assert report.spotify_overlay_microgap_anomalies == [microgap]
     assert any("delivery microgaps" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_parses_single_surface_renderer_health_and_flags_failures():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=paintGL surface=compositor "
+            "screen=1 mode=deep_sea elapsed_ms=10000.0 set_state=900 paint=598 "
+            "update_requests=600 geometry_changes=0 fbo_resizes=1 "
+            "fbo_renders=598 texture_reuses=1042 "
+            "render_failures=2 retained_last_good=2 visible=True enabled=True playing=True",
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][MICROGAP] reason=paintGL surface=compositor "
+            "screen=1 mode=deep_sea context=steady_idle gap_samples=598 "
+            "gap_p95_ms=12.0 gap_max_ms=20.0 wait_samples=598 wait_p95_ms=8.0 "
+            "wait_max_ms=16.0 pending_wait_ms=0.0 visible=True enabled=True playing=True",
+        ]
+    )
+
+    window = report.spotify_overlay_perf_windows[0]
+    assert window.surface == "compositor"
+    assert window.fbo_resize_count == 1
+    assert window.fbo_render_count == 598
+    assert window.texture_reuse_count == 1042
+    assert window.render_failure_count == 2
+    assert window.retained_last_good_count == 2
+    assert report.spotify_overlay_microgap_windows[0].surface == "compositor"
+    assert report.spotify_compositor_render_failure_windows == [window]
+    assert report.spotify_compositor_fbo_churn_windows == []
+    assert any("renderer failures" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_flags_repeated_single_surface_framebuffer_rebuilds():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - widgets.spotify_bars_gl_overlay - INFO - "
+            "[PERF][SPOTIFY_VIS][OVERLAY] reason=setGeometry surface=compositor "
+            "screen=0 mode=spectrum elapsed_ms=10000.0 set_state=600 paint=600 "
+            "update_requests=600 geometry_changes=4 fbo_resizes=4 "
+            "render_failures=0 retained_last_good=0 visible=True enabled=True playing=True",
+        ]
+    )
+
+    window = report.spotify_overlay_perf_windows[0]
+    assert report.spotify_compositor_fbo_churn_windows == [window]
+    assert report.spotify_compositor_render_failure_windows == []
+    assert any("framebuffer churn" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_distinguishes_expected_and_unexpected_legacy_surfaces():
+    report = parse_perf_health_lines(
+        [
+            "2026-07-16 17:01:49 - rendering.display_image_ops - WARNING - "
+            "[SPOTIFY_VIS][SURFACE] Renderer target=legacy_child "
+            "reason=explicit_rollback screen=0",
+            "2026-07-16 17:01:50 - rendering.display_image_ops - WARNING - "
+            "[SPOTIFY_VIS][SURFACE] Renderer target=legacy_child "
+            "reason=compositor_unavailable screen=1",
+        ]
+    )
+
+    assert len(report.spotify_surface_selections) == 2
+    assert report.spotify_surface_selections[0].screen == 0
+    assert report.unexpected_spotify_legacy_surfaces == [
+        report.spotify_surface_selections[1]
+    ]
+    assert any("unexpected spotify legacy" in anomaly for anomaly in report.anomalies)
 
 
 def test_perf_health_allows_bounded_overlay_microgaps_at_owner_cadence():

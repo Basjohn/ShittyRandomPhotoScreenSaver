@@ -46,8 +46,9 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
-    # The visualizer owns a child QOpenGLWidget. Release it before tearing down
-    # the display compositor or render surface so its context is still valid.
+    # Release the visualizer renderer target before tearing down the owning
+    # compositor/context. This covers both the normal compositor layer and the
+    # environment-forced legacy child-surface adapter.
     widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "cleanup")
 
     # Ensure compositor is torn down cleanly

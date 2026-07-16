@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 
 from core.logging.logger import get_logger
@@ -20,7 +20,17 @@ logger = get_logger(__name__)
 def update_card_style(widget: Any) -> None:
     """Rebuild the QSS stylesheet for the card surface."""
     selector = f"#{widget.objectName()}" if widget.objectName() else "QWidget"
-    if widget.uses_painted_frame_shadow():
+    if bool(getattr(widget, "_compositor_visualizer_active", False)):
+        widget.setStyleSheet(
+            f"""
+            {selector} {{
+                background-color: transparent;
+                border: 0px solid transparent;
+                border-radius: 8px;
+            }}
+            """
+        )
+    elif widget.uses_painted_frame_shadow():
         widget.setStyleSheet(
             f"""
             {selector} {{
@@ -156,3 +166,89 @@ def paint_painted_frame_shadow(widget: Any) -> None:
             painter.drawPixmap(0, 0, pixmap)
         finally:
             painter.end()
+
+
+def resolve_compositor_card_opacity(widget: Any) -> float:
+    """Return the shared fade opacity for compositor-owned card painting."""
+
+    try:
+        progress = getattr(widget, "_shadowfade_progress", None)
+        if isinstance(progress, (int, float)):
+            return max(0.0, min(1.0, float(progress)))
+    except Exception:
+        pass
+    try:
+        if bool(widget.isVisible()):
+            return 1.0
+    except Exception:
+        pass
+    return 0.0
+
+
+def paint_compositor_card(
+    widget: Any,
+    painter: QPainter,
+    target_rect: QRect,
+    *,
+    opacity: float | None = None,
+) -> None:
+    """Paint the visualizer card into the display compositor.
+
+    The painted-shadow path reuses the exact cached pixmap used by the legacy
+    QWidget surface. The non-shadow path mirrors the card's background/border
+    contract without asking Qt's stylesheet engine to create another backing
+    store.
+    """
+
+    if target_rect.width() <= 0 or target_rect.height() <= 0:
+        return
+    resolved_opacity = (
+        resolve_compositor_card_opacity(widget)
+        if opacity is None
+        else max(0.0, min(1.0, float(opacity)))
+    )
+    if resolved_opacity <= 0.0:
+        return
+
+    painter.save()
+    try:
+        painter.setOpacity(resolved_opacity)
+        painter.translate(target_rect.topLeft())
+        local_rect = QRect(0, 0, target_rect.width(), target_rect.height())
+        if widget.uses_painted_frame_shadow():
+            pixmap = ensure_painted_frame_shadow_pixmap(widget)
+            if pixmap is not None and not pixmap.isNull():
+                if pixmap.deviceIndependentSize().toSize() == local_rect.size():
+                    painter.drawPixmap(0, 0, pixmap)
+                else:
+                    painter.drawPixmap(local_rect, pixmap)
+            return
+
+        if not bool(getattr(widget, "_show_background", False)):
+            return
+
+        bg = QColor(widget._bg_color)
+        bg.setAlpha(
+            int(
+                255
+                * max(
+                    0.0,
+                    min(1.0, float(getattr(widget, "_bg_opacity", 1.0))),
+                )
+            )
+        )
+        border_width = max(0, int(getattr(widget, "_border_width", 0)))
+        border = QColor(getattr(widget, "_card_border_color", QColor(0, 0, 0, 0)))
+        inset = max(0.0, border_width / 2.0)
+        frame_rect = QRectF(local_rect).adjusted(inset, inset, -inset, -inset)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setBrush(bg)
+        if border_width > 0 and border.alpha() > 0:
+            pen = QPen(border, border_width)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            painter.setPen(pen)
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(frame_rect, 8.0, 8.0)
+    finally:
+        painter.restore()

@@ -33,6 +33,10 @@ from rendering.gl_compositor import GLCompositorWidget
 from transitions.overlay_manager import GL_OVERLAY_KEYS
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_visualizer.frame_transport import VisualizerFramePacket
+from rendering.gl_compositor_pkg.spotify_visualizer_layer import (
+    CompositorSpotifyVisualizerLayer,
+    single_surface_visualizer_enabled,
+)
 
 from rendering.display_widget import _describe_pixmap
 
@@ -975,6 +979,7 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
     if overlay is None:
         return False
 
+    startup_mode = ""
     try:
         # Keep deferred shader warmup aligned with the real startup mode rather than
         # the overlay's historical internal default.
@@ -992,6 +997,10 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
         preload_fragment_shaders()
     except Exception:
         logger.debug("[SPOTIFY_VIS] Failed to preload visualizer shader sources", exc_info=True)
+        _set_visualizer_surface_terminal_reason(
+            widget,
+            "shader_source_preload_failed",
+        )
         return False
 
     try:
@@ -1002,8 +1011,74 @@ def prewarm_spotify_visualizer_overlay(widget) -> bool:
             overlay.show()
             overlay.update()
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to prewarm SpotifyBarsGLOverlay", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to prewarm visualizer renderer", exc_info=True)
         return False
+
+    if isinstance(overlay, CompositorSpotifyVisualizerLayer):
+        ready = False
+        try:
+            ready = bool(overlay.is_render_ready())
+        except Exception:
+            logger.debug(
+                "[SPOTIFY_VIS] Failed to inspect compositor visualizer readiness",
+                exc_info=True,
+            )
+        if not ready:
+            fallback_reason = None
+            try:
+                fallback_reason = overlay.hard_legacy_fallback_reason()
+            except Exception:
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to classify compositor prewarm readiness",
+                    exc_info=True,
+                )
+            if fallback_reason:
+                overlay = _fallback_compositor_visualizer_to_legacy(
+                    widget,
+                    overlay,
+                    vis=vis,
+                    initial_mode=startup_mode or None,
+                    reason=fallback_reason,
+                )
+                if overlay is None:
+                    return False
+                try:
+                    overlay.prewarm_context(geom)
+                except Exception:
+                    logger.error(
+                        "[SPOTIFY_VIS][FALLBACK] Legacy visualizer prewarm also failed",
+                        exc_info=True,
+                    )
+                    _set_visualizer_surface_terminal_reason(
+                        widget,
+                        "legacy_prewarm_failed",
+                    )
+                    return False
+            else:
+                logger.debug(
+                    "[SPOTIFY_VIS] Compositor visualizer prewarm deferred without "
+                    "legacy fallback screen=%s state=%s",
+                    getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+                    overlay.describe_state(),
+                )
+                return False
+
+    if str(getattr(overlay, "render_surface_kind", "")) == "legacy_child":
+        readiness = getattr(overlay, "is_gl_ready", None)
+        try:
+            ready = bool(readiness()) if callable(readiness) else False
+        except Exception:
+            ready = False
+        if not ready:
+            logger.error(
+                "[SPOTIFY_VIS][FALLBACK] Legacy renderer failed to reach READY; "
+                "the visualizer will remain hidden"
+            )
+            _set_visualizer_surface_terminal_reason(
+                widget,
+                "legacy_renderer_not_ready",
+            )
+            return False
 
     return True
 
@@ -1044,7 +1119,7 @@ def sync_spotify_visualizer_overlay_geometry(widget) -> bool:
                 logger.debug("[SPOTIFY_VIS] Failed to update overlay after geometry sync", exc_info=True)
         return True
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to sync SpotifyBarsGLOverlay geometry", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to sync visualizer renderer geometry", exc_info=True)
         return False
 
 
@@ -1089,47 +1164,213 @@ def _resolve_spotify_visualizer_overlay_rect(vis) -> QRect | None:
         return None
 
 
-def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
-    """Return the shared Spotify GL overlay, creating it if needed."""
+def _set_visualizer_compositor_ownership(vis, enabled: bool) -> None:
+    if vis is None:
+        return
+    setter = getattr(vis, "set_compositor_visualizer_active", None)
+    if callable(setter):
+        setter(enabled)
+        return
+    setattr(vis, "_compositor_visualizer_active", bool(enabled))
 
-    # Lazily create a small GL overlay dedicated to Spotify bars. This
-    # sits above the card widget in Z-order while the card itself remains
-    # a normal QWidget with ShadowFadeProfile-driven opacity.
-    overlay = getattr(widget, "_spotify_bars_overlay", None)
-    if overlay is None or not isinstance(overlay, SpotifyBarsGLOverlay):
-        try:
-            initial_mode = None
+
+def _set_visualizer_surface_terminal_reason(widget, reason: str | None) -> None:
+    """Publish display-generation renderer setup failure without fallback."""
+
+    normalized = str(reason or "").strip()
+    setattr(widget, "_spotify_visualizer_surface_terminal_reason", normalized)
+    if not normalized:
+        vis = getattr(widget, "spotify_visualizer_widget", None)
+        if vis is not None:
+            setattr(vis, "_startup_renderer_terminal_logged", False)
+
+
+def _create_legacy_spotify_bars_overlay(
+    widget,
+    *,
+    vis,
+    initial_mode: str | None,
+    reason: str,
+) -> SpotifyBarsGLOverlay | None:
+    try:
+        overlay = SpotifyBarsGLOverlay(widget, initial_mode=initial_mode)
+        overlay.setObjectName("spotify_bars_gl_overlay")
+        widget._spotify_bars_overlay = overlay
+        _set_visualizer_surface_terminal_reason(widget, None)
+        _set_visualizer_compositor_ownership(vis, False)
+        if widget._resource_manager is not None:
             try:
-                vis = getattr(widget, "spotify_visualizer_widget", None)
-                if vis is not None:
-                    initial_mode = str(getattr(vis, "_vis_mode_str", "") or "").strip().lower() or None
+                widget._resource_manager.register_qt(
+                    overlay,
+                    description="Spotify bars GL overlay",
+                )
             except Exception:
-                logger.debug("[SPOTIFY_VIS] Failed to read visualizer mode for overlay init", exc_info=True)
-            overlay = SpotifyBarsGLOverlay(widget, initial_mode=initial_mode)
-            overlay.setObjectName("spotify_bars_gl_overlay")
-            widget._spotify_bars_overlay = overlay
-            if widget._resource_manager is not None:
-                try:
-                    widget._resource_manager.register_qt(
-                        overlay,
-                        description="Spotify bars GL overlay",
-                    )
-                except Exception:
-                    logger.debug("[SPOTIFY_VIS] Failed to register SpotifyBarsGLOverlay", exc_info=True)
-            # NOTE: Do NOT register the GL overlay with PixelShiftManager.
-            # The overlay already tracks the visualizer card's geometry via
-            # set_state(rect=vis.geometry()) every tick.  Registering it
-            # causes double-shifting: PSM moves the overlay, then set_state()
-            # snaps it to the card's already-shifted position, then PSM
-            # shifts it again → the overlay drifts past the card and briefly
-            # flashes over neighbouring widgets (e.g. weather).
-        except Exception:
-            logger.debug("[DISPLAY_WIDGET] Failed to initialize SpotifyBarsGLOverlay", exc_info=True)
-            widget._spotify_bars_overlay = None
-            return None
+                logger.debug(
+                    "[SPOTIFY_VIS] Failed to register legacy visualizer surface",
+                    exc_info=True,
+                )
+        logger.warning(
+            "[SPOTIFY_VIS][SURFACE] Renderer target=legacy_child reason=%s screen=%s",
+            str(reason or "unknown"),
+            getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+        )
+        return overlay
+    except Exception:
+        logger.debug(
+            "[DISPLAY_WIDGET] Failed to initialize legacy visualizer surface",
+            exc_info=True,
+        )
+        widget._spotify_bars_overlay = None
+        _set_visualizer_surface_terminal_reason(
+            widget,
+            "legacy_surface_creation_failed",
+        )
+        return None
+
+
+def _fallback_compositor_visualizer_to_legacy(
+    widget,
+    overlay: CompositorSpotifyVisualizerLayer,
+    *,
+    vis,
+    initial_mode: str | None,
+    reason: str,
+) -> SpotifyBarsGLOverlay | None:
+    """Switch before first reveal when compositor prewarm cannot reach READY."""
+
+    logger.error(
+        "[SPOTIFY_VIS][FALLBACK] Using legacy child surface before reveal "
+        "reason=%s screen=%s",
+        reason,
+        getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+    )
+    try:
+        overlay.hide()
+        overlay.cleanup_gl()
+        overlay.deleteLater()
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to retire compositor visualizer layer",
+            exc_info=True,
+        )
+    compositor = getattr(widget, "_gl_compositor", None)
+    if compositor is not None and getattr(
+        compositor,
+        "_spotify_visualizer_layer",
+        None,
+    ) is overlay:
+        compositor._spotify_visualizer_layer = None
+    widget._spotify_bars_overlay = None
+    _set_visualizer_compositor_ownership(vis, False)
+    return _create_legacy_spotify_bars_overlay(
+        widget,
+        vis=vis,
+        initial_mode=initial_mode,
+        reason=f"hard_fallback_{reason}",
+    )
+
+
+def _ensure_spotify_bars_overlay(
+    widget,
+) -> SpotifyBarsGLOverlay | CompositorSpotifyVisualizerLayer | None:
+    """Return the active visualizer renderer target, creating it if needed."""
+
+    overlay = getattr(widget, "_spotify_bars_overlay", None)
+    if isinstance(overlay, CompositorSpotifyVisualizerLayer):
+        vis = getattr(widget, "spotify_visualizer_widget", None)
+        _set_visualizer_surface_terminal_reason(widget, None)
+        _set_visualizer_compositor_ownership(vis, True)
+        return overlay
+    if isinstance(overlay, SpotifyBarsGLOverlay):
+        vis = getattr(widget, "spotify_visualizer_widget", None)
+        _set_visualizer_surface_terminal_reason(widget, None)
+        _set_visualizer_compositor_ownership(vis, False)
+        return overlay
+
+    initial_mode = None
+    vis = getattr(widget, "spotify_visualizer_widget", None)
+    try:
+        if vis is not None:
+            initial_mode = (
+                str(getattr(vis, "_vis_mode_str", "") or "").strip().lower()
+                or None
+            )
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to read visualizer mode for renderer init",
+            exc_info=True,
+        )
+
+    single_surface_requested = single_surface_visualizer_enabled()
+    if single_surface_requested:
+        compositor = getattr(widget, "_gl_compositor", None)
+        if isinstance(compositor, GLCompositorWidget):
+            try:
+                overlay = compositor.get_or_create_spotify_visualizer_layer(
+                    initial_mode=initial_mode,
+                )
+                widget._spotify_bars_overlay = overlay
+                _set_visualizer_surface_terminal_reason(widget, None)
+                _set_visualizer_compositor_ownership(vis, True)
+                logger.info(
+                    "[SPOTIFY_VIS][SURFACE] Renderer target=compositor "
+                    "reason=default screen=%s",
+                    getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+                )
+                return overlay
+            except Exception:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Failed to create display-owned visualizer layer; "
+                    "legacy will not mask an unexpected compositor-path defect",
+                    exc_info=True,
+                )
+                _set_visualizer_surface_terminal_reason(
+                    widget,
+                    "compositor_layer_creation_failed",
+                )
+                return None
+
+    # Legacy is restricted to explicit rollback or a deliberately selected
+    # non-compositor backend. An unexpectedly missing GL compositor is a real
+    # failure, not permission to restore the competing child surface.
+    if overlay is None:
+        if not single_surface_requested:
+            legacy_reason = "explicit_rollback"
+        else:
+            backend_selection = getattr(widget, "_backend_selection", None)
+            resolved_mode = str(
+                getattr(backend_selection, "resolved_mode", "") or ""
+            ).strip().lower()
+            if resolved_mode and resolved_mode != "opengl":
+                legacy_reason = "software_backend"
+            else:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Display-owned visualizer unavailable "
+                    "without an authorized legacy condition screen=%s backend=%s pyopengl=%s",
+                    getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+                    resolved_mode or "unknown",
+                    GL is not None,
+                )
+                _set_visualizer_surface_terminal_reason(
+                    widget,
+                    "compositor_unavailable",
+                )
+                return None
+        overlay = _create_legacy_spotify_bars_overlay(
+            widget,
+            vis=vis,
+            initial_mode=initial_mode,
+            reason=legacy_reason,
+        )
+
+    # NOTE: Do NOT register either renderer target with PixelShiftManager.
+    # Both follow the visualizer card's already-shifted authoritative geometry.
 
     if overlay is None:
-        logger.warning("[SPOTIFY_VIS] Missing SpotifyBarsGLOverlay after initialization; visualizer bars will be blank")
+        logger.warning(
+            "[SPOTIFY_VIS] Missing visualizer renderer target after initialization; "
+            "visualizer content will be blank"
+        )
         return None
 
     if not hasattr(overlay, "clear_overlay_buffer"):
@@ -1137,12 +1378,19 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
         module = sys.modules.get(module_name)
         module_path = getattr(module, "__file__", "<unknown>")
         logger.critical(
-            "[SPOTIFY_VIS] SpotifyBarsGLOverlay missing clear_overlay_buffer (module=%s path=%s). "
+            "[SPOTIFY_VIS] Visualizer renderer target missing clear_overlay_buffer "
+            "(module=%s path=%s). "
             "Ensure code reload or delete stale pyc files.",
             module_name,
             module_path,
         )
-        raise RuntimeError("SpotifyBarsGLOverlay missing clear_overlay_buffer; stale build detected")
+        _set_visualizer_surface_terminal_reason(
+            widget,
+            "renderer_interface_invalid",
+        )
+        raise RuntimeError(
+            "Visualizer renderer target missing clear_overlay_buffer; stale build detected"
+        )
 
     return overlay
 
@@ -1150,7 +1398,7 @@ def _ensure_spotify_bars_overlay(widget) -> SpotifyBarsGLOverlay | None:
 def _push_spotify_bars_overlay_state(
     widget,
     *,
-    overlay: SpotifyBarsGLOverlay,
+    overlay: SpotifyBarsGLOverlay | CompositorSpotifyVisualizerLayer,
     geom: QRect,
     bars,
     bar_count,
@@ -1232,7 +1480,7 @@ def _push_spotify_bars_overlay_state(
             else:
                 raise
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to push frame to SpotifyBarsGLOverlay", exc_info=True)
+        logger.debug("[SPOTIFY_VIS] Failed to push frame to visualizer renderer", exc_info=True)
         return False
 
     return True
