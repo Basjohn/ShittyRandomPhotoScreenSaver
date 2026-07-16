@@ -358,11 +358,13 @@ class UsageTelemetryService:
         interval_ms: int = DEFAULT_USAGE_INTERVAL_MS,
         process_collector: ProcessUsageCollector | None = None,
         gpu_collector: WindowsGpuUsageCollector | None = None,
+        resource_manager: Any | None = None,
     ) -> None:
         self._thread_manager = thread_manager
         self._interval_ms = max(5_000, int(interval_ms))
         self._process_collector = process_collector or ProcessUsageCollector()
         self._gpu_collector = gpu_collector or WindowsGpuUsageCollector()
+        self._resource_manager = resource_manager
         self._timer: Any | None = None
         self._stopped = True
         self._in_flight = False
@@ -456,6 +458,48 @@ class UsageTelemetryService:
             "tm_compute_failed": int(compute_stats.get("failed", 0) or 0),
         }
 
+    def _resource_snapshot(self) -> dict[str, int | None]:
+        manager = self._resource_manager
+        if manager is None:
+            return {
+                "rm_total": None,
+                "rm_gl_total": None,
+                "rm_gl_texture": None,
+                "rm_gl_vbo": None,
+                "rm_gl_vao": None,
+                "rm_gl_program": None,
+            }
+        try:
+            get_usage_counts = getattr(manager, "get_usage_counts", None)
+            if callable(get_usage_counts):
+                counts = get_usage_counts()
+                return {
+                    "rm_total": int(counts.get("total", 0) or 0),
+                    "rm_gl_total": int(counts.get("gl_total", 0) or 0),
+                    "rm_gl_texture": int(counts.get("gl_texture", 0) or 0),
+                    "rm_gl_vbo": int(counts.get("gl_vbo", 0) or 0),
+                    "rm_gl_vao": int(counts.get("gl_vao", 0) or 0),
+                    "rm_gl_program": int(counts.get("gl_program", 0) or 0),
+                }
+            gl_stats = manager.get_gl_stats()
+            return {
+                "rm_total": len(manager.get_all_resources()),
+                "rm_gl_total": int(gl_stats.get("total", 0) or 0),
+                "rm_gl_texture": int(gl_stats.get("texture", 0) or 0),
+                "rm_gl_vbo": int(gl_stats.get("vbo", 0) or 0),
+                "rm_gl_vao": int(gl_stats.get("vao", 0) or 0),
+                "rm_gl_program": int(gl_stats.get("program", 0) or 0),
+            }
+        except Exception:
+            return {
+                "rm_total": None,
+                "rm_gl_total": None,
+                "rm_gl_texture": None,
+                "rm_gl_vbo": None,
+                "rm_gl_vao": None,
+                "rm_gl_program": None,
+            }
+
     def _collect_and_log(
         self,
         sequence: int,
@@ -467,6 +511,7 @@ class UsageTelemetryService:
             process = self._process_collector.collect()
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()
+            resources = self._resource_snapshot()
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "
@@ -476,6 +521,8 @@ class UsageTelemetryService:
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
+                "rm_total=%s rm_gl_total=%s rm_gl_texture=%s rm_gl_vbo=%s "
+                "rm_gl_vao=%s rm_gl_program=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d",
@@ -505,6 +552,12 @@ class UsageTelemetryService:
                 int(gpu.vram_supported),
                 _fmt(gpu.vram_dedicated_mb),
                 _fmt(gpu.vram_shared_mb),
+                _fmt(resources["rm_total"]),
+                _fmt(resources["rm_gl_total"]),
+                _fmt(resources["rm_gl_texture"]),
+                _fmt(resources["rm_gl_vbo"]),
+                _fmt(resources["rm_gl_vao"]),
+                _fmt(resources["rm_gl_program"]),
                 threads["tm_active"],
                 threads["tm_io_max"],
                 threads["tm_compute_max"],

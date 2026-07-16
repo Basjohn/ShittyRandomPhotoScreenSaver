@@ -16,18 +16,28 @@ def _usage_line(
     skipped: int = 0,
     gpu: str = "na",
     vram: str = "na",
+    rm_total: str = "na",
+    rm_gl_total: str = "na",
+    rm_gl_texture: str = "na",
+    private: str = "na",
+    vms: float = 900.0,
+    compute_submitted: int = 4,
+    compute_completed: int = 4,
 ) -> str:
     return (
         f"{timestamp} - core.performance.usage_sampler - INFO - [USAGE] sample "
         f"seq={sequence} cadence_gap_ms={cadence_gap_ms} skipped={skipped} "
         f"collect_ms={collect_ms} cpu_primed=1 cpu_app_pct={cpu} cpu_main_pct={cpu} "
         f"cpu_system_pct=35.0 processes=2 children=1 rss_app_mb={rss} rss_main_mb=300.0 "
-        f"private_app_mb=na vms_app_mb=900.0 threads_app={threads} handles_app={handles} "
+        f"private_app_mb={private} vms_app_mb={vms} threads_app={threads} handles_app={handles} "
         f"io_read_mb=10.0 io_write_mb=2.0 gpu_supported=1 gpu_active=1 gpu_status=ok "
         f"gpu_busy_pct={gpu} gpu_engine_sum_pct={gpu} vram_supported=1 "
-        f"vram_dedicated_mb={vram} vram_shared_mb=64.0 tm_active=1 tm_io_max=4 "
+        f"vram_dedicated_mb={vram} vram_shared_mb=64.0 rm_total={rm_total} "
+        f"rm_gl_total={rm_gl_total} rm_gl_texture={rm_gl_texture} "
+        "rm_gl_vbo=na rm_gl_vao=na rm_gl_program=na tm_active=1 tm_io_max=4 "
         "tm_compute_max=3 tm_io_submitted=7 tm_io_completed=6 tm_io_failed=0 "
-        "tm_compute_submitted=4 tm_compute_completed=4 tm_compute_failed=0"
+        f"tm_compute_submitted={compute_submitted} "
+        f"tm_compute_completed={compute_completed} tm_compute_failed=0"
     )
 
 
@@ -283,8 +293,28 @@ def test_perf_health_parses_usage_availability_without_treating_na_as_zero():
 def test_perf_health_flags_resource_growth_and_sampler_self_interference():
     report = parse_perf_health_lines(
         [
-            _usage_line("2026-07-15 14:45:15", 1, rss=350.0, threads=20, handles=500),
-            _usage_line("2026-07-15 14:45:30", 2, rss=400.0, threads=21, handles=510),
+            _usage_line(
+                "2026-07-15 14:45:15",
+                1,
+                rss=350.0,
+                threads=20,
+                handles=500,
+                private="340.0",
+                vms=850.0,
+                compute_submitted=90,
+                compute_completed=89,
+            ),
+            _usage_line(
+                "2026-07-15 14:45:30",
+                2,
+                rss=400.0,
+                threads=21,
+                handles=510,
+                private="390.0",
+                vms=950.0,
+                compute_submitted=100,
+                compute_completed=99,
+            ),
             _usage_line(
                 "2026-07-15 14:45:45",
                 3,
@@ -294,6 +324,13 @@ def test_perf_health_flags_resource_growth_and_sampler_self_interference():
                 collect_ms=140.0,
                 skipped=1,
                 vram="700.0",
+                rm_total="170",
+                rm_gl_total="30",
+                rm_gl_texture="20",
+                private="700.0",
+                vms=1600.0,
+                compute_submitted=140,
+                compute_completed=120,
             ),
         ]
     )
@@ -302,7 +339,49 @@ def test_perf_health_flags_resource_growth_and_sampler_self_interference():
     assert any("RSS grew" in anomaly for anomaly in report.usage_growth_anomalies)
     assert any("thread count grew" in anomaly for anomaly in report.usage_growth_anomalies)
     assert any("handle count grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("private memory grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("virtual memory grew" in anomaly for anomaly in report.usage_growth_anomalies)
+    assert any("compute backlog grew" in anomaly for anomaly in report.usage_growth_anomalies)
     assert any("usage telemetry was slow" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_flags_stale_resource_manager_gl_registration_growth():
+    report = parse_perf_health_lines(
+        [
+            _usage_line(
+                "2026-07-15 14:45:15",
+                1,
+                rm_total="70",
+                rm_gl_total="12",
+                rm_gl_texture="4",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:30",
+                2,
+                rm_total="72",
+                rm_gl_total="14",
+                rm_gl_texture="6",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:45",
+                3,
+                rm_total="110",
+                rm_gl_total="28",
+                rm_gl_texture="20",
+            ),
+        ]
+    )
+
+    assert report.usage_samples[-1].rm_gl_total == 28
+    assert report.usage_samples[-1].rm_gl_texture == 20
+    assert any(
+        "GL registrations grew" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
+    assert any(
+        "texture registrations grew" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
 
 
 def test_perf_health_correlates_usage_with_visualizer_smoothness_and_reactivity_failures():
@@ -685,7 +764,54 @@ def test_perf_health_flags_slow_texture_uploads_as_own_anomaly():
     assert report.slow_texture_uploads[0].width == 3840
     assert report.slow_texture_uploads[0].height == 2160
     assert report.slow_texture_uploads[0].pbo is True
+    assert report.slow_texture_uploads[0].dominant_phase is None
     assert any("slow GL texture uploads" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_parses_slow_texture_upload_phase_breakdown():
+    report = parse_perf_health_lines(
+        [
+            "21:02:44 - rendering.gl_programs.texture_manager - WARNING - "
+            "[PERF] [GL TEXTURE] Slow upload: 28.75ms "
+            "(3840x2160, pbo=True, convert=3.20ms, copy=4.10ms, "
+            "pbo_stage=5.45ms, tex_upload=15.60ms)"
+        ]
+    )
+
+    upload = report.slow_texture_uploads[0]
+    assert upload.convert_ms == 3.20
+    assert upload.copy_ms == 4.10
+    assert upload.pbo_stage_ms == 5.45
+    assert upload.tex_upload_ms == 15.60
+    assert upload.dominant_phase == ("tex_upload", 15.60)
+
+
+def test_perf_health_enforces_bounded_gl_texture_cache_cleanup_contract():
+    healthy = parse_perf_health_lines(
+        [
+            "21:02:44 - rendering.gl_programs.texture_manager - INFO - "
+            "[PERF] [GL TEXTURE CACHE] cleanup textures=4 texture_mb=126.4 "
+            "pbo_count=1 pbo_mb=31.6 hits=20 misses=8 uploads=8 evictions=4 "
+            "managed_releases=4 pbo_replacements=1 registrations=5"
+        ]
+    )
+    excessive = parse_perf_health_lines(
+        [
+            "21:02:44 - rendering.gl_programs.texture_manager - INFO - "
+            "[PERF] [GL TEXTURE CACHE] cleanup textures=7 texture_mb=221.2 "
+            "pbo_count=2 pbo_mb=47.4 hits=20 misses=11 uploads=11 evictions=4 "
+            "managed_releases=4 pbo_replacements=0 registrations=9"
+        ]
+    )
+
+    assert len(healthy.texture_cache_cleanups) == 1
+    assert healthy.excessive_texture_cache_cleanups == []
+    assert healthy.anomalies == []
+    assert len(excessive.excessive_texture_cache_cleanups) == 1
+    assert any(
+        "four-texture/one-PBO" in anomaly
+        for anomaly in excessive.anomalies
+    )
 
 
 def test_perf_health_flags_pending_paint_requeue_rescues():

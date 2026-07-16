@@ -414,17 +414,41 @@ class ResourceManager:
             self._logger.warning("OpenGL not available for texture registration")
             return ""
     
+    def _get_gl_stats_locked(self) -> Dict[str, int]:
+        stats = {
+            "vao": 0,
+            "vbo": 0,
+            "texture": 0,
+            "program": 0,
+            "shader": 0,
+            "total": 0,
+        }
+        for info in self._resources.values():
+            if info.resource_type != ResourceType.NATIVE_HANDLE:
+                continue
+            handle_type = info.metadata.get("gl_handle_type", "")
+            if handle_type in stats:
+                stats[handle_type] += 1
+                stats["total"] += 1
+        return stats
+
     def get_gl_stats(self) -> Dict[str, int]:
         """Get statistics about registered GL handles."""
         with self._lock:
-            stats = {"vao": 0, "vbo": 0, "texture": 0, "program": 0, "shader": 0, "total": 0}
-            for rid, info in self._resources.items():
-                if info.resource_type == ResourceType.NATIVE_HANDLE:
-                    handle_type = info.metadata.get("gl_handle_type", "")
-                    if handle_type in stats:
-                        stats[handle_type] += 1
-                        stats["total"] += 1
-            return stats
+            return self._get_gl_stats_locked()
+
+    def get_usage_counts(self) -> Dict[str, int]:
+        """Return one atomic, allocation-light snapshot for passive telemetry."""
+        with self._lock:
+            gl_stats = self._get_gl_stats_locked()
+            return {
+                "total": len(self._resources),
+                "gl_total": gl_stats["total"],
+                "gl_texture": gl_stats["texture"],
+                "gl_vbo": gl_stats["vbo"],
+                "gl_vao": gl_stats["vao"],
+                "gl_program": gl_stats["program"],
+            }
     
     def get(self, resource_id: str) -> Optional[Any]:
         """
@@ -456,13 +480,22 @@ class ResourceManager:
             
             return resource
     
-    def unregister(self, resource_id: str, force: bool = False) -> bool:
+    def unregister(
+        self,
+        resource_id: str,
+        force: bool = False,
+        *,
+        cleanup: bool = True,
+    ) -> bool:
         """
         Unregister and clean up a resource.
         
         Args:
             resource_id: ID of resource to unregister
             force: If True, force cleanup even if reference count > 0
+            cleanup: Run the registered cleanup handler. Set False only when
+                the owning subsystem already released the resource or its
+                native context was destroyed and made the handle invalid.
         
         Returns:
             bool: True if resource was unregistered
@@ -486,7 +519,7 @@ class ResourceManager:
             cleanup_info = self._cleanup_handlers.get(resource_id, None)
             
             # Perform cleanup before removing from tracking
-            if cleanup_info is not None:
+            if cleanup and cleanup_info is not None:
                 try:
                     handler, is_method = cleanup_info
                     if is_method:

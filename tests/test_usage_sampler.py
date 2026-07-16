@@ -98,13 +98,31 @@ class _GpuCollector:
         self.closed = True
 
 
+class _ResourceManager:
+    def __init__(self) -> None:
+        self.snapshot_calls = 0
+
+    def get_usage_counts(self):
+        self.snapshot_calls += 1
+        return {
+            "total": 24,
+            "gl_total": 12,
+            "gl_texture": 6,
+            "gl_vbo": 2,
+            "gl_vao": 2,
+            "gl_program": 2,
+        }
+
+
 def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     manager = _Manager()
     gpu = _GpuCollector()
+    resources = _ResourceManager()
     service = UsageTelemetryService(
         manager,
         process_collector=_ProcessCollector(),
         gpu_collector=gpu,
+        resource_manager=resources,
     )
 
     with caplog.at_level(logging.INFO, logger="core.performance.usage_sampler"):
@@ -115,7 +133,11 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "rss_app_mb=420.0" in sample
     assert "gpu_busy_pct=67.0" in sample
     assert "vram_dedicated_mb=512.0" in sample
+    assert "rm_total=24" in sample
+    assert "rm_gl_total=12" in sample
+    assert "rm_gl_texture=6" in sample
     assert "tm_active=1" in sample
+    assert resources.snapshot_calls == 1
 
     service.stop()
     assert manager.timer.stopped is True

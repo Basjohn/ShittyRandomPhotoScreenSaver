@@ -9,7 +9,7 @@ import ctypes
 import logging
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtGui import QImage, QPixmap
 
@@ -48,6 +48,7 @@ class PBOEntry:
     pbo_id: int
     size: int
     in_use: bool = False
+    resource_id: str | None = None
 
 
 class GLTextureManager:
@@ -63,7 +64,13 @@ class GLTextureManager:
     """
     
     # Cache configuration
-    MAX_CACHED_TEXTURES = 12
+    # A transition needs two textures. Retaining one adjacent pair preserves
+    # seamless back-to-back transitions without keeping a slideshow's worth of
+    # full-resolution images resident in every display context.
+    MAX_CACHED_TEXTURES = 4
+    # Uploads are serialized on the UI/GL thread, so one grow-only PBO is
+    # sufficient. Smaller superseded buffers only waste dedicated VRAM.
+    MAX_PBO_ENTRIES = 1
     
     def __init__(self):
         self._initialized: bool = False
@@ -71,6 +78,9 @@ class GLTextureManager:
         # Texture cache: pixmap.cacheKey() -> texture_id
         self._texture_cache: Dict[int, int] = {}
         self._texture_lru: List[int] = []
+        self._texture_resource_ids: Dict[int, str] = {}
+        self._texture_sizes: Dict[int, int] = {}
+        self._resource_manager: Any | None = None
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -78,6 +88,12 @@ class GLTextureManager:
         
         # PBO pool for async uploads
         self._pbo_pool: List[PBOEntry] = []
+        self._cache_hits = 0
+        self._cache_misses = 0
+        self._uploads = 0
+        self._evictions = 0
+        self._managed_releases = 0
+        self._pbo_replacements = 0
         
     @property
     def old_tex_id(self) -> int:
@@ -113,10 +129,11 @@ class GLTextureManager:
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
         
-        _upload_start = time.time()
+        _upload_start = time.perf_counter()
         
         # Convert to ARGB32 + GL_BGRA for correct channel ordering
         image = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+        _convert_ms = (time.perf_counter() - _upload_start) * 1000.0
         w = image.width()
         h = image.height()
         if w <= 0 or h <= 0:
@@ -130,6 +147,7 @@ class GLTextureManager:
             return 0
         
         # Get image data
+        _copy_start = time.perf_counter()
         try:
             ptr = image.constBits()
             if hasattr(ptr, "setsize"):
@@ -140,6 +158,7 @@ class GLTextureManager:
         except Exception:
             logger.debug("[GL TEXTURE] Failed to access image bits", exc_info=True)
             return 0
+        _copy_ms = (time.perf_counter() - _copy_start) * 1000.0
         
         data_size = len(data)
         tex = gl.glGenTextures(1)
@@ -148,6 +167,7 @@ class GLTextureManager:
         # Try PBO upload for better performance
         use_pbo = False
         pbo_id = 0
+        _pbo_stage_start = time.perf_counter()
         
         try:
             if hasattr(gl, 'GL_PIXEL_UNPACK_BUFFER') and data_size > 0:
@@ -179,8 +199,10 @@ class GLTextureManager:
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
                 pbo_id = 0
+        _pbo_stage_ms = (time.perf_counter() - _pbo_stage_start) * 1000.0
         
         # Upload texture - bind once, set all parameters in batch
+        _tex_upload_start = time.perf_counter()
         gl.glBindTexture(gl.GL_TEXTURE_2D, tex_id)
         try:
             # Batch GL state changes to reduce driver overhead
@@ -222,26 +244,107 @@ class GLTextureManager:
                     self._release_pbo(pbo_id)
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+        _tex_upload_ms = (time.perf_counter() - _tex_upload_start) * 1000.0
         
         # Log slow uploads
-        _upload_elapsed = (time.time() - _upload_start) * 1000.0
+        _upload_elapsed = (time.perf_counter() - _upload_start) * 1000.0
         if _upload_elapsed > 20.0 and is_perf_metrics_enabled():
-            logger.warning("[PERF] [GL TEXTURE] Slow upload: %.2fms (%dx%d, pbo=%s)", 
-                          _upload_elapsed, w, h, use_pbo)
+            logger.warning(
+                "[PERF] [GL TEXTURE] Slow upload: %.2fms "
+                "(%dx%d, pbo=%s, convert=%.2fms, copy=%.2fms, "
+                "pbo_stage=%.2fms, tex_upload=%.2fms)",
+                _upload_elapsed,
+                w,
+                h,
+                use_pbo,
+                _convert_ms,
+                _copy_ms,
+                _pbo_stage_ms,
+                _tex_upload_ms,
+            )
         
         # Register texture with ResourceManager for VRAM leak prevention
         try:
             from core.resources.manager import ResourceManager
             rm = ResourceManager.get_or_create_app_shared()
-            rm.register_gl_texture(tex_id, description=f"GLTextureManager {w}x{h}")
+            resource_id = rm.register_gl_texture(
+                tex_id,
+                description=f"GLTextureManager {w}x{h}",
+            )
+            if resource_id:
+                self._resource_manager = rm
+                self._texture_resource_ids[tex_id] = resource_id
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
-        
+
+        self._texture_sizes[tex_id] = data_size
+        self._uploads += 1
         return tex_id
     
     # -------------------------------------------------------------------------
     # Texture Caching
     # -------------------------------------------------------------------------
+
+    def _delete_texture(self, tex_id: int) -> None:
+        """Release one texture through its registered owner when available."""
+        tex_id = int(tex_id or 0)
+        if tex_id <= 0:
+            return
+
+        self._texture_sizes.pop(tex_id, None)
+        resource_id = self._texture_resource_ids.pop(tex_id, None)
+        if resource_id and self._resource_manager is not None:
+            try:
+                if self._resource_manager.unregister(resource_id, force=True):
+                    self._managed_releases += 1
+                    return
+                # A missing registration means ResourceManager already released it.
+                return
+            except Exception:
+                logger.debug(
+                    "[GL TEXTURE] Managed texture release failed for %s",
+                    tex_id,
+                    exc_info=True,
+                )
+                try:
+                    self._resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=False,
+                    )
+                except Exception:
+                    pass
+
+        if gl is None:
+            return
+        try:
+            gl.glDeleteTextures(int(tex_id))
+        except Exception:
+            logger.debug(
+                "[GL TEXTURE] Failed to delete texture %s",
+                tex_id,
+                exc_info=True,
+            )
+
+    def _evict_excess_textures(self) -> None:
+        """Keep the bounded LRU while never evicting the active transition pair."""
+        protected = {self._old_tex_id, self._new_tex_id}
+        while len(self._texture_lru) > self.MAX_CACHED_TEXTURES:
+            evict_index = next(
+                (
+                    index
+                    for index, candidate_key in enumerate(self._texture_lru)
+                    if self._texture_cache.get(candidate_key, 0) not in protected
+                ),
+                None,
+            )
+            if evict_index is None:
+                return
+            evict_key = self._texture_lru.pop(evict_index)
+            old_tex = self._texture_cache.pop(evict_key, 0)
+            if old_tex:
+                self._delete_texture(old_tex)
+                self._evictions += 1
     
     def get_or_create_texture(self, pixmap: QPixmap) -> int:
         """Get cached texture or upload new one. Returns texture ID or 0."""
@@ -268,31 +371,25 @@ class GLTextureManager:
                     self._texture_lru.append(key)
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+                self._cache_hits += 1
                 return int(tex_id)
         
         # Upload new texture
+        self._cache_misses += 1
         tex_id = self.upload_pixmap(pixmap)
         if not tex_id:
             return 0
         
         # Add to cache with LRU eviction
-        if key > 0:
-            self._texture_cache[key] = tex_id
-            try:
-                self._texture_lru.append(key)
-                while len(self._texture_lru) > self.MAX_CACHED_TEXTURES:
-                    evict_key = self._texture_lru.pop(0)
-                    if evict_key == key:
-                        continue
-                    old_tex = self._texture_cache.pop(evict_key, 0)
-                    if old_tex:
-                        try:
-                            gl.glDeleteTextures(int(old_tex))
-                        except Exception:
-                            logger.debug("[GL TEXTURE] Failed to delete cached texture %s", 
-                                        old_tex, exc_info=True)
-            except Exception as e:
-                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+        cache_key = key if key > 0 else -int(tex_id)
+        self._texture_cache[cache_key] = tex_id
+        try:
+            if cache_key in self._texture_lru:
+                self._texture_lru.remove(cache_key)
+            self._texture_lru.append(cache_key)
+            self._evict_excess_textures()
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         
         return tex_id
     
@@ -346,26 +443,55 @@ class GLTextureManager:
                 return entry.pbo_id
         
         # Create new PBO
+        pbo_id = 0
+        entry: PBOEntry | None = None
         try:
             pbo = gl.glGenBuffers(1)
             pbo_id = int(pbo)
             if pbo_id > 0:
                 gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
                 gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, required_size, None, gl.GL_STREAM_DRAW)
-                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
-                self._pbo_pool.append(PBOEntry(pbo_id, required_size, True))
-                
+                entry = PBOEntry(pbo_id, required_size, True)
+
                 # Register PBO with ResourceManager for VRAM leak prevention
                 try:
                     from core.resources.manager import ResourceManager
                     rm = ResourceManager.get_or_create_app_shared()
-                    rm.register_gl_vbo(pbo_id, description=f"GLTextureManager PBO {required_size}B")
+                    resource_id = rm.register_gl_vbo(
+                        pbo_id,
+                        description=f"GLTextureManager PBO {required_size}B",
+                    )
+                    if resource_id:
+                        self._resource_manager = rm
+                        entry.resource_id = resource_id
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical
-                
+
+                self._pbo_pool.append(entry)
+                self._prune_idle_pbos(keep_id=pbo_id)
                 return pbo_id
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+            if entry is not None:
+                try:
+                    self._pbo_pool.remove(entry)
+                except ValueError:
+                    pass
+                self._delete_pbo(entry)
+            elif pbo_id > 0:
+                try:
+                    gl.glDeleteBuffers(1, [pbo_id])
+                except Exception:
+                    logger.debug(
+                        "[GL TEXTURE] Failed to release partially created PBO %s",
+                        pbo_id,
+                        exc_info=True,
+                    )
+        finally:
+            try:
+                gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
+            except Exception:
+                pass
         return 0
     
     def _release_pbo(self, pbo_id: int) -> None:
@@ -374,40 +500,140 @@ class GLTextureManager:
             if entry.pbo_id == pbo_id:
                 entry.in_use = False
                 return
-    
-    def _cleanup_pbo_pool(self) -> None:
-        """Delete all PBOs in pool."""
+
+    def _delete_pbo(self, entry: PBOEntry) -> None:
+        resource_id = entry.resource_id
+        if resource_id and self._resource_manager is not None:
+            try:
+                if self._resource_manager.unregister(resource_id, force=True):
+                    self._managed_releases += 1
+                    return
+                return
+            except Exception:
+                logger.debug(
+                    "[GL TEXTURE] Managed PBO release failed for %s",
+                    entry.pbo_id,
+                    exc_info=True,
+                )
+                try:
+                    self._resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=False,
+                    )
+                except Exception:
+                    pass
+
         if gl is None:
             return
+        try:
+            gl.glDeleteBuffers(1, [entry.pbo_id])
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+
+    def _prune_idle_pbos(self, *, keep_id: int) -> None:
+        if len(self._pbo_pool) <= self.MAX_PBO_ENTRIES:
+            return
+        retained: List[PBOEntry] = []
         for entry in self._pbo_pool:
-            try:
-                gl.glDeleteBuffers(1, [entry.pbo_id])
-            except Exception as e:
-                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
+            if entry.pbo_id == keep_id or entry.in_use:
+                retained.append(entry)
+                continue
+            self._delete_pbo(entry)
+            self._pbo_replacements += 1
+        self._pbo_pool = retained
+
+    def _cleanup_pbo_pool(self) -> None:
+        """Delete all PBOs in pool."""
+        for entry in list(self._pbo_pool):
+            self._delete_pbo(entry)
         self._pbo_pool.clear()
+
+    def abandon(self) -> None:
+        """Drop registrations after the owning GL context is already invalid."""
+        if self._resource_manager is not None:
+            resource_ids = list(self._texture_resource_ids.values())
+            resource_ids.extend(
+                entry.resource_id for entry in self._pbo_pool if entry.resource_id
+            )
+            for resource_id in resource_ids:
+                try:
+                    self._resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=False,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[GL TEXTURE] Failed to abandon registration %s",
+                        resource_id,
+                        exc_info=True,
+                    )
+        self.release_transition_textures()
+        self._texture_cache.clear()
+        self._texture_lru.clear()
+        self._texture_resource_ids.clear()
+        self._texture_sizes.clear()
+        self._pbo_pool.clear()
+        self._initialized = False
     
     # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
+
+    def get_stats(self) -> Dict[str, float | int]:
+        texture_bytes = sum(self._texture_sizes.values())
+        pbo_bytes = sum(entry.size for entry in self._pbo_pool)
+        return {
+            "textures": len(self._texture_cache),
+            "texture_mb": texture_bytes / (1024.0 * 1024.0),
+            "pbo_count": len(self._pbo_pool),
+            "pbo_mb": pbo_bytes / (1024.0 * 1024.0),
+            "hits": self._cache_hits,
+            "misses": self._cache_misses,
+            "uploads": self._uploads,
+            "evictions": self._evictions,
+            "managed_releases": self._managed_releases,
+            "pbo_replacements": self._pbo_replacements,
+            "registrations": (
+                len(self._texture_resource_ids)
+                + sum(1 for entry in self._pbo_pool if entry.resource_id)
+            ),
+        }
     
     def cleanup_cache(self) -> None:
         """Delete all cached textures."""
-        if gl is None:
-            return
-        
-        try:
-            ids = [int(t) for t in self._texture_cache.values() if t]
-            if ids:
-                arr = (ctypes.c_uint * len(ids))(*ids)
-                gl.glDeleteTextures(len(ids), arr)
-        except Exception:
-            logger.debug("[GL TEXTURE] Failed to delete cached textures", exc_info=True)
-        
+        texture_ids = (
+            set(self._texture_cache.values())
+            | set(self._texture_resource_ids)
+            | set(self._texture_sizes)
+        )
+        for tex_id in texture_ids:
+            self._delete_texture(tex_id)
         self._texture_cache.clear()
         self._texture_lru.clear()
+        self._texture_sizes.clear()
     
     def cleanup(self) -> None:
         """Full cleanup - release all textures and PBOs."""
+        if is_perf_metrics_enabled():
+            stats = self.get_stats()
+            logger.info(
+                "[PERF] [GL TEXTURE CACHE] cleanup textures=%d texture_mb=%.1f "
+                "pbo_count=%d pbo_mb=%.1f hits=%d misses=%d uploads=%d "
+                "evictions=%d managed_releases=%d pbo_replacements=%d registrations=%d",
+                stats["textures"],
+                stats["texture_mb"],
+                stats["pbo_count"],
+                stats["pbo_mb"],
+                stats["hits"],
+                stats["misses"],
+                stats["uploads"],
+                stats["evictions"],
+                stats["managed_releases"],
+                stats["pbo_replacements"],
+                stats["registrations"],
+            )
         self.release_transition_textures()
         self.cleanup_cache()
         self._cleanup_pbo_pool()

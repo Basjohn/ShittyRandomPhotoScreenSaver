@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -12,47 +12,49 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
-2. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
-3. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
-4. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
-5. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
-6. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
-7. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
-8. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
-9. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-10. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-11. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-12. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-13. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-14. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-15. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-16. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-17. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-18. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-19. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-20. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-21. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-22. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-23. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
-24. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-25. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-26. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-27. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-28. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-29. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-30. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-31. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-32. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-33. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-34. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-35. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-36. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-37. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-38. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-39. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-40. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-41. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-50 — 2026-07-16 — Lazy WidgetsTab Rehydrated Its Initial Sections Twice (Resolved In Code, Runtime Validation Pending)](#R-50)
+2. [R-49 — 2026-07-16 — GL Texture/Geometry/Visualizer Handles Retained Across Rebuild Ownership Boundaries (Resolved In Code, Runtime Validation Pending)](#R-49)
+3. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
+4. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
+5. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
+6. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
+7. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
+8. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
+9. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
+10. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
+11. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
+12. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
+13. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
+14. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
+15. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+16. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+17. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
+18. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+19. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+20. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+21. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+22. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+23. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+24. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+25. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
+26. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+27. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+28. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+29. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+30. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+31. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+32. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+33. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+34. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+35. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+36. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+37. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+38. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+39. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+40. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+41. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+42. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+43. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -74,6 +76,36 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="R-50"></a>
+### [R-50] 2026-07-16 — Lazy WidgetsTab Rehydrated Its Initial Sections Twice (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed pressure:** the 2026-07-15 Settings pass built the Visualizers section in about `1210 ms`, completed WidgetsTab setup in about `1744 ms`, and then entered the constructor's `_load_settings()` phase even though lazy bootstrap/initial builders had already run their scoped descriptor loaders.
+- **Root cause:** `WidgetsTab.__init__()` unconditionally called the full standard-section loader after `_setup_ui()`. In lazy mode, `_setup_ui()` calls `_build_lazy_subtab_content()` for bootstrap/initial sections, and that helper already calls `_load_widget_sections_by_id()` under signal/save suppression. The unconditional broad pass therefore repopulated every currently materialized section a second time before reveal. This was independent of R-32's save guard: hydration was safe but duplicated.
+- **Fix:** lazy construction now trusts each built section's scoped descriptor-owned hydration and skips the immediate broad `_load_settings()` pass. Non-lazy construction still performs its one broad load, and explicit reload/import/reset paths retain their deliberate refresh behavior. No section, control, default, persistence rule, or background provider work was removed.
+- **Bars:** a real lazy `WidgetsTab` construction test records descriptor calls and proves General plus the requested Clock section hydrate exactly once while the broad loader is not called. Descriptor and focused lazy-tab suites remain green.
+- **Runtime validation target:** open Settings directly into General, Visualizers, Steam, and an ordinary widget section under `--set --perf`; require one scoped load per constructed section, no blocked-save warning, unchanged values/bucket/scroll state, and lower or equal setup cost without missing controls. The still-expensive Visualizers builder is a separate on-demand-mode construction candidate, not permission to omit settings.
+
+<a id="R-49"></a>
+### [R-49] 2026-07-16 — GL Texture/Geometry/Visualizer Handles Retained Across Rebuild Ownership Boundaries (Resolved In Code, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [ ] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed pressure:** in the 2026-07-15 15:32-15:39 run, cache work was healthy and bounded, ThreadManager completed roughly 93 compute submissions per second with only two outstanding tasks, and no shader/swap/repaint-rescue failure appeared. After the first primed usage sample, app RSS still rose about `776 MB`, private/VMS about `2.46 GB`, handles by `150`, and dedicated VRAM about `1.55 GB`, especially across Settings/display rebuild activity.
+- **Concrete ownership defects:** each compositor retained up to 12 full-resolution textures and an unbounded size-history of upload PBO names; texture/PBO ResourceManager registration IDs were discarded; `GLGeometryManager` and `SpotifyBarsGLOverlay` registered native handles but manually deleted them without unregistering; compositor cleanup also manually deleted geometry already owned by `GLGeometryManager`; invalid-context paths reset local state without removing stale registrations; and partial geometry/PBO initialization could strand handles. The old log cannot prove every byte of driver/private growth came from these paths, but each is a real retained-resource/double-owner defect aligned with the rebuild pressure.
+- **Fix:** texture/PBO/geometry/visualizer-native handles retain their registration IDs and use one managed release on valid-context teardown. Context-invalid teardown unregisters with `cleanup=False` because the native object is no longer safely callable. Partial registration and initialization preserve/release each successful handle. Compositor cleanup delegates geometry deletion to its manager. Each compositor now retains only the active transition pair plus one adjacent pair (`4` textures) and one grow-only PBO; obsolete smaller idle PBOs are replaced. Active old/new textures cannot be evicted.
+- **Observability:** `--usage` now records total and GL-specific ResourceManager counts. Texture-manager cleanup logs retained texture/PBO bytes, cache hits/misses/uploads/evictions, managed releases, replacements, and registration count. The health parser uses a primed growth baseline, reports private/VMS and ThreadManager throughput/backlog, flags ResourceManager growth, and fails a cleanup above four textures, one PBO, or five registrations.
+- **Safeguard:** no image resolution, texture filter, transition duration/pixels, visualizer shader, smoothing, reactivity, accepted repaint request, render/source cadence, or cache quality changed. The CPU image cache remains intentionally capable of retaining raw plus display-ready variants to avoid decode/prescale stalls.
+- **Bars:** focused resource/GL/usage/parser coverage includes bounded texture eviction, one-PBO replacement, partial PBO/geometry failure cleanup, partial registration ownership, valid/invalid-context teardown, overlay program/VAO/VBO cleanup, and ResourceManager/parser contracts. The current-good supported visualizer reactivity/smoothness lock remains the required post-change gate.
+- **Runtime validation target:** run at least 30 minutes with dual displays, ordinary/live visualizer playback, repeated transitions, Settings restart, and multiple compositor rebuilds under `--usage --perf --viz --cache --life --set`. Require GL registrations and retained-cache summaries to plateau, private/RSS/VRAM to stop staircasing after warm-up, teardown to leave no native-resource warning, and current visuals/cadence/reactivity to remain unchanged. If counts plateau while driver memory still grows, investigate the documented share-group texture/program arena and upload-preparation tracks rather than lowering fidelity.
 
 <a id="R-48"></a>
 ### [R-48] 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)

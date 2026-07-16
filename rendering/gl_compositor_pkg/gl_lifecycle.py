@@ -683,8 +683,23 @@ def init_gl_pipeline(widget) -> None:
         widget._gl_disabled_for_session = True
         widget._use_shaders = False
 
+def _abandon_managed_pipeline_resources(widget) -> None:
+    """Forget managed handles whose GL context has already become invalid."""
+    try:
+        if widget._texture_manager is not None:
+            widget._texture_manager.abandon()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to abandon texture registrations", exc_info=True)
+    try:
+        if widget._geometry_manager is not None:
+            widget._geometry_manager.abandon()
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to abandon geometry registrations", exc_info=True)
+
+
 def cleanup_gl_pipeline(widget) -> None:
     if gl is None or widget._gl_pipeline is None:
+        _abandon_managed_pipeline_resources(widget)
         _cleanup_deferred_warmup_resources(widget)
         return
     try:
@@ -697,6 +712,7 @@ def cleanup_gl_pipeline(widget) -> None:
     try:
         is_valid = getattr(widget, "isValid", None)
         if callable(is_valid) and not is_valid():
+            _abandon_managed_pipeline_resources(widget)
             widget._reset_pipeline_state()
             return
     except Exception as e:
@@ -706,6 +722,7 @@ def cleanup_gl_pipeline(widget) -> None:
         widget.makeCurrent()
     except Exception as e:
         logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        _abandon_managed_pipeline_resources(widget)
         widget._reset_pipeline_state()
         return
 
@@ -731,18 +748,11 @@ def cleanup_gl_pipeline(widget) -> None:
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
 
-        # Delete geometry buffers
+        # GeometryManager owns its VAO/VBO registrations and performs exactly
+        # one managed release per handle.
         try:
-            for vbo_attr in ["quad_vbo", "box_vbo"]:
-                vbo_id = getattr(widget._gl_pipeline, vbo_attr, 0)
-                if vbo_id:
-                    buf = (ctypes.c_uint * 1)(int(vbo_id))
-                    gl.glDeleteBuffers(1, buf)
-            for vao_attr in ["quad_vao", "box_vao"]:
-                vao_id = getattr(widget._gl_pipeline, vao_attr, 0)
-                if vao_id:
-                    arr = (ctypes.c_uint * 1)(int(vao_id))
-                    gl.glDeleteVertexArrays(1, arr)
+            if widget._geometry_manager is not None:
+                widget._geometry_manager.cleanup()
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
 

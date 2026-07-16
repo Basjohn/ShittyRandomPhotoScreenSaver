@@ -44,7 +44,13 @@ _STARTUP_FIRST_FRAME_RE = re.compile(
 _GEO_SAVE_RE = re.compile(r"\[GEO_AUDIT\].*phase=save_scene")
 _SLOW_TEXTURE_UPLOAD_RE = re.compile(
     r"\[PERF\] \[GL TEXTURE\] Slow upload: (?P<duration_ms>[0-9.]+)ms "
-    r"\((?P<width>\d+)x(?P<height>\d+), pbo=(?P<pbo>True|False)\)"
+    r"\((?P<width>\d+)x(?P<height>\d+), pbo=(?P<pbo>True|False)"
+    r"(?:, convert=(?P<convert_ms>[0-9.]+)ms, copy=(?P<copy_ms>[0-9.]+)ms, "
+    r"pbo_stage=(?P<pbo_stage_ms>[0-9.]+)ms, "
+    r"tex_upload=(?P<tex_upload_ms>[0-9.]+)ms)?\)"
+)
+_GL_TEXTURE_CACHE_RE = re.compile(
+    r"\[PERF\] \[GL TEXTURE CACHE\] cleanup (?P<payload>.*)"
 )
 _PENDING_PAINT_REQUEUE_RE = re.compile(r"\[PERF\] \[GL RENDER\] Pending paint update exceeded coalescing window")
 _PENDING_PAINT_STALL_RE = re.compile(r"\[PERF\] \[GL RENDER\] Paint update still pending without delivery")
@@ -159,6 +165,7 @@ class UsageSample:
     cpu_system_pct: float
     rss_app_mb: float
     private_app_mb: float | None
+    vms_app_mb: float | None
     threads_app: int
     handles_app: int | None
     gpu_supported: bool
@@ -167,6 +174,18 @@ class UsageSample:
     vram_supported: bool
     vram_dedicated_mb: float | None
     tm_active: int
+    rm_total: int | None = None
+    rm_gl_total: int | None = None
+    rm_gl_texture: int | None = None
+    rm_gl_vbo: int | None = None
+    rm_gl_vao: int | None = None
+    rm_gl_program: int | None = None
+    tm_io_submitted: int | None = None
+    tm_io_completed: int | None = None
+    tm_io_failed: int | None = None
+    tm_compute_submitted: int | None = None
+    tm_compute_completed: int | None = None
+    tm_compute_failed: int | None = None
     line: str = ""
 
 
@@ -249,6 +268,41 @@ class TextureUploadWarning:
     width: int
     height: int
     pbo: bool
+    convert_ms: float | None = None
+    copy_ms: float | None = None
+    pbo_stage_ms: float | None = None
+    tex_upload_ms: float | None = None
+    line: str = ""
+
+    @property
+    def dominant_phase(self) -> tuple[str, float] | None:
+        phases = {
+            "convert": self.convert_ms,
+            "copy": self.copy_ms,
+            "pbo_stage": self.pbo_stage_ms,
+            "tex_upload": self.tex_upload_ms,
+        }
+        measured = {
+            name: value for name, value in phases.items() if value is not None
+        }
+        if not measured:
+            return None
+        return max(measured.items(), key=lambda item: item[1])
+
+
+@dataclass(frozen=True)
+class TextureCacheCleanup:
+    textures: int
+    texture_mb: float
+    pbo_count: int
+    pbo_mb: float
+    hits: int
+    misses: int
+    uploads: int
+    evictions: int
+    managed_releases: int
+    pbo_replacements: int
+    registrations: int
     line: str = ""
 
 
@@ -364,6 +418,7 @@ class PerfHealthReport:
     visualizer_tick_phase_breakdowns: list[VisualizerTickPhaseBreakdown] = field(default_factory=list)
     media_refresh_warnings: list[MediaRefreshWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
+    texture_cache_cleanups: list[TextureCacheCleanup] = field(default_factory=list)
     settings_stalls: list[SettingsStall] = field(default_factory=list)
     visualizer_custom_suppressions: list[str] = field(default_factory=list)
     visualizer_custom_bucket_repairs: list[str] = field(default_factory=list)
@@ -413,6 +468,24 @@ class PerfHealthReport:
         rss_growth = latest.rss_app_mb - baseline.rss_app_mb
         if rss_growth >= 128.0 and latest.rss_app_mb >= baseline.rss_app_mb * 1.20:
             anomalies.append(f"app RSS grew {rss_growth:.1f}MB across usage samples")
+        if (
+            baseline.private_app_mb is not None
+            and latest.private_app_mb is not None
+        ):
+            private_growth = latest.private_app_mb - baseline.private_app_mb
+            if (
+                private_growth >= 128.0
+                and latest.private_app_mb >= baseline.private_app_mb * 1.20
+            ):
+                anomalies.append(
+                    f"app private memory grew {private_growth:.1f}MB across usage samples"
+                )
+        if baseline.vms_app_mb is not None and latest.vms_app_mb is not None:
+            vms_growth = latest.vms_app_mb - baseline.vms_app_mb
+            if vms_growth >= 256.0 and latest.vms_app_mb >= baseline.vms_app_mb * 1.15:
+                anomalies.append(
+                    f"app virtual memory grew {vms_growth:.1f}MB across usage samples"
+                )
         thread_growth = latest.threads_app - baseline.threads_app
         if thread_growth >= 8:
             anomalies.append(f"app thread count grew by {thread_growth} across usage samples")
@@ -427,7 +500,56 @@ class PerfHealthReport:
             vram_growth = latest.vram_dedicated_mb - baseline.vram_dedicated_mb
             if vram_growth >= 256.0 and latest.vram_dedicated_mb >= baseline.vram_dedicated_mb * 1.25:
                 anomalies.append(f"dedicated VRAM grew {vram_growth:.1f}MB across usage samples")
+        if baseline.rm_gl_total is not None and latest.rm_gl_total is not None:
+            gl_growth = latest.rm_gl_total - baseline.rm_gl_total
+            if gl_growth >= 8:
+                anomalies.append(
+                    f"ResourceManager GL registrations grew by {gl_growth} across usage samples"
+                )
+        if (
+            baseline.rm_gl_texture is not None
+            and latest.rm_gl_texture is not None
+        ):
+            texture_growth = latest.rm_gl_texture - baseline.rm_gl_texture
+            if texture_growth >= 8:
+                anomalies.append(
+                    "ResourceManager texture registrations grew by "
+                    f"{texture_growth} across usage samples"
+                )
+        if baseline.rm_total is not None and latest.rm_total is not None:
+            resource_growth = latest.rm_total - baseline.rm_total
+            if resource_growth >= 32:
+                anomalies.append(
+                    f"ResourceManager total registrations grew by {resource_growth} "
+                    "across usage samples"
+                )
+        if (
+            baseline.tm_compute_submitted is not None
+            and baseline.tm_compute_completed is not None
+            and latest.tm_compute_submitted is not None
+            and latest.tm_compute_completed is not None
+        ):
+            baseline_backlog = (
+                baseline.tm_compute_submitted - baseline.tm_compute_completed
+            )
+            latest_backlog = latest.tm_compute_submitted - latest.tm_compute_completed
+            backlog_growth = latest_backlog - baseline_backlog
+            if latest_backlog >= 8 and backlog_growth >= 8:
+                anomalies.append(
+                    "ThreadManager compute backlog grew by "
+                    f"{backlog_growth} to {latest_backlog} tasks"
+                )
         return anomalies
+
+    @property
+    def excessive_texture_cache_cleanups(self) -> list[TextureCacheCleanup]:
+        return [
+            cleanup
+            for cleanup in self.texture_cache_cleanups
+            if cleanup.textures > 4
+            or cleanup.pbo_count > 1
+            or cleanup.registrations > 5
+        ]
 
     @property
     def usage_visualizer_correlations(self) -> list[UsageVisualizerCorrelation]:
@@ -893,6 +1015,11 @@ class PerfHealthReport:
             messages.append(
                 f"slow GL texture uploads present: {len(self.slow_texture_uploads)}"
             )
+        if self.excessive_texture_cache_cleanups:
+            messages.append(
+                "GL texture cache cleanup exceeded the four-texture/one-PBO bound: "
+                f"{len(self.excessive_texture_cache_cleanups)}"
+            )
         if self.significant_settings_stalls:
             messages.append(
                 "settings UI stalls above 1s present: "
@@ -943,6 +1070,19 @@ def _parse_float(value: str | None) -> float | None:
         return float(value.rstrip("ms").rstrip("Hz"))
     except ValueError:
         return None
+
+
+def _percentile(values: Iterable[float], percentile: float) -> float | None:
+    ordered = sorted(float(value) for value in values)
+    if not ordered:
+        return None
+    if len(ordered) == 1:
+        return ordered[0]
+    position = max(0.0, min(1.0, percentile)) * (len(ordered) - 1)
+    lower = int(position)
+    upper = min(lower + 1, len(ordered) - 1)
+    fraction = position - lower
+    return ordered[lower] + ((ordered[upper] - ordered[lower]) * fraction)
 
 
 def _parse_int(value: str | None) -> int | None:
@@ -1005,6 +1145,7 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         cpu_system_pct=cpu_system_pct,
         rss_app_mb=rss_app_mb,
         private_app_mb=_parse_float(parts.get("private_app_mb")),
+        vms_app_mb=_parse_float(parts.get("vms_app_mb")),
         threads_app=threads_app,
         handles_app=_parse_int(parts.get("handles_app")),
         gpu_supported=_parse_flag(parts.get("gpu_supported")),
@@ -1013,6 +1154,54 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         vram_supported=_parse_flag(parts.get("vram_supported")),
         vram_dedicated_mb=_parse_float(parts.get("vram_dedicated_mb")),
         tm_active=tm_active,
+        rm_total=_parse_int(parts.get("rm_total")),
+        rm_gl_total=_parse_int(parts.get("rm_gl_total")),
+        rm_gl_texture=_parse_int(parts.get("rm_gl_texture")),
+        rm_gl_vbo=_parse_int(parts.get("rm_gl_vbo")),
+        rm_gl_vao=_parse_int(parts.get("rm_gl_vao")),
+        rm_gl_program=_parse_int(parts.get("rm_gl_program")),
+        tm_io_submitted=_parse_int(parts.get("tm_io_submitted")),
+        tm_io_completed=_parse_int(parts.get("tm_io_completed")),
+        tm_io_failed=_parse_int(parts.get("tm_io_failed")),
+        tm_compute_submitted=_parse_int(parts.get("tm_compute_submitted")),
+        tm_compute_completed=_parse_int(parts.get("tm_compute_completed")),
+        tm_compute_failed=_parse_int(parts.get("tm_compute_failed")),
+        line=line,
+    )
+
+
+def _texture_cache_cleanup_from_line(
+    line: str,
+    payload: str,
+) -> TextureCacheCleanup | None:
+    parts = _parse_kv_payload(payload)
+    required = {
+        "textures": _parse_int(parts.get("textures")),
+        "texture_mb": _parse_float(parts.get("texture_mb")),
+        "pbo_count": _parse_int(parts.get("pbo_count")),
+        "pbo_mb": _parse_float(parts.get("pbo_mb")),
+        "hits": _parse_int(parts.get("hits")),
+        "misses": _parse_int(parts.get("misses")),
+        "uploads": _parse_int(parts.get("uploads")),
+        "evictions": _parse_int(parts.get("evictions")),
+        "managed_releases": _parse_int(parts.get("managed_releases")),
+        "pbo_replacements": _parse_int(parts.get("pbo_replacements")),
+        "registrations": _parse_int(parts.get("registrations")),
+    }
+    if any(value is None for value in required.values()):
+        return None
+    return TextureCacheCleanup(
+        textures=int(required["textures"]),
+        texture_mb=float(required["texture_mb"]),
+        pbo_count=int(required["pbo_count"]),
+        pbo_mb=float(required["pbo_mb"]),
+        hits=int(required["hits"]),
+        misses=int(required["misses"]),
+        uploads=int(required["uploads"]),
+        evictions=int(required["evictions"]),
+        managed_releases=int(required["managed_releases"]),
+        pbo_replacements=int(required["pbo_replacements"]),
+        registrations=int(required["registrations"]),
         line=line,
     )
 
@@ -1164,6 +1353,16 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
         line = raw.rstrip("\n")
         timestamp = _timestamp_from_line(line)
 
+        texture_cache_match = _GL_TEXTURE_CACHE_RE.search(line)
+        if texture_cache_match:
+            cleanup = _texture_cache_cleanup_from_line(
+                line,
+                texture_cache_match.group("payload"),
+            )
+            if cleanup is not None:
+                report.texture_cache_cleanups.append(cleanup)
+            continue
+
         usage_match = _USAGE_SAMPLE_RE.search(line)
         if usage_match:
             sample = _usage_sample_from_line(line, usage_match.group("payload"))
@@ -1175,7 +1374,8 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                         "usage_sample",
                         (
                             f"cpu_app={sample.cpu_app_pct:.1f}% rss={sample.rss_app_mb:.1f}MB "
-                            f"gpu={sample.gpu_busy_pct if sample.gpu_busy_pct is not None else 'na'}"
+                            f"gpu={sample.gpu_busy_pct if sample.gpu_busy_pct is not None else 'na'} "
+                            f"rm_gl={sample.rm_gl_total if sample.rm_gl_total is not None else 'na'}"
                         ),
                         line,
                     )
@@ -1452,6 +1652,14 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                         width=int(texture_upload.group("width")),
                         height=int(texture_upload.group("height")),
                         pbo=texture_upload.group("pbo") == "True",
+                        convert_ms=_parse_float(texture_upload.group("convert_ms")),
+                        copy_ms=_parse_float(texture_upload.group("copy_ms")),
+                        pbo_stage_ms=_parse_float(
+                            texture_upload.group("pbo_stage_ms")
+                        ),
+                        tex_upload_ms=_parse_float(
+                            texture_upload.group("tex_upload_ms")
+                        ),
                         line=line,
                     )
                 )
@@ -1665,6 +1873,7 @@ def main() -> int:
     print(f"Whole-process usage samples: {len(report.usage_samples)}")
     print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
+    print(f"GL texture cache cleanups: {len(report.texture_cache_cleanups)}")
     print(f"Settings stalls: {len(report.settings_stalls)}")
     print(f"Startup first-frame exposures: {len(report.startup_first_frame_exposures)}")
     print(f"Spotify visualizer CUSTOM suppressions: {len(report.visualizer_custom_suppressions)}")
@@ -1674,9 +1883,21 @@ def main() -> int:
     print(f"Spotify overlay under-delivery windows: {len(report.spotify_overlay_under_delivery_windows)}")
     print(f"Timeline markers: {len(report.timeline_markers)}")
     if report.usage_samples:
-        first_usage = report.usage_samples[0]
+        growth_baseline_index = 1 if len(report.usage_samples) >= 3 else 0
+        growth_baseline = report.usage_samples[growth_baseline_index]
         last_usage = report.usage_samples[-1]
         peak_cpu = max(sample.cpu_app_pct for sample in report.usage_samples)
+        primed_cpu = [
+            sample.cpu_app_pct
+            for sample in report.usage_samples
+            if sample.cpu_primed
+        ]
+        average_cpu = (
+            sum(primed_cpu) / len(primed_cpu)
+            if primed_cpu
+            else peak_cpu
+        )
+        p95_cpu = _percentile(primed_cpu, 0.95)
         peak_rss = max(sample.rss_app_mb for sample in report.usage_samples)
         gpu_values = [
             sample.gpu_busy_pct
@@ -1684,12 +1905,76 @@ def main() -> int:
             if sample.gpu_busy_pct is not None
         ]
         peak_gpu = max(gpu_values) if gpu_values else None
+        gl_registration_values = [
+            sample.rm_gl_total
+            for sample in report.usage_samples
+            if sample.rm_gl_total is not None
+        ]
+        peak_gl_registrations = (
+            max(gl_registration_values) if gl_registration_values else None
+        )
+        gl_registration_delta = (
+            last_usage.rm_gl_total - growth_baseline.rm_gl_total
+            if (
+                last_usage.rm_gl_total is not None
+                and growth_baseline.rm_gl_total is not None
+            )
+            else None
+        )
+        elapsed_seconds = sum(
+            max(0.0, sample.cadence_gap_ms)
+            for sample in report.usage_samples[growth_baseline_index + 1 :]
+        ) / 1000.0
+        compute_rate = None
+        compute_backlog = None
+        if (
+            elapsed_seconds > 0.0
+            and growth_baseline.tm_compute_submitted is not None
+            and last_usage.tm_compute_submitted is not None
+        ):
+            compute_rate = (
+                last_usage.tm_compute_submitted
+                - growth_baseline.tm_compute_submitted
+            ) / elapsed_seconds
+        if (
+            last_usage.tm_compute_submitted is not None
+            and last_usage.tm_compute_completed is not None
+        ):
+            compute_backlog = (
+                last_usage.tm_compute_submitted
+                - last_usage.tm_compute_completed
+            )
+        private_delta = (
+            last_usage.private_app_mb - growth_baseline.private_app_mb
+            if (
+                last_usage.private_app_mb is not None
+                and growth_baseline.private_app_mb is not None
+            )
+            else None
+        )
+        vms_delta = (
+            last_usage.vms_app_mb - growth_baseline.vms_app_mb
+            if (
+                last_usage.vms_app_mb is not None
+                and growth_baseline.vms_app_mb is not None
+            )
+            else None
+        )
         print(
             "Usage summary: "
+            f"avg_cpu={average_cpu:.1f}% "
+            f"p95_cpu={f'{p95_cpu:.1f}%' if p95_cpu is not None else 'na'} "
             f"peak_cpu={peak_cpu:.1f}% peak_rss={peak_rss:.1f}MB "
-            f"rss_delta={last_usage.rss_app_mb - first_usage.rss_app_mb:.1f}MB "
-            f"threads_delta={last_usage.threads_app - first_usage.threads_app} "
-            f"peak_gpu={f'{peak_gpu:.1f}%' if peak_gpu is not None else 'na'}"
+            f"growth_baseline_seq={growth_baseline.sequence} "
+            f"rss_delta={last_usage.rss_app_mb - growth_baseline.rss_app_mb:.1f}MB "
+            f"private_delta={f'{private_delta:.1f}MB' if private_delta is not None else 'na'} "
+            f"vms_delta={f'{vms_delta:.1f}MB' if vms_delta is not None else 'na'} "
+            f"threads_delta={last_usage.threads_app - growth_baseline.threads_app} "
+            f"peak_gpu={f'{peak_gpu:.1f}%' if peak_gpu is not None else 'na'} "
+            f"peak_rm_gl={peak_gl_registrations if peak_gl_registrations is not None else 'na'} "
+            f"rm_gl_delta={gl_registration_delta if gl_registration_delta is not None else 'na'} "
+            f"compute_submit_rate={f'{compute_rate:.1f}/s' if compute_rate is not None else 'na'} "
+            f"compute_backlog={compute_backlog if compute_backlog is not None else 'na'}"
         )
 
     _print_samples(
@@ -1764,6 +2049,11 @@ def main() -> int:
         args.max_samples,
     )
     _print_samples("Slow GL texture uploads", report.slow_texture_uploads, args.max_samples)
+    _print_samples(
+        "Excessive GL texture cache cleanups",
+        report.excessive_texture_cache_cleanups,
+        args.max_samples,
+    )
     _print_samples("Significant settings stalls", report.significant_settings_stalls, args.max_samples)
     _print_samples(
         "Risky startup first-frame exposures",

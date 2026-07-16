@@ -440,7 +440,10 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
                 if engine.thread_manager is None:
                     raise RuntimeError("ThreadManager unavailable after engine start")
-                engine._usage_telemetry = UsageTelemetryService(engine.thread_manager)
+                engine._usage_telemetry = UsageTelemetryService(
+                    engine.thread_manager,
+                    resource_manager=engine.resource_manager,
+                )
                 if not engine._usage_telemetry.start():
                     raise RuntimeError("usage telemetry declined startup")
             except Exception:

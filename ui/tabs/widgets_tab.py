@@ -212,7 +212,11 @@ class WidgetsTab(QWidget):
         self._setup_ui()
         self._perf_log("_setup_ui", _ui_start)
         _load_start = time.perf_counter()
-        self._load_settings()
+        if not self._lazy_sections:
+            self._load_settings()
+        # Lazy builders hydrate each built bootstrap/initial section as part of
+        # construction. Re-running every eligible loader here duplicated that
+        # work before the dialog was shown.
         self._refresh_custom_resize_lock_state()
         self._perf_log("_load_settings", _load_start)
         self._loading = False

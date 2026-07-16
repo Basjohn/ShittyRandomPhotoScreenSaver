@@ -1,6 +1,6 @@
 # SRPSS Guardrails
 
-Last updated: 2026-07-02
+Last updated: 2026-07-16
 
 Policy rules to keep architecture coherent and prevent repeat regressions.
 
@@ -33,6 +33,7 @@ Policy rules to keep architecture coherent and prevent repeat regressions.
 - High-frequency render/timer workers must acknowledge stop before display cleanup drops ownership. Do not use "immediate" cleanup paths that merely clear local handles while the worker loop can still be alive in `ThreadManager`.
 - Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
 - During display/widget startup, do not keep two lifecycle-start authorities alive. If `widget_setup_all` already initializes/activates the created widgets, display glue must not immediately run another initialize pass over the same set.
+- Registered native GL resources must have one cleanup owner. Keep ResourceManager registration IDs, unregister/delete once while a valid owning context is current, and use `cleanup=False` only after context destruction makes native deletion unsafe. Do not manually delete a live handle and leave its ResourceManager record behind, double-delete manager-owned geometry from compositor code, or discard partial registration state.
 
 No shadow frameworks or parallel ownership paths.
 
@@ -68,6 +69,7 @@ No shadow frameworks or parallel ownership paths.
 - Do not touch the fullscreen / one-pixel shrink / startup flash seam opportunistically. The current fullscreen geometry and startup presentation ordering are fragile, user-visible contracts; changes to fullscreen sizing, taskbar coverage, compositor prewarm visibility, first-frame readiness, or startup flash behavior require explicit user greenlight, a document-first audit, and bars/runtime evidence. If a performance pass introduces flashes, flicker, black borders, taskbar gaps, or rebuild/widget regressions, revert that seam to last committed behavior instead of layering guards.
 - UI pressure is not a performance fix. Do not try to solve cadence, transition FPS, missed paints, widget starvation, or visualizer latency by queueing extra UI-thread work, repaint/update retries, rescue timers, or broader widget refreshes. If a render/update delivery seam looks stuck, first prove ownership/timing/cache/upload root cause with `--perf` bars; any proposed retry path must have a regression bar proving it does not increase UI-thread churn.
 - Whole-process profiling belongs to opt-in `--usage`, never the tray or a permanently running widget/UI timer. Keep sampling slow, non-overlapping, and worker-owned; the UI callback may submit only. Every sample must report its own collection duration, cadence gap, skipped submissions, and unsupported counters honestly. Profiling may observe visualizer reactivity/smoothness and transition cadence but must not retune modes, drop repaint requests, lower fidelity, or automatically change quality/settings.
+- Performance fixes must not lower accepted smoothness, visual fidelity, visualizer reactivity, transition resolution/duration, source cadence, render cadence, or accepted repaint delivery. Recover headroom by removing duplicate work, bounding retained resources, preparing immutable work off the UI thread, and correcting ownership/surface architecture. Automatic quality scaling is not an allowed fallback.
 - If `GL RENDER` timer cadence is healthy while same-screen `GL PAINT` cadence is bad, treat it as paint/event-loop delivery starvation. Add paired render/paint evidence and timeline correlation before changing cadence mechanics; do not add repaint retries or update requeues.
 - `QOpenGLWidget.paintGL()` must not self-schedule continuous `update()` calls as a cadence mechanism. The owning tick/frame handoff should request repaint; paint-owned recursive updates create child-GL overpaint and can starve other displays.
 - Do not producer-throttle Spotify visualizer overlay repaint requests to make passive counters look cleaner. The visualizer feed may run above a low-refresh owner display; Qt may coalesce naturally, but dropping `set_state()` repaint requests before `QOpenGLWidget.update()` can create visible 60Hz stutter/under-delivery.
@@ -96,6 +98,7 @@ No shadow frameworks or parallel ownership paths.
 - When a widget needs base-settings inheritance, shadow-config injection, or dev gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
 - `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
 - New WidgetsTab sections must not casually worsen settings-open or section-switch cost. Prefer lazy-built descriptor-owned sections, keep `bootstrap_in_lazy_mode` rare, keep cross-section dependencies explicit and minimal, and do not turn one widget's builder/loader into a reason every other widget section has to materialize.
+- Lazy WidgetsTab construction must not broadly reload sections that their descriptor-owned builders just hydrated. One scoped load per materialized section is the startup contract; broad reloads are reserved for non-lazy construction and explicit user/runtime reload operations.
 - `ui/tabs/widgets_tab.py` must use descriptor-owned standard-section signal-block target collection during load-time population instead of re-scanning standard section attr names inline. Keep only genuinely special non-standard control groups explicit where the descriptor layer would not improve clarity.
 - Descriptor-layer cleanup should reduce fragmented helper surfaces and duplicate UI truth, not invent a second level of implicit magic. If a UI descriptor needs routing authority, prefer deriving it from the runtime descriptor contract instead of storing a second settings-key truth.
 - Cached active descriptor views are acceptable, but they must stay environment/dev-gate-aware so gated families such as deprecated Imgur or Steam do not go stale across tests or runtime toggles while they remain present.

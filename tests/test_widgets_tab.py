@@ -92,6 +92,42 @@ class TestWidgetsTab:
         finally:
             tab.deleteLater()
 
+    def test_lazy_widgets_tab_initial_sections_are_not_broadly_reloaded(
+        self,
+        qt_app,
+        settings_manager,
+        monkeypatch,
+    ):
+        broad_calls: list[str] = []
+        scoped_calls: list[str] = []
+
+        monkeypatch.setattr(
+            "ui.tabs.widgets_tab.load_widget_sections",
+            lambda *_args, **_kwargs: broad_calls.append("broad"),
+        )
+
+        def _fake_load_section(owner, section_id, _widgets_config, descriptors=None):
+            scoped_calls.append(section_id)
+            owner._mark_widget_section_hydrated(section_id)
+            return True
+
+        monkeypatch.setattr(
+            "ui.tabs.widgets_tab.load_widget_section",
+            _fake_load_section,
+        )
+
+        tab = WidgetsTab(
+            settings_manager,
+            lazy_sections=True,
+            initial_view_state={"subtab_id": "clock"},
+        )
+        try:
+            assert broad_calls == []
+            assert sorted(scoped_calls) == ["clock", "defaults"]
+            assert len(scoped_calls) == 2
+        finally:
+            tab.deleteLater()
+
     def test_lazy_widgets_tab_accepts_descriptor_owned_subtab_id_restore(self, qt_app, settings_manager):
         tab = WidgetsTab(
             settings_manager,

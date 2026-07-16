@@ -390,6 +390,8 @@ class SpotifyBarsGLOverlay(QOpenGLWidget):
         # ResourceManager resource IDs for GL handles (for cleanup tracking)
         self._gl_program_rids: _Dict[str, _Any] = {}
         self._gl_vao_rid = None
+        self._gl_vbo_rid = None
+        self._gl_resource_manager = None
         self._gl_vbo: Optional[int] = None
         # Rounded-rect stencil mask program for painted-card corner clipping
         self._gl_mask_program: Optional[int] = None
@@ -1633,6 +1635,7 @@ void main() {
             from core.resources.manager import ResourceManager
             from OpenGL import GL as _gl_mod
             rm = ResourceManager.get_or_create_app_shared()
+            self._gl_resource_manager = rm
             self._gl_vao_rid = rm.register_gl_handle(
                 vao, "vao",
                 lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
@@ -1648,8 +1651,6 @@ void main() {
             logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to register GL handles: %s", e)
-            self._gl_vao_rid = None
-            self._gl_vbo_rid = None
 
         logger.info(
             "[SPOTIFY_VIS] Startup shader ready: active_mode=%s program=%s compiled=%s pending=%s",
@@ -1764,6 +1765,7 @@ void main() {
                 group="spotify_vis_gl",
             )
             self._gl_program_rids[mode] = rid
+            self._gl_resource_manager = rm
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Failed to register %s GL handle: %s", mode, e)
 
@@ -1825,6 +1827,38 @@ void main() {
             except Exception as e:
                 logger.debug("[SPOTIFY_VIS] Failed to make GL context current for cleanup: %s", e)
 
+        resource_manager = self._gl_resource_manager
+
+        def _release_registered(handle, resource_id, direct_cleanup) -> None:
+            if not handle:
+                return
+            if resource_id and resource_manager is not None:
+                try:
+                    if resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=ctx_acquired,
+                    ):
+                        return
+                    # A missing registration means it was already released.
+                    return
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Managed GL release failed for handle %s",
+                        handle,
+                        exc_info=True,
+                    )
+                    try:
+                        resource_manager.unregister(
+                            resource_id,
+                            force=True,
+                            cleanup=False,
+                        )
+                    except Exception:
+                        pass
+            if ctx_acquired:
+                direct_cleanup(handle)
+
         try:
             if self._gl_program_warm_timer is not None:
                 try:
@@ -1834,8 +1868,11 @@ void main() {
             self._gl_program_warm_queue = []
             for mode, prog in list(self._gl_programs.items()):
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteProgram(prog)
+                    _release_registered(
+                        prog,
+                        self._gl_program_rids.pop(mode, None),
+                        _gl.glDeleteProgram,
+                    )
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
             self._gl_programs.clear()
@@ -1852,16 +1889,22 @@ void main() {
 
             if self._gl_vbo is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteBuffers(1, [self._gl_vbo])
+                    _release_registered(
+                        self._gl_vbo,
+                        self._gl_vbo_rid,
+                        lambda handle: _gl.glDeleteBuffers(1, [handle]),
+                    )
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
                 self._gl_vbo = None
 
             if self._gl_vao is not None:
                 try:
-                    if ctx_acquired:
-                        _gl.glDeleteVertexArrays(1, [self._gl_vao])
+                    _release_registered(
+                        self._gl_vao,
+                        self._gl_vao_rid,
+                        lambda handle: _gl.glDeleteVertexArrays(1, [handle]),
+                    )
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
                 self._gl_vao = None
@@ -1872,9 +1915,23 @@ void main() {
                 except Exception:
                     pass
 
+        if resource_manager is not None:
+            for resource_id in self._gl_program_rids.values():
+                try:
+                    resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=False,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[SPOTIFY_VIS] Failed to release leftover program registration",
+                        exc_info=True,
+                    )
         self._gl_program_rids.clear()
         self._gl_vao_rid = None
         self._gl_vbo_rid = None
+        self._gl_resource_manager = None
         logger.debug("[SPOTIFY_VIS] GL handles cleaned up")
 
     def _get_dpr(self) -> float:

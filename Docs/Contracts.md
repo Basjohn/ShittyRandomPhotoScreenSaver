@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 Short contract index for SRPSS.
 
@@ -23,7 +23,7 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Contract Family | Canonical Owner | Related Files | Goal |
 |---|---|---|---|
 | Threading / async task ownership | `core/threading/manager.py` | `engine/*`, widget runtime helpers | One authoritative task submission/cancel/shutdown seam. |
-| Qt resource lifecycle | `core/resources/manager.py` | widgets, rendering, displays | One authoritative GUI/resource cleanup seam. |
+| Qt/native resource lifecycle | `core/resources/manager.py` | widgets, rendering, displays, GL managers | One authoritative GUI/native cleanup seam. Registered GL handles keep their resource IDs, delete exactly once with a valid context, and use cleanup-free unregister only after context loss. |
 | Settings read/write/migration | `core/settings/settings_manager.py` | `core/settings/defaults.py`, `core/settings/default_settings.py`, `core/settings/json_store.py` | One persistence API and one schema-normalization path. |
 | Shared runtime animation ownership | `core/animation/animator.py` | widget fade helpers, render timing, perf parser | Shared timeline/tick animation without shadow managers; perf output must identify owner and peak active/listener counts. |
 | Event publish/subscribe | `core/events/event_system.py` | engine, runtime glue | One cross-module signaling seam. |
@@ -77,6 +77,8 @@ Use this as a fast routing layer, then open the owning files and `Spec.md` for t
 | Transition paint progress authority | `core/animation/frame_interpolator.py` | `rendering/gl_compositor_pkg/paint.py`, transition controllers | Paint reads use elapsed-time/easing state so visible shader progress is not capped by stale `AnimationManager` callback samples. |
 | Transition start / render wake authority | `rendering/gl_compositor.py` | `core/animation/animator.py`, compositor metrics | Render strategy and transition metrics begin at transition start, not from the first animation callback. |
 | Transition/display perf health bar | `tools/transition_perf_health_parser.py` | `core/animation/animator.py`, compositor metrics, sidecar logs | Keep paired render/paint starvation, `GL ANIM` vs `GL PAINT`, fallback usage, texture uploads, visualizer latency, and owner/peak-count animation evidence loud. |
+| Whole-process/resource residency telemetry | `core/performance/usage_sampler.py`, `tools/transition_perf_health_parser.py` | `core/resources/manager.py`, `rendering/gl_programs/texture_manager.py`, ThreadManager stats | Correlate primed CPU/memory/handle/GPU/VRAM slopes with task throughput/backlog and GL registration/cache bounds without adding UI work or changing quality/cadence. |
+| Compositor texture/geometry ownership | `rendering/gl_programs/texture_manager.py`, `rendering/gl_programs/geometry_manager.py` | `rendering/gl_compositor_pkg/gl_lifecycle.py`, `core/resources/manager.py` | Keep four active/adjacent textures plus one PBO per compositor, protect the active pair, clean partial initialization, and release each managed native handle exactly once. |
 | No UI-pressure cadence fixes | `Docs/Guardrails.md` | adaptive timers, display rebuild, settings entry | Do not fix missed paints or low FPS by queueing extra UI work; prove ownership/timing/cache/upload root cause first. |
 
 ## CUSTOM Layout Contracts

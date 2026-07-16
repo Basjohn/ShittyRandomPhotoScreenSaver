@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-15
+Last updated: 2026-07-16
 
 Living map of the current SRPSS codebase.
 
@@ -50,7 +50,7 @@ Living map of the current SRPSS codebase.
 | Manager | File |
 |---|---|
 | ThreadManager | `core/threading/manager.py` |
-| ResourceManager | `core/resources/manager.py` |
+| ResourceManager | `core/resources/manager.py` — app-shared Qt/native-resource owner; registered GL handles retain one managed cleanup identity, with explicit cleanup-free unregister only after native context loss |
 | SettingsManager | `core/settings/settings_manager.py` |
 | AnimationManager | `core/animation/animator.py` — shared/app-scoped animation owner plus display/settings owner-tagged perf telemetry; transition managers own transition callbacks/completion, not visualizer tick work |
 | EventSystem | `core/events/event_system.py` |
@@ -102,10 +102,10 @@ Living map of the current SRPSS codebase.
 |---|---|---|
 | Frame budget / GC controller | `core/performance/frame_budget.py` | Frame pacing and GC budget helpers for render/runtime hot paths |
 | Widget perf profiler | `core/performance/widget_profiler.py` | Widget paint/timer metrics sampling and perf log emission |
-| Whole-process usage sampler | `core/performance/usage_sampler.py` | Opt-in `--usage` main-plus-child CPU/memory/thread/handle/IO and Windows process GPU/VRAM telemetry, submitted at low cadence through the app-shared ThreadManager with self-cost/cadence guards |
+| Whole-process usage sampler | `core/performance/usage_sampler.py` | Opt-in `--usage` main-plus-child CPU/memory/thread/handle/IO, ThreadManager throughput/backlog inputs, app-shared ResourceManager/GL registration counts, and Windows process GPU/VRAM telemetry, submitted at low cadence through the app-shared ThreadManager with self-cost/cadence guards |
 | Transition frame state | `core/animation/frame_interpolator.py` | Paint-authoritative elapsed-time/easing state for transitions so visible shader progress is not tethered to stale `AnimationManager` callback samples |
 | Animation perf diagnostics | `core/animation/animator.py` | Owner-tagged `AnimationManager` metrics with active/listener peak counts so completed transition cadence, listener pressure, and idle timer churn are separable |
-| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/`--usage`/cache log bar for cadence collapse, resource peaks/growth, sampler self-interference, visualizer reactivity/smoothness correlation, slow GL uploads, fallback loudness, and merged timeline evidence |
+| Transition perf health parser | `tools/transition_perf_health_parser.py` | Read-only `--perf`/`--usage`/cache log bar for cadence collapse, primed-baseline RSS/private/VMS/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-registration growth, bounded GL texture-cache cleanup, sampler self-interference, visualizer reactivity/smoothness correlation, slow uploads, fallback loudness, and merged timeline evidence |
 
 ## Visualizer System
 
@@ -118,7 +118,7 @@ Living map of the current SRPSS codebase.
 | Bubble parity harness | `tools/bubble_parity_harness.py` | Historical comparison harness for Bubble curated presets against `9d4925e` / `510520e`, used when Deep Sea regressions are too severe for present-day proxy bars to be trusted |
 | Widget runtime | `widgets/spotify_visualizer_widget.py` | Runtime visualizer coordinator and resolved activation payload application; authoritative technical replay reads from `_get_mode_technical_config(...)` rather than transient widget cache, latency diagnostics are reset at activation/reset boundaries, cold construction can be seeded with a resolved startup mode, ThreadManager hookup must not replay authoritative technical config before the settings model/cache exist, and active CUSTOM geometry now rejects foreign outer-rect writes once committed rect authority exists |
 | Display participation helper | `rendering/spotify_display_participation.py` | Narrow visualizer/display owner selection helper that distinguishes truly absent CUSTOM targets from runtime-known but temporarily non-participating displays, so owner selection can stay cautious during startup and sleep/wake churn |
-| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, and deferred warmup of remaining visualizer mode programs |
+| Overlay transport | `widgets/spotify_bars_gl_overlay.py` | GL state transport, render-state storage, painted-card rounded-rect stencil mask with border-width inset, resolved-startup-mode-first shader compilation, deferred warmup of remaining visualizer mode programs, and exactly-once ResourceManager cleanup/abandonment of registered programs/VAO/VBO |
 | Visualizer overlay prewarm bridge | `rendering/display_image_ops.py` | Creates/synchronizes the visualizer GL overlay at authoritative geometry and seeds the resolved startup mode before first-program prewarm |
 | Oscilloscope display contract | `widgets/spotify_visualizer/oscilloscope_contract.py` | Mode-owned Oscilloscope waveform-consumption helpers for live PCM display conditioning, line-speed blend alpha, playback-boundary waveform reset support, ghost-ring delay/fill, and bounded transient-width display accent; intentionally outside shared audio/floor production |
 | Spectrum solid-bar display smoothing | `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` | Display-only solid Spectrum smoothing/easing: continuous display-state motion, small-zone chatter suppression, brief coherent-zero hold, and bounded delayed-frame catch-up, intentionally kept out of shared audio/floor/timer logic |
@@ -150,6 +150,8 @@ Living map of the current SRPSS codebase.
 | Module | File | Role |
 |---|---|---|
 | Image processing/display pipeline | `engine/image_pipeline.py` | Worker-owned cache/prescale/display preparation, including bounded per-display replacement after missing/rejected/decompression-bomb candidates and atomic common-candidate replacement for same-image multi-monitor mode; UI callbacks consume only completed display results and never add repaint retries |
+| GL texture residency/upload manager | `rendering/gl_programs/texture_manager.py` | Per-compositor active-plus-adjacent four-texture LRU, one grow-only PBO, active-pair-safe eviction, ResourceManager-owned valid-context cleanup/context-loss abandonment, and bounded `--perf` cleanup summaries without changing image resolution/filtering |
+| GL context-local geometry manager | `rendering/gl_programs/geometry_manager.py` | Per-compositor quad/box VAO/VBO creation with partial-initialization cleanup and exactly-once ResourceManager ownership; VAOs remain context-local |
 | Display presenter | `rendering/display_widget.py` | Fullscreen presenter per display; participates in active-display startup/rebuild ownership instead of guessing from raw OS screen state |
 | Transition registry | `rendering/transition_registry.py` | Canonical transition identity, legacy alias canonicalization, UI ordering, cycle/random-pool participation, hardware gating, compositor program routing, and startup shader warmup metadata |
 | GL compositor paint/metrics | `rendering/gl_compositor_pkg/paint.py` / `rendering/gl_compositor_pkg/compositor_metrics.py` | Paint-time shader dispatch, loud shader-fallback reporting, visual transition progress sync from `FrameState`, and `GL PAINT` / render-timer metrics that distinguish visible cadence from `AnimationManager` progress-sample cadence |
@@ -174,7 +176,7 @@ Living map of the current SRPSS codebase.
 | Widget positioner | `rendering/widget_positioner.py` | Centralized anchor/margin/stack positioning calculations for overlay widgets |
 | Input routing | `rendering/input_handler.py` | Keyboard/mouse/media/control routing; keeps non-link widget controls separate from real URL clicks, routes Steam and missing-location Weather settings affordances through persisted Widgets-tab navigation, emits focused transport/volume hotkey intent such as `Space`/`Home` play-pause, `Left`/`Right` track navigation, `Up`/`Down` slider volume steps, plus `PgUp`/`PgDn`/`End` system-audio requests through the same centralized input contract as the other runtime keyboard actions, consumes number/Shift+number layout-slot hotkeys so they cannot exit the app, and preserves focused-only key ownership rather than global key grabs |
 | GL compositor | `rendering/gl_compositor.py` | GL transition/composition surface with transition-resource warmup delegated to the compositor/runtime helpers, compositor-owned skip logic for transitions already warmed through the hidden startup path, shared compositor-side transition desync that is retained only for real multi-display pacing, and actual-start telemetry handoff so transition-duration metrics reflect compositor runtime rather than request-time delay |
-| GL lifecycle helpers | `rendering/gl_compositor_pkg/gl_lifecycle.py` | Compositor context initialization plus registry-driven minimal startup transition-program compilation, hidden/quiescent deferred warmup of the remaining transition shader programs and representative transition resources, and the shared first-use transition-program ensure/bind seam |
+| GL lifecycle helpers | `rendering/gl_compositor_pkg/gl_lifecycle.py` | Compositor context initialization plus registry-driven minimal startup transition-program compilation, hidden/quiescent deferred warmup, first-use transition-program ensure/bind, manager-owned texture/geometry teardown, and invalid-context registration abandonment without double-deleting geometry |
 | Frame push / overlay state | `rendering/display_image_ops.py` | Per-frame overlay state routing, including `border_width_px` handoff to the GL overlay for stencil-mask inset, plus ThreadManager-owned startup first-frame readiness publication without forced repaint |
 | Transition busy state | `rendering/display_widget.py` / `engine/display_manager.py` | Pending/active transition reporting used by overlay widgets to defer refresh/cache churn during image-load and GL transition windows |
 | Transition settings UI | `ui/tabs/transitions_tab.py` | Transition settings UI, per-transition specific controls, and registry-driven ordinary transition selector order/load/save behavior |

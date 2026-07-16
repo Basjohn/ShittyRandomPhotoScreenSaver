@@ -195,6 +195,50 @@ class TestResourceCleanup:
         # Cleanup should have been attempted
         # Note: weak refs may have been collected
 
+    def test_unregister_can_forget_already_released_native_resource(self):
+        manager = ResourceManager()
+        cleanup_called = []
+
+        class TestResource:
+            pass
+
+        obj = TestResource()
+        resource_id = manager.register(
+            obj,
+            ResourceType.NATIVE_HANDLE,
+            "already released handle",
+            cleanup_handler=lambda _resource: cleanup_called.append(True),
+        )
+
+        assert manager.unregister(resource_id, force=True, cleanup=False) is True
+        assert cleanup_called == []
+        assert resource_id not in manager._resources
+
+    def test_usage_counts_are_atomic_and_include_gl_breakdown(self):
+        manager = ResourceManager()
+
+        class TestResource:
+            pass
+
+        plain = TestResource()
+        texture = TestResource()
+        manager.register(plain, ResourceType.UNKNOWN, "plain")
+        manager.register(
+            texture,
+            ResourceType.NATIVE_HANDLE,
+            "texture",
+            gl_handle_type="texture",
+        )
+
+        assert manager.get_usage_counts() == {
+            "total": 2,
+            "gl_total": 1,
+            "gl_texture": 1,
+            "gl_vbo": 0,
+            "gl_vao": 0,
+            "gl_program": 0,
+        }
+
     def test_cleanup_all_idempotent(self):
         """Test that cleanup_all can be called multiple times."""
         manager = ResourceManager()

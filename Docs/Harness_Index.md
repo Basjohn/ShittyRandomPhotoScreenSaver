@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-12
+Last updated: 2026-07-16
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -36,7 +36,7 @@ python -m pytest tests/test_default_settings_editor.py tests/test_regenerate_sst
   - The editor changes fresh/reset defaults, not the current user's saved settings.
 
 ### WidgetsTab lazy-section and settings-lifetime slice
-- Purpose: protect descriptor-owned WidgetsTab section routing, lazy hydration, hydrated-only normal save collection, the still-loud direct unhydrated-save guard, visualizer-section persistence, and stale settings-slider QObject lifetime handling.
+- Purpose: protect descriptor-owned WidgetsTab section routing, exactly-once scoped lazy hydration without a constructor-time broad reload, hydrated-only normal save collection, the still-loud direct unhydrated-save guard, visualizer-section persistence, and stale settings-slider QObject lifetime handling.
 - Use when:
   - editing `ui/tabs/widgets_tab.py`
   - editing `ui/tabs/widgets_tab_media.py`
@@ -259,11 +259,11 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --
 python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log --max-samples 8
 ```
 - Start runtime collection with `--usage`; combine it with `--perf --viz` when diagnosing visualizer/cadence pressure. The parser auto-merges `screensaver_usage.log` beside the primary `screensaver_perf.log` when present, while `--usage-log` selects an explicit sidecar.
-- `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager activity, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero.
-- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, coarse RSS/thread/handle/VRAM growth, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. Correlation is evidence, not automatic root-cause proof.
+- `--usage` samples about every 15 seconds and records main-plus-child CPU, system CPU, RSS/private/VMS, thread/handle/IO totals, ThreadManager submitted/completed/failed activity, app-shared ResourceManager totals and GL texture/VBO/VAO/program registrations, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable or unsupported, never measured zero.
+- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, primed-baseline RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager/texture-registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, first-frame/reactivity safeguard failures, and usage samples close to visualizer timing warnings. Correlation is evidence, not automatic root-cause proof.
 - Focused implementation bar:
 ```powershell
-python -m pytest tests/test_usage_sampler.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
+python -m pytest tests/test_usage_sampler.py tests/test_resource_manager.py tests/test_gl_texture_streaming.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
 ```
 - Non-interference is mandatory: no tray probe, unmanaged thread, per-frame query, UI-thread collection/logging, repaint/update, mode retuning, source-cadence change, or automatic quality reduction. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
 - Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.

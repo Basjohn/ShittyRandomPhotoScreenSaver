@@ -1,6 +1,6 @@
 # Test Suite Guide
 
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 Testing strategy, execution guidance, and minimum quality bar.
 
@@ -49,6 +49,14 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Explicit storage roots honor the exact requested profile while ordinary production construction retains argv-based Normal/MC profile detection.
 - `tests/test_image_pipeline.py`
   Image-cache/prefetch behavior plus bounded per-display replacement after a missing or worker-rejected candidate, atomic common-candidate replacement for same-image multi-monitor mode, and the no-direct-`QTimer.singleShot` ownership bar.
+- `tests/test_gl_texture_streaming.py`
+  GL texture/PBO/geometry/visualizer-native ownership: four-texture active-plus-adjacent cache bounds, active-pair-safe eviction, one grow-only PBO replacement, partial allocation/registration/initialization cleanup, valid-context ResourceManager deletion, invalid-context abandonment, and exactly-once Spotify overlay program/VAO/VBO release.
+- `tests/test_resource_manager.py`
+  Central resource registration/cleanup, app-shared ownership, native-handle tracking, and explicit `unregister(..., cleanup=False)` behavior for already-released or context-invalid native resources.
+- `tests/test_usage_sampler.py`
+  Low-pressure whole-process sampler collection/logging, overlap/cadence guards, ThreadManager snapshots, app-shared ResourceManager/GL registration fields, and shutdown behavior without UI-thread OS collection.
+- `tests/test_transition_perf_health_parser.py`
+  Render/paint/visualizer/cache/settings health parsing plus usage-sidecar primed CPU/memory/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-growth, and bounded texture-cache cleanup anomaly contracts.
 - `tests/test_steam_credentials.py`
   Steam-family strict credential storage, DPAPI-only persistence, plaintext rejection, redaction/leak guards, opaque account cache keys/metadata routing, disconnect/cache-clear semantics, SST import/export stripping, and UI-safe credential input/status contracts.
 - `tests/test_steam_openid.py`

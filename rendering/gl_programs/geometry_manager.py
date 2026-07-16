@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ctypes
 import logging
-from typing import Optional
+from typing import Any, Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,11 @@ class GLGeometryManager:
         self._box_vbo: int = 0
         self._box_vertex_count: int = 0
         self._initialized: bool = False
+        self._resource_manager: Any | None = None
+        self._quad_vao_rid: str | None = None
+        self._quad_vbo_rid: str | None = None
+        self._box_vao_rid: str | None = None
+        self._box_vbo_rid: str | None = None
     
     @property
     def quad_vao(self) -> int:
@@ -85,14 +90,17 @@ class GLGeometryManager:
         
         try:
             if not self._create_quad_geometry():
+                self.cleanup()
                 return False
             if not self._create_box_geometry():
+                self.cleanup()
                 return False
             self._initialized = True
             logger.debug("[GL GEOMETRY] Geometry initialized")
             return True
         except Exception as e:
             logger.error("[GL GEOMETRY] Failed to initialize: %s", e)
+            self.cleanup()
             return False
     
     def _create_quad_geometry(self) -> bool:
@@ -138,6 +146,7 @@ class GLGeometryManager:
             try:
                 from core.resources.manager import ResourceManager
                 rm = ResourceManager.get_or_create_app_shared()
+                self._resource_manager = rm
                 self._quad_vao_rid = rm.register_gl_vao(
                     self._quad_vao, description="GeometryManager quad VAO"
                 )
@@ -146,8 +155,6 @@ class GLGeometryManager:
                 )
             except Exception as e:
                 logger.debug("[GL GEOMETRY] Failed to register quad handles: %s", e)
-                self._quad_vao_rid = None
-                self._quad_vbo_rid = None
             
             logger.debug("[GL GEOMETRY] Quad geometry created: VAO=%d, VBO=%d", self._quad_vao, self._quad_vbo)
             return True
@@ -252,6 +259,7 @@ class GLGeometryManager:
             try:
                 from core.resources.manager import ResourceManager
                 rm = ResourceManager.get_or_create_app_shared()
+                self._resource_manager = rm
                 self._box_vao_rid = rm.register_gl_vao(
                     self._box_vao, description="GeometryManager box VAO"
                 )
@@ -260,8 +268,6 @@ class GLGeometryManager:
                 )
             except Exception as e:
                 logger.debug("[GL GEOMETRY] Failed to register box handles: %s", e)
-                self._box_vao_rid = None
-                self._box_vbo_rid = None
             
             logger.debug("[GL GEOMETRY] Box geometry created: VAO=%d, VBO=%d, vertices=%d",
                         self._box_vao, self._box_vbo, self._box_vertex_count)
@@ -329,26 +335,104 @@ class GLGeometryManager:
         Must be called with a valid GL context.
         """
         if gl is None:
-            self._initialized = False
+            self.abandon()
             return
         
-        try:
-            if self._quad_vbo:
-                gl.glDeleteBuffers(1, [self._quad_vbo])
-            if self._quad_vao:
-                gl.glDeleteVertexArrays(1, [self._quad_vao])
-            if self._box_vbo:
-                gl.glDeleteBuffers(1, [self._box_vbo])
-            if self._box_vao:
-                gl.glDeleteVertexArrays(1, [self._box_vao])
-            logger.debug("[GL GEOMETRY] Geometry cleaned up")
-        except Exception as e:
-            logger.debug("[GL GEOMETRY] Cleanup error: %s", e)
+        def _release(
+            handle: int,
+            resource_id: str | None,
+            delete_direct: Callable[[int], None],
+        ) -> None:
+            if not handle:
+                return
+            if resource_id and self._resource_manager is not None:
+                try:
+                    if self._resource_manager.unregister(resource_id, force=True):
+                        return
+                    return
+                except Exception:
+                    logger.debug(
+                        "[GL GEOMETRY] Managed release failed for handle %s",
+                        handle,
+                        exc_info=True,
+                    )
+                    try:
+                        self._resource_manager.unregister(
+                            resource_id,
+                            force=True,
+                            cleanup=False,
+                        )
+                    except Exception:
+                        pass
+            try:
+                delete_direct(handle)
+            except Exception as e:
+                logger.debug("[GL GEOMETRY] Cleanup error: %s", e)
+
+        _release(
+            self._quad_vbo,
+            self._quad_vbo_rid,
+            lambda handle: gl.glDeleteBuffers(1, [handle]),
+        )
+        _release(
+            self._quad_vao,
+            self._quad_vao_rid,
+            lambda handle: gl.glDeleteVertexArrays(1, [handle]),
+        )
+        _release(
+            self._box_vbo,
+            self._box_vbo_rid,
+            lambda handle: gl.glDeleteBuffers(1, [handle]),
+        )
+        _release(
+            self._box_vao,
+            self._box_vao_rid,
+            lambda handle: gl.glDeleteVertexArrays(1, [handle]),
+        )
+        logger.debug("[GL GEOMETRY] Geometry cleaned up")
         
         self._quad_vao = 0
         self._quad_vbo = 0
         self._box_vao = 0
         self._box_vbo = 0
+        self._quad_vao_rid = None
+        self._quad_vbo_rid = None
+        self._box_vao_rid = None
+        self._box_vbo_rid = None
+        self._box_vertex_count = 0
+        self._initialized = False
+
+    def abandon(self) -> None:
+        """Drop registrations after the owning GL context is already invalid."""
+        if self._resource_manager is not None:
+            for resource_id in (
+                self._quad_vbo_rid,
+                self._quad_vao_rid,
+                self._box_vbo_rid,
+                self._box_vao_rid,
+            ):
+                if not resource_id:
+                    continue
+                try:
+                    self._resource_manager.unregister(
+                        resource_id,
+                        force=True,
+                        cleanup=False,
+                    )
+                except Exception:
+                    logger.debug(
+                        "[GL GEOMETRY] Failed to abandon registration %s",
+                        resource_id,
+                        exc_info=True,
+                    )
+        self._quad_vao = 0
+        self._quad_vbo = 0
+        self._box_vao = 0
+        self._box_vbo = 0
+        self._quad_vao_rid = None
+        self._quad_vbo_rid = None
+        self._box_vao_rid = None
+        self._box_vbo_rid = None
         self._box_vertex_count = 0
         self._initialized = False
 
