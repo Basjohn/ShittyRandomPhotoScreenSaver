@@ -549,6 +549,34 @@ class TestThreadManagerStats:
         assert ThreadPoolType.COMPUTE in manager._stats
         manager.shutdown()
 
+    def test_high_rate_task_stats_do_not_schedule_ui_mutation_drains(self, monkeypatch):
+        manager = ThreadManager(
+            config={ThreadPoolType.IO: 1, ThreadPoolType.COMPUTE: 4},
+        )
+        scheduled: list[tuple] = []
+        manager.single_shot = lambda *args, **kwargs: scheduled.append((args, kwargs))
+
+        futures_done = threading.Event()
+        remaining = {"count": 200}
+        lock = threading.Lock()
+
+        def callback(_result):
+            with lock:
+                remaining["count"] -= 1
+                if remaining["count"] == 0:
+                    futures_done.set()
+
+        for _ in range(200):
+            manager.submit_compute_task(lambda: 1, callback=callback)
+
+        assert futures_done.wait(timeout=3.0)
+        stats = manager.get_pool_stats()["compute"]
+        assert stats == {"submitted": 200, "completed": 200, "failed": 0}
+        assert scheduled == []
+        assert not hasattr(manager, "_mut_q")
+        assert not hasattr(manager, "_stats_tb")
+        manager.shutdown()
+
 
 class TestTaskPriority:
     """Task priority enum tests."""

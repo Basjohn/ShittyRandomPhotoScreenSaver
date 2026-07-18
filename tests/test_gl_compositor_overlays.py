@@ -153,6 +153,29 @@ def test_paint_qpainter_overlays_gl_skips_painter_when_no_overlays(monkeypatch):
     shader_dispatch.paint_qpainter_overlays_gl(comp)
 
 
+def test_paint_qpainter_overlays_gl_skips_inactive_visualizer_layer(monkeypatch):
+    comp = _OverlayWidget()
+    comp._spotify_visualizer_layer = SimpleNamespace(
+        should_paint_scene=lambda: False,
+    )
+
+    monkeypatch.setattr(shader_dispatch, "is_perf_metrics_enabled", lambda: False)
+    monkeypatch.setattr(
+        shader_dispatch,
+        "QPainter",
+        lambda comp: (_ for _ in ()).throw(
+            AssertionError("inactive visualizer must not open QPainter")
+        ),
+    )
+    monkeypatch.setattr(
+        shader_dispatch,
+        "gl",
+        SimpleNamespace(glUseProgram=lambda program: None),
+    )
+
+    shader_dispatch.paint_qpainter_overlays_gl(comp)
+
+
 def test_visualizer_scene_routes_only_to_compositor_layer():
     events: list[str] = []
     comp = SimpleNamespace(

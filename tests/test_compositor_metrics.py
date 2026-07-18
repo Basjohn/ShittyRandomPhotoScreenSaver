@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from rendering.adaptive_timer import _queue_safe_widget_update
+from rendering.adaptive_timer import _mark_widget_update_pending, _queue_safe_widget_update
 from rendering.gl_compositor import GLCompositorWidget
 from rendering.gl_compositor_pkg.compositor_metrics import _is_active_transition_paint_window
 from rendering.gl_compositor_pkg.compositor_metrics import record_render_timer_tick
@@ -63,8 +63,9 @@ def test_complete_transition_finalizes_paint_metrics():
         def _finalize_paint_metrics(self, outcome="stopped"):
             calls.append(f"finalize_paint:{outcome}")
 
-        def update(self):
-            calls.append("update")
+        def request_scene_update(self, *, source="scene"):
+            calls.append(f"request:{source}")
+            return True
 
     stub = _StubCompositor()
 
@@ -108,7 +109,11 @@ def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
         _queue_safe_widget_update(widget)
         assert getattr(widget, "_srpss_timer_update_pending") is True
 
-        monkeypatch.setattr(paint_module, "paintGL_impl", lambda _widget: calls.append("paint"))
+        def _paint(_widget):
+            assert getattr(widget, "_srpss_timer_update_pending") is True
+            calls.append("paint")
+
+        monkeypatch.setattr(paint_module, "paintGL_impl", _paint)
         paint_module.handle_paintGL(widget)
 
         assert calls[:2] == ["update", "paint"]
@@ -116,6 +121,81 @@ def test_handle_paintgl_consumes_pending_timer_update(monkeypatch):
     finally:
         adaptive_timer.ThreadManager.run_on_ui_thread = original_run
         adaptive_timer.Shiboken = original_shiboken
+
+
+def test_presentation_owner_acknowledges_latest_latched_generation(monkeypatch):
+    queued: list[object] = []
+
+    class _StubCompositor:
+        def __init__(self):
+            self._render_shutdown_requested = False
+            self._presentation_dirty_generation = 1
+            self._presentation_requested_generation = 0
+            self._presentation_ack_generation = 0
+            self._presentation_paint_generation = 0
+            self._presentation_paint_active = False
+            self._transition_completion_due = None
+            self._transition_terminal_generation = 0
+
+        def _request_latched_presentation(self):
+            raise AssertionError("no generation should remain after acknowledgement")
+
+    widget = _StubCompositor()
+
+    def _queue(target):
+        if getattr(target, "_srpss_timer_update_pending", False):
+            return False
+        _mark_widget_update_pending(target)
+        queued.append(target)
+        return True
+
+    monkeypatch.setattr("rendering.gl_compositor._queue_safe_widget_update", _queue)
+
+    assert GLCompositorWidget._present_scene_from_coordinator(
+        widget,
+        continuous=False,
+    ) is True
+    assert widget._presentation_requested_generation == 1
+
+    widget._presentation_dirty_generation = 2
+    assert GLCompositorWidget._present_scene_from_coordinator(
+        widget,
+        continuous=False,
+    ) is False
+    assert widget._presentation_requested_generation == 2
+    assert queued == [widget]
+
+    paint_generation = GLCompositorWidget._presentation_paint_started(widget)
+    assert paint_generation == 2
+    assert widget._srpss_timer_update_pending is True
+
+    GLCompositorWidget._presentation_paint_completed(widget, paint_generation)
+    assert widget._presentation_ack_generation == 2
+    assert widget._srpss_timer_update_pending is False
+
+
+def test_terminal_transition_waits_for_matching_paint_generation():
+    completions: list[str] = []
+    demand_requests: list[str] = []
+    widget = SimpleNamespace(
+        _render_shutdown_requested=False,
+        _presentation_dirty_generation=4,
+        _presentation_requested_generation=4,
+        _presentation_ack_generation=2,
+        _presentation_paint_active=True,
+        _transition_completion_due=(7, lambda: completions.append("complete")),
+        _transition_terminal_generation=4,
+        _transition_animation_generation=7,
+        _request_latched_presentation=lambda: demand_requests.append("request") or True,
+    )
+
+    GLCompositorWidget._presentation_paint_completed(widget, 3)
+    assert completions == []
+    assert demand_requests == ["request"]
+
+    GLCompositorWidget._presentation_paint_completed(widget, 4)
+    assert completions == ["complete"]
+    assert widget._transition_completion_due is None
 
 
 def test_render_timer_metrics_separate_wakeups_from_accepted_updates(monkeypatch):
@@ -360,6 +440,9 @@ def test_start_render_strategy_resets_metrics_when_resuming_paused_timer():
         def _reset_render_timer_metrics(self, target_fps):
             calls.append(("reset", target_fps))
 
+        def _ensure_presentation_owner_configured(self):
+            return GLCompositorWidget._ensure_presentation_owner_configured(self)
+
     stub = _StubCompositor()
 
     GLCompositorWidget._start_render_strategy(stub)
@@ -398,6 +481,9 @@ def test_start_render_strategy_keeps_metrics_when_timer_already_running():
 
         def _reset_render_timer_metrics(self, target_fps):
             calls.append(("reset", target_fps))
+
+        def _ensure_presentation_owner_configured(self):
+            return GLCompositorWidget._ensure_presentation_owner_configured(self)
 
     stub = _StubCompositor()
 

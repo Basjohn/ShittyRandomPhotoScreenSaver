@@ -78,7 +78,7 @@ def test_compositor_prewarms_all_modes_while_legacy_keeps_incremental_warmup():
 def test_layer_geometry_reuses_buffers_for_position_only_changes():
     requests: list[str] = []
     compositor = SimpleNamespace(
-        request_scene_update=lambda: requests.append("update") or True,
+        request_scene_update=lambda **_kwargs: requests.append("update") or True,
     )
     layer = _bare_layer(
         _compositor=compositor,
@@ -97,13 +97,32 @@ def test_layer_geometry_reuses_buffers_for_position_only_changes():
     assert requests == ["update", "update"]
 
 
+def test_layer_scene_predicate_matches_visible_active_renderer_contract():
+    visualizer = SimpleNamespace(
+        _compositor_visualizer_active=True,
+        isVisible=lambda: True,
+    )
+    display = SimpleNamespace(spotify_visualizer_widget=visualizer)
+    layer = _bare_layer(
+        _compositor=SimpleNamespace(parent=lambda: display),
+        _renderer=SimpleNamespace(_enabled=True),
+        _geometry=QRect(0, 0, 320, 180),
+        _visible=True,
+    )
+
+    assert layer.should_paint_scene() is True
+
+    visualizer._compositor_visualizer_active = False
+    assert layer.should_paint_scene() is False
+
+
 def test_layer_surface_invalidation_keeps_old_buffers_until_replacement():
     requests: list[str] = []
     front = object()
     back = object()
     layer = _bare_layer(
         _compositor=SimpleNamespace(
-            request_scene_update=lambda: requests.append("update") or True,
+            request_scene_update=lambda **_kwargs: requests.append("update") or True,
         ),
         _front=front,
         _back=back,
@@ -281,7 +300,7 @@ def test_compositor_physical_cache_invalidation_reaches_visualizer_layer():
         _spotify_visualizer_layer=SimpleNamespace(
             invalidate_surface_metrics=lambda *, reason: reasons.append(reason),
         ),
-        request_scene_update=lambda: True,
+        request_scene_update=lambda **_kwargs: True,
     )
 
     GLCompositorWidget.invalidate_physical_surface_cache(
@@ -820,23 +839,24 @@ def test_layer_prepare_failure_backoff_does_not_retry_each_compositor_paint(
     assert layer._prepare_attempted_this_paint is False
 
 
-def test_compositor_scene_update_coalesces_with_pending_display_paint(monkeypatch):
-    calls: list[object] = []
-    monkeypatch.setattr(
-        "rendering.gl_compositor._queue_safe_widget_update",
-        lambda widget: calls.append(widget) or True,
-    )
+def test_compositor_scene_update_latches_new_generation_while_paint_is_pending():
+    calls: list[str] = []
     compositor = SimpleNamespace(
         _render_shutdown_requested=False,
         _srpss_timer_update_pending=False,
+        _presentation_dirty_generation=0,
+        _presentation_source_counts={},
+        _request_latched_presentation=lambda: calls.append("request") or True,
     )
 
     assert GLCompositorWidget.request_scene_update(compositor) is True
-    assert calls == [compositor]
+    assert compositor._presentation_dirty_generation == 1
+    assert calls == ["request"]
 
     compositor._srpss_timer_update_pending = True
-    assert GLCompositorWidget.request_scene_update(compositor) is False
-    assert calls == [compositor]
+    assert GLCompositorWidget.request_scene_update(compositor) is True
+    assert compositor._presentation_dirty_generation == 2
+    assert calls == ["request", "request"]
 
 
 def test_ensure_visualizer_renderer_prefers_display_compositor(monkeypatch):
@@ -941,6 +961,99 @@ def test_missing_opengl_compositor_does_not_start_legacy_without_rollback(monkey
         widget._spotify_visualizer_surface_terminal_reason
         == "compositor_unavailable"
     )
+
+
+def test_staggered_hidden_display_treats_missing_compositor_as_pending(monkeypatch):
+    monkeypatch.setattr(display_image_ops, "single_surface_visualizer_enabled", lambda: True)
+    monkeypatch.setattr(
+        display_image_ops,
+        "_create_legacy_spotify_bars_overlay",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("pending display startup must not create legacy")
+        ),
+    )
+    visualizer = SimpleNamespace(_vis_mode_str="spectrum")
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=visualizer,
+        _spotify_bars_overlay=None,
+        _gl_compositor=None,
+        _render_surface=None,
+        _backend_selection=SimpleNamespace(resolved_mode="opengl"),
+        _spotify_visualizer_surface_terminal_reason="",
+        screen_index=1,
+        isVisible=lambda: False,
+    )
+
+    assert display_image_ops._ensure_spotify_bars_overlay(widget) is None
+    assert widget._spotify_visualizer_surface_terminal_reason == ""
+
+
+def test_staggered_hidden_display_preserves_existing_terminal_failure(monkeypatch):
+    monkeypatch.setattr(display_image_ops, "single_surface_visualizer_enabled", lambda: True)
+    visualizer = SimpleNamespace(_vis_mode_str="spectrum")
+    widget = SimpleNamespace(
+        spotify_visualizer_widget=visualizer,
+        _spotify_bars_overlay=None,
+        _gl_compositor=None,
+        _render_surface=None,
+        _backend_selection=SimpleNamespace(resolved_mode="opengl"),
+        _spotify_visualizer_surface_terminal_reason="compositor_layer_creation_failed",
+        screen_index=1,
+        isVisible=lambda: False,
+    )
+    visualizer.parent = lambda: widget
+
+    assert display_image_ops._ensure_spotify_bars_overlay(widget) is None
+    assert (
+        widget._spotify_visualizer_surface_terminal_reason
+        == "compositor_layer_creation_failed"
+    )
+    assert startup_staging.parent_renderer_startup_retry_allowed(visualizer) is False
+
+
+def test_staggered_hidden_display_waits_without_terminal_log_or_short_retry(
+    monkeypatch,
+    caplog,
+):
+    scheduled: list[int] = []
+    parent = SimpleNamespace(
+        _spotify_bars_overlay=None,
+        _gl_compositor=None,
+        _render_surface=None,
+        _spotify_visualizer_surface_terminal_reason="",
+        isVisible=lambda: False,
+    )
+    widget = SimpleNamespace(
+        parent=lambda: parent,
+        _enabled=True,
+        _startup_reveal_pending=True,
+        _startup_require_playing_before_reveal=False,
+        _spotify_playing=False,
+        _startup_idle_reveal_requires_authoritative_media=False,
+        _startup_has_authoritative_media_update=False,
+        _waiting_for_fresh_frame=False,
+        _startup_renderer_terminal_logged=False,
+    )
+    monkeypatch.setattr(startup_staging, "_qt_object_is_valid", lambda _widget: True)
+    monkeypatch.setattr(startup_staging, "is_anchor_visible", lambda _widget: True)
+    monkeypatch.setattr(
+        startup_staging,
+        "is_parent_renderer_ready",
+        lambda _widget: False,
+    )
+    monkeypatch.setattr(
+        startup_staging,
+        "schedule_ready_driven_startup_reveal",
+        lambda _widget, *, delay_ms: scheduled.append(delay_ms),
+    )
+
+    with caplog.at_level("ERROR"):
+        startup_staging.finish_staged_startup_reveal(widget, reason="test")
+
+    assert startup_staging.parent_renderer_startup_is_staggered_pending(widget) is True
+    assert scheduled == []
+    assert widget._startup_renderer_terminal_logged is False
+    assert "terminal hidden state" not in caplog.text
 
 
 def test_transient_compositor_prewarm_does_not_fall_back(monkeypatch):

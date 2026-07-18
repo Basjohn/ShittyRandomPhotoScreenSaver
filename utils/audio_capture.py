@@ -11,11 +11,20 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Any
 import os
 import platform
+import threading
 import time
 
 from core.logging.logger import get_logger, is_verbose_logging
 
 logger = get_logger(__name__)
+
+
+def _name_native_audio_callback_thread(name: str) -> None:
+    """Expose foreign PortAudio callback threads to low-pressure telemetry."""
+
+    current = threading.current_thread()
+    if current.name.startswith("Dummy-"):
+        current.name = name
 
 
 @dataclass
@@ -224,8 +233,14 @@ class PyAudioWPatchBackend(AudioCaptureBackend):
         # Create stream callback
         self._callback = callback  # Store for restart
         
+        callback_thread_named = False
+
         def stream_callback(in_data, frame_count, time_info, status):
+            nonlocal callback_thread_named
             try:
+                if not callback_thread_named:
+                    _name_native_audio_callback_thread("audio_capture_pyaudio")
+                    callback_thread_named = True
                 self._last_callback_ts = time.time()
                 samples = self._np.frombuffer(in_data, dtype=self._np.float32)
                 try:
@@ -453,8 +468,14 @@ class SounddeviceBackend(AudioCaptureBackend):
         # Create callback wrapper
         self._callback = callback  # Store for restart
 
+        callback_thread_named = False
+
         def stream_callback(indata, frames, time_info, status):
+            nonlocal callback_thread_named
             try:
+                if not callback_thread_named:
+                    _name_native_audio_callback_thread("audio_capture_sounddevice")
+                    callback_thread_named = True
                 self._last_callback_ts = time.time()
                 # Mix to mono if stereo
                 if indata.shape[1] > 1:

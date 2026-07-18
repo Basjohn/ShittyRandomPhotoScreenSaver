@@ -59,4 +59,10 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._clear_all_transitions()
     if snap_to_new and new_pm is not None:
         widget._base_pixmap = new_pm
-    widget.update()
+    requester = getattr(widget, "request_scene_update", None)
+    if callable(requester):
+        requester(source="transition_cancel")
+    else:
+        logger.error(
+            "[GL COMPOSITOR] Presentation owner unavailable during transition cancellation"
+        )

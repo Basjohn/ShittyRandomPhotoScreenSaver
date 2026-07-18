@@ -287,7 +287,13 @@ def perform_activation_refresh(widget, reason: str) -> None:
     comp = getattr(widget, "_gl_compositor", None)
     if comp is not None:
         try:
-            comp.update()
+            requester = getattr(comp, "request_scene_update", None)
+            if callable(requester):
+                requester(source="activation_refresh")
+            else:
+                logger.error(
+                    "[DISPLAY_WIDGET] GL compositor presentation owner unavailable during activation refresh"
+                )
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 

@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import os
+import re
+import threading
 import time
+import weakref
 from dataclasses import dataclass
 from typing import Any, Iterable
 
@@ -30,14 +33,20 @@ def _fmt(value: float | int | None, decimals: int = 1) -> str:
     return f"{value:.{decimals}f}"
 
 
+def _fmt_hot_threads(values: tuple[tuple[str, float], ...]) -> str:
+    if not values:
+        return "na"
+    return "|".join(f"{name}:{cpu_pct:.1f}" for name, cpu_pct in values)
+
+
 @dataclass(frozen=True)
 class ProcessUsageSnapshot:
     pids: tuple[int, ...]
     process_count: int
     child_count: int
-    cpu_app_pct: float
-    cpu_main_pct: float
-    cpu_system_pct: float
+    cpu_app_pct: float | None
+    cpu_main_pct: float | None
+    cpu_system_pct: float | None
     rss_app_mb: float
     rss_main_mb: float
     private_app_mb: float | None
@@ -47,6 +56,7 @@ class ProcessUsageSnapshot:
     io_read_mb: float | None
     io_write_mb: float | None
     cpu_primed: bool
+    cpu_hot_threads: tuple[tuple[str, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -67,16 +77,97 @@ class ProcessUsageCollector:
     def __init__(self, process: psutil.Process | None = None) -> None:
         self._main = process or psutil.Process(os.getpid())
         self._processes: dict[int, psutil.Process] = {self._main.pid: self._main}
-        self._sample_count = 0
-        self._prime_cpu(self._main)
-        psutil.cpu_percent(interval=None)
+        self._last_sample_at: float | None = None
+        self._process_cpu_totals: dict[int, float] = {}
+        self._thread_cpu_totals: dict[tuple[int, int], float] = {}
+        self._system_cpu_total: float | None = None
+        self._system_cpu_busy: float | None = None
+        self._lock = threading.Lock()
 
     @staticmethod
-    def _prime_cpu(process: psutil.Process) -> None:
+    def _process_cpu_total(process: psutil.Process) -> float | None:
         try:
-            process.cpu_percent(interval=None)
-        except (psutil.Error, OSError):
-            pass
+            times = process.cpu_times()
+            return max(
+                0.0,
+                float(getattr(times, "user", 0.0) or 0.0)
+                + float(getattr(times, "system", 0.0) or 0.0),
+            )
+        except (psutil.Error, OSError, AttributeError):
+            return None
+
+    @staticmethod
+    def _system_cpu_totals() -> tuple[float | None, float | None]:
+        try:
+            times = psutil.cpu_times()
+            values = times._asdict() if hasattr(times, "_asdict") else {}
+            if not values:
+                return None, None
+            total = sum(
+                max(0.0, float(value or 0.0))
+                for name, value in values.items()
+                if name not in {"guest", "guest_nice"}
+            )
+            idle = max(0.0, float(values.get("idle", 0.0) or 0.0))
+            idle += max(0.0, float(values.get("iowait", 0.0) or 0.0))
+            return total, max(0.0, total - idle)
+        except (psutil.Error, OSError, AttributeError, TypeError, ValueError):
+            return None, None
+
+    @staticmethod
+    def _safe_thread_name(value: str) -> str:
+        normalized = re.sub(r"[^A-Za-z0-9_.-]+", "_", str(value or "thread"))
+        return normalized.strip("_")[:48] or "thread"
+
+    def _thread_cpu_snapshot(
+        self,
+        processes: list[psutil.Process],
+        *,
+        elapsed: float | None,
+    ) -> tuple[tuple[tuple[str, float], ...], dict[tuple[int, int], float]]:
+        current: dict[tuple[int, int], float] = {}
+        samples: list[tuple[str, float]] = []
+        main_names: dict[int, str] = {}
+        try:
+            main_names = {
+                int(thread.native_id): self._safe_thread_name(thread.name)
+                for thread in threading.enumerate()
+                if getattr(thread, "native_id", None) is not None
+            }
+        except Exception:
+            main_names = {}
+
+        for process in processes:
+            try:
+                thread_rows = process.threads()
+            except (psutil.Error, OSError, AttributeError):
+                continue
+            for row in thread_rows:
+                try:
+                    tid = int(row.id)
+                    total = max(
+                        0.0,
+                        float(getattr(row, "user_time", 0.0) or 0.0)
+                        + float(getattr(row, "system_time", 0.0) or 0.0),
+                    )
+                except (AttributeError, TypeError, ValueError):
+                    continue
+                key = (int(process.pid), tid)
+                current[key] = total
+                previous = self._thread_cpu_totals.get(key)
+                if previous is None or elapsed is None or elapsed <= 0.0:
+                    continue
+                cpu_pct = max(0.0, (total - previous) / elapsed * 100.0)
+                if cpu_pct < 0.1:
+                    continue
+                if process.pid == self._main.pid:
+                    name = main_names.get(tid, f"main_tid_{tid}")
+                else:
+                    name = f"child_{process.pid}_tid_{tid}"
+                samples.append((name, cpu_pct))
+
+        samples.sort(key=lambda item: item[1], reverse=True)
+        return tuple(samples[:4]), current
 
     def _live_processes(self) -> list[psutil.Process]:
         try:
@@ -93,7 +184,6 @@ class ProcessUsageCollector:
             if cached is None:
                 cached = child
                 self._processes[child.pid] = cached
-                self._prime_cpu(cached)
             live.append(cached)
             live_pids.add(child.pid)
 
@@ -103,9 +193,22 @@ class ProcessUsageCollector:
         return live
 
     def collect(self) -> ProcessUsageSnapshot:
+        with self._lock:
+            return self._collect_locked()
+
+    def _collect_locked(self) -> ProcessUsageSnapshot:
+        sample_at = time.monotonic()
+        elapsed = (
+            None
+            if self._last_sample_at is None
+            else max(0.0, sample_at - self._last_sample_at)
+        )
         processes = self._live_processes()
-        main_cpu = 0.0
-        app_cpu = 0.0
+        main_cpu: float | None = None
+        app_cpu: float | None = None
+        current_process_cpu: dict[int, float] = {}
+        process_cpu_deltas: dict[int, float] = {}
+        all_process_cpu_primed = elapsed is not None and elapsed > 0.0
         rss_main = 0
         rss_app = 0
         private_app = 0
@@ -121,18 +224,26 @@ class ProcessUsageCollector:
 
         for process in processes:
             try:
-                cpu = max(0.0, float(process.cpu_percent(interval=None)))
                 memory = process.memory_info()
                 live_pids.append(process.pid)
             except (psutil.Error, OSError):
                 continue
 
-            app_cpu += cpu
+            cpu_total = self._process_cpu_total(process)
+            if cpu_total is None:
+                all_process_cpu_primed = False
+            else:
+                current_process_cpu[process.pid] = cpu_total
+                previous_cpu = self._process_cpu_totals.get(process.pid)
+                if previous_cpu is None or elapsed is None or elapsed <= 0.0:
+                    all_process_cpu_primed = False
+                else:
+                    process_cpu_deltas[process.pid] = max(0.0, cpu_total - previous_cpu)
+
             rss = int(getattr(memory, "rss", 0) or 0)
             rss_app += rss
             vms_app += int(getattr(memory, "vms", 0) or 0)
             if process.pid == self._main.pid:
-                main_cpu = cpu
                 rss_main = rss
 
             private_value = getattr(memory, "private", None)
@@ -158,7 +269,33 @@ class ProcessUsageCollector:
             except (psutil.Error, OSError, AttributeError):
                 io_available = False
 
-        system_cpu = max(0.0, float(psutil.cpu_percent(interval=None)))
+        system_total, system_busy = self._system_cpu_totals()
+        system_cpu: float | None = None
+        system_primed = (
+            self._system_cpu_total is not None
+            and self._system_cpu_busy is not None
+            and system_total is not None
+            and system_busy is not None
+        )
+        if system_primed:
+            total_delta = max(0.0, system_total - self._system_cpu_total)
+            busy_delta = max(0.0, system_busy - self._system_cpu_busy)
+            if total_delta > 0.0:
+                system_cpu = min(100.0, busy_delta / total_delta * 100.0)
+            else:
+                system_primed = False
+
+        cpu_primed = bool(all_process_cpu_primed and system_primed)
+        if cpu_primed and elapsed is not None and elapsed > 0.0:
+            app_cpu = sum(process_cpu_deltas.values()) / elapsed * 100.0
+            main_delta = process_cpu_deltas.get(self._main.pid)
+            if main_delta is not None:
+                main_cpu = main_delta / elapsed * 100.0
+
+        hot_threads, current_thread_cpu = self._thread_cpu_snapshot(
+            processes,
+            elapsed=elapsed,
+        )
         snapshot = ProcessUsageSnapshot(
             pids=tuple(sorted(live_pids)),
             process_count=len(live_pids),
@@ -174,9 +311,14 @@ class ProcessUsageCollector:
             handles_app=handles_app if handles_available else None,
             io_read_mb=_mb(io_read) if io_available else None,
             io_write_mb=_mb(io_write) if io_available else None,
-            cpu_primed=self._sample_count > 0,
+            cpu_primed=cpu_primed,
+            cpu_hot_threads=hot_threads,
         )
-        self._sample_count += 1
+        self._last_sample_at = sample_at
+        self._process_cpu_totals = current_process_cpu
+        self._thread_cpu_totals = current_thread_cpu
+        self._system_cpu_total = system_total
+        self._system_cpu_busy = system_busy
         return snapshot
 
 
@@ -359,12 +501,16 @@ class UsageTelemetryService:
         process_collector: ProcessUsageCollector | None = None,
         gpu_collector: WindowsGpuUsageCollector | None = None,
         resource_manager: Any | None = None,
+        image_cache: Any | None = None,
     ) -> None:
         self._thread_manager = thread_manager
         self._interval_ms = max(5_000, int(interval_ms))
         self._process_collector = process_collector or ProcessUsageCollector()
         self._gpu_collector = gpu_collector or WindowsGpuUsageCollector()
         self._resource_manager = resource_manager
+        self._image_cache_ref = (
+            weakref.ref(image_cache) if image_cache is not None else None
+        )
         self._timer: Any | None = None
         self._stopped = True
         self._in_flight = False
@@ -470,6 +616,8 @@ class UsageTelemetryService:
                 "rm_gl_program": None,
                 "rm_gl_framebuffer": None,
                 "rm_gl_renderbuffer": None,
+                "rm_gl_texture_est_bytes": None,
+                "rm_gl_pbo_est_bytes": None,
             }
         try:
             get_usage_counts = getattr(manager, "get_usage_counts", None)
@@ -484,6 +632,12 @@ class UsageTelemetryService:
                     "rm_gl_program": int(counts.get("gl_program", 0) or 0),
                     "rm_gl_framebuffer": int(counts.get("gl_framebuffer", 0) or 0),
                     "rm_gl_renderbuffer": int(counts.get("gl_renderbuffer", 0) or 0),
+                    "rm_gl_texture_est_bytes": int(
+                        counts.get("gl_texture_est_bytes", 0) or 0
+                    ),
+                    "rm_gl_pbo_est_bytes": int(
+                        counts.get("gl_pbo_est_bytes", 0) or 0
+                    ),
                 }
             gl_stats = manager.get_gl_stats()
             return {
@@ -495,6 +649,8 @@ class UsageTelemetryService:
                 "rm_gl_program": int(gl_stats.get("program", 0) or 0),
                 "rm_gl_framebuffer": int(gl_stats.get("framebuffer", 0) or 0),
                 "rm_gl_renderbuffer": int(gl_stats.get("renderbuffer", 0) or 0),
+                "rm_gl_texture_est_bytes": None,
+                "rm_gl_pbo_est_bytes": None,
             }
         except Exception:
             return {
@@ -506,7 +662,43 @@ class UsageTelemetryService:
                 "rm_gl_program": None,
                 "rm_gl_framebuffer": None,
                 "rm_gl_renderbuffer": None,
+                "rm_gl_texture_est_bytes": None,
+                "rm_gl_pbo_est_bytes": None,
             }
+
+    def _image_cache_snapshot(self) -> dict[str, int | float | None]:
+        empty = {
+            "img_cache_items": None,
+            "img_cache_max_items": None,
+            "img_cache_est_mb": None,
+            "img_cache_budget_mb": None,
+            "img_cache_hits": None,
+            "img_cache_misses": None,
+            "img_cache_evictions": None,
+        }
+        cache_ref = self._image_cache_ref
+        cache = cache_ref() if cache_ref is not None else None
+        if cache is None:
+            return empty
+        try:
+            stats = cache.get_stats()
+            return {
+                "img_cache_items": int(stats.get("item_count", 0) or 0),
+                "img_cache_max_items": int(stats.get("max_items", 0) or 0),
+                "img_cache_est_mb": max(
+                    0.0,
+                    float(stats.get("memory_usage_mb", 0.0) or 0.0),
+                ),
+                "img_cache_budget_mb": max(
+                    0.0,
+                    float(stats.get("max_memory_mb", 0.0) or 0.0),
+                ),
+                "img_cache_hits": int(stats.get("hits", 0) or 0),
+                "img_cache_misses": int(stats.get("misses", 0) or 0),
+                "img_cache_evictions": int(stats.get("evictions", 0) or 0),
+            }
+        except Exception:
+            return empty
 
     def _collect_and_log(
         self,
@@ -520,10 +712,12 @@ class UsageTelemetryService:
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()
             resources = self._resource_snapshot()
+            image_cache = self._image_cache_snapshot()
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "
                 "cpu_primed=%d cpu_app_pct=%s cpu_main_pct=%s cpu_system_pct=%s "
+                "cpu_hot_threads=%s "
                 "processes=%d children=%d rss_app_mb=%s rss_main_mb=%s "
                 "private_app_mb=%s vms_app_mb=%s threads_app=%d handles_app=%s "
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
@@ -531,7 +725,11 @@ class UsageTelemetryService:
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
                 "rm_total=%s rm_gl_total=%s rm_gl_texture=%s rm_gl_vbo=%s "
                 "rm_gl_vao=%s rm_gl_program=%s rm_gl_framebuffer=%s "
-                "rm_gl_renderbuffer=%s "
+                "rm_gl_renderbuffer=%s rm_gl_texture_est_mb=%s "
+                "rm_gl_pbo_est_mb=%s img_cache_items=%s "
+                "img_cache_max_items=%s img_cache_est_mb=%s "
+                "img_cache_budget_mb=%s img_cache_hits=%s "
+                "img_cache_misses=%s img_cache_evictions=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
                 "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d",
@@ -543,6 +741,7 @@ class UsageTelemetryService:
                 _fmt(process.cpu_app_pct),
                 _fmt(process.cpu_main_pct),
                 _fmt(process.cpu_system_pct),
+                _fmt_hot_threads(process.cpu_hot_threads),
                 process.process_count,
                 process.child_count,
                 _fmt(process.rss_app_mb),
@@ -569,6 +768,23 @@ class UsageTelemetryService:
                 _fmt(resources["rm_gl_program"]),
                 _fmt(resources["rm_gl_framebuffer"]),
                 _fmt(resources["rm_gl_renderbuffer"]),
+                _fmt(
+                    _mb(resources["rm_gl_texture_est_bytes"])
+                    if resources["rm_gl_texture_est_bytes"] is not None
+                    else None
+                ),
+                _fmt(
+                    _mb(resources["rm_gl_pbo_est_bytes"])
+                    if resources["rm_gl_pbo_est_bytes"] is not None
+                    else None
+                ),
+                _fmt(image_cache["img_cache_items"]),
+                _fmt(image_cache["img_cache_max_items"]),
+                _fmt(image_cache["img_cache_est_mb"]),
+                _fmt(image_cache["img_cache_budget_mb"]),
+                _fmt(image_cache["img_cache_hits"]),
+                _fmt(image_cache["img_cache_misses"]),
+                _fmt(image_cache["img_cache_evictions"]),
                 threads["tm_active"],
                 threads["tm_io_max"],
                 threads["tm_compute_max"],

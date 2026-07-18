@@ -125,9 +125,9 @@ class TestPBOPoolManagement:
                 self.registered = []
                 self.released = []
 
-            def register_gl_vbo(self, handle, description=""):
+            def register_gl_vbo(self, handle, description="", **metadata):
                 resource_id = f"pbo_{handle}"
-                self.registered.append(resource_id)
+                self.registered.append((resource_id, metadata))
                 return resource_id
 
             def unregister(self, resource_id, force=False, cleanup=True):
@@ -153,6 +153,16 @@ class TestPBOPoolManagement:
         assert second != first
         assert len(manager._pbo_pool) == manager.MAX_PBO_ENTRIES == 1
         assert manager._pbo_pool[0].pbo_id == second
+        assert resource_manager.registered == [
+            (
+                f"pbo_{first}",
+                {"estimated_bytes": 1024, "usage_bucket": "texture_pbo"},
+            ),
+            (
+                f"pbo_{second}",
+                {"estimated_bytes": 4096, "usage_bucket": "texture_pbo"},
+            ),
+        ]
         assert resource_manager.released == [(f"pbo_{first}", True, True)]
         assert manager.get_stats()["pbo_replacements"] == 1
         assert fake_gl.deleted == []

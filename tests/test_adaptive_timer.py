@@ -310,13 +310,13 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             self.assertFalse(getattr(widget, "_srpss_timer_update_dispatch_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 2)
+            self.assertEqual(len(queued), 1)
 
             _mark_widget_update_consumed(widget)
             self.assertFalse(getattr(widget, "_srpss_timer_update_pending"))
 
             _queue_safe_widget_update(widget)
-            self.assertEqual(len(queued), 3)
+            self.assertEqual(len(queued), 2)
         finally:
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
@@ -444,8 +444,8 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
             adaptive_timer.ThreadManager.run_on_ui_thread = original_run
             adaptive_timer.Shiboken = original_shiboken
 
-    def test_safe_widget_update_allows_fresh_pending_to_keep_target_cadence(self):
-        """Fresh paint-pending state should not self-throttle high-refresh cadence."""
+    def test_safe_widget_update_keeps_one_inflight_token_until_paint_completion(self):
+        """A dispatched update must not reopen the queue before paint completes."""
         class _FrameState:
             started = True
             completed = False
@@ -474,8 +474,8 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
 
             accepted = _queue_safe_widget_update(widget)
 
-            self.assertTrue(accepted)
-            self.assertEqual(len(queued), 1)
+            self.assertFalse(accepted)
+            self.assertEqual(len(queued), 0)
             self.assertTrue(getattr(widget, "_srpss_timer_update_pending"))
             self.assertEqual(widget.update_count, 0)
         finally:
@@ -629,6 +629,17 @@ class TestAdaptiveTimerAutoIdle(unittest.TestCase):
         timer.resume()
         
         self.assertEqual(timer.get_state(), TimerState.RUNNING)
+        timer.stop()
+
+    def test_demand_frame_uses_paused_owner_without_starting_continuous_lease(self):
+        timer = AdaptiveTimerStrategy(self.compositor, self.config)
+
+        self.assertTrue(timer.request_frame())
+        self.assertEqual(timer.get_state(), TimerState.PAUSED)
+        time.sleep(0.08)
+
+        self.assertGreaterEqual(self.compositor.update_count, 1)
+        self.assertEqual(timer.get_state(), TimerState.PAUSED)
         timer.stop()
 
 

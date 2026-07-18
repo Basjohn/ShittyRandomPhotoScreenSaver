@@ -123,10 +123,11 @@ def _queue_safe_widget_update(widget) -> bool:
             age_ms = _pending_widget_update_age_ms(widget)
             if age_ms is None or age_ms >= _PENDING_UPDATE_LOG_AFTER_MS:
                 _maybe_log_pending_widget_update(widget)
-                return False
-            setattr(widget, "_srpss_timer_update_dispatch_pending", True)
-        else:
-            _mark_widget_update_pending(widget)
+            # A request remains owned until paint completion, not merely until
+            # its Qt update event is dispatched. New scene generations stay
+            # latched on the compositor and are presented at the next deadline.
+            return False
+        _mark_widget_update_pending(widget)
     except Exception:
         # If the widget cannot host the flag, fall back to the old behavior.
         pass
@@ -210,6 +211,8 @@ def _wait_until_deadline_without_gil_spin(
     deadline: float,
     stop_event: threading.Event,
     state: AtomicTimerState,
+    *,
+    expected_state=None,
 ) -> None:
     """Wait for a render deadline without monopolizing the Python GIL.
 
@@ -220,8 +223,9 @@ def _wait_until_deadline_without_gil_spin(
     the queued paint.
     """
 
+    owner_state = TimerState.RUNNING if expected_state is None else expected_state
     while True:
-        if stop_event.is_set() or state.load() != TimerState.RUNNING:
+        if stop_event.is_set() or state.load() != owner_state:
             return
 
         remaining = deadline - time.perf_counter()
@@ -371,20 +375,30 @@ class AdaptiveTimerStrategy:
         except Exception:
             pass
     
-    def start(self) -> bool:
-        """Start adaptive timer (creates thread if not exists, wakes if sleeping)."""
+    def configure(self, config: AdaptiveTimerConfig) -> None:
+        """Replace cadence configuration and wake the managed loop to observe it."""
+
+        self._config = config
+        self._wake_event.set()
+
+    def start(self, *, continuous: bool = True) -> bool:
+        """Start the managed loop for a transition lease or demand paint."""
         # Check if already running in any capacity
         if self._task_future is not None:
-            # Timer thread exists - just wake it
             current = self._state.load()
-            if current != TimerState.RUNNING:
+            desired = TimerState.RUNNING if continuous else TimerState.PAUSED
+            if continuous and current != TimerState.RUNNING:
                 self._metrics.record_state_change(current)
                 self._state.store(TimerState.RUNNING)
-                self._wake_event.set()
                 if is_perf_metrics_enabled():
                     logger.info("[PERF][ADAPTIVE_TIMER] wake_to_running id=%s state=%s", self._task_id, current.name)
                 else:
                     logger.debug("[ADAPTIVE_TIMER] Waking from %s to RUNNING", current.name)
+            elif not continuous and current == TimerState.IDLE:
+                self._metrics.record_state_change(current)
+                self._state.store(desired)
+                self._transition_ended_at = time.monotonic()
+            self._wake_event.set()
             return True
         
         # Need to create thread - ThreadManager is required
@@ -402,8 +416,10 @@ class AdaptiveTimerStrategy:
             self._loop_stopped_event.clear()
             self._frame_queue.clear()
             
-            # Start in IDLE state, thread will wait for wake
-            self._state.store(TimerState.IDLE)
+            initial_state = TimerState.RUNNING if continuous else TimerState.PAUSED
+            self._state.store(initial_state)
+            if not continuous:
+                self._transition_ended_at = time.monotonic()
             
             # Submit to ThreadManager COMPUTE pool
             task_id = f"adaptive_timer_{id(self)}"
@@ -428,11 +444,14 @@ class AdaptiveTimerStrategy:
                 except Exception as e:
                     logger.debug("[ADAPTIVE_TIMER] Could not register: %s", e)
             
-            # Immediately wake to RUNNING state
-            self._state.store(TimerState.RUNNING)
             self._wake_event.set()
             
-            logger.info("[ADAPTIVE_TIMER] Started (target=%dHz, task=%s)", self._config.target_fps, self._task_id)
+            logger.info(
+                "[ADAPTIVE_TIMER] Started (target=%dHz, task=%s, state=%s)",
+                self._config.target_fps,
+                self._task_id,
+                initial_state.name,
+            )
             return True
             
         except Exception as e:
@@ -515,13 +534,22 @@ class AdaptiveTimerStrategy:
     
     def _timer_loop(self) -> None:
         """Main timer loop with state machine."""
-        fps = self._config.target_fps if self._config.target_fps > 0 else 240.0
-        target_interval = max(1.0, 1000.0 / fps) / 1000.0
+        configured_fps = 0.0
+        target_interval = 1.0 / 240.0
         next_tick_deadline: Optional[float] = None
         
         logger.debug("[ADAPTIVE_TIMER] Loop started (target=%.2fms)", target_interval * 1000)
         try:
             while not self._stop_event.is_set():
+                fps = (
+                    float(self._config.target_fps)
+                    if self._config.target_fps > 0
+                    else 240.0
+                )
+                if fps != configured_fps:
+                    configured_fps = fps
+                    target_interval = max(1.0, 1000.0 / fps) / 1000.0
+                    next_tick_deadline = None
                 state = self._state.load()
 
                 if state == TimerState.IDLE:
@@ -534,8 +562,35 @@ class AdaptiveTimerStrategy:
                     continue
 
                 elif state == TimerState.PAUSED:
-                    next_tick_deadline = None
-                    # Check if should go idle
+                    has_request = False
+                    while True:
+                        ok, _ = self._frame_queue.try_pop()
+                        if not ok:
+                            break
+                        has_request = True
+
+                    if has_request:
+                        now_ts = time.perf_counter()
+                        if next_tick_deadline is None:
+                            next_tick_deadline = now_ts
+                        _wait_until_deadline_without_gil_spin(
+                            next_tick_deadline,
+                            self._stop_event,
+                            self._state,
+                            expected_state=TimerState.PAUSED,
+                        )
+                        if (
+                            not self._stop_event.is_set()
+                            and self._state.load() == TimerState.PAUSED
+                        ):
+                            self._signal_frame(continuous=False)
+                            next_tick_deadline = _normalize_next_deadline(
+                                next_tick_deadline + target_interval,
+                                time.perf_counter(),
+                                target_interval,
+                            )
+                        continue
+
                     elapsed = time.monotonic() - self._transition_ended_at
                     if elapsed > self._config.idle_timeout_sec:
                         # Transition to IDLE
@@ -545,8 +600,12 @@ class AdaptiveTimerStrategy:
                             logger.debug("[ADAPTIVE_TIMER] Auto-idle after %.1fs", elapsed)
                         continue
 
-                    # Brief sleep before rechecking
-                    time.sleep(0.001)
+                    remaining_idle = max(
+                        0.0,
+                        self._config.idle_timeout_sec - elapsed,
+                    )
+                    if self._wake_event.wait(timeout=min(1.0, remaining_idle)):
+                        self._wake_event.clear()
                     continue
 
                 elif state == TimerState.RUNNING:
@@ -555,17 +614,14 @@ class AdaptiveTimerStrategy:
                         if next_tick_deadline is None:
                             next_tick_deadline = time.perf_counter() + target_interval
 
-                        # Check for immediate frame requests
-                        has_request = False
+                        # Demand producers only mark newer scene state while a
+                        # transition lease is active. The lease deadline owns
+                        # presentation, so those requests never add a second
+                        # immediate paint stream.
                         while True:
                             ok, _ = self._frame_queue.try_pop()
                             if not ok:
                                 break
-                            has_request = True
-
-                        if has_request:
-                            self._signal_frame()
-                            continue
 
                         # Precise timing anchored to the carried deadline so callback
                         # overhead does not accumulate into long-run drift.
@@ -580,7 +636,7 @@ class AdaptiveTimerStrategy:
                             not self._stop_event.is_set()
                             and self._state.load() == TimerState.RUNNING
                         ):
-                            self._signal_frame()
+                            self._signal_frame(continuous=True)
                             next_tick_deadline = _normalize_next_deadline(
                                 next_tick_deadline + target_interval,
                                 time.perf_counter(),
@@ -594,23 +650,37 @@ class AdaptiveTimerStrategy:
             self._loop_stopped_event.set()
             logger.debug("[ADAPTIVE_TIMER] Loop stopped")
     
-    def _signal_frame(self) -> None:
+    def _signal_frame(self, *, continuous: bool = True) -> None:
         """Signal UI thread to render."""
         if self._compositor is not None:
             try:
                 # Log occasional frame signals for debugging
                 if self._metrics.frame_count % 100 == 0:
                     logger.debug("[ADAPTIVE_TIMER] Signaling frame %d", self._metrics.frame_count)
-                accepted_update = _queue_safe_widget_update(self._compositor)
-                if hasattr(self._compositor, "_record_render_timer_tick"):
+                present = getattr(
+                    self._compositor,
+                    "_present_scene_from_coordinator",
+                    None,
+                )
+                if callable(present):
+                    accepted_update = bool(present(continuous=continuous))
+                else:
+                    accepted_update = _queue_safe_widget_update(self._compositor)
+                if continuous and hasattr(self._compositor, "_record_render_timer_tick"):
                     self._compositor._record_render_timer_tick(accepted_update=accepted_update)
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)
     
-    def request_frame(self) -> None:
-        """Queue immediate frame request."""
+    def request_frame(self) -> bool:
+        """Latch a demand frame for the next legal display deadline."""
+
+        if not self.start(continuous=False):
+            return False
         self._frame_queue.push_drop_oldest(True)
+        self._transition_ended_at = time.monotonic()
+        self._wake_event.set()
+        return True
     
     def _log_metrics(self) -> None:
         """Log final metrics."""
@@ -652,6 +722,8 @@ class AdaptiveRenderStrategyManager:
         """Update configuration."""
         with self._lock:
             self._config = config
+            if self._timer is not None:
+                self._timer.configure(config)
     
     def start(self) -> bool:
         """Start or resume adaptive timer."""
@@ -721,11 +793,12 @@ class AdaptiveRenderStrategyManager:
                 self._describe_compositor_state(),
             )
     
-    def request_frame(self) -> None:
-        """Request immediate frame."""
+    def request_frame(self) -> bool:
+        """Request one demand-paced frame, creating the managed loop if needed."""
         with self._lock:
-            if self._timer is not None:
-                self._timer.request_frame()
+            if self._timer is None:
+                self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
+            return bool(self._timer.request_frame())
     
     def is_running(self) -> bool:
         """Check if timer is active."""

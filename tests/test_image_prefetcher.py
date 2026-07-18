@@ -47,6 +47,13 @@ class _FakeThreads:
         return "io-task"
 
 
+class _NoPositionalPopList(list):
+    """Regression oracle for the production stale-index dispatch failure."""
+
+    def pop(self, index=-1):
+        raise AssertionError(f"scaled prefetch dispatch used positional pop({index})")
+
+
 def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):
     raw_path = r"C:\wall\one.jpg"
     cache = _FakeCache({raw_path: _solid_qimage(3840, 2160, "blue")})
@@ -116,6 +123,59 @@ def test_scaled_prefetch_requests_queue_beyond_parallel_limit(qt_app):
     callback(SimpleNamespace(success=True, result=("scaled-1", QPixmap.fromImage(_solid_qimage(2560, 1440, "red")))))
 
     assert len(threads.compute_callbacks) == 3
+
+
+def test_scaled_prefetch_dispatch_partitions_queue_without_stale_indices(qt_app):
+    preferred_path = r"C:\wall\preferred.jpg"
+    other_path = r"C:\wall\other.jpg"
+    cache = _FakeCache(
+        {
+            preferred_path: _solid_qimage(640, 360, "blue"),
+            other_path: _solid_qimage(640, 360, "green"),
+        }
+    )
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=2)
+    requests = [
+        {
+            "stats": {},
+            "path": other_path,
+            "cache_key": "other-scaled",
+            "width": 320,
+            "height": 180,
+            "display_mode": DisplayMode.FILL,
+        },
+        {
+            "stats": {},
+            "path": preferred_path,
+            "cache_key": "preferred-scaled",
+            "width": 320,
+            "height": 180,
+            "display_mode": DisplayMode.FILL,
+        },
+        {
+            "stats": {},
+            "path": other_path,
+            "cache_key": "deferred-scaled",
+            "width": 160,
+            "height": 90,
+            "display_mode": DisplayMode.FIT,
+        },
+    ]
+
+    with prefetcher._lock:
+        prefetcher._pending_scaled_requests = _NoPositionalPopList(requests)
+        prefetcher._pending_scaled_keys = {
+            str(request["cache_key"]) for request in requests
+        }
+
+    prefetcher._pump_scaled_prefetch(preferred_path=preferred_path)
+
+    assert len(threads.compute_callbacks) == 2
+    assert prefetcher._scaled_inflight == {"preferred-scaled", "other-scaled"}
+    assert [
+        request["cache_key"] for request in prefetcher._pending_scaled_requests
+    ] == ["deferred-scaled"]
 
 
 def test_scaled_prefetch_requests_refuse_paths_without_raw_producers(qt_app):

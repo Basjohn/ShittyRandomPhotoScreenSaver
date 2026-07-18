@@ -670,9 +670,23 @@ def apply_vis_mode_kwargs(widget: Any, kwargs: Dict[str, Any]) -> None:
     if 'bubble_tail_opacity' in kwargs:
         widget._bubble_tail_opacity = max(0.0, min(0.85, float(kwargs['bubble_tail_opacity'])))
 
+    try:
+        mark_static_dirty = getattr(widget, '_mark_gpu_static_state_dirty', None)
+        if callable(mark_static_dirty):
+            mark_static_dirty()
+        else:
+            widget._gpu_static_revision = int(
+                getattr(widget, '_gpu_static_revision', 0) or 0
+            ) + 1
+    except Exception:
+        logger.debug(
+            "[SPOTIFY_VIS] Failed to advance GPU static-config revision",
+            exc_info=True,
+        )
 
-def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Update *extra* with the cross-mode visual fields every GPU path understands."""
+
+def _populate_shared_visualizer_static_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach cross-mode settings that remain stable between config applies."""
     extra['rainbow_enabled'] = getattr(widget, '_rainbow_enabled', False)
     extra['rainbow_speed'] = getattr(widget, '_rainbow_speed', 0.5)
     extra['rainbow_per_bar'] = getattr(widget, '_rainbow_per_bar', False)
@@ -697,7 +711,6 @@ def _populate_shared_visualizer_extras(extra: Dict[str, Any], widget: Any) -> No
     extra['bubble_ghost_alpha'] = getattr(widget, '_bubble_ghost_alpha', 0.0)
     extra['bubble_ghost_decay'] = getattr(widget, '_bubble_ghost_decay', 0.4)
     extra['sine_heartbeat'] = getattr(widget, '_sine_heartbeat', 0.0)
-    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
     extra['sine_density'] = getattr(widget, '_sine_density', 1.0)
     extra['sine_displacement'] = getattr(widget, '_sine_displacement', 0.0)
 
@@ -726,6 +739,20 @@ def _resolve_continuous_energy_bands(widget: Any, mode_str: str, engine: Any):
 def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_str: str, engine: Any) -> None:
     """Attach waveform, continuous energy, transient bus, and mode-local event edges."""
     if engine is None:
+        for key in (
+            'activation_id',
+            'engine_generation',
+            'latest_frame_generation',
+            'latest_waveform_generation',
+            'waveform',
+            'waveform_count',
+            'energy_bands',
+            'transient_energy',
+            'floor_snapshot',
+            'line_kick_event_strength',
+            'line_snare_event_strength',
+        ):
+            extra.pop(key, None)
         return
 
     try:
@@ -759,15 +786,18 @@ def _populate_engine_signal_snapshot(extra: Dict[str, Any], widget: Any, mode_st
         floor_snapshot = None
     if floor_snapshot is not None:
         extra['floor_snapshot'] = floor_snapshot
+    else:
+        extra.pop('floor_snapshot', None)
 
     try:
         scheduler = engine.get_event_scheduler()
     except Exception:
         scheduler = None
-    if scheduler is None:
-        return
-
     if mode_str in {'sine_wave', 'oscilloscope'}:
+        extra['line_kick_event_strength'] = 0.0
+        extra['line_snare_event_strength'] = 0.0
+        if scheduler is None:
+            return
         kick_evt = scheduler.peek_latest('kick', max_age_s=0.16)
         snare_evt = scheduler.peek_latest('snare', max_age_s=0.20)
         extra['line_kick_event_strength'] = (
@@ -862,8 +892,8 @@ def _append_line_mode_visual_extras(extra: Dict[str, Any], widget: Any, *, is_si
 
 
 
-def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
-    """Attach only GL-safe Bubble extras; sim controls stay on the widget."""
+def _append_bubble_static_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach frame-stable Bubble styling; simulation controls stay widget-owned."""
     extra['bubble_outline_color'] = getattr(widget, '_bubble_outline_color', None)
     extra['bubble_specular_color'] = getattr(widget, '_bubble_specular_color', None)
     extra['bubble_gradient_light'] = getattr(widget, '_bubble_gradient_light', None)
@@ -871,24 +901,54 @@ def _append_bubble_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     extra['bubble_pop_color'] = getattr(widget, '_bubble_pop_color', None)
     extra['bubble_specular_direction'] = getattr(widget, '_bubble_specular_direction', 'top_left')
     extra['bubble_gradient_direction'] = getattr(widget, '_bubble_gradient_direction', 'top')
+    extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
+    extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
+
+
+def _append_bubble_frame_extras(extra: Dict[str, Any], widget: Any) -> None:
+    """Attach the accepted Bubble simulation frame without copying its arrays."""
     extra['bubble_pos_data'] = getattr(widget, '_bubble_pos_data', [])
     extra['bubble_extra_data'] = getattr(widget, '_bubble_extra_data', [])
     extra['bubble_trail_data'] = getattr(widget, '_bubble_trail_data', [])
-    extra['bubble_trail_strength'] = getattr(widget, '_bubble_trail_strength', 0.0)
-    extra['bubble_tail_opacity'] = getattr(widget, '_bubble_tail_opacity', 0.0)
     extra['bubble_count'] = getattr(widget, '_bubble_count', 0)
+
+
+def _gpu_static_token(widget: Any, mode_str: str) -> tuple[int, bool]:
+    """Return the config token that owns frame-stable GPU payload fields."""
+
+    revision = int(getattr(widget, '_gpu_static_revision', 0) or 0)
+    line_idle_contract = bool(getattr(widget, '_spotify_playing', False))
+    if mode_str not in {'sine_wave', 'oscilloscope'}:
+        line_idle_contract = False
+    return revision, line_idle_contract
 
 
 def build_gpu_push_extra_kwargs(widget: Any, mode_str: str, engine: Any) -> Dict[str, Any]:
     """Build the mode-local GPU extras payload for the compositor overlay."""
     extra = _reusable_gpu_extras(widget, mode_str)
-    extra.clear()
-    _populate_shared_visualizer_extras(extra, widget)
+    token_cache = getattr(widget, '_gpu_push_static_tokens_by_mode', None)
+    if not isinstance(token_cache, dict):
+        token_cache = {}
+        widget._gpu_push_static_tokens_by_mode = token_cache
+    static_token = _gpu_static_token(widget, mode_str)
+    if token_cache.get(mode_str) != static_token:
+        extra.clear()
+        _populate_shared_visualizer_static_extras(extra, widget)
+        if mode_str in {'sine_wave', 'oscilloscope'}:
+            _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
+        elif mode_str == 'bubble':
+            _append_bubble_static_visual_extras(extra, widget)
+        token_cache[mode_str] = static_token
+        frame_tokens = getattr(widget, '_gpu_frame_static_tokens_by_mode', None)
+        if not isinstance(frame_tokens, dict):
+            frame_tokens = {}
+            widget._gpu_frame_static_tokens_by_mode = frame_tokens
+        frame_tokens[mode_str] = object()
+
+    extra['heartbeat_intensity'] = getattr(widget, '_heartbeat_intensity', 0.0)
     _populate_engine_signal_snapshot(extra, widget, mode_str, engine)
-    if mode_str in {'sine_wave', 'oscilloscope'}:
-        _append_line_mode_visual_extras(extra, widget, is_sine=(mode_str == 'sine_wave'))
-    elif mode_str == 'bubble':
-        _append_bubble_visual_extras(extra, widget)
+    if mode_str == 'bubble':
+        _append_bubble_frame_extras(extra, widget)
     elif mode_str == 'devcurve':
         _append_devcurve_visual_extras(extra, widget)
     return extra

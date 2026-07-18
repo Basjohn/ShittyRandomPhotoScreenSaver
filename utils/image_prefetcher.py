@@ -340,40 +340,54 @@ class ImagePrefetcher:
             if available_slots <= 0 or not self._pending_scaled_requests:
                 return
 
-            selected_indices: List[int] = []
+            selected_requests: List[Dict[str, Any]] = []
+            remaining_requests: List[Dict[str, Any]] = []
             if preferred_path:
-                for idx, pending in enumerate(self._pending_scaled_requests):
-                    if len(selected_indices) >= available_slots:
-                        break
-                    if pending.get("path") == preferred_path and self._cache.contains(str(pending.get("path") or "")):
-                        selected_indices.append(idx)
+                for pending in self._pending_scaled_requests:
+                    if (
+                        len(selected_requests) < available_slots
+                        and pending.get("path") == preferred_path
+                        and self._cache.contains(str(pending.get("path") or ""))
+                    ):
+                        selected_requests.append(pending)
+                    else:
+                        remaining_requests.append(pending)
+            else:
+                remaining_requests.extend(self._pending_scaled_requests)
 
-            for idx, pending in enumerate(self._pending_scaled_requests):
-                if len(selected_indices) >= available_slots:
-                    break
-                if idx in selected_indices:
-                    continue
+            deferred_requests: List[Dict[str, Any]] = []
+            for pending in remaining_requests:
                 source_image = pending.get("_source_image")
                 has_streamed_source = (
                     isinstance(source_image, QImage)
                     and not source_image.isNull()
                 )
-                if has_streamed_source or self._cache.contains(str(pending.get("path") or "")):
-                    selected_indices.append(idx)
+                if (
+                    len(selected_requests) < available_slots
+                    and (
+                        has_streamed_source
+                        or self._cache.contains(str(pending.get("path") or ""))
+                    )
+                ):
+                    selected_requests.append(pending)
+                else:
+                    deferred_requests.append(pending)
 
-            if not selected_indices:
+            if not selected_requests:
                 return
 
-            for idx in reversed(selected_indices):
-                request = self._pending_scaled_requests.pop(idx)
+            # Replace the queue atomically instead of retaining positional
+            # indices across cache readiness checks. Completion and teardown
+            # callbacks can race in production; request identity remains safe
+            # even when a prior queue position no longer does.
+            self._pending_scaled_requests[:] = deferred_requests
+            for request in selected_requests:
                 cache_key = str(request.get("cache_key") or "")
                 raw_path = str(request.get("path") or "")
                 self._pending_scaled_keys.discard(cache_key)
                 self._scaled_inflight.add(cache_key)
                 self._scaled_inflight_paths[cache_key] = raw_path
                 requests_to_submit.append(request)
-
-            requests_to_submit.reverse()
 
         for request in requests_to_submit:
             _cache_trace(

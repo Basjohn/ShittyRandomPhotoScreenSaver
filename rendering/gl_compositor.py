@@ -248,6 +248,18 @@ class GLCompositorWidget(QOpenGLWidget):
         # Render strategy manager for timer-based rendering (primary method)
         # Using adaptive timer for optimal performance
         self._render_strategy_manager: Optional[AdaptiveRenderStrategyManager] = None
+        # One per-display presentation owner combines transition pacing with
+        # demand-driven scene updates. Producers only advance dirty state;
+        # paint completion acknowledges the exact generation consumed.
+        self._presentation_dirty_generation: int = 0
+        self._presentation_requested_generation: int = 0
+        self._presentation_ack_generation: int = 0
+        self._presentation_paint_generation: int = 0
+        self._presentation_paint_active: bool = False
+        self._presentation_source_counts: Dict[str, int] = {}
+        self._presentation_owner_failure_logged: bool = False
+        self._transition_completion_due = None
+        self._transition_terminal_generation: int = 0
         self._paint_metrics: Optional[_PaintMetrics] = None
         self._paint_slow_threshold_ms: float = 24.0
         self._paint_warning_last_ts: float = 0.0
@@ -371,25 +383,159 @@ class GLCompositorWidget(QOpenGLWidget):
                 "[DIMMING] GL dimming changed: enabled=%s→%s, opacity=%.0f%%→%.0f%%",
                 old_enabled, enabled, old_opacity * 100, self._dimming_opacity * 100
             )
-        self.update()
+        self.request_scene_update(source="dimming")
 
-    def request_scene_update(self) -> bool:
-        """Request one compositor paint without building a second paint loop.
+    def _ensure_presentation_owner_configured(self) -> bool:
+        """Ensure the existing adaptive loop is configured for this display."""
 
-        Visualizer packets can arrive independently of transition cadence.
-        Coalesce them with the compositor's existing pending-paint authority so
-        the newest state is painted once rather than queuing one UI event per
-        producer update.
-        """
+        if self._render_strategy_manager is not None and self._render_timer_fps > 0:
+            return True
+        display_hz = self._get_display_refresh_rate()
+        target_fps = self._calculate_target_fps(display_hz)
+        self._render_timer_fps = target_fps
+        interval_ms = max(1.0, 1000.0 / target_fps)
+        config = AdaptiveTimerConfig(
+            target_fps=target_fps,
+            idle_timeout_sec=5.0,
+            max_deep_sleep_sec=60.0,
+            min_frame_time_ms=interval_ms,
+        )
+        if self._render_strategy_manager is None:
+            self._render_strategy_manager = AdaptiveRenderStrategyManager(self)
+        self._render_strategy_manager.configure(config)
+        return True
+
+    def reconfigure_presentation_target(self, *, reason: str) -> None:
+        """Refresh this display's deadline grid after screen/Hz topology changes."""
+
+        display_hz = self._get_display_refresh_rate()
+        previous_fps = int(self._render_timer_fps)
+        # Parent DisplayWidget authority is updated before this hook runs.
+        self._render_timer_fps = 0
+        target_fps = self._calculate_target_fps(display_hz)
+        self._render_timer_fps = target_fps
+        interval_ms = max(1.0, 1000.0 / target_fps)
+        config = AdaptiveTimerConfig(
+            target_fps=target_fps,
+            idle_timeout_sec=5.0,
+            max_deep_sleep_sec=60.0,
+            min_frame_time_ms=interval_ms,
+        )
+        if self._render_strategy_manager is None:
+            self._render_strategy_manager = AdaptiveRenderStrategyManager(self)
+        self._render_strategy_manager.configure(config)
+        if previous_fps > 0 and previous_fps != target_fps:
+            self._finalize_render_timer_metrics(outcome="display_reconfigured")
+            if self._render_strategy_manager.get_timer_state_name() == "RUNNING":
+                self._reset_render_timer_metrics(target_fps)
+        logger.info(
+            "[GL COMPOSITOR][PRESENTATION] target_reconfigured reason=%s "
+            "display_hz=%d previous=%d target=%d",
+            reason,
+            display_hz,
+            previous_fps,
+            target_fps,
+        )
+        self.request_scene_update(source="display_reconfigure")
+
+    def _request_latched_presentation(self) -> bool:
+        """Wake the display owner without manufacturing another dirty generation."""
 
         if bool(getattr(self, "_render_shutdown_requested", False)):
             return False
         try:
-            if bool(getattr(self, "_srpss_timer_update_pending", False)):
-                return False
+            self._ensure_presentation_owner_configured()
+            manager = self._render_strategy_manager
+            if manager is not None and manager.request_frame():
+                return True
         except Exception:
-            pass
+            logger.debug(
+                "[GL COMPOSITOR] Presentation owner demand request failed",
+                exc_info=True,
+            )
+        if not self._presentation_owner_failure_logged:
+            self._presentation_owner_failure_logged = True
+            logger.error(
+                "[GL COMPOSITOR][PRESENTATION][FALLBACK] Managed presentation owner "
+                "unavailable for demand paint screen=%s",
+                getattr(self, "_screen_index", "?"),
+            )
+        # Demand-only startup/error presentation must not leave the surface
+        # blank. This still uses the single coalesced dispatch transport and is
+        # never authorized as transition cadence or visualizer fallback.
         return bool(_queue_safe_widget_update(self))
+
+    def request_scene_update(self, *, source: str = "scene") -> bool:
+        """Latch scene dirtiness for the one display-local presentation owner."""
+
+        if bool(getattr(self, "_render_shutdown_requested", False)):
+            return False
+        self._presentation_dirty_generation += 1
+        if is_perf_metrics_enabled():
+            source_name = str(source or "scene")
+            self._presentation_source_counts[source_name] = (
+                int(self._presentation_source_counts.get(source_name, 0)) + 1
+            )
+        return self._request_latched_presentation()
+
+    def _present_scene_from_coordinator(self, *, continuous: bool) -> bool:
+        """Submit one owned Qt update for a transition lease or latched demand."""
+
+        if bool(getattr(self, "_render_shutdown_requested", False)):
+            return False
+        dirty_generation = int(self._presentation_dirty_generation)
+        if (
+            not continuous
+            and dirty_generation <= int(self._presentation_ack_generation)
+        ):
+            return False
+        self._presentation_requested_generation = max(
+            int(self._presentation_requested_generation),
+            dirty_generation,
+        )
+        return bool(_queue_safe_widget_update(self))
+
+    def _presentation_paint_started(self) -> int:
+        """Capture the newest generation visible to this paint invocation."""
+
+        generation = max(
+            int(self._presentation_requested_generation),
+            int(self._presentation_dirty_generation),
+        )
+        self._presentation_paint_generation = generation
+        self._presentation_paint_active = True
+        return generation
+
+    def _presentation_paint_completed(self, generation: int) -> None:
+        """Acknowledge paint completion and retain any later dirty generation."""
+
+        self._presentation_paint_active = False
+        self._presentation_ack_generation = max(
+            int(self._presentation_ack_generation),
+            int(generation),
+        )
+        _mark_widget_update_consumed(self)
+
+        completion = self._transition_completion_due
+        if (
+            completion is not None
+            and int(generation) >= int(self._transition_terminal_generation)
+        ):
+            animation_generation, complete_callback = completion
+            self._transition_completion_due = None
+            self._transition_terminal_generation = 0
+            if (
+                not self._render_shutdown_requested
+                and animation_generation == self._transition_animation_generation
+            ):
+                complete_callback()
+
+        if (
+            not self._render_shutdown_requested
+            and int(self._presentation_dirty_generation)
+            > int(self._presentation_ack_generation)
+        ):
+            self._request_latched_presentation()
 
     def invalidate_physical_surface_cache(self, *, reason: str) -> None:
         """Invalidate DPR/viewport-derived state without dropping visible content."""
@@ -454,6 +600,14 @@ class GLCompositorWidget(QOpenGLWidget):
             "has_frame_state": self._frame_state is not None,
             "frame_state": frame_state,
             "render_strategy": strategy_state,
+            "presentation": {
+                "dirty_generation": self._presentation_dirty_generation,
+                "requested_generation": self._presentation_requested_generation,
+                "ack_generation": self._presentation_ack_generation,
+                "paint_active": self._presentation_paint_active,
+                "terminal_due": self._transition_completion_due is not None,
+                "sources": dict(self._presentation_source_counts),
+            },
         }
 
     def describe_stall_context(self) -> dict:
@@ -601,23 +755,25 @@ class GLCompositorWidget(QOpenGLWidget):
         No adaptive ladders; target the display refresh rate with the render timer.
         
         Priority order:
-        1. Already-cached value on this compositor (survives settings dialog)
-        2. Parent DisplayWidget._target_fps (set once at startup)
+        1. Parent DisplayWidget._target_fps (screen/topology authority)
+        2. Already-cached value on this compositor
         3. Late re-detection from parent screen
         4. display_hz from _get_display_refresh_rate()
         """
-        # 1. Reuse our own cached value if we already detected successfully
-        if self._render_timer_fps > 0:
-            return self._render_timer_fps
-
-        # 2. Parent's cached target (set by configure_refresh_rate_sync at startup)
+        # Parent authority must win after a display move or Hz/topology change;
+        # otherwise the compositor can retain a stale target indefinitely.
         parent = self.parent()
         from rendering.display_widget import DisplayWidget  # local import to avoid cycle
         if isinstance(parent, DisplayWidget):
             target = getattr(parent, "_target_fps", 0)
             if target > 0:
                 return target
-            # 3. parent._target_fps is 0 (not yet detected) — force detection now
+
+        if self._render_timer_fps > 0:
+            return self._render_timer_fps
+
+        if isinstance(parent, DisplayWidget):
+            # parent._target_fps is 0 (not yet detected) — force detection now
             try:
                 detected = int(round(parent._detect_refresh_rate()))
                 if detected > 0:
@@ -654,41 +810,32 @@ class GLCompositorWidget(QOpenGLWidget):
         else:
             self._render_timer_metrics = None
 
-    def _start_render_strategy(self) -> None:
+    def _start_render_strategy(self) -> bool:
         """Start the render strategy to drive repaints during transitions.
 
         Uses adaptive timer for optimal performance with state management.
         Paint delivery is validated by GL PAINT metrics rather than assumed.
         """
         display_hz = self._get_display_refresh_rate()
-        target_fps = self._calculate_target_fps(display_hz)
-        self._render_timer_fps = target_fps
-
-        interval_ms = max(1.0, 1000.0 / target_fps)
-        config = AdaptiveTimerConfig(
-            target_fps=target_fps,
-            idle_timeout_sec=5.0,  # Go idle after 5s of no transitions
-            max_deep_sleep_sec=60.0,
-            min_frame_time_ms=interval_ms,
-        )
+        self._ensure_presentation_owner_configured()
+        target_fps = self._render_timer_fps
 
         # Check if already running
         if self._render_strategy_manager is not None:
             if self._render_strategy_manager.is_running():
-                self._render_strategy_manager.configure(config)
                 if self._render_strategy_manager.get_timer_state_name() != "RUNNING":
                     self._reset_render_timer_metrics(target_fps)
                 # Already running - just resume
                 self._render_strategy_manager.resume()
                 logger.debug("[GL COMPOSITOR] Render strategy resumed")
-                return
+                return True
 
         self._reset_render_timer_metrics(target_fps)
         
         # Start adaptive timer-based rendering
-        self._start_adaptive_timer_render(target_fps, display_hz)
+        return self._start_adaptive_timer_render(target_fps, display_hz)
 
-    def _start_adaptive_timer_render(self, target_fps: int, display_hz: int) -> None:
+    def _start_adaptive_timer_render(self, target_fps: int, display_hz: int) -> bool:
         """Start adaptive timer-based rendering (primary method).
         
         This is the primary rendering method.
@@ -712,6 +859,7 @@ class GLCompositorWidget(QOpenGLWidget):
             "[GL COMPOSITOR] Adaptive timer render started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
             display_hz, target_fps, interval_ms, success
         )
+        return bool(success)
     
     def _pause_render_strategy(self) -> None:
         """Pause render strategy after transition ends (enter low-power mode)."""
@@ -730,12 +878,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._finalize_render_timer_metrics()
         logger.debug("[GL COMPOSITOR] Render strategy stopped")
     
-    def _start_render_timer(self) -> None:
+    def _start_render_timer(self) -> bool:
         """Start the render timer to drive repaints during transitions.
         
         This is now a wrapper around _start_render_strategy() for backward compatibility.
         """
-        self._start_render_strategy()
+        return self._start_render_strategy()
     
     def _pause_render_timer(self) -> None:
         """Pause the render timer (enter low-power mode between transitions).
@@ -759,8 +907,8 @@ class GLCompositorWidget(QOpenGLWidget):
         using the FrameState.
         """
         if self._frame_state is not None and self._frame_state.started and not self._frame_state.completed:
-            self.update()
-            self._record_render_timer_tick(accepted_update=True)
+            accepted = self._present_scene_from_coordinator(continuous=True)
+            self._record_render_timer_tick(accepted_update=accepted)
         else:
             self._record_render_timer_tick(accepted_update=False)
 
@@ -784,7 +932,7 @@ class GLCompositorWidget(QOpenGLWidget):
         
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
-            self.update()
+            self.request_scene_update(source="base_pixmap")
 
     def _clear_all_transitions(self) -> None:
         """Clear all transition states."""
@@ -820,7 +968,7 @@ class GLCompositorWidget(QOpenGLWidget):
         logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (%s)", name)
         self._clear_all_transitions()
         self._base_pixmap = new_pixmap
-        self.update()
+        self.request_scene_update(source="first_base_pixmap")
         if on_finished:
             try:
                 on_finished()
@@ -842,6 +990,8 @@ class GLCompositorWidget(QOpenGLWidget):
     def _cancel_current_animation(self) -> None:
         """Cancel any previous animation on this compositor."""
         self._transition_animation_generation += 1
+        self._transition_completion_due = None
+        self._transition_terminal_generation = 0
         if self._current_anim_id and self._animation_manager:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
@@ -876,16 +1026,20 @@ class GLCompositorWidget(QOpenGLWidget):
                 f"Transition program admission failed for {transition_label}"
             )
         duration_sec = max(0.001, duration_ms / 1000.0)
+
+        if not self._start_render_timer():
+            self._clear_all_transitions()
+            raise RuntimeError(
+                f"Presentation owner admission failed for {transition_label or 'transition'}"
+            )
         
-        # Create frame state and wake paint immediately.  Paint cadence and
+        # Create frame state after presentation ownership is confirmed. Paint cadence and
         # shader-visible progress are elapsed-time authoritative; completion is
-        # a single generation-guarded handoff instead of thousands of UI timer
-        # callbacks that can collapse after settings churn.
+        # generation-guarded and waits for a terminal paint acknowledgement.
         self._frame_state = FrameState(duration=duration_sec)
         self._frame_state.begin_timeline(easing=easing)
         self._begin_paint_metrics(transition_label or "transition")
         self._current_anim_metrics = None
-        self._start_render_timer()
 
         def _complete_if_current() -> None:
             if (
@@ -897,7 +1051,14 @@ class GLCompositorWidget(QOpenGLWidget):
                 update_callback(1.0)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Final transition progress update failed", exc_info=True)
-            on_complete()
+            self._transition_completion_due = (
+                animation_generation,
+                on_complete,
+            )
+            self.request_scene_update(source="transition_terminal")
+            self._transition_terminal_generation = int(
+                self._presentation_dirty_generation
+            )
 
         anim_id = f"{transition_label or 'transition'}:timeline:{id(self)}:{animation_generation}"
         try:
@@ -935,7 +1096,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 duration=duration_sec,
                 easing=easing,
                 update_callback=guarded_update_callback,
-                on_complete=on_complete,
+                on_complete=_complete_if_current,
                 frame_state=self._frame_state,
             )
         self._current_anim_id = anim_id
@@ -1000,7 +1161,7 @@ class GLCompositorWidget(QOpenGLWidget):
             setattr(self, state_attr, None)
             self._current_anim_id = None
             try:
-                self.update()
+                self.request_scene_update(source="transition_commit")
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] %s complete update failed: %s", name.capitalize(), e, exc_info=True)
             if on_finished:
@@ -1543,7 +1704,7 @@ class GLCompositorWidget(QOpenGLWidget):
         if state is None:
             return
         state.region = region
-        self.update()
+        self.request_scene_update(source="transition_region")
 
     def set_blockflip_region(self, region: Optional[QRegion]) -> None:
         self._set_transition_region("_blockflip", region)

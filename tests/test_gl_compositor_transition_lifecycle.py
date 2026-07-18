@@ -64,8 +64,9 @@ def _setup_compositor(monkeypatch) -> tuple[QWidget, GLCompositorWidget]:
     monkeypatch.setattr(comp, "_start_frame_pacing", _fake_start_frame_pacing)
     monkeypatch.setattr(comp, "_pre_upload_textures", lambda *a, **k: None)
     monkeypatch.setattr(comp, "_release_transition_textures", lambda *a, **k: None)
-    monkeypatch.setattr(comp, "_start_render_timer", lambda *a, **k: None)
+    monkeypatch.setattr(comp, "_start_render_timer", lambda *a, **k: True)
     monkeypatch.setattr(comp, "_stop_render_timer", lambda *a, **k: None)
+    monkeypatch.setattr(comp, "_request_latched_presentation", lambda: True)
     # These lifecycle tests exercise animation ownership, not real GL admission.
     monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda _identity: True)
     comp._desync_delay_ms = 0
@@ -256,7 +257,7 @@ def test_stop_rendering_invalidates_late_lazy_animation_callback(qt_app, monkeyp
 
     monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda _label: True)
     monkeypatch.setattr(comp, "_begin_paint_metrics", lambda _label: None)
-    monkeypatch.setattr(comp, "_start_render_timer", lambda: None)
+    monkeypatch.setattr(comp, "_start_render_timer", lambda: True)
     monkeypatch.setattr(
         "core.threading.manager.ThreadManager.single_shot",
         lambda delay, callback: scheduled.append((delay, callback)),
@@ -297,7 +298,7 @@ def test_transition_render_timer_starts_before_first_animation_tick(qt_app, monk
 
     monkeypatch.setattr(comp, "_ensure_transition_program_ready", lambda _label: calls.append("program") or True)
     monkeypatch.setattr(comp, "_begin_paint_metrics", lambda _label: calls.append("paint_metrics"))
-    monkeypatch.setattr(comp, "_start_render_timer", lambda: calls.append("render_timer"))
+    monkeypatch.setattr(comp, "_start_render_timer", lambda: calls.append("render_timer") or True)
     monkeypatch.setattr(
         "core.threading.manager.ThreadManager.single_shot",
         lambda delay, callback: scheduled.append((delay, callback)),
@@ -313,7 +314,7 @@ def test_transition_render_timer_starts_before_first_animation_tick(qt_app, monk
     )
 
     assert anim_id.startswith("wipe:timeline:")
-    assert calls == ["program", "paint_metrics", "render_timer"]
+    assert calls == ["program", "render_timer", "paint_metrics"]
     assert scheduled and scheduled[0][0] == 200
     assert "animate" not in calls
     assert update_calls == []
@@ -321,7 +322,36 @@ def test_transition_render_timer_starts_before_first_animation_tick(qt_app, monk
     scheduled[0][1]()
 
     assert update_calls == [1.0]
+    assert complete_calls == []
+    comp._presentation_paint_completed(comp._presentation_dirty_generation)
     assert complete_calls == ["complete"]
+
+
+@pytest.mark.qt_no_exception_capture
+def test_transition_admission_refuses_when_presentation_owner_cannot_start(
+    qt_app,
+    monkeypatch,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    comp._wipe = object()
+    monkeypatch.setattr(comp, "_start_render_timer", lambda: False)
+    animation_manager = AnimationManager(fps=60)
+
+    try:
+        with pytest.raises(RuntimeError, match="Presentation owner admission failed"):
+            comp._start_transition_animation(
+                duration_ms=200,
+                easing=EasingCurve.LINEAR,
+                animation_manager=animation_manager,
+                update_callback=lambda _progress: None,
+                on_complete=lambda: None,
+                transition_label="wipe",
+            )
+    finally:
+        animation_manager.stop()
+
+    assert comp._wipe is None
+    assert comp._frame_state is None
 
 
 @pytest.mark.qt_no_exception_capture

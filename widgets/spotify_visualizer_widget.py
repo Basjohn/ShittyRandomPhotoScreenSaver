@@ -498,6 +498,9 @@ class SpotifyVisualizerWidget(QWidget):
         self._gpu_push_extras_by_mode: Dict[str, Dict[str, Any]] = {
             "spectrum": self._spectrum_gpu_push_extras,
         }
+        self._gpu_static_revision: int = 0
+        self._gpu_push_static_tokens_by_mode: Dict[str, tuple[int, bool]] = {}
+        self._gpu_frame_static_tokens_by_mode: Dict[str, object] = {}
         self._gpu_frame_packet = None
         self._last_gpu_fade_sent: float = -1.0
         self._compositor_visualizer_active: bool = False
@@ -1376,9 +1379,11 @@ class SpotifyVisualizerWidget(QWidget):
             try:
                 requester = getattr(compositor, "request_scene_update", None)
                 if callable(requester):
-                    requester()
+                    requester(source="visualizer_fade")
                 else:
-                    compositor.update()
+                    logger.error(
+                        "[SPOTIFY_VIS][COMPOSITOR] Presentation owner unavailable for fade"
+                    )
             except RuntimeError:
                 pass
 
@@ -1390,6 +1395,7 @@ class SpotifyVisualizerWidget(QWidget):
         resolved_width = BaseOverlayWidget.get_global_border_width() if border_width is None else int(border_width)
         self._border_width = max(0, resolved_width)
         self._show_background = bool(show_background)
+        self._mark_gpu_static_state_dirty()
         self._invalidate_painted_frame_shadow_cache()
         self._update_card_style()
         self.update()
@@ -1422,7 +1428,13 @@ class SpotifyVisualizerWidget(QWidget):
         # outline tint. Card border remains driven by set_bar_style.
         self._bar_fill_color = QColor(fill_color)
         self._bar_border_color = QColor(border_color)
+        self._mark_gpu_static_state_dirty()
         self.update()
+
+    def _mark_gpu_static_state_dirty(self) -> None:
+        """Invalidate frame-stable renderer configuration without repaint churn."""
+
+        self._gpu_static_revision = int(self._gpu_static_revision) + 1
 
     def set_ghost_config(self, enabled: bool, alpha: float, decay: float) -> None:
         """Configure ghost trailing behaviour for the GPU bar overlay.
@@ -1459,6 +1471,7 @@ class SpotifyVisualizerWidget(QWidget):
         if gd < 0.0:
             gd = 0.0
         self._ghost_decay_rate = gd
+        self._mark_gpu_static_state_dirty()
 
     def set_anchor_media_widget(self, widget: QWidget) -> None:
         self._anchor_media = widget

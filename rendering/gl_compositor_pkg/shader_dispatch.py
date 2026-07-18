@@ -392,7 +392,17 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
     has_dimming = bool(
         getattr(comp, "_dimming_enabled", False) and dimming_opacity > 0.0
     )
-    has_visualizer = getattr(comp, "_spotify_visualizer_layer", None) is not None
+    visualizer_layer = getattr(comp, "_spotify_visualizer_layer", None)
+    has_visualizer = visualizer_layer is not None
+    if has_visualizer:
+        should_paint = getattr(visualizer_layer, "should_paint_scene", None)
+        if callable(should_paint):
+            try:
+                has_visualizer = bool(should_paint())
+            except Exception:
+                # Preserve the established paint path if diagnostics cannot
+                # prove that the layer is inactive.
+                has_visualizer = True
     if not has_dimming and not has_visualizer and debug_image is None:
         return
 

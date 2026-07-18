@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-16
+Last updated: 2026-07-18
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -12,11 +12,11 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-56 — 2026-07-16 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Resolved In Code, Packaged Runtime Validation Pending)](#R-56)
+1. [R-56 — 2026-07-16 / 2026-07-18 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Architecture Implemented, Performance Promotion Reopened)](#R-56)
 2. [R-55 — 2026-07-16 — Final Visualizer Cleanup Preserved Its Child GL Overlay Across Display Rebuilds (Resolved)](#R-55)
 3. [R-54 — 2026-07-16 — Refused Or Delayed GL Transition Advanced The Destination Without Animation (Resolved)](#R-54)
 4. [R-53 — 2026-07-16 — Paused Transition Probes Poisoned Visualizer Latency Health (Resolved)](#R-53)
-5. [R-52 — 2026-07-16 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Resolved In Code, Runtime Validation Pending)](#R-52)
+5. [R-52 — 2026-07-16 / 2026-07-18 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Oversized Fix Implemented, Producer-Gap Validation Reopened)](#R-52)
 6. [R-51 — 2026-07-16 — Duplicate Display Destroy Callback Silently Disabled Explicit GL Teardown (Resolved)](#R-51)
 7. [R-50 — 2026-07-16 — Lazy WidgetsTab Rehydrated Its Initial Sections Twice (Resolved)](#R-50)
 8. [R-49 — 2026-07-16 — GL Texture/Geometry Handles Retained Across Rebuild Ownership Boundaries (Resolved)](#R-49)
@@ -84,11 +84,11 @@ This is the long-term anti-regression record for the project, not an active task
 ## Recent Entries
 
 <a id="R-56"></a>
-### [R-56] 2026-07-16 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Resolved In Code, Packaged Runtime Validation Pending)
+### [R-56] 2026-07-16 / 2026-07-18 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Architecture Implemented, Performance Promotion Reopened)
 
 - [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
+- [x] PARTIAL
+- [ ] AWAITING VALIDATION
 - [ ] SOLVED
 
 - **Observed pressure:** mixed `165/60 Hz` runs showed long compositor and visualizer delivery gaps, including ordinary pre-tail compositor `dt_max` near `193/158 ms` and visualizer paint/wait maxima near `125/79 ms`, while measured shader/paint work and GPU load remained much smaller. The transition compositor and visualizer each owned a realized `QOpenGLWidget`, forcing separate UI delivery, Qt composition, GL context, and Windows presentation work per display.
@@ -96,7 +96,10 @@ This is the long-term anti-regression record for the project, not an active task
 - **Strict legacy boundary:** normal startup selects the compositor. Legacy is allowed only for the explicit environment rollback, a deliberately non-OpenGL backend, or a hard compositor-owned composite/FBO/context failure before reveal. A transient readiness miss, shared renderer/shader failure, unexpected normal-path setup failure, or any post-reveal failure may not create or switch to a second surface. Unexpected setup failure publishes a display-generation terminal reason and stops short startup retries instead of spinning at 16ms. Missing mask/program state leaves content absent or last-good rather than showing unclipped/simple substitute bars.
 - **Pressure safeguards:** compositor mode programs and the required mask prewarm while hidden; visible paint never compiles a missing mode. Dimming, card/visualizer, and PERF HUD share one ordered QPainter scene session. Runtime preparation has no timer or rescue repaint and uses bounded backoff only on actual compositor work. Accepted packets remain synchronous scratch storage, and high-frequency compositor paints reuse the front texture when no new visualizer generation exists.
 - **Bars:** focused automation covers renderer-host parity, all-mode hidden prewarm, strict fallback classification, no visible compilation, required-mask refusal, transactional partial cleanup, stencil-only FBOs, logical-size/DPR reuse, last-good scaling after replacement failure, retained-frame release on explicit clear, generation reuse, scene-update coalescing, CUSTOM snapshot routing, every transition overlay route, startup retry termination, and ResourceManager framebuffer/renderbuffer telemetry. The supported-mode first-frame/reactivity lock, compositor/transition, display/CUSTOM, low-level GL/resource, and parser groups are required before promotion.
-- **Validation status:** code and automated parity are complete. No performance improvement is claimed until the packaged Windows matrix covers every supported mode and transition, live/paused playback, mixed refresh, 100-200% DPR, portrait/landscape, CUSTOM edit/save/cancel/reset, Settings restart, topology removal/return, ordinary load, deliberate external contention, and final teardown. The normal run must create no `legacy_child`, report no visualizer render failure/FBO churn beyond real size/DPR changes, preserve exact pixels/cadence/reactivity, and materially improve presentation headroom and `dt_max`.
+- **First packaged outcome:** no user-visible regression was found, normal runs created no `legacy_child`, the long MC compositor stayed close to `60 Hz`, GL registrations remained nearly flat, and shader/program lifecycle, visualizer-render, and FBO-churn failures stayed at zero. The ordinary mixed-display lifetime nevertheless averaged/peaked about `93.5/125.5%` app CPU and delivered only about `104-121.5 FPS` against `165 Hz`; the better fresh-reboot lifetime is not a representative deployment condition. The 75-minute MC lifetime averaged `58.0%` app CPU, submitted compute work at `93.4/s`, and accumulated `1,710` parser-recognized visualizer timing warnings with repeated `80-118 ms` latency while transitions were idle. The architecture is functionally sound but did not earn performance promotion.
+- **Follow-up root causes:** `ThreadManager` throughput counters were pushed through an incorrectly multi-producer SPSC queue and scheduled a UI mutation drain after every high-rate submit/completion. A separate unused 250 ms UI stats publisher also woke the UI thread. Both are removed in favor of a small locked direct snapshot. Inactive compositor visualizer scenes now skip the QPainter overlay session, while active pixels/order remain unchanged. `--usage` now owns CPU-time deltas and bounded hot-thread attribution so the next runtime can separate main-thread pressure from compute workers.
+- **Startup diagnostic correction:** the full display set is registered before staggered display surfaces are shown. A hidden display awaiting its compositor was therefore logged as terminally unavailable even though its compositor appeared later and rendered normally. Clean not-yet-shown displays now report `pending_compositor` and wait for the existing display lifecycle without starting a 16 ms readiness loop; a pre-existing real terminal reason is preserved and continues to suppress rapid startup retries.
+- **Validation status:** repeat the same ordinary-background mixed-display, fresh-reboot comparator, and long single-display MC matrix. Promotion requires material ordinary-load CPU, visualizer microgap/wait, high-refresh delivery, and `dt_max` improvement with zero loss of pixels, smoothing, reactivity, source cadence, transition cadence, startup safety, CUSTOM behavior, or multi-display independence. Until then this entry remains partial and new widget work remains frozen behind the performance-foundation gate.
 
 <a id="R-55"></a>
 ### [R-55] 2026-07-16 — Final Visualizer Cleanup Preserved Its Child GL Overlay Across Display Rebuilds (Resolved)
@@ -142,11 +145,11 @@ This is the long-term anti-regression record for the project, not an active task
 - **Validation:** the fresh mixed live/paused run reported zero paused forced-probe latency diagnostics and zero first-frame/reactivity safeguard failures. One genuine live Spectrum latency event remained and is preserved under the active compositor/visualizer headroom task rather than being misclassified as this resolved paused-probe bug.
 
 <a id="R-52"></a>
-### [R-52] 2026-07-16 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Resolved In Code, Runtime Validation Pending)
+### [R-52] 2026-07-16 / 2026-07-18 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Oversized Fix Implemented, Producer-Gap Validation Reopened)
 
 - [ ] COMPLETELY FUCKED
-- [ ] PARTIAL
-- [x] AWAITING VALIDATION
+- [x] PARTIAL
+- [ ] AWAITING VALIDATION
 - [ ] SOLVED
 
 - **Observed failure:** performance did not simply start bad and warm up. The 2026-07-16 run averaged higher CPU and memory after the first three minutes, then decoded a roughly `15000 x 10800` source near shutdown. That raw image was large enough to displace much of the prepared cache window; two later selected images reached `scaled_miss/raw_missing` fallback even though their display-ready variants had existed earlier.
@@ -155,6 +158,7 @@ This is the long-term anti-regression record for the project, not an active task
 - **Adjacent upload improvement:** mapped-PBO staging now copies directly from the exact converted ARGB32 `QImage` buffer when available instead of first allocating a full Python `bytes` object. Slow-upload logs identify `direct=True/False`; the compatible owned-bytes path remains. This does not yet move `QPixmap.toImage()/convertToFormat()` off the UI thread.
 - **Bars:** prefetch tests prove no oversized raw LRU admission, successful scaled production, bounded lifetime, and state return to zero. Texture tests prove direct contiguous-buffer exposure and owned-bytes fallback. Existing image-pipeline/fallback tests remain green.
 - **Runtime validation target:** repeat a long mixed-size source run under `--cache --perf --usage`; require no zero-producer fallback for active-window entries, `streamed_raw` to return to zero, normal mapped-PBO uploads to report the direct path, and no post-warm-up memory staircase caused by giant raw admission. If conversion remains dominant, promote worker-prepared exact-format upload rather than reducing source quality.
+- **2026-07-18 result:** the post-overhaul matrix contained one cold-start `scaled_miss` with active raw/scaled producers and one post-rebuild `scaled_miss/raw_missing` with no producer. The latter fails this entry's runtime bar, but the logs do not show the oversized-raw/`streamed_raw` eviction signature that caused the original bug. Treat active-window request registration or rebuild-generation producer loss as the next seam; do not revert the bounded oversized-image policy or lower image quality without matching evidence.
 
 <a id="R-51"></a>
 ### [R-51] 2026-07-16 — Duplicate Display Destroy Callback Silently Disabled Explicit GL Teardown (Resolved)

@@ -11,7 +11,8 @@ def _usage_line(
     timestamp: str,
     sequence: int,
     *,
-    cpu: float = 25.0,
+    cpu: float | str = 25.0,
+    cpu_primed: int = 1,
     rss: float = 400.0,
     threads: int = 20,
     handles: int = 500,
@@ -23,23 +24,37 @@ def _usage_line(
     rm_total: str = "na",
     rm_gl_total: str = "na",
     rm_gl_texture: str = "na",
+    rm_gl_texture_est: str = "na",
+    rm_gl_pbo_est: str = "na",
+    img_cache_items: str = "na",
+    img_cache_est: str = "na",
+    img_cache_hits: str = "na",
+    img_cache_misses: str = "na",
+    img_cache_evictions: str = "na",
     private: str = "na",
     vms: float = 900.0,
     compute_submitted: int = 4,
     compute_completed: int = 4,
+    hot_threads: str = "compute_pool_0:14.0|MainThread:8.0",
 ) -> str:
     return (
         f"{timestamp} - core.performance.usage_sampler - INFO - [USAGE] sample "
         f"seq={sequence} cadence_gap_ms={cadence_gap_ms} skipped={skipped} "
-        f"collect_ms={collect_ms} cpu_primed=1 cpu_app_pct={cpu} cpu_main_pct={cpu} "
-        f"cpu_system_pct=35.0 processes=2 children=1 rss_app_mb={rss} rss_main_mb=300.0 "
+        f"collect_ms={collect_ms} cpu_primed={cpu_primed} cpu_app_pct={cpu} cpu_main_pct={cpu} "
+        f"cpu_system_pct={'na' if cpu == 'na' else '35.0'} cpu_hot_threads={hot_threads} "
+        f"processes=2 children=1 rss_app_mb={rss} rss_main_mb=300.0 "
         f"private_app_mb={private} vms_app_mb={vms} threads_app={threads} handles_app={handles} "
         f"io_read_mb=10.0 io_write_mb=2.0 gpu_supported=1 gpu_active=1 gpu_status=ok "
         f"gpu_busy_pct={gpu} gpu_engine_sum_pct={gpu} vram_supported=1 "
         f"vram_dedicated_mb={vram} vram_shared_mb=64.0 rm_total={rm_total} "
         f"rm_gl_total={rm_gl_total} rm_gl_texture={rm_gl_texture} "
         "rm_gl_vbo=na rm_gl_vao=na rm_gl_program=na rm_gl_framebuffer=na "
-        "rm_gl_renderbuffer=na tm_active=1 tm_io_max=4 "
+        f"rm_gl_renderbuffer=na rm_gl_texture_est_mb={rm_gl_texture_est} "
+        f"rm_gl_pbo_est_mb={rm_gl_pbo_est} img_cache_items={img_cache_items} "
+        f"img_cache_max_items=24 img_cache_est_mb={img_cache_est} "
+        f"img_cache_budget_mb=1024.0 img_cache_hits={img_cache_hits} "
+        f"img_cache_misses={img_cache_misses} img_cache_evictions={img_cache_evictions} "
+        "tm_active=1 tm_io_max=4 "
         "tm_compute_max=3 tm_io_submitted=7 tm_io_completed=6 tm_io_failed=0 "
         f"tm_compute_submitted={compute_submitted} "
         f"tm_compute_completed={compute_completed} tm_compute_failed=0"
@@ -424,7 +439,69 @@ def test_perf_health_parses_usage_availability_without_treating_na_as_zero():
     assert sample.gpu_active is True
     assert sample.gpu_busy_pct is None
     assert sample.vram_dedicated_mb is None
+    assert sample.img_cache_est_mb is None
+    assert sample.rm_gl_texture_est_mb is None
     assert report.usage_growth_anomalies == []
+
+
+def test_perf_health_preserves_unprimed_cpu_and_hot_thread_attribution():
+    report = parse_perf_health_lines(
+        [
+            _usage_line(
+                "2026-07-15 14:45:15",
+                1,
+                cpu="na",
+                cpu_primed=0,
+                hot_threads="na",
+            ),
+            _usage_line("2026-07-15 14:45:30", 2),
+        ]
+    )
+
+    assert len(report.usage_samples) == 2
+    assert report.usage_samples[0].cpu_app_pct is None
+    assert report.usage_samples[0].cpu_system_pct is None
+    assert report.usage_samples[1].cpu_hot_threads == (
+        ("compute_pool_0", 14.0),
+        ("MainThread", 8.0),
+    )
+    assert report.usage_hot_thread_stats[0] == ("compute_pool_0", 14.0, 14.0, 1)
+
+
+def test_perf_health_partitions_usage_restarts_before_growth_analysis():
+    report = parse_perf_health_lines(
+        [
+            _usage_line("2026-07-16 21:00:15", 1, rss=300.0),
+            _usage_line("2026-07-16 21:00:30", 2, rss=310.0),
+            _usage_line("2026-07-16 21:00:45", 3, rss=320.0),
+            _usage_line("2026-07-16 21:53:15", 1, rss=800.0),
+            _usage_line("2026-07-16 21:53:30", 2, rss=810.0),
+            _usage_line("2026-07-16 21:53:45", 3, rss=820.0),
+        ]
+    )
+
+    assert [len(lifetime) for lifetime in report.usage_lifetimes] == [3, 3]
+    assert report.usage_growth_anomalies == []
+
+
+def test_perf_health_orders_rotated_logs_by_full_date(tmp_path):
+    newer = tmp_path / "newer.log"
+    older = tmp_path / "older.log"
+    newer.write_text(
+        _usage_line("2026-07-17 06:00:00", 1, rss=800.0),
+        encoding="utf-8",
+    )
+    older.write_text(
+        _usage_line("2026-07-16 21:00:00", 1, rss=300.0),
+        encoding="utf-8",
+    )
+
+    report = parse_perf_health_logs([newer, older])
+
+    assert [sample.timestamp for sample in report.usage_samples] == [
+        "2026-07-16 21:00:00",
+        "2026-07-17 06:00:00",
+    ]
 
 
 def test_perf_health_flags_resource_growth_and_sampler_self_interference():
@@ -480,6 +557,98 @@ def test_perf_health_flags_resource_growth_and_sampler_self_interference():
     assert any("virtual memory grew" in anomaly for anomaly in report.usage_growth_anomalies)
     assert any("compute backlog grew" in anomaly for anomaly in report.usage_growth_anomalies)
     assert any("usage telemetry was slow" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_attributes_owned_cache_growth_without_claiming_proof():
+    report = parse_perf_health_lines(
+        [
+            _usage_line(
+                "2026-07-15 14:45:15",
+                1,
+                rss=380.0,
+                vram="380.0",
+                img_cache_items="4",
+                img_cache_est="48.0",
+                rm_gl_texture_est="64.0",
+                rm_gl_pbo_est="8.0",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:30",
+                2,
+                rss=400.0,
+                vram="400.0",
+                img_cache_items="5",
+                img_cache_est="64.0",
+                rm_gl_texture_est="80.0",
+                rm_gl_pbo_est="8.0",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:45",
+                3,
+                rss=650.0,
+                vram="750.0",
+                img_cache_items="18",
+                img_cache_est="224.0",
+                rm_gl_texture_est="352.0",
+                rm_gl_pbo_est="24.0",
+            ),
+        ]
+    )
+
+    assert report.usage_samples[-1].img_cache_items == 18
+    assert report.usage_samples[-1].img_cache_est_mb == 224.0
+    assert report.usage_samples[-1].rm_gl_texture_est_mb == 352.0
+    assert any(
+        "ImageCache estimate grew 160.0MB" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
+    assert any(
+        "registered compositor texture/PBO estimate grew 288.0MB" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
+
+
+def test_perf_health_does_not_misattribute_growth_when_owned_estimates_are_flat():
+    report = parse_perf_health_lines(
+        [
+            _usage_line(
+                "2026-07-15 14:45:15",
+                1,
+                rss=380.0,
+                vram="380.0",
+                img_cache_est="64.0",
+                rm_gl_texture_est="80.0",
+                rm_gl_pbo_est="8.0",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:30",
+                2,
+                rss=400.0,
+                vram="400.0",
+                img_cache_est="64.0",
+                rm_gl_texture_est="80.0",
+                rm_gl_pbo_est="8.0",
+            ),
+            _usage_line(
+                "2026-07-15 14:45:45",
+                3,
+                rss=650.0,
+                vram="750.0",
+                img_cache_est="64.0",
+                rm_gl_texture_est="80.0",
+                rm_gl_pbo_est="8.0",
+            ),
+        ]
+    )
+
+    assert any(
+        "does not attribute that growth to the decoded-image cache" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
+    assert any(
+        "does not attribute it to GLTextureManager" in anomaly
+        for anomaly in report.usage_growth_anomalies
+    )
 
 
 def test_perf_health_flags_stale_resource_manager_gl_registration_growth():

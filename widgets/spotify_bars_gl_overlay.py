@@ -200,6 +200,7 @@ class SpotifyVisualizerGLRenderer:
         self._perf_update_request_count: int = 0
         self._perf_geometry_change_count: int = 0
         self._state_generation: int = 0
+        self._last_static_token: Any = None
         self._perf_metrics_enabled: bool = is_perf_metrics_enabled()
         self._perf_last_log_ts: float = time.monotonic()
         perf_context_count = len(_PERF_MICROGAP_CONTEXTS)
@@ -1022,6 +1023,7 @@ class SpotifyVisualizerGLRenderer:
         engine_generation: int | None = None,
         latest_frame_generation: int | None = None,
         latest_waveform_generation: int | None = None,
+        static_token: Any = None,
     ) -> None:
         """Update overlay bar state and geometry.
 
@@ -1043,18 +1045,22 @@ class SpotifyVisualizerGLRenderer:
             border_width_px=border_width_px,
         ):
             return
+        static_state_changed = (
+            static_token is None or static_token is not self._last_static_token
+        )
         self._perf_set_state_count += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
         osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
 
-        try:
-            self._sine_density = float(sine_density)
-        except Exception:
-            self._sine_density = 1.0
-        try:
-            self._sine_displacement = float(sine_displacement)
-        except Exception:
-            self._sine_displacement = 0.0
+        if static_state_changed:
+            try:
+                self._sine_density = float(sine_density)
+            except Exception:
+                self._sine_density = 1.0
+            try:
+                self._sine_displacement = float(sine_displacement)
+            except Exception:
+                self._sine_displacement = 0.0
 
         # one coherent input snapshot per frame.
         if transient_energy is not None:
@@ -1113,10 +1119,11 @@ class SpotifyVisualizerGLRenderer:
                     self._sine_peak_mid = max(self._sine_peak_mid, raw_mid + min_off * 0.90)
                     self._sine_peak_high = max(self._sine_peak_high, raw_high + min_off * 0.80)
         self._last_time_ts = now_ts
-        self._line_speed = max(0.01, min(1.0, float(line_speed)))
-        self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
-        osc_decay = max(0.1, min(1.0, float(osc_ghost_decay)))
-        self._ghost_delay_frames = max(2, min(18, int(round(2 + osc_decay * 16))))
+        if static_state_changed:
+            self._line_speed = max(0.01, min(1.0, float(line_speed)))
+            self._osc_ghost_alpha = max(0.0, min(1.0, float(osc_ghost_intensity))) if osc_ghosting_enabled else 0.0
+            osc_decay = max(0.1, min(1.0, float(osc_ghost_decay)))
+            self._ghost_delay_frames = max(2, min(18, int(round(2 + osc_decay * 16))))
 
         # Store waveform data (line modes) with temporal smoothing via line_speed
         if waveform is not None:
@@ -1191,54 +1198,52 @@ class SpotifyVisualizerGLRenderer:
         if energy_bands is not None:
             self._energy_bands = energy_bands
 
-        # Oscilloscope glow settings
-        self._glow_enabled = bool(glow_enabled)
-        self._glow_intensity = max(0.0, float(glow_intensity))
-        self._glow_size = max(0.1, min(3.0, float(glow_size)))
-        self._glow_reactivity = max(0.0, min(2.0, float(glow_reactivity)))
-        if glow_color is not None:
-            self._glow_color = QColor(glow_color)
-        if line_color is not None:
-            self._line_color = QColor(line_color)
-        self._reactive_glow = bool(reactive_glow)
-        self._line_sensitivity = max(0.5, min(10.0, float(line_sensitivity)))
-        self._line_smoothing = max(0.0, min(1.0, float(line_smoothing)))
+        if static_state_changed:
+            # Oscilloscope/Sine settings are immutable between config tokens.
+            self._glow_enabled = bool(glow_enabled)
+            self._glow_intensity = max(0.0, float(glow_intensity))
+            self._glow_size = max(0.1, min(3.0, float(glow_size)))
+            self._glow_reactivity = max(0.0, min(2.0, float(glow_reactivity)))
+            if glow_color is not None:
+                self._glow_color = QColor(glow_color)
+            if line_color is not None:
+                self._line_color = QColor(line_color)
+            self._reactive_glow = bool(reactive_glow)
+            self._line_sensitivity = max(0.5, min(10.0, float(line_sensitivity)))
+            self._line_smoothing = max(0.0, min(1.0, float(line_smoothing)))
 
-        # Multi-line oscilloscope / sine
-        self._line_count = max(1, min(6, int(line_count)))
-        if line2_color is not None:
-            self._line2_color = QColor(line2_color)
-        if line2_glow_color is not None:
-            self._line2_glow_color = QColor(line2_glow_color)
-        if line3_color is not None:
-            self._line3_color = QColor(line3_color)
-        if line3_glow_color is not None:
-            self._line3_glow_color = QColor(line3_glow_color)
-        if line4_color is not None:
-            self._line4_color = QColor(line4_color)
-        if line4_glow_color is not None:
-            self._line4_glow_color = QColor(line4_glow_color)
-        if line5_color is not None:
-            self._line5_color = QColor(line5_color)
-        if line5_glow_color is not None:
-            self._line5_glow_color = QColor(line5_glow_color)
-        if line6_color is not None:
-            self._line6_color = QColor(line6_color)
-        if line6_glow_color is not None:
-            self._line6_glow_color = QColor(line6_glow_color)
-        self._osc_ghost_line2_enabled = bool(osc_ghost_line2_enabled)
-        self._osc_ghost_line3_enabled = bool(osc_ghost_line3_enabled)
-        self._osc_ghost_line4_enabled = bool(osc_ghost_line4_enabled)
-        self._osc_ghost_line5_enabled = bool(osc_ghost_line5_enabled)
-        self._osc_ghost_line6_enabled = bool(osc_ghost_line6_enabled)
+            self._line_count = max(1, min(6, int(line_count)))
+            if line2_color is not None:
+                self._line2_color = QColor(line2_color)
+            if line2_glow_color is not None:
+                self._line2_glow_color = QColor(line2_glow_color)
+            if line3_color is not None:
+                self._line3_color = QColor(line3_color)
+            if line3_glow_color is not None:
+                self._line3_glow_color = QColor(line3_glow_color)
+            if line4_color is not None:
+                self._line4_color = QColor(line4_color)
+            if line4_glow_color is not None:
+                self._line4_glow_color = QColor(line4_glow_color)
+            if line5_color is not None:
+                self._line5_color = QColor(line5_color)
+            if line5_glow_color is not None:
+                self._line5_glow_color = QColor(line5_glow_color)
+            if line6_color is not None:
+                self._line6_color = QColor(line6_color)
+            if line6_glow_color is not None:
+                self._line6_glow_color = QColor(line6_glow_color)
+            self._osc_ghost_line2_enabled = bool(osc_ghost_line2_enabled)
+            self._osc_ghost_line3_enabled = bool(osc_ghost_line3_enabled)
+            self._osc_ghost_line4_enabled = bool(osc_ghost_line4_enabled)
+            self._osc_ghost_line5_enabled = bool(osc_ghost_line5_enabled)
+            self._osc_ghost_line6_enabled = bool(osc_ghost_line6_enabled)
 
-
-        self._transient_pulse_gain = max(0.0, min(3.0, float(transient_pulse_gain)))
-        self._transient_clamp = max(0.0, min(3.0, float(transient_clamp)))
-        # pockets/solvers cannot spend a frame under stale subtype authority.
-        self._line_dim = bool(line_dim)
-        self._line_offset_bias = max(0.0, min(1.0, float(line_offset_bias)))
-        self._osc_vertical_shift = max(-50, min(200, int(osc_vertical_shift)))
+            self._transient_pulse_gain = max(0.0, min(3.0, float(transient_pulse_gain)))
+            self._transient_clamp = max(0.0, min(3.0, float(transient_clamp)))
+            self._line_dim = bool(line_dim)
+            self._line_offset_bias = max(0.0, min(1.0, float(line_offset_bias)))
+            self._osc_vertical_shift = max(-50, min(200, int(osc_vertical_shift)))
         if self._vis_mode == "oscilloscope":
             _osc_sens_mod, _osc_drive = resolve_transient_sensitivity_modulation(
                 base_sensitivity=self._line_sensitivity,
@@ -1249,44 +1254,39 @@ class SpotifyVisualizerGLRenderer:
             )
             self._osc_last_transient_width_drive = _osc_drive
             self._osc_last_sensitivity_mod = _osc_sens_mod
-        self._sine_wave_travel = max(0, min(2, int(sine_wave_travel)))
-        self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
-        self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
-        self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
-        self._sine_travel_line4 = max(0, min(2, int(sine_travel_line4)))
-        self._sine_travel_line5 = max(0, min(2, int(sine_travel_line5)))
-        self._sine_travel_line6 = max(0, min(2, int(sine_travel_line6)))
-        self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
-        self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
-        self._sine_crawl_amount = max(0.0, min(1.0, float(sine_crawl_amount)))
-        self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
-        self._sine_line1_shift = max(-1.0, min(1.0, float(sine_line1_shift)))
-        self._sine_line2_shift = max(-1.0, min(1.0, float(sine_line2_shift)))
-        self._sine_line3_shift = max(-1.0, min(1.0, float(sine_line3_shift)))
-        self._sine_line4_shift = max(-1.0, min(1.0, float(sine_line4_shift)))
-        self._sine_line5_shift = max(-1.0, min(1.0, float(sine_line5_shift)))
-        self._sine_line6_shift = max(-1.0, min(1.0, float(sine_line6_shift)))
-        self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
+        if static_state_changed:
+            self._sine_wave_travel = max(0, min(2, int(sine_wave_travel)))
+            self._sine_card_adaptation = max(0.05, min(1.0, float(sine_card_adaptation)))
+            self._sine_travel_line2 = max(0, min(2, int(sine_travel_line2)))
+            self._sine_travel_line3 = max(0, min(2, int(sine_travel_line3)))
+            self._sine_travel_line4 = max(0, min(2, int(sine_travel_line4)))
+            self._sine_travel_line5 = max(0, min(2, int(sine_travel_line5)))
+            self._sine_travel_line6 = max(0, min(2, int(sine_travel_line6)))
+            self._sine_wave_effect = max(0.0, min(1.0, float(sine_wave_effect)))
+            self._sine_micro_wobble = max(0.0, min(1.0, float(sine_micro_wobble)))
+            self._sine_crawl_amount = max(0.0, min(1.0, float(sine_crawl_amount)))
+            self._sine_vertical_shift = max(-50, min(200, int(sine_vertical_shift)))
+            self._sine_line1_shift = max(-1.0, min(1.0, float(sine_line1_shift)))
+            self._sine_line2_shift = max(-1.0, min(1.0, float(sine_line2_shift)))
+            self._sine_line3_shift = max(-1.0, min(1.0, float(sine_line3_shift)))
+            self._sine_line4_shift = max(-1.0, min(1.0, float(sine_line4_shift)))
+            self._sine_line5_shift = max(-1.0, min(1.0, float(sine_line5_shift)))
+            self._sine_line6_shift = max(-1.0, min(1.0, float(sine_line6_shift)))
+            self._sine_width_reaction = max(0.0, min(1.0, float(sine_width_reaction)))
 
+            self._single_piece = bool(single_piece)
+            self._slanted = bool(slanted)
+            self._border_radius = max(0.0, float(border_radius))
+            self._rainbow_enabled = bool(rainbow_enabled)
+            self._rainbow_speed = max(0.01, min(5.0, float(rainbow_speed)))
+            self._rainbow_per_bar = bool(rainbow_per_bar)
+            self._spectrum_rainbow_border = bool(spectrum_rainbow_border)
+            self._spectrum_glow_enabled = bool(spectrum_glow_enabled)
+            self._spectrum_glow_intensity = max(0.0, min(1.5, float(spectrum_glow_intensity)))
+            if spectrum_glow_color is not None:
+                self._spectrum_glow_color = QColor(spectrum_glow_color)
+            self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
 
-        # Spectrum: single piece (solid bars, no segments)
-        self._single_piece = bool(single_piece)
-        # Spectrum: slanted bar edges and border radius
-        self._slanted = bool(slanted)
-        self._border_radius = max(0.0, float(border_radius))
-
-        # Rainbow (Taste The Rainbow) mode
-        self._rainbow_enabled = bool(rainbow_enabled)
-        self._rainbow_speed = max(0.01, min(5.0, float(rainbow_speed)))
-        self._rainbow_per_bar = bool(rainbow_per_bar)
-        self._spectrum_rainbow_border = bool(spectrum_rainbow_border)
-        self._spectrum_glow_enabled = bool(spectrum_glow_enabled)
-        self._spectrum_glow_intensity = max(0.0, min(1.5, float(spectrum_glow_intensity)))
-        if spectrum_glow_color is not None:
-            self._spectrum_glow_color = QColor(spectrum_glow_color)
-
-        # Sine Wave Heartbeat
-        self._sine_heartbeat = max(0.0, min(1.0, float(sine_heartbeat)))
         self._heartbeat_intensity = max(0.0, min(1.0, float(heartbeat_intensity)))
 
         maybe_log_glow_diagnostics(self, logger)
@@ -1297,20 +1297,21 @@ class SpotifyVisualizerGLRenderer:
         self._bubble_pos_data = bubble_pos_data or []
         self._bubble_extra_data = bubble_extra_data or []
         self._bubble_trail_data = bubble_trail_data or []
-        self._bubble_trail_strength = max(0.0, min(1.5, float(bubble_trail_strength)))
-        self._bubble_tail_opacity = max(0.0, min(0.85, float(bubble_tail_opacity)))
-        if bubble_outline_color is not None:
-            self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
-        if bubble_specular_color is not None:
-            self._bubble_specular_color = QColor(bubble_specular_color) if not isinstance(bubble_specular_color, QColor) else bubble_specular_color
-        if bubble_gradient_light is not None:
-            self._bubble_gradient_light = QColor(bubble_gradient_light) if not isinstance(bubble_gradient_light, QColor) else bubble_gradient_light
-        if bubble_gradient_dark is not None:
-            self._bubble_gradient_dark = QColor(bubble_gradient_dark) if not isinstance(bubble_gradient_dark, QColor) else bubble_gradient_dark
-        if bubble_pop_color is not None:
-            self._bubble_pop_color = QColor(bubble_pop_color) if not isinstance(bubble_pop_color, QColor) else bubble_pop_color
-        self._bubble_specular_direction = str(bubble_specular_direction)
-        self._bubble_gradient_direction = str(bubble_gradient_direction)
+        if static_state_changed:
+            self._bubble_trail_strength = max(0.0, min(1.5, float(bubble_trail_strength)))
+            self._bubble_tail_opacity = max(0.0, min(0.85, float(bubble_tail_opacity)))
+            if bubble_outline_color is not None:
+                self._bubble_outline_color = QColor(bubble_outline_color) if not isinstance(bubble_outline_color, QColor) else bubble_outline_color
+            if bubble_specular_color is not None:
+                self._bubble_specular_color = QColor(bubble_specular_color) if not isinstance(bubble_specular_color, QColor) else bubble_specular_color
+            if bubble_gradient_light is not None:
+                self._bubble_gradient_light = QColor(bubble_gradient_light) if not isinstance(bubble_gradient_light, QColor) else bubble_gradient_light
+            if bubble_gradient_dark is not None:
+                self._bubble_gradient_dark = QColor(bubble_gradient_dark) if not isinstance(bubble_gradient_dark, QColor) else bubble_gradient_dark
+            if bubble_pop_color is not None:
+                self._bubble_pop_color = QColor(bubble_pop_color) if not isinstance(bubble_pop_color, QColor) else bubble_pop_color
+            self._bubble_specular_direction = str(bubble_specular_direction)
+            self._bubble_gradient_direction = str(bubble_gradient_direction)
 
         # --- Per-mode ghost configuration -----------------------------------
         # Each mode stores its own ghosting_enabled / ghost_alpha / ghost_decay
@@ -1319,102 +1320,105 @@ class SpotifyVisualizerGLRenderer:
         # backward compat and used to seed the legacy _ghosting_enabled /
         # _ghost_alpha fields, but mode-specific fields always take priority
         # for rendering decisions.
-        self._spectrum_ghosting_enabled = bool(spectrum_ghosting_enabled)
-        self._spectrum_ghost_alpha = max(0.0, min(1.0, float(spectrum_ghost_alpha)))
-        self._spectrum_ghost_decay = max(0.1, min(1.0, float(spectrum_ghost_decay)))
-        self._sine_ghosting_enabled = bool(sine_ghosting_enabled)
-        self._sine_ghost_alpha = max(0.0, min(1.0, float(sine_ghost_alpha)))
-        self._sine_ghost_decay = max(0.1, min(1.0, float(sine_ghost_decay)))
-        self._sine_ghost_line2_enabled = bool(sine_ghost_line2_enabled)
-        self._sine_ghost_line3_enabled = bool(sine_ghost_line3_enabled)
-        self._sine_ghost_line4_enabled = bool(sine_ghost_line4_enabled)
-        self._sine_ghost_line5_enabled = bool(sine_ghost_line5_enabled)
-        self._sine_ghost_line6_enabled = bool(sine_ghost_line6_enabled)
-        self._bubble_ghosting_enabled = bool(bubble_ghosting_enabled)
-        self._bubble_ghost_alpha = max(0.0, min(1.0, float(bubble_ghost_alpha)))
-        self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))
+        if static_state_changed:
+            self._spectrum_ghosting_enabled = bool(spectrum_ghosting_enabled)
+            self._spectrum_ghost_alpha = max(0.0, min(1.0, float(spectrum_ghost_alpha)))
+            self._spectrum_ghost_decay = max(0.1, min(1.0, float(spectrum_ghost_decay)))
+            self._sine_ghosting_enabled = bool(sine_ghosting_enabled)
+            self._sine_ghost_alpha = max(0.0, min(1.0, float(sine_ghost_alpha)))
+            self._sine_ghost_decay = max(0.1, min(1.0, float(sine_ghost_decay)))
+            self._sine_ghost_line2_enabled = bool(sine_ghost_line2_enabled)
+            self._sine_ghost_line3_enabled = bool(sine_ghost_line3_enabled)
+            self._sine_ghost_line4_enabled = bool(sine_ghost_line4_enabled)
+            self._sine_ghost_line5_enabled = bool(sine_ghost_line5_enabled)
+            self._sine_ghost_line6_enabled = bool(sine_ghost_line6_enabled)
+            self._bubble_ghosting_enabled = bool(bubble_ghosting_enabled)
+            self._bubble_ghost_alpha = max(0.0, min(1.0, float(bubble_ghost_alpha)))
+            self._bubble_ghost_decay = max(0.1, min(1.0, float(bubble_ghost_decay)))
 
-        # Dev Curve mode state -----------------------------------------------------
-        self._devcurve_base_level = max(0.10, min(0.90, float(devcurve_base_level)))
-        self._devcurve_sample_count = max(2, min(96, int(devcurve_sample_count)))
-        if devcurve_curve_bass is not None:
-            self._devcurve_curve_bass = list(devcurve_curve_bass)
-        if devcurve_curve_vocals is not None:
-            self._devcurve_curve_vocals = list(devcurve_curve_vocals)
-        if devcurve_curve_mids is not None:
-            self._devcurve_curve_mids = list(devcurve_curve_mids)
-        if devcurve_curve_transients is not None:
-            self._devcurve_curve_transients = list(devcurve_curve_transients)
-        if devcurve_layer_bass_color is not None:
-            self._devcurve_layer_bass_color = QColor(*devcurve_layer_bass_color) if not isinstance(devcurve_layer_bass_color, QColor) else QColor(devcurve_layer_bass_color)
-        if devcurve_layer_vocals_color is not None:
-            self._devcurve_layer_vocals_color = QColor(*devcurve_layer_vocals_color) if not isinstance(devcurve_layer_vocals_color, QColor) else QColor(devcurve_layer_vocals_color)
-        if devcurve_layer_mids_color is not None:
-            self._devcurve_layer_mids_color = QColor(*devcurve_layer_mids_color) if not isinstance(devcurve_layer_mids_color, QColor) else QColor(devcurve_layer_mids_color)
-        if devcurve_layer_transients_color is not None:
-            self._devcurve_layer_transients_color = QColor(*devcurve_layer_transients_color) if not isinstance(devcurve_layer_transients_color, QColor) else QColor(devcurve_layer_transients_color)
-        if devcurve_layer_bass_outline_color is not None:
-            self._devcurve_layer_bass_outline_color = QColor(*devcurve_layer_bass_outline_color) if not isinstance(devcurve_layer_bass_outline_color, QColor) else QColor(devcurve_layer_bass_outline_color)
-            self._devcurve_layer_bass_outline_color.setAlpha(255)
-        if devcurve_layer_vocals_outline_color is not None:
-            self._devcurve_layer_vocals_outline_color = QColor(*devcurve_layer_vocals_outline_color) if not isinstance(devcurve_layer_vocals_outline_color, QColor) else QColor(devcurve_layer_vocals_outline_color)
-            self._devcurve_layer_vocals_outline_color.setAlpha(255)
-        if devcurve_layer_mids_outline_color is not None:
-            self._devcurve_layer_mids_outline_color = QColor(*devcurve_layer_mids_outline_color) if not isinstance(devcurve_layer_mids_outline_color, QColor) else QColor(devcurve_layer_mids_outline_color)
-            self._devcurve_layer_mids_outline_color.setAlpha(255)
-        if devcurve_layer_transients_outline_color is not None:
-            self._devcurve_layer_transients_outline_color = QColor(*devcurve_layer_transients_outline_color) if not isinstance(devcurve_layer_transients_outline_color, QColor) else QColor(devcurve_layer_transients_outline_color)
-            self._devcurve_layer_transients_outline_color.setAlpha(255)
-        self._devcurve_layer_bass_outline_width = max(0.001, min(0.020, float(devcurve_layer_bass_outline_width)))
-        self._devcurve_layer_vocals_outline_width = max(0.001, min(0.020, float(devcurve_layer_vocals_outline_width)))
-        self._devcurve_layer_mids_outline_width = max(0.001, min(0.020, float(devcurve_layer_mids_outline_width)))
-        self._devcurve_layer_transients_outline_width = max(0.001, min(0.020, float(devcurve_layer_transients_outline_width)))
-        self._devcurve_layer_bass_alpha = max(0.0, min(1.0, float(devcurve_layer_bass_alpha)))
-        self._devcurve_layer_vocals_alpha = max(0.0, min(1.0, float(devcurve_layer_vocals_alpha)))
-        self._devcurve_layer_mids_alpha = max(0.0, min(1.0, float(devcurve_layer_mids_alpha)))
-        self._devcurve_layer_transients_alpha = max(0.0, min(1.0, float(devcurve_layer_transients_alpha)))
-        self._devcurve_layer_bass_enabled = bool(devcurve_layer_bass_enabled)
-        self._devcurve_layer_vocals_enabled = bool(devcurve_layer_vocals_enabled)
-        self._devcurve_layer_mids_enabled = bool(devcurve_layer_mids_enabled)
-        self._devcurve_layer_transients_enabled = bool(devcurve_layer_transients_enabled)
-        self._devcurve_layer_bass_order = max(1, min(4, int(devcurve_layer_bass_order)))
-        self._devcurve_layer_vocals_order = max(1, min(4, int(devcurve_layer_vocals_order)))
-        self._devcurve_layer_mids_order = max(1, min(4, int(devcurve_layer_mids_order)))
-        self._devcurve_layer_transients_order = max(1, min(4, int(devcurve_layer_transients_order)))
-        self._devcurve_foreground_layer_id = max(-1, min(3, int(devcurve_foreground_layer_id)))
-        self._devcurve_foreground_shadow_enabled = bool(devcurve_foreground_shadow_enabled)
-        self._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(devcurve_foreground_shadow_alpha)))
-        self._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(devcurve_foreground_shadow_darken)))
-        self._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(devcurve_foreground_shadow_offset)))
-        self._devcurve_foreground_specular_enabled = bool(devcurve_foreground_specular_enabled)
-        self._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(devcurve_foreground_specular_alpha)))
-        self._devcurve_foreground_specular_width = max(0.002, min(0.120, float(devcurve_foreground_specular_width)))
-        self._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(devcurve_foreground_specular_offset)))
-        self._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(devcurve_foreground_specular_crest_bias)))
-        _slot0 = devcurve_specular_slot0 if isinstance(devcurve_specular_slot0, (list, tuple)) else (0.0, 0.0, 0.0)
-        _slot1 = devcurve_specular_slot1 if isinstance(devcurve_specular_slot1, (list, tuple)) else (0.0, 0.0, 0.0)
-        _slot2 = devcurve_specular_slot2 if isinstance(devcurve_specular_slot2, (list, tuple)) else (0.0, 0.0, 0.0)
-        self._devcurve_specular_slot0 = [
-            max(-1.5, min(2.5, float(_slot0[0] if len(_slot0) > 0 else 0.0))),
-            max(0.0, min(1.0, float(_slot0[1] if len(_slot0) > 1 else 0.0))),
-            max(0.0, min(1.0, float(_slot0[2] if len(_slot0) > 2 else 0.0))),
-            max(0.0, min(1.0, float(_slot0[3] if len(_slot0) > 3 else 0.0))),
-        ]
-        self._devcurve_specular_slot1 = [
-            max(-1.5, min(2.5, float(_slot1[0] if len(_slot1) > 0 else 0.0))),
-            max(0.0, min(1.0, float(_slot1[1] if len(_slot1) > 1 else 0.0))),
-            max(0.0, min(1.0, float(_slot1[2] if len(_slot1) > 2 else 0.0))),
-            max(0.0, min(1.0, float(_slot1[3] if len(_slot1) > 3 else 0.0))),
-        ]
-        self._devcurve_specular_slot2 = [
-            max(-1.5, min(2.5, float(_slot2[0] if len(_slot2) > 0 else 0.0))),
-            max(0.0, min(1.0, float(_slot2[1] if len(_slot2) > 1 else 0.0))),
-            max(0.0, min(1.0, float(_slot2[2] if len(_slot2) > 2 else 0.0))),
-            max(0.0, min(1.0, float(_slot2[3] if len(_slot2) > 3 else 0.0))),
-        ]
-        self._devcurve_ghosting_enabled = bool(devcurve_ghosting_enabled)
-        self._devcurve_ghost_alpha = max(0.0, min(1.0, float(devcurve_ghost_alpha)))
-        self._devcurve_ghost_decay = max(0.1, min(1.0, float(devcurve_ghost_decay)))
+        if self._vis_mode == 'devcurve':
+            # Dev Curve owns a large mode-local payload. Do not rebuild it for
+            # Bubble, Spectrum, or line frames that never read this state.
+            self._devcurve_base_level = max(0.10, min(0.90, float(devcurve_base_level)))
+            self._devcurve_sample_count = max(2, min(96, int(devcurve_sample_count)))
+            if devcurve_curve_bass is not None:
+                self._devcurve_curve_bass = list(devcurve_curve_bass)
+            if devcurve_curve_vocals is not None:
+                self._devcurve_curve_vocals = list(devcurve_curve_vocals)
+            if devcurve_curve_mids is not None:
+                self._devcurve_curve_mids = list(devcurve_curve_mids)
+            if devcurve_curve_transients is not None:
+                self._devcurve_curve_transients = list(devcurve_curve_transients)
+            if devcurve_layer_bass_color is not None:
+                self._devcurve_layer_bass_color = QColor(*devcurve_layer_bass_color) if not isinstance(devcurve_layer_bass_color, QColor) else QColor(devcurve_layer_bass_color)
+            if devcurve_layer_vocals_color is not None:
+                self._devcurve_layer_vocals_color = QColor(*devcurve_layer_vocals_color) if not isinstance(devcurve_layer_vocals_color, QColor) else QColor(devcurve_layer_vocals_color)
+            if devcurve_layer_mids_color is not None:
+                self._devcurve_layer_mids_color = QColor(*devcurve_layer_mids_color) if not isinstance(devcurve_layer_mids_color, QColor) else QColor(devcurve_layer_mids_color)
+            if devcurve_layer_transients_color is not None:
+                self._devcurve_layer_transients_color = QColor(*devcurve_layer_transients_color) if not isinstance(devcurve_layer_transients_color, QColor) else QColor(devcurve_layer_transients_color)
+            if devcurve_layer_bass_outline_color is not None:
+                self._devcurve_layer_bass_outline_color = QColor(*devcurve_layer_bass_outline_color) if not isinstance(devcurve_layer_bass_outline_color, QColor) else QColor(devcurve_layer_bass_outline_color)
+                self._devcurve_layer_bass_outline_color.setAlpha(255)
+            if devcurve_layer_vocals_outline_color is not None:
+                self._devcurve_layer_vocals_outline_color = QColor(*devcurve_layer_vocals_outline_color) if not isinstance(devcurve_layer_vocals_outline_color, QColor) else QColor(devcurve_layer_vocals_outline_color)
+                self._devcurve_layer_vocals_outline_color.setAlpha(255)
+            if devcurve_layer_mids_outline_color is not None:
+                self._devcurve_layer_mids_outline_color = QColor(*devcurve_layer_mids_outline_color) if not isinstance(devcurve_layer_mids_outline_color, QColor) else QColor(devcurve_layer_mids_outline_color)
+                self._devcurve_layer_mids_outline_color.setAlpha(255)
+            if devcurve_layer_transients_outline_color is not None:
+                self._devcurve_layer_transients_outline_color = QColor(*devcurve_layer_transients_outline_color) if not isinstance(devcurve_layer_transients_outline_color, QColor) else QColor(devcurve_layer_transients_outline_color)
+                self._devcurve_layer_transients_outline_color.setAlpha(255)
+            self._devcurve_layer_bass_outline_width = max(0.001, min(0.020, float(devcurve_layer_bass_outline_width)))
+            self._devcurve_layer_vocals_outline_width = max(0.001, min(0.020, float(devcurve_layer_vocals_outline_width)))
+            self._devcurve_layer_mids_outline_width = max(0.001, min(0.020, float(devcurve_layer_mids_outline_width)))
+            self._devcurve_layer_transients_outline_width = max(0.001, min(0.020, float(devcurve_layer_transients_outline_width)))
+            self._devcurve_layer_bass_alpha = max(0.0, min(1.0, float(devcurve_layer_bass_alpha)))
+            self._devcurve_layer_vocals_alpha = max(0.0, min(1.0, float(devcurve_layer_vocals_alpha)))
+            self._devcurve_layer_mids_alpha = max(0.0, min(1.0, float(devcurve_layer_mids_alpha)))
+            self._devcurve_layer_transients_alpha = max(0.0, min(1.0, float(devcurve_layer_transients_alpha)))
+            self._devcurve_layer_bass_enabled = bool(devcurve_layer_bass_enabled)
+            self._devcurve_layer_vocals_enabled = bool(devcurve_layer_vocals_enabled)
+            self._devcurve_layer_mids_enabled = bool(devcurve_layer_mids_enabled)
+            self._devcurve_layer_transients_enabled = bool(devcurve_layer_transients_enabled)
+            self._devcurve_layer_bass_order = max(1, min(4, int(devcurve_layer_bass_order)))
+            self._devcurve_layer_vocals_order = max(1, min(4, int(devcurve_layer_vocals_order)))
+            self._devcurve_layer_mids_order = max(1, min(4, int(devcurve_layer_mids_order)))
+            self._devcurve_layer_transients_order = max(1, min(4, int(devcurve_layer_transients_order)))
+            self._devcurve_foreground_layer_id = max(-1, min(3, int(devcurve_foreground_layer_id)))
+            self._devcurve_foreground_shadow_enabled = bool(devcurve_foreground_shadow_enabled)
+            self._devcurve_foreground_shadow_alpha = max(0.0, min(1.0, float(devcurve_foreground_shadow_alpha)))
+            self._devcurve_foreground_shadow_darken = max(0.0, min(1.0, float(devcurve_foreground_shadow_darken)))
+            self._devcurve_foreground_shadow_offset = max(0.0, min(0.45, float(devcurve_foreground_shadow_offset)))
+            self._devcurve_foreground_specular_enabled = bool(devcurve_foreground_specular_enabled)
+            self._devcurve_foreground_specular_alpha = max(0.0, min(1.0, float(devcurve_foreground_specular_alpha)))
+            self._devcurve_foreground_specular_width = max(0.002, min(0.120, float(devcurve_foreground_specular_width)))
+            self._devcurve_foreground_specular_offset = max(-0.20, min(0.20, float(devcurve_foreground_specular_offset)))
+            self._devcurve_foreground_specular_crest_bias = max(0.0, min(2.0, float(devcurve_foreground_specular_crest_bias)))
+            _slot0 = devcurve_specular_slot0 if isinstance(devcurve_specular_slot0, (list, tuple)) else (0.0, 0.0, 0.0)
+            _slot1 = devcurve_specular_slot1 if isinstance(devcurve_specular_slot1, (list, tuple)) else (0.0, 0.0, 0.0)
+            _slot2 = devcurve_specular_slot2 if isinstance(devcurve_specular_slot2, (list, tuple)) else (0.0, 0.0, 0.0)
+            self._devcurve_specular_slot0 = [
+                max(-1.5, min(2.5, float(_slot0[0] if len(_slot0) > 0 else 0.0))),
+                max(0.0, min(1.0, float(_slot0[1] if len(_slot0) > 1 else 0.0))),
+                max(0.0, min(1.0, float(_slot0[2] if len(_slot0) > 2 else 0.0))),
+                max(0.0, min(1.0, float(_slot0[3] if len(_slot0) > 3 else 0.0))),
+            ]
+            self._devcurve_specular_slot1 = [
+                max(-1.5, min(2.5, float(_slot1[0] if len(_slot1) > 0 else 0.0))),
+                max(0.0, min(1.0, float(_slot1[1] if len(_slot1) > 1 else 0.0))),
+                max(0.0, min(1.0, float(_slot1[2] if len(_slot1) > 2 else 0.0))),
+                max(0.0, min(1.0, float(_slot1[3] if len(_slot1) > 3 else 0.0))),
+            ]
+            self._devcurve_specular_slot2 = [
+                max(-1.5, min(2.5, float(_slot2[0] if len(_slot2) > 0 else 0.0))),
+                max(0.0, min(1.0, float(_slot2[1] if len(_slot2) > 1 else 0.0))),
+                max(0.0, min(1.0, float(_slot2[2] if len(_slot2) > 2 else 0.0))),
+                max(0.0, min(1.0, float(_slot2[3] if len(_slot2) > 3 else 0.0))),
+            ]
+            self._devcurve_ghosting_enabled = bool(devcurve_ghosting_enabled)
+            self._devcurve_ghost_alpha = max(0.0, min(1.0, float(devcurve_ghost_alpha)))
+            self._devcurve_ghost_decay = max(0.1, min(1.0, float(devcurve_ghost_decay)))
 
         # Legacy global ghost fields — still written for backward compat but
         # renderers MUST read mode-specific fields above.
@@ -1463,7 +1467,10 @@ class SpotifyVisualizerGLRenderer:
             return
 
         try:
-            bars_seq = list(bars)
+            if self._vis_mode != 'spectrum' and isinstance(bars, list):
+                bars_seq = bars
+            else:
+                bars_seq = list(bars)
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             self.clear_overlay_buffer()
@@ -1476,20 +1483,26 @@ class SpotifyVisualizerGLRenderer:
         if len(bars_seq) > count:
             bars_seq = bars_seq[:count]
         elif len(bars_seq) < count:
-            bars_seq = bars_seq + [0.0] * (count - len(bars_seq))
+            bars_seq = list(bars_seq) + [0.0] * (count - len(bars_seq))
 
-        clamped: List[float] = []
-        for v in bars_seq:
-            try:
-                f = float(v)
-            except Exception as e:
-                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                f = 0.0
-            if f < 0.0:
-                f = 0.0
-            if f > 1.0:
-                f = 1.0
-            clamped.append(f)
+        if self._vis_mode == 'spectrum':
+            clamped: List[float] = []
+            for v in bars_seq:
+                try:
+                    f = float(v)
+                except Exception as e:
+                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                    f = 0.0
+                if f < 0.0:
+                    f = 0.0
+                if f > 1.0:
+                    f = 1.0
+                clamped.append(f)
+        else:
+            # Non-Spectrum shaders consume waveform/energy/simulation state,
+            # not the compatibility bar array. Keep the accepted list by
+            # reference instead of copying and reclamping it every frame.
+            clamped = bars_seq
 
         if not clamped:
             self.clear_overlay_buffer()
@@ -1586,8 +1599,10 @@ class SpotifyVisualizerGLRenderer:
         self._bars = clamped
         self._bar_count = len(clamped)
         self._segments = max(1, segs)
-        self._fill_color = QColor(fill_color)
-        self._border_color = QColor(border_color)
+        if static_state_changed or self._fill_color != fill_color:
+            self._fill_color = QColor(fill_color)
+        if static_state_changed or self._border_color != border_color:
+            self._border_color = QColor(border_color)
         try:
             self._fade = max(0.0, min(1.0, float(fade)))
         except Exception as e:
@@ -1639,6 +1654,8 @@ class SpotifyVisualizerGLRenderer:
         _show_elapsed = (time.time() - _show_start) * 1000.0
 
         _update_start = time.time()
+        if static_token is not None:
+            self._last_static_token = static_token
         self._state_generation += 1
         self._request_frame_update(force=geometry_changed or became_visible)
         _update_elapsed = (time.time() - _update_start) * 1000.0

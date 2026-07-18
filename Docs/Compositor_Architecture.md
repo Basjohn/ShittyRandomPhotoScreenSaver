@@ -1,6 +1,6 @@
 # Compositor Architecture
 
-Last updated: 2026-07-16
+Last updated: 2026-07-18
 
 This document defines the implemented rendering architecture for fullscreen
 SRPSS displays and the remaining runtime-promotion contract for the
@@ -13,6 +13,12 @@ and one render scheduler. Wallpaper presentation, shader transitions, dimming,
 and GPU visualizer content are composed through that display-owned surface.
 Ordinary Qt widgets and temporary CUSTOM edit shells remain separate Qt
 widgets above the compositor.
+
+"Single surface" is display-local, not application-global. A two-display run
+has two compositor surfaces and two independent presentation targets. The PERF
+overlay therefore reports display-local compositor/transition delivery and
+`dt_max`; different simultaneous FPS values are expected when refresh, DPR,
+resolution, paint coalescing, or OS presentation differs between displays.
 
 The overhaul is intended to recover substantial CPU, presentation, and
 multi-display headroom by removing the competing Spotify visualizer child GL
@@ -58,8 +64,58 @@ or transition shader.
 The normal implementation now routes visualizer content through the
 display-owned compositor. The old child widget remains only as an explicit
 rollback/software-backend adapter and a narrowly authorized pre-reveal escape
-for a hard compositor-layer failure. Automated parity is implemented; packaged
-mixed-display runtime promotion remains open.
+for a hard compositor-layer failure. Automated and functional packaged parity
+are healthy, but the first performance-promotion matrix did not deliver
+repeatable ordinary-background headroom. Phase E is reopened rather than
+calling architectural completion a performance success.
+
+## First Packaged Matrix And Promotion Result
+
+Three process lifetimes were preserved separately:
+
+- The ordinary-background mixed `165/60 Hz` Normal run averaged/peaked about
+  `93.5/125.5%` app CPU. High-refresh compositor paint windows delivered about
+  `104-121.5 FPS` against `165 Hz`, while measured paint duration generally
+  remained below `14 ms` and GPU usage stayed modest.
+- The fresh-reboot mixed-display run improved materially, with about `82.0%`
+  average app CPU and a representative high-refresh Slide paint window near
+  `153 FPS`. This proves external/process state affects delivery, but a
+  fresh-reboot result is a comparator rather than the deployment assumption.
+- The 75-minute single-display MC run held compositor transition delivery near
+  `60 Hz`, had no shader/program lifecycle failure, compositor visualizer
+  render failure, or FBO churn, and kept ResourceManager GL registrations
+  nearly flat. It still averaged `58.0%` app CPU (`83.0%` p95), submitted
+  compute work at `93.4/s`, and accumulated `1,710` parser-recognized
+  visualizer timing warnings with repeated `80-118 ms` latency while
+  transitions were often idle.
+
+These results support the display-owned compositor structure but reject its
+performance promotion. The dominant unresolved shape is shared CPU/GIL/Qt
+event-delivery pressure, not expensive compositor draw calls or GPU saturation.
+Startup/cache/driver growth in short rebuild-heavy runs is not leak proof; a
+post-warm slope with quiescent checkpoints remains required.
+
+The first follow-up removes pressure that does not produce pixels:
+
+- `ThreadManager` throughput statistics update a small locked snapshot in the
+  submitting/completing threads. They no longer enqueue one UI mutation drain
+  per task, and the unused 250 ms UI stats publisher/triple buffer is retired.
+- A compositor frame with no dimming, PERF HUD, or active visualizer scene does
+  not open a QPainter overlay session. Active visualizer paint order and pixels
+  remain unchanged. PERF HUD runs still open the session by design.
+- A registered but not-yet-shown staggered display reports
+  `pending_compositor` rather than a terminal missing-compositor error. A real
+  existing terminal reason remains authoritative and still stops short retries
+  until target creation succeeds or the display generation is rebuilt. The
+  clean pending state also schedules no 16 ms readiness retry; it waits for the
+  existing staggered display lifecycle to realize the compositor.
+- `--usage` uses collector-owned process/system CPU-time deltas, reports an
+  unprimed value as `na`, and samples only the four hottest process threads at
+  the existing 15-second off-UI cadence. The parser partitions sequence resets
+  into process lifetimes and sorts dated rotations by full date.
+
+No performance improvement is claimed for these corrections until the same
+ordinary-background, fresh-reboot comparator, and long MC matrix is repeated.
 
 ## Implemented Ownership
 
@@ -355,12 +411,17 @@ single-surface samples during A/B runs.
 - Automated CUSTOM, display rebuild, geometry, cleanup, and exactly-once
   lifecycle bars are green.
 
-### Phase E: Packaged Runtime Promotion - Open
+### Phase E: Packaged Runtime Promotion - Reopened After Failed Headroom Gate
 
-- Automated parity is complete; packaged runtime A/B remains required.
-- Compare ordinary and externally saturated evidence separately.
-- Promote only with meaningful paint-gap, update-wait, CPU, and `dt_max`
-  headroom while preserving accepted pixels and cadence.
+- Automated parity and first packaged functional parity are complete.
+- The first packaged performance matrix did not provide meaningful,
+  repeatable ordinary-background headroom and therefore failed promotion.
+- Repeat the same scenarios after each named pressure correction; compare
+  ordinary, post-reboot, settings/rebuild, long-idle, and deliberately
+  externally saturated evidence separately.
+- Promote only with material CPU-distribution, paint-gap, visualizer-wait,
+  high-refresh delivery, and `dt_max` improvement while preserving accepted
+  pixels, cadence, smoothing, reactivity, and transition behavior.
 - Retire the legacy adapter only after the rollback gate has served a stable
   bake period.
 

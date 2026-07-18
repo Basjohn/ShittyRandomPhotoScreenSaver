@@ -253,7 +253,58 @@ class TestResourceCleanup:
             "gl_program": 0,
             "gl_framebuffer": 1,
             "gl_renderbuffer": 1,
+            "gl_texture_est_bytes": 0,
+            "gl_pbo_est_bytes": 0,
         }
+
+    def test_usage_counts_aggregate_only_owned_texture_cache_allocations(self):
+        manager = ResourceManager()
+
+        class TestResource:
+            pass
+
+        texture = TestResource()
+        pbo = TestResource()
+        unrelated = TestResource()
+        invalid = TestResource()
+        texture_id = manager.register(
+            texture,
+            ResourceType.NATIVE_HANDLE,
+            "cached texture",
+            gl_handle_type="texture",
+            usage_bucket="texture_cache",
+            estimated_bytes=8 * 1024 * 1024,
+        )
+        manager.register(
+            pbo,
+            ResourceType.NATIVE_HANDLE,
+            "texture upload PBO",
+            gl_handle_type="vbo",
+            usage_bucket="texture_pbo",
+            estimated_bytes=2 * 1024 * 1024,
+        )
+        manager.register(
+            unrelated,
+            ResourceType.NATIVE_HANDLE,
+            "unrelated texture",
+            gl_handle_type="texture",
+            estimated_bytes=99 * 1024 * 1024,
+        )
+        manager.register(
+            invalid,
+            ResourceType.NATIVE_HANDLE,
+            "invalid estimate",
+            gl_handle_type="texture",
+            usage_bucket="texture_cache",
+            estimated_bytes="invalid",
+        )
+
+        counts = manager.get_usage_counts()
+        assert counts["gl_texture_est_bytes"] == 8 * 1024 * 1024
+        assert counts["gl_pbo_est_bytes"] == 2 * 1024 * 1024
+
+        assert manager.unregister(texture_id, force=True) is True
+        assert manager.get_usage_counts()["gl_texture_est_bytes"] == 0
 
     def test_cleanup_all_idempotent(self):
         """Test that cleanup_all can be called multiple times."""

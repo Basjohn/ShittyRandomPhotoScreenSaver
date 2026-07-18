@@ -193,6 +193,32 @@ def parent_renderer_startup_retry_allowed(widget: Any) -> bool:
     return state_name not in {"ERROR", "CONTEXT_LOST", "DESTROYING", "DESTROYED"}
 
 
+def parent_renderer_startup_is_staggered_pending(widget: Any) -> bool:
+    """Return whether display startup owns readiness and no short retry is needed."""
+
+    parent_getter = getattr(widget, "parent", None)
+    if not callable(parent_getter):
+        return False
+    try:
+        parent = parent_getter()
+    except Exception:
+        return False
+    if parent is None or not hasattr(parent, "_gl_compositor"):
+        return False
+    if str(
+        getattr(parent, "_spotify_visualizer_surface_terminal_reason", "") or ""
+    ).strip():
+        return False
+    if getattr(parent, "_gl_compositor", None) is not None:
+        return False
+    if getattr(parent, "_render_surface", None) is not None:
+        return False
+    try:
+        return not bool(parent.isVisible())
+    except Exception:
+        return False
+
+
 def is_parent_renderer_ready(widget: Any) -> bool:
     """Gate reveal on a realised compositor frame target.
 
@@ -269,6 +295,8 @@ def finish_staged_startup_reveal(
     if widget._waiting_for_fresh_frame:
         return
     if not is_parent_renderer_ready(widget):
+        if parent_renderer_startup_is_staggered_pending(widget):
+            return
         if parent_renderer_startup_retry_allowed(widget):
             schedule_ready_driven_startup_reveal(widget, delay_ms=16)
         elif not bool(getattr(widget, "_startup_renderer_terminal_logged", False)):

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
@@ -116,6 +117,10 @@ class MetricWindow:
     max_listener_count: int | None = None
     pending_skip_count: int | None = None
     wakeup_count: int | None = None
+    presentation_dirty_generation: int | None = None
+    presentation_ack_generation: int | None = None
+    presentation_generation_lag: int | None = None
+    visualizer_request_count: int | None = None
     duration_ms: float | None = None
     owner: str | None = None
     line: str = ""
@@ -183,8 +188,9 @@ class UsageSample:
     skipped: int
     collect_ms: float
     cpu_primed: bool
-    cpu_app_pct: float
-    cpu_system_pct: float
+    cpu_app_pct: float | None
+    cpu_main_pct: float | None
+    cpu_system_pct: float | None
     rss_app_mb: float
     private_app_mb: float | None
     vms_app_mb: float | None
@@ -204,13 +210,134 @@ class UsageSample:
     rm_gl_program: int | None = None
     rm_gl_framebuffer: int | None = None
     rm_gl_renderbuffer: int | None = None
+    rm_gl_texture_est_mb: float | None = None
+    rm_gl_pbo_est_mb: float | None = None
+    img_cache_items: int | None = None
+    img_cache_max_items: int | None = None
+    img_cache_est_mb: float | None = None
+    img_cache_budget_mb: float | None = None
+    img_cache_hits: int | None = None
+    img_cache_misses: int | None = None
+    img_cache_evictions: int | None = None
     tm_io_submitted: int | None = None
     tm_io_completed: int | None = None
     tm_io_failed: int | None = None
     tm_compute_submitted: int | None = None
     tm_compute_completed: int | None = None
     tm_compute_failed: int | None = None
+    cpu_hot_threads: tuple[tuple[str, float], ...] = ()
     line: str = ""
+
+
+def _usage_growth_anomalies_for_samples(samples: list[UsageSample]) -> list[str]:
+    baseline = samples[1]
+    latest = samples[-1]
+    anomalies: list[str] = []
+    rss_growth = latest.rss_app_mb - baseline.rss_app_mb
+    rss_growth_flagged = (
+        rss_growth >= 128.0
+        and latest.rss_app_mb >= baseline.rss_app_mb * 1.20
+    )
+    if rss_growth_flagged:
+        anomalies.append(f"app RSS grew {rss_growth:.1f}MB across usage samples")
+        if baseline.img_cache_est_mb is not None and latest.img_cache_est_mb is not None:
+            image_cache_growth = latest.img_cache_est_mb - baseline.img_cache_est_mb
+            if image_cache_growth >= 16.0:
+                anomalies.append(
+                    "ImageCache estimate grew "
+                    f"{image_cache_growth:.1f}MB alongside RSS; decoded-image cache "
+                    "warm-up is a plausible contributor"
+                )
+            else:
+                anomalies.append(
+                    "ImageCache estimate remained effectively flat during RSS growth; "
+                    "current telemetry does not attribute that growth to the decoded-image cache"
+                )
+    if baseline.private_app_mb is not None and latest.private_app_mb is not None:
+        private_growth = latest.private_app_mb - baseline.private_app_mb
+        if private_growth >= 128.0 and latest.private_app_mb >= baseline.private_app_mb * 1.20:
+            anomalies.append(
+                f"app private memory grew {private_growth:.1f}MB across usage samples"
+            )
+    if baseline.vms_app_mb is not None and latest.vms_app_mb is not None:
+        vms_growth = latest.vms_app_mb - baseline.vms_app_mb
+        if vms_growth >= 256.0 and latest.vms_app_mb >= baseline.vms_app_mb * 1.15:
+            anomalies.append(
+                f"app virtual memory grew {vms_growth:.1f}MB across usage samples"
+            )
+    thread_growth = latest.threads_app - baseline.threads_app
+    if thread_growth >= 8:
+        anomalies.append(f"app thread count grew by {thread_growth} across usage samples")
+    if baseline.handles_app is not None and latest.handles_app is not None:
+        handle_growth = latest.handles_app - baseline.handles_app
+        if handle_growth >= 128:
+            anomalies.append(f"app handle count grew by {handle_growth} across usage samples")
+    if baseline.vram_dedicated_mb is not None and latest.vram_dedicated_mb is not None:
+        vram_growth = latest.vram_dedicated_mb - baseline.vram_dedicated_mb
+        vram_growth_flagged = (
+            vram_growth >= 256.0
+            and latest.vram_dedicated_mb >= baseline.vram_dedicated_mb * 1.25
+        )
+        if vram_growth_flagged:
+            anomalies.append(f"dedicated VRAM grew {vram_growth:.1f}MB across usage samples")
+            if (
+                baseline.rm_gl_texture_est_mb is not None
+                and latest.rm_gl_texture_est_mb is not None
+                and baseline.rm_gl_pbo_est_mb is not None
+                and latest.rm_gl_pbo_est_mb is not None
+            ):
+                registered_growth = (
+                    latest.rm_gl_texture_est_mb
+                    + latest.rm_gl_pbo_est_mb
+                    - baseline.rm_gl_texture_est_mb
+                    - baseline.rm_gl_pbo_est_mb
+                )
+                if registered_growth >= 16.0:
+                    anomalies.append(
+                        "registered compositor texture/PBO estimate grew "
+                        f"{registered_growth:.1f}MB alongside dedicated VRAM"
+                    )
+                else:
+                    anomalies.append(
+                        "registered compositor texture/PBO estimate remained effectively flat "
+                        "during dedicated VRAM growth; current telemetry does not attribute it "
+                        "to GLTextureManager cache/PBO ownership"
+                    )
+    if baseline.rm_gl_total is not None and latest.rm_gl_total is not None:
+        gl_growth = latest.rm_gl_total - baseline.rm_gl_total
+        if gl_growth >= 8:
+            anomalies.append(
+                f"ResourceManager GL registrations grew by {gl_growth} across usage samples"
+            )
+    if baseline.rm_gl_texture is not None and latest.rm_gl_texture is not None:
+        texture_growth = latest.rm_gl_texture - baseline.rm_gl_texture
+        if texture_growth >= 8:
+            anomalies.append(
+                "ResourceManager texture registrations grew by "
+                f"{texture_growth} across usage samples"
+            )
+    if baseline.rm_total is not None and latest.rm_total is not None:
+        resource_growth = latest.rm_total - baseline.rm_total
+        if resource_growth >= 32:
+            anomalies.append(
+                f"ResourceManager total registrations grew by {resource_growth} "
+                "across usage samples"
+            )
+    if (
+        baseline.tm_compute_submitted is not None
+        and baseline.tm_compute_completed is not None
+        and latest.tm_compute_submitted is not None
+        and latest.tm_compute_completed is not None
+    ):
+        baseline_backlog = baseline.tm_compute_submitted - baseline.tm_compute_completed
+        latest_backlog = latest.tm_compute_submitted - latest.tm_compute_completed
+        backlog_growth = latest_backlog - baseline_backlog
+        if latest_backlog >= 8 and backlog_growth >= 8:
+            anomalies.append(
+                "ThreadManager compute backlog grew by "
+                f"{backlog_growth} to {latest_backlog} tasks"
+            )
+    return anomalies
 
 
 @dataclass(frozen=True)
@@ -220,8 +347,13 @@ class UsageVisualizerCorrelation:
 
     @property
     def line(self) -> str:
+        cpu_app = (
+            f"{self.usage.cpu_app_pct:.1f}%"
+            if self.usage.cpu_app_pct is not None
+            else "na"
+        )
         return (
-            f"{self.usage.timestamp or '<no-ts>'} cpu_app={self.usage.cpu_app_pct:.1f}% "
+            f"{self.usage.timestamp or '<no-ts>'} cpu_app={cpu_app} "
             f"rss={self.usage.rss_app_mb:.1f}MB gpu={self.usage.gpu_busy_pct if self.usage.gpu_busy_pct is not None else 'na'} "
             f"visualizer={self.warning.kind}:{self.warning.value_ms:.1f}ms"
         )
@@ -495,6 +627,22 @@ class PerfHealthReport:
     timeline_markers: list[TimelineMarker] = field(default_factory=list)
 
     @property
+    def usage_lifetimes(self) -> list[list[UsageSample]]:
+        """Partition samples whenever the per-process sequence restarts."""
+        lifetimes: list[list[UsageSample]] = []
+        current: list[UsageSample] = []
+        previous_sequence: int | None = None
+        for sample in self.usage_samples:
+            if current and previous_sequence is not None and sample.sequence <= previous_sequence:
+                lifetimes.append(current)
+                current = []
+            current.append(sample)
+            previous_sequence = sample.sequence
+        if current:
+            lifetimes.append(current)
+        return lifetimes
+
+    @property
     def intrusive_usage_samples(self) -> list[UsageSample]:
         """Samples where diagnostics were slow, late, or unable to keep cadence."""
         return [
@@ -507,105 +655,61 @@ class PerfHealthReport:
 
     @property
     def sustained_high_cpu_samples(self) -> list[UsageSample]:
-        high = [
-            sample
-            for sample in self.usage_samples
-            if sample.cpu_primed and sample.cpu_app_pct >= 100.0
-        ]
-        return high if len(high) >= 3 else []
+        sustained: list[UsageSample] = []
+        for lifetime in self.usage_lifetimes:
+            high = [
+                sample
+                for sample in lifetime
+                if sample.cpu_primed
+                and sample.cpu_app_pct is not None
+                and sample.cpu_app_pct >= 100.0
+            ]
+            if len(high) >= 3:
+                sustained.extend(high)
+        return sustained
+
+    @property
+    def usage_hot_thread_stats(self) -> list[tuple[str, float, float, int]]:
+        buckets: dict[str, list[float]] = {}
+        for sample in self.usage_samples:
+            for name, cpu_pct in sample.cpu_hot_threads:
+                buckets.setdefault(name, []).append(cpu_pct)
+        return sorted(
+            (
+                (name, sum(values) / len(values), max(values), len(values))
+                for name, values in buckets.items()
+            ),
+            key=lambda item: (item[2], item[1]),
+            reverse=True,
+        )
 
     @property
     def sustained_gpu_saturation_samples(self) -> list[UsageSample]:
-        high = [
-            sample
-            for sample in self.usage_samples
-            if sample.gpu_supported
-            and sample.gpu_active
-            and (sample.gpu_busy_pct or 0.0) >= 90.0
-        ]
-        return high if len(high) >= 3 else []
+        sustained: list[UsageSample] = []
+        for lifetime in self.usage_lifetimes:
+            high = [
+                sample
+                for sample in lifetime
+                if sample.gpu_supported
+                and sample.gpu_active
+                and (sample.gpu_busy_pct or 0.0) >= 90.0
+            ]
+            if len(high) >= 3:
+                sustained.extend(high)
+        return sustained
 
     @property
     def usage_growth_anomalies(self) -> list[str]:
-        if len(self.usage_samples) < 3:
-            return []
-        baseline = self.usage_samples[1]
-        latest = self.usage_samples[-1]
         anomalies: list[str] = []
-        rss_growth = latest.rss_app_mb - baseline.rss_app_mb
-        if rss_growth >= 128.0 and latest.rss_app_mb >= baseline.rss_app_mb * 1.20:
-            anomalies.append(f"app RSS grew {rss_growth:.1f}MB across usage samples")
-        if (
-            baseline.private_app_mb is not None
-            and latest.private_app_mb is not None
-        ):
-            private_growth = latest.private_app_mb - baseline.private_app_mb
-            if (
-                private_growth >= 128.0
-                and latest.private_app_mb >= baseline.private_app_mb * 1.20
-            ):
-                anomalies.append(
-                    f"app private memory grew {private_growth:.1f}MB across usage samples"
-                )
-        if baseline.vms_app_mb is not None and latest.vms_app_mb is not None:
-            vms_growth = latest.vms_app_mb - baseline.vms_app_mb
-            if vms_growth >= 256.0 and latest.vms_app_mb >= baseline.vms_app_mb * 1.15:
-                anomalies.append(
-                    f"app virtual memory grew {vms_growth:.1f}MB across usage samples"
-                )
-        thread_growth = latest.threads_app - baseline.threads_app
-        if thread_growth >= 8:
-            anomalies.append(f"app thread count grew by {thread_growth} across usage samples")
-        if baseline.handles_app is not None and latest.handles_app is not None:
-            handle_growth = latest.handles_app - baseline.handles_app
-            if handle_growth >= 128:
-                anomalies.append(f"app handle count grew by {handle_growth} across usage samples")
-        if (
-            baseline.vram_dedicated_mb is not None
-            and latest.vram_dedicated_mb is not None
-        ):
-            vram_growth = latest.vram_dedicated_mb - baseline.vram_dedicated_mb
-            if vram_growth >= 256.0 and latest.vram_dedicated_mb >= baseline.vram_dedicated_mb * 1.25:
-                anomalies.append(f"dedicated VRAM grew {vram_growth:.1f}MB across usage samples")
-        if baseline.rm_gl_total is not None and latest.rm_gl_total is not None:
-            gl_growth = latest.rm_gl_total - baseline.rm_gl_total
-            if gl_growth >= 8:
-                anomalies.append(
-                    f"ResourceManager GL registrations grew by {gl_growth} across usage samples"
-                )
-        if (
-            baseline.rm_gl_texture is not None
-            and latest.rm_gl_texture is not None
-        ):
-            texture_growth = latest.rm_gl_texture - baseline.rm_gl_texture
-            if texture_growth >= 8:
-                anomalies.append(
-                    "ResourceManager texture registrations grew by "
-                    f"{texture_growth} across usage samples"
-                )
-        if baseline.rm_total is not None and latest.rm_total is not None:
-            resource_growth = latest.rm_total - baseline.rm_total
-            if resource_growth >= 32:
-                anomalies.append(
-                    f"ResourceManager total registrations grew by {resource_growth} "
-                    "across usage samples"
-                )
-        if (
-            baseline.tm_compute_submitted is not None
-            and baseline.tm_compute_completed is not None
-            and latest.tm_compute_submitted is not None
-            and latest.tm_compute_completed is not None
-        ):
-            baseline_backlog = (
-                baseline.tm_compute_submitted - baseline.tm_compute_completed
+        lifetimes = self.usage_lifetimes
+        for index, lifetime in enumerate(lifetimes, start=1):
+            if len(lifetime) < 3:
+                continue
+            prefix = f"usage lifetime {index}/{len(lifetimes)}: " if len(lifetimes) > 1 else ""
+            anomalies.extend(
+                prefix + message
+                for message in _usage_growth_anomalies_for_samples(lifetime)
             )
-            latest_backlog = latest.tm_compute_submitted - latest.tm_compute_completed
-            backlog_growth = latest_backlog - baseline_backlog
-            if latest_backlog >= 8 and backlog_growth >= 8:
-                anomalies.append(
-                    "ThreadManager compute backlog grew by "
-                    f"{backlog_growth} to {latest_backlog} tasks"
-                )
         return anomalies
 
     @property
@@ -1316,6 +1420,19 @@ def _parse_flag(value: str | None) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_hot_threads(value: str | None) -> tuple[tuple[str, float], ...]:
+    if not value or value.strip().lower() == "na":
+        return ()
+    parsed: list[tuple[str, float]] = []
+    for entry in value.split("|"):
+        name, separator, raw_cpu = entry.rpartition(":")
+        cpu_pct = _parse_float(raw_cpu) if separator else None
+        if not name or cpu_pct is None:
+            continue
+        parsed.append((name, cpu_pct))
+    return tuple(parsed)
+
+
 def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
     parts = _parse_kv_payload(payload)
     sequence = _parse_int(parts.get("seq"))
@@ -1323,6 +1440,7 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
     skipped = _parse_int(parts.get("skipped"))
     collect_ms = _parse_float(parts.get("collect_ms"))
     cpu_app_pct = _parse_float(parts.get("cpu_app_pct"))
+    cpu_main_pct = _parse_float(parts.get("cpu_main_pct"))
     cpu_system_pct = _parse_float(parts.get("cpu_system_pct"))
     rss_app_mb = _parse_float(parts.get("rss_app_mb"))
     threads_app = _parse_int(parts.get("threads_app"))
@@ -1332,8 +1450,6 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         cadence_gap_ms,
         skipped,
         collect_ms,
-        cpu_app_pct,
-        cpu_system_pct,
         rss_app_mb,
         threads_app,
         tm_active,
@@ -1348,6 +1464,7 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         collect_ms=collect_ms,
         cpu_primed=_parse_flag(parts.get("cpu_primed")),
         cpu_app_pct=cpu_app_pct,
+        cpu_main_pct=cpu_main_pct,
         cpu_system_pct=cpu_system_pct,
         rss_app_mb=rss_app_mb,
         private_app_mb=_parse_float(parts.get("private_app_mb")),
@@ -1368,12 +1485,22 @@ def _usage_sample_from_line(line: str, payload: str) -> UsageSample | None:
         rm_gl_program=_parse_int(parts.get("rm_gl_program")),
         rm_gl_framebuffer=_parse_int(parts.get("rm_gl_framebuffer")),
         rm_gl_renderbuffer=_parse_int(parts.get("rm_gl_renderbuffer")),
+        rm_gl_texture_est_mb=_parse_float(parts.get("rm_gl_texture_est_mb")),
+        rm_gl_pbo_est_mb=_parse_float(parts.get("rm_gl_pbo_est_mb")),
+        img_cache_items=_parse_int(parts.get("img_cache_items")),
+        img_cache_max_items=_parse_int(parts.get("img_cache_max_items")),
+        img_cache_est_mb=_parse_float(parts.get("img_cache_est_mb")),
+        img_cache_budget_mb=_parse_float(parts.get("img_cache_budget_mb")),
+        img_cache_hits=_parse_int(parts.get("img_cache_hits")),
+        img_cache_misses=_parse_int(parts.get("img_cache_misses")),
+        img_cache_evictions=_parse_int(parts.get("img_cache_evictions")),
         tm_io_submitted=_parse_int(parts.get("tm_io_submitted")),
         tm_io_completed=_parse_int(parts.get("tm_io_completed")),
         tm_io_failed=_parse_int(parts.get("tm_io_failed")),
         tm_compute_submitted=_parse_int(parts.get("tm_compute_submitted")),
         tm_compute_completed=_parse_int(parts.get("tm_compute_completed")),
         tm_compute_failed=_parse_int(parts.get("tm_compute_failed")),
+        cpu_hot_threads=_parse_hot_threads(parts.get("cpu_hot_threads")),
         line=line,
     )
 
@@ -1422,7 +1549,8 @@ def _timestamp_from_line(line: str) -> str | None:
 def _timestamp_seconds(timestamp: str | None) -> int | None:
     if not timestamp:
         return None
-    time_part = timestamp.rsplit(" ", 1)[-1]
+    timestamp_parts = timestamp.rsplit(" ", 1)
+    time_part = timestamp_parts[-1]
     parts = time_part.split(":")
     if len(parts) != 3:
         return None
@@ -1430,7 +1558,13 @@ def _timestamp_seconds(timestamp: str | None) -> int | None:
         hours, minutes, seconds = (int(part) for part in parts)
     except ValueError:
         return None
-    return hours * 3600 + minutes * 60 + seconds
+    day_offset = 0
+    if len(timestamp_parts) == 2:
+        try:
+            day_offset = date.fromisoformat(timestamp_parts[0]).toordinal() * 86_400
+        except ValueError:
+            return None
+    return day_offset + hours * 3600 + minutes * 60 + seconds
 
 
 def _metric_window_from_payload(source: str, name: str, payload: str, line: str) -> MetricWindow | None:
@@ -1447,6 +1581,10 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
     max_listener_count = _parse_int(parts.get("max_listeners"))
     pending_skip_count = _parse_int(parts.get("pending_skips"))
     wakeup_count = _parse_int(parts.get("wakeups"))
+    presentation_dirty_generation = _parse_int(parts.get("dirty_generation"))
+    presentation_ack_generation = _parse_int(parts.get("ack_generation"))
+    presentation_generation_lag = _parse_int(parts.get("generation_lag"))
+    visualizer_request_count = _parse_int(parts.get("visualizer_requests"))
     duration_ms = _parse_float(parts.get("duration"))
     owner = parts.get("owner")
     return MetricWindow(
@@ -1463,6 +1601,10 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
         max_listener_count=max_listener_count,
         pending_skip_count=pending_skip_count,
         wakeup_count=wakeup_count,
+        presentation_dirty_generation=presentation_dirty_generation,
+        presentation_ack_generation=presentation_ack_generation,
+        presentation_generation_lag=presentation_generation_lag,
+        visualizer_request_count=visualizer_request_count,
         duration_ms=duration_ms,
         owner=owner,
         line=line,
@@ -1676,7 +1818,8 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                         timestamp,
                         "usage_sample",
                         (
-                            f"cpu_app={sample.cpu_app_pct:.1f}% rss={sample.rss_app_mb:.1f}MB "
+                            f"cpu_app={f'{sample.cpu_app_pct:.1f}%' if sample.cpu_app_pct is not None else 'na'} "
+                            f"rss={sample.rss_app_mb:.1f}MB "
                             f"gpu={sample.gpu_busy_pct if sample.gpu_busy_pct is not None else 'na'} "
                             f"rm_gl={sample.rm_gl_total if sample.rm_gl_total is not None else 'na'}"
                         ),
@@ -2236,6 +2379,7 @@ def main() -> int:
     )
     print(f"Visualizer safeguard failures: {len(report.visualizer_safeguard_failures)}")
     print(f"Whole-process usage samples: {len(report.usage_samples)}")
+    print(f"Whole-process usage lifetimes: {len(report.usage_lifetimes)}")
     print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
     print(f"GL texture cache cleanups: {len(report.texture_cache_cleanups)}")
@@ -2268,31 +2412,32 @@ def main() -> int:
     )
     print(f"Timeline markers: {len(report.timeline_markers)}")
     if report.usage_samples:
-        growth_baseline_index = 1 if len(report.usage_samples) >= 3 else 0
-        growth_baseline = report.usage_samples[growth_baseline_index]
-        last_usage = report.usage_samples[-1]
-        peak_cpu = max(sample.cpu_app_pct for sample in report.usage_samples)
+        usage_samples = report.usage_lifetimes[-1]
+        growth_baseline_index = 1 if len(usage_samples) >= 3 else 0
+        growth_baseline = usage_samples[growth_baseline_index]
+        last_usage = usage_samples[-1]
         primed_cpu = [
             sample.cpu_app_pct
-            for sample in report.usage_samples
-            if sample.cpu_primed
+            for sample in usage_samples
+            if sample.cpu_primed and sample.cpu_app_pct is not None
         ]
+        peak_cpu = max(primed_cpu) if primed_cpu else None
         average_cpu = (
             sum(primed_cpu) / len(primed_cpu)
             if primed_cpu
-            else peak_cpu
+            else None
         )
         p95_cpu = _percentile(primed_cpu, 0.95)
-        peak_rss = max(sample.rss_app_mb for sample in report.usage_samples)
+        peak_rss = max(sample.rss_app_mb for sample in usage_samples)
         gpu_values = [
             sample.gpu_busy_pct
-            for sample in report.usage_samples
+            for sample in usage_samples
             if sample.gpu_busy_pct is not None
         ]
         peak_gpu = max(gpu_values) if gpu_values else None
         gl_registration_values = [
             sample.rm_gl_total
-            for sample in report.usage_samples
+            for sample in usage_samples
             if sample.rm_gl_total is not None
         ]
         peak_gl_registrations = (
@@ -2308,7 +2453,7 @@ def main() -> int:
         )
         elapsed_seconds = sum(
             max(0.0, sample.cadence_gap_ms)
-            for sample in report.usage_samples[growth_baseline_index + 1 :]
+            for sample in usage_samples[growth_baseline_index + 1 :]
         ) / 1000.0
         compute_rate = None
         compute_backlog = None
@@ -2345,11 +2490,37 @@ def main() -> int:
             )
             else None
         )
+        image_cache_delta = (
+            last_usage.img_cache_est_mb - growth_baseline.img_cache_est_mb
+            if (
+                last_usage.img_cache_est_mb is not None
+                and growth_baseline.img_cache_est_mb is not None
+            )
+            else None
+        )
+        texture_estimate_delta = (
+            last_usage.rm_gl_texture_est_mb
+            - growth_baseline.rm_gl_texture_est_mb
+            if (
+                last_usage.rm_gl_texture_est_mb is not None
+                and growth_baseline.rm_gl_texture_est_mb is not None
+            )
+            else None
+        )
+        pbo_estimate_delta = (
+            last_usage.rm_gl_pbo_est_mb - growth_baseline.rm_gl_pbo_est_mb
+            if (
+                last_usage.rm_gl_pbo_est_mb is not None
+                and growth_baseline.rm_gl_pbo_est_mb is not None
+            )
+            else None
+        )
         print(
-            "Usage summary: "
-            f"avg_cpu={average_cpu:.1f}% "
+            f"Usage summary (latest lifetime {len(report.usage_lifetimes)}/{len(report.usage_lifetimes)}): "
+            f"avg_cpu={f'{average_cpu:.1f}%' if average_cpu is not None else 'na'} "
             f"p95_cpu={f'{p95_cpu:.1f}%' if p95_cpu is not None else 'na'} "
-            f"peak_cpu={peak_cpu:.1f}% peak_rss={peak_rss:.1f}MB "
+            f"peak_cpu={f'{peak_cpu:.1f}%' if peak_cpu is not None else 'na'} "
+            f"peak_rss={peak_rss:.1f}MB "
             f"growth_baseline_seq={growth_baseline.sequence} "
             f"rss_delta={last_usage.rss_app_mb - growth_baseline.rss_app_mb:.1f}MB "
             f"private_delta={f'{private_delta:.1f}MB' if private_delta is not None else 'na'} "
@@ -2358,9 +2529,22 @@ def main() -> int:
             f"peak_gpu={f'{peak_gpu:.1f}%' if peak_gpu is not None else 'na'} "
             f"peak_rm_gl={peak_gl_registrations if peak_gl_registrations is not None else 'na'} "
             f"rm_gl_delta={gl_registration_delta if gl_registration_delta is not None else 'na'} "
+            f"img_cache={f'{last_usage.img_cache_est_mb:.1f}MB' if last_usage.img_cache_est_mb is not None else 'na'} "
+            f"img_cache_delta={f'{image_cache_delta:.1f}MB' if image_cache_delta is not None else 'na'} "
+            f"img_cache_items={last_usage.img_cache_items if last_usage.img_cache_items is not None else 'na'} "
+            f"rm_texture_est_delta={f'{texture_estimate_delta:.1f}MB' if texture_estimate_delta is not None else 'na'} "
+            f"rm_pbo_est_delta={f'{pbo_estimate_delta:.1f}MB' if pbo_estimate_delta is not None else 'na'} "
             f"compute_submit_rate={f'{compute_rate:.1f}/s' if compute_rate is not None else 'na'} "
             f"compute_backlog={compute_backlog if compute_backlog is not None else 'na'}"
         )
+        if report.usage_hot_thread_stats:
+            print(
+                "Hot thread CPU (all parsed lifetimes): "
+                + "; ".join(
+                    f"{name} avg={average:.1f}% peak={peak:.1f}% samples={count}"
+                    for name, average, peak, count in report.usage_hot_thread_stats[:8]
+                )
+            )
 
     _print_samples(
         "Paint delivery starvation windows",

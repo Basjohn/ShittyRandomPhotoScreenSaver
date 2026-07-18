@@ -74,6 +74,25 @@ def show_on_screen(widget) -> None:
     
     # Store screen reference and DPI ratio for high-quality rendering
     widget._screen = screen
+
+    previous_refresh_screen = getattr(widget, "_refresh_rate_screen", None)
+    if previous_refresh_screen is not screen:
+        if _qt_object_is_valid(previous_refresh_screen):
+            try:
+                previous_refresh_screen.refreshRateChanged.disconnect(
+                    widget._handle_refresh_rate_change
+                )
+            except Exception:
+                pass
+        try:
+            screen.refreshRateChanged.connect(widget._handle_refresh_rate_change)
+            widget._refresh_rate_screen = screen
+        except Exception:
+            widget._refresh_rate_screen = None
+            logger.debug(
+                "[SCREEN] Failed to connect refresh-rate change authority",
+                exc_info=True,
+            )
     widget._device_pixel_ratio = screen.devicePixelRatio()
     
     screen_geom = screen.geometry()
@@ -343,6 +362,42 @@ def handle_screen_change(widget, screen) -> None:
         widget._ensure_gl_compositor()
     except Exception:
         logger.debug("[SCREEN] GL compositor update failed", exc_info=True)
+
+    comp = getattr(widget, "_gl_compositor", None)
+    if comp is not None:
+        try:
+            reconfigure = getattr(comp, "reconfigure_presentation_target", None)
+            if callable(reconfigure):
+                reconfigure(reason="screen_change")
+        except Exception:
+            logger.debug(
+                "[SCREEN] Compositor presentation target update failed",
+                exc_info=True,
+            )
+
+
+def handle_refresh_rate_change(widget) -> None:
+    """Apply a live QScreen Hz change to all display-local cadence owners."""
+
+    if not _qt_object_is_valid(widget):
+        return
+    try:
+        widget._configure_refresh_rate_sync()
+    except Exception:
+        logger.debug("[SCREEN] Live refresh-rate sync failed", exc_info=True)
+        return
+    comp = getattr(widget, "_gl_compositor", None)
+    if comp is None:
+        return
+    try:
+        reconfigure = getattr(comp, "reconfigure_presentation_target", None)
+        if callable(reconfigure):
+            reconfigure(reason="refresh_rate_changed")
+    except Exception:
+        logger.debug(
+            "[SCREEN] Live compositor refresh-rate update failed",
+            exc_info=True,
+        )
 
 def detect_refresh_rate(widget) -> float:
     _FALLBACK_HZ = 240.0  # prefer too-fast over too-slow

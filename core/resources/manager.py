@@ -415,7 +415,8 @@ class ResourceManager:
             self._logger.warning("OpenGL not available for texture registration")
             return ""
     
-    def _get_gl_stats_locked(self) -> Dict[str, int]:
+    def _get_gl_usage_locked(self) -> tuple[Dict[str, int], int, int]:
+        """Return GL handle counts plus passive texture/PBO byte estimates."""
         stats = {
             "vao": 0,
             "vbo": 0,
@@ -426,6 +427,8 @@ class ResourceManager:
             "renderbuffer": 0,
             "total": 0,
         }
+        texture_estimated_bytes = 0
+        pbo_estimated_bytes = 0
         for info in self._resources.values():
             if info.resource_type != ResourceType.NATIVE_HANDLE:
                 continue
@@ -433,6 +436,24 @@ class ResourceManager:
             if handle_type in stats:
                 stats[handle_type] += 1
                 stats["total"] += 1
+            try:
+                estimated_bytes = max(
+                    0,
+                    int(info.metadata.get("estimated_bytes", 0) or 0),
+                )
+            except (TypeError, ValueError, OverflowError):
+                estimated_bytes = 0
+            usage_bucket = str(info.metadata.get("usage_bucket", "") or "")
+            if handle_type == "texture" and usage_bucket == "texture_cache":
+                texture_estimated_bytes += estimated_bytes
+            elif handle_type == "vbo" and usage_bucket == "texture_pbo":
+                pbo_estimated_bytes += estimated_bytes
+        return stats, texture_estimated_bytes, pbo_estimated_bytes
+
+    def _get_gl_stats_locked(self) -> Dict[str, int]:
+        stats, _texture_estimated_bytes, _pbo_estimated_bytes = (
+            self._get_gl_usage_locked()
+        )
         return stats
 
     def get_gl_stats(self) -> Dict[str, int]:
@@ -443,7 +464,9 @@ class ResourceManager:
     def get_usage_counts(self) -> Dict[str, int]:
         """Return one atomic, allocation-light snapshot for passive telemetry."""
         with self._lock:
-            gl_stats = self._get_gl_stats_locked()
+            gl_stats, texture_estimated_bytes, pbo_estimated_bytes = (
+                self._get_gl_usage_locked()
+            )
             return {
                 "total": len(self._resources),
                 "gl_total": gl_stats["total"],
@@ -453,6 +476,8 @@ class ResourceManager:
                 "gl_program": gl_stats["program"],
                 "gl_framebuffer": gl_stats["framebuffer"],
                 "gl_renderbuffer": gl_stats["renderbuffer"],
+                "gl_texture_est_bytes": texture_estimated_bytes,
+                "gl_pbo_est_bytes": pbo_estimated_bytes,
             }
     
     def get(self, resource_id: str) -> Optional[Any]:

@@ -138,7 +138,16 @@ def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
 
 def handle_paintGL(widget) -> None:  # type: ignore[override]
     _paint_start = time.time()
-    _mark_widget_update_consumed(widget)
+    paint_generation = 0
+    paint_started = getattr(widget, "_presentation_paint_started", None)
+    if callable(paint_started):
+        try:
+            paint_generation = int(paint_started())
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Presentation paint-start acknowledgement failed",
+                exc_info=True,
+            )
     
     # Phase 4: Disable GC during frame rendering to prevent GC pauses
     gc_controller = None
@@ -161,7 +170,13 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
         paintGL_impl(widget, )
     finally:
         paint_elapsed = (time.time() - _paint_start) * 1000.0
-        widget._record_paint_metrics(paint_elapsed)
+        try:
+            widget._record_paint_metrics(paint_elapsed)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Paint metrics recording failed",
+                exc_info=True,
+            )
         
         # End frame budget tracking and re-enable GC
         try:
@@ -185,6 +200,19 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
                 "[PERF] [GL COMPOSITOR] Slow paintGL: %.2fms (recent transitions: %s)",
                 paint_elapsed, history_str
             )
+
+        paint_completed = getattr(widget, "_presentation_paint_completed", None)
+        if callable(paint_completed):
+            try:
+                paint_completed(paint_generation)
+            except Exception:
+                logger.error(
+                    "[GL COMPOSITOR] Presentation paint-completion acknowledgement failed",
+                    exc_info=True,
+                )
+                _mark_widget_update_consumed(widget)
+        else:
+            _mark_widget_update_consumed(widget)
 
 def paintGL_impl(widget) -> None:
     """Internal paintGL implementation.

@@ -1234,6 +1234,30 @@ def test_gpu_push_extras_are_reused_per_mode_without_cross_mode_aliasing(qt_app,
     assert "line_count" not in bubble_second
 
 
+@pytest.mark.qt
+def test_gpu_push_static_payload_rebuilds_only_after_revision_change(qt_app, qtbot, monkeypatch):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    engine = _FakeEngine(bar_count=24)
+    _patch_shared_engine(monkeypatch, lambda *_: engine)
+    widget = SpotifyVisualizerWidget(parent=parent, bar_count=24)
+    widget._engine = engine
+
+    widget._bubble_outline_color = QColor("red")
+    first = config_applier.build_gpu_push_extra_kwargs(widget, "bubble", engine)
+    first_token = widget._gpu_frame_static_tokens_by_mode["bubble"]
+
+    widget._bubble_outline_color = QColor("blue")
+    second = config_applier.build_gpu_push_extra_kwargs(widget, "bubble", engine)
+    assert second["bubble_outline_color"] == QColor("red")
+    assert widget._gpu_frame_static_tokens_by_mode["bubble"] is first_token
+
+    widget._mark_gpu_static_state_dirty()
+    third = config_applier.build_gpu_push_extra_kwargs(widget, "bubble", engine)
+    assert third["bubble_outline_color"] == QColor("blue")
+    assert widget._gpu_frame_static_tokens_by_mode["bubble"] is not first_token
+
+
 class _OverlayStub:
     def __init__(self) -> None:
         self.reset_requests: list[str] = []

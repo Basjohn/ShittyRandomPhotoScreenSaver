@@ -231,9 +231,11 @@ class CompositorSpotifyVisualizerLayer:
         try:
             requester = getattr(self._compositor, "request_scene_update", None)
             if callable(requester):
-                requester()
+                requester(source="visualizer")
             else:
-                self._compositor.update()
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Presentation owner unavailable for layer update"
+                )
         except RuntimeError:
             return
 
@@ -284,9 +286,11 @@ class CompositorSpotifyVisualizerLayer:
         try:
             requester = getattr(self._compositor, "request_scene_update", None)
             if callable(requester):
-                requester()
+                requester(source="visualizer_retire")
             else:
-                self._compositor.update()
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Presentation owner unavailable during layer retirement"
+                )
         except RuntimeError:
             pass
 
@@ -1013,7 +1017,8 @@ class CompositorSpotifyVisualizerLayer:
         gl.glDisable(gl.GL_BLEND)
         return True
 
-    def paint(self, painter: QPainter) -> bool:
+    def should_paint_scene(self) -> bool:
+        """Return whether this layer has visible work for the current scene."""
         if self._retired or not self.isVisible():
             return False
         if not bool(getattr(self._renderer, "_enabled", False)):
@@ -1030,6 +1035,14 @@ class CompositorSpotifyVisualizerLayer:
             if not visualizer.isVisible():
                 return False
         except Exception:
+            return False
+        return True
+
+    def paint(self, painter: QPainter) -> bool:
+        if not self.should_paint_scene():
+            return False
+        visualizer = getattr(self.parent(), "spotify_visualizer_widget", None)
+        if visualizer is None:
             return False
 
         try:

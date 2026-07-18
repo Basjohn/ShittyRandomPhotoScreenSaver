@@ -12,7 +12,7 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from enum import Enum, auto
 from types import SimpleNamespace
-from typing import List, Optional
+from typing import Any, List, Optional
 import os
 import threading
 
@@ -148,6 +148,48 @@ class VisualizerMode(Enum):
 class _AudioFrame:
     samples: object
     activation_id: Optional[int] = None
+
+
+def _prepare_mono_audio_frame(np_mod: Any, samples: Any, *, max_samples: int = 2048):
+    """Return one owned float32 mono frame without hot-path intermediates."""
+
+    source = np_mod.asarray(samples)
+    source_is_int16 = source.dtype == np_mod.int16
+    arr = np_mod.asarray(source, dtype=np_mod.float32)
+
+    if arr.ndim > 1:
+        channel_count = arr.shape[1] if arr.ndim > 1 else 1
+        if channel_count <= 1:
+            mono = arr.reshape(-1).copy()
+        else:
+            first_channel = 0
+            second_channel = 1
+            if channel_count > 2:
+                # Preserve the established strongest-two-channel policy while
+                # avoiding an arr*arr allocation for every native callback.
+                energy = np_mod.einsum("ij,ij->j", arr, arr, optimize=False)
+                top_idx = np_mod.argsort(energy)[-2:]
+                first_channel = int(top_idx[0])
+                second_channel = int(top_idx[1])
+            mono = np_mod.empty(arr.shape[0], dtype=np_mod.float32)
+            np_mod.add(
+                arr[:, first_channel],
+                arr[:, second_channel],
+                out=mono,
+            )
+            mono *= np_mod.float32(0.5)
+    else:
+        # The capture backend owns its input buffer. Publish an independent
+        # array so a later native callback cannot mutate the accepted frame.
+        mono = arr.reshape(-1).copy()
+
+    if source_is_int16:
+        mono *= np_mod.float32(1.0 / 32768.0)
+
+    sample_limit = max(1, int(max_samples))
+    if mono.size > sample_limit:
+        mono = mono[-sample_limit:].copy()
+    return mono
 
 
 class SpotifyVisualizerAudioWorker(QObject):
@@ -564,38 +606,14 @@ class SpotifyVisualizerAudioWorker(QObject):
                 np_mod = self._np
                 if samples is None or len(samples) == 0:
                     return
-                
-                if hasattr(samples, "ndim") and samples.ndim > 1:
-                    arr = np_mod.asarray(samples, dtype=np_mod.float32)
-                    channel_count = arr.shape[1] if arr.ndim > 1 else 1
-                    if channel_count <= 1:
-                        mono = arr.reshape(-1)
-                    else:
-                        selected = arr
-                        if channel_count > 2:
-                            try:
-                                energy = np_mod.sum(arr * arr, axis=0)
-                                top_k = min(2, channel_count)
-                                top_idx = np_mod.argsort(energy)[-top_k:]
-                                selected = arr[:, top_idx]
-                            except Exception as e:
-                                logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
-                                selected = arr[:, :2]
-                        mono = np_mod.mean(selected, axis=1, dtype=np_mod.float32)
-                else:
-                    mono = np_mod.asarray(samples, dtype=np_mod.float32)
-                
-                if mono.dtype == np_mod.int16:
-                    mono = mono.astype(np_mod.float32) / 32768.0
-                
-                if mono.size > 2048:
-                    mono = mono[-2048:]
-                
+
+                mono = _prepare_mono_audio_frame(np_mod, samples)
+
                 self._buffer.publish(_AudioFrame(
-                    samples=mono.copy(),
+                    samples=mono,
                     activation_id=getattr(self, "_activation_id", None),
                 ))
-                
+
                 if is_verbose_logging():
                     peak = float(np_mod.max(np_mod.abs(mono))) if mono.size else 0.0
                     self._frame_debug_counter += 1

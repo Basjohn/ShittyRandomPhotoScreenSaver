@@ -265,9 +265,23 @@ def finalize_render_timer_metrics(widget, outcome: str = "stopped") -> None:
     avg_fps = (metrics.frame_count / elapsed_s) if elapsed_s > 0 else 0.0
     min_dt_ms = metrics.min_dt * 1000.0 if metrics.min_dt > 0.0 else 0.0
     max_dt_ms = metrics.max_dt * 1000.0 if metrics.max_dt > 0.0 else 0.0
+    dirty_generation = int(
+        getattr(widget, "_presentation_dirty_generation", 0) or 0
+    )
+    ack_generation = int(
+        getattr(widget, "_presentation_ack_generation", 0) or 0
+    )
+    generation_lag = max(0, dirty_generation - ack_generation)
+    source_counts = getattr(widget, "_presentation_source_counts", {})
+    visualizer_requests = (
+        int(source_counts.get("visualizer", 0) or 0)
+        if isinstance(source_counts, dict)
+        else 0
+    )
     logger.info(
         "[PERF] [GL RENDER] Timer metrics: screen=%s, frames=%d, wakeups=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-        "stalls=%d, pending_skips=%d, target=%dHz, outcome=%s",
+        "stalls=%d, pending_skips=%d, target=%dHz, dirty_generation=%d, "
+        "ack_generation=%d, generation_lag=%d, visualizer_requests=%d, outcome=%s",
         _get_screen_index(widget),
         metrics.frame_count,
         metrics.wakeup_count,
@@ -277,5 +291,9 @@ def finalize_render_timer_metrics(widget, outcome: str = "stopped") -> None:
         metrics.stall_count,
         metrics.pending_skip_count,
         metrics.target_fps,
+        dirty_generation,
+        ack_generation,
+        generation_lag,
+        visualizer_requests,
         outcome,
     )

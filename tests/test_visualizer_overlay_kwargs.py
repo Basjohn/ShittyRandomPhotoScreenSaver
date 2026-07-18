@@ -323,6 +323,82 @@ def test_overlay_accumulated_time_advances_for_paused_sine_but_not_spectrum(qt_a
 
 
 @pytest.mark.qt
+def test_overlay_static_token_keeps_style_stable_while_bubble_frame_advances(qt_app):
+    overlay = SpotifyBarsGLOverlay(parent=None)
+    qt_app.processEvents()
+
+    rect = QRect(0, 0, 320, 180)
+    bars = [0.1] * 16
+    first_token = object()
+    second_token = object()
+    first_positions = [0.1, 0.2, 0.3, 0.4]
+    second_positions = [0.5, 0.6, 0.7, 0.8]
+    devcurve_sentinel = object()
+    overlay._devcurve_specular_slot0 = devcurve_sentinel
+
+    overlay.set_state(
+        rect=rect,
+        bars=bars,
+        bar_count=16,
+        segments=18,
+        fill_color=QColor("white"),
+        border_color=QColor("black"),
+        fade=1.0,
+        playing=True,
+        visible=True,
+        vis_mode="bubble",
+        static_token=first_token,
+        bubble_outline_color=QColor("red"),
+        bubble_pos_data=first_positions,
+        bubble_count=1,
+        heartbeat_intensity=0.1,
+    )
+    overlay.set_state(
+        rect=rect,
+        bars=bars,
+        bar_count=16,
+        segments=18,
+        fill_color=QColor("white"),
+        border_color=QColor("black"),
+        fade=1.0,
+        playing=True,
+        visible=True,
+        vis_mode="bubble",
+        static_token=first_token,
+        bubble_outline_color=QColor("blue"),
+        bubble_pos_data=second_positions,
+        bubble_count=1,
+        heartbeat_intensity=0.8,
+    )
+
+    assert overlay._bubble_outline_color == QColor("red")
+    assert overlay._bubble_pos_data is second_positions
+    assert overlay._heartbeat_intensity == pytest.approx(0.8)
+    assert overlay._bars is bars
+    assert overlay._devcurve_specular_slot0 is devcurve_sentinel
+
+    overlay.set_state(
+        rect=rect,
+        bars=bars,
+        bar_count=16,
+        segments=18,
+        fill_color=QColor("white"),
+        border_color=QColor("black"),
+        fade=1.0,
+        playing=True,
+        visible=True,
+        vis_mode="bubble",
+        static_token=second_token,
+        bubble_outline_color=QColor("blue"),
+        bubble_pos_data=second_positions,
+        bubble_count=1,
+    )
+
+    assert overlay._bubble_outline_color == QColor("blue")
+    overlay.deleteLater()
+
+
+@pytest.mark.qt
 def test_devcurve_set_state_applies_curve_payload(qt_app):
     overlay = SpotifyBarsGLOverlay(parent=None)
     qt_app.processEvents()

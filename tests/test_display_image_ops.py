@@ -162,6 +162,7 @@ def test_push_spotify_visualizer_frame_packet_preserves_payload_and_extras(monke
 
     bars = [0.1, 0.2, 0.3]
     extras = {"spectrum_glow_enabled": True, "border_width_px": 99}
+    static_token = object()
     packet = VisualizerFramePacket(
         bars=bars,
         bar_count=3,
@@ -171,6 +172,7 @@ def test_push_spotify_visualizer_frame_packet_preserves_payload_and_extras(monke
         fade=0.75,
         playing=True,
         vis_mode="spectrum",
+        static_token=static_token,
         extra_kwargs=extras,
     )
     widget = SimpleNamespace(spotify_visualizer_widget=_FakeVisualizer())
@@ -184,6 +186,7 @@ def test_push_spotify_visualizer_frame_packet_preserves_payload_and_extras(monke
     assert calls[0]["bar_count"] == 3
     assert calls[0]["segments"] == 12
     assert calls[0]["border_width_px"] == 3
+    assert calls[0]["static_token"] is static_token
     assert calls[0]["spectrum_glow_enabled"] is True
     assert extras["border_width_px"] == 99
 

@@ -25,4 +25,5 @@ class VisualizerFramePacket:
     ghost_alpha: float = 0.4
     ghost_decay: float = -1.0
     vis_mode: str = "spectrum"
+    static_token: Any = None
     extra_kwargs: Dict[str, Any] = field(default_factory=dict)

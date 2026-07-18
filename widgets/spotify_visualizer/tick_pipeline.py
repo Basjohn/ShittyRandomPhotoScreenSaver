@@ -880,6 +880,11 @@ def push_gpu_frame(
         packet.ghost_alpha = widget._ghost_alpha
         packet.ghost_decay = widget._ghost_decay_rate
         packet.vis_mode = mode_str
+        packet.static_token = getattr(
+            widget,
+            '_gpu_frame_static_tokens_by_mode',
+            {},
+        ).get(mode_str)
         packet.extra_kwargs = extra
         used_gpu = push_packet(packet)
     else:
@@ -895,6 +900,11 @@ def push_gpu_frame(
             ghost_alpha=widget._ghost_alpha,
             ghost_decay=widget._ghost_decay_rate,
             vis_mode=mode_str,
+            static_token=getattr(
+                widget,
+                '_gpu_frame_static_tokens_by_mode',
+                {},
+            ).get(mode_str),
             border_width_px=border_width_px,
             **extra,
         )

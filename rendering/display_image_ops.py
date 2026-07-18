@@ -844,6 +844,7 @@ def push_spotify_visualizer_frame(
     ghost_alpha=0.4,
     ghost_decay=-1.0,
     vis_mode="spectrum",
+    static_token=None,
     **extra_kwargs,
 ):
     vis = getattr(widget, "spotify_visualizer_widget", None)
@@ -898,6 +899,7 @@ def push_spotify_visualizer_frame(
         ghost_alpha=ghost_alpha,
         ghost_decay=ghost_decay,
         vis_mode=vis_mode,
+        static_token=static_token,
         visible=True,
         border_width_px=border_width,
         extra_kwargs=extra_kwargs,
@@ -955,6 +957,7 @@ def push_spotify_visualizer_frame_packet(
         ghost_alpha=packet.ghost_alpha,
         ghost_decay=packet.ghost_decay,
         vis_mode=packet.vis_mode,
+        static_token=packet.static_token,
         visible=True,
         border_width_px=border_width,
         extra_kwargs=packet.extra_kwargs,
@@ -1185,6 +1188,18 @@ def _set_visualizer_surface_terminal_reason(widget, reason: str | None) -> None:
             setattr(vis, "_startup_renderer_terminal_logged", False)
 
 
+def _display_compositor_startup_is_pending(widget) -> bool:
+    """Return whether a registered staggered display has not been shown yet."""
+    if getattr(widget, "_gl_compositor", None) is not None:
+        return False
+    try:
+        if bool(widget.isVisible()):
+            return False
+    except Exception:
+        return False
+    return getattr(widget, "_render_surface", None) is None
+
+
 def _create_legacy_spotify_bars_overlay(
     widget,
     *,
@@ -1343,6 +1358,24 @@ def _ensure_spotify_bars_overlay(
             ).strip().lower()
             if resolved_mode and resolved_mode != "opengl":
                 legacy_reason = "software_backend"
+            elif str(
+                getattr(
+                    widget,
+                    "_spotify_visualizer_surface_terminal_reason",
+                    "",
+                )
+                or ""
+            ).strip():
+                _set_visualizer_compositor_ownership(vis, False)
+                return None
+            elif _display_compositor_startup_is_pending(widget):
+                _set_visualizer_compositor_ownership(vis, False)
+                logger.info(
+                    "[SPOTIFY_VIS][SURFACE] Renderer target=pending_compositor "
+                    "reason=staggered_display_startup screen=%s",
+                    getattr(widget, "screen_index", getattr(widget, "_screen_index", "?")),
+                )
+                return None
             else:
                 logger.error(
                     "[SPOTIFY_VIS][COMPOSITOR] Display-owned visualizer unavailable "
@@ -1411,6 +1444,7 @@ def _push_spotify_bars_overlay_state(
     ghost_alpha=0.4,
     ghost_decay=-1.0,
     vis_mode="spectrum",
+    static_token=None,
     visible=True,
     border_width_px=0,
     extra_kwargs=None,
@@ -1443,6 +1477,7 @@ def _push_spotify_bars_overlay_state(
                 ghost_alpha=ghost_alpha,
                 ghost_decay=ghost_decay,
                 vis_mode=vis_mode,
+                static_token=static_token,
                 border_width_px=border_width_px,
                 **extras,
             )

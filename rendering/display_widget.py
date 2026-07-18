@@ -275,6 +275,7 @@ class DisplayWidget(QWidget):
         self._last_transition_finished_wall_ts: float = 0.0
         self._screen = None  # Store screen reference for DPI
         self._device_pixel_ratio = 1.0  # DPI scaling factor
+        self._refresh_rate_screen = None
         self._initial_mouse_pos = None  # Track mouse movement for exit
         self._mouse_move_threshold = 10  # Pixels of movement before exit
         self._target_fps = 0  # 0 = not yet detected; set by configure_refresh_rate_sync
@@ -710,6 +711,11 @@ class DisplayWidget(QWidget):
         """Delegates to rendering.display_setup."""
         from rendering.display_setup import handle_screen_change
         handle_screen_change(self, screen)
+
+    def _handle_refresh_rate_change(self, *_args) -> None:
+        """Reconfigure display-local animation and presentation cadence."""
+        from rendering.display_setup import handle_refresh_rate_change
+        handle_refresh_rate_change(self)
 
     def _detect_refresh_rate(self) -> float:
         """Delegates to rendering.display_setup."""

@@ -443,6 +443,7 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
                 engine._usage_telemetry = UsageTelemetryService(
                     engine.thread_manager,
                     resource_manager=engine.resource_manager,
+                    image_cache=getattr(engine, "_image_cache", None),
                 )
                 if not engine._usage_telemetry.start():
                     raise RuntimeError("usage telemetry declined startup")

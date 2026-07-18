@@ -341,6 +341,8 @@ class GLTextureManager:
             resource_id = rm.register_gl_texture(
                 tex_id,
                 description=f"GLTextureManager {w}x{h}",
+                estimated_bytes=data_size,
+                usage_bucket="texture_cache",
             )
             if resource_id:
                 self._resource_manager = rm
@@ -531,6 +533,8 @@ class GLTextureManager:
                     resource_id = rm.register_gl_vbo(
                         pbo_id,
                         description=f"GLTextureManager PBO {required_size}B",
+                        estimated_bytes=required_size,
+                        usage_bucket="texture_pbo",
                     )
                     if resource_id:
                         self._resource_manager = rm
