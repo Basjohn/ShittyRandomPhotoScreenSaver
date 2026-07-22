@@ -260,23 +260,41 @@ class EditShellWidget(QWidget):
         pos_hint = self._reset_position_btn.sizeHint()
         vis_hint = self._reset_visualizer_btn.sizeHint()
         remove_size = self._remove_btn.sizeHint()
-        self._reset_size_btn.resize(size_hint)
-        self._reset_position_btn.resize(pos_hint)
-        self._reset_visualizer_btn.resize(vis_hint)
         self._remove_btn.resize(max(22, remove_size.width()), max(22, remove_size.height()))
         spacing = 8
-        button_widths = [size_hint.width(), pos_hint.width()]
+        buttons_and_hints = [
+            (self._reset_size_btn, size_hint),
+            (self._reset_position_btn, pos_hint),
+        ]
         if self._reset_visualizer_btn.isVisible():
-            button_widths.append(vis_hint.width())
+            buttons_and_hints.append((self._reset_visualizer_btn, vis_hint))
+
+        # Qt's fallback fonts can make the preferred controls wider than a
+        # narrow shell. Fit the row before centering it instead of clamping
+        # only its start position and letting the final button overflow.
+        available_width = max(1, self.width() - 12)
+        spacing = min(spacing, available_width // max(1, len(buttons_and_hints) - 1))
+        preferred_widths = [hint.width() for _, hint in buttons_and_hints]
+        content_width = max(1, available_width - spacing * (len(buttons_and_hints) - 1))
+        preferred_total = max(1, sum(preferred_widths))
+        if preferred_total <= content_width:
+            button_widths = preferred_widths
+        else:
+            button_widths = [
+                max(1, (width * content_width) // preferred_total)
+                for width in preferred_widths
+            ]
+            button_widths[-1] += content_width - sum(button_widths)
+
         total_width = sum(button_widths) + spacing * (len(button_widths) - 1)
-        start_x = max(6, int((self.width() - total_width) / 2))
-        y = max(6, self.height() - max(size_hint.height(), pos_hint.height()) - 10)
+        start_x = 6 + max(0, (available_width - total_width) // 2)
+        button_height = max(hint.height() for _, hint in buttons_and_hints)
+        y = max(6, self.height() - button_height - 10)
         x = start_x
-        self._reset_size_btn.move(x, y)
-        x += size_hint.width() + spacing
-        self._reset_position_btn.move(x, y)
-        x += pos_hint.width() + spacing
-        self._reset_visualizer_btn.move(x, y)
+        for (button, hint), width in zip(buttons_and_hints, button_widths):
+            button.resize(width, hint.height())
+            button.move(x, y)
+            x += width + spacing
         self._remove_btn.move(max(6, self.width() - self._remove_btn.width() - 8), 8)
         self._reset_size_btn.raise_()
         self._reset_position_btn.raise_()

@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from PySide6.QtCore import QRect, QSize
-from PySide6.QtGui import QColor, QPainter, QPixmap
+from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
 from PySide6.QtWidgets import QWidget
 
 from rendering import display_image_ops
@@ -17,6 +17,8 @@ from rendering.gl_compositor_pkg.spotify_visualizer_layer import (
 from rendering.gl_compositor_pkg import spotify_visualizer_layer as layer_module
 from widgets.spotify_visualizer import startup_staging
 from widgets.spotify_visualizer.card_paint import (
+    compositor_card_raster_key,
+    ensure_compositor_card_raster,
     ensure_painted_frame_shadow_pixmap,
     paint_compositor_card,
 )
@@ -52,6 +54,11 @@ def _bare_layer(**values):
         "_perf_retained_last_good_window": 0,
         "_perf_fbo_render_window": 0,
         "_perf_texture_reuse_window": 0,
+        "_card_texture_key": None,
+        "_card_texture_failed_key": None,
+        "_card_texture_visible_miss_key": None,
+        "_card_texture_warmup_pending": False,
+        "_native_partial_presented": False,
     }
     defaults.update(values)
     for name, value in defaults.items():
@@ -95,6 +102,26 @@ def test_layer_geometry_reuses_buffers_for_position_only_changes():
 
     assert layer._buffer_logical_size.isEmpty()
     assert requests == ["update", "update"]
+
+
+def test_layer_audio_state_does_not_rebuild_static_card_raster():
+    calls = []
+    layer = _bare_layer(
+        _renderer=SimpleNamespace(
+            set_state=lambda *args, **kwargs: calls.append((args, kwargs))
+        ),
+    )
+    object.__setattr__(
+        layer,
+        "prewarm_card_raster",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("audio frame must not touch static card chrome")
+        ),
+    )
+
+    layer.set_state(bars=(0.1, 0.2), playing=True)
+
+    assert calls == [((), {"bars": (0.1, 0.2), "playing": True})]
 
 
 def test_layer_scene_predicate_matches_visible_active_renderer_contract():
@@ -546,11 +573,31 @@ def test_framebuffer_slot_uses_stencil_only_and_cleans_partial_allocation(monkey
         def glDeleteRenderbuffers(cls, _count, handles):
             cls.deleted_renderbuffers.extend(handles)
 
+    class _ResourceManager:
+        def __init__(self):
+            self.next_id = 0
+            self.handles = {}
+            self.fail_after = None
+
+        def register_gl_handle(self, handle, _kind, cleanup, **_kwargs):
+            self.next_id += 1
+            if self.fail_after is not None and self.next_id > self.fail_after:
+                return None
+            resource_id = f"resource-{self.next_id}"
+            self.handles[resource_id] = (handle, cleanup)
+            return resource_id
+
+        def unregister(self, resource_id, *, force, cleanup):
+            assert force is True
+            handle, cleanup_fn = self.handles.pop(resource_id)
+            if cleanup:
+                cleanup_fn(handle)
+            return True
+
     monkeypatch.setattr(layer_module, "gl", _FakeGL)
+    resource_manager = _ResourceManager()
     layer = _bare_layer(
-        _resource_manager=SimpleNamespace(
-            register_gl_handle=lambda *_args, **_kwargs: None,
-        ),
+        _resource_manager=resource_manager,
     )
 
     slot = layer._create_framebuffer_slot(640, 360)
@@ -558,9 +605,30 @@ def test_framebuffer_slot_uses_stencil_only_and_cleans_partial_allocation(monkey
     assert slot.stencil == 103
     assert _FakeGL.storage_formats == [_FakeGL.GL_STENCIL_INDEX8]
     assert _FakeGL.attachment_points == [_FakeGL.GL_STENCIL_ATTACHMENT]
+    layer._release_framebuffer_slot(slot, context_valid=True)
+    assert _FakeGL.deleted_framebuffers == [101]
+    assert _FakeGL.deleted_textures == [102]
+    assert _FakeGL.deleted_renderbuffers == [103]
+
+    _FakeGL.deleted_framebuffers.clear()
+    _FakeGL.deleted_textures.clear()
+    _FakeGL.deleted_renderbuffers.clear()
 
     _FakeGL.fail_texture_upload = True
     with pytest.raises(RuntimeError, match="upload failed"):
+        layer._create_framebuffer_slot(640, 360)
+
+    assert _FakeGL.deleted_framebuffers == [101]
+    assert _FakeGL.deleted_textures == [102]
+    assert _FakeGL.deleted_renderbuffers == [103]
+
+    _FakeGL.fail_texture_upload = False
+    _FakeGL.deleted_framebuffers.clear()
+    _FakeGL.deleted_textures.clear()
+    _FakeGL.deleted_renderbuffers.clear()
+    resource_manager.next_id = 0
+    resource_manager.fail_after = 1
+    with pytest.raises(RuntimeError, match="color texture ResourceManager"):
         layer._create_framebuffer_slot(640, 360)
 
     assert _FakeGL.deleted_framebuffers == [101]
@@ -1260,3 +1328,363 @@ def test_compositor_card_reuses_exact_painted_shadow_asset(qt_app, qtbot):
         painter.end()
 
     assert target.toImage() == source.toImage()
+
+
+@pytest.mark.qt
+def test_compositor_card_raster_reuses_style_geometry_dpr_key(qt_app, qtbot):
+    card = QWidget()
+    qtbot.addWidget(card)
+    card.resize(260, 120)
+    card._show_background = True
+    card._bg_color = QColor(18, 24, 30)
+    card._bg_opacity = 0.72
+    card._card_border_color = QColor(220, 230, 240, 210)
+    card._border_width = 2
+    card._shadowfade_progress = 0.25
+    card.uses_painted_frame_shadow = lambda: False
+
+    first = ensure_compositor_card_raster(card, QSize(260, 120), 1.5)
+    card._shadowfade_progress = 0.80
+    same = ensure_compositor_card_raster(card, QSize(260, 120), 1.5)
+
+    assert first is not None
+    assert same is first
+
+    card._bg_color = QColor(30, 40, 50)
+    style_changed = ensure_compositor_card_raster(card, QSize(260, 120), 1.5)
+    resized = ensure_compositor_card_raster(card, QSize(300, 140), 1.5)
+    dpr_changed = ensure_compositor_card_raster(card, QSize(300, 140), 2.0)
+
+    assert style_changed is not same
+    assert resized is not style_changed
+    assert dpr_changed is not resized
+
+
+@pytest.mark.qt
+def test_card_texture_registers_uploads_and_cleans_up_once(qt_app, qtbot, monkeypatch):
+    card = QWidget()
+    qtbot.addWidget(card)
+    card.resize(80, 40)
+    card._show_background = True
+    card._bg_color = QColor(12, 22, 32)
+    card._bg_opacity = 0.8
+    card._card_border_color = QColor(220, 230, 240, 200)
+    card._border_width = 1
+    card.uses_painted_frame_shadow = lambda: False
+    raster = ensure_compositor_card_raster(card, QSize(80, 40), 1.0)
+    key = compositor_card_raster_key(card, QSize(80, 40), 1.0)
+
+    class _FakeGL:
+        GL_TEXTURE_2D = 1
+        GL_TEXTURE_MIN_FILTER = 2
+        GL_TEXTURE_MAG_FILTER = 3
+        GL_LINEAR = 4
+        GL_TEXTURE_WRAP_S = 5
+        GL_TEXTURE_WRAP_T = 6
+        GL_CLAMP_TO_EDGE = 7
+        GL_UNPACK_ALIGNMENT = 8
+        GL_RGBA8 = 9
+        GL_RGBA = 10
+        GL_UNSIGNED_BYTE = 11
+        uploads = 0
+        deleted: list[int] = []
+
+        @staticmethod
+        def glGenTextures(_count):
+            return 77
+
+        @staticmethod
+        def glBindTexture(*_args):
+            return None
+
+        @staticmethod
+        def glTexParameteri(*_args):
+            return None
+
+        @staticmethod
+        def glPixelStorei(*_args):
+            return None
+
+        @classmethod
+        def glTexImage2D(cls, *_args):
+            cls.uploads += 1
+
+        @classmethod
+        def glDeleteTextures(cls, _count, handles):
+            cls.deleted.extend(handles)
+
+        @staticmethod
+        def glDeleteProgram(_program):
+            return None
+
+    registered: dict[str, tuple[int, object]] = {}
+    unregister_calls: list[tuple[str, bool]] = []
+
+    def _register(handle, _kind, cleanup, **_kwargs):
+        registered["card-rid"] = (handle, cleanup)
+        return "card-rid"
+
+    def _unregister(resource_id, *, force, cleanup):
+        assert force is True
+        unregister_calls.append((resource_id, cleanup))
+        handle, cleanup_fn = registered.pop(resource_id)
+        if cleanup:
+            cleanup_fn(handle)
+
+    renderer_cleanup: list[bool] = []
+    layer = _bare_layer(
+        _geometry=QRect(0, 0, 80, 40),
+        _card_raster_image=raster,
+        _card_raster_key=key,
+        _card_texture=0,
+        _card_texture_rid=None,
+        _card_texture_key=None,
+        _card_texture_failed_key=None,
+        _resource_manager=SimpleNamespace(
+            register_gl_handle=_register,
+            unregister=_unregister,
+        ),
+        _renderer=SimpleNamespace(
+            _gl_programs={},
+            cleanup_gl=lambda *, context_current: renderer_cleanup.append(
+                context_current
+            ),
+        ),
+        _composite_program=0,
+        _composite_program_rid=None,
+        _composite_target_loc=-1,
+        _composite_sampler_loc=-1,
+        _composite_opacity_loc=-1,
+        _buffer_size_px=QSize(),
+        _last_render_attempt_generation=-1,
+        _last_rendered_state_generation=-1,
+        _retired=True,
+    )
+    object.__setattr__(layer, "devicePixelRatioF", lambda: 1.0)
+    object.__setattr__(layer, "_acquire_context", lambda: False)
+    object.__setattr__(layer, "_release_context", lambda _acquired: None)
+    monkeypatch.setattr(layer_module, "gl", _FakeGL)
+
+    assert layer._ensure_card_texture(card) is True
+    assert layer._ensure_card_texture(card) is True
+    assert _FakeGL.uploads == 1
+    assert list(registered) == ["card-rid"]
+
+    layer.cleanup_gl()
+    layer.cleanup_gl()
+
+    assert unregister_calls == [("card-rid", True)]
+    assert _FakeGL.deleted == [77]
+    assert renderer_cleanup == [True]
+
+
+def test_composite_shader_applies_opacity_uniform_with_premultiplied_card_blend(
+    monkeypatch,
+):
+    events: list[tuple] = []
+    assert "uniform float u_opacity;" in layer_module._COMPOSITE_FRAGMENT_SHADER
+    assert "* u_opacity" in layer_module._COMPOSITE_FRAGMENT_SHADER
+
+    class _FakeGL:
+        GL_FRAMEBUFFER = 1
+        GL_DEPTH_TEST = 2
+        GL_CULL_FACE = 3
+        GL_SCISSOR_TEST = 4
+        GL_STENCIL_TEST = 5
+        GL_BLEND = 6
+        GL_FUNC_ADD = 7
+        GL_ONE = 8
+        GL_SRC_ALPHA = 9
+        GL_ONE_MINUS_SRC_ALPHA = 10
+        GL_TEXTURE0 = 11
+        GL_TEXTURE_2D = 12
+        GL_TRIANGLE_STRIP = 13
+
+        @staticmethod
+        def glBindFramebuffer(*_args):
+            return None
+
+        @staticmethod
+        def glViewport(*_args):
+            return None
+
+        @staticmethod
+        def glDisable(*_args):
+            return None
+
+        @staticmethod
+        def glStencilMask(*_args):
+            return None
+
+        @staticmethod
+        def glEnable(*_args):
+            return None
+
+        @staticmethod
+        def glBlendEquation(*_args):
+            return None
+
+        @staticmethod
+        def glBlendFunc(*args):
+            events.append(("blend", *args))
+
+        @staticmethod
+        def glUseProgram(*_args):
+            return None
+
+        @staticmethod
+        def glUniform4f(*_args):
+            return None
+
+        @staticmethod
+        def glUniform1f(*args):
+            events.append(("opacity", *args))
+
+        @staticmethod
+        def glActiveTexture(*_args):
+            return None
+
+        @staticmethod
+        def glBindTexture(*_args):
+            return None
+
+        @staticmethod
+        def glUniform1i(*_args):
+            return None
+
+        @staticmethod
+        def glBindVertexArray(*_args):
+            return None
+
+        @staticmethod
+        def glDrawArrays(*_args):
+            return None
+
+    layer = _bare_layer(
+        _compositor=SimpleNamespace(
+            width=lambda: 1920,
+            height=lambda: 1080,
+            defaultFramebufferObject=lambda: 3,
+        ),
+        _renderer=SimpleNamespace(_gl_vao=6),
+        _geometry=QRect(20, 30, 200, 100),
+        _composite_program=7,
+        _composite_target_loc=21,
+        _composite_sampler_loc=22,
+        _composite_opacity_loc=23,
+    )
+    object.__setattr__(layer, "devicePixelRatioF", lambda: 1.0)
+    monkeypatch.setattr(layer_module, "gl", _FakeGL)
+
+    assert layer._draw_texture_to_geometry(
+        44,
+        opacity=0.35,
+        premultiplied=True,
+    ) is True
+    assert events == [
+        ("blend", _FakeGL.GL_ONE, _FakeGL.GL_ONE_MINUS_SRC_ALPHA),
+        ("opacity", 23, 0.35),
+    ]
+
+
+def test_native_paint_orders_card_before_visualizer_texture(monkeypatch):
+    events: list[tuple] = []
+
+    class _FakeGL:
+        GL_FRAMEBUFFER = 1
+        GL_SCISSOR_TEST = 2
+        GL_STENCIL_TEST = 3
+        GL_DEPTH_TEST = 4
+        GL_CULL_FACE = 5
+        GL_BLEND = 6
+
+        @staticmethod
+        def glBindFramebuffer(*_args):
+            return None
+
+        @staticmethod
+        def glViewport(*_args):
+            return None
+
+        @staticmethod
+        def glDisable(*_args):
+            return None
+
+        @staticmethod
+        def glColorMask(*_args):
+            return None
+
+        @staticmethod
+        def glStencilMask(*_args):
+            return None
+
+        @staticmethod
+        def glBindVertexArray(*_args):
+            return None
+
+        @staticmethod
+        def glUseProgram(*_args):
+            return None
+
+    visualizer = SimpleNamespace(_shadowfade_progress=0.4)
+    visualizer.uses_painted_frame_shadow = lambda: False
+    geometry = QRect(20, 30, 200, 100)
+    card_key = compositor_card_raster_key(visualizer, geometry.size(), 1.0)
+    layer = _bare_layer(
+        _compositor=SimpleNamespace(
+            defaultFramebufferObject=lambda: 7,
+            width=lambda: 1920,
+            height=lambda: 1080,
+        ),
+        _geometry=geometry,
+        _card_texture=44,
+        _card_texture_key=card_key,
+        _paint_count=0,
+    )
+    object.__setattr__(layer, "should_paint_scene", lambda: True)
+    object.__setattr__(
+        layer,
+        "parent",
+        lambda: SimpleNamespace(spotify_visualizer_widget=visualizer),
+    )
+    object.__setattr__(layer, "_context_is_current", lambda: True)
+    object.__setattr__(layer, "_prepare_current_context", lambda: True)
+    object.__setattr__(
+        layer,
+        "_render_to_back_buffer",
+        lambda: events.append(("render",)) or (True, False),
+    )
+    object.__setattr__(
+        layer,
+        "_draw_texture_to_geometry",
+        lambda texture, **kwargs: events.append(("card", texture, kwargs)) or True,
+    )
+    object.__setattr__(
+        layer,
+        "_composite_front_buffer",
+        lambda: events.append(("visualizer",)) or True,
+    )
+    object.__setattr__(layer, "devicePixelRatioF", lambda: 1.0)
+    monkeypatch.setattr(layer_module, "gl", _FakeGL)
+
+    assert layer.paint_native() is True
+    assert events == [
+        ("render",),
+        ("card", 44, {"opacity": 0.4, "premultiplied": True}),
+        ("visualizer",),
+    ]
+
+    events.clear()
+    object.__setattr__(
+        layer,
+        "_composite_front_buffer",
+        lambda: events.append(("visualizer:failed",)) or False,
+    )
+
+    assert layer.paint_native() is False
+    assert layer.native_fallback_is_safe() is False
+    assert events == [
+        ("render",),
+        ("card", 44, {"opacity": 0.4, "premultiplied": True}),
+        ("visualizer:failed",),
+    ]

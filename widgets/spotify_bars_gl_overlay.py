@@ -828,7 +828,8 @@ class SpotifyVisualizerGLRenderer:
 
     def _request_frame_update(self, *, force: bool = False) -> None:
         del force
-        self._perf_update_request_count += 1
+        if self._perf_metrics_enabled:
+            self._perf_update_request_count += 1
         self._surface_update()
         if self._perf_metrics_enabled:
             self._record_perf_update_request()
@@ -1048,7 +1049,8 @@ class SpotifyVisualizerGLRenderer:
         static_state_changed = (
             static_token is None or static_token is not self._last_static_token
         )
-        self._perf_set_state_count += 1
+        if self._perf_metrics_enabled:
+            self._perf_set_state_count += 1
         osc_entering_idle = self._vis_mode == "oscilloscope" and was_playing and not bool(playing)
         osc_entering_live = self._vis_mode == "oscilloscope" and (not was_playing) and bool(playing)
 
@@ -1156,10 +1158,12 @@ class SpotifyVisualizerGLRenderer:
             new_wf = (
                 condition_live_waveform(self._waveform, waveform)
                 if self._vis_mode == "oscilloscope" and bool(playing)
-                else list(waveform)
+                else waveform
             )
             speed = self._line_speed
-            old_wf = list(self._waveform)
+            # blend_waveform returns a new list, so the previous list remains
+            # a stable delta reference without another full-frame copy.
+            old_wf = self._waveform
             self._osc_last_waveform_blend_alpha = resolve_waveform_blend_alpha(speed)
             self._waveform = blend_waveform(self._waveform, new_wf, speed)
             if old_wf and len(old_wf) == len(self._waveform):
@@ -1342,13 +1346,29 @@ class SpotifyVisualizerGLRenderer:
             self._devcurve_base_level = max(0.10, min(0.90, float(devcurve_base_level)))
             self._devcurve_sample_count = max(2, min(96, int(devcurve_sample_count)))
             if devcurve_curve_bass is not None:
-                self._devcurve_curve_bass = list(devcurve_curve_bass)
+                self._devcurve_curve_bass = (
+                    devcurve_curve_bass
+                    if isinstance(devcurve_curve_bass, list)
+                    else list(devcurve_curve_bass)
+                )
             if devcurve_curve_vocals is not None:
-                self._devcurve_curve_vocals = list(devcurve_curve_vocals)
+                self._devcurve_curve_vocals = (
+                    devcurve_curve_vocals
+                    if isinstance(devcurve_curve_vocals, list)
+                    else list(devcurve_curve_vocals)
+                )
             if devcurve_curve_mids is not None:
-                self._devcurve_curve_mids = list(devcurve_curve_mids)
+                self._devcurve_curve_mids = (
+                    devcurve_curve_mids
+                    if isinstance(devcurve_curve_mids, list)
+                    else list(devcurve_curve_mids)
+                )
             if devcurve_curve_transients is not None:
-                self._devcurve_curve_transients = list(devcurve_curve_transients)
+                self._devcurve_curve_transients = (
+                    devcurve_curve_transients
+                    if isinstance(devcurve_curve_transients, list)
+                    else list(devcurve_curve_transients)
+                )
             if devcurve_layer_bass_color is not None:
                 self._devcurve_layer_bass_color = QColor(*devcurve_layer_bass_color) if not isinstance(devcurve_layer_bass_color, QColor) else QColor(devcurve_layer_bass_color)
             if devcurve_layer_vocals_color is not None:
@@ -1611,7 +1631,8 @@ class SpotifyVisualizerGLRenderer:
         self._playing = bool(playing)
         maybe_log_sine_idle_state(self, logger, dt_seconds=dt_seconds)
 
-        _geom_start = time.time()
+        perf_enabled = self._perf_metrics_enabled
+        geom_start = time.perf_counter() if perf_enabled else 0.0
         if not clamped:
             self.clear_overlay_buffer()
             return
@@ -1625,13 +1646,18 @@ class SpotifyVisualizerGLRenderer:
                 cur_geom = None
             if cur_geom is None or cur_geom != rect:
                 self._surface_set_geometry(rect)
-                self._perf_geometry_change_count += 1
+                if perf_enabled:
+                    self._perf_geometry_change_count += 1
                 geometry_changed = True
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to set overlay geometry", exc_info=True)
-        _geom_elapsed = (time.time() - _geom_start) * 1000.0
+        geom_elapsed = (
+            (time.perf_counter() - geom_start) * 1000.0
+            if perf_enabled
+            else 0.0
+        )
 
-        _show_start = time.time()
+        show_start = time.perf_counter() if perf_enabled else 0.0
         became_visible = False
         try:
             if self._enabled:
@@ -1651,19 +1677,28 @@ class SpotifyVisualizerGLRenderer:
                 # The overlay is created on top and stays there
         except Exception:
             logger.debug("[SPOTIFY_VIS] Failed to show overlay", exc_info=True)
-        _show_elapsed = (time.time() - _show_start) * 1000.0
+        show_elapsed = (
+            (time.perf_counter() - show_start) * 1000.0
+            if perf_enabled
+            else 0.0
+        )
 
-        _update_start = time.time()
+        update_start = time.perf_counter() if perf_enabled else 0.0
         if static_token is not None:
             self._last_static_token = static_token
         self._state_generation += 1
         self._request_frame_update(force=geometry_changed or became_visible)
-        _update_elapsed = (time.time() - _update_start) * 1000.0
-        self._maybe_log_perf_counters(reason="set_state")
-        
-        if is_perf_metrics_enabled() and (_geom_elapsed > 5.0 or _show_elapsed > 5.0 or _update_elapsed > 5.0):
+        update_elapsed = (
+            (time.perf_counter() - update_start) * 1000.0
+            if perf_enabled
+            else 0.0
+        )
+        if perf_enabled:
+            self._maybe_log_perf_counters(reason="set_state")
+
+        if perf_enabled and (geom_elapsed > 5.0 or show_elapsed > 5.0 or update_elapsed > 5.0):
             logger.warning("[PERF] [SPOTIFY_VIS][RENDERER] set_state breakdown: geom=%.2fms, show=%.2fms, update=%.2fms",
-                          _geom_elapsed, _show_elapsed, _update_elapsed)
+                          geom_elapsed, show_elapsed, update_elapsed)
 
     def prewarm_context(self, rect: QRect) -> None:
         """Pre-create the GL context and shader pipeline off the visible hot path."""
@@ -1755,8 +1790,8 @@ class SpotifyVisualizerGLRenderer:
         # GLStateManager now tracks initialization state - no separate flag needed
 
     def render_current_framebuffer(self, rect: QRect | None = None) -> bool:
-        self._perf_paint_count += 1
         if self._perf_metrics_enabled:
+            self._perf_paint_count += 1
             self._record_perf_paint_delivery()
         # Skip rendering until initializeGL has completed to avoid
         # uninitialized buffer artifacts (green dots on first frame)
@@ -1786,7 +1821,8 @@ class SpotifyVisualizerGLRenderer:
 
         # set_state() is the repaint authority.  Scheduling from paintGL()
         # creates a child-GL self-loop that can overdrive the owning display.
-        self._maybe_log_perf_counters(reason="paintGL")
+        if self._perf_metrics_enabled:
+            self._maybe_log_perf_counters(reason="paintGL")
         return rendered
 
     def _begin_painted_card_stencil_clip(self, rect: QRect) -> bool:

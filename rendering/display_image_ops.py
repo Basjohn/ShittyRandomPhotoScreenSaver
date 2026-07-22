@@ -30,6 +30,8 @@ except ImportError:
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from rendering.gl_compositor import GLCompositorWidget
+from rendering.image_presenter import ensure_pixmap_device_pixel_ratio
+from rendering.image_upload_payload import ImageUploadPayload
 from transitions.overlay_manager import GL_OVERLAY_KEYS
 from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
 from widgets.spotify_visualizer.frame_transport import VisualizerFramePacket
@@ -173,7 +175,11 @@ def _clear_deferred_processed_image(widget, *, clear_pending: bool = False) -> N
         widget.set_transition_work_pending(False)
 
 
-def _restore_visible_pixmap(widget, previous_pixmap: Optional[QPixmap]) -> None:
+def _restore_visible_pixmap(
+    widget,
+    previous_pixmap: Optional[QPixmap],
+    previous_upload_payload: Optional[ImageUploadPayload] = None,
+) -> None:
     """Restore the last committed frame after transition admission refuses."""
 
     widget.current_pixmap = previous_pixmap
@@ -184,7 +190,11 @@ def _restore_visible_pixmap(widget, previous_pixmap: Optional[QPixmap]) -> None:
     presenter = getattr(widget, "_image_presenter", None)
     if presenter is not None and previous_pixmap is not None:
         try:
-            presenter.set_current(previous_pixmap, update_seed=True)
+            presenter.set_current(
+                previous_pixmap,
+                update_seed=True,
+                upload_payload=previous_upload_payload,
+            )
         except Exception:
             logger.debug(
                 "[DISPLAY_WIDGET] Failed to restore presenter after transition refusal",
@@ -194,7 +204,10 @@ def _restore_visible_pixmap(widget, previous_pixmap: Optional[QPixmap]) -> None:
     comp = getattr(widget, "_gl_compositor", None)
     if comp is not None and previous_pixmap is not None:
         try:
-            comp.set_base_pixmap(previous_pixmap)
+            comp.set_base_pixmap(
+                previous_pixmap,
+                payload=previous_upload_payload,
+            )
         except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to restore committed base frame",
@@ -249,6 +262,8 @@ def _schedule_deferred_processed_image_retry(
             return
         if token != int(getattr(target, "_deferred_processed_image_retry_token", 0)):
             return
+        if bool(getattr(target, "_render_pipeline_quiesced", False)):
+            return
         target._deferred_processed_image_retry_scheduled = False
         if target.has_running_transition():
             return
@@ -259,7 +274,13 @@ def _schedule_deferred_processed_image_retry(
         target._deferred_processed_image = None
         target._deferred_processed_image_retry_in_progress = True
         try:
-            set_processed_image(target, retained[0], retained[1], retained[2])
+            set_processed_image(
+                target,
+                retained[0],
+                retained[1],
+                retained[2],
+                retained[3],
+            )
         finally:
             target._deferred_processed_image_retry_in_progress = False
 
@@ -296,6 +317,7 @@ def _stage_deferred_processed_image(
     processed_pixmap: QPixmap,
     original_pixmap: QPixmap,
     image_path: str,
+    upload_payload: Optional[ImageUploadPayload] = None,
     *,
     reason: str,
     schedule_retry: bool,
@@ -308,6 +330,7 @@ def _stage_deferred_processed_image(
             processed_pixmap,
             original_pixmap,
             image_path,
+            upload_payload,
         )
         widget._transition_defer_count = (
             int(getattr(widget, "_transition_defer_count", 0)) + 1
@@ -342,6 +365,11 @@ def _stage_deferred_processed_image(
 def _ensure_transition_admitted(widget, transition) -> bool:
     """Prove compositor program readiness before visible state can change."""
 
+    if (
+        bool(getattr(widget, "_render_pipeline_quiesced", False))
+        or not bool(getattr(widget, "_transition_admission_open", True))
+    ):
+        return False
     transition_name = transition.__class__.__name__
     if not transition_name.startswith("GLCompositor"):
         return True
@@ -350,6 +378,8 @@ def _ensure_transition_admitted(widget, transition) -> bool:
         return False
     try:
         return bool(
+            comp.can_accept_transition()
+            and
             comp._ensure_gl_pipeline_ready()
             and comp._ensure_transition_program_ready(transition_name)
         )
@@ -370,12 +400,18 @@ def _on_deferred_transition_start_failed(
     """Roll a delayed compositor refusal back without exposing its destination."""
 
     if not _is_live_widget(widget) or bool(
-        getattr(widget, "_render_shutdown_requested", False)
+        getattr(widget, "_render_pipeline_quiesced", False)
     ):
         return
 
     payload = getattr(widget, "_pending_transition_finish_args", None)
     previous_pixmap = getattr(widget, "previous_pixmap", None)
+    presenter = getattr(widget, "_image_presenter", None)
+    previous_upload_payload = (
+        getattr(presenter, "previous_upload_payload", None)
+        if presenter is not None
+        else None
+    )
     logger.error(
         "[TRANSITION][DEFER] Compositor work failed after acceptance; preserving old frame "
         "screen=%s transition=%s reason=%s image=%s",
@@ -407,7 +443,11 @@ def _on_deferred_transition_start_failed(
     widget._current_transition_first_run = False
     widget._pending_transition_finish_args = None
     widget._cancel_transition_watchdog()
-    _restore_visible_pixmap(widget, previous_pixmap)
+    _restore_visible_pixmap(
+        widget,
+        previous_pixmap,
+        previous_upload_payload,
+    )
     _raise_runtime_widgets_above_compositor(
         widget,
         stage="deferred_transition_refused",
@@ -429,13 +469,19 @@ def _on_deferred_transition_start_failed(
         payload[0],
         payload[1],
         payload[2],
+        payload[5],
         reason=reason,
         schedule_retry=True,
     )
 
 
-def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPixmap, 
-                       image_path: str = "") -> None:
+def set_processed_image(
+    widget,
+    processed_pixmap: QPixmap,
+    original_pixmap: QPixmap,
+    image_path: str = "",
+    upload_payload: Optional[ImageUploadPayload] = None,
+) -> None:
     """Display an already-processed image with transition.
     
     ARCHITECTURAL NOTE: This method accepts pre-processed pixmaps to avoid
@@ -448,6 +494,14 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         original_pixmap: Original unprocessed pixmap (for reference)
         image_path: Path to image (for logging/events)
     """
+    if bool(getattr(widget, "_render_pipeline_quiesced", False)):
+        _clear_deferred_processed_image(widget, clear_pending=True)
+        logger.info(
+            "[TRANSITION][STALE] Dropped prepared frame after display quiesce screen=%s",
+            getattr(widget, "screen_index", "?"),
+        )
+        return
+
     if (
         getattr(widget, "_deferred_processed_image", None) is not None
         and not bool(getattr(widget, "_deferred_processed_image_retry_in_progress", False))
@@ -457,6 +511,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             processed_pixmap,
             original_pixmap,
             image_path,
+            upload_payload,
             reason="retained_frame_already_pending",
             schedule_retry=False,
         )
@@ -469,6 +524,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
             processed_pixmap,
             original_pixmap,
             image_path,
+            upload_payload,
             reason="transition_in_progress",
             schedule_retry=False,
         )
@@ -490,12 +546,11 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     widget._pre_raise_log_emitted = False
     widget._base_fallback_paint_logged = False
     
-    # Set DPR on the processed pixmap for proper display scaling
-    processed_pixmap.setDevicePixelRatio(widget._device_pixel_ratio)
-    try:
-        new_pixmap.setDevicePixelRatio(widget._device_pixel_ratio)
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    # Finalize display metadata before this identity can enter the GL cache.
+    ensure_pixmap_device_pixel_ratio(
+        processed_pixmap,
+        widget._device_pixel_ratio,
+    )
     
     # Stop any running transition via TransitionController
     if widget._transition_controller is not None:
@@ -511,22 +566,33 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
     
     # Cache previous pixmap reference before we mutate current_pixmap
     previous_pixmap_ref = widget.current_pixmap
+    presenter = getattr(widget, "_image_presenter", None)
+    previous_upload_payload_ref = (
+        getattr(presenter, "current_upload_payload", None)
+        if presenter is not None
+        else None
+    )
+    if presenter is not None:
+        presenter.remember_previous(
+            previous_pixmap_ref,
+            previous_upload_payload_ref,
+        )
 
     # Seed base widget with the new frame before starting transitions.
     # This prevents fallback paints (black bands) while overlays warm up.
     widget.current_pixmap = processed_pixmap
     if widget.current_pixmap:
-        try:
-            widget.current_pixmap.setDevicePixelRatio(widget._device_pixel_ratio)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         widget._seed_pixmap = widget.current_pixmap
         widget._last_pixmap_seed_ts = time.monotonic()
         
         # Phase 4b: Notify ImagePresenter of pixmap change
         if widget._image_presenter is not None:
             try:
-                widget._image_presenter.set_current(widget.current_pixmap, update_seed=True)
+                widget._image_presenter.set_current(
+                    widget.current_pixmap,
+                    update_seed=True,
+                    upload_payload=upload_payload,
+                )
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         if is_verbose_logging():
@@ -553,14 +619,22 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         if isinstance(comp, GLCompositorWidget):
             try:
                 comp.setGeometry(0, 0, widget.width(), widget.height())
-                comp.set_base_pixmap(widget.current_pixmap)
+                comp.set_base_pixmap(
+                    widget.current_pixmap,
+                    payload=upload_payload,
+                )
                 comp.show()
                 comp.raise_()
                 # Prewarm shader textures for the upcoming transition so
                 # GLSL paths (Slide, Wipe, Diffuse, etc.) do not pay the
                 # full texture upload cost on their first animated frame.
                 try:
-                    comp.warm_shader_textures(previous_pixmap_ref, new_pixmap)
+                    comp.warm_shader_textures(
+                        previous_pixmap_ref,
+                        new_pixmap,
+                        old_payload=previous_upload_payload_ref,
+                        new_payload=upload_payload,
+                    )
                 except Exception:
                     logger.debug(
                         "[GL COMPOSITOR] warm_shader_textures failed during pre-warm",
@@ -590,7 +664,11 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                             "[TRANSITION] Failed to cleanup unadmitted transition",
                             exc_info=True,
                         )
-                    _restore_visible_pixmap(widget, previous_pixmap_ref)
+                    _restore_visible_pixmap(
+                        widget,
+                        previous_pixmap_ref,
+                        previous_upload_payload_ref,
+                    )
                     _raise_runtime_widgets_above_compositor(
                         widget,
                         stage="transition_admission_refused",
@@ -600,6 +678,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         processed_pixmap,
                         original_pixmap,
                         image_path,
+                        upload_payload,
                         reason="program_admission_refused",
                         schedule_retry=True,
                     )
@@ -618,7 +697,14 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                             and previous_pixmap_ref is not None
                             and not previous_pixmap_ref.isNull()
                         ):
-                            comp.set_base_pixmap(previous_pixmap_ref)
+                            comp.set_base_pixmap(
+                                previous_pixmap_ref,
+                                payload=previous_upload_payload_ref,
+                            )
+                            comp.stage_transition_upload_payloads(
+                                previous_upload_payload_ref,
+                                upload_payload,
+                            )
                     except Exception as e:
                         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
@@ -627,20 +713,59 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     transition.__class__.__name__,
                     widget.previous_pixmap,
                     new_pixmap,
+                    previous_upload_payload_ref,
+                    upload_payload,
                 )
 
                 # Store pending finish args
-                widget._pending_transition_finish_args = (processed_pixmap, original_pixmap, image_path, False, None)
+                widget._pending_transition_finish_args = (
+                    processed_pixmap,
+                    original_pixmap,
+                    image_path,
+                    False,
+                    None,
+                    upload_payload,
+                )
                 
                 # Create finish handler with weakref
                 self_ref = weakref.ref(widget)
-                def _finish_handler(np=processed_pixmap, op=original_pixmap, ip=image_path, ref=self_ref):
+                lifecycle_generation = int(
+                    getattr(widget, "_render_lifecycle_generation", 0)
+                )
+                def _finish_handler(
+                    np=processed_pixmap,
+                    op=original_pixmap,
+                    ip=image_path,
+                    prepared=upload_payload,
+                    ref=self_ref,
+                    expected_generation=lifecycle_generation,
+                ):
                     widget = ref()
                     if widget is None or not _is_live_widget(widget):
                         return
+                    if (
+                        bool(getattr(widget, "_render_pipeline_quiesced", False))
+                        or int(getattr(widget, "_render_lifecycle_generation", 0))
+                        != expected_generation
+                    ):
+                        return
                     try:
-                        widget._pending_transition_finish_args = (np, op, ip, False, None)
-                        widget._on_transition_finished(np, op, ip, False, None)
+                        widget._pending_transition_finish_args = (
+                            np,
+                            op,
+                            ip,
+                            False,
+                            None,
+                            prepared,
+                        )
+                        widget._on_transition_finished(
+                            np,
+                            op,
+                            ip,
+                            False,
+                            None,
+                            prepared,
+                        )
                     finally:
                         widget._pending_transition_finish_args = None
 
@@ -657,7 +782,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     success = transition.start(widget.previous_pixmap, new_pixmap, widget)
                 
                 if success:
-                    widget._current_transition = transition
+                    # TransitionController is the sole active-object owner.
+                    widget._current_transition = None
                     widget._current_transition_overlay_key = overlay_key
                     deferred_start = False
                     try:
@@ -702,24 +828,34 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget._current_transition_first_run = False
                     widget._pending_transition_finish_args = None
                     widget._cancel_transition_watchdog()
-                    _restore_visible_pixmap(widget, previous_pixmap_ref)
+                    _restore_visible_pixmap(
+                        widget,
+                        previous_pixmap_ref,
+                        previous_upload_payload_ref,
+                    )
                     _raise_runtime_widgets_above_compositor(widget, stage="transition_refused")
                     _stage_deferred_processed_image(
                         widget,
                         processed_pixmap,
                         original_pixmap,
                         image_path,
+                        upload_payload,
                         reason="transition_start_refused",
                         schedule_retry=True,
                     )
                     return
             else:
-                _restore_visible_pixmap(widget, previous_pixmap_ref)
+                _restore_visible_pixmap(
+                    widget,
+                    previous_pixmap_ref,
+                    previous_upload_payload_ref,
+                )
                 _stage_deferred_processed_image(
                     widget,
                     processed_pixmap,
                     original_pixmap,
                     image_path,
+                    upload_payload,
                     reason="transition_factory_unavailable",
                     schedule_retry=True,
                 )
@@ -759,16 +895,12 @@ def _on_transition_finished(
     image_path: str,
     pan_enabled: bool,
     pan_preview: Optional[QPixmap] = None,
+    upload_payload: Optional[ImageUploadPayload] = None,
 ) -> None:
     """Handle transition completion."""
-    # Delegate cleanup to TransitionController
-    if widget._transition_controller is not None:
-        try:
-            widget._transition_controller.on_transition_finished()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-    
-    # Clear local state
+    # TransitionController clears its canonical object/generation before this
+    # presentation callback runs. Clear display telemetry before publishing any
+    # post-transition signals or deferred provider work.
     widget._current_transition_overlay_key = None
     widget._current_transition_started_at = 0.0
     widget._current_transition_expected_duration_ms = 0
@@ -783,17 +915,21 @@ def _on_transition_finished(
     # Update pixmap state
     widget.current_pixmap = pan_preview or new_pixmap
     if widget.current_pixmap:
-        try:
-            widget.current_pixmap.setDevicePixelRatio(widget._device_pixel_ratio)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+        ensure_pixmap_device_pixel_ratio(
+            widget.current_pixmap,
+            widget._device_pixel_ratio,
+        )
     widget._seed_pixmap = widget.current_pixmap
     widget._last_pixmap_seed_ts = time.monotonic()
     
     # Notify ImagePresenter
     if widget._image_presenter is not None:
         try:
-            widget._image_presenter.complete_transition(new_pixmap, pan_preview)
+            widget._image_presenter.complete_transition(
+                new_pixmap,
+                pan_preview,
+                upload_payload,
+            )
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
     
@@ -805,12 +941,10 @@ def _on_transition_finished(
         widget._updates_blocked_until_seed = False
     widget.previous_pixmap = None
 
-    # Ensure overlays and repaint
-    try:
-        widget._ensure_overlay_stack(stage="transition_finish")
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-    widget.update()
+    # The compositor already published the resident destination during its
+    # terminal transaction. Ordinary completion does not alter topology or
+    # stacking, so a broad raise_() sweep and redundant parent repaint here
+    # only add a synchronous UI-tail burst.
 
     try:
         logger.debug("Transition completed, image displayed: %s", image_path)
@@ -1455,67 +1589,39 @@ def _push_spotify_bars_overlay_state(
         extras.pop("border_width_px", None)
 
     try:
-        try:
+        if static_token is None or static_token is not getattr(
+            overlay,
+            "_last_static_token",
+            None,
+        ):
             vis = getattr(widget, "spotify_visualizer_widget", None)
-            if vis is not None and hasattr(overlay, "set_painted_frame_shadow_enabled"):
-                overlay.set_painted_frame_shadow_enabled(bool(vis.uses_painted_frame_shadow()))
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Failed to sync GL stencil shadow state", exc_info=True)
+            resolve_shadow = getattr(vis, "uses_painted_frame_shadow", None)
+            if callable(resolve_shadow) and hasattr(
+                overlay,
+                "set_painted_frame_shadow_enabled",
+            ):
+                overlay.set_painted_frame_shadow_enabled(bool(resolve_shadow()))
 
-        try:
-            overlay.set_state(
-                rect=geom,
-                bars=bars,
-                bar_count=bar_count,
-                segments=segments,
-                fill_color=fill_color,
-                border_color=border_color,
-                fade=fade,
-                playing=playing,
-                visible=visible,
-                ghosting_enabled=ghosting_enabled,
-                ghost_alpha=ghost_alpha,
-                ghost_decay=ghost_decay,
-                vis_mode=vis_mode,
-                static_token=static_token,
-                border_width_px=border_width_px,
-                **extras,
-            )
-        except TypeError as exc:
-            # Fallback: strip keys the current overlay implementation does not accept.
-            unexpected = []
-            msg = str(exc)
-            if "got an unexpected keyword argument" in msg:
-                # extract the offending arg name to remove it and retry.
-                start = msg.find("'")
-                end = msg.find("'", start + 1)
-                if start != -1 and end != -1:
-                    unexpected.append(msg[start + 1:end])
-            if unexpected:
-                fallback_extras = dict(extras)
-                for key in unexpected:
-                    fallback_extras.pop(key, None)
-                overlay.set_state(
-                    rect=geom,
-                    bars=bars,
-                    bar_count=bar_count,
-                    segments=segments,
-                    fill_color=fill_color,
-                    border_color=border_color,
-                    fade=fade,
-                    playing=playing,
-                    visible=visible,
-                    ghosting_enabled=ghosting_enabled,
-                    ghost_alpha=ghost_alpha,
-                    ghost_decay=ghost_decay,
-                    vis_mode=vis_mode,
-                    border_width_px=border_width_px,
-                    **fallback_extras,
-                )
-            else:
-                raise
+        overlay.set_state(
+            rect=geom,
+            bars=bars,
+            bar_count=bar_count,
+            segments=segments,
+            fill_color=fill_color,
+            border_color=border_color,
+            fade=fade,
+            playing=playing,
+            visible=visible,
+            ghosting_enabled=ghosting_enabled,
+            ghost_alpha=ghost_alpha,
+            ghost_decay=ghost_decay,
+            vis_mode=vis_mode,
+            static_token=static_token,
+            border_width_px=border_width_px,
+            **extras,
+        )
     except Exception:
-        logger.debug("[SPOTIFY_VIS] Failed to push frame to visualizer renderer", exc_info=True)
+        logger.error("[SPOTIFY_VIS] Failed to push frame to visualizer renderer", exc_info=True)
         return False
 
     return True

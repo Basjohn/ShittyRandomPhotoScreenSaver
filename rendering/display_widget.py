@@ -2,6 +2,7 @@
 from collections import defaultdict
 from typing import Optional, Iterable, Tuple, Callable, Dict, Any, List, Set
 import logging
+import math
 import time
 import sys
 import ctypes
@@ -51,6 +52,7 @@ from rendering.widget_manager import WidgetManager
 from rendering.input_handler import InputHandler
 from rendering.transition_controller import TransitionController
 from rendering.image_presenter import ImagePresenter
+from rendering.image_upload_payload import ImageUploadPayload
 from rendering.multi_monitor_coordinator import get_coordinator, MultiMonitorCoordinator
 from rendering.custom_layout_manager import CustomLayoutManager
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
@@ -269,6 +271,10 @@ class DisplayWidget(QWidget):
         self._current_transition_name: Optional[str] = None
         self._current_transition_first_run: bool = False
         self._transition_work_pending: bool = False
+        self._render_lifecycle_generation: int = 1
+        self._render_pipeline_quiesced: bool = False
+        self._render_pipeline_permanent_shutdown: bool = False
+        self._transition_admission_open: bool = True
         self._warmed_transition_types: Set[str] = set()
         self._prewarmed_transition_types: Set[str] = set()
         self._last_transition_name: Optional[str] = None
@@ -302,10 +308,21 @@ class DisplayWidget(QWidget):
         self._transition_watchdog_overlay_key: Optional[str] = None
         self._transition_watchdog_transition: Optional[str] = None
         self._transition_watchdog_started_at: float = 0.0
-        self._pending_transition_finish_args: Optional[Tuple[QPixmap, QPixmap, str, bool, Optional[QPixmap]]] = None
+        self._pending_transition_finish_args: Optional[
+            Tuple[
+                QPixmap,
+                QPixmap,
+                str,
+                bool,
+                Optional[QPixmap],
+                Optional[ImageUploadPayload],
+            ]
+        ] = None
         self._transition_skip_count: int = 0
         self._transition_defer_count: int = 0
-        self._deferred_processed_image: Optional[Tuple[QPixmap, QPixmap, str]] = None
+        self._deferred_processed_image: Optional[
+            Tuple[QPixmap, QPixmap, str, Optional[ImageUploadPayload]]
+        ] = None
         self._deferred_processed_image_retry_token: int = 0
         self._deferred_processed_image_retry_attempts: int = 0
         self._deferred_processed_image_retry_scheduled: bool = False
@@ -407,7 +424,11 @@ class DisplayWidget(QWidget):
         # ImagePresenter for centralized pixmap lifecycle (Phase 4 refactor)
         self._image_presenter: Optional[ImagePresenter] = None
         try:
-            self._image_presenter = ImagePresenter(self, display_mode, 1.0)
+            self._image_presenter = ImagePresenter(
+                self,
+                display_mode,
+                self._device_pixel_ratio,
+            )
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Failed to create ImagePresenter: %s", e, exc_info=True)
         
@@ -563,31 +584,7 @@ class DisplayWidget(QWidget):
             except Exception as exc:
                 logger.debug("[DISPLAY_WIDGET] Failed to describe state during shutdown: %s", exc)
 
-        # Stop transitions via controller or legacy path
-        try:
-            if self._transition_controller is not None:
-                self._transition_controller.stop_current(reason=reason)
-            elif self._current_transition:
-                transition_to_stop = self._current_transition
-                self._current_transition = None
-                try:
-                    transition_to_stop.stop()
-                except Exception as exc:
-                    logger.debug("[DISPLAY_WIDGET] Transition stop failed: %s", exc)
-                try:
-                    transition_to_stop.cleanup()
-                except Exception as exc:
-                    logger.debug("[DISPLAY_WIDGET] Transition cleanup failed: %s", exc)
-        except Exception as exc:
-            logger.debug("[DISPLAY_WIDGET] Transition shutdown failed: %s", exc)
-
-        # Stop GL compositor render strategy
-        comp = getattr(self, "_gl_compositor", None)
-        if comp is not None and hasattr(comp, "stop_rendering"):
-            try:
-                comp.stop_rendering(reason=f"display:{reason}")
-            except Exception as exc:
-                logger.debug("[DISPLAY_WIDGET] GL compositor stop failed: %s", exc)
+        self.quiesce_for_runtime_pause(reason=reason)
 
         anim_manager = getattr(self, "_animation_manager", None)
         if anim_manager is not None:
@@ -954,13 +951,28 @@ class DisplayWidget(QWidget):
                     )
                 ):
                     logical_size = QSize(screen_size.width(), max(1, screen_size.height() - 1))
-                    self._device_pixel_ratio = screen.devicePixelRatio()
+                    self._set_device_pixel_ratio(screen.devicePixelRatio())
             except Exception as e:
                 logger.debug("[DISPLAY_WIDGET] Failed to resolve screen target size: %s", e)
         return QSize(
             int(logical_size.width() * self._device_pixel_ratio),
             int(logical_size.height() * self._device_pixel_ratio)
         )
+
+    def _set_device_pixel_ratio(self, value: object) -> float:
+        """Keep display and presenter on one validated DPR authority."""
+
+        try:
+            ratio = float(value)
+        except (TypeError, ValueError):
+            return float(self._device_pixel_ratio)
+        if not math.isfinite(ratio) or ratio <= 0.0:
+            return float(self._device_pixel_ratio)
+        self._device_pixel_ratio = ratio
+        presenter = getattr(self, "_image_presenter", None)
+        if presenter is not None:
+            presenter.device_pixel_ratio = ratio
+        return ratio
 
     def logical_to_physical_size(self) -> QSize:
         """
@@ -995,18 +1007,30 @@ class DisplayWidget(QWidget):
         )
         self.set_processed_image(processed_pixmap, pixmap, image_path)
 
-    def set_processed_image(self, processed_pixmap: QPixmap, original_pixmap: QPixmap,
-                            image_path: str = "") -> None:
+    def set_processed_image(
+        self,
+        processed_pixmap: QPixmap,
+        original_pixmap: QPixmap,
+        image_path: str = "",
+        upload_payload: Optional[ImageUploadPayload] = None,
+    ) -> None:
         """Delegates to rendering.display_image_ops."""
         if self._custom_layout_manager.should_defer_runtime_updates():
             self._custom_layout_manager.defer_processed_image(
                 processed_pixmap,
                 original_pixmap,
                 image_path,
+                upload_payload,
             )
             return
         from rendering.display_image_ops import set_processed_image
-        set_processed_image(self, processed_pixmap, original_pixmap, image_path)
+        set_processed_image(
+            self,
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+            upload_payload,
+        )
 
     def _on_transition_finished(self, *args, **kwargs) -> None:
         """Delegates to rendering.display_image_ops."""
@@ -1029,6 +1053,8 @@ class DisplayWidget(QWidget):
         transition_name: str,
         old_pixmap: Optional[QPixmap],
         new_pixmap: Optional[QPixmap],
+        old_payload: Optional[ImageUploadPayload] = None,
+        new_payload: Optional[ImageUploadPayload] = None,
     ) -> None:
         """Warm per-transition GL resources to avoid first-run stalls."""
         if (
@@ -1051,7 +1077,13 @@ class DisplayWidget(QWidget):
             warm_old = new_pixmap
 
         try:
-            warmed = compositor.warm_transition_resources(transition_name, warm_old, new_pixmap)
+            warmed = compositor.warm_transition_resources(
+                transition_name,
+                warm_old,
+                new_pixmap,
+                old_payload=old_payload,
+                new_payload=new_payload,
+            )
             if warmed:
                 self._prewarmed_transition_types.add(transition_name)
         except Exception:
@@ -1130,7 +1162,9 @@ class DisplayWidget(QWidget):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # type: ignore[override]
         super().resizeEvent(event)
-        self._device_pixel_ratio = self.windowHandle().devicePixelRatio() if self.windowHandle() else self._device_pixel_ratio
+        window = self.windowHandle()
+        if window is not None:
+            self._set_device_pixel_ratio(window.devicePixelRatio())
         if self._render_surface is not None:
             try:
                 self._render_surface.resize(
@@ -1218,6 +1252,10 @@ class DisplayWidget(QWidget):
 
     def cleanup_for_teardown(self) -> None:
         """Release display-owned resources while child GL contexts are still valid."""
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self, operation="display.cleanup_for_teardown")
+        self.quiesce_for_runtime_pause(reason="teardown", permanent=True)
         self._on_destroyed()
 
     def _update_backend_fallback_overlay(self) -> None:
@@ -1323,24 +1361,132 @@ class DisplayWidget(QWidget):
 
         self.update()
 
-    def quiesce_for_runtime_pause(self) -> None:
-        """Suppress late display/widget work before runtime pause or teardown."""
-        self._pending_activation_refresh = False
-        self._transition_work_pending = False
+    def quiesce_for_runtime_pause(
+        self,
+        *,
+        reason: str = "runtime_pause",
+        permanent: bool = False,
+    ) -> None:
+        """Close admission and reconcile display/GL work before teardown."""
 
-        if self._widget_manager is not None:
+        permanent = bool(permanent)
+        if self._render_pipeline_permanent_shutdown:
+            return
+        already_quiesced = self._render_pipeline_quiesced
+        if already_quiesced and not permanent:
+            return
+        if permanent:
+            self._render_pipeline_permanent_shutdown = True
+        if not already_quiesced:
+            self._render_pipeline_quiesced = True
+            self._transition_admission_open = False
+            self._render_lifecycle_generation += 1
+            self._pending_activation_refresh = False
+            self._transition_work_pending = False
+
+            try:
+                from rendering.display_image_ops import _clear_deferred_processed_image
+
+                _clear_deferred_processed_image(self, clear_pending=True)
+            except Exception:
+                logger.debug("[DISPLAY_WIDGET] Deferred image invalidation failed", exc_info=True)
+
+        controller = self._transition_controller
+        if controller is not None:
+            try:
+                controller.begin_quiesce(
+                    reason=f"display:{reason}",
+                    snap_to_new=True,
+                )
+            except Exception:
+                logger.error(
+                    "[DISPLAY_WIDGET] Transition quiesce failed screen=%s reason=%s",
+                    self.screen_index,
+                    reason,
+                    exc_info=True,
+                )
+
+        comp = getattr(self, "_gl_compositor", None)
+        if comp is not None:
+            begin_quiesce = getattr(comp, "begin_quiesce", None)
+            try:
+                if callable(begin_quiesce):
+                    begin_quiesce(
+                        reason=f"display:{reason}",
+                        snap_to_new=True,
+                        permanent=permanent,
+                    )
+                elif hasattr(comp, "stop_rendering"):
+                    comp.stop_rendering(reason=f"display:{reason}")
+            except Exception:
+                logger.error(
+                    "[DISPLAY_WIDGET] GL compositor quiesce failed screen=%s reason=%s",
+                    self.screen_index,
+                    reason,
+                    exc_info=True,
+                )
+
+        if not already_quiesced:
+            self._current_transition = None
+            self._current_transition_overlay_key = None
+            self._current_transition_started_at = 0.0
+            self._current_transition_expected_duration_ms = 0
+            self._current_transition_name = None
+            self._current_transition_first_run = False
+            self._pending_transition_finish_args = None
+
+        if not already_quiesced and self._widget_manager is not None:
             try:
                 self._widget_manager.prepare_for_runtime_pause()
             except Exception:
                 logger.debug("[DISPLAY_WIDGET] WidgetManager runtime-pause prep failed", exc_info=True)
 
+    def resume_after_runtime_pause(self) -> bool:
+        """Reopen display/controller/compositor admission for a reused runtime."""
+
+        if self._render_pipeline_permanent_shutdown:
+            logger.error(
+                "[DISPLAY_WIDGET] Refusing to resume permanently shut down display screen=%s",
+                self.screen_index,
+            )
+            return False
+        if not self._render_pipeline_quiesced:
+            return True
+
+        controller = self._transition_controller
+        if controller is not None:
+            controller.resume_after_quiesce()
+
+        try:
+            comp = getattr(self, "_gl_compositor", None)
+            if comp is not None:
+                resume = getattr(comp, "resume_after_quiesce", None)
+                if callable(resume):
+                    resume()
+        except Exception:
+            if controller is not None:
+                controller.begin_quiesce(
+                    reason="display_resume_rollback",
+                    snap_to_new=False,
+                )
+            raise
+
+        self._render_lifecycle_generation += 1
+        self._pending_activation_refresh = False
+        self._transition_work_pending = False
+        self._render_pipeline_quiesced = False
+        self._transition_admission_open = True
+        return True
+
     def reset_after_settings(self) -> None:
+        if not self.resume_after_runtime_pause():
+            raise RuntimeError("Display render pipeline could not resume after Settings")
         try:
             self.setUpdatesEnabled(False)
             self._updates_blocked_until_seed = True
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            self._self._updates_blocked_until_seed = False
+            self._updates_blocked_until_seed = False
         self._has_rendered_first_frame = False
         self._seed_pixmap = None
         self._last_pixmap_seed_ts = None
@@ -2077,9 +2223,10 @@ class DisplayWidget(QWidget):
         return int(self._transition_skip_count)
 
     def has_running_transition(self) -> bool:
-        # Delegate to TransitionController if available
+        # Controller ownership remains busy through terminal cleanup, not only
+        # while the transition object's public state says RUNNING.
         if self._transition_controller is not None:
-            return self._transition_controller.is_running
+            return self._transition_controller.current_transition is not None
         # Fallback to local state
         ct = getattr(self, "_current_transition", None)
         try:
@@ -2119,7 +2266,11 @@ class DisplayWidget(QWidget):
             "idle_age": None,
             "last_transition": self._last_transition_name,
         }
-        transition = self._current_transition
+        transition = (
+            self._transition_controller.current_transition
+            if self._transition_controller is not None
+            else self._current_transition
+        )
         if transition is not None:
             try:
                 running = transition.is_running()
@@ -2128,7 +2279,11 @@ class DisplayWidget(QWidget):
                 running = False
             if running:
                 snapshot["running"] = True
-                snapshot["name"] = self._current_transition_name
+                snapshot["name"] = (
+                    self._transition_controller.get_active_transition_name()
+                    if self._transition_controller is not None
+                    else self._current_transition_name
+                )
                 snapshot["first_run"] = self._current_transition_first_run
                 if self._current_transition_started_at > 0.0:
                     snapshot["elapsed"] = max(0.0, time.monotonic() - self._current_transition_started_at)
@@ -2138,6 +2293,17 @@ class DisplayWidget(QWidget):
                             snapshot["pending"] = True
                     except Exception:
                         pass
+        compositor = self._gl_compositor
+        if compositor is not None:
+            try:
+                terminal = compositor.get_terminal_transition_state()
+            except Exception:
+                terminal = None
+            if terminal:
+                snapshot["terminal"] = terminal
+                if terminal.get("busy"):
+                    snapshot["running"] = True
+                    snapshot["name"] = terminal.get("transition") or snapshot["name"]
         if not snapshot["running"] and self._last_transition_finished_wall_ts > 0.0:
             snapshot["idle_age"] = max(0.0, now_wall - self._last_transition_finished_wall_ts)
         return snapshot

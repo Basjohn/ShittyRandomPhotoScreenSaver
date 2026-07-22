@@ -17,6 +17,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, Hashable, Optional, Set, TYPE_CHECKING
 
+from rendering.gl_programs.context_identity import (
+    current_share_group_identity,
+    qt_object_is_valid,
+)
+
 if TYPE_CHECKING:
     from rendering.gl_programs.base_program import BaseGLProgram
 
@@ -37,46 +42,6 @@ def _load_gl():
     from OpenGL import GL as gl  # type: ignore
 
     return gl
-
-
-def _qt_cpp_pointer(obj: object) -> int:
-    try:
-        import shiboken6
-
-        pointer = shiboken6.getCppPointer(obj)
-        if pointer:
-            return int(pointer[0])
-    except Exception:
-        pass
-    return id(obj)
-
-
-def _qt_object_is_valid(obj: object | None) -> bool:
-    if obj is None:
-        return False
-    try:
-        import shiboken6
-
-        return bool(shiboken6.isValid(obj))
-    except Exception:
-        return True
-
-
-def _current_share_group_identity() -> tuple[Hashable, object | None]:
-    """Return a stable key and wrapper for the current GL share group."""
-
-    try:
-        from PySide6.QtGui import QOpenGLContext
-
-        context = QOpenGLContext.currentContext()
-        if context is None:
-            return ("no_context", 0), None
-        share_group = context.shareGroup()
-        if share_group is not None:
-            return ("share_group", _qt_cpp_pointer(share_group)), share_group
-        return ("context", _qt_cpp_pointer(context)), context
-    except Exception:
-        return ("no_context", 0), None
 
 
 class GLProgramCache:
@@ -113,9 +78,9 @@ class GLProgramCache:
         self._group_wrappers: Dict[Hashable, object] = {}
 
     def _get_bucket(self, *, create: bool = True) -> tuple[Hashable, Optional[_ProgramBucket]]:
-        key, wrapper = _current_share_group_identity()
+        key, wrapper = current_share_group_identity()
         existing_wrapper = self._group_wrappers.get(key)
-        if existing_wrapper is not None and not _qt_object_is_valid(existing_wrapper):
+        if existing_wrapper is not None and not qt_object_is_valid(existing_wrapper):
             # A C++ pointer can eventually be reused after its old share group
             # dies. Never let that resurrect the old numeric program IDs.
             self._buckets.pop(key, None)

@@ -9,7 +9,11 @@ from PySide6.QtCore import QSize
 from engine.image_pipeline import (
     _build_scaled_cache_key,
     _cache_trace,
+    _capture_display_work_specs,
     _describe_prefetcher_state,
+    _display_work_is_current,
+    _process_display_image_candidate,
+    _publish_upload_payload,
     _get_cached_pixmap_variants,
     _process_display_with_replacements,
     _process_same_image_with_replacements,
@@ -17,6 +21,7 @@ from engine.image_pipeline import (
     schedule_prefetch,
 )
 from rendering.display_modes import DisplayMode
+from rendering.image_upload_payload import ImageUploadPayload
 
 
 class _FakeScheduler:
@@ -31,6 +36,115 @@ def _solid_qimage(width: int, height: int, color: QColor) -> QImage:
     image = QImage(width, height, QImage.Format.Format_ARGB32)
     image.fill(color)
     return image
+
+
+def test_display_work_specs_capture_primitives_before_compute_submission():
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(2560, 1440),
+        display_mode=DisplayMode.FILL,
+        _render_lifecycle_generation=9,
+    )
+
+    specs = _capture_display_work_specs([display])
+
+    assert len(specs) == 1
+    assert specs[0].display_identity == id(display)
+    assert specs[0].lifecycle_generation == 9
+    assert (specs[0].target_width, specs[0].target_height) == (2560, 1440)
+    assert specs[0].display_mode is DisplayMode.FILL
+    assert all(getattr(specs[0], name) is not display for name in specs[0].__slots__)
+
+
+def test_display_work_generation_rejects_rebuild_and_quiesce():
+    display = SimpleNamespace(
+        get_target_size=lambda: QSize(1920, 1080),
+        display_mode=DisplayMode.FIT,
+        _render_lifecycle_generation=4,
+        _render_pipeline_quiesced=False,
+    )
+    manager = SimpleNamespace(displays=[display])
+    engine = SimpleNamespace(display_manager=manager)
+    spec = _capture_display_work_specs([display])[0]
+
+    assert _display_work_is_current(engine, manager, display, spec) is True
+
+    display._render_pipeline_quiesced = True
+    assert _display_work_is_current(engine, manager, display, spec) is False
+    display._render_pipeline_quiesced = False
+    display._render_lifecycle_generation += 1
+    assert _display_work_is_current(engine, manager, display, spec) is False
+
+    replacement_manager = SimpleNamespace(displays=[display])
+    engine.display_manager = replacement_manager
+    assert _display_work_is_current(engine, manager, display, spec) is False
+
+
+def test_compute_candidate_consumes_payload_without_qpixmap_conversion(
+    tmp_path,
+    monkeypatch,
+):
+    image_path = tmp_path / "prepared.png"
+    image_path.touch()
+    spec = SimpleNamespace(
+        target_width=2,
+        target_height=2,
+        display_mode=DisplayMode.FILL,
+    )
+    scaled_key = _build_scaled_cache_key(
+        str(image_path),
+        2,
+        2,
+        DisplayMode.FILL,
+        True,
+        False,
+    )
+    payload = ImageUploadPayload.from_rgba8(2, 2, b"\x03" * 16)
+
+    class _Cache:
+        def get(self, key):
+            return payload if key == scaled_key else None
+
+        def put(self, *_args):
+            raise AssertionError("payload cache hit must not be rewritten")
+
+    class _PixmapTrap:
+        @staticmethod
+        def fromImage(_image):
+            raise AssertionError("compute candidate must not create QPixmap")
+
+    monkeypatch.setattr("engine.image_pipeline.QPixmap", _PixmapTrap)
+    engine = SimpleNamespace(
+        _image_cache=_Cache(),
+        _process_supervisor=None,
+        _prefetcher=None,
+        _cache_runtime_stats={},
+    )
+    meta = SimpleNamespace(local_path=image_path, url=None)
+
+    result = _process_display_image_candidate(
+        engine,
+        spec,
+        0,
+        meta,
+        True,
+        False,
+    )
+
+    assert result is not None
+    assert result["upload_payload"] is payload
+
+
+def test_ui_publication_passes_exact_payload_to_display(qt_app):
+    payload = ImageUploadPayload.from_rgba8(2, 2, b"\x04" * 16)
+    received = []
+    display = SimpleNamespace(
+        set_processed_image=lambda *args: received.append(args),
+    )
+
+    assert _publish_upload_payload(display, payload, "prepared.png", 0)
+    assert len(received) == 1
+    assert received[0][3] is payload
+    assert received[0][0] is received[0][1]
 
 
 def test_rejected_display_candidate_uses_bounded_queue_replacement(monkeypatch):

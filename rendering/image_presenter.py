@@ -12,6 +12,7 @@ remains the async pre-processed pipeline.
 from __future__ import annotations
 
 import time
+import math
 from typing import Optional, TYPE_CHECKING
 
 from PySide6.QtCore import Signal, QObject
@@ -22,8 +23,31 @@ from rendering.display_modes import DisplayMode
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
+    from rendering.image_upload_payload import ImageUploadPayload
 
 logger = get_logger(__name__)
+
+
+def ensure_pixmap_device_pixel_ratio(pixmap: Optional[QPixmap], dpr: float) -> bool:
+    """Apply a valid DPR only when it differs from the pixmap's current value."""
+
+    if pixmap is None or pixmap.isNull():
+        return False
+    try:
+        ratio = float(dpr)
+    except (TypeError, ValueError):
+        return False
+    if not math.isfinite(ratio) or ratio <= 0.0:
+        return False
+    try:
+        current = float(pixmap.devicePixelRatio())
+        if math.isclose(current, ratio, rel_tol=0.0, abs_tol=1e-6):
+            return False
+        pixmap.setDevicePixelRatio(ratio)
+        return True
+    except Exception:
+        logger.debug("[IMAGE_PRESENTER] Failed to apply pixmap DPR", exc_info=True)
+        return False
 
 
 def _describe_pixmap(pm: Optional[QPixmap]) -> str:
@@ -84,6 +108,9 @@ class ImagePresenter(QObject):
         self._current_pixmap: Optional[QPixmap] = None
         self._previous_pixmap: Optional[QPixmap] = None
         self._seed_pixmap: Optional[QPixmap] = None
+        self._current_upload_payload: Optional["ImageUploadPayload"] = None
+        self._previous_upload_payload: Optional["ImageUploadPayload"] = None
+        self._seed_upload_payload: Optional["ImageUploadPayload"] = None
         self._last_seed_ts: Optional[float] = None
         
         logger.debug("[IMAGE_PRESENTER] Initialized with mode=%s, dpr=%.2f",
@@ -117,6 +144,18 @@ class ImagePresenter(QObject):
     def seed_pixmap(self) -> Optional[QPixmap]:
         """Get the seed pixmap for transition smoothness."""
         return self._seed_pixmap
+
+    @property
+    def current_upload_payload(self) -> Optional["ImageUploadPayload"]:
+        return self._current_upload_payload
+
+    @property
+    def previous_upload_payload(self) -> Optional["ImageUploadPayload"]:
+        return self._previous_upload_payload
+
+    @property
+    def seed_upload_payload(self) -> Optional["ImageUploadPayload"]:
+        return self._seed_upload_payload
     
     @property
     def display_mode(self) -> DisplayMode:
@@ -136,13 +175,23 @@ class ImagePresenter(QObject):
     @device_pixel_ratio.setter
     def device_pixel_ratio(self, value: float) -> None:
         """Set the device pixel ratio."""
-        self._device_pixel_ratio = value
+        try:
+            ratio = float(value)
+        except (TypeError, ValueError):
+            return
+        if math.isfinite(ratio) and ratio > 0.0:
+            self._device_pixel_ratio = ratio
     
     # =========================================================================
     # Pixmap Lifecycle
     # =========================================================================
     
-    def set_current(self, pixmap: QPixmap, update_seed: bool = True) -> None:
+    def set_current(
+        self,
+        pixmap: QPixmap,
+        update_seed: bool = True,
+        upload_payload: Optional["ImageUploadPayload"] = None,
+    ) -> None:
         """
         Set the current pixmap.
         
@@ -151,15 +200,14 @@ class ImagePresenter(QObject):
             update_seed: Whether to also update the seed pixmap
         """
         self._current_pixmap = pixmap
+        self._current_upload_payload = upload_payload
         
         if pixmap:
-            try:
-                pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception as e:
-                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
+            ensure_pixmap_device_pixel_ratio(pixmap, self._device_pixel_ratio)
         
         if update_seed and pixmap:
             self._seed_pixmap = pixmap
+            self._seed_upload_payload = upload_payload
             self._last_seed_ts = time.monotonic()
             
             if is_verbose_logging():
@@ -178,9 +226,26 @@ class ImagePresenter(QObject):
             The previous pixmap reference for the transition
         """
         previous_ref = self._current_pixmap
+        self._previous_pixmap = previous_ref
+        self._previous_upload_payload = self._current_upload_payload
         return previous_ref
+
+    def remember_previous(
+        self,
+        pixmap: Optional[QPixmap],
+        upload_payload: Optional["ImageUploadPayload"] = None,
+    ) -> None:
+        """Retain one exact previous presentation generation for rollback."""
+
+        self._previous_pixmap = pixmap
+        self._previous_upload_payload = upload_payload
     
-    def complete_transition(self, new_pixmap: QPixmap, pan_preview: Optional[QPixmap] = None) -> None:
+    def complete_transition(
+        self,
+        new_pixmap: QPixmap,
+        pan_preview: Optional[QPixmap] = None,
+        upload_payload: Optional["ImageUploadPayload"] = None,
+    ) -> None:
         """
         Complete a transition by updating pixmap state.
         
@@ -189,16 +254,19 @@ class ImagePresenter(QObject):
             pan_preview: Optional pan preview frame
         """
         self._current_pixmap = pan_preview or new_pixmap
+        self._current_upload_payload = upload_payload
         
         if self._current_pixmap:
-            try:
-                self._current_pixmap.setDevicePixelRatio(self._device_pixel_ratio)
-            except Exception as e:
-                logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
+            ensure_pixmap_device_pixel_ratio(
+                self._current_pixmap,
+                self._device_pixel_ratio,
+            )
         
         self._seed_pixmap = self._current_pixmap
+        self._seed_upload_payload = upload_payload
         self._last_seed_ts = time.monotonic()
         self._previous_pixmap = None
+        self._previous_upload_payload = None
         
         if is_verbose_logging():
             logger.debug(
@@ -209,15 +277,21 @@ class ImagePresenter(QObject):
     def clear(self) -> None:
         """Clear all pixmap state."""
         self._previous_pixmap = self._current_pixmap
+        self._previous_upload_payload = self._current_upload_payload
         self._current_pixmap = None
+        self._current_upload_payload = None
         self._seed_pixmap = None
+        self._seed_upload_payload = None
         self._last_seed_ts = None
     
     def show_error(self, message: str) -> None:
         """Set error state and clear current pixmap."""
         self._previous_pixmap = self._current_pixmap
+        self._previous_upload_payload = self._current_upload_payload
         self._current_pixmap = None
+        self._current_upload_payload = None
         self._seed_pixmap = None
+        self._seed_upload_payload = None
         self._last_seed_ts = None
         self.image_error.emit(message)
     
@@ -238,13 +312,16 @@ class ImagePresenter(QObject):
         try:
             wallpaper_pm = screen.grabWindow(0)
             if wallpaper_pm is not None and not wallpaper_pm.isNull():
-                try:
-                    wallpaper_pm.setDevicePixelRatio(self._device_pixel_ratio)
-                except Exception as e:
-                    logger.debug("[IMAGE_PRESENTER] Exception suppressed: %s", e)
+                ensure_pixmap_device_pixel_ratio(
+                    wallpaper_pm,
+                    self._device_pixel_ratio,
+                )
                 self._current_pixmap = wallpaper_pm
                 self._previous_pixmap = wallpaper_pm
                 self._seed_pixmap = wallpaper_pm
+                self._current_upload_payload = None
+                self._previous_upload_payload = None
+                self._seed_upload_payload = None
                 self._last_seed_ts = time.monotonic()
                 return True
         except Exception as e:
@@ -260,5 +337,8 @@ class ImagePresenter(QObject):
         self._current_pixmap = None
         self._previous_pixmap = None
         self._seed_pixmap = None
+        self._current_upload_payload = None
+        self._previous_upload_payload = None
+        self._seed_upload_payload = None
         self._last_seed_ts = None
         logger.debug("[IMAGE_PRESENTER] Cleanup complete")

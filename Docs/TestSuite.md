@@ -51,16 +51,22 @@ Keep these regression-focused files discoverable and up to date when their bug f
   Image-cache/prefetch behavior plus bounded per-display replacement after a missing or worker-rejected candidate, atomic common-candidate replacement for same-image multi-monitor mode, `streamed_raw` fallback context, and the no-direct-`QTimer.singleShot` ownership bar.
 - `tests/test_image_prefetcher.py`
   Full preview-window producer scheduling, cooldown-safe scaled registration, and direct-to-scaled lifetime/cleanup for raw decodes larger than one quarter of the shared cache budget without LRU admission.
+- `tests/test_image_upload_payload.py`, `tests/test_image_presenter.py`
+  Immutable owned ARGB32 upload-payload identity/lifetime plus presenter propagation without UI-affine image conversion, redundant DPR mutation, or loss across first-image, transition, and committed-base publication.
 - `tests/test_display_cleanup.py`
   Display renderer-target cleanup clears owner attributes, final visualizer cleanup precedes compositor teardown, explicit destroy cleanup is idempotent, and compositor teardown precedes render-surface destruction.
 - `tests/test_gl_texture_streaming.py`
   GL texture/PBO/geometry/visualizer-native ownership: four-texture active-plus-adjacent cache bounds, active-pair-safe eviction, one grow-only PBO replacement, exact converted-QImage direct-buffer staging plus owned-bytes fallback, partial allocation/registration/initialization cleanup, valid-context ResourceManager deletion, invalid-context abandonment, and exactly-once visualizer renderer program/VAO/VBO release.
+- `tests/test_gl_shared_texture_registry.py`
+  Verified-share-group immutable texture reuse, content/shape/stride/format identity, per-manager leases, producer-fence/consumer-GPU-wait ordering, exact-final delete/unregister, and context-loss abandonment that cannot invalidate another manager's live lease.
+- `tests/test_transition_controller_transaction.py`
+  Generation-scoped terminal transaction authority, exactly-once destination commit, stale/cancelled completion rejection, and admission closure across Settings pause, rebuild, and teardown.
 - `tests/test_resource_manager.py`
   Central resource registration/cleanup, app-shared ownership, GL texture/VBO/VAO/program/framebuffer/renderbuffer accounting, native-handle tracking, and explicit `unregister(..., cleanup=False)` behavior for already-released or context-invalid native resources.
 - `tests/test_usage_sampler.py`
   Low-pressure whole-process sampler collection/logging, overlap/cadence guards, ThreadManager snapshots, app-shared ResourceManager GL texture/VBO/VAO/program/framebuffer/renderbuffer fields, and shutdown behavior without UI-thread OS collection.
 - `tests/test_transition_perf_health_parser.py`
-  Render/paint/visualizer/cache/settings health parsing plus transition refusal/instant-commit/request-drop/program-lifecycle detection, usage-sidecar primed CPU/memory/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-growth, bounded texture-cache cleanup, direct upload telemetry, compositor-vs-legacy visualizer selection, compositor FBO churn/render-failure/last-good counters, live-versus-historical-paused visualizer latency classification, and context-aware renderer microgap/accepted-update-wait detection even when aggregate throughput remains healthy.
+  Render/paint/visualizer/cache/settings health parsing plus transition refusal/instant-commit/request-drop/program-lifecycle detection, terminal-transaction failures, Qt/OpenGL affinity errors, stale image-publication suppression, asynchronous render-owner request-to-ack latency, usage-sidecar primed CPU/memory/handle/VRAM growth, ThreadManager throughput/backlog, ResourceManager GL-growth, bounded texture-cache cleanup, direct/shared upload telemetry, compositor-vs-legacy visualizer selection, compositor FBO churn/render-failure/last-good counters, live-versus-historical-paused visualizer latency classification, and context-aware renderer microgap/accepted-update-wait detection even when aggregate throughput remains healthy.
 - `tests/test_spotify_overlay_repaint_contract.py`
   Shared legacy/compositor renderer identity, accepted-state-owned repaint authority, no self-scheduling from legacy `paintGL()`, passive microgap hooks attached to accepted update and paint delivery, bounded fixed-bucket p95 calculation, and distinct transition/mode-handoff classification.
 - `tests/test_spotify_compositor_layer.py`

@@ -8,13 +8,18 @@ import time
 from typing import Any, Optional
 
 from OpenGL import GL as gl
-from PySide6.QtCore import QRect, QSize
+from PySide6.QtCore import QRect, QSize, Qt
 from PySide6.QtGui import QImage, QOpenGLContext, QPainter
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
 from widgets.spotify_bars_gl_overlay import SpotifyVisualizerGLRenderer
-from widgets.spotify_visualizer.card_paint import paint_compositor_card
+from widgets.spotify_visualizer.card_paint import (
+    compositor_card_raster_key,
+    ensure_compositor_card_raster,
+    paint_compositor_card,
+    resolve_compositor_card_opacity,
+)
 
 logger = get_logger(__name__)
 
@@ -41,9 +46,10 @@ in vec2 v_uv;
 out vec4 frag_color;
 
 uniform sampler2D u_visualizer_texture;
+uniform float u_opacity;
 
 void main() {
-    frag_color = texture(u_visualizer_texture, v_uv);
+    frag_color = texture(u_visualizer_texture, v_uv) * u_opacity;
 }
 """
 
@@ -100,6 +106,16 @@ class CompositorSpotifyVisualizerLayer:
         "_composite_program_rid",
         "_composite_target_loc",
         "_composite_sampler_loc",
+        "_composite_opacity_loc",
+        "_card_raster_image",
+        "_card_raster_key",
+        "_card_texture",
+        "_card_texture_rid",
+        "_card_texture_key",
+        "_card_texture_failed_key",
+        "_card_texture_visible_miss_key",
+        "_card_texture_warmup_pending",
+        "_native_partial_presented",
         "_resource_manager",
         "_has_last_good_frame",
         "_last_good_frame_ts",
@@ -141,6 +157,16 @@ class CompositorSpotifyVisualizerLayer:
         object.__setattr__(self, "_composite_program_rid", None)
         object.__setattr__(self, "_composite_target_loc", -1)
         object.__setattr__(self, "_composite_sampler_loc", -1)
+        object.__setattr__(self, "_composite_opacity_loc", -1)
+        object.__setattr__(self, "_card_raster_image", None)
+        object.__setattr__(self, "_card_raster_key", None)
+        object.__setattr__(self, "_card_texture", 0)
+        object.__setattr__(self, "_card_texture_rid", None)
+        object.__setattr__(self, "_card_texture_key", None)
+        object.__setattr__(self, "_card_texture_failed_key", None)
+        object.__setattr__(self, "_card_texture_visible_miss_key", None)
+        object.__setattr__(self, "_card_texture_warmup_pending", False)
+        object.__setattr__(self, "_native_partial_presented", False)
         object.__setattr__(self, "_resource_manager", ResourceManager.get_or_create_app_shared())
         object.__setattr__(self, "_has_last_good_frame", False)
         object.__setattr__(self, "_last_good_frame_ts", 0.0)
@@ -205,7 +231,114 @@ class CompositorSpotifyVisualizerLayer:
             self._buffer_logical_size = QSize()
             self._prepare_retry_not_before_ts = 0.0
             self._prepare_retry_delay_s = 0.0
+        self.prewarm_card_raster()
         self.update()
+
+    def set_state(self, *args, **kwargs) -> None:
+        """Apply one visualizer frame without touching static card assets."""
+
+        self._renderer.set_state(*args, **kwargs)
+
+    def set_painted_frame_shadow_enabled(self, enabled: bool) -> None:
+        previous = bool(getattr(self._renderer, "_painted_frame_shadow_enabled", False))
+        self._renderer.set_painted_frame_shadow_enabled(enabled)
+        if previous != bool(enabled):
+            self.prewarm_card_raster()
+
+    def prewarm_card_raster(self) -> bool:
+        """Refresh the CPU card asset without touching the current GL context."""
+
+        if self._retired or self._geometry.width() <= 0 or self._geometry.height() <= 0:
+            return False
+        try:
+            visualizer = getattr(self.parent(), "spotify_visualizer_widget", None)
+            if visualizer is None:
+                return False
+            dpr = max(1.0, min(4.0, float(self.devicePixelRatioF())))
+            image = ensure_compositor_card_raster(
+                visualizer,
+                self._geometry.size(),
+                dpr,
+            )
+            if image is None or image.isNull():
+                return False
+            previous_key = self._card_raster_key
+            self._card_raster_image = image
+            self._card_raster_key = compositor_card_raster_key(
+                visualizer,
+                self._geometry.size(),
+                dpr,
+            )
+            if self._card_raster_key != previous_key:
+                self._card_texture_failed_key = None
+                self._card_texture_visible_miss_key = None
+                self._schedule_card_texture_prewarm()
+            return True
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Failed to prewarm static card raster",
+                exc_info=True,
+            )
+            return False
+
+    def _schedule_card_texture_prewarm(self) -> None:
+        """Upload changed static chrome outside a visible compositor paint."""
+
+        if self._retired or self._card_texture_warmup_pending:
+            return
+        if not callable(getattr(self._compositor, "context", None)):
+            return
+        if self._context_is_current():
+            self._prewarm_card_texture_current_context()
+            return
+
+        self._card_texture_warmup_pending = True
+
+        def _warm(_compositor) -> None:
+            if not self._card_texture_warmup_pending:
+                return
+            self._card_texture_warmup_pending = False
+            if self._retired:
+                return
+            acquired = False
+            try:
+                acquired = self._acquire_context()
+                self._prewarm_card_texture_current_context()
+            except Exception:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Static card texture prewarm failed",
+                    exc_info=True,
+                )
+            finally:
+                self._release_context(acquired)
+
+        def _suppressed(_compositor) -> None:
+            self._card_texture_warmup_pending = False
+
+        try:
+            from rendering.gl_compositor_pkg.gl_lifecycle import (
+                _schedule_deferred_gl_warmup,
+            )
+
+            _schedule_deferred_gl_warmup(
+                self._compositor,
+                _warm,
+                delay_ms=0,
+                on_suppressed=_suppressed,
+            )
+        except Exception:
+            self._card_texture_warmup_pending = False
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Failed to schedule static card prewarm",
+                exc_info=True,
+            )
+
+    def _prewarm_card_texture_current_context(self) -> bool:
+        self._card_texture_warmup_pending = False
+        visualizer = getattr(self.parent(), "spotify_visualizer_widget", None)
+        if visualizer is None or not self._context_is_current():
+            return False
+        return self._ensure_card_texture(visualizer)
 
     def rect(self) -> QRect:
         return QRect(0, 0, self._geometry.width(), self._geometry.height())
@@ -252,6 +385,7 @@ class CompositorSpotifyVisualizerLayer:
             "[SPOTIFY_VIS] Invalidated compositor visualizer surface metrics reason=%s",
             reason,
         )
+        self.prewarm_card_raster()
         self.update()
 
     def raise_(self) -> None:
@@ -275,9 +409,15 @@ class CompositorSpotifyVisualizerLayer:
         return float(self._compositor.devicePixelRatioF())
 
     def makeCurrent(self) -> None:
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self._compositor, operation="visualizer_layer.makeCurrent")
         self._compositor.makeCurrent()
 
     def doneCurrent(self) -> None:
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self._compositor, operation="visualizer_layer.doneCurrent")
         self._compositor.doneCurrent()
 
     def deleteLater(self) -> None:
@@ -307,14 +447,15 @@ class CompositorSpotifyVisualizerLayer:
     def _acquire_context(self) -> bool:
         if self._context_is_current():
             return False
-        self._compositor.makeCurrent()
+        self.makeCurrent()
         return True
 
     def _release_context(self, acquired: bool) -> None:
         if acquired:
-            self._compositor.doneCurrent()
+            self.doneCurrent()
 
     def force_renderer_initialize(self) -> None:
+        self.prewarm_card_raster()
         acquired = False
         try:
             acquired = self._acquire_context()
@@ -329,6 +470,8 @@ class CompositorSpotifyVisualizerLayer:
             if self._geometry.width() > 0 and self._geometry.height() > 0:
                 if not self._ensure_framebuffers():
                     raise RuntimeError("Visualizer framebuffers unavailable")
+                if not self._prewarm_card_texture_current_context():
+                    raise RuntimeError("Visualizer static card texture unavailable")
             self._prepare_failure_domain = ""
             self._prepare_failure_reason = ""
             self._prepare_retry_not_before_ts = 0.0
@@ -464,6 +607,13 @@ class CompositorSpotifyVisualizerLayer:
                     cleanup=context_valid,
                 )
                 return
+            except RuntimeError as exc:
+                if "affinity violation" in str(exc):
+                    raise
+                logger.debug(
+                    "[SPOTIFY_VIS] Compositor visualizer cleanup has no valid context",
+                    exc_info=True,
+                )
             except Exception:
                 logger.debug(
                     "[SPOTIFY_VIS] Managed compositor visualizer release failed",
@@ -500,7 +650,8 @@ class CompositorSpotifyVisualizerLayer:
             sampler_loc = int(
                 gl.glGetUniformLocation(program, "u_visualizer_texture")
             )
-            if target_loc < 0 or sampler_loc < 0:
+            opacity_loc = int(gl.glGetUniformLocation(program, "u_opacity"))
+            if target_loc < 0 or sampler_loc < 0 or opacity_loc < 0:
                 raise RuntimeError(
                     "Visualizer composite program required uniforms unavailable"
                 )
@@ -513,6 +664,7 @@ class CompositorSpotifyVisualizerLayer:
             self._composite_program = program
             self._composite_target_loc = target_loc
             self._composite_sampler_loc = sampler_loc
+            self._composite_opacity_loc = opacity_loc
             self._composite_program_rid = program_rid
             program = 0
             return True
@@ -529,6 +681,7 @@ class CompositorSpotifyVisualizerLayer:
             self._composite_program_rid = None
             self._composite_target_loc = -1
             self._composite_sampler_loc = -1
+            self._composite_opacity_loc = -1
             self._prepare_failure_domain = "composite_program"
             self._prepare_failure_reason = "composite_program_init_failed"
             logger.error(
@@ -541,6 +694,136 @@ class CompositorSpotifyVisualizerLayer:
                 gl.glDeleteShader(vertex)
             if fragment:
                 gl.glDeleteShader(fragment)
+
+    def _ensure_card_texture(self, visualizer: Any) -> bool:
+        """Upload the prewarmed card asset into one context-local texture."""
+
+        image = self._card_raster_image
+        dpr = max(1.0, min(4.0, float(self.devicePixelRatioF())))
+        expected_key = compositor_card_raster_key(
+            visualizer,
+            self._geometry.size(),
+            dpr,
+        )
+        if (
+            not isinstance(image, QImage)
+            or image.isNull()
+            or self._card_raster_key != expected_key
+        ):
+            if self._card_texture_failed_key != expected_key:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Static card raster is missing or stale; "
+                    "retaining QPainter card path"
+                )
+            self._card_texture_failed_key = expected_key
+            return False
+        if self._card_texture and self._card_texture_key == expected_key:
+            return True
+        if self._card_texture_failed_key == expected_key:
+            return False
+
+        created_texture = False
+        texture = int(self._card_texture or 0)
+        try:
+            if not texture:
+                texture = int(gl.glGenTextures(1))
+                if not texture:
+                    raise RuntimeError("Static card texture allocation returned zero")
+                created_texture = True
+                resource_id = self._register_handle(
+                    texture,
+                    "texture",
+                    lambda handle: gl.glDeleteTextures(1, [handle]),
+                    "Compositor visualizer static card texture",
+                )
+                if not resource_id:
+                    raise RuntimeError(
+                        "Static card texture ResourceManager registration failed"
+                    )
+                self._card_texture = texture
+                self._card_texture_rid = resource_id
+
+            upload = image.flipped(Qt.Orientation.Vertical)
+            gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
+            gl.glTexParameteri(
+                gl.GL_TEXTURE_2D,
+                gl.GL_TEXTURE_MIN_FILTER,
+                gl.GL_LINEAR,
+            )
+            gl.glTexParameteri(
+                gl.GL_TEXTURE_2D,
+                gl.GL_TEXTURE_MAG_FILTER,
+                gl.GL_LINEAR,
+            )
+            gl.glTexParameteri(
+                gl.GL_TEXTURE_2D,
+                gl.GL_TEXTURE_WRAP_S,
+                gl.GL_CLAMP_TO_EDGE,
+            )
+            gl.glTexParameteri(
+                gl.GL_TEXTURE_2D,
+                gl.GL_TEXTURE_WRAP_T,
+                gl.GL_CLAMP_TO_EDGE,
+            )
+            gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 4)
+            gl.glTexImage2D(
+                gl.GL_TEXTURE_2D,
+                0,
+                getattr(gl, "GL_RGBA8", gl.GL_RGBA),
+                upload.width(),
+                upload.height(),
+                0,
+                gl.GL_RGBA,
+                gl.GL_UNSIGNED_BYTE,
+                upload.constBits(),
+            )
+            self._card_texture_key = expected_key
+            self._card_texture_failed_key = None
+            return True
+        except Exception:
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Static card texture upload failed; "
+                "retaining QPainter card path",
+                exc_info=True,
+            )
+            if created_texture:
+                self._release_handle(
+                    texture,
+                    self._card_texture_rid,
+                    lambda handle: gl.glDeleteTextures(1, [handle]),
+                    context_valid=True,
+                )
+                self._card_texture = 0
+                self._card_texture_rid = None
+            self._card_texture_key = None
+            self._card_texture_failed_key = expected_key
+            return False
+        finally:
+            try:
+                gl.glBindTexture(gl.GL_TEXTURE_2D, 0)
+            except Exception:
+                pass
+
+    def _card_texture_is_ready(self, visualizer: Any) -> bool:
+        """Cache-only visible-paint check; uploads belong to prewarm."""
+
+        dpr = max(1.0, min(4.0, float(self.devicePixelRatioF())))
+        expected_key = compositor_card_raster_key(
+            visualizer,
+            self._geometry.size(),
+            dpr,
+        )
+        ready = bool(
+            self._card_texture
+            and self._card_texture_key == expected_key
+        )
+        if not ready and self._card_texture_visible_miss_key != expected_key:
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Visible native paint found no prewarmed "
+                "card texture; retaining QPainter path"
+            )
+            self._card_texture_visible_miss_key = expected_key
+        return ready
 
     def _create_framebuffer_slot(
         self,
@@ -614,32 +897,43 @@ class CompositorSpotifyVisualizerLayer:
                 gl.glDeleteTextures(1, [texture])
             raise
 
-        return _FramebufferSlot(
+        slot = _FramebufferSlot(
             framebuffer=framebuffer,
             texture=texture,
             stencil=stencil,
             width_px=width_px,
             height_px=height_px,
             dpr=dpr,
-            framebuffer_rid=self._register_handle(
+        )
+        try:
+            slot.framebuffer_rid = self._register_handle(
                 framebuffer,
                 "framebuffer",
                 lambda handle: gl.glDeleteFramebuffers(1, [handle]),
                 "Compositor visualizer framebuffer",
-            ),
-            texture_rid=self._register_handle(
+            )
+            if not slot.framebuffer_rid:
+                raise RuntimeError("framebuffer ResourceManager registration failed")
+            slot.texture_rid = self._register_handle(
                 texture,
                 "texture",
                 lambda handle: gl.glDeleteTextures(1, [handle]),
                 "Compositor visualizer color texture",
-            ),
-            stencil_rid=self._register_handle(
+            )
+            if not slot.texture_rid:
+                raise RuntimeError("color texture ResourceManager registration failed")
+            slot.stencil_rid = self._register_handle(
                 stencil,
                 "renderbuffer",
                 lambda handle: gl.glDeleteRenderbuffers(1, [handle]),
                 "Compositor visualizer stencil buffer",
-            ),
-        )
+            )
+            if not slot.stencil_rid:
+                raise RuntimeError("stencil ResourceManager registration failed")
+        except Exception:
+            self._release_framebuffer_slot(slot, context_valid=True)
+            raise
+        return slot
 
     def _release_framebuffer_slot(
         self,
@@ -776,6 +1070,7 @@ class CompositorSpotifyVisualizerLayer:
                 self._back,
                 self._retained_front,
                 self._composite_program,
+                self._card_texture,
                 self._renderer._gl_programs,
             )
         ):
@@ -809,6 +1104,19 @@ class CompositorSpotifyVisualizerLayer:
             self._prepare_retry_not_before_ts = 0.0
             self._prepare_retry_delay_s = 0.0
             self._release_handle(
+                self._card_texture,
+                self._card_texture_rid,
+                lambda handle: gl.glDeleteTextures(1, [handle]),
+                context_valid=context_valid,
+            )
+            self._card_texture = 0
+            self._card_texture_rid = None
+            self._card_texture_key = None
+            self._card_texture_failed_key = None
+            self._card_texture_visible_miss_key = None
+            self._card_texture_warmup_pending = False
+            self._native_partial_presented = False
+            self._release_handle(
                 self._composite_program,
                 self._composite_program_rid,
                 gl.glDeleteProgram,
@@ -816,6 +1124,9 @@ class CompositorSpotifyVisualizerLayer:
             )
             self._composite_program = 0
             self._composite_program_rid = None
+            self._composite_target_loc = -1
+            self._composite_sampler_loc = -1
+            self._composite_opacity_loc = -1
             self._renderer.cleanup_gl(context_current=context_valid)
         finally:
             self._release_context(acquired)
@@ -885,6 +1196,47 @@ class CompositorSpotifyVisualizerLayer:
                         exc_info=True,
                     )
                     prepared = False
+        if prepared:
+            self._prepare_retry_not_before_ts = 0.0
+            self._prepare_retry_delay_s = 0.0
+            return True
+        delay_s = (
+            0.10
+            if self._prepare_retry_delay_s <= 0.0
+            else min(2.0, self._prepare_retry_delay_s * 2.0)
+        )
+        self._prepare_retry_delay_s = delay_s
+        self._prepare_retry_not_before_ts = now + delay_s
+        return False
+
+    def _prepare_current_context(self) -> bool:
+        """Prepare native resources without opening a QPainter session."""
+
+        if not self._needs_prepare():
+            self._prepare_attempted_this_paint = False
+            self._prepare_retry_not_before_ts = 0.0
+            self._prepare_retry_delay_s = 0.0
+            return True
+        now = time.monotonic()
+        if self._prepare_failure_domain and now < self._prepare_retry_not_before_ts:
+            self._prepare_attempted_this_paint = False
+            return False
+        self._prepare_attempted_this_paint = True
+        try:
+            if not self._context_is_current():
+                raise RuntimeError("Compositor context is not current")
+            prepared = bool(self.initialize_gl() and self._ensure_framebuffers())
+        except Exception:
+            self._prepare_failure_domain = self._prepare_failure_domain or "native_context"
+            self._prepare_failure_reason = (
+                self._prepare_failure_reason or "native_context_prepare_failed"
+            )
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Native visualizer preparation failed; "
+                "retaining QPainter path",
+                exc_info=True,
+            )
+            prepared = False
         if prepared:
             self._prepare_retry_not_before_ts = 0.0
             self._prepare_retry_delay_s = 0.0
@@ -978,10 +1330,15 @@ class CompositorSpotifyVisualizerLayer:
             return True, False
         return self._has_presentable_frame(), True
 
-    def _composite_front_buffer(self) -> bool:
-        slot = self._presentable_front_slot()
-        if slot is None:
-            return False
+    def _draw_texture_to_geometry(
+        self,
+        texture: int,
+        *,
+        opacity: float,
+        premultiplied: bool,
+    ) -> bool:
+        if not texture or opacity <= 0.0:
+            return opacity <= 0.0
         comp_width = max(1, self._compositor.width())
         comp_height = max(1, self._compositor.height())
         rect = self._geometry
@@ -1003,11 +1360,18 @@ class CompositorSpotifyVisualizerLayer:
         gl.glStencilMask(0x00)
         gl.glEnable(gl.GL_BLEND)
         gl.glBlendEquation(gl.GL_FUNC_ADD)
-        gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
+        gl.glBlendFunc(
+            gl.GL_ONE if premultiplied else gl.GL_SRC_ALPHA,
+            gl.GL_ONE_MINUS_SRC_ALPHA,
+        )
         gl.glUseProgram(self._composite_program)
         gl.glUniform4f(self._composite_target_loc, left, bottom, right, top)
+        gl.glUniform1f(
+            self._composite_opacity_loc,
+            max(0.0, min(1.0, float(opacity))),
+        )
         gl.glActiveTexture(gl.GL_TEXTURE0)
-        gl.glBindTexture(gl.GL_TEXTURE_2D, slot.texture)
+        gl.glBindTexture(gl.GL_TEXTURE_2D, texture)
         gl.glUniform1i(self._composite_sampler_loc, 0)
         gl.glBindVertexArray(self._renderer._gl_vao)
         gl.glDrawArrays(gl.GL_TRIANGLE_STRIP, 0, 4)
@@ -1016,6 +1380,16 @@ class CompositorSpotifyVisualizerLayer:
         gl.glUseProgram(0)
         gl.glDisable(gl.GL_BLEND)
         return True
+
+    def _composite_front_buffer(self) -> bool:
+        slot = self._presentable_front_slot()
+        if slot is None:
+            return False
+        return self._draw_texture_to_geometry(
+            slot.texture,
+            opacity=1.0,
+            premultiplied=False,
+        )
 
     def should_paint_scene(self) -> bool:
         """Return whether this layer has visible work for the current scene."""
@@ -1111,6 +1485,90 @@ class CompositorSpotifyVisualizerLayer:
                 gl.glUseProgram(0)
             finally:
                 painter.endNativePainting()
+
+    def paint_native(self) -> bool:
+        """Paint card then visualizer with the compositor context already current."""
+
+        self._native_partial_presented = False
+        if not self.should_paint_scene():
+            return False
+        visualizer = getattr(self.parent(), "spotify_visualizer_widget", None)
+        if visualizer is None:
+            return False
+        if not self._context_is_current():
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Native visualizer paint requested without "
+                "the owning compositor context; retaining QPainter path"
+            )
+            return False
+
+        prepared = self._prepare_current_context()
+        if not prepared:
+            if bool(getattr(self, "_prepare_attempted_this_paint", True)):
+                self._record_render_failure("prepare")
+            if not self._has_presentable_frame() or not self._composite_program:
+                return False
+        if not self._card_texture_is_ready(visualizer):
+            return False
+
+        if prepared:
+            frame_available, render_failed = self._render_to_back_buffer()
+            if render_failed:
+                self._record_render_failure("mode_render")
+        else:
+            frame_available = self._has_presentable_frame()
+        if not frame_available:
+            return False
+
+        try:
+            card_opacity = resolve_compositor_card_opacity(visualizer)
+            if card_opacity > 0.0:
+                # Once native drawing starts, a QPainter fallback cannot safely
+                # repaint translucent chrome without darkening the frame.
+                self._native_partial_presented = True
+            if not self._draw_texture_to_geometry(
+                self._card_texture,
+                opacity=card_opacity,
+                premultiplied=True,
+            ):
+                return False
+            composited = bool(self._composite_front_buffer())
+            self._paint_count += 1
+            return composited
+        except Exception:
+            self._record_render_failure("native_composite")
+            logger.error(
+                "[SPOTIFY_VIS][COMPOSITOR] Native card/visualizer composite failed; "
+                "retaining QPainter path",
+                exc_info=True,
+            )
+            return False
+        finally:
+            gl.glBindFramebuffer(
+                gl.GL_FRAMEBUFFER,
+                int(self._compositor.defaultFramebufferObject()),
+            )
+            dpr = max(1.0, min(4.0, float(self.devicePixelRatioF())))
+            gl.glViewport(
+                0,
+                0,
+                max(1, int(round(self._compositor.width() * dpr))),
+                max(1, int(round(self._compositor.height() * dpr))),
+            )
+            gl.glDisable(gl.GL_SCISSOR_TEST)
+            gl.glDisable(gl.GL_STENCIL_TEST)
+            gl.glDisable(gl.GL_DEPTH_TEST)
+            gl.glDisable(gl.GL_CULL_FACE)
+            gl.glDisable(gl.GL_BLEND)
+            gl.glColorMask(True, True, True, True)
+            gl.glStencilMask(0x00)
+            gl.glBindVertexArray(0)
+            gl.glUseProgram(0)
+
+    def native_fallback_is_safe(self) -> bool:
+        """Return false after any native pixels may have reached the scene."""
+
+        return not self._native_partial_presented
 
     # ------------------------------------------------------------------
     # Explicit edit-mode snapshot

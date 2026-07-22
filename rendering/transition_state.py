@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Optional, Callable
+from typing import TYPE_CHECKING, Optional, Callable
 
 from PySide6.QtCore import QPoint
 from PySide6.QtGui import QPixmap, QRegion
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from rendering.image_upload_payload import ImageUploadPayload
 
 
 @dataclass
@@ -21,6 +24,8 @@ class TransitionStateBase:
     old_pixmap: Optional[QPixmap] = None
     new_pixmap: Optional[QPixmap] = None
     progress: float = 0.0  # 0..1
+    old_upload_payload: Optional["ImageUploadPayload"] = None
+    new_upload_payload: Optional["ImageUploadPayload"] = None
 
 
 @dataclass

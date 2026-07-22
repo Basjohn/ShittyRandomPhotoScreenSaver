@@ -7,13 +7,16 @@ the first parameter to preserve the original interface.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import List, Optional, Dict, Any, TYPE_CHECKING
 import time
 import math
+import threading
 
 from PySide6.QtCore import QRect
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
+from core.threading.manager import TaskPriority, ThreadManager
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
@@ -372,118 +375,214 @@ def apply_visual_smoothing(widget: Any, target_bars: List[float], now_ts: float)
 # PERF metrics snapshot
 # ------------------------------------------------------------------
 
-def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
-    """Emit a PERF metrics snapshot for the current tick/paint window.
+@dataclass(frozen=True, slots=True)
+class VisualizerPerfSnapshot:
+    tick: Optional[tuple[float, int, float, float, float]]
+    paint: Optional[tuple[float, int, float, float, float]]
+    audio_lag: Optional[tuple[float, float, float]]
+    bar_count: int
+    bubble_result_skips: int
+    bubble: Optional[tuple[float, float, float, float, int, int, int, int, bool, int]]
+    devcurve: Optional[tuple[float, bool]]
 
-    When ``reset`` is True, internal counters are cleared afterwards so
-    subsequent snapshots start a fresh window (used on widget stop).
-    When ``reset`` is False, counters are left intact so that periodic
-    logging during runtime does not disturb the measurement window.
-    """
+
+_PERF_EMIT_LOCK = threading.Lock()
+_PERF_EMIT_INFLIGHT: set[int] = set()
+
+
+def _window_metrics(
+    start_ts: Any,
+    end_ts: Any,
+    frame_count: Any,
+    min_dt: Any,
+    max_dt: Any,
+) -> Optional[tuple[float, int, float, float, float]]:
+    try:
+        frames = int(frame_count or 0)
+        if start_ts is None or end_ts is None or frames <= 0:
+            return None
+        elapsed = max(0.0, float(end_ts) - float(start_ts))
+        if elapsed <= 0.0:
+            return None
+        return (
+            elapsed * 1000.0,
+            frames,
+            frames / elapsed,
+            max(0.0, float(min_dt or 0.0) * 1000.0),
+            max(0.0, float(max_dt or 0.0) * 1000.0),
+        )
+    except (TypeError, ValueError):
+        return None
+
+
+def capture_perf_snapshot(widget: Any, *, reset: bool = False) -> VisualizerPerfSnapshot:
+    """Capture primitive diagnostics on the owner thread without log I/O."""
+
+    tick = _window_metrics(
+        getattr(widget, "_perf_tick_start_ts", None),
+        getattr(widget, "_perf_tick_last_ts", None),
+        getattr(widget, "_perf_tick_frame_count", 0),
+        getattr(widget, "_perf_tick_min_dt", 0.0),
+        getattr(widget, "_perf_tick_max_dt", 0.0),
+    )
+    paint = _window_metrics(
+        getattr(widget, "_perf_paint_start_ts", None),
+        getattr(widget, "_perf_paint_last_ts", None),
+        getattr(widget, "_perf_paint_frame_count", 0),
+        getattr(widget, "_perf_paint_min_dt", 0.0),
+        getattr(widget, "_perf_paint_max_dt", 0.0),
+    )
+    audio_lag = None
+    try:
+        last_audio_lag = float(getattr(widget, "_perf_audio_lag_last_ms", 0.0) or 0.0)
+        if last_audio_lag > 0.0:
+            audio_lag = (
+                last_audio_lag,
+                float(getattr(widget, "_perf_audio_lag_min_ms", 0.0) or 0.0),
+                float(getattr(widget, "_perf_audio_lag_max_ms", 0.0) or 0.0),
+            )
+    except (TypeError, ValueError):
+        audio_lag = None
+
+    bubble_result_skips = int(
+        getattr(widget, "_bubble_pending_result_skip_count", 0) or 0
+    )
+    bubble = None
+    bubble_perf = getattr(widget, "_bubble_last_perf_diag", None)
+    if isinstance(bubble_perf, dict) and bubble_perf:
+        bubble = (
+            float(bubble_perf.get("worker_total_ms", 0.0) or 0.0),
+            float(bubble_perf.get("tick_ms", 0.0) or 0.0),
+            float(bubble_perf.get("collision_ms", 0.0) or 0.0),
+            float(bubble_perf.get("snapshot_ms", 0.0) or 0.0),
+            int(bubble_perf.get("collision_pairs", 0.0) or 0),
+            int(bubble_perf.get("collision_overlaps", 0.0) or 0),
+            int(bubble_perf.get("collision_passes", 0.0) or 0),
+            int(bubble_perf.get("active_bubbles", 0.0) or 0),
+            bool(bubble_perf.get("snapshot_trail_payload_active", 0.0)),
+            int(bubble_perf.get("snapshot_trail_floats", 0.0) or 0),
+        )
+
+    devcurve = None
+    devcurve_perf = getattr(widget, "_devcurve_last_perf_diag", None)
+    if isinstance(devcurve_perf, dict) and devcurve_perf:
+        has_pending_devcurve = getattr(widget, "_has_pending_devcurve_work", None)
+        devcurve = (
+            float(devcurve_perf.get("worker_total_ms", 0.0) or 0.0),
+            bool(has_pending_devcurve()) if callable(has_pending_devcurve) else False,
+        )
+
+    if bubble_result_skips > 0:
+        widget._bubble_pending_result_skip_count = 0
+    if reset:
+        for name, value in (
+            ("_perf_tick_start_ts", None),
+            ("_perf_tick_last_ts", None),
+            ("_perf_tick_frame_count", 0),
+            ("_perf_tick_min_dt", 0.0),
+            ("_perf_tick_max_dt", 0.0),
+            ("_perf_paint_start_ts", None),
+            ("_perf_paint_last_ts", None),
+            ("_perf_paint_frame_count", 0),
+            ("_perf_paint_min_dt", 0.0),
+            ("_perf_paint_max_dt", 0.0),
+            ("_perf_audio_lag_last_ms", 0.0),
+            ("_perf_audio_lag_min_ms", 0.0),
+            ("_perf_audio_lag_max_ms", 0.0),
+        ):
+            setattr(widget, name, value)
+
+    return VisualizerPerfSnapshot(
+        tick=tick,
+        paint=paint,
+        audio_lag=audio_lag,
+        bar_count=int(getattr(widget, "_bar_count", 0) or 0),
+        bubble_result_skips=bubble_result_skips,
+        bubble=bubble,
+        devcurve=devcurve,
+    )
+
+
+def emit_perf_snapshot(snapshot: VisualizerPerfSnapshot) -> None:
+    """Format and emit an immutable snapshot from an IO worker."""
+
+    if snapshot.tick is not None:
+        duration_ms, frames, avg_fps, min_dt_ms, max_dt_ms = snapshot.tick
+        logger.info(
+            "[PERF] [SPOTIFY_VIS] Tick metrics: duration=%.1fms, frames=%d, "
+            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
+            duration_ms,
+            frames,
+            avg_fps,
+            min_dt_ms,
+            max_dt_ms,
+            snapshot.bar_count,
+        )
+    if snapshot.paint is not None:
+        duration_ms, frames, avg_fps, min_dt_ms, max_dt_ms = snapshot.paint
+        logger.info(
+            "[PERF] [SPOTIFY_VIS] Paint metrics: duration=%.1fms, frames=%d, "
+            "avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
+            duration_ms,
+            frames,
+            avg_fps,
+            min_dt_ms,
+            max_dt_ms,
+            snapshot.bar_count,
+        )
+    if snapshot.audio_lag is not None:
+        logger.info(
+            "[PERF] [SPOTIFY_VIS] AudioLag metrics: last=%.2fms, min=%.2fms, max=%.2fms",
+            *snapshot.audio_lag,
+        )
+    if snapshot.bubble_result_skips > 0:
+        logger.warning(
+            "[PERF] [SPOTIFY_VIS][BUBBLE] result_apply_backpressure_skips=%d",
+            snapshot.bubble_result_skips,
+        )
+    if snapshot.bubble is not None:
+        logger.info(
+            "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f "
+            "collision_ms=%.2f snapshot_ms=%.2f pairs=%d overlaps=%d passes=%d "
+            "active=%d trail_payload=%s trail_floats=%d",
+            *snapshot.bubble,
+        )
+    if snapshot.devcurve is not None:
+        logger.info(
+            "[PERF] [SPOTIFY_VIS][DEVCURVE] worker_ms=%.2f pending=%s",
+            *snapshot.devcurve,
+        )
+
+
+def log_perf_snapshot(widget: Any, reset: bool = False) -> None:
+    """Capture on the owner thread and emit through the shared IO pool."""
 
     if not is_perf_metrics_enabled():
         return
+    snapshot = capture_perf_snapshot(widget, reset=reset)
+    owner_id = id(widget)
+    with _PERF_EMIT_LOCK:
+        if owner_id in _PERF_EMIT_INFLIGHT:
+            return
+        _PERF_EMIT_INFLIGHT.add(owner_id)
 
+    def _emit() -> None:
+        try:
+            emit_perf_snapshot(snapshot)
+        finally:
+            with _PERF_EMIT_LOCK:
+                _PERF_EMIT_INFLIGHT.discard(owner_id)
+
+    manager = getattr(widget, "_thread_manager", None) or ThreadManager.get_app_shared()
     try:
-        if (
-            widget._perf_tick_start_ts is not None
-            and widget._perf_tick_last_ts is not None
-            and widget._perf_tick_frame_count > 0
-        ):
-            elapsed = max(0.0, widget._perf_tick_last_ts - widget._perf_tick_start_ts)
-            if elapsed > 0.0:
-                duration_ms = elapsed * 1000.0
-                avg_fps = widget._perf_tick_frame_count / elapsed
-                min_dt_ms = widget._perf_tick_min_dt * 1000.0 if widget._perf_tick_min_dt > 0.0 else 0.0
-                max_dt_ms = widget._perf_tick_max_dt * 1000.0 if widget._perf_tick_max_dt > 0.0 else 0.0
-                logger.info(
-                    "[PERF] [SPOTIFY_VIS] Tick metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
-                    "dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
-                    duration_ms,
-                    widget._perf_tick_frame_count,
-                    avg_fps,
-                    min_dt_ms,
-                    max_dt_ms,
-                    widget._bar_count,
-                )
-
-        if (
-            widget._perf_paint_start_ts is not None
-            and widget._perf_paint_last_ts is not None
-            and widget._perf_paint_frame_count > 0
-        ):
-            elapsed_p = max(0.0, widget._perf_paint_last_ts - widget._perf_paint_start_ts)
-            if elapsed_p > 0.0:
-                duration_ms_p = elapsed_p * 1000.0
-                avg_fps_p = widget._perf_paint_frame_count / elapsed_p
-                min_dt_ms_p = widget._perf_paint_min_dt * 1000.0 if widget._perf_paint_min_dt > 0.0 else 0.0
-                max_dt_ms_p = widget._perf_paint_max_dt * 1000.0 if widget._perf_paint_max_dt > 0.0 else 0.0
-                logger.info(
-                    "[PERF] [SPOTIFY_VIS] Paint metrics: duration=%.1fms, frames=%d, avg_fps=%.1f, "
-                    "dt_min=%.2fms, dt_max=%.2fms, bar_count=%d",
-                    duration_ms_p,
-                    widget._perf_paint_frame_count,
-                    avg_fps_p,
-                    min_dt_ms_p,
-                    max_dt_ms_p,
-                    widget._bar_count,
-                )
-        # Emit a separate AudioLag metrics line so tools that parse
-        # Tick/Paint summaries remain compatible.
-        try:
-            if widget._perf_audio_lag_last_ms > 0.0:
-                logger.info(
-                    "[PERF] [SPOTIFY_VIS] AudioLag metrics: last=%.2fms, min=%.2fms, max=%.2fms",
-                    widget._perf_audio_lag_last_ms,
-                    widget._perf_audio_lag_min_ms,
-                    widget._perf_audio_lag_max_ms,
-                )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] AudioLag PERF metrics logging failed", exc_info=True)
-        try:
-            bubble_result_skips = int(getattr(widget, "_bubble_pending_result_skip_count", 0) or 0)
-            if bubble_result_skips > 0:
-                logger.warning(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE] result_apply_backpressure_skips=%d",
-                    bubble_result_skips,
-                )
-                widget._bubble_pending_result_skip_count = 0
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Bubble PERF metrics logging failed", exc_info=True)
-        try:
-            bubble_perf = getattr(widget, "_bubble_last_perf_diag", None)
-            if isinstance(bubble_perf, dict) and bubble_perf:
-                logger.info(
-                    "[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=%.2f tick_ms=%.2f collision_ms=%.2f snapshot_ms=%.2f pairs=%d overlaps=%d passes=%d active=%d trail_payload=%s trail_floats=%d",
-                    float(bubble_perf.get("worker_total_ms", 0.0) or 0.0),
-                    float(bubble_perf.get("tick_ms", 0.0) or 0.0),
-                    float(bubble_perf.get("collision_ms", 0.0) or 0.0),
-                    float(bubble_perf.get("snapshot_ms", 0.0) or 0.0),
-                    int(bubble_perf.get("collision_pairs", 0.0) or 0),
-                    int(bubble_perf.get("collision_overlaps", 0.0) or 0),
-                    int(bubble_perf.get("collision_passes", 0.0) or 0),
-                    int(bubble_perf.get("active_bubbles", 0.0) or 0),
-                    bool(bubble_perf.get("snapshot_trail_payload_active", 0.0)),
-                    int(bubble_perf.get("snapshot_trail_floats", 0.0) or 0),
-                )
-        except Exception:
-            logger.debug("[SPOTIFY_VIS] Bubble PERF diagnostics logging failed", exc_info=True)
+        if manager is None:
+            raise RuntimeError("app-shared ThreadManager unavailable")
+        manager.submit_io_task(
+            _emit,
+            priority=TaskPriority.LOW,
+        )
     except Exception:
-        logger.debug("[SPOTIFY_VIS] PERF metrics logging failed", exc_info=True)
-    finally:
+        with _PERF_EMIT_LOCK:
+            _PERF_EMIT_INFLIGHT.discard(owner_id)
         if reset:
-            widget._perf_tick_start_ts = None
-            widget._perf_tick_last_ts = None
-            widget._perf_tick_frame_count = 0
-            widget._perf_tick_min_dt = 0.0
-            widget._perf_tick_max_dt = 0.0
-            widget._perf_paint_start_ts = None
-            widget._perf_paint_last_ts = None
-            widget._perf_paint_frame_count = 0
-            widget._perf_paint_min_dt = 0.0
-            widget._perf_paint_max_dt = 0.0
-            widget._perf_audio_lag_last_ms = 0.0
-            widget._perf_audio_lag_min_ms = 0.0
-            widget._perf_audio_lag_max_ms = 0.0
-            if hasattr(widget, "_bubble_pending_result_skip_count"):
-                widget._bubble_pending_result_skip_count = 0
+            emit_perf_snapshot(snapshot)

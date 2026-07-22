@@ -14,7 +14,7 @@ except Exception:  # pragma: no cover - PySide test/import fallback
     Shiboken = None  # type: ignore[assignment]
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFontDatabase, QColor, QPainter, QPen
+from PySide6.QtGui import QFont, QFontDatabase, QColor, QPainter, QPen
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -45,7 +45,41 @@ _INTER_FONT_PATHS = (
     ":/ui/assets/fonts/Inter-VariableFont_opsz,wght.ttf",
     ":/ui/assets/fonts/Inter-Italic-VariableFont_opsz,wght.ttf",
 )
+_COMPLEX_SCRIPT_FALLBACK_CANDIDATES = (
+    "Nirmala UI",
+    "Noto Sans Telugu",
+    "Gautami",
+)
+_COMPLEX_SCRIPT_BASE_FAMILIES = (
+    "Inter",
+    "Jost",
+    "Segoe UI",
+    "Tahoma",
+    "Arial",
+)
 _FONTS_REGISTERED = False
+
+
+def _configure_complex_script_fallbacks() -> str | None:
+    """Add a real shaping-capable fallback behind the application's Latin faces."""
+
+    available = {family.casefold(): family for family in QFontDatabase.families()}
+    fallback = next(
+        (
+            available[candidate.casefold()]
+            for candidate in _COMPLEX_SCRIPT_FALLBACK_CANDIDATES
+            if candidate.casefold() in available
+        ),
+        None,
+    )
+    if fallback is None:
+        return None
+    fallback_key = fallback.casefold()
+    for family in _COMPLEX_SCRIPT_BASE_FAMILIES:
+        existing = {name.casefold() for name in QFont.substitutes(family)}
+        if fallback_key not in existing:
+            QFont.insertSubstitution(family, fallback)
+    return fallback
 
 
 def _ensure_fonts_registered() -> None:
@@ -58,6 +92,7 @@ def _ensure_fonts_registered() -> None:
         QFontDatabase.addApplicationFont(path)
     for path in _INTER_FONT_PATHS:
         QFontDatabase.addApplicationFont(path)
+    _configure_complex_script_fallbacks()
     _FONTS_REGISTERED = True
 
 

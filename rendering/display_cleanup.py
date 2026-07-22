@@ -46,6 +46,28 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+    # Reconcile transition/controller state before visualizer or compositor GL
+    # resources are touched. Cancellation is signal-suppressed by the
+    # controller, so teardown cannot re-enter normal image completion.
+    try:
+        from rendering.display_image_ops import _clear_deferred_processed_image
+
+        _clear_deferred_processed_image(widget, clear_pending=True)
+        if widget._transition_controller is not None:
+            widget._transition_controller.begin_quiesce(
+                reason="display_destroy",
+                snap_to_new=True,
+            )
+        elif widget._current_transition:
+            transition = widget._current_transition
+            widget._current_transition = None
+            try:
+                transition.stop()
+            finally:
+                transition.cleanup()
+    except Exception:
+        logger.error("[TRANSITION] Pre-GL teardown reconciliation failed", exc_info=True)
+
     # Release the visualizer renderer target before tearing down the owning
     # compositor/context. This covers both the normal compositor layer and the
     # environment-forced legacy child-surface adapter.
@@ -56,16 +78,14 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
         if widget._gl_compositor is not None:
             cleanup = getattr(widget._gl_compositor, "cleanup", None)
             if callable(cleanup):
-                try:
-                    cleanup()
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Cleanup failed: %s", e, exc_info=True)
+                cleanup()
             widget._gl_compositor.hide()
             widget._gl_compositor.setParent(None)
             widget._gl_compositor = None
-    except Exception as e:
-        logger.debug("[GL COMPOSITOR] Teardown failed: %s", e, exc_info=True)
-        widget._gl_compositor = None
+    except Exception:
+        widget._destroy_cleanup_done = False
+        logger.critical("[GL COMPOSITOR] Teardown failed before ownership release", exc_info=True)
+        raise
 
     widget._destroy_render_surface()
 
@@ -85,26 +105,6 @@ def on_destroyed(widget: "DisplayWidget", *_args) -> None:
     except Exception as e:
         logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
         widget._ctrl_cursor_hint = None
-
-    # Stop and clean up any active transition via TransitionController
-    try:
-        from rendering.display_image_ops import _clear_deferred_processed_image
-
-        _clear_deferred_processed_image(widget, clear_pending=True)
-        if widget._transition_controller is not None:
-            widget._transition_controller.stop_current()
-        elif widget._current_transition:
-            try:
-                widget._current_transition.stop()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                widget._current_transition.cleanup()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            widget._current_transition = None
-    except Exception as e:
-        logger.debug("[TRANSITION] Cleanup failed: %s", e, exc_info=True)
 
     # Hide overlays and cancel watchdog timer
     try:

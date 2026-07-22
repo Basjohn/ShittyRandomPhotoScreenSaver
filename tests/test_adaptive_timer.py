@@ -71,6 +71,11 @@ class MockCompositor:
     def update(self):
         with self.update_lock:
             self.update_count += 1
+
+    def _present_scene_from_coordinator(self, *, continuous):
+        del continuous
+        self.update()
+        return True
     
     def parent(self):
         return self._parent
@@ -617,17 +622,16 @@ class TestAdaptiveTimerAutoIdle(unittest.TestCase):
         self.assertIn(timer.get_state(), [TimerState.PAUSED, TimerState.IDLE])
         
         timer.stop()
-    
+
     def test_no_idle_if_resumed_quickly(self):
         """Timer should not go IDLE if resumed before timeout."""
         timer = AdaptiveTimerStrategy(self.compositor, self.config)
         timer.start()
         timer.pause()
-        
-        # Resume quickly
+
         time.sleep(0.1)
         timer.resume()
-        
+
         self.assertEqual(timer.get_state(), TimerState.RUNNING)
         timer.stop()
 
@@ -641,6 +645,72 @@ class TestAdaptiveTimerAutoIdle(unittest.TestCase):
         self.assertGreaterEqual(self.compositor.update_count, 1)
         self.assertEqual(timer.get_state(), TimerState.PAUSED)
         timer.stop()
+
+
+def test_running_owner_backpressures_one_inflight_paint_at_60_and_165_hz():
+    class PendingCompositor(MockCompositor):
+        def __init__(self):
+            super().__init__()
+            self.pending = False
+            self.present_count = 0
+
+        def _presentation_handoff_outstanding(self):
+            return self.pending
+
+        def _present_scene_from_coordinator(self, *, continuous):
+            assert continuous is True
+            self.present_count += 1
+            self.pending = True
+            return True
+
+    for target_fps in (60, 165):
+        compositor = PendingCompositor()
+        timer = AdaptiveTimerStrategy(
+            compositor,
+            AdaptiveTimerConfig(target_fps=target_fps, idle_timeout_sec=1.0),
+        )
+        try:
+            assert timer.start() is True
+            time.sleep(0.08)
+
+            assert compositor.present_count == 1
+            assert timer._metrics.presentation_wait_count == 0
+
+            compositor.pending = False
+            timer.notify_presentation_paint_completed()
+            time.sleep(0.04)
+
+            assert compositor.present_count == 2
+            assert timer._metrics.presentation_wait_count >= 1
+        finally:
+            timer.stop()
+
+
+def test_pause_releases_owner_waiting_for_paint_completion():
+    class PendingCompositor(MockCompositor):
+        pending = False
+
+        def _presentation_handoff_outstanding(self):
+            return self.pending
+
+        def _present_scene_from_coordinator(self, *, continuous):
+            assert continuous is True
+            self.pending = True
+            return True
+
+    compositor = PendingCompositor()
+    timer = AdaptiveTimerStrategy(
+        compositor,
+        AdaptiveTimerConfig(target_fps=165, idle_timeout_sec=1.0),
+    )
+    assert timer.start() is True
+    time.sleep(0.03)
+
+    timer.pause()
+    assert timer.get_state() == TimerState.PAUSED
+    timer.stop()
+
+    assert timer._loop_stopped_event.is_set()
 
 
 class TestMultipleDisplays(unittest.TestCase):
@@ -896,6 +966,29 @@ class TestRenderStrategyManager(unittest.TestCase):
         self.assertTrue(self.manager.is_running())
         
         self.manager.stop()
+
+    def test_manager_request_stop_never_calls_blocking_stop(self):
+        """Qt quiesce uses request/ack rather than the synchronous join path."""
+
+        calls = []
+
+        class _RetiringTimer:
+            def request_stop(self):
+                calls.append("request_stop")
+                return False
+
+            def stop(self):
+                raise AssertionError("request_stop must not call stop")
+
+        self.manager._timer = _RetiringTimer()
+
+        started = time.perf_counter()
+        assert self.manager.request_stop() is False
+        elapsed_ms = (time.perf_counter() - started) * 1000.0
+
+        assert calls == ["request_stop"]
+        assert elapsed_ms < 25.0
+        self.manager._timer = None
     
     def test_multiple_start_calls(self):
         """Multiple start calls should be idempotent."""

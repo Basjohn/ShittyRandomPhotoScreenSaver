@@ -37,6 +37,7 @@ from rendering.custom_layout_contract import (
     SnapGuide,
     write_custom_layout_map,
 )
+from rendering.image_upload_payload import ImageUploadPayload
 from rendering.widget_descriptors import (
     get_custom_persistence_monitor_settings_key_for_widget,
     get_custom_persistence_position_settings_key_for_widget,
@@ -115,6 +116,13 @@ class _ShellState:
     resize_corner: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _CustomLayoutCommitPlan:
+    in_place: bool
+    reason: str
+    widget_ids: tuple[str, ...]
+
+
 class CustomLayoutManager:
     """Owns one display participant in the global CUSTOM layout edit session."""
 
@@ -135,11 +143,17 @@ class CustomLayoutManager:
         self._paused_visualizer: tuple[Any, bool, Any | None, bool] | None = None
         self._active = False
         self._grid_overlay: EditGridOverlayWidget | None = None
-        self._deferred_processed_image: tuple[QPixmap, QPixmap, str] | None = None
+        self._deferred_processed_image: tuple[
+            QPixmap,
+            QPixmap,
+            str,
+            ImageUploadPayload | None,
+        ] | None = None
         self._suppress_live_feedback_widget_ids: set[str] = set()
         self._edit_mode_dimming_restore: tuple[bool, float] | None = None
         self._display_cursor_restore_shape: Qt.CursorShape | None = None
         self._geo_session_id: str | None = None
+        self._session_topology_signature: tuple[tuple[int, int, str], ...] = ()
 
     @classmethod
     def _next_geo_session_id(cls) -> str:
@@ -255,6 +269,18 @@ class CustomLayoutManager:
             instances.append(self._display)
         instances.sort(key=lambda instance: int(getattr(instance, "screen_index", 0)))
         return instances
+
+    def _display_topology_signature(self) -> tuple[tuple[int, int, str], ...]:
+        """Return stable live display ownership for one edit-session lifetime."""
+
+        return tuple(
+            (
+                id(instance),
+                int(getattr(instance, "screen_index", 0)),
+                get_screen_signature(getattr(instance, "_screen", None)),
+            )
+            for instance in self._get_global_display_instances()
+        )
 
     def _sync_display_screen_binding(self) -> tuple[Any, str]:
         screen = getattr(self._display, "_screen", None)
@@ -383,8 +409,14 @@ class CustomLayoutManager:
         processed_pixmap: QPixmap,
         original_pixmap: QPixmap,
         image_path: str,
+        upload_payload: ImageUploadPayload | None = None,
     ) -> None:
-        self._deferred_processed_image = (processed_pixmap, original_pixmap, image_path)
+        self._deferred_processed_image = (
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+            upload_payload,
+        )
 
     def flush_deferred_processed_image(self) -> None:
         if self._deferred_processed_image is None:
@@ -486,11 +518,29 @@ class CustomLayoutManager:
                 )
 
         write_custom_layout_map(widgets_map, custom_layout_map)
+        commit_plan = self._classify_commit_plan(active_managers)
+        if not request_reload:
+            commit_plan = _CustomLayoutCommitPlan(
+                in_place=False,
+                reason="reload_not_requested",
+                widget_ids=commit_plan.widget_ids,
+            )
         self._set_runtime_reload_pending_for_managers(active_managers, True)
         try:
             settings_manager.set_widgets_map(widgets_map)
             settings_manager.save()
 
+            if commit_plan.in_place and self._apply_commit_plan_in_place(
+                active_managers,
+                commit_plan,
+            ):
+                return True
+
+            logger.info(
+                "[CUSTOM_LAYOUT][FULL_REBUILD] reason=%s widgets=%s",
+                commit_plan.reason,
+                ",".join(commit_plan.widget_ids) or "none",
+            )
             for manager in active_managers:
                 manager._finish_session(
                     restore_live_visibility=False,
@@ -501,6 +551,108 @@ class CustomLayoutManager:
             return True
         finally:
             self._set_runtime_reload_pending_for_managers(active_managers, False)
+
+    def _classify_commit_plan(
+        self,
+        active_managers: list["CustomLayoutManager"],
+    ) -> _CustomLayoutCommitPlan:
+        widget_ids = tuple(
+            sorted(
+                {
+                    widget_id
+                    for manager in active_managers
+                    for widget_id in manager._shell_states
+                }
+            )
+        )
+        if not active_managers or not widget_ids:
+            return _CustomLayoutCommitPlan(False, "no_live_widgets", widget_ids)
+
+        expected_topology = active_managers[0]._session_topology_signature
+        current_topology = active_managers[0]._display_topology_signature()
+        if not expected_topology or current_topology != expected_topology:
+            return _CustomLayoutCommitPlan(False, "topology_changed", widget_ids)
+        if any(
+            manager._session_topology_signature != expected_topology
+            for manager in active_managers
+        ):
+            return _CustomLayoutCommitPlan(False, "session_topology_mismatch", widget_ids)
+
+        for manager in active_managers:
+            display_screen = getattr(manager._display, "_screen", None)
+            display_signature = get_screen_signature(display_screen)
+            for state in manager._shell_states.values():
+                if state.removed:
+                    return _CustomLayoutCommitPlan(False, "widget_owner_removed", widget_ids)
+                if bool(getattr(state.widget, "_custom_layout_recovery_placeholder", False)):
+                    return _CustomLayoutCommitPlan(False, "widget_requires_creation", widget_ids)
+                if (
+                    state.source_screen_signature != display_signature
+                    or state.current_screen_signature != display_signature
+                ):
+                    return _CustomLayoutCommitPlan(False, "cross_display_transfer", widget_ids)
+                live_widget = getattr(manager._display, state.descriptor.attr_name, None)
+                if live_widget is not state.widget:
+                    return _CustomLayoutCommitPlan(False, "widget_owner_changed", widget_ids)
+
+        return _CustomLayoutCommitPlan(True, "same_owner_geometry", widget_ids)
+
+    def _apply_commit_plan_in_place(
+        self,
+        active_managers: list["CustomLayoutManager"],
+        plan: _CustomLayoutCommitPlan,
+    ) -> bool:
+        """Apply a same-owner CUSTOM commit without destroying display surfaces."""
+
+        visualizer_displays = [
+            manager._display
+            for manager in active_managers
+            if "spotify_visualizer" in manager._shell_states
+        ]
+        try:
+            for manager in active_managers:
+                if not manager.apply_saved_layouts_to_display(allow_active=True):
+                    raise RuntimeError("display-local CUSTOM replay refused")
+        except Exception:
+            logger.warning(
+                "[CUSTOM_LAYOUT][PARTIAL_REFUSED] reason=local_replay_failed widgets=%s",
+                ",".join(plan.widget_ids) or "none",
+                exc_info=True,
+            )
+            return False
+
+        for manager in active_managers:
+            manager._finish_session()
+
+        suppress_input = getattr(
+            type(active_managers[0]._display),
+            "suppress_pointer_input_globally",
+            None,
+        )
+        if callable(suppress_input):
+            suppress_input(700, reason="custom_layout_partial_commit")
+
+        if visualizer_displays:
+            try:
+                from rendering.widget_setup_all import schedule_saved_custom_layout_stabilization
+
+                for display in visualizer_displays:
+                    schedule_saved_custom_layout_stabilization(
+                        display,
+                        log_prefix="[CUSTOM_LAYOUT][PARTIAL]",
+                    )
+            except Exception:
+                logger.debug(
+                    "[CUSTOM_LAYOUT] Failed to schedule partial visualizer geometry verification",
+                    exc_info=True,
+                )
+
+        logger.info(
+            "[CUSTOM_LAYOUT][PARTIAL] applied widgets=%s displays=%d retained_surfaces=true",
+            ",".join(plan.widget_ids),
+            len(active_managers),
+        )
+        return True
 
     def reset_to_authored_layout(self) -> bool:
         """Restore the last known non-CUSTOM authored routes and exit edit mode.
@@ -554,6 +706,7 @@ class CustomLayoutManager:
             return True
 
         self._sync_display_screen_binding()
+        self._session_topology_signature = self._display_topology_signature()
         targets = self._collect_targets()
         if not targets:
             logger.debug("[CUSTOM_LAYOUT] No eligible widgets found for edit session on screen %s", self._screen_signature)
@@ -865,12 +1018,12 @@ class CustomLayoutManager:
                 logger.debug("[CUSTOM_LAYOUT] Failed to reapply saved layouts after cancel", exc_info=True)
         return True
 
-    def apply_saved_layouts_to_display(self) -> None:
-        if self._active:
-            return
+    def apply_saved_layouts_to_display(self, *, allow_active: bool = False) -> bool:
+        if self._active and not allow_active:
+            return False
         settings_manager = getattr(self._display, "settings_manager", None)
         if settings_manager is None:
-            return
+            return False
         screen, fallback_signature = self._sync_display_screen_binding()
         widgets_map = settings_manager.get_widgets_map()
         custom_layout_map = load_custom_layout_map(widgets_map)
@@ -905,6 +1058,7 @@ class CustomLayoutManager:
                     save()
             except Exception:
                 logger.debug("[CUSTOM_LAYOUT] Failed to persist reconciled clock geometry variants", exc_info=True)
+        return True
 
     def _reconcile_clock_geometry_variant(
         self,
@@ -1061,6 +1215,7 @@ class CustomLayoutManager:
             CustomLayoutManager._uninstall_global_key_filter()
         setattr(self._display, "_custom_layout_edit_active", False)
         self._geo_session_id = None
+        self._session_topology_signature = ()
         self.flush_deferred_processed_image()
 
     def _suspend_interaction_cursor_state(self) -> None:
@@ -2014,9 +2169,20 @@ class CustomLayoutManager:
             shell_vertical_guides = (vertical_assists[0],)
         if not shell_horizontal_guides and horizontal_assists:
             shell_horizontal_guides = (horizontal_assists[0],)
-        if center_vertical is not None:
+        # A peer guide represents a concrete snap candidate. Do not replace it
+        # with the broader display-center indicator merely because the shell
+        # happens to span the center line while it is being dragged.
+        has_vertical_peer_guide = any(
+            guide.kind in {"peer", "peer_center"}
+            for guide in (*shell_vertical_guides, *vertical_assists)
+        )
+        has_horizontal_peer_guide = any(
+            guide.kind in {"peer", "peer_center"}
+            for guide in (*shell_horizontal_guides, *horizontal_assists)
+        )
+        if center_vertical is not None and not has_vertical_peer_guide:
             shell_vertical_guides = (center_vertical,)
-        if center_horizontal is not None:
+        if center_horizontal is not None and not has_horizontal_peer_guide:
             shell_horizontal_guides = (center_horizontal,)
         overlay_vertical_guides = tuple(
             guide for guide in shell_vertical_guides if guide.kind in {"display_center", "peer", "peer_center"}

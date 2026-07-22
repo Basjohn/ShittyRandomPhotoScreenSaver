@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import inspect
+import threading
+from types import SimpleNamespace
 
 import pytest
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QCoreApplication, QEvent, QRect
 from PySide6.QtGui import QColor
 
+from core.threading.manager import ThreadManager, ThreadPoolType
 from widgets.spotify_visualizer.audio_worker import VisualizerMode
 from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
 from widgets.spotify_visualizer.energy_bands import EnergyBands
@@ -32,6 +35,31 @@ class _StubEngine:
 
     def get_transient_energy_bands(self):
         return TransientEnergyBands()
+
+
+class _ImmediateComputeManager:
+    """Run a COMPUTE task inline while preserving callback handoff semantics."""
+
+    def submit_compute_task(self, func, *args, callback=None, **_kwargs):
+        result = func(*args)
+        if callback is not None:
+            callback(SimpleNamespace(success=True, result=result, error=None))
+        return "immediate-compute"
+
+
+class _DeferredComputeManager:
+    def __init__(self):
+        self.calls = []
+
+    def submit_compute_task(self, func, *args, callback=None, **_kwargs):
+        self.calls.append((func, args, callback))
+        return f"deferred-{len(self.calls)}"
+
+    def complete(self, index: int = -1):
+        func, args, callback = self.calls[index]
+        result = func(*args)
+        if callback is not None:
+            callback(SimpleNamespace(success=True, result=result, error=None))
 
 
 class _ZeroBandEngine(_StubEngine):
@@ -138,13 +166,15 @@ def test_devcurve_specular_activity_fades_down_while_paused(qt_app):
     qt_app.processEvents()
 
     widget._engine = _StubEngine()
+    widget._thread_manager = _ImmediateComputeManager()
     widget.set_visualization_mode(VisualizerMode.DEVCURVE)
     widget._spotify_playing = False
     widget._devcurve_specular_activity_alpha = 1.0
 
-    dispatch_devcurve_field(widget, 10.0)
+    dispatch_devcurve_field(widget, 10.0)  # submit
+    dispatch_devcurve_field(widget, 10.016)  # publish + submit
     first = widget._devcurve_specular_activity_alpha
-    dispatch_devcurve_field(widget, 10.1)
+    dispatch_devcurve_field(widget, 10.1)  # publish + submit
 
     assert 0.0 <= widget._devcurve_specular_activity_alpha < first < 1.0
 
@@ -157,17 +187,121 @@ def test_devcurve_specular_activity_fades_up_when_playing(qt_app):
     qt_app.processEvents()
 
     widget._engine = _StubEngine()
+    widget._thread_manager = _ImmediateComputeManager()
     widget.set_visualization_mode(VisualizerMode.DEVCURVE)
     widget._spotify_playing = True
     widget._devcurve_specular_activity_alpha = 0.0
 
-    dispatch_devcurve_field(widget, 20.0)
+    dispatch_devcurve_field(widget, 20.0)  # submit
+    dispatch_devcurve_field(widget, 20.016)  # publish + submit
     first = widget._devcurve_specular_activity_alpha
-    dispatch_devcurve_field(widget, 20.1)
+    dispatch_devcurve_field(widget, 20.1)  # publish + submit
 
     assert 0.0 < first < widget._devcurve_specular_activity_alpha <= 1.0
 
     widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_compute_coalesces_and_rejects_pre_reset_result(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+    manager = _DeferredComputeManager()
+    widget._thread_manager = manager
+    widget._engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = True
+
+    assert dispatch_devcurve_field(widget, 30.0) is False
+    assert dispatch_devcurve_field(widget, 30.01) is False
+    assert len(manager.calls) == 1
+    assert widget._devcurve_curve_bass == []
+
+    widget._mark_gpu_static_state_dirty()
+    manager.complete(0)
+    assert widget._take_pending_devcurve_result() is None
+
+    assert dispatch_devcurve_field(widget, 30.02) is False
+    assert len(manager.calls) == 2
+    manager.complete(1)
+    assert dispatch_devcurve_field(widget, 30.04) is True
+    assert len(widget._devcurve_curve_bass) == 96
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_worker_does_not_mutate_published_curve(qt_app):
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+    widget._thread_manager = _ImmediateComputeManager()
+    widget._engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = True
+
+    dispatch_devcurve_field(widget, 40.0)
+    dispatch_devcurve_field(widget, 40.016)
+    published = widget._devcurve_curve_bass
+    published_values = list(published)
+
+    # The second solve has already completed into the pending slot. Its mutable
+    # worker state must not alter the list currently consumed by the renderer.
+    assert widget._has_pending_devcurve_work() is True
+    assert widget._devcurve_curve_bass is published
+    assert published == published_values
+
+    widget.deleteLater()
+
+
+@pytest.mark.qt
+def test_devcurve_real_compute_callback_is_safe_after_epoch_teardown(
+    qt_app,
+    monkeypatch,
+):
+    """A retiring real pool callback may not revive a destroyed Dev Curve epoch."""
+
+    from widgets.spotify_visualizer import devcurve_runtime
+
+    started = threading.Event()
+    release = threading.Event()
+    original_solve = devcurve_runtime.solve_devcurve_frame
+
+    def slow_solve(*args, **kwargs):
+        started.set()
+        if not release.wait(timeout=2.0):
+            raise TimeoutError("test did not release the Dev Curve worker")
+        return original_solve(*args, **kwargs)
+
+    monkeypatch.setattr(devcurve_runtime, "solve_devcurve_frame", slow_solve)
+    manager = ThreadManager(
+        config={ThreadPoolType.IO: 1, ThreadPoolType.COMPUTE: 1}
+    )
+    widget = SpotifyVisualizerWidget(parent=None, bar_count=16)
+    qt_app.processEvents()
+    widget._thread_manager = manager
+    widget._engine = _StubEngine()
+    widget.set_visualization_mode(VisualizerMode.DEVCURVE)
+    widget._spotify_playing = True
+
+    try:
+        assert dispatch_devcurve_field(widget, 50.0) is False
+        assert started.wait(timeout=1.0)
+
+        retired_epoch = widget._devcurve_worker_epoch
+        widget._invalidate_devcurve_worker_generation()
+        assert widget._devcurve_worker_epoch == retired_epoch + 1
+        widget.deleteLater()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+        release.set()
+        manager.shutdown(wait=True)
+
+        assert widget._has_pending_devcurve_work() is False
+        assert widget._take_pending_devcurve_result() is None
+        assert widget._devcurve_curve_bass == []
+    finally:
+        release.set()
+        manager.shutdown(wait=True)
 
 
 @pytest.mark.qt

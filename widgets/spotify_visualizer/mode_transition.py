@@ -280,6 +280,9 @@ def reset_visualizer_state(
         clear_pending_bubble_result()
     widget._bubble_pending_result_skip_count = 0
     widget._bubble_last_tick_ts = 0.0
+    invalidate_devcurve = getattr(widget, "_invalidate_devcurve_worker_generation", None)
+    if callable(invalidate_devcurve):
+        invalidate_devcurve()
     # Reset the CPU-side bubble simulation so stale running averages,
     # burst state, and beat timestamps don't bleed across mode switches.
     bubble_sim = getattr(widget, '_bubble_simulation', None)
@@ -318,6 +321,10 @@ def reset_mode_owned_runtime_state(widget: Any, *, reason: str = "mode_activatio
     that can bleed when switching modes or presets without reconstructing the
     widget.
     """
+
+    invalidate_devcurve = getattr(widget, "_invalidate_devcurve_worker_generation", None)
+    if callable(invalidate_devcurve):
+        invalidate_devcurve()
 
     for attr in (
         "_last_visual_smooth_ts",

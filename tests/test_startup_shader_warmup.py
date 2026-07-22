@@ -5,9 +5,11 @@ import inspect
 import rendering.gl_compositor_pkg.gl_lifecycle as gl_lifecycle
 from rendering.gl_compositor_pkg.gl_lifecycle import (
     _disable_current_context_swap_interval,
+    _schedule_deferred_base_texture_warmup,
     _schedule_deferred_transition_resource_warmup,
     deferred_transition_program_specs,
     ensure_transition_program_ready,
+    init_gl_pipeline,
     startup_transition_program_specs,
     _has_live_visible_base_surface,
 )
@@ -273,3 +275,162 @@ def test_deferred_transition_resource_warmup_schedules_when_base_ready(monkeypat
     assert widget._startup_transition_resource_warm_queue
     assert "GLCompositorSlideTransition" in widget._startup_transition_resource_warm_queue
     assert scheduled == [140]
+
+
+def test_deferred_base_texture_warmup_coalesces_and_presents_after_commit(monkeypatch) -> None:
+    class _Pixmap:
+        def isNull(self):
+            return False
+
+    class _Manager:
+        def __init__(self):
+            self.committed = 0
+
+        def get_committed_texture(self):
+            return self.committed
+
+    class _StubWidget:
+        def __init__(self):
+            self._gl_disabled_for_session = False
+            self._base_pixmap = _Pixmap()
+            self._texture_manager = _Manager()
+            self._base_texture_warmup_pending = False
+            self.warm_calls = 0
+            self.update_sources = []
+
+        def _warm_pixmap_textures_in_current_context(
+            self,
+            old,
+            new,
+            *,
+            old_payload=None,
+            new_payload=None,
+        ):
+            assert old is self._base_pixmap
+            assert new is self._base_pixmap
+            assert old_payload is None
+            assert new_payload is None
+            self.warm_calls += 1
+            self._texture_manager.committed = 77
+            return True
+
+        def request_scene_update(self, *, source):
+            self.update_sources.append(source)
+
+    callbacks = []
+    releases = []
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.ThreadManager.single_shot",
+        lambda delay, callback: callbacks.append((delay, callback)),
+    )
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.acquire_safe_warmup_context",
+        lambda *_args, **_kwargs: lambda: releases.append(True),
+    )
+
+    widget = _StubWidget()
+    _schedule_deferred_base_texture_warmup(widget)
+    _schedule_deferred_base_texture_warmup(widget)
+
+    assert len(callbacks) == 1
+    assert callbacks[0][0] == 0
+    callbacks[0][1]()
+
+    assert widget.warm_calls == 1
+    assert releases == [True]
+    assert widget.update_sources == ["base_residency_ready"]
+    assert widget._base_texture_warmup_pending is False
+
+
+def test_deferred_base_texture_warmup_does_not_outlive_render_shutdown(monkeypatch) -> None:
+    class _Pixmap:
+        def isNull(self):
+            return False
+
+    class _StubWidget:
+        def __init__(self):
+            self._gl_disabled_for_session = False
+            self._render_shutdown_requested = False
+            self._base_pixmap = _Pixmap()
+            self._texture_manager = None
+            self._base_texture_warmup_pending = False
+            self.warm_calls = 0
+
+        def _warm_pixmap_textures_in_current_context(
+            self,
+            _old,
+            _new,
+            **_kwargs,
+        ):
+            self.warm_calls += 1
+            return True
+
+    callbacks = []
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.ThreadManager.single_shot",
+        lambda _delay, callback: callbacks.append(callback),
+    )
+    monkeypatch.setattr(
+        "rendering.gl_compositor_pkg.gl_lifecycle.acquire_safe_warmup_context",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("shutdown callback must not acquire a GL context")
+        ),
+    )
+
+    widget = _StubWidget()
+    _schedule_deferred_base_texture_warmup(widget)
+    assert len(callbacks) == 1
+
+    widget._render_shutdown_requested = True
+    callbacks[0]()
+
+    assert widget.warm_calls == 0
+    assert widget._base_texture_warmup_pending is False
+
+
+def test_pipeline_ready_rearms_base_residency_after_pre_show_miss(monkeypatch) -> None:
+    class _FakeGL:
+        @staticmethod
+        def glGetUniformLocation(_program, _name):
+            return 1
+
+    class _Geometry:
+        quad_vao = 1
+        quad_vbo = 2
+        box_vao = 3
+        box_vbo = 4
+        box_vertex_count = 36
+
+        def initialize(self):
+            return True
+
+    widget = type(
+        "_Widget",
+        (),
+        {
+            "_gl_disabled_for_session": False,
+            "_use_shaders": False,
+            "_gl_pipeline": gl_lifecycle._GLPipelineState(),
+            "_geometry_manager": _Geometry(),
+            "_texture_manager": object(),
+        },
+    )()
+    scheduled = []
+    monkeypatch.setattr(gl_lifecycle, "gl", _FakeGL())
+    monkeypatch.setattr(gl_lifecycle, "create_card_flip_program", lambda _widget: 7)
+    monkeypatch.setattr(gl_lifecycle, "startup_transition_program_specs", lambda: [])
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "schedule_deferred_transition_program_warmup",
+        lambda _widget: scheduled.append("programs"),
+    )
+    monkeypatch.setattr(
+        gl_lifecycle,
+        "_schedule_deferred_base_texture_warmup",
+        lambda _widget: scheduled.append("base"),
+    )
+
+    init_gl_pipeline(widget)
+
+    assert widget._gl_pipeline.initialized is True
+    assert scheduled == ["programs", "base"]

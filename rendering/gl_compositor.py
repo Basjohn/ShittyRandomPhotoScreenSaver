@@ -12,6 +12,8 @@ compositor over time.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import time
 from typing import Dict, Optional, Callable
 
 # Import metrics classes from extracted package
@@ -30,7 +32,7 @@ from rendering.adaptive_timer import (
     _queue_safe_widget_update,
 )
 
-from PySide6.QtCore import Qt, QPoint, QRect, QEvent, Slot
+from PySide6.QtCore import Qt, QPoint, QRect, QEvent, QMetaObject, Slot
 from PySide6.QtGui import QPainter, QPixmap, QRegion, QImage
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 
@@ -39,6 +41,7 @@ from core.animation.types import EasingCurve
 from core.animation.animator import AnimationManager
 from core.animation.frame_interpolator import FrameState
 from rendering.gl_format import apply_widget_surface_format
+from rendering.image_upload_payload import ImageUploadPayload
 from rendering.gl_profiler import TransitionProfiler
 from transitions.base_transition import WipeDirection, SlideDirection
 from core.resources.manager import ResourceManager
@@ -90,6 +93,20 @@ _PHYSICAL_SURFACE_CHANGE_EVENTS = frozenset(
 )
 
 
+@dataclass(slots=True)
+class _TerminalTransitionCompletion:
+    """One paint-confirmed terminal transaction for a compositor generation."""
+
+    animation_generation: int
+    transition_name: str
+    complete_callback: Callable[[], None]
+    created_ts: float
+    phase: str = "awaiting_terminal_paint"
+    paint_generation: int = 0
+    queued_ts: float = 0.0
+    applied_ts: float = 0.0
+
+
 def _get_blockflip_program():
     """Get the BlockFlipProgram instance via cache."""
     return get_program_cache().get_program_instance(GLProgramCache.BLOCK_FLIP)
@@ -138,12 +155,15 @@ def _get_burn_program():
 def cleanup_global_shader_programs(displays=None) -> None:
     """Release cache-owned programs once per live share group at final exit."""
 
+    from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
     cache = get_program_cache()
     for owner in displays or ():
         compositor = getattr(owner, "_gl_compositor", owner)
         if compositor is None:
             continue
         try:
+            assert_qt_affinity(compositor, operation="global_shader_cleanup.makeCurrent")
             compositor.makeCurrent()
             deleted = cache.cleanup_current_group()
             if deleted:
@@ -155,6 +175,7 @@ def cleanup_global_shader_programs(displays=None) -> None:
             logger.debug("[GL CACHE] Live-context transition program cleanup failed", exc_info=True)
         finally:
             try:
+                assert_qt_affinity(compositor, operation="global_shader_cleanup.doneCurrent")
                 compositor.doneCurrent()
             except Exception:
                 pass
@@ -258,11 +279,17 @@ class GLCompositorWidget(QOpenGLWidget):
         self._presentation_paint_active: bool = False
         self._presentation_source_counts: Dict[str, int] = {}
         self._presentation_owner_failure_logged: bool = False
-        self._transition_completion_due = None
-        self._transition_terminal_generation: int = 0
+        self._terminal_transaction: Optional[_TerminalTransitionCompletion] = None
+        self._terminal_completion_dispatch_pending: bool = False
+        self._admission_open: bool = True
+        self._lifecycle_generation: int = 1
+        self._quiesce_permanent: bool = False
+        self._quiesce_reason: str = ""
         self._paint_metrics: Optional[_PaintMetrics] = None
         self._paint_slow_threshold_ms: float = 24.0
         self._paint_warning_last_ts: float = 0.0
+        self._last_paint_path: str = "unpainted"
+        self._paint_path_window = None
 
         # Animation plumbing: compositor transitions are paint-time timeline
         # driven.  Keep the current token so stale scheduled completions can be
@@ -271,6 +298,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id: Optional[str] = None
         self._transition_animation_generation: int = 0
         self._render_shutdown_requested: bool = False
+        self._render_owner_stopped_ack: bool = True
+        self._render_owner_stop_requested_ts: float = 0.0
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
         self._current_easing: EasingCurve = EasingCurve.QUAD_IN_OUT
         self._current_anim_metrics: Optional[_AnimationRunMetrics] = None
@@ -284,6 +313,14 @@ class GLCompositorWidget(QOpenGLWidget):
         self._gl_pipeline: Optional[_GLPipelineState] = None
         self._use_shaders: bool = False
         self._gl_disabled_for_session: bool = False
+        self._base_texture_warmup_pending: bool = False
+        self._base_upload_payload: Optional[ImageUploadPayload] = None
+        self._staged_old_upload_payload: Optional[ImageUploadPayload] = None
+        self._staged_new_upload_payload: Optional[ImageUploadPayload] = None
+        self._deferred_warmup_context = None
+        self._deferred_warmup_surface = None
+        self._deferred_warmup_generation: int = 0
+        self._deferred_warmup_owner_thread = None
         
         # Per-compositor geometry manager - VAOs are NOT shared between GL contexts
         # so each display's compositor needs its own geometry
@@ -495,6 +532,14 @@ class GLCompositorWidget(QOpenGLWidget):
         )
         return bool(_queue_safe_widget_update(self))
 
+    def _presentation_handoff_outstanding(self) -> bool:
+        """Return primitive-only handoff state safe for the owner worker."""
+
+        return bool(
+            getattr(self, "_srpss_timer_update_pending", False)
+            or self._presentation_paint_active
+        )
+
     def _presentation_paint_started(self) -> int:
         """Capture the newest generation visible to this paint invocation."""
 
@@ -506,7 +551,12 @@ class GLCompositorWidget(QOpenGLWidget):
         self._presentation_paint_active = True
         return generation
 
-    def _presentation_paint_completed(self, generation: int) -> None:
+    def _presentation_paint_completed(
+        self,
+        generation: int,
+        *,
+        terminal_transition_rendered: bool = False,
+    ) -> None:
         """Acknowledge paint completion and retain any later dirty generation."""
 
         self._presentation_paint_active = False
@@ -516,26 +566,63 @@ class GLCompositorWidget(QOpenGLWidget):
         )
         _mark_widget_update_consumed(self)
 
-        completion = self._transition_completion_due
-        if (
-            completion is not None
-            and int(generation) >= int(self._transition_terminal_generation)
-        ):
-            animation_generation, complete_callback = completion
-            self._transition_completion_due = None
-            self._transition_terminal_generation = 0
+        try:
+            completion = self._terminal_transaction
+            if (
+                completion is not None
+                and terminal_transition_rendered
+                and completion.phase == "awaiting_terminal_paint"
+            ):
+                completion.paint_generation = int(generation)
+                completion.phase = "terminal_painted"
+                self._queue_terminal_transition_completion(completion)
+
             if (
                 not self._render_shutdown_requested
-                and animation_generation == self._transition_animation_generation
+                and int(self._presentation_dirty_generation)
+                > int(self._presentation_ack_generation)
             ):
-                complete_callback()
+                self._request_latched_presentation()
+        finally:
+            manager = getattr(self, "_render_strategy_manager", None)
+            notify = getattr(manager, "notify_presentation_paint_completed", None)
+            if callable(notify):
+                notify()
 
-        if (
-            not self._render_shutdown_requested
-            and int(self._presentation_dirty_generation)
-            > int(self._presentation_ack_generation)
-        ):
-            self._request_latched_presentation()
+    def _queue_terminal_transition_completion(
+        self,
+        completion: _TerminalTransitionCompletion,
+    ) -> bool:
+        """Queue terminal commit after paint; never mutate transition state in paint."""
+
+        if self._terminal_completion_dispatch_pending:
+            return True
+        self._terminal_completion_dispatch_pending = True
+        completion.phase = "completion_queued"
+        completion.queued_ts = time.monotonic()
+        try:
+            queued = QMetaObject.invokeMethod(
+                self,
+                "_srpss_complete_terminal_transition",
+                Qt.ConnectionType.QueuedConnection,
+            )
+        except Exception:
+            queued = False
+            logger.error(
+                "[GL COMPOSITOR] Failed to queue terminal transition completion",
+                exc_info=True,
+            )
+        if bool(queued):
+            return True
+        self._terminal_completion_dispatch_pending = False
+        completion.phase = "completion_dispatch_failed"
+        logger.critical(
+            "[GL COMPOSITOR][TERMINAL][ERROR] Owner-thread completion dispatch "
+            "was rejected screen=%s generation=%s; terminal frame remains held",
+            getattr(self, "_screen_index", "?"),
+            completion.animation_generation,
+        )
+        return False
 
     def invalidate_physical_surface_cache(self, *, reason: str) -> None:
         """Invalidate DPR/viewport-derived state without dropping visible content."""
@@ -605,10 +692,139 @@ class GLCompositorWidget(QOpenGLWidget):
                 "requested_generation": self._presentation_requested_generation,
                 "ack_generation": self._presentation_ack_generation,
                 "paint_active": self._presentation_paint_active,
-                "terminal_due": self._transition_completion_due is not None,
+                "terminal": self.get_terminal_transition_state(),
                 "sources": dict(self._presentation_source_counts),
             },
+            "admission_open": self._admission_open,
+            "lifecycle_generation": self._lifecycle_generation,
+            "quiesce_reason": self._quiesce_reason,
         }
+
+    def get_terminal_transition_state(self) -> dict:
+        """Return the canonical terminal transaction state for HUD/diagnostics."""
+
+        transaction = self._terminal_transaction
+        if transaction is None:
+            return {
+                "busy": False,
+                "phase": "idle",
+                "transition": self._current_transition_name,
+                "generation": 0,
+                "paint_generation": 0,
+                "queue_age_ms": 0.0,
+            }
+        queue_age_ms = 0.0
+        if transaction.queued_ts > 0.0:
+            queue_age_ms = max(
+                0.0,
+                (time.monotonic() - transaction.queued_ts) * 1000.0,
+            )
+        return {
+            "busy": True,
+            "phase": transaction.phase,
+            "transition": transaction.transition_name,
+            "generation": transaction.animation_generation,
+            "paint_generation": transaction.paint_generation,
+            "queue_age_ms": round(queue_age_ms, 3),
+        }
+
+    def can_accept_transition(self) -> bool:
+        """Return True only when no generation is active or terminal-pending."""
+
+        return bool(
+            self._admission_open
+            and not self._render_shutdown_requested
+            and self._terminal_transaction is None
+            and not self._terminal_completion_dispatch_pending
+            and self._frame_state is None
+        )
+
+    def begin_quiesce(
+        self,
+        *,
+        reason: str,
+        snap_to_new: bool = True,
+        permanent: bool = False,
+    ) -> None:
+        """Close admission and quiesce presentation without blocking Qt."""
+
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self, operation="compositor.begin_quiesce")
+        permanent = bool(permanent)
+        if self._render_shutdown_requested and not self._admission_open:
+            if not permanent or self._quiesce_permanent:
+                return
+        self._quiesce_permanent = self._quiesce_permanent or permanent
+        if (
+            self._render_shutdown_requested
+            and not self._admission_open
+            and not permanent
+        ):
+            return
+        self._admission_open = False
+        self._render_shutdown_requested = True
+        self._quiesce_reason = str(reason or "unspecified")
+        self._lifecycle_generation += 1
+        self._transition_animation_generation += 1
+        self._staged_old_upload_payload = None
+        self._staged_new_upload_payload = None
+        self._terminal_transaction = None
+        self._terminal_completion_dispatch_pending = False
+        try:
+            self.cancel_current_transition(snap_to_new=bool(snap_to_new))
+        except Exception:
+            logger.error(
+                "[GL COMPOSITOR][TERMINAL] Failed to reconcile transition during quiesce",
+                exc_info=True,
+            )
+        try:
+            self._stop_frame_pacing()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] Frame pacing quiesce failed", exc_info=True)
+        if permanent:
+            self._stop_render_strategy()
+
+    def resume_after_quiesce(self) -> None:
+        """Reopen a non-destructive runtime pause generation."""
+
+        from rendering.adaptive_timer import _mark_widget_update_consumed
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self, operation="compositor.resume_after_quiesce")
+        if self._quiesce_permanent:
+            raise RuntimeError("Cannot resume a permanently quiesced compositor")
+        if not self._render_shutdown_requested and self._admission_open:
+            return
+        self._lifecycle_generation += 1
+        self._render_shutdown_requested = False
+        self._admission_open = True
+        self._quiesce_reason = None
+        self._terminal_transaction = None
+        self._terminal_completion_dispatch_pending = False
+        _mark_widget_update_consumed(self)
+
+    def _render_owner_stop_acknowledged(self, *, immediate: bool = False) -> None:
+        """Accept the worker's primitive-only retirement acknowledgement."""
+
+        requested_ts = self._render_owner_stop_requested_ts
+        if self._render_owner_stopped_ack and requested_ts <= 0.0:
+            return
+        latency_ms = (
+            max(0.0, (time.monotonic() - requested_ts) * 1000.0)
+            if requested_ts > 0.0
+            else 0.0
+        )
+        self._render_owner_stopped_ack = True
+        self._render_owner_stop_requested_ts = 0.0
+        if is_perf_metrics_enabled():
+            logger.info(
+                "[PERF][ADAPTIVE_TIMER] asynchronous_stop_ack "
+                "screen=%s latency_ms=%.2f immediate=%s",
+                getattr(self, "_screen_index", "?"),
+                latency_ms,
+                immediate,
+            )
 
     def describe_stall_context(self) -> dict:
         """Return shared context for paint-gap / timer-stall diagnostics."""
@@ -631,14 +847,7 @@ class GLCompositorWidget(QOpenGLWidget):
                 logger.info("[PERF][GL COMPOSITOR] stop_rendering reason=%s state=%s", reason, self.describe_state())
             except Exception as exc:
                 logger.debug("[GL COMPOSITOR] describe_state logging failed: %s", exc)
-        self._render_shutdown_requested = True
-        self._transition_animation_generation += 1
-        self._cancel_current_animation()
-        try:
-            self._stop_frame_pacing()
-        except Exception as exc:
-            logger.debug("[GL COMPOSITOR] stop_frame_pacing failed: %s", exc)
-        self._stop_render_strategy()
+        self.begin_quiesce(reason=reason, snap_to_new=True)
 
     def _start_frame_pacing(self, duration_sec: float) -> FrameState:
         """Create and return a new FrameState for a transition.
@@ -827,6 +1036,7 @@ class GLCompositorWidget(QOpenGLWidget):
                     self._reset_render_timer_metrics(target_fps)
                 # Already running - just resume
                 self._render_strategy_manager.resume()
+                self._render_owner_stopped_ack = False
                 logger.debug("[GL COMPOSITOR] Render strategy resumed")
                 return True
 
@@ -854,6 +1064,8 @@ class GLCompositorWidget(QOpenGLWidget):
         self._render_strategy_manager.configure(config)
         
         success = self._render_strategy_manager.start()
+        if success:
+            self._render_owner_stopped_ack = False
         
         logger.info(
             "[GL COMPOSITOR] Adaptive timer render started: display=%dHz, target=%dHz, interval=%.2fms, success=%s",
@@ -869,14 +1081,33 @@ class GLCompositorWidget(QOpenGLWidget):
             self._finalize_render_timer_metrics(outcome="paused")
             logger.debug("[GL COMPOSITOR] Render strategy paused")
     
-    def _stop_render_strategy(self) -> None:
-        """Stop the render strategy."""
+    def _stop_render_strategy(self) -> bool:
+        """Request render-owner retirement without blocking the Qt thread."""
         _mark_widget_update_consumed(self)
-        if self._render_strategy_manager is not None:
-            self._render_strategy_manager.stop()
-        
+        manager = self._render_strategy_manager
+        if manager is None:
+            self._render_owner_stopped_ack = True
+            self._render_owner_stop_requested_ts = 0.0
+            self._finalize_render_timer_metrics()
+            logger.debug("[GL COMPOSITOR] Render strategy stopped")
+            return True
+
+        # Publish the pending state before signalling the worker. A fast
+        # acknowledgement may race request_stop() returning and must never be
+        # overwritten with a stale False afterwards.
+        self._render_owner_stopped_ack = False
+        self._render_owner_stop_requested_ts = time.monotonic()
+        stopped_at_request_return = bool(manager.request_stop())
+        if stopped_at_request_return and not self._render_owner_stopped_ack:
+            self._render_owner_stop_acknowledged(immediate=True)
+
         self._finalize_render_timer_metrics()
-        logger.debug("[GL COMPOSITOR] Render strategy stopped")
+        stopped = self._render_owner_stopped_ack
+        if stopped:
+            logger.debug("[GL COMPOSITOR] Render strategy stopped")
+        else:
+            logger.debug("[GL COMPOSITOR] Render strategy stop requested")
+        return stopped
     
     def _start_render_timer(self) -> bool:
         """Start the render timer to drive repaints during transitions.
@@ -912,7 +1143,12 @@ class GLCompositorWidget(QOpenGLWidget):
         else:
             self._record_render_timer_tick(accepted_update=False)
 
-    def set_base_pixmap(self, pixmap: Optional[QPixmap]) -> None:
+    def set_base_pixmap(
+        self,
+        pixmap: Optional[QPixmap],
+        *,
+        payload: Optional[ImageUploadPayload] = None,
+    ) -> None:
         """Set the base image when no transition is active.
         
         Keep startup/runtime warmup on the compositor-owned GL lifecycle seam.
@@ -920,12 +1156,17 @@ class GLCompositorWidget(QOpenGLWidget):
         are context-owned and should only be warmed via the compositor's own
         hidden/quiescent lifecycle paths.
         """
-        self._base_pixmap = pixmap
+        committed = self._assign_base_pixmap(pixmap, payload=payload)
 
         if pixmap is not None and not pixmap.isNull():
             try:
-                from rendering.gl_compositor_pkg.gl_lifecycle import _schedule_deferred_transition_resource_warmup
+                from rendering.gl_compositor_pkg.gl_lifecycle import (
+                    _schedule_deferred_base_texture_warmup,
+                    _schedule_deferred_transition_resource_warmup,
+                )
 
+                if committed <= 0:
+                    _schedule_deferred_base_texture_warmup(self)
                 _schedule_deferred_transition_resource_warmup(self)
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to schedule deferred transition resource warmup", exc_info=True)
@@ -933,6 +1174,103 @@ class GLCompositorWidget(QOpenGLWidget):
         # If no crossfade is active, repaint immediately.
         if self._crossfade is None:
             self.request_scene_update(source="base_pixmap")
+
+    def _assign_base_pixmap(
+        self,
+        pixmap: Optional[QPixmap],
+        *,
+        payload: Optional[ImageUploadPayload] = None,
+        texture_id: int | None = None,
+    ) -> int:
+        """Atomically pair the logical base with an already-resident GL texture."""
+
+        self._base_pixmap = pixmap
+        self._base_upload_payload = payload
+        manager = self._texture_manager
+        if manager is None:
+            return 0
+        if pixmap is None or pixmap.isNull():
+            manager.clear_committed_texture()
+            return 0
+        if payload is not None:
+            committed = manager.commit_cached_texture(
+                payload=payload,
+                texture_id=texture_id,
+            )
+        else:
+            committed = manager.commit_cached_texture(
+                pixmap,
+                texture_id=texture_id,
+            )
+        if texture_id and committed <= 0:
+            logger.warning(
+                "[GL COMPOSITOR][RESIDENCY] Failed to promote terminal texture "
+                "screen=%s expected_texture=%s identity=%s dpr=%.3f size=%dx%d",
+                getattr(self.parent(), "screen_index", "?"),
+                int(texture_id),
+                payload.content_id if payload is not None else int(pixmap.cacheKey()),
+                float(pixmap.devicePixelRatio()),
+                int(pixmap.width()),
+                int(pixmap.height()),
+            )
+        return committed
+
+    def stage_transition_upload_payloads(
+        self,
+        old_payload: Optional[ImageUploadPayload],
+        new_payload: Optional[ImageUploadPayload],
+    ) -> bool:
+        """Stage one complete immutable pair for the next admitted transition."""
+
+        self._staged_old_upload_payload = None
+        self._staged_new_upload_payload = None
+        if old_payload is None and new_payload is None:
+            return False
+        if not isinstance(old_payload, ImageUploadPayload) or not isinstance(
+            new_payload,
+            ImageUploadPayload,
+        ):
+            logger.warning(
+                "[GL COMPOSITOR][UPLOAD] Incomplete payload pair; pixmap bootstrap "
+                "path remains authoritative screen=%s",
+                getattr(self.parent(), "screen_index", "?"),
+            )
+            return False
+        self._staged_old_upload_payload = old_payload
+        self._staged_new_upload_payload = new_payload
+        return True
+
+    def _attach_staged_transition_upload_payloads(self) -> bool:
+        old_payload = self._staged_old_upload_payload
+        new_payload = self._staged_new_upload_payload
+        self._staged_old_upload_payload = None
+        self._staged_new_upload_payload = None
+        if old_payload is None or new_payload is None:
+            return False
+        for attr_name in (
+            "_crossfade",
+            "_slide",
+            "_wipe",
+            "_warp",
+            "_blockflip",
+            "_blockspin",
+            "_blinds",
+            "_diffuse",
+            "_raindrops",
+            "_crumble",
+            "_particle",
+            "_burn",
+        ):
+            state = getattr(self, attr_name, None)
+            if state is None:
+                continue
+            state.old_upload_payload = old_payload
+            state.new_upload_payload = new_payload
+            return True
+        logger.error(
+            "[GL COMPOSITOR][UPLOAD] Staged payload pair had no active transition state"
+        )
+        return False
 
     def _clear_all_transitions(self) -> None:
         """Clear all transition states."""
@@ -966,9 +1304,11 @@ class GLCompositorWidget(QOpenGLWidget):
         if new_pixmap is None or new_pixmap.isNull():
             return False
         logger.debug("[GL COMPOSITOR] No old image; showing new image immediately (%s)", name)
+        new_payload = self._staged_new_upload_payload
+        self._staged_old_upload_payload = None
+        self._staged_new_upload_payload = None
         self._clear_all_transitions()
-        self._base_pixmap = new_pixmap
-        self.request_scene_update(source="first_base_pixmap")
+        self.set_base_pixmap(new_pixmap, payload=new_payload)
         if on_finished:
             try:
                 on_finished()
@@ -990,8 +1330,8 @@ class GLCompositorWidget(QOpenGLWidget):
     def _cancel_current_animation(self) -> None:
         """Cancel any previous animation on this compositor."""
         self._transition_animation_generation += 1
-        self._transition_completion_due = None
-        self._transition_terminal_generation = 0
+        self._terminal_transaction = None
+        self._terminal_completion_dispatch_pending = False
         if self._current_anim_id and self._animation_manager:
             try:
                 self._animation_manager.cancel_animation(self._current_anim_id)
@@ -1015,10 +1355,14 @@ class GLCompositorWidget(QOpenGLWidget):
         OPTIMIZATION: Defer non-critical initialization to reduce transition start overhead.
         Metrics and render strategy start are deferred to first frame update.
         """
+        if not self.can_accept_transition():
+            raise RuntimeError(
+                f"Transition admission closed for {transition_label or 'transition'}"
+            )
         self._animation_manager = animation_manager
         self._current_easing = easing
         self._cancel_current_animation()
-        self._render_shutdown_requested = False
+        self._attach_staged_transition_upload_payloads()
         self._transition_animation_generation += 1
         animation_generation = self._transition_animation_generation
         if transition_label and not self._ensure_transition_program_ready(transition_label):
@@ -1041,64 +1385,14 @@ class GLCompositorWidget(QOpenGLWidget):
         self._begin_paint_metrics(transition_label or "transition")
         self._current_anim_metrics = None
 
-        def _complete_if_current() -> None:
-            if (
-                self._render_shutdown_requested
-                or animation_generation != self._transition_animation_generation
-            ):
-                return
-            try:
-                update_callback(1.0)
-            except Exception:
-                logger.debug("[GL COMPOSITOR] Final transition progress update failed", exc_info=True)
-            self._transition_completion_due = (
-                animation_generation,
-                on_complete,
-            )
-            self.request_scene_update(source="transition_terminal")
-            self._transition_terminal_generation = int(
-                self._presentation_dirty_generation
-            )
-
         anim_id = f"{transition_label or 'transition'}:timeline:{id(self)}:{animation_generation}"
-        try:
-            parent = self.parent()
-            thread_manager = getattr(parent, "_thread_manager", None) if parent is not None else None
-            if thread_manager is not None and hasattr(thread_manager, "single_shot"):
-                thread_manager.single_shot(int(duration_ms), _complete_if_current)
-            else:
-                from core.threading.manager import ThreadManager
-
-                ThreadManager.single_shot(int(duration_ms), _complete_if_current)
-        except Exception:
-            logger.error(
-                "[GL COMPOSITOR][FALLBACK] Timeline completion scheduler failed; "
-                "falling back to transition AnimationManager for %s",
-                transition_label or "transition",
-                exc_info=True,
-            )
-            metrics = self._begin_animation_metrics(
-                transition_label or "transition",
-                duration_ms,
-                animation_manager,
-            )
-            profiled_callback = self._wrap_animation_update(update_callback, metrics)
-
-            def guarded_update_callback(progress: float) -> None:
-                if (
-                    self._render_shutdown_requested
-                    or animation_generation != self._transition_animation_generation
-                ):
-                    return
-                profiled_callback(progress)
-
-            anim_id = animation_manager.animate_custom(
-                duration=duration_sec,
-                easing=easing,
-                update_callback=guarded_update_callback,
-                on_complete=_complete_if_current,
-                frame_state=self._frame_state,
-            )
+        self._current_transition_name = transition_label or "transition"
+        self._terminal_transaction = _TerminalTransitionCompletion(
+            animation_generation=animation_generation,
+            transition_name=self._current_transition_name,
+            complete_callback=on_complete,
+            created_ts=time.monotonic(),
+        )
         self._current_anim_id = anim_id
         return anim_id
 
@@ -1141,36 +1435,76 @@ class GLCompositorWidget(QOpenGLWidget):
         on_finished: Optional[Callable[[], None]],
         release_textures: bool = False,
     ) -> None:
-        """Generic transition completion handler."""
+        """Commit resident destination and converge compositor state to idle."""
+
+        state = getattr(self, state_attr, None)
+        committed = 0
         try:
             self._profiler.complete(name, viewport_size=(self.width(), self.height()))
-            self._stop_frame_pacing()
+        except Exception:
+            logger.debug("[GL COMPOSITOR] %s profiler completion failed", name, exc_info=True)
+        try:
             self._finalize_animation_metrics(outcome="complete")
+        except Exception:
+            logger.debug("[GL COMPOSITOR] %s animation metrics finalization failed", name, exc_info=True)
+        try:
             self._finalize_paint_metrics(outcome="complete")
-            if release_textures:
-                try:
-                    self._release_transition_textures()
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Failed to release %s textures: %s", name, e, exc_info=True)
-            state = getattr(self, state_attr, None)
-            if state is not None:
-                try:
-                    self._base_pixmap = state.new_pixmap
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-            setattr(self, state_attr, None)
-            self._current_anim_id = None
+        except Exception:
+            logger.debug("[GL COMPOSITOR] %s paint metrics finalization failed", name, exc_info=True)
+
+        if state is not None:
             try:
-                self.request_scene_update(source="transition_commit")
-            except Exception as e:
-                logger.debug("[GL COMPOSITOR] %s complete update failed: %s", name.capitalize(), e, exc_info=True)
-            if on_finished:
-                try:
-                    on_finished()
-                except Exception:
-                    logger.debug("[GL COMPOSITOR] on_finished callback failed", exc_info=True)
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] %s complete handler failed: %s", name.capitalize(), e, exc_info=True)
+                destination_texture = 0
+                if self._texture_manager is not None:
+                    destination_texture = int(self._texture_manager.new_tex_id or 0)
+                committed = self._assign_base_pixmap(
+                    state.new_pixmap,
+                    payload=getattr(state, "new_upload_payload", None),
+                    texture_id=destination_texture or None,
+                )
+            except Exception:
+                logger.error(
+                    "[GL COMPOSITOR][TERMINAL] Failed to commit %s destination",
+                    name,
+                    exc_info=True,
+                )
+
+        # These fields are the renderer's canonical busy state. Clear them
+        # before notifying the transition wrapper or any provider callbacks.
+        setattr(self, state_attr, None)
+        self._current_anim_id = None
+        self._current_transition_name = None
+        try:
+            self._stop_frame_pacing()
+        except Exception:
+            logger.error(
+                "[GL COMPOSITOR][TERMINAL] Failed to stop %s frame pacing",
+                name,
+                exc_info=True,
+            )
+
+        if state is not None and committed <= 0:
+            try:
+                from rendering.gl_compositor_pkg.gl_lifecycle import (
+                    _schedule_deferred_base_texture_warmup,
+                )
+
+                _schedule_deferred_base_texture_warmup(self)
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Base residency warmup scheduling failed", exc_info=True)
+
+        if release_textures:
+            try:
+                self._release_transition_textures()
+            except Exception:
+                logger.debug("[GL COMPOSITOR] Failed to release %s textures", name, exc_info=True)
+
+        try:
+            self.request_scene_update(source="transition_commit")
+        except Exception:
+            logger.debug("[GL COMPOSITOR] %s commit update failed", name, exc_info=True)
+        if on_finished:
+            on_finished()
 
     def _ensure_gl_pipeline_ready(self) -> bool:
         """Ensure the GLSL pipeline is initialised and ready for use."""
@@ -1180,6 +1514,7 @@ class GLCompositorWidget(QOpenGLWidget):
             return True
 
         try:
+            self._assert_gl_owner_thread("ensure_gl_pipeline_ready.makeCurrent")
             self.makeCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -1197,6 +1532,7 @@ class GLCompositorWidget(QOpenGLWidget):
             return False
         finally:
             try:
+                self._assert_gl_owner_thread("ensure_gl_pipeline_ready.doneCurrent")
                 self.doneCurrent()
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -1205,6 +1541,13 @@ class GLCompositorWidget(QOpenGLWidget):
         """Delegate program binding to the shared GL lifecycle seam."""
         from rendering.gl_compositor_pkg.gl_lifecycle import ensure_transition_program_ready
         return ensure_transition_program_ready(self, identity)
+
+    def _assert_gl_owner_thread(self, operation: str) -> None:
+        """Reject GL lifecycle work before Qt sees a wrong-thread call."""
+
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self, operation=operation)
 
     def _with_temp_state(self, attr_name: str, state, prep_fn: Callable[[], bool]) -> bool:
         """Assign a temporary state, invoke prep_fn, then restore the original state."""
@@ -1235,6 +1578,7 @@ class GLCompositorWidget(QOpenGLWidget):
     ) -> bool:
         """Prime transition-specific state so heavy prep work is done before first run."""
         try:
+            self._assert_gl_owner_thread("warm_transition_state.makeCurrent")
             self.makeCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -1248,6 +1592,7 @@ class GLCompositorWidget(QOpenGLWidget):
             )
         finally:
             try:
+                self._assert_gl_owner_thread("warm_transition_state.doneCurrent")
                 self.doneCurrent()
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -1374,18 +1719,28 @@ class GLCompositorWidget(QOpenGLWidget):
         self,
         old_pixmap: Optional[QPixmap],
         new_pixmap: Optional[QPixmap],
+        *,
+        old_payload: Optional[ImageUploadPayload] = None,
+        new_payload: Optional[ImageUploadPayload] = None,
     ) -> bool:
         """Upload/cache the provided pixmaps so textures are ready when needed."""
         try:
+            self._assert_gl_owner_thread("warm_pixmap_textures.makeCurrent")
             self.makeCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             return False
 
         try:
-            return self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
+            return self._warm_pixmap_textures_in_current_context(
+                old_pixmap,
+                new_pixmap,
+                old_payload=old_payload,
+                new_payload=new_payload,
+            )
         finally:
             try:
+                self._assert_gl_owner_thread("warm_pixmap_textures.doneCurrent")
                 self.doneCurrent()
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -1394,6 +1749,9 @@ class GLCompositorWidget(QOpenGLWidget):
         self,
         old_pixmap: Optional[QPixmap],
         new_pixmap: Optional[QPixmap],
+        *,
+        old_payload: Optional[ImageUploadPayload] = None,
+        new_payload: Optional[ImageUploadPayload] = None,
     ) -> bool:
         """Upload/cache the provided pixmaps while the caller owns the current GL context."""
         if gl is None or self._gl_disabled_for_session:
@@ -1410,9 +1768,35 @@ class GLCompositorWidget(QOpenGLWidget):
             success = True
 
             if old_pixmap is not None and not old_pixmap.isNull():
-                success = bool(manager.get_or_create_texture(old_pixmap)) and success
+                old_texture = int(
+                    manager.get_or_create_texture(
+                        old_pixmap,
+                        payload=old_payload,
+                    )
+                    or 0
+                )
+                success = bool(old_texture) and success
+                if old_pixmap is self._base_pixmap:
+                    manager.commit_cached_texture(
+                        old_pixmap,
+                        payload=old_payload,
+                        texture_id=old_texture,
+                    )
             if new_pixmap is not None and not new_pixmap.isNull():
-                success = bool(manager.get_or_create_texture(new_pixmap)) and success
+                new_texture = int(
+                    manager.get_or_create_texture(
+                        new_pixmap,
+                        payload=new_payload,
+                    )
+                    or 0
+                )
+                success = bool(new_texture) and success
+                if new_pixmap is self._base_pixmap:
+                    manager.commit_cached_texture(
+                        new_pixmap,
+                        payload=new_payload,
+                        texture_id=new_texture,
+                    )
             return success
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to warm pixmap textures", exc_info=True)
@@ -1450,6 +1834,7 @@ class GLCompositorWidget(QOpenGLWidget):
             duration_ms, easing, animation_manager,
             self._on_crossfade_update,
             lambda: self._on_crossfade_complete(on_finished),
+            transition_label="crossfade",
         )
 
     def start_warp(
@@ -1791,11 +2176,14 @@ class GLCompositorWidget(QOpenGLWidget):
 
     def cleanup(self) -> None:
         """Clean up GL resources and transition to DESTROYED state."""
-        self._render_shutdown_requested = True
-        self._transition_animation_generation += 1
-        self._cancel_current_animation()
-        # Stop render strategy first to prevent timer callbacks during cleanup
-        self._stop_render_strategy()
+        from rendering.gl_compositor_pkg.gl_lifecycle import assert_qt_affinity
+
+        assert_qt_affinity(self, operation="compositor.cleanup")
+        self.begin_quiesce(
+            reason="compositor_cleanup",
+            snap_to_new=True,
+            permanent=True,
+        )
         
         # Transition to DESTROYING state
         self._gl_state.transition(GLContextState.DESTROYING)
@@ -1937,7 +2325,14 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.shader_dispatch import can_use_burn_shader
         return can_use_burn_shader(self)
 
-    def warm_shader_textures(self, old_pixmap: Optional[QPixmap], new_pixmap: Optional[QPixmap]) -> None:
+    def warm_shader_textures(
+        self,
+        old_pixmap: Optional[QPixmap],
+        new_pixmap: Optional[QPixmap],
+        *,
+        old_payload: Optional[ImageUploadPayload] = None,
+        new_payload: Optional[ImageUploadPayload] = None,
+    ) -> None:
         """Best-effort prewarm of shader textures for a pixmap pair."""
         if not self._ensure_gl_pipeline_ready():
             return
@@ -1952,7 +2347,12 @@ class GLCompositorWidget(QOpenGLWidget):
             return
 
         try:
-            self._warm_pixmap_textures_in_current_context(old_pixmap, new_pixmap)
+            self._warm_pixmap_textures_in_current_context(
+                old_pixmap,
+                new_pixmap,
+                old_payload=old_payload,
+                new_payload=new_payload,
+            )
         finally:
             try:
                 release_current()
@@ -1964,6 +2364,9 @@ class GLCompositorWidget(QOpenGLWidget):
         transition_name: str,
         old_pixmap: Optional[QPixmap],
         new_pixmap: Optional[QPixmap],
+        *,
+        old_payload: Optional[ImageUploadPayload] = None,
+        new_payload: Optional[ImageUploadPayload] = None,
     ) -> bool:
         """Warm shader program + textures for a specific transition type."""
         if new_pixmap is None or new_pixmap.isNull():
@@ -1989,7 +2392,12 @@ class GLCompositorWidget(QOpenGLWidget):
         try:
             if not bind_transition_program_for_current_context(self, transition_name):
                 logger.debug("[GL COMPOSITOR] Transition program ensure incomplete for %s", transition_name)
-            textures_ready = self._warm_pixmap_textures_in_current_context(warm_old, new_pixmap)
+            textures_ready = self._warm_pixmap_textures_in_current_context(
+                warm_old,
+                new_pixmap,
+                old_payload=old_payload,
+                new_payload=new_payload,
+            )
             state_ready = textures_ready and self._warm_transition_state_in_current_context(
                 transition_name,
                 warm_old,
@@ -2173,6 +2581,35 @@ class GLCompositorWidget(QOpenGLWidget):
         except Exception as exc:
             logger.debug("[GL COMPOSITOR] Timer update dispatch failed: %s", exc)
             _mark_widget_update_consumed(self)
+
+    @Slot()
+    def _srpss_complete_terminal_transition(self) -> None:
+        """Commit one paint-confirmed transition outside paintGL reentrancy."""
+
+        completion = self._terminal_transaction
+        self._terminal_completion_dispatch_pending = False
+        if completion is None or completion.phase != "completion_queued":
+            return
+        if (
+            self._render_shutdown_requested
+            or completion.animation_generation != self._transition_animation_generation
+        ):
+            completion.phase = "cancelled"
+            self._terminal_transaction = None
+            return
+        completion.phase = "completion_applying"
+        try:
+            completion.complete_callback()
+        except Exception:
+            logger.error(
+                "[GL COMPOSITOR] Terminal transition completion failed",
+                exc_info=True,
+            )
+        finally:
+            completion.applied_ts = time.monotonic()
+            completion.phase = "completion_applied"
+            if self._terminal_transaction is completion:
+                self._terminal_transaction = None
 
     def _try_shader_path(self, name: str, state, can_use_fn, paint_fn, target, prep_fn=None) -> bool:
         from rendering.gl_compositor_pkg.shader_dispatch import try_shader_path

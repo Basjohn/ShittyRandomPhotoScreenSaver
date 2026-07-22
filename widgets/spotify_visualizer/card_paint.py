@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from PySide6.QtCore import QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QRect, QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 
 from core.logging.logger import get_logger
 
@@ -183,6 +183,86 @@ def resolve_compositor_card_opacity(widget: Any) -> float:
     except Exception:
         pass
     return 0.0
+
+
+def compositor_card_raster_key(
+    widget: Any,
+    target_size: QSize,
+    dpr: float,
+) -> tuple[Any, ...]:
+    """Return the immutable compositor card asset identity.
+
+    Fade progress is intentionally absent: the compositor applies it while
+    blending the cached texture, so an animation never rebuilds card chrome.
+    """
+
+    from widgets.base_overlay_widget import PAINTED_FRAME_SHADOW_TUNING
+
+    try:
+        painted_shadow = bool(widget.uses_painted_frame_shadow())
+    except Exception:
+        painted_shadow = False
+    return (
+        max(0, int(target_size.width())),
+        max(0, int(target_size.height())),
+        round(max(1.0, float(dpr)), 3),
+        painted_shadow,
+        bool(getattr(widget, "_show_background", False)),
+        QColor(getattr(widget, "_bg_color", QColor(0, 0, 0, 0))).getRgb(),
+        round(float(getattr(widget, "_bg_opacity", 1.0)), 6),
+        QColor(
+            getattr(widget, "_card_border_color", QColor(0, 0, 0, 0))
+        ).getRgb(),
+        max(0, int(getattr(widget, "_border_width", 0))),
+        tuple(sorted(PAINTED_FRAME_SHADOW_TUNING.items())) if painted_shadow else (),
+    )
+
+
+def ensure_compositor_card_raster(
+    widget: Any,
+    target_size: QSize,
+    dpr: float,
+) -> Optional[QImage]:
+    """Build the compositor card asset only when its immutable key changes.
+
+    This is an owner/UI-side preparation helper. Visible compositor paints
+    consume the cached image and never call it to recover a stale asset.
+    """
+
+    logical_size = QSize(target_size)
+    if logical_size.width() <= 0 or logical_size.height() <= 0:
+        return None
+    resolved_dpr = max(1.0, float(dpr))
+    key = compositor_card_raster_key(widget, logical_size, resolved_dpr)
+    cached = getattr(widget, "_compositor_card_raster_image", None)
+    if (
+        isinstance(cached, QImage)
+        and not cached.isNull()
+        and getattr(widget, "_compositor_card_raster_key", None) == key
+    ):
+        return cached
+
+    image = QImage(
+        max(1, int(round(logical_size.width() * resolved_dpr))),
+        max(1, int(round(logical_size.height() * resolved_dpr))),
+        QImage.Format.Format_RGBA8888_Premultiplied,
+    )
+    image.setDevicePixelRatio(resolved_dpr)
+    image.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(image)
+    try:
+        paint_compositor_card(
+            widget,
+            painter,
+            QRect(0, 0, logical_size.width(), logical_size.height()),
+            opacity=1.0,
+        )
+    finally:
+        painter.end()
+
+    widget._compositor_card_raster_image = image
+    widget._compositor_card_raster_key = key
+    return image
 
 
 def paint_compositor_card(

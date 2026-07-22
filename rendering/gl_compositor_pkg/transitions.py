@@ -73,6 +73,14 @@ def _start_with_desync(
     on_started: Optional[Callable[[int], None]] = None,
 ) -> Optional[str]:
     """Spread transition-start overhead without changing perceived pacing."""
+    can_accept = getattr(widget, "can_accept_transition", None)
+    if callable(can_accept) and not can_accept():
+        logger.warning(
+            "[TRANSITION][BLOCKED] Compositor admission closed transition=%s",
+            transition_label,
+        )
+        return None
+
     delay_ms, compensated_duration = widget._apply_desync_strategy(duration_ms)
     if delay_ms <= 0:
         animation_id = starter(compensated_duration)
@@ -82,6 +90,7 @@ def _start_with_desync(
 
     widget_ref = weakref.ref(widget)
     scheduled_generation = getattr(widget, "_transition_animation_generation", 0)
+    scheduled_lifecycle_generation = getattr(widget, "_lifecycle_generation", 0)
 
     def deferred_start() -> None:
         target = widget_ref()
@@ -100,6 +109,12 @@ def _start_with_desync(
             if (
                 getattr(target, "_render_shutdown_requested", False)
                 or scheduled_generation != getattr(target, "_transition_animation_generation", 0)
+                or scheduled_lifecycle_generation
+                != getattr(target, "_lifecycle_generation", 0)
+                or (
+                    callable(getattr(target, "can_accept_transition", None))
+                    and not target.can_accept_transition()
+                )
             ):
                 logger.debug(
                     "[GL COMPOSITOR] Suppressed stale deferred %s start after compositor lifecycle changed",

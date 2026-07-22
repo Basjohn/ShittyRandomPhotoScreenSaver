@@ -837,6 +837,17 @@ class ScreensaverEngine(QObject):
         
         try:
             logger.info("Starting screensaver engine...")
+
+            if self.display_manager is not None:
+                resume_displays = getattr(
+                    self.display_manager,
+                    "resume_all_after_runtime_pause",
+                    None,
+                )
+                if callable(resume_displays) and not bool(resume_displays()):
+                    raise RuntimeError(
+                        "One or more display render pipelines could not resume"
+                    )
             
             # Show first image immediately
             if not self._show_next_image():
@@ -1096,7 +1107,7 @@ class ScreensaverEngine(QObject):
         display_mode: str = "fill",
         sharpen: bool = False,
         timeout_ms: int = 500,
-    ) -> Optional[QImage]:
+    ):
         """Delegates to engine.image_pipeline."""
         from engine.image_pipeline import load_image_via_worker
         return load_image_via_worker(

@@ -72,6 +72,24 @@ def _paint_debug_overlay_payload(painter: QPainter, payload: tuple[str, str]) ->
         y += line_height
 
 
+def _measure_debug_overlay_image(payload: tuple[str, str]) -> tuple[int, int]:
+    """Measure the tight backing raster using the same painter font contract."""
+
+    probe = QImage(1, 1, QImage.Format.Format_ARGB32_Premultiplied)
+    painter = QPainter(probe)
+    try:
+        line1, line2 = payload
+        lines = (f"{line1}\n{line2}" if line2 else line1).split("\n")
+        metrics = painter.fontMetrics()
+        margin = 6
+        rect_width = max(metrics.horizontalAdvance(line) for line in lines) + margin * 2
+        rect_height = metrics.height() * len(lines) + margin * 2
+        # _paint_debug_overlay_payload positions the card at (margin, margin).
+        return max(1, margin + rect_width), max(1, margin + rect_height)
+    finally:
+        painter.end()
+
+
 def paint_debug_overlay(widget, painter: QPainter) -> None:
     """Paint debug overlay showing transition profiling metrics."""
     if not is_perf_metrics_enabled():
@@ -109,8 +127,8 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
         return None
-    size = widget.size()
-    if size.width() <= 0 or size.height() <= 0:
+    viewport_size = widget.size()
+    if viewport_size.width() <= 0 or viewport_size.height() <= 0:
         widget._debug_overlay_cache_key = None
         widget._debug_overlay_cache_image = None
         return None
@@ -120,7 +138,7 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
     cached_image = getattr(widget, "_debug_overlay_cache_image", None)
     cached_built_at = float(getattr(widget, "_debug_overlay_cache_built_at", 0.0) or 0.0)
     cached_size = cached_key[:2] if isinstance(cached_key, tuple) and len(cached_key) >= 2 else None
-    size_key = (size.width(), size.height())
+    size_key = (viewport_size.width(), viewport_size.height())
     if (
         cached_image is not None
         and cached_size == size_key
@@ -136,11 +154,16 @@ def render_debug_overlay_image(widget) -> Optional[QImage]:
         widget._debug_overlay_cache_built_at = 0.0
         return None
 
-    cache_key = (size.width(), size.height(), payload)
+    cache_key = (viewport_size.width(), viewport_size.height(), payload)
     if cached_key == cache_key and cached_image is not None:
         return cached_image
 
-    image = QImage(size.width(), size.height(), QImage.Format.Format_ARGB32_Premultiplied)
+    image_width, image_height = _measure_debug_overlay_image(payload)
+    image = QImage(
+        image_width,
+        image_height,
+        QImage.Format.Format_ARGB32_Premultiplied,
+    )
     image.fill(Qt.GlobalColor.transparent)
 
     painter = QPainter(image)

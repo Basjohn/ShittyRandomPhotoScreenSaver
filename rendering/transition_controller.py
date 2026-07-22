@@ -17,7 +17,7 @@ from PySide6.QtGui import QPixmap
 
 from core.logging.logger import get_logger, is_verbose_logging, is_perf_metrics_enabled
 from core.resources.manager import ResourceManager
-from transitions.base_transition import BaseTransition
+from transitions.base_transition import BaseTransition, TransitionState
 
 if TYPE_CHECKING:
     from rendering.display_widget import DisplayWidget
@@ -76,6 +76,12 @@ class TransitionController(QObject):
         self._current_overlay_key: Optional[str] = None
         self._transition_started_at: float = 0.0
         self._skip_count: int = 0
+        self._generation: int = 0
+        self._active_generation: int = 0
+        self._admission_open: bool = True
+        self._stopping: bool = False
+        self._terminal_phase: str = "idle"
+        self._finish_handler: Optional[Callable[[], None]] = None
         
         # Watchdog timer
         self._watchdog_timer: Optional[QTimer] = None
@@ -136,6 +142,9 @@ class TransitionController(QObject):
             "overlay_key": self._current_overlay_key,
             "elapsed_s": self.get_active_transition_elapsed_s(),
             "skip_count": self._skip_count,
+            "generation": self._active_generation,
+            "admission_open": self._admission_open,
+            "terminal_phase": self._terminal_phase,
         }
     
     @property
@@ -157,6 +166,16 @@ class TransitionController(QObject):
     def overlay_key(self) -> Optional[str]:
         """Get the current overlay key for GL transitions."""
         return self._current_overlay_key
+
+    @property
+    def active_generation(self) -> int:
+        """Return the generation of the currently owned transition."""
+        return int(self._active_generation)
+
+    @property
+    def admission_open(self) -> bool:
+        """Return whether this display may accept new transition work."""
+        return bool(self._admission_open)
     
     # =========================================================================
     # Transition Lifecycle
@@ -183,8 +202,17 @@ class TransitionController(QObject):
         Returns:
             True if transition started successfully
         """
-        # If a transition is already running, skip this request
-        if self.is_running:
+        if not self._admission_open:
+            logger.warning(
+                "[TRANSITION][BLOCKED] Admission closed screen=%s transition=%s",
+                getattr(self._parent, "screen_index", "?"),
+                transition.__class__.__name__,
+            )
+            return False
+
+        # A controller-owned object remains busy through terminal cleanup,
+        # even after its public RUNNING state has changed.
+        if self._current_transition is not None:
             self._skip_count += 1
             logger.debug(
                 "Transition in progress - skipping request (skip_count=%d)",
@@ -192,12 +220,13 @@ class TransitionController(QObject):
             )
             return False
         
-        # Stop any existing transition
-        self.stop_current()
-        
         # Set up the new transition
+        self._generation += 1
+        generation = self._generation
+        self._active_generation = generation
         self._current_transition = transition
         self._current_overlay_key = overlay_key
+        self._terminal_phase = "running"
         deferred_start = False
         try:
             deferred_start = bool(transition.uses_deferred_start_telemetry())
@@ -208,16 +237,25 @@ class TransitionController(QObject):
         if overlay_key:
             self._overlay_timeouts[overlay_key] = self._transition_started_at
         
-        # Connect finish handler
-        if on_finished:
-            transition.finished.connect(on_finished)
+        def _finished() -> None:
+            self._finish_transition(
+                transition,
+                generation=generation,
+                on_finished=on_finished,
+            )
+
+        self._finish_handler = _finished
+        transition.finished.connect(_finished)
         
         # Start the transition
         try:
             success = transition.start(old_pixmap, new_pixmap, self._parent)
             if success:
-                self._start_watchdog(overlay_key, transition)
-                self.transition_started.emit(transition.__class__.__name__)
+                # Immediate-completion transitions can emit synchronously from
+                # start(). Do not arm a watchdog after that generation is idle.
+                if self._current_transition is transition:
+                    self._start_watchdog(overlay_key, transition)
+                    self.transition_started.emit(transition.__class__.__name__)
                 return True
             else:
                 logger.warning("Transition failed to start")
@@ -237,6 +275,8 @@ class TransitionController(QObject):
             reason: Reason for stopping (used for instrumentation)
         """
         if self._current_transition is None:
+            self._active_generation = 0
+            self._terminal_phase = "idle"
             return
         
         transition = self._current_transition
@@ -260,27 +300,34 @@ class TransitionController(QObject):
                 reason, transition_name, anim_info
             )
         
+        self._stopping = True
+        self._terminal_phase = "cancelling"
+        self._disconnect_finish_handler(transition)
+        overlay_key = self._current_overlay_key
         self._current_transition = None
-        
-        # Signal compositor to snap to new image if requested
-        if snap_to_new:
-            try:
-                compositor = getattr(self._parent, "_compositor", None)
-                if compositor is not None and hasattr(compositor, "cancel_current_transition"):
-                    compositor.cancel_current_transition(snap_to_new=True)
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-        
-        # Cancel any AnimationManager animations if available
+        self._current_overlay_key = None
+        self._transition_started_at = 0.0
+        self._active_generation = 0
+
+        # Cancel the compositor exactly once. Detaching it first prevents each
+        # transition class's stop()/cleanup() pair from re-entering GL state.
+        compositor = getattr(transition, "_compositor", None)
+        if compositor is None:
+            compositor = getattr(self._parent, "_gl_compositor", None)
         try:
-            anim_manager = getattr(self._parent, "_animation_manager", None)
-            if anim_manager is not None and hasattr(anim_manager, "cancel_all"):
-                anim_manager.cancel_all()
-                if is_perf_metrics_enabled():
-                    logger.info("[PERF][TRANSITION] AnimationManager.cancel_all() called")
-        except Exception as e:
-            logger.debug("[TRANSITION] AnimationManager cancel failed: %s", e)
-        
+            setattr(transition, "_compositor", None)
+        except Exception:
+            pass
+        try:
+            if compositor is not None and hasattr(compositor, "cancel_current_transition"):
+                compositor.cancel_current_transition(snap_to_new=bool(snap_to_new))
+        except Exception:
+            logger.error(
+                "[TRANSITION] Compositor cancellation failed reason=%s",
+                reason,
+                exc_info=True,
+            )
+
         try:
             transition.stop()
         except Exception as e:
@@ -292,72 +339,105 @@ class TransitionController(QObject):
             logger.debug("[TRANSITION] Exception suppressed: %s", e)
         
         self._cancel_watchdog()
+        if overlay_key:
+            self._overlay_timeouts.pop(overlay_key, None)
         self._clear_overlay_timeout()
+        self._pending_finish_args = None
+        self._terminal_phase = "idle"
+        self._stopping = False
+        self.transition_cancelled.emit(reason)
 
     def abort_current_preserving_old(self, reason: str) -> None:
         """Abort failed work without committing the uncompleted destination."""
 
-        transition = self._current_transition
-        compositor = getattr(self._parent, "_gl_compositor", None)
-        if compositor is not None and hasattr(compositor, "cancel_current_transition"):
-            try:
-                compositor.cancel_current_transition(snap_to_new=False)
-            except Exception:
-                logger.debug(
-                    "[TRANSITION] Failed to cancel compositor while preserving old frame",
-                    exc_info=True,
-                )
+        self.stop_current(snap_to_new=False, reason=reason)
 
-        if transition is not None:
-            # GL transition cleanup historically snaps to the destination.
-            # Detach the compositor after the explicit preserve-old cancel.
-            try:
-                setattr(transition, "_compositor", None)
-                setattr(transition, "_animation_id", None)
-            except Exception:
-                logger.debug(
-                    "[TRANSITION] Failed to detach refused compositor transition",
-                    exc_info=True,
-                )
-            self._cleanup_transition(transition)
-        else:
-            self._current_overlay_key = None
-            self._transition_started_at = 0.0
-            self._pending_finish_args = None
-            self._cancel_watchdog()
+    def begin_quiesce(self, *, reason: str, snap_to_new: bool = True) -> None:
+        """Close admission and synchronously reconcile controller-owned work."""
 
-        self._clear_overlay_timeout()
-        self.transition_cancelled.emit(reason)
-    
-    def on_transition_finished(self) -> None:
-        """Handle transition completion.
-        
-        Called by DisplayWidget when the transition's finished signal fires.
-        """
+        self._admission_open = False
+        self.stop_current(snap_to_new=snap_to_new, reason=reason)
+
+    def resume_after_quiesce(self) -> None:
+        """Open a fresh admission generation after a non-destructive pause."""
+
+        if self._current_transition is not None or self._terminal_phase != "idle":
+            raise RuntimeError("Cannot resume transition admission while work is active")
+        self._generation += 1
+        self._active_generation = 0
+        self._pending_finish_args = None
+        self._stopping = False
+        self._admission_open = True
+
+    def _finish_transition(
+        self,
+        transition: BaseTransition,
+        *,
+        generation: int,
+        on_finished: Optional[Callable],
+    ) -> None:
+        """Apply one natural completion after controller state is made idle."""
+
+        if (
+            self._stopping
+            or transition is not self._current_transition
+            or generation != self._active_generation
+        ):
+            return
+
+        self._terminal_phase = "completion_applying"
+        self._disconnect_finish_handler(transition)
         overlay_key = self._current_overlay_key
         if overlay_key:
             self._overlay_timeouts.pop(overlay_key, None)
-        
+        self._current_transition = None
         self._current_overlay_key = None
         self._transition_started_at = 0.0
+        self._active_generation = 0
         self._cancel_watchdog()
-        
-        transition = self._current_transition
-        self._current_transition = None
-        
-        if transition:
-            try:
-                transition.cleanup()
-            except Exception as e:
-                logger.debug("[TRANSITION] Exception suppressed: %s", e)
-        
-        self.transition_finished.emit()
+
+        # The compositor has already committed its resident destination. Keep
+        # mode-specific CPU cleanup, but prevent cleanup from cancelling GL a
+        # second time inside the terminal callback.
+        try:
+            if transition.get_state() == TransitionState.FINISHED:
+                setattr(transition, "_compositor", None)
+                setattr(transition, "_animation_id", None)
+        except Exception:
+            logger.debug("[TRANSITION] Failed to detach completed compositor", exc_info=True)
+        try:
+            transition.cleanup()
+        except Exception:
+            logger.debug("[TRANSITION] Completed transition cleanup failed", exc_info=True)
+
+        self._terminal_phase = "completion_applied"
+        try:
+            self.transition_finished.emit()
+            if on_finished is not None:
+                on_finished()
+        finally:
+            # Observers are outside authoritative ownership. A failing signal
+            # must not strand the display after the compositor has committed.
+            self._terminal_phase = "idle"
+
+    def _disconnect_finish_handler(self, transition: BaseTransition) -> None:
+        handler = self._finish_handler
+        self._finish_handler = None
+        if handler is None:
+            return
+        try:
+            transition.finished.disconnect(handler)
+        except Exception:
+            pass
     
     def _cleanup_transition(self, transition: BaseTransition) -> None:
         """Clean up a failed or cancelled transition."""
+        self._disconnect_finish_handler(transition)
         self._current_transition = None
         self._current_overlay_key = None
         self._transition_started_at = 0.0
+        self._active_generation = 0
+        self._terminal_phase = "idle"
         self._pending_finish_args = None
         self._cancel_watchdog()
         
@@ -489,7 +569,7 @@ class TransitionController(QObject):
     
     def cleanup(self) -> None:
         """Clean up all transition state."""
-        self.stop_current()
+        self.begin_quiesce(reason="controller_cleanup")
         self._cancel_watchdog()
         self._overlay_timeouts.clear()
         self._pending_finish_args = None

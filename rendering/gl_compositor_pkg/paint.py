@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 try:
@@ -23,12 +24,32 @@ from rendering.gl_compositor_pkg.overlays import (
     paint_debug_overlay,
     paint_visualizer_scene,
 )
+from rendering.gl_compositor_pkg.shader_dispatch import (
+    paint_idle_base_shader,
+    paint_qpainter_overlays_gl,
+)
 
 if TYPE_CHECKING:
     pass
 
 logger = get_logger(__name__)
 win_diag_logger = logging.getLogger("win_diag")
+
+
+@dataclass(frozen=True)
+class PaintOutcome:
+    path: str
+    rendered: bool
+    transition_rendered: bool
+    terminal_transition_rendered: bool
+
+
+_NO_PAINT_OUTCOME = PaintOutcome(
+    path="not_ready",
+    rendered=False,
+    transition_rendered=False,
+    terminal_transition_rendered=False,
+)
 
 
 _TRANSITION_SHADER_DESCRIPTORS = (
@@ -46,6 +67,10 @@ _TRANSITION_SHADER_DESCRIPTORS = (
     ("wipe", "_wipe", "_can_use_wipe_shader", "_paint_wipe_shader", None),
 )
 
+_TRANSITION_SHADER_BY_NAME = {
+    descriptor[0]: descriptor for descriptor in _TRANSITION_SHADER_DESCRIPTORS
+}
+
 
 def _active_transition_descriptors(widget) -> list[tuple]:
     """Return active transition descriptors without binding every paint method.
@@ -62,11 +87,53 @@ def _active_transition_descriptors(widget) -> list[tuple]:
     return active
 
 
+def _resolve_active_transition(widget):
+    """Resolve the compositor's singular transition owner without a broad scan.
+
+    ``_current_transition_name`` and the matching state slot are committed by
+    the same UI-thread transition-start transaction.  A scan is reserved for
+    an already-invalid active frame so normal idle and transition paints stay
+    constant-time.
+    """
+
+    transition_name = str(
+        getattr(widget, "_current_transition_name", "") or ""
+    ).strip().lower()
+    descriptor = _TRANSITION_SHADER_BY_NAME.get(transition_name)
+    if descriptor is not None:
+        state = getattr(widget, descriptor[1], None)
+        if state is not None:
+            return descriptor, state
+
+    frame_state = getattr(widget, "_frame_state", None)
+    if frame_state is None:
+        return None
+
+    # This is an invariant-recovery path, not ordinary dispatch.  Keeping it
+    # loud avoids turning a corrupt owner into a silent base-image paint.
+    active = _active_transition_descriptors(widget)
+    if not active:
+        return None
+    names = _active_shader_names(active)
+    signature = (transition_name, tuple(names))
+    if getattr(widget, "_last_transition_owner_mismatch", None) != signature:
+        widget._last_transition_owner_mismatch = signature
+        logger.error(
+            "[GL PAINT][OWNERSHIP] Transition owner mismatch current=%s active=%s",
+            transition_name or "<none>",
+            ",".join(names),
+        )
+    return active[0]
+
+
 def _active_shader_names(active_descriptors) -> list[str]:
     return [descriptor[0][0] for descriptor in active_descriptors]
 
 
-def _sync_transition_progress_from_frame_state(widget) -> None:
+def _sync_transition_progress_from_frame_state(
+    widget,
+    active_transition=None,
+) -> float | None:
     """Refresh active shader progress from paint-time interpolation.
 
     AnimationManager still owns duration/completion.  Paint frames should not
@@ -76,27 +143,29 @@ def _sync_transition_progress_from_frame_state(widget) -> None:
 
     frame_state = getattr(widget, "_frame_state", None)
     if frame_state is None:
-        return
+        return None
     try:
         progress = float(frame_state.get_interpolated_progress())
     except Exception:
         logger.debug("[GL COMPOSITOR] FrameState interpolation failed", exc_info=True)
-        return
+        return None
     progress = max(0.0, min(1.0, progress))
-    active_descriptors = _active_transition_descriptors(widget)
-    if not active_descriptors:
-        return
+    if active_transition is None:
+        active_transition = _resolve_active_transition(widget)
+    if active_transition is None:
+        return progress
     profiler = getattr(widget, "_profiler", None)
-    for descriptor, state in active_descriptors:
-        name, attr, *_ = descriptor
-        if not hasattr(state, "progress"):
-            continue
-        try:
-            state.progress = progress
-            if profiler is not None and name:
-                profiler.tick(name)
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
+    descriptor, state = active_transition
+    name, attr, *_ = descriptor
+    if not hasattr(state, "progress"):
+        return progress
+    try:
+        state.progress = progress
+        if profiler is not None and name:
+            profiler.tick(name)
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Failed to sync %s progress", attr, exc_info=True)
+    return progress
 
 
 def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
@@ -137,7 +206,8 @@ def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
 
 
 def handle_paintGL(widget) -> None:  # type: ignore[override]
-    _paint_start = time.time()
+    perf_enabled = is_perf_metrics_enabled()
+    paint_start = time.perf_counter() if perf_enabled else 0.0
     paint_generation = 0
     paint_started = getattr(widget, "_presentation_paint_started", None)
     if callable(paint_started):
@@ -149,50 +219,48 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
                 exc_info=True,
             )
     
-    # Phase 4: Disable GC during frame rendering to prevent GC pauses
-    gc_controller = None
     _is_transition_active = widget._frame_state is not None and widget._frame_state.started and not widget._frame_state.completed
-    try:
-        from core.performance.frame_budget import get_gc_controller, get_frame_budget
-        gc_controller = get_gc_controller()
-        gc_controller.disable_gc()
-        
-        # Track frame budget - only during active transitions to avoid false positives
-        # from idle time between transitions (5+ second gaps are expected)
-        frame_budget = get_frame_budget()
-        if _is_transition_active:
+    frame_budget = None
+    if _is_transition_active and perf_enabled:
+        try:
+            from core.performance.frame_budget import get_frame_budget
+
+            # Frame-budget accounting is diagnostic-only. It must not add
+            # locks or global GC state changes to ordinary compositor paints.
+            frame_budget = get_frame_budget()
             frame_budget.begin_frame()
             frame_budget.begin_category(frame_budget.CATEGORY_GL_RENDER)
-    except Exception as e:
-        logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)  # Non-critical - continue without frame budget
-    
-    try:
-        paintGL_impl(widget, )
-    finally:
-        paint_elapsed = (time.time() - _paint_start) * 1000.0
-        try:
-            widget._record_paint_metrics(paint_elapsed)
-        except Exception:
-            logger.debug(
-                "[GL COMPOSITOR] Paint metrics recording failed",
-                exc_info=True,
-            )
-        
-        # End frame budget tracking and re-enable GC
-        try:
-            if gc_controller:
-                gc_controller.enable_gc()
-                # Only end frame budget if we started it (during active transition)
-                if _is_transition_active:
-                    frame_budget = get_frame_budget()
-                    frame_budget.end_category(frame_budget.CATEGORY_GL_RENDER)
-                    remaining = frame_budget.get_frame_remaining()
-                    if remaining > 5.0:  # 5ms+ remaining
-                        gc_controller.run_idle_gc(remaining)
         except Exception as e:
+            frame_budget = None
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+    
+    paint_outcome = _NO_PAINT_OUTCOME
+    try:
+        result = paintGL_impl(widget, perf_enabled=perf_enabled)
+        if isinstance(result, PaintOutcome):
+            paint_outcome = result
+    finally:
+        paint_elapsed = (
+            (time.perf_counter() - paint_start) * 1000.0
+            if perf_enabled
+            else 0.0
+        )
+        if perf_enabled:
+            try:
+                widget._record_paint_metrics(paint_elapsed)
+            except Exception:
+                logger.debug(
+                    "[GL COMPOSITOR] Paint metrics recording failed",
+                    exc_info=True,
+                )
         
-        if paint_elapsed > 50.0 and is_perf_metrics_enabled():
+        if frame_budget is not None:
+            try:
+                frame_budget.end_category(frame_budget.CATEGORY_GL_RENDER)
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        
+        if perf_enabled and paint_elapsed > 50.0:
             # Phase 8: Include GLStateManager transition history on dt_max spikes
             history = widget._gl_state.get_transition_history(limit=5)
             history_str = ", ".join(f"{h[0].name}→{h[1].name}" for h in history) if history else "none"
@@ -204,7 +272,12 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
         paint_completed = getattr(widget, "_presentation_paint_completed", None)
         if callable(paint_completed):
             try:
-                paint_completed(paint_generation)
+                paint_completed(
+                    paint_generation,
+                    terminal_transition_rendered=(
+                        paint_outcome.terminal_transition_rendered
+                    ),
+                )
             except Exception:
                 logger.error(
                     "[GL COMPOSITOR] Presentation paint-completion acknowledgement failed",
@@ -214,7 +287,17 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
         else:
             _mark_widget_update_consumed(widget)
 
-def paintGL_impl(widget) -> None:
+def _record_section_time(
+    section_times: dict[str, float],
+    previous_time: float,
+    name: str,
+) -> float:
+    now = time.perf_counter()
+    section_times[name] = (now - previous_time) * 1000.0
+    return now
+
+
+def paintGL_impl(widget, *, perf_enabled: bool | None = None) -> PaintOutcome:
     """Internal paintGL implementation.
     
     Phase 6 GL Warmup Protection: Gate rendering behind GLStateManager.is_ready()
@@ -222,58 +305,86 @@ def paintGL_impl(widget) -> None:
     """
     # Phase 6: Prevent rendering until GL context is fully ready
     if not widget._gl_state.is_ready():
-        return
+        widget._last_paint_path = "not_ready"
+        return _NO_PAINT_OUTCOME
     
     # Section timing is diagnostic-only. Sample it so --perf does not add
     # avoidable Python allocation/timestamp pressure to every high-refresh
     # paint while paint-duration metrics remain authoritative each frame.
-    _sample_index = int(getattr(widget, "_paint_section_sample_counter", 0) or 0)
-    try:
-        widget._paint_section_sample_counter = _sample_index + 1
-    except Exception:
-        pass
-    _collect_sections = is_perf_metrics_enabled() and (_sample_index % 60 == 0)
-    _section_times = {} if _collect_sections else None
-    _last_time = time.perf_counter() if _collect_sections else 0.0
-    
-    def _mark_section(name: str):
-        nonlocal _last_time
-        if _section_times is None:
-            return
-        now = time.perf_counter()
-        _section_times[name] = (now - _last_time) * 1000.0
-        _last_time = now
+    if perf_enabled is None:
+        perf_enabled = is_perf_metrics_enabled()
+    section_times = None
+    last_section_time = 0.0
+    if perf_enabled:
+        sample_index = int(
+            getattr(widget, "_paint_section_sample_counter", 0) or 0
+        )
+        widget._paint_section_sample_counter = sample_index + 1
+        if sample_index % 60 == 0:
+            section_times = {}
+            last_section_time = time.perf_counter()
     
     target = widget.rect()
-    _mark_section("init")
-    _sync_transition_progress_from_frame_state(widget)
-    _mark_section("progress_sync")
+    if section_times is not None:
+        last_section_time = _record_section_time(
+            section_times, last_section_time, "init"
+        )
+    active_transition = _resolve_active_transition(widget)
+    frame_progress = _sync_transition_progress_from_frame_state(
+        widget,
+        active_transition,
+    )
+    if section_times is not None:
+        last_section_time = _record_section_time(
+            section_times, last_section_time, "progress_sync"
+        )
 
     # Try shader paths in priority order. On failure, fall back to QPainter.
-    _mark_section("pre_shader")
-    # Check if ANY transition state is active (non-None).
-    # When idle (between transitions), all states are None — that's normal.
-    active_descriptors = _active_transition_descriptors(widget)
-    active_names = _active_shader_names(active_descriptors)
-    any_transition_active = bool(active_names)
+    if section_times is not None:
+        last_section_time = _record_section_time(
+            section_times, last_section_time, "pre_shader"
+        )
+    any_transition_active = active_transition is not None
 
     shader_success = False
-    if any_transition_active:
-        for descriptor, state in active_descriptors:
-            name, _attr, can_use_name, paint_name, prep_name = descriptor
-            can_use_fn = getattr(widget, can_use_name)
-            paint_fn = getattr(widget, paint_name)
-            prep_fn = getattr(widget, prep_name) if prep_name else None
-            if widget._try_shader_path(name, state, can_use_fn, paint_fn, target, prep_fn):
-                shader_success = True
-                break
+    active_name = ""
+    if active_transition is not None:
+        descriptor, state = active_transition
+        active_name, _attr, can_use_name, paint_name, prep_name = descriptor
+        can_use_fn = getattr(widget, can_use_name)
+        paint_fn = getattr(widget, paint_name)
+        prep_fn = getattr(widget, prep_name) if prep_name else None
+        shader_success = widget._try_shader_path(
+            active_name,
+            state,
+            can_use_fn,
+            paint_fn,
+            target,
+            prep_fn,
+        )
 
-    _mark_section("shader_render" if shader_success else "shader_attempt")
+    if section_times is not None:
+        last_section_time = _record_section_time(
+            section_times,
+            last_section_time,
+            "shader_render" if shader_success else "shader_attempt",
+        )
 
-    if not shader_success:
-        # Idle or shader failure — render base image via QPainter.
+    idle_shader_success = False
+    if not any_transition_active:
+        idle_shader_success = paint_idle_base_shader(widget)
+        if idle_shader_success:
+            paint_qpainter_overlays_gl(widget)
+            if section_times is not None:
+                last_section_time = _record_section_time(
+                    section_times, last_section_time, "idle_gl"
+                )
+
+    if not shader_success and not idle_shader_success:
+        # A transition shader failure, first-image cache miss, or genuinely
+        # unavailable GL context retains the established QPainter safety path.
         if any_transition_active:
-            _log_shader_fallback_once(widget, active_names)
+            _log_shader_fallback_once(widget, [active_name])
         painter = QPainter(widget)
         try:
             painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
@@ -284,12 +395,46 @@ def paintGL_impl(widget) -> None:
             paint_debug_overlay(widget, painter)
         finally:
             painter.end()
-            _mark_section("qpainter_base_only")
+            if section_times is not None:
+                last_section_time = _record_section_time(
+                    section_times, last_section_time, "qpainter_base_only"
+                )
+
+    paint_path = (
+        "transition_gl"
+        if shader_success
+        else "idle_gl"
+        if idle_shader_success
+        else "transition_qpainter_fallback"
+        if any_transition_active
+        else "idle_qpainter_fallback"
+    )
+    try:
+        widget._last_paint_path = paint_path
+    except Exception:
+        pass
 
     # Log section times if any section took >10ms
-    if _section_times:
-        total = sum(_section_times.values())
+    if section_times:
+        total = sum(section_times.values())
         if total > 10.0:
-            sections_str = ", ".join(f"{k}={v:.1f}ms" for k, v in _section_times.items() if v > 1.0)
+            sections_str = ", ".join(
+                f"{key}={value:.1f}ms"
+                for key, value in section_times.items()
+                if value > 1.0
+            )
             logger.debug("[PERF] [GL PAINT] Section times (total=%.1fms): %s", total, sections_str)
+
+    terminal_rendered = bool(
+        shader_success
+        and any_transition_active
+        and frame_progress is not None
+        and frame_progress >= 0.999999
+    )
+    return PaintOutcome(
+        path=paint_path,
+        rendered=True,
+        transition_rendered=bool(shader_success and any_transition_active),
+        terminal_transition_rendered=terminal_rendered,
+    )
 

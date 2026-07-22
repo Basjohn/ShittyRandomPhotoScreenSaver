@@ -24,10 +24,21 @@ except Exception:
 logger = get_logger(__name__)
 
 
+class _IdleBaseState:
+    __slots__ = ()
+    progress = 0.0
+
+
+_IDLE_BASE_STATE = _IdleBaseState()
+
+
 def _record_shader_path_failure(comp: "GLCompositorWidget", name: str, reason: str) -> None:
     """Store the most recent active shader failure for the paint fallback log."""
     try:
         comp._last_shader_path_failure = f"{name}:{reason}"
+        comp._shader_path_failure_streak = int(
+            getattr(comp, "_shader_path_failure_streak", 0) or 0
+        ) + 1
     except Exception:
         pass
 
@@ -126,21 +137,42 @@ def release_transition_textures(comp: "GLCompositorWidget") -> None:
         comp._texture_manager.release_transition_textures()
 
 
-def prepare_pair_textures(comp: "GLCompositorWidget", old_pixmap: QPixmap, new_pixmap: QPixmap) -> bool:
+def prepare_pair_textures(
+    comp: "GLCompositorWidget",
+    old_pixmap: QPixmap,
+    new_pixmap: QPixmap,
+    *,
+    old_payload=None,
+    new_payload=None,
+) -> bool:
     """Prepare texture pair via texture manager."""
     if comp._gl_pipeline is None:
         return False
     try:
-        result = comp._texture_manager.prepare_transition_textures(old_pixmap, new_pixmap)
-        if not result:
-            comp._gl_disabled_for_session = True
-            comp._use_shaders = False
-        return result
+        if old_payload is not None or new_payload is not None:
+            prepared = bool(
+                comp._texture_manager.prepare_transition_textures(
+                    old_pixmap,
+                    new_pixmap,
+                    old_payload=old_payload,
+                    new_payload=new_payload,
+                )
+            )
+        else:
+            prepared = bool(
+                comp._texture_manager.prepare_transition_textures(old_pixmap, new_pixmap)
+            )
+        if prepared:
+            comp._texture_prep_exception_logged = False
+        return prepared
     except Exception:
-        logger.debug("[GL SHADER] Failed to upload transition textures", exc_info=True)
+        if not bool(getattr(comp, "_texture_prep_exception_logged", False)):
+            logger.debug(
+                "[GL SHADER] Failed to upload transition textures; retaining retry authority",
+                exc_info=True,
+            )
+            comp._texture_prep_exception_logged = True
         release_transition_textures(comp)
-        comp._gl_disabled_for_session = True
-        comp._use_shaders = False
         return False
 
 
@@ -156,7 +188,13 @@ def prepare_transition_textures(comp: "GLCompositorWidget", can_use_fn, state) -
         return True
     if state is None:
         return False
-    return prepare_pair_textures(comp, state.old_pixmap, state.new_pixmap)
+    return prepare_pair_textures(
+        comp,
+        state.old_pixmap,
+        state.new_pixmap,
+        old_payload=getattr(state, "old_upload_payload", None),
+        new_payload=getattr(state, "new_upload_payload", None),
+    )
 
 
 def prepare_blockspin_textures(comp: "GLCompositorWidget") -> bool:
@@ -245,6 +283,63 @@ def get_viewport_size(comp: "GLCompositorWidget") -> tuple[int, int]:
     comp._cached_viewport = (w, h)
     comp._cached_widget_size = current_size
     return comp._cached_viewport
+
+
+def paint_idle_base_shader(comp: "GLCompositorWidget") -> bool:
+    """Draw the resident base image with one fullscreen GL quad.
+
+    This path is deliberately cache-only. A first image that has not completed
+    hidden GL warmup still uses the established QPainter presentation rather
+    than performing conversion or texture upload inside a visible paint.
+    """
+
+    if gl is None or getattr(comp, "_gl_disabled_for_session", False):
+        return False
+    pipeline = getattr(comp, "_gl_pipeline", None)
+    manager = getattr(comp, "_texture_manager", None)
+    pixmap = getattr(comp, "_base_pixmap", None)
+    if (
+        pipeline is None
+        or not getattr(pipeline, "initialized", False)
+        or not getattr(pipeline, "crossfade_program", 0)
+        or not getattr(pipeline, "quad_vao", 0)
+        or manager is None
+        or pixmap is None
+        or pixmap.isNull()
+    ):
+        return False
+
+    texture_id = manager.get_committed_texture()
+    if texture_id <= 0:
+        return False
+
+    viewport = get_viewport_size(comp)
+    source_width = max(1, int(pixmap.width()))
+    source_height = max(1, int(pixmap.height()))
+    source_aspect = source_width / float(source_height)
+    viewport_aspect = viewport[0] / float(max(1, viewport[1]))
+    if abs(source_aspect - viewport_aspect) > max(0.0005, viewport_aspect * 0.001):
+        # Crossfade samples the whole texture. Preserve QPainter's aspect-fill
+        # crop authority for an unusual non-display-ready base image.
+        return False
+
+    try:
+        from rendering.gl_programs.program_cache import GLProgramCache, get_program_cache
+
+        helper = get_program_cache().get_program_instance(GLProgramCache.CROSSFADE)
+        helper.render(
+            program=int(pipeline.crossfade_program),
+            uniforms=pipeline.crossfade_uniforms,
+            viewport=viewport,
+            old_tex=texture_id,
+            new_tex=texture_id,
+            state=_IDLE_BASE_STATE,
+            quad_vao=int(pipeline.quad_vao),
+        )
+        return True
+    except Exception:
+        logger.debug("[GL COMPOSITOR] Idle base shader paint failed", exc_info=True)
+        return False
 
 
 # ======================================================================
@@ -406,6 +501,44 @@ def paint_qpainter_overlays_gl(comp: "GLCompositorWidget") -> None:
     if not has_dimming and not has_visualizer and debug_image is None:
         return
 
+    if has_visualizer and not has_dimming and debug_image is None:
+        native_paint = getattr(visualizer_layer, "paint_native", None)
+        if callable(native_paint):
+            try:
+                if bool(native_paint()):
+                    comp._native_visualizer_fallback_logged = False
+                    comp._native_visualizer_partial_logged = False
+                    return
+            except Exception:
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Native visualizer dispatch raised; "
+                    "retaining QPainter path",
+                    exc_info=True,
+                )
+            fallback_safe = getattr(
+                visualizer_layer,
+                "native_fallback_is_safe",
+                None,
+            )
+            if callable(fallback_safe) and not bool(fallback_safe()):
+                if not bool(
+                    getattr(comp, "_native_visualizer_partial_logged", False)
+                ):
+                    logger.error(
+                        "[SPOTIFY_VIS][COMPOSITOR] Native visualizer frame was "
+                        "partially presented; suppressing double-blend QPainter fallback"
+                    )
+                    comp._native_visualizer_partial_logged = True
+                return
+            if not bool(
+                getattr(comp, "_native_visualizer_fallback_logged", False)
+            ):
+                logger.error(
+                    "[SPOTIFY_VIS][COMPOSITOR] Native visualizer dispatch was not "
+                    "presentable; retaining QPainter path"
+                )
+                comp._native_visualizer_fallback_logged = True
+
     gl.glUseProgram(0)
 
     painter = QPainter(comp)
@@ -437,12 +570,20 @@ def try_shader_path(comp: "GLCompositorWidget", name: str, state, can_use_fn, pa
         paint_qpainter_overlays_gl(comp)
         try:
             comp._last_shader_path_failure = ""
+            comp._shader_path_failure_streak = 0
         except Exception:
             pass
         return True
     except Exception as exc:
         _record_shader_path_failure(comp, name, f"exception:{type(exc).__name__}")
-        logger.debug("[GL SHADER] Shader %s path failed; disabling shader pipeline", name, exc_info=True)
-        comp._gl_disabled_for_session = True
-        comp._use_shaders = False
+        streak = int(getattr(comp, "_shader_path_failure_streak", 1) or 1)
+        if streak == 1 or (streak & (streak - 1)) == 0:
+            logger.warning(
+                "[GL SHADER][RECOVERY] Shader %s paint failed; retaining committed "
+                "frame and retrying on the compositor streak=%d error=%s",
+                name,
+                streak,
+                type(exc).__name__,
+                exc_info=True,
+            )
         return False

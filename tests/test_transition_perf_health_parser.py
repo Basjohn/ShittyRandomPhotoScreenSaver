@@ -1028,6 +1028,70 @@ def test_perf_health_collects_spotify_tick_phase_breakdown_without_new_anomaly()
     assert report.timeline_markers[0].kind == "spotify_tick_phase_breakdown"
 
 
+def test_perf_health_aggregates_slow_spotify_gpu_pushes_with_dominant_subphase():
+    report = parse_perf_health_lines(
+        [
+            "17:40:02 - widgets.spotify_visualizer.tick_pipeline - WARNING - "
+            "[PERF] [SPOTIFY_VIS] GPU push breakdown total_ms=61.20 mode=bubble "
+            "extra_build_ms=45.00 primer_ms=0.40 packet_build_ms=1.20 parent_publish_ms=14.60",
+            "17:40:03 - widgets.spotify_visualizer.tick_pipeline - WARNING - "
+            "[PERF] [SPOTIFY_VIS] GPU push breakdown total_ms=12.00 mode=spectrum "
+            "extra_build_ms=0.10 primer_ms=0.20 packet_build_ms=10.50 parent_publish_ms=1.20",
+        ]
+    )
+
+    assert len(report.visualizer_gpu_push_breakdowns) == 2
+    bubble, spectrum = report.visualizer_gpu_push_breakdowns
+    assert bubble.mode == "bubble"
+    assert bubble.dominant_phase == ("extra_build", 45.00)
+    assert spectrum.dominant_phase == ("packet_build", 10.50)
+    assert [marker.kind for marker in report.timeline_markers] == [
+        "spotify_gpu_push_breakdown",
+        "spotify_gpu_push_breakdown",
+    ]
+    assert "dominant=extra_build:45.00ms" in report.timeline_markers[0].detail
+    assert any("slow GPU push paths" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_tracks_devcurve_worker_budget_without_conflating_ui_time():
+    report = parse_perf_health_lines(
+        [
+            "17:40:04 - widgets.spotify_visualizer.tick_helpers - INFO - "
+            "[PERF] [SPOTIFY_VIS][DEVCURVE] worker_ms=4.25 pending=False",
+            "17:40:05 - widgets.spotify_visualizer.tick_helpers - INFO - "
+            "[PERF] [SPOTIFY_VIS][DEVCURVE] worker_ms=21.50 pending=True",
+        ]
+    )
+
+    assert len(report.visualizer_devcurve_worker_samples) == 2
+    assert report.visualizer_devcurve_worker_samples[0].worker_ms == 4.25
+    assert report.visualizer_devcurve_worker_samples[1].pending is True
+    assert len(report.slow_devcurve_worker_samples) == 1
+    assert report.timeline_markers[-1].kind == "spotify_devcurve_worker"
+    assert any("Dev Curve worker exceeded" in anomaly for anomaly in report.anomalies)
+
+
+def test_perf_health_tracks_async_render_owner_retirement_latency():
+    report = parse_perf_health_lines(
+        [
+            "17:41:04 - rendering.gl_compositor - INFO - "
+            "[PERF][ADAPTIVE_TIMER] asynchronous_stop_ack "
+            "screen=0 latency_ms=7.25 immediate=False",
+            "17:41:05 - rendering.gl_compositor - INFO - "
+            "[PERF][ADAPTIVE_TIMER] asynchronous_stop_ack "
+            "screen=1 latency_ms=325.50 immediate=True",
+        ]
+    )
+
+    assert len(report.adaptive_render_owner_stop_acks) == 2
+    assert report.adaptive_render_owner_stop_acks[0].screen == 0
+    assert report.adaptive_render_owner_stop_acks[0].latency_ms == 7.25
+    assert report.adaptive_render_owner_stop_acks[1].immediate is True
+    assert len(report.slow_adaptive_render_owner_stop_acks) == 1
+    assert report.timeline_markers[-1].kind == "adaptive_render_owner_stop_ack"
+    assert any("retirement acknowledgement exceeded" in item for item in report.anomalies)
+
+
 def test_perf_health_flags_significant_settings_stalls():
     report = parse_perf_health_lines(
         [
@@ -1151,7 +1215,9 @@ def test_perf_health_enforces_bounded_gl_texture_cache_cleanup_contract():
             "21:02:44 - rendering.gl_programs.texture_manager - INFO - "
             "[PERF] [GL TEXTURE CACHE] cleanup textures=4 texture_mb=126.4 "
             "pbo_count=1 pbo_mb=31.6 hits=20 misses=8 uploads=8 evictions=4 "
-            "managed_releases=4 pbo_replacements=1 registrations=5"
+            "managed_releases=4 pbo_replacements=1 registrations=5 "
+            "shared_leases=4 shared_group_textures=4 shared_group_texture_mb=126.4 "
+            "shared_group_managers=2 shared_acquisitions=4 shared_reuses=2"
         ]
     )
     excessive = parse_perf_health_lines(
@@ -1164,13 +1230,32 @@ def test_perf_health_enforces_bounded_gl_texture_cache_cleanup_contract():
     )
 
     assert len(healthy.texture_cache_cleanups) == 1
+    assert healthy.texture_cache_cleanups[0].shared_group_managers == 2
+    assert healthy.texture_cache_cleanups[0].shared_reuses == 2
     assert healthy.excessive_texture_cache_cleanups == []
+    assert healthy.excessive_shared_texture_groups == []
     assert healthy.anomalies == []
     assert len(excessive.excessive_texture_cache_cleanups) == 1
     assert any(
         "four-texture/one-PBO" in anomaly
         for anomaly in excessive.anomalies
     )
+
+
+def test_perf_health_flags_excessive_shared_texture_group_residency():
+    report = parse_perf_health_lines(
+        [
+            "21:02:44 - rendering.gl_programs.texture_manager - INFO - "
+            "[PERF] [GL TEXTURE CACHE] cleanup textures=4 texture_mb=0.0 "
+            "pbo_count=1 pbo_mb=31.6 hits=20 misses=8 uploads=4 evictions=0 "
+            "managed_releases=0 pbo_replacements=0 registrations=1 "
+            "shared_leases=4 shared_group_textures=9 shared_group_texture_mb=284.4 "
+            "shared_group_managers=2 shared_acquisitions=4 shared_reuses=2"
+        ]
+    )
+
+    assert len(report.excessive_shared_texture_groups) == 1
+    assert any("shared texture residency" in item for item in report.anomalies)
 
 
 def test_perf_health_flags_pending_paint_requeue_rescues():
@@ -1318,3 +1403,64 @@ def test_perf_health_default_companions_include_main_and_usage_logs(tmp_path):
         verbose_log,
         usage_log,
     ]
+
+
+def test_perf_health_parses_gl_paint_path_windows_without_false_fallback_alarm():
+    report = parse_perf_health_lines(
+        [
+            "18:10:01 - rendering.gl - INFO - [PERF] [GL PAINT PATH] "
+            "screen=0 elapsed_ms=10002.0 total=900 idle_gl=500 "
+            "idle_gl_avg_ms=1.100 idle_gl_max_ms=4.200 transition_gl=399 "
+            "transition_gl_avg_ms=2.300 transition_gl_max_ms=8.400 "
+            "idle_qpainter_fallback=1 idle_qpainter_avg_ms=3.500 "
+            "idle_qpainter_max_ms=3.500 transition_qpainter_fallback=0 "
+            "transition_qpainter_avg_ms=0.000 transition_qpainter_max_ms=0.000"
+        ]
+    )
+
+    assert len(report.paint_path_windows) == 1
+    assert report.paint_path_windows[0].fallback_count == 1
+    assert report.unexpected_paint_path_fallback_windows == []
+    assert report.timeline_markers[0].kind == "gl_paint_path"
+
+
+def test_perf_health_flags_persistent_or_transition_qpainter_fallback():
+    report = parse_perf_health_lines(
+        [
+            "18:10:01 - rendering.gl - INFO - [PERF] [GL PAINT PATH] "
+            "screen=1 elapsed_ms=10010.0 total=300 idle_gl=260 "
+            "idle_gl_avg_ms=1.000 idle_gl_max_ms=4.000 transition_gl=20 "
+            "transition_gl_avg_ms=2.000 transition_gl_max_ms=7.000 "
+            "idle_qpainter_fallback=19 idle_qpainter_avg_ms=4.500 "
+            "idle_qpainter_max_ms=12.000 transition_qpainter_fallback=1 "
+            "transition_qpainter_avg_ms=6.000 transition_qpainter_max_ms=6.000"
+        ]
+    )
+
+    assert len(report.unexpected_paint_path_fallback_windows) == 1
+    assert any("persistent compositor QPainter fallback" in item for item in report.anomalies)
+
+
+def test_parser_flags_gl_affinity_and_terminal_transaction_failures():
+    report = parse_perf_health_lines(
+        [
+            "12:00:01 - qt - CRITICAL - Cannot make QOpenGLContext current in a different thread",
+            "12:00:02 - rendering.gl_compositor - CRITICAL - "
+            "[GL COMPOSITOR][TERMINAL][ERROR] Owner-thread completion dispatch was rejected",
+            "12:00:03 - engine.image_pipeline - INFO - "
+            "[ASYNC][STALE] Dropped image result after display lifecycle changed",
+        ]
+    )
+
+    assert len(report.gl_affinity_errors) == 1
+    assert len(report.gl_terminal_transaction_errors) == 1
+    assert len(report.stale_image_publications) == 1
+    assert any("affinity violations" in item for item in report.anomalies)
+    assert any("terminal transaction errors" in item for item in report.anomalies)
+    assert {
+        marker.kind for marker in report.timeline_markers
+    } >= {
+        "gl_affinity_error",
+        "gl_terminal_transaction_error",
+        "stale_image_publication_suppressed",
+    }

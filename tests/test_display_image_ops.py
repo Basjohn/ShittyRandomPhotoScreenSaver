@@ -191,6 +191,44 @@ def test_push_spotify_visualizer_frame_packet_preserves_payload_and_extras(monke
     assert extras["border_width_px"] == 99
 
 
+def test_visualizer_renderer_schema_failure_does_not_strip_and_retry(caplog):
+    class _FakeVisualizer:
+        def uses_painted_frame_shadow(self) -> bool:
+            return True
+
+    class _RejectingOverlay:
+        def __init__(self):
+            self.calls = 0
+
+        def set_painted_frame_shadow_enabled(self, _enabled: bool) -> None:
+            return None
+
+        def set_state(self, **_kwargs) -> None:
+            self.calls += 1
+            raise TypeError("got an unexpected keyword argument 'stale_field'")
+
+    overlay = _RejectingOverlay()
+    widget = SimpleNamespace(spotify_visualizer_widget=_FakeVisualizer())
+
+    ok = display_image_ops._push_spotify_bars_overlay_state(
+        widget,
+        overlay=overlay,
+        geom=QRect(0, 0, 320, 160),
+        bars=[0.1],
+        bar_count=1,
+        segments=8,
+        fill_color=None,
+        border_color=None,
+        fade=1.0,
+        playing=True,
+        extra_kwargs={"stale_field": True},
+    )
+
+    assert ok is False
+    assert overlay.calls == 1
+    assert "Failed to push frame to visualizer renderer" in caplog.text
+
+
 def test_push_spotify_visualizer_frame_still_skips_hidden_nonstartup_widget(monkeypatch):
     class _FakeVisualizer:
         _startup_reveal_pending = False
@@ -624,6 +662,7 @@ def test_deferred_start_failure_restores_old_frame_and_retains_destination(qt_ap
         new_pixmap,
         "next.png",
         False,
+        None,
         None,
     )
     widget.previous_pixmap = old_pixmap

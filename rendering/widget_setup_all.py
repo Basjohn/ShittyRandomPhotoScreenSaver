@@ -339,6 +339,18 @@ def _reapply_saved_custom_layouts_after_startup(parent: Optional[QWidget], *, lo
             after_geom.height(),
         )
 
+    schedule_saved_custom_layout_stabilization(parent, log_prefix=log_prefix)
+
+
+def schedule_saved_custom_layout_stabilization(
+    parent: Optional[QWidget],
+    *,
+    log_prefix: str,
+) -> None:
+    """Verify one committed visualizer geometry generation without rebuilding it."""
+
+    if parent is None:
+        return
     try:
         setattr(parent, "_custom_layout_runtime_stabilize_pending", False)
         token = int(getattr(parent, "_spotify_custom_layout_stabilize_token", 0)) + 1

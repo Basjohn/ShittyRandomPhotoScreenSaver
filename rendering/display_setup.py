@@ -62,6 +62,20 @@ def _qt_object_is_valid(obj: object | None) -> bool:
         return False
 
 
+def _apply_device_pixel_ratio(widget, value: object) -> float:
+    """Route every display DPR update through the widget's shared authority."""
+
+    setter = getattr(widget, "_set_device_pixel_ratio", None)
+    if callable(setter):
+        return float(setter(value))
+    ratio = float(value)
+    widget._device_pixel_ratio = ratio
+    presenter = getattr(widget, "_image_presenter", None)
+    if presenter is not None:
+        presenter.device_pixel_ratio = ratio
+    return ratio
+
+
 def show_on_screen(widget) -> None:
     """Show widget fullscreen on assigned screen."""
     screens = QGuiApplication.screens()
@@ -93,7 +107,7 @@ def show_on_screen(widget) -> None:
                 "[SCREEN] Failed to connect refresh-rate change authority",
                 exc_info=True,
             )
-    widget._device_pixel_ratio = screen.devicePixelRatio()
+    _apply_device_pixel_ratio(widget, screen.devicePixelRatio())
     
     screen_geom = screen.geometry()
     geom = screen_geom
@@ -320,7 +334,7 @@ def handle_screen_change(widget, screen) -> None:
     widget._screen = screen
 
     try:
-        widget._device_pixel_ratio = float(screen.devicePixelRatio())
+        _apply_device_pixel_ratio(widget, screen.devicePixelRatio())
     except Exception:
         logger.debug("[SCREEN] Failed to read devicePixelRatio", exc_info=True)
 

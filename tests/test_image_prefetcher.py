@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from PySide6.QtGui import QColor, QImage, QPixmap
+from PySide6.QtGui import QColor, QImage
 
 from rendering.display_modes import DisplayMode
+from rendering.image_upload_payload import ImageUploadPayload
 from utils.image_prefetcher import ImagePrefetcher
 
 
@@ -87,10 +88,11 @@ def test_scaled_prefetch_requests_use_bounded_parallelism(qt_app):
     assert len(threads.compute_callbacks) == 2
 
     first_callback = threads.compute_callbacks[0][1]
-    first_pixmap = QPixmap.fromImage(_solid_qimage(2560, 1440, "red"))
-    first_callback(SimpleNamespace(success=True, result=("one-scaled", first_pixmap)))
+    first_image = _solid_qimage(2560, 1440, "red")
+    first_callback(SimpleNamespace(success=True, result=("one-scaled", first_image)))
 
     assert "one-scaled" in cache.store
+    assert isinstance(cache.store["one-scaled"], QImage)
     assert stats["scaled_prefetch_completed"] == 1
 
 
@@ -120,7 +122,7 @@ def test_scaled_prefetch_requests_queue_beyond_parallel_limit(qt_app):
     assert len(threads.compute_callbacks) == 2
 
     callback = threads.compute_callbacks[0][1]
-    callback(SimpleNamespace(success=True, result=("scaled-1", QPixmap.fromImage(_solid_qimage(2560, 1440, "red")))))
+    callback(SimpleNamespace(success=True, result=("scaled-1", _solid_qimage(2560, 1440, "red"))))
 
     assert len(threads.compute_callbacks) == 3
 
@@ -367,13 +369,15 @@ def test_oversized_raw_prefetch_streams_to_scaler_without_entering_lru(qt_app):
     compute, callback = threads.compute_callbacks[0]
     payload = compute()
     assert payload is not None
-    key, pixmap = payload
+    key, image = payload
     assert key == "huge-scaled"
-    assert (pixmap.width(), pixmap.height()) == (640, 360)
+    assert isinstance(image, ImageUploadPayload)
+    assert (image.width, image.height) == (640, 360)
 
     callback(SimpleNamespace(success=True, result=payload))
 
     assert "huge-scaled" in cache.store
+    assert isinstance(cache.store["huge-scaled"], ImageUploadPayload)
     assert prefetcher.snapshot_state()["streamed_raw"] == 0
 
 

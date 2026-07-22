@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Set
 import threading
 import time
 from PySide6.QtCore import QSize
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage
 
 from core.logging.logger import (
     get_logger,
@@ -24,6 +24,10 @@ from core.logging.logger import (
 from core.threading.manager import ThreadManager, TaskPriority, ThreadPoolType
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
+from rendering.image_upload_payload import (
+    ImageUploadPayload,
+    prepare_qimage_upload_payload,
+)
 from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
@@ -409,13 +413,11 @@ class ImagePrefetcher:
         use_lanczos = bool(request.get("use_lanczos", False))
         sharpen = bool(request.get("sharpen", False))
 
-        def _compute_scaled_variant() -> Optional[tuple[str, QPixmap]]:
+        def _compute_scaled_variant() -> Optional[tuple[str, ImageUploadPayload]]:
             try:
                 base = request.get("_source_image")
                 if not isinstance(base, QImage) or base.isNull():
                     base = self._cache.get(raw_path)
-                if isinstance(base, QPixmap) and not base.isNull():
-                    base = base.toImage()
                 if not isinstance(base, QImage) or base.isNull():
                     return None
                 scaled = AsyncImageProcessor.process_qimage(
@@ -427,10 +429,13 @@ class ImagePrefetcher:
                 )
                 if scaled.isNull():
                     return None
-                pixmap = QPixmap.fromImage(scaled)
-                if pixmap.isNull():
-                    return None
-                return cache_key, pixmap
+                return (
+                    cache_key,
+                    prepare_qimage_upload_payload(
+                        scaled,
+                        identity_seed=cache_key,
+                    ),
+                )
             except Exception as e:
                 logger.debug("Scaled prefetch compute failed for %s: %s", cache_key, e)
                 return None
@@ -439,8 +444,8 @@ class ImagePrefetcher:
             try:
                 payload = res.result if res and res.success else None
                 if payload:
-                    key, pixmap = payload
-                    self._cache.put(key, pixmap)
+                    key, image = payload
+                    self._cache.put(key, image)
                     stats = request.get("stats")
                     if isinstance(stats, dict):
                         stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1

@@ -1,6 +1,6 @@
 # Historical Bugs
 
-Last updated: 2026-07-18
+Last updated: 2026-07-22
 
 Track significant bugs with clear dates, failed attempts, and final fixes.
 This is the long-term anti-regression record for the project, not an active task list.
@@ -12,55 +12,57 @@ This is the long-term anti-regression record for the project, not an active task
 2. [U-06 — 2026-04-30 — Multi-Monitor MC Shadow Cache Corruption On Focus Loss (Unresolved)](#U-06)
 
 ### Recent Resolutions
-1. [R-56 — 2026-07-16 / 2026-07-18 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Architecture Implemented, Performance Promotion Reopened)](#R-56)
-2. [R-55 — 2026-07-16 — Final Visualizer Cleanup Preserved Its Child GL Overlay Across Display Rebuilds (Resolved)](#R-55)
-3. [R-54 — 2026-07-16 — Refused Or Delayed GL Transition Advanced The Destination Without Animation (Resolved)](#R-54)
-4. [R-53 — 2026-07-16 — Paused Transition Probes Poisoned Visualizer Latency Health (Resolved)](#R-53)
-5. [R-52 — 2026-07-16 / 2026-07-18 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Oversized Fix Implemented, Producer-Gap Validation Reopened)](#R-52)
-6. [R-51 — 2026-07-16 — Duplicate Display Destroy Callback Silently Disabled Explicit GL Teardown (Resolved)](#R-51)
-7. [R-50 — 2026-07-16 — Lazy WidgetsTab Rehydrated Its Initial Sections Twice (Resolved)](#R-50)
-8. [R-49 — 2026-07-16 — GL Texture/Geometry Handles Retained Across Rebuild Ownership Boundaries (Resolved)](#R-49)
-9. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
-10. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
-11. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
-12. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
-13. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
-14. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
-15. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
-16. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
-17. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
-18. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
-19. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
-20. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
-21. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
-22. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
-23. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
-24. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
-25. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
-26. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
-27. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
-28. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
-29. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
-30. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
-31. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
-32. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
-33. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
-34. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
-35. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
-36. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
-37. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
-38. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
-39. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
-40. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
-41. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
-42. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
-43. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
-44. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
-45. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
-46. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
-47. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
-48. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
-49. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
+1. [R-58 — 2026-07-21 / 2026-07-22 — Terminal State Split Left PERF HUD Active And Edit Teardown Crossed GL Context Affinity (Candidate Implemented, Runtime Validation Pending)](#R-58)
+2. [R-57 — 2026-07-18 / 2026-07-21 — Paint-Acknowledged Presentation Removed Handoff Amplification; Resident Idle GL Validated, UI Tail Remains (Partial)](#R-57)
+3. [R-56 — 2026-07-16 / 2026-07-18 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Architecture Implemented, Performance Promotion Reopened)](#R-56)
+4. [R-55 — 2026-07-16 — Final Visualizer Cleanup Preserved Its Child GL Overlay Across Display Rebuilds (Resolved)](#R-55)
+5. [R-54 — 2026-07-16 — Refused Or Delayed GL Transition Advanced The Destination Without Animation (Resolved)](#R-54)
+6. [R-53 — 2026-07-16 — Paused Transition Probes Poisoned Visualizer Latency Health (Resolved)](#R-53)
+7. [R-52 — 2026-07-16 / 2026-07-18 — Oversized Raw Prefetch Evicted Prepared Images And Triggered Late Fallback Churn (Oversized Fix Implemented, Producer-Gap Validation Reopened)](#R-52)
+8. [R-51 — 2026-07-16 — Duplicate Display Destroy Callback Silently Disabled Explicit GL Teardown (Resolved)](#R-51)
+9. [R-50 — 2026-07-16 — Lazy WidgetsTab Rehydrated Its Initial Sections Twice (Resolved)](#R-50)
+9. [R-49 — 2026-07-16 — GL Texture/Geometry Handles Retained Across Rebuild Ownership Boundaries (Resolved)](#R-49)
+10. [R-48 — 2026-07-15 — Clock Double-Click Replaced Per-Display Mode With Shared Setting (Resolved)](#R-48)
+11. [R-47 — 2026-07-15 — Oscilloscope Diagnostic Cleanup Broke Every Frame Push (Resolved)](#R-47)
+12. [R-46 — 2026-07-15 — Failed Blob Visualizer Retired End To End (Resolved)](#R-46)
+13. [R-45 — 2026-07-15 — Clock CUSTOM Payload Overrode Settings Mode To Preserve Geometry (Resolved)](#R-45)
+14. [R-44 — 2026-07-15 — Gmail CUSTOM Resize Payload Overrode Live Text Balance (Resolved)](#R-44)
+15. [R-43 — 2026-07-15 — Defaults Foundry Modal Colour Picker Destroyed Its Delegate Editor (Resolved)](#R-43)
+16. [R-42 — 2026-07-15 — Abandonment Achievement Shelves Had No Selected-Game Acquisition Path (Resolved)](#R-42)
+17. [R-41 — 2026-07-14 — Gmail OAuth Callback Server Escaped ThreadManager Lifecycle Ownership (Resolved)](#R-41)
+18. [R-40 — 2026-07-14 — Abandonment Ignored The Shared Steam Refresh Interval (Resolved In Code, Runtime Validation Pending)](#R-40)
+19. [R-39 — 2026-07-14 — Abandonment Automatic Rotation Lost Uncached Selected Artwork (Resolved In Code, Runtime Validation Pending)](#R-39)
+20. [R-38 — 2026-07-14 — Achievement Pulse Ranked Recent Play Instead Of Recent Unlock And Elided Unlocked Counts (Resolved In Code, Runtime Validation Pending)](#R-38)
+21. [R-37 — 2026-07-14 — Abandonment Rotation Expiry Was Silently Dropped And Selection Walked Archive Order (Resolved In Code, Runtime Validation Pending)](#R-37)
+22. [R-36 — 2026-07-12 — Blob Mighty / Shaped Contours Reached Healthy Audio But Lost Visible Motion Inside Blob-Local Geometry (Resolved In Code, Runtime Validation Pending)](#R-36)
+23. [R-35 — 2026-07-10 — Steam Family Master Hid Settings But Did Not Gate Runtime Cards (Solved)](#R-35)
+24. [R-34 — 2026-07-10 — Blank Weather Location Entered Lifecycle Error/Fallback And Collapsed Its Card (Solved)](#R-34)
+25. [R-33 — 2026-07-10 — Defaults SST Regeneration Reached Installed Profiles And Canonicalized Machine Layout Slots (Resolved In Code)](#R-33)
+26. [R-32 — 2026-07-10 — Lazy WidgetsTab Save Treated Expected Unbuilt Sections As Guard Violations (Resolved In Code, Runtime Validation Pending)](#R-32)
+27. [R-31 — 2026-07-10 — Worker-Rejected Display Image Masqueraded As Multi-Monitor Compositor Loss (Resolved In Code, Runtime Validation Pending)](#R-31)
+28. [R-30 — 2026-07-01 — Adaptive Timer Ownership Drop Left Python Process Alive After App Exit (Resolved In Code, Runtime Validation Pending)](#R-30)
+29. [R-29 — 2026-06-30 — Reddit Refresh Cadence And Provider Fallback Authority (Resolved In Code, Runtime Validation Pending)](#R-29)
+30. [R-28 — 2026-06-30 — Settings Slider Last-Moved Weakref Touched Deleted Qt Wrapper (Resolved In Code, Runtime Validation Pending)](#R-28)
+31. [U-10 — 2026-06-28 / 2026-06-29 — Oscilloscope Visual Strobe / Waveform-Ghost-Transient Contract Drift (Resolved)](#U-10)
+32. [U-07 — 2026-06-05 — Bubble Loud-Path Oracle Drift / Multi-Tweak Overfit Family (Resolved)](#U-07)
+33. [U-09 — 2026-06-13 / 2026-06-29 — Visualizer CUSTOM Runtime Shape Poison / Post-Replay Geometry Authority Split (Watchlist With Stale-Bucket Repair)](#U-09)
+34. [R-27 — 2026-06-27 — Pending-Paint Requeue Perf Regression / UI Pressure Trap (Resolved)](#R-27)
+35. [R-26 — 2026-06-18 — Visualizer CUSTOM Display-Participation Startup Fallback / Duplicate Owner From Sequential Display Registration (Resolved)](#R-26)
+36. [R-25 — 2026-06-13 — Spectrum Solid-Bar Boundary Flicker / Robotic Snap Follow-Up (Resolved)](#R-25)
+37. [U-08 — 2026-06-06 / 2026-06-12 — CUSTOM Runtime Replay Shrink Failure / Minimum-Constraint Reassertion Drift (Resolved)](#U-08)
+38. [R-24 — 2026-05-25 — Retired Overlay-Effect Cache-Busting Path Still Driving Menu/Focus/Display Churn (Resolved)](#R-24)
+39. [R-23 — 2026-05-24 / 2026-05-25 — CUSTOM Edit Mode Global Shell/Grid/Z-Order/Geometry Regression Family (Resolved)](#R-23)
+40. [R-22 — 2026-05-07 — Spotify Visualizer State Bleed: Runtime Bar Arrays Not Cleared During Mode Transitions (Resolved)](#R-22)
+41. [R-21 — 2026-05-04 — Visualizer Painted-Card GL Content Escaping Card Boundary (Resolved)](#R-21)
+42. [R-19 — 2026-04-25 — Bubble / Blob Signal-Contract Trap: Dead Smoothed Hold vs Raw-Energy Blowout (Resolved)](#U-02)
+43. [R-20 — 2026-04-25 — Non-Mirrored Spectrum Vocal Lane Still Missing After Claimed Landing (Resolved)](#U-03)
+44. [R-18 — 2026-04-23 — Settings Dialog Flicker / Taskbar Ghost (`Qt691QWindowIcon`) (Resolved)](#R-18)
+45. [R-01 — 2026-04-09 — Settings Shell Outer Border Radius / Corner Bleed (Resolved With Caveats)](#R-01)
+46. [R-02 — 2026-04-08 / 2026-04-09 — Reddit Helper Link Handoff Fails In Real Screensaver Runtime (Resolved)](#R-02)
+47. [R-03 — 2026-04-18 — Sine Idle Motion Dead/Flat During Paused State (Resolved)](#R-03)
+48. [R-04 — 2026-04-18 — Visualizer Curated Preset Selection Reused Custom Runtime Values (Resolved)](#R-04)
+49. [R-05 — 2026-04-18 — Visualizer Preset Slot Label Mismatched Edit Target (Resolved)](#R-05)
+50. [R-06 — 2026-04-11 — Visualizer Preset Override Bug (MERGE Semantics + Cross-Mode Pollution + Call-Site MERGE) (Resolved)](#R-06)
 ### Archived Context
 1. [A-01 — MAJOR VISUAL BUG: Settings Dialog Flicker / Placeholder Regression — Historical Investigation Archived](#A-01)
 2. [A-02 — 2026-02-24 — Spotify Visualizer "Crossover Persistence" (Blob muted after mode switch)](#A-02)
@@ -82,6 +84,39 @@ This is the long-term anti-regression record for the project, not an active task
 11. [R-17 — 2026-04-18 — Goo No-Gap/Artifact Regression Family (Resolved In Dev-Gated Path)](#R-17)
 
 ## Recent Entries
+
+<a id="R-58"></a>
+### [R-58] 2026-07-21 / 2026-07-22 — Terminal State Split Left PERF HUD Active And Edit Teardown Crossed GL Context Affinity (Candidate Implemented, Runtime Validation Pending)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed failure:** after many visually complete transitions, the PERF overlay on display 0 remained in transition state. Both the dual-display and MC runs later crashed after CUSTOM edit/runtime teardown; the terminal reported `Cannot make QOpenGLContext current in a different thread` even though the sidecars ended at the preceding lifecycle boundary.
+- **Dual evidence:** at the `20:09:39` CUSTOM save/engine-stop boundary, both display wrappers reported `running=True` for Rain Drops while each compositor reported `current_transition=None`, `has_frame_state=False`, `frame_state=None`, and `terminal_due=False`. The visible frame had completed, but the public busy/HUD owner had not converged with compositor authority.
+- **MC evidence:** at `03:29:32`, edit/runtime teardown began while a newly admitted Particle transition was about `10 ms` old. The compositor had `terminal_due=True`, dirty/request/ack generations `12583/12582/12580`, and an active render owner. Transition admission therefore remained open after the lifecycle had begun stopping displays.
+- **Risky ownership seam:** hidden shared `QOpenGLContext` / `QOffscreenSurface` objects are cached on the compositor widget and reused by deferred warmup. Managed callbacks currently route through the UI thread, but creation-generation/thread affinity is implicit, cleanup has no explicit affinity assertion/marshal, and stale deferred work can race display replacement. The raw Qt error is direct evidence that at least one teardown path invoked a context from the wrong thread or after ownership crossed generations.
+- **Implemented correction:** terminal paint/completion is now one controller generation with a single queued publication and canonical busy/HUD clearing. Runtime pause closes admission, invalidates deferred work, pauses the adaptive owner, and can reopen display/controller/compositor admission before the next first image. Permanent teardown sets a shutdown barrier, marks retirement pending before signalling the worker, and never blocks Qt or overwrites a racing acknowledgement with stale pending state; the worker retains manager ownership until its `finally` path unregisters and acknowledges, while the barrier prevents any later Qt/GL work. Hidden warmup context/surface state is generation-tagged; affinity helpers reject or marshal before Qt context/surface calls. The parser recognizes terminal conflicts, affinity errors, stale publications, and `[PERF][ADAPTIVE_TIMER]` request-to-ack latency above `250 ms`. Tests race terminal paint against cancel, CUSTOM/Settings/topology teardown, stale callback delivery, wrong-thread fakes, reusable pause/resume, callback-before-request-return acknowledgement, and nonblocking retirement without adding a watchdog commit, repaint retry, fallback surface, or second clock.
+- **Adjacent headroom work:** the same candidate removes ordinary UI-side format conversion through immutable upload payloads, shares immutable image textures by verified Qt share group, composes cached visualizer card chrome natively, keeps same-owner CUSTOM geometry off full display teardown, and moves Dev Curve's pure spline solve to an epoch-tagged one-in-flight COMPUTE handoff. These do not close R-58 by proxy; they reduce pressure around the lifecycle seam while preserving its exact ownership bars.
+- **Automated bars:** the current candidate passes the supported visualizer reactivity lock (`20`), focused single-surface compositor gate (`236`), broader ownership/lifecycle gate (`352` passed, `13` environment skips), and combined changed-surface integration gate (`688` passed, `20` environment skips). Coverage includes strict no-double-blend/native-failure, stale Dev Curve result rejection, real ThreadManager teardown-race rejection, reversible nested admission, callback-before-request-return stop acknowledgement, nonblocking Qt quiesce, immutable published curves, shared-texture final-lease cleanup, and native/offscreen frameless CUSTOM guide parity.
+- **Runtime acceptance still required:** repeated packaged Normal/MC CUSTOM save/cancel, Settings restart, topology reduction/return, transition-boundary teardown, and final exit must produce no stuck HUD, stale busy bit, new transition after quiesce, context-affinity warning, crash, snap/skip, blank frame, flicker, or legacy surface across mixed refresh/DPR. Every real retirement must acknowledge, and none may exceed the parser's observational `250 ms` bar. Until that matrix passes, this remains partial rather than solved.
+
+<a id="R-57"></a>
+### [R-57] 2026-07-18 / 2026-07-21 — Paint-Acknowledged Presentation Removed Handoff Amplification; Resident Idle GL Validated, UI Tail Remains (Partial)
+
+- [ ] COMPLETELY FUCKED
+- [x] PARTIAL
+- [x] AWAITING VALIDATION
+- [ ] SOLVED
+
+- **Observed pressure:** the prior single-surface implementation still woke each display render owner roughly `2-3.5x` as often as Qt delivered paints and repainted the complete wallpaper through QPainter on every ready idle visualizer frame. The clean `18:02` run averaged `116.1%` CPU with low GPU use and shared UI starvation unrelated to transition or visualizer identity.
+- **Candidate correction:** the adaptive owner now permits one outstanding Qt handoff per display, sleeps until `paintGL()` acknowledges it, and resumes on the display's next normalized deadline. Ready idle paint uses a resident texture and one fullscreen GL quad without paint-time upload. Prefetch workers retain `QImage` rather than constructing worker-thread `QPixmap`; per-paint global GC toggling is removed; and transition completion is queued only after a successful terminal shader paint. Transient shader failure retains the committed frame and retry authority instead of session-poisoning the path.
+- **First runtime result:** the `18:57-19:00` mixed `165/60 Hz` script run proved `wakeups == frames`, `pending_skips=0`, generation lag `0-1`, stable Settings rebuild ownership, and zero transition skip/refusal/instant commit/drop, transition fallback, unexpected legacy, or compositor visualizer failure. It still averaged `108.0%` CPU with `56.8%` on Python `MainThread`; screen 0 averaged `98.9/165 FPS` with `188.8 ms` peak paint gap and screen 1 `51.2/60 FPS` with `250.2 ms` peak. Spectrum, Dev Curve, and Bubble all retained shared visualizer microgaps.
+- **Proven root seam:** display 1 used QPainter for `2,556/3,308` idle paints (`77.3%`), while display 0 showed roughly one idle fallback after each transition. Transition textures were valid and active shaders never fell back. A direct Qt probe proved same-DPR reapplication preserves `QPixmap.cacheKey()`, while a real DPR change does not. `DisplayWidget` discovered DPR `1.5` but `ImagePresenter` retained its default `1.0`; the display pipeline finalized the pixmap at `1.5`, then presenter assignment/completion changed the uploaded object back to `1.0`. Continuous visualizer demand magnified that terminal identity mismatch into hundreds of full-scene fallback paints.
+- **Implemented correction:** initial show, same-geometry screen changes, target-size discovery, resize, display, and presenter share one validated DPR setter, and no-op DPR mutation is skipped. Terminal completion and snap-to-new cancellation promote the uploaded destination texture to an explicit committed residency lease before pair release; idle paint uses the lease rather than mutable pixmap identity; eviction protects it. A true nonresident base gets one coalesced hidden-context warm attempt and one successful-completion presentation update, GL readiness re-arms a pre-show miss, and teardown invalidates queued work. Rejected post-paint terminal dispatch holds the rendered terminal frame for one managed deferred dispatch rather than retrying each paint or jumping. Real-QPixmap mutation, current one-pixel-shrink geometry, all transition completion routes, cancellation, eviction, startup/teardown warmup, screen change, and visualizer safeguards are covered by focused and ownership suites.
+- **Second runtime result:** the `20:06-20:10` mixed run and latest MC corpus produced zero persistent GL QPainter fallback across `43/50` paint-path windows, zero transition fallback, and zero shader/program/legacy/FBO/render failure. The residency correction is validated. Dual display improved to `92.4%` average CPU but still placed `46.1%` on `MainThread`, produced five passive paint stalls and gaps up to about `205 ms`; latest MC averaged `72.1%`, put `34.1%` on `MainThread`, and retained gaps up to about `161 ms`. Visualizer microgaps remained mode-independent.
+- **Remaining boundary:** residency is no longer the blocker. R-58's lifecycle/headroom candidate now implements terminal ownership, immutable uploads, shared texture leases, native static card composition, same-owner CUSTOM partial rebuild, and one bounded Dev Curve worker lane. The next packaged matrix must prove real CPU/delivery/resource reward and choose any further deadline/typed-transport/native-compute work from fresh attribution. Preserve one-surface ownership, resident idle GL, and no-skip behavior.
 
 <a id="R-56"></a>
 ### [R-56] 2026-07-16 / 2026-07-18 — Competing Visualizer Child GL Surface Merged Into The Display Compositor (Architecture Implemented, Performance Promotion Reopened)

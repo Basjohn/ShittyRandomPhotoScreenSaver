@@ -337,6 +337,18 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_pending_result_skip_count: int = 0
         self._bubble_last_perf_diag: Dict[str, float] = {}
         self._bubble_last_tick_ts: float = 0.0
+        # Dev Curve's spline solve is CPU-only and must not execute inside the
+        # GUI tick. One worker job may be in flight; completed frames cross the
+        # thread boundary through this epoch-tagged latest-result slot.
+        self._devcurve_runtime_state: Optional[object] = None
+        self._devcurve_compute_pending_epoch: Optional[int] = None
+        self._devcurve_pending_result: Optional[tuple] = None
+        self._devcurve_pending_result_lock = threading.Lock()
+        self._devcurve_worker_epoch: int = 0
+        self._devcurve_compute_config_token: Optional[int] = None
+        self._devcurve_compute_config: Optional[Dict[str, Any]] = None
+        self._devcurve_last_perf_diag: Dict[str, float] = {}
+        self._devcurve_last_tick_ts: float = 0.0
         self._bubble_dispatch_energy_snapshot: Dict[str, float] = {
             "bass": 0.0,
             "mid": 0.0,
@@ -1336,6 +1348,99 @@ class SpotifyVisualizerWidget(QWidget):
         self._bubble_count = count
         return True
 
+    def _begin_devcurve_compute(self, epoch: int) -> bool:
+        """Claim the single Dev Curve worker slot for ``epoch``."""
+
+        with self._devcurve_pending_result_lock:
+            if self._devcurve_compute_pending_epoch is not None:
+                return False
+            if self._devcurve_pending_result is not None:
+                return False
+            self._devcurve_compute_pending_epoch = int(epoch)
+            return True
+
+    def _devcurve_compute_worker(
+        self,
+        epoch: int,
+        state,
+        solve_kwargs: Dict[str, Any],
+    ) -> tuple:
+        """Solve one immutable Dev Curve input snapshot on COMPUTE."""
+
+        from widgets.spotify_visualizer.devcurve_runtime import solve_devcurve_frame
+
+        worker_start = time.perf_counter()
+        frame = solve_devcurve_frame(state, **solve_kwargs)
+        worker_ms = (time.perf_counter() - worker_start) * 1000.0
+        return (
+            int(epoch),
+            state,
+            frame,
+            float(solve_kwargs["dt"]),
+            bool(solve_kwargs["playing"]),
+            float(solve_kwargs["now_ts"]),
+            worker_ms,
+        )
+
+    def _devcurve_compute_done(self, task_result) -> None:
+        """Stage a completed worker frame without touching Qt-owned state."""
+
+        result = task_result.result if task_result.success else None
+        result_epoch = int(result[0]) if isinstance(result, tuple) and result else None
+        with self._devcurve_pending_result_lock:
+            pending_epoch = self._devcurve_compute_pending_epoch
+            if result_epoch is not None and pending_epoch == result_epoch:
+                self._devcurve_compute_pending_epoch = None
+            elif not task_result.success:
+                self._devcurve_compute_pending_epoch = None
+
+            if (
+                result is not None
+                and result_epoch == self._devcurve_worker_epoch
+                and self._devcurve_pending_result is None
+            ):
+                self._devcurve_pending_result = result
+
+        if not task_result.success:
+            logger.warning(
+                "[SPOTIFY_VIS][DEVCURVE] compute failed: %s",
+                task_result.error,
+            )
+
+    def _cancel_devcurve_compute_claim(self, epoch: int) -> None:
+        """Release a worker claim when task submission itself fails."""
+
+        with self._devcurve_pending_result_lock:
+            if self._devcurve_compute_pending_epoch == int(epoch):
+                self._devcurve_compute_pending_epoch = None
+
+    def _take_pending_devcurve_result(self) -> Optional[tuple]:
+        """Take the newest generation-valid Dev Curve frame on the UI tick."""
+
+        with self._devcurve_pending_result_lock:
+            pending = self._devcurve_pending_result
+            self._devcurve_pending_result = None
+            if pending is None or int(pending[0]) != self._devcurve_worker_epoch:
+                return None
+            return pending
+
+    def _has_pending_devcurve_work(self) -> bool:
+        with self._devcurve_pending_result_lock:
+            return (
+                self._devcurve_compute_pending_epoch is not None
+                or self._devcurve_pending_result is not None
+            )
+
+    def _invalidate_devcurve_worker_generation(self) -> None:
+        """Reject queued results while allowing an in-flight solve to retire."""
+
+        with self._devcurve_pending_result_lock:
+            self._devcurve_worker_epoch += 1
+            self._devcurve_pending_result = None
+        self._devcurve_runtime_state = None
+        self._devcurve_compute_config_token = None
+        self._devcurve_compute_config = None
+
     def _ensure_tick_source(self) -> None:
         """Delegates to widgets.spotify_visualizer.tick_helpers."""
         from widgets.spotify_visualizer.tick_helpers import ensure_tick_source
@@ -1345,8 +1450,10 @@ class SpotifyVisualizerWidget(QWidget):
     def set_shadow_config(self, config) -> None:
         self._shadow_config = config
         self._painted_frame_shadow_enabled = shadow_config_enabled(config, "enabled", True)
+        self._mark_gpu_static_state_dirty()
         self._invalidate_painted_frame_shadow_cache()
         self._update_card_style()
+        self._prewarm_compositor_card_raster()
         self.update()
 
     def _update_card_style(self) -> None:
@@ -1360,9 +1467,21 @@ class SpotifyVisualizerWidget(QWidget):
         if self._compositor_visualizer_active == resolved:
             return
         self._compositor_visualizer_active = resolved
+        self._mark_gpu_static_state_dirty()
         self._invalidate_painted_frame_shadow_cache()
         self._update_card_style()
+        self._prewarm_compositor_card_raster()
         self.update()
+
+    def _prewarm_compositor_card_raster(self) -> None:
+        """Refresh static card chrome only after a real style ownership change."""
+
+        parent = self.parent()
+        compositor = getattr(parent, "_gl_compositor", None) if parent is not None else None
+        layer = getattr(compositor, "_spotify_visualizer_layer", None)
+        prewarm = getattr(layer, "prewarm_card_raster", None)
+        if callable(prewarm):
+            prewarm()
 
     def _set_compositor_fade_progress(self, progress: float) -> None:
         """Request one compositor frame for the shared visualizer fade."""
@@ -1398,6 +1517,7 @@ class SpotifyVisualizerWidget(QWidget):
         self._mark_gpu_static_state_dirty()
         self._invalidate_painted_frame_shadow_cache()
         self._update_card_style()
+        self._prewarm_compositor_card_raster()
         self.update()
 
     def uses_painted_frame_shadow(self) -> bool:
@@ -1435,6 +1555,11 @@ class SpotifyVisualizerWidget(QWidget):
         """Invalidate frame-stable renderer configuration without repaint churn."""
 
         self._gpu_static_revision = int(self._gpu_static_revision) + 1
+        if (
+            getattr(self, "_vis_mode_str", "") == "devcurve"
+            and hasattr(self, "_devcurve_pending_result_lock")
+        ):
+            self._invalidate_devcurve_worker_generation()
 
     def set_ghost_config(self, enabled: bool, alpha: float, decay: float) -> None:
         """Configure ghost trailing behaviour for the GPU bar overlay.

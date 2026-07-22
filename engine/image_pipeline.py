@@ -8,6 +8,7 @@ to preserve the original interface.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 import time
 
@@ -27,6 +28,10 @@ from core.process.types import WorkerType, MessageType
 from core.settings import SettingsManager
 from rendering.display_modes import DisplayMode
 from rendering.image_processor_async import AsyncImageProcessor
+from rendering.image_upload_payload import (
+    ImageUploadPayload,
+    prepare_qimage_upload_payload,
+)
 from sources.base_provider import ImageMetadata
 
 if TYPE_CHECKING:
@@ -124,7 +129,7 @@ def _probe_cache(
     cache_key: str,
     *,
     bucket: str,
-) -> Optional[QPixmap | QImage]:
+) -> Optional[QPixmap | QImage | ImageUploadPayload]:
     cache = getattr(engine, "_image_cache", None)
     if cache is None or not cache_key:
         return None
@@ -455,6 +460,85 @@ def _get_cached_pixmap_variants(
     return processed_pixmap, original_pixmap
 
 
+def _get_cached_upload_payload(
+    engine: ScreensaverEngine,
+    cache_key: str,
+) -> Optional[ImageUploadPayload]:
+    """Return a worker-safe scaled payload, upgrading old QImage entries once."""
+
+    cached = _probe_cache(engine, cache_key, bucket="scaled")
+    if isinstance(cached, ImageUploadPayload):
+        return cached
+    if isinstance(cached, QImage) and not cached.isNull():
+        try:
+            payload = prepare_qimage_upload_payload(
+                cached,
+                identity_seed=cache_key,
+            )
+        except (TypeError, ValueError):
+            return None
+        cache = getattr(engine, "_image_cache", None)
+        if cache is not None:
+            cache.put(cache_key, payload)
+        return payload
+    if isinstance(cached, QPixmap) and not cached.isNull():
+        logger.warning(
+            "[CACHE][STALE] Ignoring GUI-owned scaled pixmap on compute path key=%s",
+            cache_key,
+        )
+    return None
+
+
+def _pixmap_from_upload_payload(payload: ImageUploadPayload) -> QPixmap:
+    """Promote immutable RGBA bytes at the UI publication boundary only."""
+
+    image = QImage(
+        payload.data,
+        int(payload.width),
+        int(payload.height),
+        int(payload.stride),
+        QImage.Format.Format_RGBA8888,
+    )
+    if image.isNull():
+        return QPixmap()
+    return QPixmap.fromImage(image)
+
+
+def _publish_upload_payload(
+    display: Any,
+    payload: ImageUploadPayload,
+    image_path: str,
+    display_index: int,
+) -> bool:
+    """Create the presentation pixmap and publish from the UI boundary."""
+
+    conversion_start = time.perf_counter()
+    pixmap = _pixmap_from_upload_payload(payload)
+    conversion_ms = (time.perf_counter() - conversion_start) * 1000.0
+    if pixmap.isNull():
+        logger.warning(
+            "[ASYNC] Upload payload produced a null pixmap for display %d",
+            display_index,
+        )
+        return False
+    if conversion_ms > 24.0 and is_perf_metrics_enabled():
+        logger.warning(
+            "[PERF] [ASYNC] UI payload promotion took %.1fms for display %d",
+            conversion_ms,
+            display_index,
+        )
+    if hasattr(display, "set_processed_image"):
+        display.set_processed_image(
+            pixmap,
+            pixmap,
+            image_path,
+            payload,
+        )
+    else:
+        display.set_image(pixmap, image_path)
+    return True
+
+
 # ------------------------------------------------------------------
 # ImageWorker-based loading
 # ------------------------------------------------------------------
@@ -466,8 +550,9 @@ def load_image_via_worker(
     target_height: int,
     display_mode: str = "fill",
     sharpen: bool = False,
+    use_lanczos: Optional[bool] = None,
     timeout_ms: int = 500,
-) -> Optional[QImage]:
+) -> Optional[ImageUploadPayload]:
     """
     Load and prescale image using ImageWorker process.
 
@@ -484,18 +569,19 @@ def load_image_via_worker(
         timeout_ms: Timeout for worker response
 
     Returns:
-        QImage if successful, None if worker unavailable or failed
+        Immutable RGBA upload payload if successful, otherwise None
     """
     if not engine._process_supervisor or not engine._process_supervisor.is_running(WorkerType.IMAGE):
         return None
 
     try:
         # Get quality settings from settings manager
-        use_lanczos = True
-        if engine.settings_manager:
-            use_lanczos = engine.settings_manager.get('display.use_lanczos', True)
-            if isinstance(use_lanczos, str):
-                use_lanczos = use_lanczos.lower() == 'true'
+        if use_lanczos is None:
+            use_lanczos = True
+            if engine.settings_manager:
+                use_lanczos = engine.settings_manager.get('display.use_lanczos', True)
+                if isinstance(use_lanczos, str):
+                    use_lanczos = use_lanczos.lower() == 'true'
 
         response = engine._process_supervisor.send_request_and_await_response(
             WorkerType.IMAGE,
@@ -548,16 +634,6 @@ def load_image_via_worker(
                 rgba_data = payload.get("rgba_data")
 
             if rgba_data and width > 0 and height > 0:
-                qimage = QImage(
-                    rgba_data,
-                    width,
-                    height,
-                    width * 4,  # bytes per line
-                    QImage.Format.Format_RGBA8888,
-                )
-                # Make a deep copy since rgba_data may be invalidated
-                qimage = qimage.copy()
-
                 if is_perf_metrics_enabled():
                     proc_time = response.processing_time_ms or 0
                     logger.info(
@@ -565,7 +641,12 @@ def load_image_via_worker(
                         width, height, proc_time
                     )
 
-                return qimage
+                return ImageUploadPayload.from_rgba8(
+                    width,
+                    height,
+                    rgba_data,
+                    identity_seed=image_path,
+                )
         else:
             error = response.error or "Unknown error"
             logger.warning(f"{TAG_WORKER} ImageWorker failed: %s", error)
@@ -684,6 +765,73 @@ def load_image_task(
 _DISPLAY_IMAGE_REPLACEMENT_LIMIT = 3
 
 
+@dataclass(frozen=True, slots=True)
+class DisplayImageWorkSpec:
+    """Primitive-only display inputs captured before compute submission."""
+
+    display_index: int
+    display_identity: int
+    lifecycle_generation: int
+    target_width: int
+    target_height: int
+    display_mode: DisplayMode
+
+
+def _capture_display_work_specs(displays: List[Any]) -> tuple[DisplayImageWorkSpec, ...]:
+    """Capture Qt-owned geometry/settings on UI before workers are submitted."""
+
+    specs: list[DisplayImageWorkSpec] = []
+    for display_index, display in enumerate(displays):
+        if hasattr(display, "get_target_size"):
+            target_size = display.get_target_size()
+        else:
+            dpr = float(getattr(display, "_device_pixel_ratio", 1.0) or 1.0)
+            target_size = QSize(
+                int(display.width() * dpr),
+                int(display.height() * dpr),
+            )
+        specs.append(
+            DisplayImageWorkSpec(
+                display_index=display_index,
+                display_identity=id(display),
+                lifecycle_generation=int(
+                    getattr(display, "_render_lifecycle_generation", 0)
+                ),
+                target_width=max(1, int(target_size.width())),
+                target_height=max(1, int(target_size.height())),
+                display_mode=_normalize_display_mode(
+                    getattr(display, "display_mode", DisplayMode.FILL)
+                ),
+            )
+        )
+    return tuple(specs)
+
+
+def _display_work_is_current(
+    engine: "ScreensaverEngine",
+    manager: Any,
+    display: Any,
+    spec: DisplayImageWorkSpec,
+) -> bool:
+    """Return whether a captured display generation still owns publication."""
+
+    if getattr(engine, "display_manager", None) is not manager:
+        return False
+    current_displays = getattr(manager, "displays", None)
+    if current_displays is None:
+        return False
+    index = int(spec.display_index)
+    if index < 0 or index >= len(current_displays):
+        return False
+    if current_displays[index] is not display or id(display) != spec.display_identity:
+        return False
+    if bool(getattr(display, "_render_pipeline_quiesced", False)):
+        return False
+    return int(getattr(display, "_render_lifecycle_generation", 0)) == int(
+        spec.lifecycle_generation
+    )
+
+
 def _image_meta_path(meta: Optional[ImageMetadata]) -> str:
     if meta is None:
         return ""
@@ -720,7 +868,7 @@ def _next_image_replacement(
 
 def _process_display_image_candidate(
     engine: "ScreensaverEngine",
-    display: Any,
+    display_spec: DisplayImageWorkSpec,
     display_index: int,
     meta: ImageMetadata,
     use_lanczos: bool,
@@ -739,30 +887,20 @@ def _process_display_image_candidate(
         cached = engine._image_cache.get(img_path)
         if isinstance(cached, QImage) and not cached.isNull():
             qimage = cached
-        elif isinstance(cached, QPixmap) and not cached.isNull():
-            qimage = cached.toImage()
 
     if (qimage is None or qimage.isNull()) and not Path(img_path).exists():
         logger.warning("%s Image file not found: %s", TAG_ASYNC, img_path)
         return None
 
     try:
-        if hasattr(display, "get_target_size"):
-            target_size = display.get_target_size()
-        else:
-            dpr = getattr(display, "_device_pixel_ratio", 1.0)
-            target_size = QSize(
-                int(display.width() * dpr),
-                int(display.height() * dpr),
-            )
-
-        display_mode = _normalize_display_mode(
-            getattr(display, "display_mode", DisplayMode.FILL)
+        target_size = QSize(
+            int(display_spec.target_width),
+            int(display_spec.target_height),
         )
+        display_mode = display_spec.display_mode
         display_mode_str = display_mode.value
 
-        processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
-            engine,
+        scaled_key = _build_scaled_cache_key(
             img_path,
             target_size.width(),
             target_size.height(),
@@ -770,26 +908,25 @@ def _process_display_image_candidate(
             use_lanczos,
             sharpen,
         )
+        processed_payload = _get_cached_upload_payload(engine, scaled_key)
 
-        if processed_pixmap is None or processed_pixmap.isNull():
+        if processed_payload is None:
             processed_qimage = None
             fallback_reason = "scaled_miss"
 
             if qimage is not None and not qimage.isNull():
-                processed_pixmap = _derive_scaled_pixmap_from_raw_cache(
-                    engine,
-                    img_path,
+                processed_qimage = AsyncImageProcessor.process_qimage(
                     qimage,
                     target_size,
                     display_mode,
-                    use_lanczos,
-                    sharpen,
+                    use_lanczos=use_lanczos,
+                    sharpen=sharpen,
                 )
-                if processed_pixmap is not None:
+                if not processed_qimage.isNull():
                     fallback_reason = "derived_from_raw_cache"
 
             if (
-                processed_pixmap is None
+                (processed_qimage is None or processed_qimage.isNull())
                 and engine._process_supervisor
                 and engine._process_supervisor.is_running(WorkerType.IMAGE)
             ):
@@ -812,17 +949,17 @@ def _process_display_image_candidate(
                     display_mode_str,
                     level=logging.WARNING,
                 )
-                worker_qimage = load_image_via_worker(
+                processed_payload = load_image_via_worker(
                     engine,
                     img_path,
                     target_size.width(),
                     target_size.height(),
                     display_mode=display_mode_str,
                     sharpen=sharpen,
+                    use_lanczos=use_lanczos,
                     timeout_ms=3000,
                 )
-                if worker_qimage and not worker_qimage.isNull():
-                    processed_qimage = worker_qimage
+                if processed_payload is not None:
                     logger.debug(
                         "%s Image loaded via ImageWorker for display %d",
                         TAG_ASYNC,
@@ -836,7 +973,7 @@ def _process_display_image_candidate(
                         img_path,
                     )
                     return None
-            elif processed_pixmap is None:
+            elif processed_qimage is None or processed_qimage.isNull():
                 if qimage is not None and not qimage.isNull():
                     _cache_trace(
                         "[FALLBACK] Compute-thread scale fallback display=%d "
@@ -863,33 +1000,18 @@ def _process_display_image_candidate(
                     )
                     return None
 
-            if processed_pixmap is None:
+            if processed_payload is None:
                 if processed_qimage is None or processed_qimage.isNull():
                     return None
-                conversion_start = time.time()
-                processed_pixmap = QPixmap.fromImage(processed_qimage)
-                conversion_elapsed = (time.time() - conversion_start) * 1000
-                if conversion_elapsed > 50 and is_perf_metrics_enabled():
-                    logger.warning(
-                        "[PERF] [ASYNC] QPixmap.fromImage took %.1fms for display %d",
-                        conversion_elapsed,
-                        display_index,
-                    )
-                processed_qimage = None
-                if (
-                    engine._image_cache is not None
-                    and processed_pixmap is not None
-                    and not processed_pixmap.isNull()
-                ):
-                    scaled_key = _build_scaled_cache_key(
-                        img_path,
-                        target_size.width(),
-                        target_size.height(),
-                        display_mode,
-                        use_lanczos,
-                        sharpen,
-                    )
-                    engine._image_cache.put(scaled_key, processed_pixmap)
+                processed_payload = prepare_qimage_upload_payload(
+                    processed_qimage,
+                    identity_seed=scaled_key,
+                )
+            if engine._image_cache is not None:
+                engine._image_cache.put(
+                    scaled_key,
+                    processed_payload,
+                )
         else:
             logger.debug(
                 "%s Using cached scaled variant for display %d",
@@ -906,24 +1028,8 @@ def _process_display_image_candidate(
                 display_mode_str,
             )
 
-        if original_pixmap is None or original_pixmap.isNull():
-            if qimage is None or qimage.isNull():
-                original_pixmap = processed_pixmap
-            else:
-                conversion_start = time.time()
-                original_pixmap = QPixmap.fromImage(qimage)
-                conversion_elapsed = (time.time() - conversion_start) * 1000
-                if conversion_elapsed > 50 and is_perf_metrics_enabled():
-                    logger.warning(
-                        "[PERF] [ASYNC] Original QPixmap.fromImage took %.1fms "
-                        "for display %d",
-                        conversion_elapsed,
-                        display_index,
-                    )
-
         return {
-            "pixmap": processed_pixmap,
-            "original_pixmap": original_pixmap,
+            "upload_payload": processed_payload,
             "target_size": target_size,
             "path": img_path,
         }
@@ -939,7 +1045,7 @@ def _process_display_image_candidate(
 
 def _process_display_with_replacements(
     engine: "ScreensaverEngine",
-    display: Any,
+    display_spec: DisplayImageWorkSpec,
     display_index: int,
     initial_meta: ImageMetadata,
     use_lanczos: bool,
@@ -954,7 +1060,7 @@ def _process_display_with_replacements(
     for replacement_index in range(max(0, int(max_replacements)) + 1):
         result = _process_display_image_candidate(
             engine,
-            display,
+            display_spec,
             display_index,
             candidate,
             use_lanczos,
@@ -996,7 +1102,7 @@ def _process_display_with_replacements(
 
 def _process_same_image_with_replacements(
     engine: "ScreensaverEngine",
-    displays: List[Any],
+    display_specs: tuple[DisplayImageWorkSpec, ...],
     initial_meta: ImageMetadata,
     use_lanczos: bool,
     sharpen: bool,
@@ -1009,10 +1115,10 @@ def _process_same_image_with_replacements(
 
     for replacement_index in range(max(0, int(max_replacements)) + 1):
         processed: Dict[int, Dict[str, Any]] = {}
-        for display_index, display in enumerate(displays):
+        for display_index, display_spec in enumerate(display_specs):
             result = _process_display_image_candidate(
                 engine,
-                display,
+                display_spec,
                 display_index,
                 candidate,
                 use_lanczos,
@@ -1022,7 +1128,7 @@ def _process_same_image_with_replacements(
                 break
             processed[display_index] = result
 
-        if len(processed) == len(displays):
+        if len(processed) == len(display_specs):
             if replacement_index:
                 logger.info(
                     "%s Recovered all displays with common replacement after %d rejection(s): %s",
@@ -1082,7 +1188,10 @@ def load_and_display_image_async(
     same_image = SettingsManager.to_bool(raw_same_image, True)
 
     # Build list of images to load - one per display if different images mode
-    displays = engine.display_manager.displays if engine.display_manager else []
+    manager_snapshot = engine.display_manager
+    displays = list(manager_snapshot.displays) if manager_snapshot else []
+    display_specs = _capture_display_work_specs(displays)
+    use_lanczos, sharpen = _get_display_quality_settings(engine)
     image_metas = [image_meta]  # First display gets the provided image
 
     if not same_image and len(displays) > 1:
@@ -1120,26 +1229,23 @@ def load_and_display_image_async(
     def _do_load_and_process() -> Optional[Dict]:
         """Background task: load and process images for all displays."""
         try:
-            display_list = engine.display_manager.displays if engine.display_manager else []
-            if not display_list:
+            if not display_specs:
                 return None
-
-            use_lanczos, sharpen = _get_display_quality_settings(engine)
 
             if same_image:
                 processed_images, selected_meta = _process_same_image_with_replacements(
                     engine,
-                    display_list,
+                    display_specs,
                     image_metas[0],
                     use_lanczos,
                     sharpen,
                 )
                 if not processed_images or selected_meta is None:
                     return None
-                image_metas[:] = [selected_meta for _ in display_list]
+                image_metas[:] = [selected_meta for _ in display_specs]
             else:
                 processed_images = {}
-                for display_index, display in enumerate(display_list):
+                for display_index, display_spec in enumerate(display_specs):
                     initial_meta = (
                         image_metas[display_index]
                         if display_index < len(image_metas)
@@ -1147,7 +1253,7 @@ def load_and_display_image_async(
                     )
                     processed, selected_meta = _process_display_with_replacements(
                         engine,
-                        display,
+                        display_spec,
                         display_index,
                         initial_meta,
                         use_lanczos,
@@ -1175,6 +1281,20 @@ def load_and_display_image_async(
     def _on_process_complete(result) -> None:
         """UI thread callback: convert to QPixmap and display."""
         try:
+            if not all(
+                _display_work_is_current(
+                    engine,
+                    manager_snapshot,
+                    display,
+                    display_specs[index],
+                )
+                for index, display in enumerate(displays)
+            ):
+                logger.info(
+                    "[ASYNC][STALE] Dropped image result after display lifecycle changed"
+                )
+                return
+
             data = result.result if result and result.success else None
             if data is None:
                 logger.warning(f"[ASYNC] Image processing failed, retrying (attempt {retry_count + 1}/10)")
@@ -1194,7 +1314,6 @@ def load_and_display_image_async(
             processed = data['processed']
             is_same_image = data.get('same_image', True)
 
-            displays = engine.display_manager.displays if engine.display_manager else []
             for i, display in enumerate(displays):
                 if i not in processed:
                     setter = getattr(display, "set_transition_work_pending", None)
@@ -1211,21 +1330,43 @@ def load_and_display_image_async(
                     continue
 
                 proc_data = processed[i]
-                processed_pixmap = proc_data['pixmap']
-                original_pixmap = proc_data['original_pixmap']
+                upload_payload = proc_data['upload_payload']
                 img_path = proc_data['path']
 
-                if processed_pixmap.isNull():
-                    logger.warning(f"[ASYNC] QPixmap is null for display {i}")
+                if not isinstance(upload_payload, ImageUploadPayload):
+                    logger.warning(
+                        "[ASYNC] Invalid upload payload for display %d",
+                        i,
+                    )
                     continue
 
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
-                    def _delayed_set(d=display, pp=processed_pixmap, op=original_pixmap, ip=img_path):
-                        if hasattr(d, 'set_processed_image'):
-                            d.set_processed_image(pp, op, ip)
-                        else:
-                            d.set_image(pp, ip)
+                    def _delayed_set(
+                        d=display,
+                        spec=display_specs[i],
+                        prepared=upload_payload,
+                        ip=img_path,
+                    ):
+                        if not _display_work_is_current(
+                            engine,
+                            manager_snapshot,
+                            d,
+                            spec,
+                        ):
+                            logger.debug(
+                                "[ASYNC][STALE] Suppressed delayed display publish "
+                                "screen=%s path=%s",
+                                spec.display_index,
+                                ip,
+                            )
+                            return
+                        _publish_upload_payload(
+                            d,
+                            prepared,
+                            ip,
+                            spec.display_index,
+                        )
                     _schedule_engine_delay(
                         engine,
                         delay_ms,
@@ -1233,10 +1374,13 @@ def load_and_display_image_async(
                         reason="transition_display_stagger",
                     )
                 else:
-                    if hasattr(display, 'set_processed_image'):
-                        display.set_processed_image(processed_pixmap, original_pixmap, img_path)
-                    else:
-                        display.set_image(processed_pixmap, img_path)
+                    if not _publish_upload_payload(
+                        display,
+                        upload_payload,
+                        img_path,
+                        i,
+                    ):
+                        continue
 
                 displayed_paths.append(img_path)
 
@@ -1323,7 +1467,10 @@ def load_and_display_image_async_with_metas(
             load_and_display_image(engine, image_metas[0])
         return
 
-    displays = engine.display_manager.displays if engine.display_manager else []
+    manager_snapshot = engine.display_manager
+    displays = list(manager_snapshot.displays) if manager_snapshot else []
+    display_specs = _capture_display_work_specs(displays)
+    use_lanczos, sharpen = _get_display_quality_settings(engine)
     # Pad metas to match display count
     while len(image_metas) < len(displays):
         image_metas.append(image_metas[-1] if image_metas else None)
@@ -1331,105 +1478,20 @@ def load_and_display_image_async_with_metas(
     def _do_load() -> Optional[Dict]:
         try:
             processed_images = {}
-            display_list = engine.display_manager.displays if engine.display_manager else []
-            sharpen = False
-            use_lanczos, sharpen = _get_display_quality_settings(engine)
-
-            for i, display in enumerate(display_list):
+            for i, display_spec in enumerate(display_specs):
                 meta = image_metas[i] if i < len(image_metas) else None
                 if meta is None:
                     continue
-                img_path = str(meta.local_path) if meta.local_path else (meta.url or "")
-                if not img_path:
-                    continue
-
-                qimage: Optional[QImage] = None
-                if engine._image_cache:
-                    cached = engine._image_cache.get(img_path)
-                    if isinstance(cached, QImage) and not cached.isNull():
-                        qimage = cached
-                    elif isinstance(cached, QPixmap) and not cached.isNull():
-                        qimage = cached.toImage()
-
-                if qimage is None or qimage.isNull():
-                    from pathlib import Path
-                    if not Path(img_path).exists():
-                        continue
-
-                try:
-                    if hasattr(display, 'get_target_size'):
-                        target_size = display.get_target_size()
-                    else:
-                        dpr = getattr(display, '_device_pixel_ratio', 1.0)
-                        target_size = QSize(int(display.width() * dpr), int(display.height() * dpr))
-
-                    display_mode = _normalize_display_mode(getattr(display, 'display_mode', DisplayMode.FILL))
-                    display_mode_str = display_mode.value
-
-                    processed_pixmap, original_pixmap = _get_cached_pixmap_variants(
-                        engine,
-                        img_path,
-                        target_size.width(),
-                        target_size.height(),
-                        display_mode,
-                        use_lanczos,
-                        sharpen,
-                    )
-
-                    if processed_pixmap is None or processed_pixmap.isNull():
-                        processed_qimage = None
-                        if qimage is not None and not qimage.isNull():
-                            processed_pixmap = _derive_scaled_pixmap_from_raw_cache(
-                                engine,
-                                img_path,
-                                qimage,
-                                target_size,
-                                display_mode,
-                                use_lanczos,
-                                sharpen,
-                            )
-                        if processed_pixmap is None and engine._process_supervisor and engine._process_supervisor.is_running(WorkerType.IMAGE):
-                            _bump_cache_runtime_stat(engine, "worker_fallbacks")
-                            worker_qimage = load_image_via_worker(
-                                engine, img_path, target_size.width(), target_size.height(),
-                                display_mode=display_mode_str, sharpen=sharpen, timeout_ms=3000,
-                            )
-                            if worker_qimage and not worker_qimage.isNull():
-                                processed_qimage = worker_qimage
-                            else:
-                                continue
-                        elif processed_pixmap is None and qimage is not None and not qimage.isNull():
-                            processed_qimage = AsyncImageProcessor.process_qimage(
-                                qimage, target_size, display_mode, use_lanczos=use_lanczos, sharpen=sharpen,
-                            )
-                        elif processed_pixmap is None:
-                            continue
-
-                        if processed_pixmap is None:
-                            processed_pixmap = QPixmap.fromImage(processed_qimage)
-                            processed_qimage = None
-                            if engine._image_cache is not None and processed_pixmap is not None and not processed_pixmap.isNull():
-                                scaled_key = _build_scaled_cache_key(
-                                    img_path,
-                                    target_size.width(),
-                                    target_size.height(),
-                                    display_mode,
-                                    use_lanczos,
-                                    sharpen,
-                                )
-                                engine._image_cache.put(scaled_key, processed_pixmap)
-
-                    if original_pixmap is None or original_pixmap.isNull():
-                        original_pixmap = QPixmap.fromImage(qimage) if (qimage and not qimage.isNull()) else processed_pixmap
-
-                    processed_images[i] = {
-                        'pixmap': processed_pixmap,
-                        'original_pixmap': original_pixmap,
-                        'target_size': target_size,
-                        'path': img_path,
-                    }
-                except Exception as e:
-                    logger.debug("[ASYNC-PREV] Failed to process for display %d: %s", i, e)
+                processed = _process_display_image_candidate(
+                    engine,
+                    display_spec,
+                    i,
+                    meta,
+                    use_lanczos,
+                    sharpen,
+                )
+                if processed is not None:
+                    processed_images[i] = processed
 
             return {'processed': processed_images} if processed_images else None
         except Exception as e:
@@ -1438,6 +1500,21 @@ def load_and_display_image_async_with_metas(
 
     def _on_complete(result) -> None:
         try:
+            if not all(
+                _display_work_is_current(
+                    engine,
+                    manager_snapshot,
+                    display,
+                    display_specs[index],
+                )
+                for index, display in enumerate(displays)
+            ):
+                logger.info(
+                    "[ASYNC-PREV][STALE] Dropped previous-image result after "
+                    "display lifecycle changed"
+                )
+                return
+
             data = result.result if result and result.success else None
             if data is None:
                 engine._loading_in_progress = False
@@ -1449,7 +1526,7 @@ def load_and_display_image_async_with_metas(
                     logger.debug("[ASYNC-PREV] Failed to clear transition pending state", exc_info=True)
                 return
             processed = data['processed']
-            displays_list = engine.display_manager.displays if engine.display_manager else []
+            displays_list = displays
             for i, display in enumerate(displays_list):
                 if i not in processed:
                     setter = getattr(display, "set_transition_work_pending", None)
@@ -1461,13 +1538,40 @@ def load_and_display_image_async_with_metas(
                 if i not in processed:
                     continue
                 proc = processed[i]
+                upload_payload = proc['upload_payload']
+                if not isinstance(upload_payload, ImageUploadPayload):
+                    logger.warning(
+                        "[ASYNC-PREV] Invalid upload payload for display %d",
+                        i,
+                    )
+                    continue
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
-                    def _delayed(d=display, pp=proc['pixmap'], op=proc['original_pixmap'], ip=proc['path']):
-                        if hasattr(d, 'set_processed_image'):
-                            d.set_processed_image(pp, op, ip)
-                        else:
-                            d.set_image(pp, ip)
+                    def _delayed(
+                        d=display,
+                        spec=display_specs[i],
+                        prepared=upload_payload,
+                        ip=proc['path'],
+                    ):
+                        if not _display_work_is_current(
+                            engine,
+                            manager_snapshot,
+                            d,
+                            spec,
+                        ):
+                            logger.debug(
+                                "[ASYNC-PREV][STALE] Suppressed delayed publish "
+                                "screen=%s path=%s",
+                                spec.display_index,
+                                ip,
+                            )
+                            return
+                        _publish_upload_payload(
+                            d,
+                            prepared,
+                            ip,
+                            spec.display_index,
+                        )
                     _schedule_engine_delay(
                         engine,
                         delay_ms,
@@ -1475,10 +1579,13 @@ def load_and_display_image_async_with_metas(
                         reason="previous_image_display_stagger",
                     )
                 else:
-                    if hasattr(display, 'set_processed_image'):
-                        display.set_processed_image(proc['pixmap'], proc['original_pixmap'], proc['path'])
-                    else:
-                        display.set_image(proc['pixmap'], proc['path'])
+                    if not _publish_upload_payload(
+                        display,
+                        upload_payload,
+                        proc['path'],
+                        i,
+                    ):
+                        continue
                 displayed.append(proc['path'])
             if displayed:
                 engine.image_changed.emit(displayed[0])

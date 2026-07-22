@@ -26,7 +26,7 @@ from widgets.spotify_visualizer.spectrum_solid_hysteresis import (
     spectrum_bar_to_segment_float,
     spectrum_bar_to_segment_index,
 )
-from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay
+from widgets.spotify_bars_gl_overlay import SpotifyBarsGLOverlay, SpotifyVisualizerGLRenderer
 from widgets.spotify_visualizer_widget import (
     SpotifyVisualizerAudioWorker,
     SpotifyVisualizerWidget,
@@ -522,7 +522,11 @@ def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
     )
 
     monkeypatch.setattr(tick_pipeline.Shiboken, "isValid", lambda obj: True)
-    monkeypatch.setattr(tick_pipeline, "record_tick_perf", lambda widget, now_ts: None)
+    monkeypatch.setattr(
+        tick_pipeline,
+        "record_tick_perf",
+        lambda widget, now_ts, **_kwargs: None,
+    )
     monkeypatch.setattr(
         tick_pipeline,
         "consume_engine_bars",
@@ -534,7 +538,13 @@ def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
     monkeypatch.setattr(
         tick_pipeline,
         "push_gpu_frame",
-        lambda widget, parent, now_ts, changed, first_frame: False,
+        lambda widget, parent, now_ts, changed, first_frame, **_kwargs: False,
+    )
+    monkeypatch.setattr(tick_pipeline, "is_perf_metrics_enabled", lambda: False)
+    monkeypatch.setattr(
+        tick_pipeline.time,
+        "perf_counter",
+        lambda: (_ for _ in ()).throw(AssertionError("unexpected PERF clock read")),
     )
 
     times = iter([100.0, 100.0, 100.001, 100.005, 100.005, 100.006])
@@ -544,6 +554,57 @@ def test_on_tick_does_not_double_throttle_when_timer_already_paces(monkeypatch):
     tick_pipeline.on_tick(widget)
 
     assert len(consume_calls) == 2
+
+
+def test_renderer_set_state_perf_disabled_avoids_diagnostic_clock(monkeypatch):
+    class _Host:
+        def __init__(self) -> None:
+            self._geometry = QRect(0, 0, 320, 180)
+            self.updated = 0
+
+        def parent(self):
+            return None
+
+        def geometry(self):
+            return QRect(self._geometry)
+
+        def setGeometry(self, rect):
+            self._geometry = QRect(rect)
+
+        def isVisible(self):
+            return True
+
+        def show(self):
+            return None
+
+        def update(self):
+            self.updated += 1
+
+    host = _Host()
+    renderer = SpotifyVisualizerGLRenderer(host, initial_mode="spectrum")
+    renderer._perf_metrics_enabled = False
+    monkeypatch.setattr(
+        "widgets.spotify_bars_gl_overlay.time.perf_counter",
+        lambda: (_ for _ in ()).throw(AssertionError("unexpected PERF clock read")),
+    )
+
+    renderer.set_state(
+        rect=QRect(0, 0, 320, 180),
+        bars=[0.2, 0.4, 0.3],
+        bar_count=3,
+        segments=12,
+        fill_color=QColor(80, 160, 220),
+        border_color=QColor(255, 255, 255),
+        fade=1.0,
+        playing=True,
+        visible=True,
+        static_token=object(),
+    )
+
+    assert host.updated == 1
+    assert renderer._perf_set_state_count == 0
+    assert renderer._perf_update_request_count == 0
+    assert renderer._perf_geometry_change_count == 0
 
 
 def test_latency_logging_skips_disabled_widget(monkeypatch):
@@ -8838,12 +8899,54 @@ def test_spotify_visualizer_emits_perf_metrics(qt_app, qtbot, monkeypatch, caplo
         "snapshot_trail_floats": 0.0,
     }
 
+    snapshot = _th_mod.capture_perf_snapshot(widget, reset=True)
     with caplog.at_level("INFO"):
-        widget._log_perf_snapshot(reset=True)  # type: ignore[attr-defined]
+        _th_mod.emit_perf_snapshot(snapshot)
 
     messages = [r.message for r in caplog.records]
     assert any("[PERF] [SPOTIFY_VIS] Tick metrics" in m for m in messages)
     assert any("[PERF] [SPOTIFY_VIS][BUBBLE] worker_ms=3.20" in m for m in messages)
+
+
+def test_spotify_visualizer_perf_snapshot_logging_uses_io_pool(monkeypatch, caplog):
+    submitted: list[tuple[Callable[[], None], object]] = []
+
+    class _Manager:
+        def submit_io_task(self, func, *, priority):
+            submitted.append((func, priority))
+            return "visualizer_perf_snapshot"
+
+    widget = SimpleNamespace(
+        _thread_manager=_Manager(),
+        _perf_tick_start_ts=0.0,
+        _perf_tick_last_ts=1.0,
+        _perf_tick_frame_count=60,
+        _perf_tick_min_dt=1.0 / 120.0,
+        _perf_tick_max_dt=1.0 / 20.0,
+        _perf_paint_start_ts=None,
+        _perf_paint_last_ts=None,
+        _perf_paint_frame_count=0,
+        _perf_paint_min_dt=0.0,
+        _perf_paint_max_dt=0.0,
+        _perf_audio_lag_last_ms=0.0,
+        _perf_audio_lag_min_ms=0.0,
+        _perf_audio_lag_max_ms=0.0,
+        _bubble_pending_result_skip_count=0,
+        _bubble_last_perf_diag=None,
+        _bar_count=16,
+    )
+    monkeypatch.setattr(tick_helpers, "is_perf_metrics_enabled", lambda: True)
+
+    with caplog.at_level("INFO"):
+        tick_helpers.log_perf_snapshot(widget)
+        assert not caplog.records
+        assert len(submitted) == 1
+        submitted[0][0]()
+
+    assert any(
+        "[PERF] [SPOTIFY_VIS] Tick metrics" in record.message
+        for record in caplog.records
+    )
 
 
 def test_compute_bars_returns_list_or_none(np_module):

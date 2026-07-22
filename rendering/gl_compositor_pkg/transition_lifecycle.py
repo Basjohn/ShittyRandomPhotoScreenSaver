@@ -31,6 +31,8 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._current_anim_id = None
 
     new_pm: Optional[QPixmap] = None
+    new_payload = None
+    new_texture_id = 0
     if snap_to_new:
         for attr_name in (
             "_crossfade",
@@ -51,14 +53,43 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
                 continue
             try:
                 new_pm = state.new_pixmap
+                new_payload = getattr(state, "new_upload_payload", None)
             except Exception as e:
                 logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             if new_pm is not None:
+                manager = getattr(widget, "_texture_manager", None)
+                if manager is not None:
+                    new_texture_id = int(getattr(manager, "new_tex_id", 0) or 0)
                 break
 
-    widget._clear_all_transitions()
+    committed = 0
     if snap_to_new and new_pm is not None:
-        widget._base_pixmap = new_pm
+        assign_base = getattr(widget, "_assign_base_pixmap", None)
+        if callable(assign_base):
+            committed = int(
+                assign_base(
+                    new_pm,
+                    payload=new_payload,
+                    texture_id=new_texture_id or None,
+                )
+                or 0
+            )
+        else:
+            widget._base_pixmap = new_pm
+            widget._base_upload_payload = new_payload
+    widget._clear_all_transitions()
+    if snap_to_new and new_pm is not None and committed <= 0:
+        try:
+            from rendering.gl_compositor_pkg.gl_lifecycle import (
+                _schedule_deferred_base_texture_warmup,
+            )
+
+            _schedule_deferred_base_texture_warmup(widget)
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] Failed to schedule cancelled-base residency warmup",
+                exc_info=True,
+            )
     requester = getattr(widget, "request_scene_update", None)
     if callable(requester):
         requester(source="transition_cancel")

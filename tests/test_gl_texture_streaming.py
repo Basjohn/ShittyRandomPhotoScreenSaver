@@ -7,7 +7,7 @@ Tests cover:
 - ResourceManager GL handle tracking
 """
 import pytest
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage, QPixmap
 
 
 def test_image_upload_view_uses_direct_contiguous_qimage_buffer():
@@ -224,6 +224,139 @@ class TestTextureCache:
         assert manager.old_tex_id == 0
         assert manager.new_tex_id == 0
 
+    def test_cached_texture_lookup_never_uploads_and_refreshes_lru(self, monkeypatch):
+        from rendering.gl_programs.texture_manager import GLTextureManager
+
+        class FakePixmap:
+            def isNull(self):
+                return False
+
+            def cacheKey(self):
+                return 22
+
+        manager = GLTextureManager()
+        manager._texture_cache = {11: 101, 22: 202}
+        manager._texture_lru = [22, 11]
+        monkeypatch.setattr(
+            manager,
+            "upload_pixmap",
+            lambda _pixmap: (_ for _ in ()).throw(
+                AssertionError("cache-only lookup must not upload")
+            ),
+        )
+
+        assert manager.get_cached_texture(FakePixmap()) == 202
+        assert manager._texture_lru == [11, 22]
+        assert manager.get_stats()["hits"] == 1
+
+    def test_cached_texture_lookup_returns_zero_for_nonresident_pixmap(self, monkeypatch):
+        from rendering.gl_programs.texture_manager import GLTextureManager
+
+        class FakePixmap:
+            def isNull(self):
+                return False
+
+            def cacheKey(self):
+                return 99
+
+        manager = GLTextureManager()
+        monkeypatch.setattr(
+            manager,
+            "upload_pixmap",
+            lambda _pixmap: (_ for _ in ()).throw(
+                AssertionError("cache-only lookup must not upload")
+            ),
+        )
+
+        assert manager.get_cached_texture(FakePixmap()) == 0
+        assert manager.get_stats()["misses"] == 0
+
+    def test_committed_texture_survives_pixmap_key_change_and_pair_release(self):
+        from rendering.gl_programs.texture_manager import GLTextureManager
+
+        class FakePixmap:
+            def __init__(self, key):
+                self.key = key
+
+            def isNull(self):
+                return False
+
+            def cacheKey(self):
+                return self.key
+
+        pixmap = FakePixmap(22)
+        manager = GLTextureManager()
+        manager._texture_cache = {11: 101, 22: 202}
+        manager._texture_lru = [11, 22]
+        manager._old_tex_id = 101
+        manager._new_tex_id = 202
+
+        assert manager.commit_cached_texture(pixmap, texture_id=202) == 202
+        pixmap.key = 99
+        manager.release_transition_textures()
+
+        assert manager.old_tex_id == 0
+        assert manager.new_tex_id == 0
+        assert manager.committed_tex_id == 202
+        assert manager.get_committed_texture() == 202
+
+    def test_committed_texture_survives_real_qpixmap_dpr_detach(self, qt_app):
+        from rendering.gl_programs.texture_manager import GLTextureManager
+
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(QColor("steelblue"))
+        original_key = int(pixmap.cacheKey())
+
+        manager = GLTextureManager()
+        manager._texture_cache = {original_key: 77}
+        manager._texture_lru = [original_key]
+
+        assert manager.commit_cached_texture(pixmap, texture_id=77) == 77
+        pixmap.setDevicePixelRatio(1.5)
+
+        assert int(pixmap.cacheKey()) != original_key
+        assert manager.get_committed_texture() == 77
+
+    def test_committed_texture_is_protected_from_lru_eviction(self, monkeypatch):
+        import rendering.gl_programs.texture_manager as texture_module
+
+        class FakePixmap:
+            def __init__(self, key):
+                self.key = key
+
+            def isNull(self):
+                return False
+
+            def cacheKey(self):
+                return self.key
+
+        class FakeGL:
+            def __init__(self):
+                self.deleted = []
+
+            def glDeleteTextures(self, texture_id):
+                self.deleted.append(int(texture_id))
+
+        fake_gl = FakeGL()
+        monkeypatch.setattr(texture_module, "gl", fake_gl)
+        manager = texture_module.GLTextureManager()
+        manager._texture_cache = {
+            1: 101,
+            2: 102,
+            3: 103,
+            4: 104,
+            5: 105,
+        }
+        manager._texture_lru = [2, 1, 3, 4, 5]
+
+        assert manager.commit_cached_texture(FakePixmap(2), texture_id=102) == 102
+        manager._evict_excess_textures()
+
+        assert 2 in manager._texture_cache
+        assert manager.get_committed_texture() == 102
+        assert len(manager._texture_cache) == manager.MAX_CACHED_TEXTURES
+        assert 102 not in fake_gl.deleted
+
     def test_cache_keeps_only_active_and_adjacent_transition_pairs(self, monkeypatch):
         import rendering.gl_programs.texture_manager as texture_module
 
@@ -301,6 +434,8 @@ class TestTextureCache:
         manager._texture_lru = [1]
         manager._texture_resource_ids = {44: "texture_44"}
         manager._texture_sizes = {44: 1024}
+        manager._committed_tex_id = 44
+        manager._committed_cache_key = 1
 
         manager.cleanup_cache()
 
@@ -308,6 +443,7 @@ class TestTextureCache:
         assert fake_gl.deleted == []
         assert manager._texture_cache == {}
         assert manager._texture_resource_ids == {}
+        assert manager.committed_tex_id == 0
 
     def test_abandon_forgets_handles_without_gl_cleanup(self):
         from rendering.gl_programs.texture_manager import GLTextureManager, PBOEntry
@@ -326,6 +462,8 @@ class TestTextureCache:
         manager._texture_lru = [1]
         manager._texture_resource_ids = {44: "texture_44"}
         manager._texture_sizes = {44: 1024}
+        manager._committed_tex_id = 44
+        manager._committed_cache_key = 1
         manager._pbo_pool = [
             PBOEntry(55, 2048, resource_id="pbo_55"),
         ]
@@ -338,6 +476,7 @@ class TestTextureCache:
         ]
         assert manager._texture_cache == {}
         assert manager._pbo_pool == []
+        assert manager.committed_tex_id == 0
 
 
 class TestGLTextureManagerLifecycle:

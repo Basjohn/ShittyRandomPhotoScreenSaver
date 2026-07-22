@@ -39,7 +39,7 @@ def test_program_cache_scopes_numeric_ids_to_current_share_group(monkeypatch):
 
     monkeypatch.setattr(
         program_cache,
-        "_current_share_group_identity",
+        "current_share_group_identity",
         lambda: (current["key"], current["wrapper"]),
     )
     monkeypatch.setattr(program_cache, "_load_gl", lambda: fake_gl)
@@ -67,7 +67,7 @@ def test_program_cache_cleans_only_the_current_share_group(monkeypatch):
 
     monkeypatch.setattr(
         program_cache,
-        "_current_share_group_identity",
+        "current_share_group_identity",
         lambda: (current["key"], current["wrapper"]),
     )
     monkeypatch.setattr(program_cache, "_load_gl", lambda: fake_gl)

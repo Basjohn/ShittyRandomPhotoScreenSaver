@@ -10,6 +10,7 @@ import ctypes
 import sys
 import time
 from typing import TYPE_CHECKING
+from PySide6.QtCore import QThread
 from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
 try:
@@ -54,19 +55,185 @@ def _qt_object_is_valid(obj: object | None) -> bool:
         return True
 
 
-def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> None:
+def assert_qt_affinity(obj: object, *, operation: str) -> None:
+    """Reject Qt/GL work before it can run on the wrong affinity thread."""
+
+    owner_getter = getattr(obj, "thread", None)
+    owner = owner_getter() if callable(owner_getter) else None
+    current = QThread.currentThread()
+    if owner is None or owner is current or owner == current:
+        return
+    logger.critical(
+        "[GL COMPOSITOR][AFFINITY][ERROR] Rejected operation=%s "
+        "object=%s owner_thread=%s current_thread=%s",
+        operation,
+        type(obj).__name__,
+        id(owner),
+        id(current),
+    )
+    raise RuntimeError(
+        f"Qt GL affinity violation before {operation}: "
+        f"owner={id(owner)} current={id(current)}"
+    )
+
+
+def _schedule_deferred_gl_warmup(
+    widget,
+    callback,
+    *,
+    delay_ms: int = 140,
+    on_suppressed=None,
+) -> None:
     """Schedule non-critical GL warmup through the managed delayed-work seam."""
 
-    def _run(w=widget) -> None:
+    lifecycle_generation = int(getattr(widget, "_lifecycle_generation", 0))
+
+    def _run(w=widget, expected_generation=lifecycle_generation) -> None:
         if not _qt_object_is_valid(w):
             logger.warning(
                 "[GL COMPOSITOR][WARNING] Skipped deferred GL warmup for deleted widget callback=%s",
                 getattr(callback, "__name__", repr(callback)),
             )
             return
+        if (
+            int(getattr(w, "_lifecycle_generation", 0)) != expected_generation
+            or bool(getattr(w, "_render_shutdown_requested", False))
+        ):
+            if callable(on_suppressed):
+                on_suppressed(w)
+            logger.debug(
+                "[GL COMPOSITOR] Suppressed stale deferred GL warmup callback=%s "
+                "expected_generation=%s current_generation=%s",
+                getattr(callback, "__name__", repr(callback)),
+                expected_generation,
+                getattr(w, "_lifecycle_generation", 0),
+            )
+            return
+        assert_qt_affinity(w, operation="deferred_gl_warmup")
         callback(w)
 
     ThreadManager.single_shot(max(0, int(delay_ms)), _run)
+
+
+def _schedule_deferred_base_texture_warmup(widget) -> None:
+    """Coalesce one off-paint attempt to restore committed base residency."""
+
+    if (
+        getattr(widget, "_gl_disabled_for_session", False)
+        or getattr(widget, "_render_shutdown_requested", False)
+    ):
+        return
+    base_pixmap = getattr(widget, "_base_pixmap", None)
+    if base_pixmap is None:
+        return
+    try:
+        if base_pixmap.isNull():
+            return
+    except Exception:
+        return
+
+    manager = getattr(widget, "_texture_manager", None)
+    committed_lookup = getattr(manager, "get_committed_texture", None)
+    if callable(committed_lookup) and int(committed_lookup() or 0) > 0:
+        return
+    if getattr(widget, "_base_texture_warmup_pending", False):
+        return
+
+    widget._base_texture_warmup_pending = True
+    _schedule_deferred_gl_warmup(
+        widget,
+        _warm_base_texture_residency,
+        delay_ms=0,
+        on_suppressed=lambda w: setattr(
+            w,
+            "_base_texture_warmup_pending",
+            False,
+        ),
+    )
+
+
+def _warm_base_texture_residency(widget) -> None:
+    """Warm the current base once, then present only after residency is proven."""
+
+    widget._base_texture_warmup_pending = False
+    if (
+        getattr(widget, "_gl_disabled_for_session", False)
+        or getattr(widget, "_render_shutdown_requested", False)
+    ):
+        return
+
+    base_pixmap = getattr(widget, "_base_pixmap", None)
+    if base_pixmap is None:
+        return
+    try:
+        if base_pixmap.isNull():
+            return
+    except Exception:
+        return
+
+    manager = getattr(widget, "_texture_manager", None)
+    committed_lookup = getattr(manager, "get_committed_texture", None)
+    if callable(committed_lookup) and int(committed_lookup() or 0) > 0:
+        return
+
+    release_current = acquire_safe_warmup_context(
+        widget,
+        fallback_label="base texture residency warmup",
+        preserve_live_surface=True,
+    )
+    if release_current is None:
+        logger.warning(
+            "[GL COMPOSITOR][RESIDENCY] Deferred base texture warmup could not "
+            "acquire a safe context"
+        )
+        return
+
+    warmed = False
+    try:
+        warmed = bool(
+            widget._warm_pixmap_textures_in_current_context(
+                base_pixmap,
+                base_pixmap,
+                old_payload=getattr(widget, "_base_upload_payload", None),
+                new_payload=getattr(widget, "_base_upload_payload", None),
+            )
+        )
+    except Exception:
+        logger.debug(
+            "[GL COMPOSITOR] Deferred base texture warmup failed",
+            exc_info=True,
+        )
+    finally:
+        try:
+            release_current()
+        except Exception:
+            logger.debug(
+                "[GL COMPOSITOR] doneCurrent failed after base texture warmup",
+                exc_info=True,
+            )
+
+    manager = getattr(widget, "_texture_manager", None)
+    committed_lookup = getattr(manager, "get_committed_texture", None)
+    committed = (
+        int(committed_lookup() or 0)
+        if callable(committed_lookup)
+        else 0
+    )
+    if (
+        warmed
+        and not getattr(widget, "_render_shutdown_requested", False)
+        and base_pixmap is getattr(widget, "_base_pixmap", None)
+        and committed > 0
+    ):
+        requester = getattr(widget, "request_scene_update", None)
+        if callable(requester):
+            requester(source="base_residency_ready")
+        return
+
+    logger.warning(
+        "[GL COMPOSITOR][RESIDENCY] Deferred base texture warmup completed "
+        "without committed residency"
+    )
 
 
 def _wgl_proc_address(name: str) -> int | None:
@@ -175,6 +342,11 @@ def _has_live_visible_base_surface(widget) -> bool:
 def _ensure_hidden_shared_warmup_context(
     widget,
 ) -> tuple[QOpenGLContext, QOffscreenSurface] | None:
+    assert_qt_affinity(widget, operation="ensure_hidden_warmup_context")
+    lifecycle_generation = int(getattr(widget, "_lifecycle_generation", 0))
+    owner_thread = QThread.currentThread()
+    existing_ctx = None
+    existing_surface = None
     try:
         existing_ctx = getattr(widget, "_deferred_warmup_context", None)
         existing_surface = getattr(widget, "_deferred_warmup_surface", None)
@@ -183,10 +355,19 @@ def _ensure_hidden_shared_warmup_context(
             and isinstance(existing_surface, QOffscreenSurface)
             and existing_ctx.isValid()
             and existing_surface.isValid()
+            and int(getattr(widget, "_deferred_warmup_generation", 0))
+            == lifecycle_generation
+            and getattr(widget, "_deferred_warmup_owner_thread", None)
+            is owner_thread
+            and existing_ctx.thread() is owner_thread
+            and existing_surface.thread() is owner_thread
         ):
             return existing_ctx, existing_surface
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to reuse deferred warmup context", exc_info=True)
+
+    if existing_ctx is not None or existing_surface is not None:
+        _cleanup_deferred_warmup_resources(widget)
 
     share_ctx = None
     try:
@@ -211,13 +392,22 @@ def _ensure_hidden_shared_warmup_context(
         if not context.create() or not context.isValid():
             logger.warning("[GL COMPOSITOR] Shared offscreen context creation failed for deferred warmup")
             try:
+                assert_qt_affinity(
+                    surface,
+                    operation="failed_hidden_warmup.surface.destroy",
+                )
                 surface.destroy()
             except Exception:
                 logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
             return None
 
+        assert_qt_affinity(surface, operation="create_hidden_warmup_surface")
+        assert_qt_affinity(context, operation="create_hidden_warmup_context")
+
         widget._deferred_warmup_context = context
         widget._deferred_warmup_surface = surface
+        widget._deferred_warmup_generation = lifecycle_generation
+        widget._deferred_warmup_owner_thread = owner_thread
         return context, surface
     except Exception:
         logger.debug("[GL COMPOSITOR] Hidden shared deferred warmup context creation failed", exc_info=True)
@@ -243,8 +433,17 @@ def acquire_safe_warmup_context(
     if warmup_target is not None:
         context, surface = warmup_target
         try:
+            assert_qt_affinity(context, operation=f"{fallback_label}:makeCurrent")
+            assert_qt_affinity(surface, operation=f"{fallback_label}:surface")
             if context.makeCurrent(surface):
-                return context.doneCurrent
+                def _release() -> None:
+                    assert_qt_affinity(
+                        context,
+                        operation=f"{fallback_label}:doneCurrent",
+                    )
+                    context.doneCurrent()
+
+                return _release
         except Exception:
             logger.debug(
                 "[GL COMPOSITOR] Failed to make hidden shared context current for %s",
@@ -261,8 +460,16 @@ def acquire_safe_warmup_context(
         return None
 
     try:
+        assert_qt_affinity(widget, operation=f"{fallback_label}:widget.makeCurrent")
         widget.makeCurrent()
-        return widget.doneCurrent
+        def _release_widget() -> None:
+            assert_qt_affinity(
+                widget,
+                operation=f"{fallback_label}:widget.doneCurrent",
+            )
+            widget.doneCurrent()
+
+        return _release_widget
     except Exception:
         logger.debug(
             "[GL COMPOSITOR] Failed to make compositor context current for %s",
@@ -376,6 +583,10 @@ def ensure_transition_program_ready(widget, identity: object) -> bool:
         return True
 
     try:
+        assert_qt_affinity(
+            widget,
+            operation="ensure_transition_program_ready.makeCurrent",
+        )
         widget.makeCurrent()
     except Exception:
         logger.debug("[GL COMPOSITOR] Failed to make compositor context current for transition program ensure", exc_info=True)
@@ -385,6 +596,10 @@ def ensure_transition_program_ready(widget, identity: object) -> bool:
         return bind_transition_program_for_current_context(widget, identity)
     finally:
         try:
+            assert_qt_affinity(
+                widget,
+                operation="ensure_transition_program_ready.doneCurrent",
+            )
             widget.doneCurrent()
         except Exception:
             logger.debug("[GL COMPOSITOR] doneCurrent failed after transition program ensure", exc_info=True)
@@ -516,7 +731,13 @@ def _warm_next_transition_resources(widget) -> None:
                 logger.debug("[GL COMPOSITOR] Deferred transition resource warmup could not bind %s", identity)
                 break
             try:
-                textures_ready = widget._warm_pixmap_textures_in_current_context(base_pixmap, base_pixmap)
+                base_payload = getattr(widget, "_base_upload_payload", None)
+                textures_ready = widget._warm_pixmap_textures_in_current_context(
+                    base_pixmap,
+                    base_pixmap,
+                    old_payload=base_payload,
+                    new_payload=base_payload,
+                )
                 state_ready = textures_ready and widget._warm_transition_state_in_current_context(
                     identity,
                     base_pixmap,
@@ -711,8 +932,8 @@ def init_gl_pipeline(widget) -> None:
         widget._gl_pipeline.box_vbo = widget._geometry_manager.box_vbo
         widget._gl_pipeline.box_vertex_count = widget._geometry_manager.box_vertex_count
         
-        # Initialize texture manager - each compositor needs its own textures since
-        # OpenGL textures are NOT shared between GL contexts
+        # Each compositor keeps local transition pins and PBO state. Immutable
+        # image storage is leased once per verified Qt share group.
         if widget._texture_manager is None:
             widget._texture_manager = GLTextureManager()
 
@@ -723,6 +944,7 @@ def init_gl_pipeline(widget) -> None:
         else:
             logger.info("[GL COMPOSITOR] Shader pipeline initialized (%.1fms)", _pipeline_elapsed)
         schedule_deferred_transition_program_warmup(widget)
+        _schedule_deferred_base_texture_warmup(widget)
     except Exception:
         logger.debug("[GL SHADER] Failed to initialize shader pipeline", exc_info=True)
         widget._gl_disabled_for_session = True
@@ -743,6 +965,8 @@ def _abandon_managed_pipeline_resources(widget) -> None:
 
 
 def cleanup_gl_pipeline(widget) -> None:
+    assert_qt_affinity(widget, operation="cleanup_gl_pipeline")
+    widget._base_texture_warmup_pending = False
     if gl is None or widget._gl_pipeline is None:
         _abandon_managed_pipeline_resources(widget)
         _cleanup_deferred_warmup_resources(widget)
@@ -759,16 +983,19 @@ def cleanup_gl_pipeline(widget) -> None:
         if callable(is_valid) and not is_valid():
             _abandon_managed_pipeline_resources(widget)
             widget._reset_pipeline_state()
+            _cleanup_deferred_warmup_resources(widget)
             return
     except Exception as e:
         logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
 
     try:
+        assert_qt_affinity(widget, operation="cleanup_gl_pipeline.makeCurrent")
         widget.makeCurrent()
     except Exception as e:
         logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
         _abandon_managed_pipeline_resources(widget)
         widget._reset_pipeline_state()
+        _cleanup_deferred_warmup_resources(widget)
         return
 
     try:
@@ -799,6 +1026,7 @@ def cleanup_gl_pipeline(widget) -> None:
         widget._reset_pipeline_state()
     finally:
         try:
+            assert_qt_affinity(widget, operation="cleanup_gl_pipeline.doneCurrent")
             widget.doneCurrent()
         except Exception as e:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
@@ -806,23 +1034,41 @@ def cleanup_gl_pipeline(widget) -> None:
 
 
 def _cleanup_deferred_warmup_resources(widget) -> None:
+    assert_qt_affinity(widget, operation="cleanup_deferred_warmup_resources")
     context = getattr(widget, "_deferred_warmup_context", None)
     surface = getattr(widget, "_deferred_warmup_surface", None)
     try:
         widget._deferred_warmup_context = None
         widget._deferred_warmup_surface = None
+        widget._deferred_warmup_generation = 0
+        widget._deferred_warmup_owner_thread = None
     except Exception:
         pass
     try:
-        if isinstance(surface, QOffscreenSurface):
-            surface.destroy()
-    except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
-    try:
         if isinstance(context, QOpenGLContext):
+            assert_qt_affinity(context, operation="hidden_warmup.doneCurrent")
             context.doneCurrent()
     except Exception:
-        logger.debug("[GL COMPOSITOR] Failed to release deferred warmup context", exc_info=True)
+        logger.error("[GL COMPOSITOR] Failed to release deferred warmup context", exc_info=True)
+    try:
+        if isinstance(surface, QOffscreenSurface):
+            assert_qt_affinity(surface, operation="hidden_warmup.surface.destroy")
+            surface.destroy()
+    except Exception:
+        logger.error("[GL COMPOSITOR] Failed to destroy deferred warmup surface", exc_info=True)
+    for obj, label in ((surface, "surface"), (context, "context")):
+        delete_later = getattr(obj, "deleteLater", None)
+        if not callable(delete_later):
+            continue
+        try:
+            assert_qt_affinity(obj, operation=f"hidden_warmup.{label}.deleteLater")
+            delete_later()
+        except Exception:
+            logger.error(
+                "[GL COMPOSITOR] Failed to retire deferred warmup %s",
+                label,
+                exc_info=True,
+            )
 
 def create_card_flip_program(widget) -> int:
     """Compile and link the basic textured card-flip shader program."""

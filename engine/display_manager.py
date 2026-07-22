@@ -625,6 +625,23 @@ class DisplayManager(QObject):
             except Exception:
                 logger.debug("[DISPLAY_MANAGER] Failed to quiesce display before runtime pause", exc_info=True)
         logger.info("All displays quiesced")
+
+    def resume_all_after_runtime_pause(self) -> bool:
+        """Reopen every reused display before the engine publishes an image."""
+
+        resumed = True
+        for display in self.displays:
+            try:
+                resume = getattr(display, "resume_after_runtime_pause", None)
+                if callable(resume) and not bool(resume()):
+                    resumed = False
+            except Exception:
+                resumed = False
+                logger.error(
+                    "[DISPLAY_MANAGER] Failed to resume display after runtime pause",
+                    exc_info=True,
+                )
+        return resumed
     
     def hide_all(self) -> None:
         """Hide all display widgets (for showing dialogs on top)."""
@@ -917,6 +934,7 @@ class DisplayManager(QObject):
             logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
 
         pending_reddit_urls: list[str] = []
+        retained_displays: list[DisplayWidget] = []
 
         for idx, display in enumerate(self.displays):
             try:
@@ -952,23 +970,13 @@ class DisplayManager(QObject):
                     display.shutdown_render_pipeline("cleanup")
                 except Exception as exc:
                     logger.debug("[DISPLAY_MANAGER] shutdown_render_pipeline failed: %s", exc)
-                # Ensure per-display cleanup (pan & scan, transitions, overlays)
-                try:
-                    display.clear()
-                except Exception as e:
-                    logger.debug(
-                        "Display.clear() failed during cleanup (index=%d, screen_index=%s): %s",
-                        idx,
-                        screen_index,
-                        e,
-                        exc_info=True,
-                    )
-                display.close()
                 cleanup_for_teardown = getattr(display, "cleanup_for_teardown", None)
+                teardown_succeeded = True
                 if callable(cleanup_for_teardown):
                     try:
                         cleanup_for_teardown()
                     except Exception as e:
+                        teardown_succeeded = False
                         logger.warning(
                             "Display teardown failed (index=%d, screen_index=%s): %s",
                             idx,
@@ -976,8 +984,21 @@ class DisplayManager(QObject):
                             e,
                             exc_info=True,
                         )
+                if not teardown_succeeded:
+                    retained_displays.append(display)
+                    logger.critical(
+                        "Display retained after failed owner-thread teardown "
+                        "index=%d screen_index=%s",
+                        idx,
+                        screen_index,
+                    )
+                    continue
+                # Close only after child GL/context cleanup has completed while
+                # the display and QOpenGLWidget native surfaces are still valid.
+                display.close()
                 display.deleteLater()
             except Exception as e:
+                retained_displays.append(display)
                 logger.warning(
                     "Error closing display (index=%d, screen_index=%s): %s",
                     idx,
@@ -986,11 +1007,16 @@ class DisplayManager(QObject):
                     exc_info=True,
                 )
 
-        self.displays.clear()
-        self.current_images.clear()
+        self.displays = retained_displays
+        if not retained_displays:
+            self.current_images.clear()
 
         self._deferred_reddit_urls = pending_reddit_urls
 
+        if retained_displays:
+            raise RuntimeError(
+                f"{len(retained_displays)} display(s) retained after failed GL teardown"
+            )
         logger.info("Display manager cleanup complete")
 
     def take_deferred_reddit_urls(self) -> list[str]:

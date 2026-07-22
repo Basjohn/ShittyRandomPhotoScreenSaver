@@ -88,6 +88,7 @@ class _FakeScreen:
 class _DisplayStub(QWidget):
     def __init__(self, settings_stub: _SettingsStub, *, screen=None, screen_index: int = 0) -> None:
         super().__init__()
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.settings_manager = settings_stub
         self.screen_index = screen_index
         self._screen = screen or QGuiApplication.primaryScreen()
@@ -120,8 +121,19 @@ class _DisplayStub(QWidget):
     def _show_context_menu(self, global_pos) -> None:
         self._context_menu_calls.append(global_pos)
 
-    def set_processed_image(self, processed_pixmap, original_pixmap, image_path: str = "") -> None:
-        self._last_processed = (processed_pixmap, original_pixmap, image_path)
+    def set_processed_image(
+        self,
+        processed_pixmap,
+        original_pixmap,
+        image_path: str = "",
+        upload_payload=None,
+    ) -> None:
+        self._last_processed = (
+            processed_pixmap,
+            original_pixmap,
+            image_path,
+            upload_payload,
+        )
 
     def _setup_widgets(self) -> None:
         self._setup_widgets_calls += 1
@@ -343,6 +355,7 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     state.current_size_payload = {"font_size": 72}
     state.resize_scale = 1.5
     state.shell.set_shell_geometry(updated_rect)
+    expected_replayed_rect = QRect(updated_rect)
 
     assert manager.save_session() is True
     assert settings_stub.saved is True
@@ -357,6 +370,60 @@ def test_custom_layout_manager_saves_and_reapplies_clock_geometry(qtbot):
     assert "display_mode" not in payload["size_payload"]
     assert payload["resize_mode"] == "clock_font"
     assert settings_stub.get_widgets_map()["clock"]["position"] == "Custom"
+
+    assert display._runtime_reload_requests == 0
+    assert clock.isVisible() is True
+    assert clock.geometry() == expected_replayed_rect
+
+
+def test_custom_layout_same_owner_commit_retains_display_and_compositor_identity(qtbot):
+    _reset_custom_layout_manager_state()
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub)
+    qtbot.addWidget(display)
+    display.show()
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+    compositor = object()
+    display._gl_compositor = compositor
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    display_identity = id(display)
+    assert manager.start_session() is True
+    state = manager._shell_states["clock"]
+    state.current_global_rect.translate(24, 18)
+    state.shell.set_shell_geometry(state.current_global_rect)
+
+    assert manager.save_session() is True
+
+    assert id(display) == display_identity
+    assert display._gl_compositor is compositor
+    assert display._runtime_reload_requests == 0
+    assert clock.isVisible() is True
+
+
+def test_custom_layout_topology_change_refuses_partial_commit(qtbot):
+    _reset_custom_layout_manager_state()
+    screen_a = _FakeScreen("topology-a", QRect(0, 0, 800, 600))
+    screen_b = _FakeScreen("topology-b", QRect(0, 0, 1024, 768))
+    settings_stub = _SettingsStub()
+    settings_stub._widgets_map = {"clock": {"position": "Top Right"}}
+    display = _DisplayStub(settings_stub, screen=screen_a)
+    qtbot.addWidget(display)
+    display.show()
+    clock = _EditableTestWidget(display, font_size=48)
+    display.clock_widget = clock
+    qtbot.addWidget(clock)
+
+    manager = CustomLayoutManager(display)
+    _attach_manager(display, manager)
+    assert manager.start_session() is True
+    display._screen = screen_b
+
+    assert manager.save_session() is True
 
     assert display._runtime_reload_requests == 1
     assert clock.isVisible() is False
@@ -1042,6 +1109,7 @@ def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot
     }
     state.resize_scale = 1.35
     state.shell.set_shell_geometry(updated_rect)
+    expected_replayed_rect = QRect(updated_rect)
 
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -1055,7 +1123,9 @@ def test_custom_layout_manager_saves_and_reapplies_spotify_volume_geometry(qtbot
         "track_width": 28,
         "track_margin": 10,
     }
-    assert display._runtime_reload_requests == 1
+    assert display._runtime_reload_requests == 0
+    assert volume.isVisible() is True
+    assert volume.geometry() == expected_replayed_rect
 
 
 def test_custom_layout_manager_volume_save_does_not_clobber_media_monitor_route(qtbot):
@@ -1163,6 +1233,7 @@ def test_custom_layout_manager_media_shell_reset_visualizer_recovers_edit_rect_w
     local_rect = QRect(display.mapFromGlobal(state.current_global_rect.topLeft()), state.current_global_rect.size())
     assert local_rect == QRect(160, 60, 320, 120)
     assert state.current_size_payload == {"width": 320, "height": 120}
+    expected_replayed_rect = QRect(state.current_global_rect)
 
     assert manager.save_session() is True
     widgets_map = settings_stub.get_widgets_map()
@@ -1171,7 +1242,9 @@ def test_custom_layout_manager_media_shell_reset_visualizer_recovers_edit_rect_w
     saved_layout = widgets_map["custom_layout"]["displays"][get_screen_signature(screen)]
     assert "spotify_visualizer" in saved_layout
     assert settings_stub.saved is True
-    assert display._runtime_reload_requests == 1
+    assert display._runtime_reload_requests == 0
+    assert visualizer.isVisible() is True
+    assert visualizer.geometry() == expected_replayed_rect
 
 
 def test_custom_layout_manager_media_shell_reset_visualizer_creates_transparent_shell_without_live_widget(qtbot):
@@ -2065,7 +2138,10 @@ def test_custom_layout_manager_apply_saved_layouts_clamps_rect_within_display_bo
 def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
-    display = _DisplayStub(settings_stub)
+    display = _DisplayStub(
+        settings_stub,
+        screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)),
+    )
     qtbot.addWidget(display)
     display.show()
 
@@ -2100,7 +2176,10 @@ def test_custom_layout_manager_live_drag_snaps_to_peer_guides(qtbot):
 def test_custom_layout_manager_live_drag_guides_without_forcing_snap(qtbot):
     _reset_custom_layout_manager_state()
     settings_stub = _SettingsStub()
-    display = _DisplayStub(settings_stub)
+    display = _DisplayStub(
+        settings_stub,
+        screen=_FakeScreen("screen0", QRect(0, 0, 800, 600)),
+    )
     qtbot.addWidget(display)
     display.show()
 
@@ -2514,7 +2593,7 @@ def test_custom_layout_manager_same_display_near_edge_does_not_transfer(qtbot, m
     assert state.shell._transfer_blocked is False
 
     assert manager.save_session() is True
-    assert display1._runtime_reload_requests == 1
+    assert display1._runtime_reload_requests == 0
 
 
 def test_custom_layout_manager_saves_and_reapplies_reddit_font_resize(qtbot):

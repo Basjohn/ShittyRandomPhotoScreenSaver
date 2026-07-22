@@ -169,27 +169,150 @@ def process_heartbeat(widget: Any, now_ts: float) -> None:
 # Bubble simulation dispatch
 # ------------------------------------------------------------------
 
-def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
-    """Advance Dev Curve runtime and publish sampled curve arrays."""
-    if widget._vis_mode_str != 'devcurve':
+def _devcurve_compute_config(widget: Any) -> dict[str, Any]:
+    """Return a revision-keyed immutable solver configuration snapshot."""
+
+    revision = int(getattr(widget, "_gpu_static_revision", 0) or 0)
+    cached = getattr(widget, "_devcurve_compute_config", None)
+    if (
+        isinstance(cached, dict)
+        and getattr(widget, "_devcurve_compute_config_token", None) == revision
+    ):
+        return cached
+
+    default_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
+    layer_settings: dict[str, dict[str, float | bool]] = {}
+    layer_shape_nodes: dict[str, list] = {}
+    for index, source in enumerate(("bass", "vocals", "mids", "transients"), start=1):
+        layer_settings[source] = {
+            "enabled": bool(getattr(widget, f"_devcurve_layer_{source}_enabled", True)),
+            "power": float(getattr(widget, f"_devcurve_layer_{source}_power", 1.0)),
+            "offset": float(getattr(widget, f"_devcurve_layer_{source}_offset", 0.0)),
+            "order": int(getattr(widget, f"_devcurve_layer_{source}_order", index)),
+        }
+        nodes = getattr(widget, f"_devcurve_layer_{source}_shape_nodes", default_nodes)
+        layer_shape_nodes[source] = [list(node) for node in nodes]
+
+    cached = {
+        "layer_shape_nodes": layer_shape_nodes,
+        "base_level": float(getattr(widget, "_devcurve_base_level", 0.58)),
+        "motion_power": float(getattr(widget, "_devcurve_motion_power", 1.0)),
+        "idle_motion": float(getattr(widget, "_devcurve_idle_motion", 0.20)),
+        "idle_speed": float(getattr(widget, "_devcurve_idle_speed", 0.60)),
+        "smoothness": float(getattr(widget, "_devcurve_smoothness", 0.55)),
+        "growth": float(getattr(widget, "_devcurve_growth", 3.0)),
+        "layer_settings": layer_settings,
+    }
+    widget._devcurve_compute_config = cached
+    widget._devcurve_compute_config_token = revision
+    return cached
+
+
+def _publish_devcurve_frame(widget: Any, pending: tuple, now_ts: float) -> None:
+    """Publish one completed worker frame on the ordinary GUI tick."""
+
+    _epoch, state, frame, dt, playing, _solve_ts, worker_ms = pending
+    if widget._vis_mode_str != "devcurve" or not isinstance(frame, dict):
         return
 
-    from widgets.spotify_visualizer.devcurve_runtime import (
-        DevCurveRuntimeState,
-        solve_devcurve_frame,
+    widget._devcurve_runtime_state = state
+    layer_map = frame.get("layers", {})
+    if not isinstance(layer_map, dict):
+        layer_map = {}
+    widget._devcurve_sample_count = int(frame.get("sample_count", 0))
+    widget._devcurve_curve_bass = layer_map.get("bass", [])
+    widget._devcurve_curve_vocals = layer_map.get("vocals", [])
+    widget._devcurve_curve_mids = layer_map.get("mids", [])
+    widget._devcurve_curve_transients = layer_map.get("transients", [])
+    draw_order = frame.get("draw_order", ["bass", "vocals", "mids", "transients"])
+    if isinstance(draw_order, list) and len(draw_order) == 4:
+        widget._devcurve_draw_order = draw_order
+    widget._devcurve_foreground_layer = str(frame.get("foreground_layer", "") or "")
+    widget._devcurve_foreground_layer_id = int(frame.get("foreground_layer_id", -1))
+
+    slots = frame.get("specular_slots", [])
+    zero_slot = [0.0, 0.0, 0.0, 0.0]
+    for index in range(3):
+        slot = slots[index] if isinstance(slots, list) and index < len(slots) else zero_slot
+        if not isinstance(slot, list) or len(slot) < 4:
+            slot = zero_slot
+        setattr(widget, f"_devcurve_specular_slot{index}", slot)
+
+    widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
+    widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
+    widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
+    widget._devcurve_foreground_travel_rate = float(frame.get("foreground_travel_rate", 0.0))
+    widget._devcurve_foreground_travel_pos = float(frame.get("foreground_travel_pos", 0.0))
+    widget._devcurve_specular_travel_rate = float(frame.get("specular_travel_rate", 0.0))
+    current_activity = float(
+        getattr(widget, "_devcurve_specular_activity_alpha", 1.0 if playing else 0.0)
     )
+    target_activity = 1.0 if playing else 0.0
+    blend = max(0.0, min(1.0, float(dt) / 0.85))
+    widget._devcurve_specular_activity_alpha = (
+        current_activity + (target_activity - current_activity) * blend
+    )
+    widget._devcurve_last_perf_diag = {"worker_total_ms": float(worker_ms)}
+
+    if is_viz_diagnostics_enabled() and logger.isEnabledFor(logging.DEBUG):
+        last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
+        if now_ts - last_diag >= 0.80:
+            energies = frame.get("energies", {})
+            if not isinstance(energies, dict):
+                energies = {}
+            logger.debug(
+                "[SPOTIFY_VIS][DEVCURVE] mode=layered worker_ms=%.2f "
+                "idle_amp=%.4f active_amp=%.4f smooth_step=%.5f fg=%s "
+                "E[b=%.3f v=%.3f m=%.3f t=%.3f]",
+                float(worker_ms),
+                widget._devcurve_idle_amplitude,
+                widget._devcurve_active_amplitude,
+                widget._devcurve_smoothness_max_step,
+                widget._devcurve_foreground_layer,
+                float(energies.get("bass", 0.0)),
+                float(energies.get("vocals", 0.0)),
+                float(energies.get("mids", 0.0)),
+                float(energies.get("transients", 0.0)),
+            )
+            widget._devcurve_diag_last_log_ts = now_ts
+
+
+def dispatch_devcurve_field(widget: Any, now_ts: float) -> bool:
+    """Publish/submit Dev Curve work and report first-frame readiness."""
+
+    take_pending = getattr(widget, "_take_pending_devcurve_result", None)
+    if callable(take_pending):
+        pending = take_pending()
+        if pending is not None:
+            _publish_devcurve_frame(widget, pending, now_ts)
+
+    if widget._vis_mode_str != "devcurve":
+        return True
+
+    frame_ready = bool(getattr(widget, "_devcurve_curve_bass", []))
+
+    if (
+        widget._mode_teardown_block_until_ready
+        or widget._thread_manager is None
+    ):
+        return frame_ready
+
+    has_work = getattr(widget, "_has_pending_devcurve_work", None)
+    if callable(has_work) and has_work():
+        return frame_ready
+
+    from widgets.spotify_visualizer.devcurve_runtime import DevCurveRuntimeState
     from widgets.spotify_visualizer.energy_bands import EnergyBands
 
-    state = getattr(widget, '_devcurve_runtime_state', None)
+    state = getattr(widget, "_devcurve_runtime_state", None)
     if state is None:
         state = DevCurveRuntimeState()
         widget._devcurve_runtime_state = state
 
-    prev_ts = getattr(widget, '_devcurve_last_tick_ts', 0.0) or 0.0
+    prev_ts = float(getattr(widget, "_devcurve_last_tick_ts", 0.0) or 0.0)
     widget._devcurve_last_tick_ts = now_ts
-    dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0 else 0.016
+    dt = max(0.001, min(0.1, now_ts - prev_ts)) if prev_ts > 0.0 else 0.016
     playing = bool(widget._spotify_playing)
-
     engine = widget._engine
     transient_bus = None
     if playing:
@@ -200,155 +323,40 @@ def dispatch_devcurve_field(widget: Any, now_ts: float) -> None:
             energy = None
             transient_bus = None
     else:
-        # Bubble/Sine idle path parity: deterministic low-amplitude motion source
-        # while paused so shape stability can be tuned visually.
-        idle_phase = now_ts
-        idle_bass = 0.018 + 0.010 * (0.5 + 0.5 * math.sin(idle_phase * 0.58))
-        idle_mid = 0.015 + 0.007 * (0.5 + 0.5 * math.sin(idle_phase * 0.41 + 1.3))
-        idle_high = 0.012 + 0.005 * (0.5 + 0.5 * math.sin(idle_phase * 0.71 + 2.1))
         energy = EnergyBands(
-            bass=idle_bass,
-            mid=idle_mid,
-            high=idle_high,
+            bass=0.018 + 0.010 * (0.5 + 0.5 * math.sin(now_ts * 0.58)),
+            mid=0.015 + 0.007 * (0.5 + 0.5 * math.sin(now_ts * 0.41 + 1.3)),
+            high=0.012 + 0.005 * (0.5 + 0.5 * math.sin(now_ts * 0.71 + 2.1)),
             overall=0.018,
         )
 
-    layer_settings = {
-        "bass": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_bass_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_bass_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_bass_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_bass_order", 1)),
-        },
-        "vocals": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_vocals_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_vocals_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_vocals_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_vocals_order", 2)),
-        },
-        "mids": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_mids_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_mids_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_mids_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_mids_order", 3)),
-        },
-        "transients": {
-            "enabled": bool(getattr(widget, "_devcurve_layer_transients_enabled", True)),
-            "power": float(getattr(widget, "_devcurve_layer_transients_power", 1.0)),
-            "offset": float(getattr(widget, "_devcurve_layer_transients_offset", 0.0)),
-            "order": int(getattr(widget, "_devcurve_layer_transients_order", 4)),
-        },
-    }
-    default_nodes = [[0.0, 0.58], [0.35, 0.64], [0.70, 0.52], [1.0, 0.60]]
-    layer_shape_nodes = {
-        "bass": list(getattr(widget, "_devcurve_layer_bass_shape_nodes", default_nodes)),
-        "vocals": list(getattr(widget, "_devcurve_layer_vocals_shape_nodes", default_nodes)),
-        "mids": list(getattr(widget, "_devcurve_layer_mids_shape_nodes", default_nodes)),
-        "transients": list(getattr(widget, "_devcurve_layer_transients_shape_nodes", default_nodes)),
-    }
-
+    solve_kwargs = dict(_devcurve_compute_config(widget))
+    solve_kwargs.update(
+        dt=dt,
+        now_ts=now_ts,
+        energy_bands=energy,
+        transient_bus=transient_bus,
+        playing=playing,
+    )
+    epoch = int(getattr(widget, "_devcurve_worker_epoch", 0) or 0)
+    begin_compute = getattr(widget, "_begin_devcurve_compute", None)
+    if not callable(begin_compute) or not begin_compute(epoch):
+        return frame_ready
     try:
-        frame = solve_devcurve_frame(
+        widget._thread_manager.submit_compute_task(
+            widget._devcurve_compute_worker,
+            epoch,
             state,
-            dt=dt,
-            now_ts=now_ts,
-            layer_shape_nodes=layer_shape_nodes,
-            base_level=float(getattr(widget, "_devcurve_base_level", 0.58)),
-            motion_power=float(getattr(widget, "_devcurve_motion_power", 1.0)),
-            idle_motion=float(getattr(widget, "_devcurve_idle_motion", 0.20)),
-            idle_speed=float(getattr(widget, "_devcurve_idle_speed", 0.60)),
-            smoothness=float(getattr(widget, "_devcurve_smoothness", 0.55)),
-            growth=float(getattr(widget, "_devcurve_growth", 3.0)),
-            layer_settings=layer_settings,
-            energy_bands=energy,
-            transient_bus=transient_bus,
-            playing=playing,
+            solve_kwargs,
+            callback=widget._devcurve_compute_done,
+            task_id=f"devcurve_sim_{id(widget)}",
         )
     except Exception:
-        logger.debug("[SPOTIFY_VIS][DEVCURVE] runtime solve failed", exc_info=True)
-        return
-
-    layer_map = frame.get("layers", {}) if isinstance(frame.get("layers", {}), dict) else {}
-    widget._devcurve_sample_count = int(frame.get("sample_count", 0))
-    widget._devcurve_curve_bass = list(layer_map.get("bass", []))
-    widget._devcurve_curve_vocals = list(layer_map.get("vocals", []))
-    widget._devcurve_curve_mids = list(layer_map.get("mids", []))
-    widget._devcurve_curve_transients = list(layer_map.get("transients", []))
-    draw_order = frame.get("draw_order", ["bass", "vocals", "mids", "transients"])
-    if isinstance(draw_order, list) and len(draw_order) == 4:
-        widget._devcurve_draw_order = list(draw_order)
-    widget._devcurve_foreground_layer = str(frame.get("foreground_layer", "") or "")
-    widget._devcurve_foreground_layer_id = int(frame.get("foreground_layer_id", -1))
-    slots = frame.get("specular_slots", [])
-    if isinstance(slots, list) and slots:
-        s0 = slots[0] if len(slots) > 0 and isinstance(slots[0], list) else [0.0, 0.0, 0.0, 0.0]
-        s1 = slots[1] if len(slots) > 1 and isinstance(slots[1], list) else [0.0, 0.0, 0.0, 0.0]
-        s2 = slots[2] if len(slots) > 2 and isinstance(slots[2], list) else [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot0 = [
-            max(-1.5, min(2.5, float(s0[0] if len(s0) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s0[1] if len(s0) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s0[2] if len(s0) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s0[3] if len(s0) > 3 else 0.0))),
-        ]
-        widget._devcurve_specular_slot1 = [
-            max(-1.5, min(2.5, float(s1[0] if len(s1) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s1[1] if len(s1) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s1[2] if len(s1) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s1[3] if len(s1) > 3 else 0.0))),
-        ]
-        widget._devcurve_specular_slot2 = [
-            max(-1.5, min(2.5, float(s2[0] if len(s2) > 0 else 0.0))),
-            max(0.0, min(1.0, float(s2[1] if len(s2) > 1 else 0.0))),
-            max(0.0, min(1.0, float(s2[2] if len(s2) > 2 else 0.0))),
-            max(0.0, min(1.0, float(s2[3] if len(s2) > 3 else 0.0))),
-        ]
-    else:
-        widget._devcurve_specular_slot0 = [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot1 = [0.0, 0.0, 0.0, 0.0]
-        widget._devcurve_specular_slot2 = [0.0, 0.0, 0.0, 0.0]
-    widget._devcurve_smoothness_max_step = float(frame.get("smoothness_max_step", 0.0))
-    widget._devcurve_active_amplitude = float(frame.get("active_amplitude", 0.0))
-    widget._devcurve_idle_amplitude = float(frame.get("idle_amplitude", 0.0))
-    widget._devcurve_foreground_travel_rate = float(frame.get("foreground_travel_rate", 0.0))
-    widget._devcurve_foreground_travel_pos = float(frame.get("foreground_travel_pos", 0.0))
-    widget._devcurve_specular_travel_rate = float(frame.get("specular_travel_rate", 0.0))
-    current_specular_activity = float(
-        getattr(widget, "_devcurve_specular_activity_alpha", 1.0 if playing else 0.0)
-    )
-    target_specular_activity = 1.0 if playing else 0.0
-    fade_seconds = 0.85
-    blend = max(0.0, min(1.0, dt / fade_seconds))
-    widget._devcurve_specular_activity_alpha = (
-        current_specular_activity
-        + (target_specular_activity - current_specular_activity) * blend
-    )
-
-    if is_viz_diagnostics_enabled() and logger.isEnabledFor(logging.DEBUG):
-        last_diag = float(getattr(widget, "_devcurve_diag_last_log_ts", 0.0) or 0.0)
-        if now_ts - last_diag >= 0.80:
-            e = frame.get("energies", {}) if isinstance(frame.get("energies", {}), dict) else {}
-            logger.debug(
-                (
-                    "[SPOTIFY_VIS][DEVCURVE] mode=%s idle_amp=%.4f active_amp=%.4f smooth_step=%.5f "
-                    "fg=%s E[b=%.3f v=%.3f m=%.3f t=%.3f] fg_rate=%.4f fg_pos=%.3f spec_rate=%.4f S[x=%.3f/%.3f/%.3f]"
-                ),
-                "layered",
-                widget._devcurve_idle_amplitude,
-                widget._devcurve_active_amplitude,
-                widget._devcurve_smoothness_max_step,
-                str(getattr(widget, "_devcurve_foreground_layer", "")),
-                float(e.get("bass", 0.0)),
-                float(e.get("vocals", 0.0)),
-                float(e.get("mids", 0.0)),
-                float(e.get("transients", 0.0)),
-                float(getattr(widget, "_devcurve_foreground_travel_rate", 0.0)),
-                float(getattr(widget, "_devcurve_foreground_travel_pos", 0.0)),
-                float(getattr(widget, "_devcurve_specular_travel_rate", 0.0)),
-                float((getattr(widget, "_devcurve_specular_slot0", [0.0]) or [0.0])[0]),
-                float((getattr(widget, "_devcurve_specular_slot1", [0.0]) or [0.0])[0]),
-                float((getattr(widget, "_devcurve_specular_slot2", [0.0]) or [0.0])[0]),
-            )
-            widget._devcurve_diag_last_log_ts = now_ts
+        cancel_claim = getattr(widget, "_cancel_devcurve_compute_claim", None)
+        if callable(cancel_claim):
+            cancel_claim(epoch)
+        logger.warning("[SPOTIFY_VIS][DEVCURVE] compute submission failed", exc_info=True)
+    return frame_ready
 
 
 def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
@@ -573,9 +581,16 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
 # Perf metrics inline accounting
 # ------------------------------------------------------------------
 
-def record_tick_perf(widget: Any, now_ts: float) -> None:
+def record_tick_perf(
+    widget: Any,
+    now_ts: float,
+    *,
+    perf_enabled: Optional[bool] = None,
+) -> None:
     """Inline PERF metrics with gap filtering (perf-gated)."""
-    if not is_perf_metrics_enabled():
+    if perf_enabled is None:
+        perf_enabled = is_perf_metrics_enabled()
+    if not perf_enabled:
         return
 
     if widget._perf_tick_last_ts is not None:
@@ -600,6 +615,18 @@ def record_tick_perf(widget: Any, now_ts: float) -> None:
     if widget._perf_last_log_ts is None or (now_ts - widget._perf_last_log_ts) >= 5.0:
         widget._log_perf_snapshot(reset=False)
         widget._perf_last_log_ts = now_ts
+
+
+def _record_perf_phase(
+    phases: dict[str, float],
+    phase_start: float,
+    name: str,
+) -> float:
+    """Record one diagnostics-only phase and return the next start time."""
+
+    now_perf = time.perf_counter()
+    phases[name] = (now_perf - phase_start) * 1000.0
+    return now_perf
 
 
 # ------------------------------------------------------------------
@@ -760,6 +787,8 @@ def push_gpu_frame(
     now_ts: float,
     changed: bool,
     first_frame: bool,
+    *,
+    perf_enabled: Optional[bool] = None,
 ) -> bool:
     """Push a visualizer frame to the GPU overlay if available.
 
@@ -797,11 +826,22 @@ def push_gpu_frame(
     if not should_push:
         return False
 
-    _gpu_push_start = time.time()
+    if perf_enabled is None:
+        perf_enabled = is_perf_metrics_enabled()
+    gpu_push_start = time.perf_counter() if perf_enabled else 0.0
+    gpu_phase_start = gpu_push_start
+    extra_build_ms = 0.0
+    primer_ms = 0.0
+    packet_build_ms = 0.0
+    parent_publish_ms = 0.0
     mode_str = widget._vis_mode_str
 
     from widgets.spotify_visualizer.config_applier import build_gpu_push_extra_kwargs
     extra = build_gpu_push_extra_kwargs(widget, mode_str, widget._engine)
+    if perf_enabled:
+        now_perf = time.perf_counter()
+        extra_build_ms = (now_perf - gpu_phase_start) * 1000.0
+        gpu_phase_start = now_perf
 
     first_frame_probe_key = None
     primer_problems: list[str] = []
@@ -829,6 +869,10 @@ def push_gpu_frame(
                 mode_str,
                 ",".join(primer_problems),
             )
+    if perf_enabled:
+        now_perf = time.perf_counter()
+        primer_ms = (now_perf - gpu_phase_start) * 1000.0
+        gpu_phase_start = now_perf
 
     if (
         mode_str == 'sine_wave'
@@ -886,8 +930,16 @@ def push_gpu_frame(
             {},
         ).get(mode_str)
         packet.extra_kwargs = extra
+        if perf_enabled:
+            now_perf = time.perf_counter()
+            packet_build_ms = (now_perf - gpu_phase_start) * 1000.0
+            gpu_phase_start = now_perf
         used_gpu = push_packet(packet)
     else:
+        if perf_enabled:
+            now_perf = time.perf_counter()
+            packet_build_ms = (now_perf - gpu_phase_start) * 1000.0
+            gpu_phase_start = now_perf
         used_gpu = parent.push_spotify_visualizer_frame(
             bars=widget._display_bars,
             bar_count=widget._bar_count,
@@ -908,9 +960,23 @@ def push_gpu_frame(
             border_width_px=border_width_px,
             **extra,
         )
-    _gpu_push_elapsed = (time.time() - _gpu_push_start) * 1000.0
-    if _gpu_push_elapsed > 20.0 and is_perf_metrics_enabled():
-        logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", _gpu_push_elapsed)
+    if perf_enabled:
+        gpu_push_end = time.perf_counter()
+        parent_publish_ms = (gpu_push_end - gpu_phase_start) * 1000.0
+        gpu_push_elapsed = (gpu_push_end - gpu_push_start) * 1000.0
+        if gpu_push_elapsed > 20.0:
+            logger.warning("[PERF] [SPOTIFY_VIS] Slow GPU push: %.2fms", gpu_push_elapsed)
+            logger.warning(
+                "[PERF] [SPOTIFY_VIS] GPU push breakdown total_ms=%.2f mode=%s "
+                "extra_build_ms=%.2f primer_ms=%.2f packet_build_ms=%.2f "
+                "parent_publish_ms=%.2f",
+                gpu_push_elapsed,
+                mode_str,
+                extra_build_ms,
+                primer_ms,
+                packet_build_ms,
+                parent_publish_ms,
+            )
 
     if first_frame and used_gpu and not primer_problems:
         log_render = getattr(widget, "_log_active_render_state_snapshot", None)
@@ -1163,18 +1229,16 @@ def on_tick(widget: Any) -> None:
     Consumes the latest bar frame from the engine and smoothly
     interpolates towards it for visual stability.
     """
-    _tick_entry_ts = time.time()
-    _tick_phase_start = time.perf_counter()
-    _tick_phase_ms: dict[str, float] = {}
-
-    def _record_tick_phase(name: str) -> None:
-        nonlocal _tick_phase_start
-        now_perf = time.perf_counter()
-        _tick_phase_ms[name] = (now_perf - _tick_phase_start) * 1000.0
-        _tick_phase_start = now_perf
+    perf_enabled = is_perf_metrics_enabled()
+    tick_entry_ts = time.perf_counter() if perf_enabled else 0.0
+    tick_phase_start = tick_entry_ts
+    tick_phase_ms: Optional[dict[str, float]] = {} if perf_enabled else None
 
     _ensure_fresh_generation_state(widget)
-    _record_tick_phase("fresh_state")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "fresh_state"
+        )
 
     # PERFORMANCE: Fast validity check without nested try/except
     if not Shiboken.isValid(widget):
@@ -1183,7 +1247,10 @@ def on_tick(widget: Any) -> None:
             widget._bars_timer = None
         widget._enabled = False
         return
-    _record_tick_phase("validity")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "validity"
+        )
 
     if not widget._enabled:
         return
@@ -1204,7 +1271,10 @@ def on_tick(widget: Any) -> None:
 
     max_fps = widget._resolve_max_fps(transition_ctx)
     widget._update_timer_interval(max_fps)
-    _record_tick_phase("context")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "context"
+        )
 
     last = widget._last_update_ts
     dt_since_last = 0.0
@@ -1218,56 +1288,94 @@ def on_tick(widget: Any) -> None:
         widget._log_tick_spike(dt_since_last, transition_ctx)
 
     # Perf metrics accounting
-    record_tick_perf(widget, now_ts)
-    _record_tick_phase("perf_accounting")
+    record_tick_perf(widget, now_ts, perf_enabled=perf_enabled)
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "perf_accounting"
+        )
 
     # Consume bars from engine
     changed, _any_nonzero = consume_engine_bars(widget, now_ts)
-    _record_tick_phase("engine_consume")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "engine_consume"
+        )
     # Let paused mode transitions progress even when fresh-engine wait short-circuits.
     widget._check_mode_teardown_ready(widget._engine, now_ts)
-    _record_tick_phase("teardown_check")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "teardown_check"
+        )
     # If consume returned (False, False) while waiting for fresh engine frame, bail
     if widget._waiting_for_fresh_engine_frame and not changed and not _any_nonzero:
         return
 
     # Heartbeat transient detection for sine mode
     process_heartbeat(widget, now_ts)
-    _record_tick_phase("heartbeat")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "heartbeat"
+        )
 
     consume_pending_bubble = getattr(widget, "_consume_pending_bubble_result", None)
     if getattr(widget, "_vis_mode_str", "") == "bubble" and callable(consume_pending_bubble):
         consume_pending_bubble()
-    _record_tick_phase("bubble_consume")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "bubble_consume"
+        )
 
     if widget._mode_teardown_block_until_ready and not widget._mode_transition_ready:
         return
 
     # Bubble simulation dispatch
     dispatch_bubble_simulation(widget, now_ts)
-    _record_tick_phase("bubble_dispatch")
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "bubble_dispatch"
+        )
 
-    # DEVCURVE liquid field solve (UI-thread, cheap: ~32 sources)
-    dispatch_devcurve_field(widget, now_ts)
-    _record_tick_phase("devcurve_dispatch")
+    # Dev Curve publishes the last completed COMPUTE result and submits at
+    # most one new solve; no spline work runs in this GUI tick.
+    devcurve_frame_ready = dispatch_devcurve_field(widget, now_ts)
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "devcurve_dispatch"
+        )
+    if not devcurve_frame_ready:
+        return
 
     # GPU frame push
     first_frame = not widget._has_pushed_first_frame
-    used_gpu = push_gpu_frame(widget, parent, now_ts, changed, first_frame)
-    _record_tick_phase("gpu_push")
+    used_gpu = push_gpu_frame(
+        widget,
+        parent,
+        now_ts,
+        changed,
+        first_frame,
+        perf_enabled=perf_enabled,
+    )
+    if tick_phase_ms is not None:
+        tick_phase_start = _record_perf_phase(
+            tick_phase_ms, tick_phase_start, "gpu_push"
+        )
 
     # PERF: Log slow ticks
-    _tick_elapsed = (time.time() - _tick_entry_ts) * 1000.0
-    if _tick_elapsed > 50.0 and is_perf_metrics_enabled():
-        logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", _tick_elapsed)
+    tick_elapsed = (
+        (time.perf_counter() - tick_entry_ts) * 1000.0
+        if perf_enabled
+        else 0.0
+    )
+    if tick_elapsed > 50.0 and tick_phase_ms is not None:
+        logger.warning("[PERF] [SPOTIFY_VIS] Slow _on_tick: %.2fms", tick_elapsed)
         phase_payload = " ".join(
             f"{name}_ms={elapsed_ms:.2f}"
-            for name, elapsed_ms in _tick_phase_ms.items()
+            for name, elapsed_ms in tick_phase_ms.items()
         )
         logger.warning(
             "[PERF] [SPOTIFY_VIS] Tick phase breakdown total_ms=%.2f mode=%s "
             "transition_active=%s changed=%s first_frame=%s used_gpu=%s %s",
-            _tick_elapsed,
+            tick_elapsed,
             getattr(widget, "_vis_mode_str", "unknown"),
             is_transition_active,
             changed,

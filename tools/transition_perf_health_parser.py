@@ -19,6 +19,7 @@ _KV_RE = re.compile(r"([A-Za-z_]+)=([^,\s]+)")
 _TIME_RE = re.compile(r"(?P<ts>(?:\d{4}-\d{2}-\d{2} )?\d{2}:\d{2}:\d{2})")
 _GL_ANIM_RE = re.compile(r"\[PERF\] \[GL ANIM\] (?P<name>.+?) metrics: (?P<payload>.*)")
 _GL_PAINT_RE = re.compile(r"\[PERF\] \[GL PAINT\] (?P<name>.+?) metrics: (?P<payload>.*)")
+_GL_PAINT_PATH_RE = re.compile(r"\[PERF\] \[GL PAINT PATH\] (?P<payload>.*)")
 _GL_RENDER_RE = re.compile(r"\[PERF\] \[GL RENDER\] Timer metrics: (?P<payload>.*)")
 _ANIM_MANAGER_RE = re.compile(r"\[PERF\] \[ANIM\] AnimationManager metrics: (?P<payload>.*)")
 _TIMER_GAP_RE = re.compile(
@@ -28,6 +29,11 @@ _SPOTIFY_LATENCY_RE = re.compile(r"\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>
 _SPOTIFY_SEVERE_LATENCY_RE = re.compile(r"\[!!!!\]\[SPOTIFY_VIS\]\[LATENCY\] lag_ms=(?P<lag_ms>[0-9.]+)")
 _SPOTIFY_TICK_SPIKE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick dt spike_ms=(?P<dt_ms>[0-9.]+)")
 _SPOTIFY_TICK_PHASE_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] Tick phase breakdown (?P<detail>.*)")
+_SPOTIFY_GPU_PUSH_RE = re.compile(r"\[PERF\] \[SPOTIFY_VIS\] GPU push breakdown (?P<detail>.*)")
+_SPOTIFY_DEVCURVE_WORKER_RE = re.compile(
+    r"\[PERF\] \[SPOTIFY_VIS\]\[DEVCURVE\] worker_ms=(?P<worker_ms>[0-9.]+) "
+    r"pending=(?P<pending>True|False)"
+)
 _SPOTIFY_OVERLAY_PERF_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[OVERLAY\](?P<detail>.*)")
 _SPOTIFY_OVERLAY_MICROGAP_RE = re.compile(r"\[PERF\]\[SPOTIFY_VIS\]\[MICROGAP\](?P<detail>.*)")
 _SPOTIFY_SURFACE_RE = re.compile(
@@ -100,6 +106,20 @@ _GL_PROGRAM_LIFECYCLE_ERROR_RE = re.compile(
     r"glUniform\w*\(\d+.*GL_INVALID_OPERATION|"
     r"baseOperation\s*=\s*gl(?:DeleteProgram|Uniform\w*))"
 )
+_GL_AFFINITY_ERROR_RE = re.compile(
+    r"(?:Cannot make QOpenGLContext current in a different thread|"
+    r"\[GL COMPOSITOR\]\[AFFINITY\]\[ERROR\]|Qt GL affinity violation)"
+)
+_ADAPTIVE_STOP_ACK_RE = re.compile(
+    r"\[PERF\]\[ADAPTIVE_TIMER\] asynchronous_stop_ack "
+    r"screen=(?P<screen>\S+) latency_ms=(?P<latency_ms>[0-9.]+) "
+    r"immediate=(?P<immediate>True|False)"
+)
+_GL_TERMINAL_TRANSACTION_ERROR_RE = re.compile(
+    r"(?:\[GL COMPOSITOR\]\[TERMINAL\]\[ERROR\]|"
+    r"Terminal transition completion failed)"
+)
+_STALE_IMAGE_PUBLICATION_RE = re.compile(r"\[ASYNC(?:-PREV)?\]\[STALE\]")
 
 
 @dataclass(frozen=True)
@@ -140,6 +160,35 @@ class MetricWindow:
         if not self.wakeup_count:
             return None
         return float(self.pending_skip_count or 0) / float(self.wakeup_count)
+
+
+@dataclass(frozen=True)
+class PaintPathWindow:
+    timestamp: str | None
+    screen: int | None
+    elapsed_ms: float
+    total: int
+    idle_gl: int
+    transition_gl: int
+    idle_qpainter_fallback: int
+    transition_qpainter_fallback: int
+    idle_gl_avg_ms: float
+    idle_gl_max_ms: float
+    transition_gl_avg_ms: float
+    transition_gl_max_ms: float
+    idle_qpainter_avg_ms: float
+    idle_qpainter_max_ms: float
+    transition_qpainter_avg_ms: float
+    transition_qpainter_max_ms: float
+    line: str = ""
+
+    @property
+    def fallback_count(self) -> int:
+        return self.idle_qpainter_fallback + self.transition_qpainter_fallback
+
+    @property
+    def fallback_ratio(self) -> float:
+        return self.fallback_count / max(1, self.total)
 
 
 @dataclass(frozen=True)
@@ -399,6 +448,55 @@ class VisualizerTickPhaseBreakdown:
 
 
 @dataclass(frozen=True)
+class VisualizerGpuPushBreakdown:
+    """A slow GPU-push event with its synchronous preparation subphases."""
+
+    timestamp: str | None
+    total_ms: float
+    mode: str
+    extra_build_ms: float
+    primer_ms: float
+    packet_build_ms: float
+    parent_publish_ms: float
+    line: str = ""
+
+    @property
+    def dominant_phase(self) -> tuple[str, float]:
+        phases = {
+            "extra_build": self.extra_build_ms,
+            "primer": self.primer_ms,
+            "packet_build": self.packet_build_ms,
+            "parent_publish": self.parent_publish_ms,
+        }
+        return max(phases.items(), key=lambda item: item[1])
+
+    @property
+    def summary(self) -> str:
+        dominant_name, dominant_ms = self.dominant_phase
+        return (
+            f"{self.timestamp or '<no-ts>'} total_ms={self.total_ms:.2f} "
+            f"mode={self.mode} dominant={dominant_name}:{dominant_ms:.2f}ms"
+        )
+
+
+@dataclass(frozen=True)
+class VisualizerDevCurveWorkerSample:
+    timestamp: str | None
+    worker_ms: float
+    pending: bool
+    line: str = ""
+
+
+@dataclass(frozen=True)
+class AdaptiveRenderOwnerStopAck:
+    timestamp: str | None
+    screen: int | None
+    latency_ms: float
+    immediate: bool
+    line: str = ""
+
+
+@dataclass(frozen=True)
 class MediaRefreshWarning:
     timestamp: str | None
     total_ms: float
@@ -460,6 +558,12 @@ class TextureCacheCleanup:
     managed_releases: int
     pbo_replacements: int
     registrations: int
+    shared_leases: int = 0
+    shared_group_textures: int = 0
+    shared_group_texture_mb: float = 0.0
+    shared_group_managers: int = 0
+    shared_acquisitions: int = 0
+    shared_reuses: int = 0
     line: str = ""
 
 
@@ -599,12 +703,17 @@ class StartupFirstFrameExposure:
 @dataclass
 class PerfHealthReport:
     windows: list[MetricWindow] = field(default_factory=list)
+    paint_path_windows: list[PaintPathWindow] = field(default_factory=list)
     cache_fallbacks: list[CacheFallback] = field(default_factory=list)
     shader_fallbacks: list[str] = field(default_factory=list)
     transition_start_refusals: list[str] = field(default_factory=list)
     transition_instant_commits: list[str] = field(default_factory=list)
     transition_request_drops: list[str] = field(default_factory=list)
     gl_program_lifecycle_errors: list[str] = field(default_factory=list)
+    gl_affinity_errors: list[str] = field(default_factory=list)
+    adaptive_render_owner_stop_acks: list[AdaptiveRenderOwnerStopAck] = field(default_factory=list)
+    gl_terminal_transaction_errors: list[str] = field(default_factory=list)
+    stale_image_publications: list[str] = field(default_factory=list)
     gl_swap_interval_warnings: list[str] = field(default_factory=list)
     pending_paint_requeues: list[str] = field(default_factory=list)
     pending_paint_stalls: list[str] = field(default_factory=list)
@@ -613,6 +722,8 @@ class PerfHealthReport:
     visualizer_safeguard_failures: list[VisualizerSafeguardFailure] = field(default_factory=list)
     usage_samples: list[UsageSample] = field(default_factory=list)
     visualizer_tick_phase_breakdowns: list[VisualizerTickPhaseBreakdown] = field(default_factory=list)
+    visualizer_gpu_push_breakdowns: list[VisualizerGpuPushBreakdown] = field(default_factory=list)
+    visualizer_devcurve_worker_samples: list[VisualizerDevCurveWorkerSample] = field(default_factory=list)
     media_refresh_warnings: list[MediaRefreshWarning] = field(default_factory=list)
     texture_upload_warnings: list[TextureUploadWarning] = field(default_factory=list)
     texture_cache_cleanups: list[TextureCacheCleanup] = field(default_factory=list)
@@ -720,6 +831,30 @@ class PerfHealthReport:
             if cleanup.textures > 4
             or cleanup.pbo_count > 1
             or cleanup.registrations > 5
+        ]
+
+    @property
+    def excessive_shared_texture_groups(self) -> list[TextureCacheCleanup]:
+        return [
+            cleanup
+            for cleanup in self.texture_cache_cleanups
+            if cleanup.shared_group_managers > 0
+            and cleanup.shared_group_textures
+            > 4 * cleanup.shared_group_managers
+        ]
+
+    @property
+    def unexpected_paint_path_fallback_windows(self) -> list[PaintPathWindow]:
+        """Fallback that persisted beyond a first-image safety paint."""
+
+        return [
+            window
+            for window in self.paint_path_windows
+            if window.transition_qpainter_fallback > 0
+            or (
+                window.idle_qpainter_fallback >= 3
+                and window.fallback_ratio >= 0.05
+            )
         ]
 
     @property
@@ -1103,6 +1238,26 @@ class PerfHealthReport:
         ]
 
     @property
+    def slow_devcurve_worker_samples(self) -> list[VisualizerDevCurveWorkerSample]:
+        """Worker solves that cannot independently sustain a 60 Hz feed."""
+
+        return [
+            sample
+            for sample in self.visualizer_devcurve_worker_samples
+            if sample.worker_ms > 16.67
+        ]
+
+    @property
+    def slow_adaptive_render_owner_stop_acks(self) -> list[AdaptiveRenderOwnerStopAck]:
+        """Retirements that remained alive well beyond a normal wake cycle."""
+
+        return [
+            sample
+            for sample in self.adaptive_render_owner_stop_acks
+            if sample.latency_ms > 250.0
+        ]
+
+    @property
     def paused_forced_visualizer_latency_warnings(self) -> list[VisualizerTimingWarning]:
         """Transition probes that sampled intentionally paused audio authority."""
         paused: list[VisualizerTimingWarning] = []
@@ -1263,6 +1418,11 @@ class PerfHealthReport:
             )
         if self.shader_fallbacks:
             messages.append(f"shader fallbacks present: {len(self.shader_fallbacks)}")
+        if self.unexpected_paint_path_fallback_windows:
+            messages.append(
+                "persistent compositor QPainter fallback windows present: "
+                f"{len(self.unexpected_paint_path_fallback_windows)}"
+            )
         if self.transition_start_refusals:
             messages.append(
                 "transition starts were refused after image preparation: "
@@ -1282,6 +1442,21 @@ class PerfHealthReport:
             messages.append(
                 "GL program ownership/binding lifecycle errors present: "
                 f"{len(self.gl_program_lifecycle_errors)}"
+            )
+        if self.gl_affinity_errors:
+            messages.append(
+                "Qt/OpenGL affinity violations present: "
+                f"{len(self.gl_affinity_errors)}"
+            )
+        if self.slow_adaptive_render_owner_stop_acks:
+            messages.append(
+                "adaptive render-owner retirement acknowledgement exceeded 250ms: "
+                f"{len(self.slow_adaptive_render_owner_stop_acks)}"
+            )
+        if self.gl_terminal_transaction_errors:
+            messages.append(
+                "compositor terminal transaction errors present: "
+                f"{len(self.gl_terminal_transaction_errors)}"
             )
         if self.gl_swap_interval_warnings:
             messages.append(
@@ -1311,6 +1486,16 @@ class PerfHealthReport:
             messages.append(
                 f"media widget async refresh slow paths present: {len(self.media_refresh_warnings)}"
             )
+        if self.visualizer_gpu_push_breakdowns:
+            messages.append(
+                "spotify visualizer slow GPU push paths present: "
+                f"{len(self.visualizer_gpu_push_breakdowns)}"
+            )
+        if self.slow_devcurve_worker_samples:
+            messages.append(
+                "spotify Dev Curve worker exceeded one 60 Hz frame: "
+                f"{len(self.slow_devcurve_worker_samples)}"
+            )
         if self.significant_visualizer_timing_warnings:
             messages.append(
                 "spotify visualizer timing warnings present: "
@@ -1329,6 +1514,11 @@ class PerfHealthReport:
             messages.append(
                 "GL texture cache cleanup exceeded the four-texture/one-PBO bound: "
                 f"{len(self.excessive_texture_cache_cleanups)}"
+            )
+        if self.excessive_shared_texture_groups:
+            messages.append(
+                "GL shared texture residency exceeded the four-textures-per-manager bound: "
+                f"{len(self.excessive_shared_texture_groups)}"
             )
         if self.significant_settings_stalls:
             messages.append(
@@ -1537,6 +1727,20 @@ def _texture_cache_cleanup_from_line(
         managed_releases=int(required["managed_releases"]),
         pbo_replacements=int(required["pbo_replacements"]),
         registrations=int(required["registrations"]),
+        shared_leases=int(_parse_int(parts.get("shared_leases")) or 0),
+        shared_group_textures=int(
+            _parse_int(parts.get("shared_group_textures")) or 0
+        ),
+        shared_group_texture_mb=float(
+            _parse_float(parts.get("shared_group_texture_mb")) or 0.0
+        ),
+        shared_group_managers=int(
+            _parse_int(parts.get("shared_group_managers")) or 0
+        ),
+        shared_acquisitions=int(
+            _parse_int(parts.get("shared_acquisitions")) or 0
+        ),
+        shared_reuses=int(_parse_int(parts.get("shared_reuses")) or 0),
         line=line,
     )
 
@@ -1607,6 +1811,49 @@ def _metric_window_from_payload(source: str, name: str, payload: str, line: str)
         visualizer_request_count=visualizer_request_count,
         duration_ms=duration_ms,
         owner=owner,
+        line=line,
+    )
+
+
+def _paint_path_window_from_line(line: str, payload: str) -> PaintPathWindow | None:
+    parts = _parse_kv_payload(payload)
+    elapsed_ms = _parse_float(parts.get("elapsed_ms"))
+    total = _parse_int(parts.get("total"))
+    if elapsed_ms is None or total is None:
+        return None
+    return PaintPathWindow(
+        timestamp=_timestamp_from_line(line),
+        screen=_parse_int(parts.get("screen")),
+        elapsed_ms=elapsed_ms,
+        total=total,
+        idle_gl=_parse_int(parts.get("idle_gl")) or 0,
+        transition_gl=_parse_int(parts.get("transition_gl")) or 0,
+        idle_qpainter_fallback=(
+            _parse_int(parts.get("idle_qpainter_fallback")) or 0
+        ),
+        transition_qpainter_fallback=(
+            _parse_int(parts.get("transition_qpainter_fallback")) or 0
+        ),
+        idle_gl_avg_ms=_parse_float(parts.get("idle_gl_avg_ms")) or 0.0,
+        idle_gl_max_ms=_parse_float(parts.get("idle_gl_max_ms")) or 0.0,
+        transition_gl_avg_ms=(
+            _parse_float(parts.get("transition_gl_avg_ms")) or 0.0
+        ),
+        transition_gl_max_ms=(
+            _parse_float(parts.get("transition_gl_max_ms")) or 0.0
+        ),
+        idle_qpainter_avg_ms=(
+            _parse_float(parts.get("idle_qpainter_avg_ms")) or 0.0
+        ),
+        idle_qpainter_max_ms=(
+            _parse_float(parts.get("idle_qpainter_max_ms")) or 0.0
+        ),
+        transition_qpainter_avg_ms=(
+            _parse_float(parts.get("transition_qpainter_avg_ms")) or 0.0
+        ),
+        transition_qpainter_max_ms=(
+            _parse_float(parts.get("transition_qpainter_max_ms")) or 0.0
+        ),
         line=line,
     )
 
@@ -1715,6 +1962,23 @@ def _spotify_tick_phase_from_line(line: str, detail: str) -> VisualizerTickPhase
     )
 
 
+def _spotify_gpu_push_from_line(line: str, detail: str) -> VisualizerGpuPushBreakdown | None:
+    parts = _parse_kv_payload(detail)
+    total_ms = _parse_float(parts.get("total_ms"))
+    if total_ms is None:
+        return None
+    return VisualizerGpuPushBreakdown(
+        timestamp=_timestamp_from_line(line),
+        total_ms=total_ms,
+        mode=parts.get("mode", "unknown"),
+        extra_build_ms=_parse_float(parts.get("extra_build_ms")) or 0.0,
+        primer_ms=_parse_float(parts.get("primer_ms")) or 0.0,
+        packet_build_ms=_parse_float(parts.get("packet_build_ms")) or 0.0,
+        parent_publish_ms=_parse_float(parts.get("parent_publish_ms")) or 0.0,
+        line=line,
+    )
+
+
 def _media_refresh_from_line(line: str, detail: str) -> MediaRefreshWarning | None:
     parts = _parse_kv_payload(detail)
     total_ms = _parse_float(parts.get("total_ms"))
@@ -1794,6 +2058,57 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                     timestamp,
                     "gl_program_lifecycle_error",
                     "program delete/bind/uniform ownership failure",
+                    line,
+                )
+            )
+        if _GL_AFFINITY_ERROR_RE.search(line):
+            report.gl_affinity_errors.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "gl_affinity_error",
+                    "Qt GL operation crossed its affinity boundary",
+                    line,
+                )
+            )
+        adaptive_stop_ack = _ADAPTIVE_STOP_ACK_RE.search(line)
+        if adaptive_stop_ack:
+            latency_ms = _parse_float(adaptive_stop_ack.group("latency_ms"))
+            if latency_ms is not None:
+                sample = AdaptiveRenderOwnerStopAck(
+                    timestamp=timestamp,
+                    screen=_parse_int(adaptive_stop_ack.group("screen")),
+                    latency_ms=latency_ms,
+                    immediate=adaptive_stop_ack.group("immediate") == "True",
+                    line=line,
+                )
+                report.adaptive_render_owner_stop_acks.append(sample)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "adaptive_render_owner_stop_ack",
+                        f"screen={sample.screen} latency_ms={latency_ms:.2f} "
+                        f"immediate={sample.immediate}",
+                        line,
+                    )
+                )
+        if _GL_TERMINAL_TRANSACTION_ERROR_RE.search(line):
+            report.gl_terminal_transaction_errors.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "gl_terminal_transaction_error",
+                    "terminal transaction failed to reach owner-thread commit",
+                    line,
+                )
+            )
+        if _STALE_IMAGE_PUBLICATION_RE.search(line):
+            report.stale_image_publications.append(line)
+            report.timeline_markers.append(
+                TimelineMarker(
+                    timestamp,
+                    "stale_image_publication_suppressed",
+                    "old display generation was prevented from publishing",
                     line,
                 )
             )
@@ -1936,6 +2251,27 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                 report.windows.append(window)
             continue
 
+        paint_path = _GL_PAINT_PATH_RE.search(line)
+        if paint_path:
+            path_window = _paint_path_window_from_line(
+                line,
+                paint_path.group("payload"),
+            )
+            if path_window is not None:
+                report.paint_path_windows.append(path_window)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "gl_paint_path",
+                        (
+                            f"screen={path_window.screen} total={path_window.total} "
+                            f"fallbacks={path_window.fallback_count}"
+                        ),
+                        line,
+                    )
+                )
+            continue
+
         paint = _GL_PAINT_RE.search(line)
         if paint:
             window = _metric_window_from_payload(
@@ -2053,6 +2389,42 @@ def parse_perf_health_lines(lines: Iterable[str]) -> PerfHealthReport:
                         timestamp,
                         "spotify_tick_phase_breakdown",
                         breakdown.summary,
+                        line,
+                    )
+                )
+            continue
+
+        spotify_gpu_push = _SPOTIFY_GPU_PUSH_RE.search(line)
+        if spotify_gpu_push:
+            breakdown = _spotify_gpu_push_from_line(line, spotify_gpu_push.group("detail"))
+            if breakdown is not None:
+                report.visualizer_gpu_push_breakdowns.append(breakdown)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "spotify_gpu_push_breakdown",
+                        breakdown.summary,
+                        line,
+                    )
+                )
+            continue
+
+        spotify_devcurve_worker = _SPOTIFY_DEVCURVE_WORKER_RE.search(line)
+        if spotify_devcurve_worker:
+            worker_ms = _parse_float(spotify_devcurve_worker.group("worker_ms"))
+            if worker_ms is not None:
+                sample = VisualizerDevCurveWorkerSample(
+                    timestamp=timestamp,
+                    worker_ms=worker_ms,
+                    pending=spotify_devcurve_worker.group("pending") == "True",
+                    line=line,
+                )
+                report.visualizer_devcurve_worker_samples.append(sample)
+                report.timeline_markers.append(
+                    TimelineMarker(
+                        timestamp,
+                        "spotify_devcurve_worker",
+                        f"worker_ms={worker_ms:.2f} pending={sample.pending}",
                         line,
                     )
                 )
@@ -2360,12 +2732,25 @@ def main() -> int:
         joined = ", ".join(str(path) for path in log_paths)
         print(f"Transition perf health summary for {joined}")
     print(f"Metric windows: {len(report.windows)}")
+    print(f"GL paint-path windows: {len(report.paint_path_windows)}")
+    print(
+        "Persistent GL QPainter fallback windows: "
+        f"{len(report.unexpected_paint_path_fallback_windows)}"
+    )
     print(f"Cache worker fallbacks: {len(report.cache_fallbacks)}")
     print(f"Shader fallbacks: {len(report.shader_fallbacks)}")
     print(f"Transition start refusals: {len(report.transition_start_refusals)}")
     print(f"Transition instant commits: {len(report.transition_instant_commits)}")
     print(f"Transition request drops: {len(report.transition_request_drops)}")
     print(f"GL program lifecycle errors: {len(report.gl_program_lifecycle_errors)}")
+    print(f"Qt/OpenGL affinity errors: {len(report.gl_affinity_errors)}")
+    print(f"GL terminal transaction errors: {len(report.gl_terminal_transaction_errors)}")
+    print(f"Stale image publications suppressed: {len(report.stale_image_publications)}")
+    print(f"Adaptive render-owner stop acknowledgements: {len(report.adaptive_render_owner_stop_acks)}")
+    print(
+        "Slow adaptive render-owner stop acknowledgements: "
+        f"{len(report.slow_adaptive_render_owner_stop_acks)}"
+    )
     print(f"GL swap-interval warnings: {len(report.gl_swap_interval_warnings)}")
     print(f"Pending paint requeues: {len(report.pending_paint_requeues)}")
     print(f"Pending paint stalls: {len(report.pending_paint_stalls)}")
@@ -2381,6 +2766,9 @@ def main() -> int:
     print(f"Whole-process usage samples: {len(report.usage_samples)}")
     print(f"Whole-process usage lifetimes: {len(report.usage_lifetimes)}")
     print(f"Spotify visualizer tick phase breakdowns: {len(report.visualizer_tick_phase_breakdowns)}")
+    print(f"Spotify visualizer slow GPU pushes: {len(report.visualizer_gpu_push_breakdowns)}")
+    print(f"Spotify Dev Curve worker samples: {len(report.visualizer_devcurve_worker_samples)}")
+    print(f"Spotify Dev Curve slow worker samples: {len(report.slow_devcurve_worker_samples)}")
     print(f"Slow GL texture uploads: {len(report.texture_upload_warnings)}")
     print(f"GL texture cache cleanups: {len(report.texture_cache_cleanups)}")
     print(f"Settings stalls: {len(report.settings_stalls)}")
@@ -2633,6 +3021,11 @@ def main() -> int:
         args.max_samples,
     )
     _print_samples(
+        "Spotify visualizer slow GPU push breakdowns",
+        report.visualizer_gpu_push_breakdowns,
+        args.max_samples,
+    )
+    _print_samples(
         "Spotify visualizer severe latency warnings",
         report.severe_visualizer_latency_warnings,
         args.max_samples,
@@ -2658,6 +3051,11 @@ def main() -> int:
     _print_samples("Spotify visualizer CUSTOM suppressions", report.visualizer_custom_suppressions, args.max_samples)
     _print_samples("Spotify visualizer CUSTOM bucket repairs", report.visualizer_custom_bucket_repairs, args.max_samples)
     _print_samples("Shader fallbacks", report.shader_fallbacks, args.max_samples)
+    _print_samples(
+        "Persistent compositor QPainter fallback windows",
+        report.unexpected_paint_path_fallback_windows,
+        args.max_samples,
+    )
     _print_samples(
         "Transition start refusals",
         report.transition_start_refusals,

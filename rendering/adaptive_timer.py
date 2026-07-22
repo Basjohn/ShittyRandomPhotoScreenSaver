@@ -15,7 +15,7 @@ import threading
 import time
 from dataclasses import dataclass, field, asdict
 from enum import Enum, auto
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 from core.logging.logger import get_logger, is_perf_metrics_enabled
 from core.threading.manager import ThreadManager, ThreadPoolType
@@ -37,6 +37,7 @@ _PENDING_UPDATE_LOG_AFTER_MS = 250.0
 _PENDING_UPDATE_LOG_INTERVAL_MS = 1000.0
 _DEADLINE_SLEEP_CAP_S = 0.004
 _DEADLINE_YIELD_WINDOW_S = 0.00075
+_PRESENTATION_WAIT_SLICE_S = 0.250
 
 
 def _safe_attr(widget, name: str, default=None):
@@ -273,6 +274,9 @@ class AdaptiveTimerMetrics:
     time_in_idle_ms: float = 0.0
     time_in_paused_ms: float = 0.0
     time_in_running_ms: float = 0.0
+    presentation_wait_count: int = 0
+    presentation_wait_ms: float = 0.0
+    presentation_wait_timeouts: int = 0
     last_state_change_ts: float = field(default_factory=time.time)
     
     def record_state_change(self, old_state: TimerState) -> None:
@@ -340,14 +344,23 @@ class AdaptiveTimerStrategy:
     - Wake event uses threading.Event (standard)
     """
     
-    def __init__(self, compositor: "GLCompositorWidget", config: AdaptiveTimerConfig):
+    def __init__(
+        self,
+        compositor: "GLCompositorWidget",
+        config: AdaptiveTimerConfig,
+        *,
+        on_stopped: Optional[Callable[["AdaptiveTimerStrategy"], None]] = None,
+    ):
         self._compositor = compositor
         self._config = config
+        self._on_stopped = on_stopped
         
         # Atomic state management
         self._state = AtomicTimerState(TimerState.IDLE)
         self._stop_event = threading.Event()
         self._wake_event = threading.Event()  # For waking from deep sleep
+        self._presentation_complete_event = threading.Event()
+        self._presentation_complete_event.set()
         
         # Frame request queue (lock-free)
         self._frame_queue: SPSCQueue[bool] = SPSCQueue(4)
@@ -357,6 +370,8 @@ class AdaptiveTimerStrategy:
         self._task_id: Optional[str] = None
         self._thread_manager: Optional[ThreadManager] = None
         self._loop_stopped_event = threading.Event()
+        self._stop_finalize_lock = threading.Lock()
+        self._stop_finalized = True
         
         # Resource management
         self._resource_manager: Optional[ResourceManager] = None
@@ -415,6 +430,8 @@ class AdaptiveTimerStrategy:
             self._wake_event.clear()
             self._loop_stopped_event.clear()
             self._frame_queue.clear()
+            with self._stop_finalize_lock:
+                self._stop_finalized = False
             
             initial_state = TimerState.RUNNING if continuous else TimerState.PAUSED
             self._state.store(initial_state)
@@ -456,6 +473,8 @@ class AdaptiveTimerStrategy:
             
         except Exception as e:
             logger.error("[ADAPTIVE_TIMER] Failed to start: %s", e)
+            self._finalize_stopped_owner()
+            self._loop_stopped_event.set()
             return False
     
     def pause(self) -> None:
@@ -465,6 +484,7 @@ class AdaptiveTimerStrategy:
             self._metrics.record_state_change(current)
             self._state.store(TimerState.PAUSED)
             self._transition_ended_at = time.monotonic()
+            self._presentation_complete_event.set()
             if is_perf_metrics_enabled():
                 logger.info("[PERF][ADAPTIVE_TIMER] paused id=%s", self._task_id)
             else:
@@ -482,39 +502,69 @@ class AdaptiveTimerStrategy:
             else:
                 logger.debug("[ADAPTIVE_TIMER] Resumed from %s", current.name)
     
-    def stop(self) -> None:
-        """Stop timer permanently and wait briefly for the loop to acknowledge it."""
-        # Signal stop
-        task_id = self._task_id
+    def request_stop(self) -> bool:
+        """Request permanent retirement without waiting on the caller thread."""
+
         self._stop_event.set()
         self._wake_event.set()
+        self._presentation_complete_event.set()
+        return bool(
+            self._task_future is None
+            or self._loop_stopped_event.is_set()
+        )
 
+    def stop(self) -> bool:
+        """Stop permanently and wait; runtime Qt owners use ``request_stop``."""
+
+        task_id = self._task_id
+        self.request_stop()
+
+        stopped = True
         if self._task_future is not None:
             # Wait for the loop's finally block, not for the already-set stop event.
             try:
                 base_wait = 4 * self._config.min_frame_time_ms / 1000.0
-                max_wait = 0.0 if self._config.exit_immediate else max(0.05, min(0.25, base_wait))
+                max_wait = max(0.25, min(1.0, base_wait))
                 stopped = self._loop_stopped_event.wait(timeout=max_wait)
                 if not stopped:
-                    logger.warning(
-                        "[PERF][ADAPTIVE_TIMER][FALLBACK] Stop timed out before loop acknowledged shutdown "
+                    logger.critical(
+                        "[PERF][ADAPTIVE_TIMER][ERROR] Stop timed out before loop acknowledged shutdown "
                         "task=%s timeout=%.3fs",
                         task_id,
                         max_wait,
                     )
             except Exception:
-                pass
+                stopped = False
+                logger.error("[ADAPTIVE_TIMER] Stop acknowledgement failed", exc_info=True)
+            if not stopped:
+                return False
+        self._finalize_stopped_owner()
+        return True
+
+    def _finalize_stopped_owner(self) -> None:
+        """Release timer metadata exactly once after the worker has retired."""
+
+        with self._stop_finalize_lock:
+            if self._stop_finalized:
+                return
+            self._stop_finalized = True
             self._task_future = None
-        self._task_id = None
-        
-        # Unregister from ResourceManager
-        if self._timer_resource_id and self._resource_manager:
-            try:
-                self._resource_manager.unregister(self._timer_resource_id)
-            except Exception:
-                pass
+            self._task_id = None
+            timer_resource_id = self._timer_resource_id
             self._timer_resource_id = None
-        
+
+        if timer_resource_id and self._resource_manager:
+            try:
+                self._resource_manager.unregister(
+                    timer_resource_id,
+                    cleanup=False,
+                )
+            except Exception:
+                logger.debug(
+                    "[ADAPTIVE_TIMER] Timer resource finalization failed",
+                    exc_info=True,
+                )
+
         if is_perf_metrics_enabled():
             logger.info("[PERF][ADAPTIVE_TIMER] stopped")
         else:
@@ -530,6 +580,9 @@ class AdaptiveTimerStrategy:
             "stop_event": self._stop_event.is_set(),
             "wake_event": self._wake_event.is_set(),
             "frames": self._metrics.frame_count,
+            "presentation_waits": self._metrics.presentation_wait_count,
+            "presentation_wait_ms": round(self._metrics.presentation_wait_ms, 3),
+            "presentation_wait_timeouts": self._metrics.presentation_wait_timeouts,
         }
     
     def _timer_loop(self) -> None:
@@ -583,7 +636,17 @@ class AdaptiveTimerStrategy:
                             not self._stop_event.is_set()
                             and self._state.load() == TimerState.PAUSED
                         ):
-                            self._signal_frame(continuous=False)
+                            self._presentation_complete_event.clear()
+                            if self._presentation_handoff_outstanding():
+                                self._wait_for_presentation_completion(
+                                    expected_state=TimerState.PAUSED,
+                                )
+                            else:
+                                accepted = self._signal_frame(continuous=False)
+                                if accepted or self._presentation_handoff_outstanding():
+                                    self._wait_for_presentation_completion(
+                                        expected_state=TimerState.PAUSED,
+                                    )
                             next_tick_deadline = _normalize_next_deadline(
                                 next_tick_deadline + target_interval,
                                 time.perf_counter(),
@@ -636,7 +699,19 @@ class AdaptiveTimerStrategy:
                             not self._stop_event.is_set()
                             and self._state.load() == TimerState.RUNNING
                         ):
-                            self._signal_frame(continuous=True)
+                            # Producers keep latching newer scene generations;
+                            # the display owner only sleeps redundant handoffs.
+                            self._presentation_complete_event.clear()
+                            if self._presentation_handoff_outstanding():
+                                self._wait_for_presentation_completion(
+                                    expected_state=TimerState.RUNNING,
+                                )
+                            else:
+                                accepted = self._signal_frame(continuous=True)
+                                if accepted or self._presentation_handoff_outstanding():
+                                    self._wait_for_presentation_completion(
+                                        expected_state=TimerState.RUNNING,
+                                    )
                             next_tick_deadline = _normalize_next_deadline(
                                 next_tick_deadline + target_interval,
                                 time.perf_counter(),
@@ -647,11 +722,63 @@ class AdaptiveTimerStrategy:
                         logger.error("[ADAPTIVE_TIMER] Loop error: %s", e)
                         break
         finally:
-            self._loop_stopped_event.set()
+            self._finalize_stopped_owner()
+            on_stopped = self._on_stopped
+            if on_stopped is not None:
+                try:
+                    on_stopped(self)
+                except Exception:
+                    logger.error(
+                        "[ADAPTIVE_TIMER] Stop acknowledgement callback failed",
+                        exc_info=True,
+                    )
             logger.debug("[ADAPTIVE_TIMER] Loop stopped")
+            self._loop_stopped_event.set()
     
-    def _signal_frame(self, *, continuous: bool = True) -> None:
-        """Signal UI thread to render."""
+    def _presentation_handoff_outstanding(self) -> bool:
+        compositor = self._compositor
+        if compositor is None:
+            return False
+        probe = getattr(compositor, "_presentation_handoff_outstanding", None)
+        if callable(probe):
+            try:
+                return bool(probe())
+            except Exception:
+                return False
+        return bool(
+            _safe_attr(compositor, "_srpss_timer_update_pending", False)
+            or _safe_attr(compositor, "_presentation_paint_active", False)
+        )
+
+    def _wait_for_presentation_completion(self, *, expected_state: TimerState) -> None:
+        """Sleep the worker while Qt owns an accepted paint handoff."""
+
+        started = time.perf_counter()
+        waited = False
+        while (
+            not self._stop_event.is_set()
+            and self._state.load() == expected_state
+            and self._presentation_handoff_outstanding()
+        ):
+            waited = True
+            if self._presentation_complete_event.wait(_PRESENTATION_WAIT_SLICE_S):
+                break
+            self._metrics.presentation_wait_timeouts += 1
+            _maybe_log_pending_widget_update(self._compositor)
+        if waited:
+            self._metrics.presentation_wait_count += 1
+            self._metrics.presentation_wait_ms += (
+                time.perf_counter() - started
+            ) * 1000.0
+
+    def notify_presentation_paint_completed(self) -> None:
+        """Release this display owner after its Qt paint acknowledgement."""
+
+        self._presentation_complete_event.set()
+
+    def _signal_frame(self, *, continuous: bool = True) -> bool:
+        """Signal UI thread to render and report whether Qt accepted it."""
+        accepted_update = False
         if self._compositor is not None:
             try:
                 # Log occasional frame signals for debugging
@@ -671,6 +798,7 @@ class AdaptiveTimerStrategy:
                 self._metrics.frame_count += 1
             except Exception as e:
                 logger.debug("[ADAPTIVE_TIMER] Frame signal failed: %s", e)
+        return accepted_update
     
     def request_frame(self) -> bool:
         """Latch a demand frame for the next legal display deadline."""
@@ -689,9 +817,12 @@ class AdaptiveTimerStrategy:
         logger.info(
             "[ADAPTIVE_TIMER] Metrics: frames=%d, transitions=%d, "
             "time_idle=%.1fms, time_paused=%.1fms, time_running=%.1fms, "
-            "total_runtime=%.1fs",
+            "paint_waits=%d, paint_wait_ms=%.1f, paint_wait_timeouts=%d, total_runtime=%.1fs",
             m.frame_count, m.state_transitions,
             m.time_in_idle_ms, m.time_in_paused_ms, m.time_in_running_ms,
+            m.presentation_wait_count,
+            m.presentation_wait_ms,
+            m.presentation_wait_timeouts,
             total_time
         )
     
@@ -717,6 +848,28 @@ class AdaptiveRenderStrategyManager:
         self._config = AdaptiveTimerConfig()
         self._timer: Optional[AdaptiveTimerStrategy] = None
         self._lock = threading.Lock()
+
+    def _new_timer(self) -> AdaptiveTimerStrategy:
+        return AdaptiveTimerStrategy(
+            self._compositor,
+            self._config,
+            on_stopped=self._on_timer_stopped,
+        )
+
+    def _on_timer_stopped(self, timer: AdaptiveTimerStrategy) -> None:
+        """Retire manager ownership and publish a primitive-only stop ack."""
+
+        with self._lock:
+            if self._timer is timer:
+                self._timer = None
+
+        acknowledge = getattr(
+            self._compositor,
+            "_render_owner_stop_acknowledged",
+            None,
+        )
+        if callable(acknowledge):
+            acknowledge()
     
     def configure(self, config: AdaptiveTimerConfig) -> None:
         """Update configuration."""
@@ -729,8 +882,11 @@ class AdaptiveRenderStrategyManager:
         """Start or resume adaptive timer."""
         with self._lock:
             if self._timer is None:
-                self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
-            result = self._timer.start()
+                self._timer = self._new_timer()
+            timer = self._timer
+            result = timer.start()
+            if not result and self._timer is timer:
+                self._timer = None
         if is_perf_metrics_enabled():
             logger.info(
                 "[PERF][ADAPTIVE_TIMER] manager_start result=%s state=%s compositor=%s",
@@ -780,25 +936,50 @@ class AdaptiveRenderStrategyManager:
                 self._describe_compositor_state(),
             )
     
-    def stop(self) -> None:
-        """Stop timer permanently."""
+    def stop(self) -> bool:
+        """Stop timer permanently without dropping an unacknowledged owner."""
         with self._lock:
-            if self._timer is not None:
-                self._timer.stop()
-                self._timer = None
+            timer = self._timer
+        stopped = True if timer is None else bool(timer.stop())
+        if stopped and timer is not None:
+            with self._lock:
+                if self._timer is timer:
+                    self._timer = None
         if is_perf_metrics_enabled():
             logger.info(
                 "[PERF][ADAPTIVE_TIMER] manager_stopped state=%s compositor=%s",
                 self.describe_state(),
                 self._describe_compositor_state(),
             )
+        return stopped
+
+    def request_stop(self) -> bool:
+        """Request retirement and return the current acknowledgement state."""
+
+        with self._lock:
+            timer = self._timer
+            if timer is None:
+                return True
+            return bool(timer.request_stop())
     
     def request_frame(self) -> bool:
         """Request one demand-paced frame, creating the managed loop if needed."""
         with self._lock:
             if self._timer is None:
-                self._timer = AdaptiveTimerStrategy(self._compositor, self._config)
-            return bool(self._timer.request_frame())
+                self._timer = self._new_timer()
+            timer = self._timer
+            result = bool(timer.request_frame())
+            if not result and self._timer is timer:
+                self._timer = None
+            return result
+
+    def notify_presentation_paint_completed(self) -> None:
+        """Wake the current timer without holding the manager lock."""
+
+        with self._lock:
+            timer = self._timer
+        if timer is not None:
+            timer.notify_presentation_paint_completed()
     
     def is_running(self) -> bool:
         """Check if timer is active."""

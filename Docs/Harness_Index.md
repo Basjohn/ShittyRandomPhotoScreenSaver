@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-18
+Last updated: 2026-07-22
 
 Compact reference for recurring SRPSS investigation harnesses and probes.
 
@@ -174,6 +174,9 @@ python -m pytest `
   tests/test_spotify_visualizer_widget.py::test_runtime_cycle_all_modes_and_settle_devcurve_matches_settings_refresh `
   tests/test_transient_per_mode_integration.py::TestSineOscTransientWidthMix::test_sine_width_reaction_modulated `
   tests/test_devcurve_runtime.py::test_devcurve_active_amplitude_exceeds_idle_amplitude `
+  tests/test_visualizer_overlay_kwargs.py::test_devcurve_compute_coalesces_and_rejects_pre_reset_result `
+  tests/test_visualizer_overlay_kwargs.py::test_devcurve_worker_does_not_mutate_published_curve `
+  tests/test_visualizer_overlay_kwargs.py::test_devcurve_real_compute_callback_is_safe_after_epoch_teardown `
   tests/test_oscilloscope_display_contract.py `
   -q --tb=short
 ```
@@ -186,6 +189,7 @@ python -m pytest `
   - Paused `Oscilloscope`, Bubble, Sine, and Dev Curve intentionally use idle reveal and clear the fresh-engine wait; paused Spectrum retains the fresh-engine wait. A shared parameterized test must not flatten those distinct contracts.
   - A lone `[FIRST_FRAME_PRIMER]` is expected remediation when the overlay still owns an old generation/activation before the first authoritative push. Escalate only when current source authority does not replace it, or when `FIRST_FRAME_GUARD`, `PARITY`, technical replay, fallback, or stale-commit evidence also fails.
   - Reusable visualizer packets are synchronous scratch storage. The lock must keep generation/activation/required-waveform checks ahead of packet delivery, preserve hidden-primer `fade=0`, and prove the same packet can be reused without carrying stale mode/source keys.
+  - Dev Curve owns one epoch-tagged COMPUTE solve. The lock must prove no overlap while a task/result is pending, stale result rejection after reset, first-frame hiding until a valid curve is published, and no mutation of the curve currently consumed by the renderer. `[PERF] [SPOTIFY_VIS][DEVCURVE]` worker samples above `16.67 ms` are throughput evidence, not permission to reduce cadence or fidelity.
   - Cached `[PERF][SPOTIFY_VIS][BUBBLE]` summaries can outlive Bubble mode. They are telemetry-only unless Bubble simulation/drift/dispatch lines also continue after the switch.
   - Harness success is still not final sign-off for visual bugs, but this lock is the required pre/post guard for shared seams.
 
@@ -204,6 +208,16 @@ python -m pytest `
   tests/test_overlay_render_dispatch.py `
   tests/test_spotify_overlay_repaint_contract.py `
   tests/test_display_image_ops.py `
+  tests/test_display_setup.py `
+  tests/test_display_widget_target_size.py `
+  tests/test_image_presenter.py `
+  tests/test_image_upload_payload.py `
+  tests/test_adaptive_timer.py `
+  tests/test_gl_compositor_cleanup.py `
+  tests/test_gl_texture_streaming.py `
+  tests/test_gl_shared_texture_registry.py `
+  tests/test_gl_shader_fallback_diagnostics.py `
+  tests/test_startup_shader_warmup.py `
   -q --tb=short
 ```
 - Broader ownership command:
@@ -211,19 +225,33 @@ python -m pytest `
 python -m pytest `
   tests/test_gl_compositor_transitions.py `
   tests/test_gl_compositor_transition_lifecycle.py `
+  tests/test_gl_compositor_cleanup.py `
+  tests/test_transition_controller_transaction.py `
   tests/test_display_image_ops.py `
+  tests/test_display_setup.py `
+  tests/test_display_widget_target_size.py `
+  tests/test_image_presenter.py `
+  tests/test_image_upload_payload.py `
   tests/test_custom_layout_manager.py `
   tests/test_gl_texture_streaming.py `
+  tests/test_gl_shared_texture_registry.py `
   tests/test_resource_manager.py `
   tests/test_usage_sampler.py `
   tests/test_transition_perf_health_parser.py `
   -q --tb=short
 ```
-- Normal runtime command: launch the packaged build with `SRPSS_SINGLE_SURFACE_VISUALIZER` unset or `1` and use `--perf --viz --usage --cache --life --geo`. A healthy normal run must select `target=compositor`, must not create `legacy_child`, must not compile a missing visualizer mode from visible paint, and must report zero compositor renderer failures. Any `Startup renderer reached a terminal hidden state` line is failure evidence and must appear once for that display generation without repeated 16ms readiness scheduling. FBO resize counters may advance only for startup, real logical-size changes, or DPR/screen changes; unchanged-generation texture reuse should grow when compositor paint cadence exceeds accepted visualizer generations.
+- Normal runtime command: launch the packaged build with `SRPSS_SINGLE_SURFACE_VISUALIZER` unset or `1` and use `--perf --viz --usage --cache --life --geo`. A healthy normal run must select `target=compositor`, must not create `legacy_child`, must not compile a missing visualizer mode from visible paint, and must report zero compositor renderer failures. Any `Startup renderer reached a terminal hidden state` line is failure evidence and must appear once for that display generation without repeated 16ms readiness scheduling. FBO resize counters may advance only for startup, real logical-size changes, or DPR/screen changes; unchanged-generation texture reuse should grow when compositor paint cadence exceeds accepted visualizer generations. `[GL PAINT PATH]` must show steady `idle_gl`; allow one first-image idle fallback per display generation, reject three or at least 5% of an idle window, and treat any transition QPainter fallback as failure.
 - Explicit rollback command: set `$env:SRPSS_SINGLE_SURFACE_VISUALIZER='0'` before launching the same scenario. The only expected legacy reason is `explicit_rollback`; unset the variable before returning to normal validation. A deliberate software backend may report `software_backend`. Any `hard_fallback_*` reason is authorized only before reveal but remains failure evidence, not a passing normal result.
 - Runtime acceptance:
   - cover every supported mode, live/paused state, all transition families, idle rendering, mode/preset hotswap, mixed refresh, 100-200% DPR, portrait/landscape, CUSTOM move/resize/save/cancel/reset, Settings restart, topology reduction/return, and final teardown
   - require no flash, blank card, stale frame, unclipped visualizer, sudden transition commit, repaint rescue, post-reveal surface switch, or fidelity/cadence/reactivity reduction
+  - require owner wakeups to match accepted handoffs, `pending_skips=0`, ordinary `paint_wait_timeouts=0`, and no no-requeue pending-paint stall after initial compositor realization
+  - require terminal completion only after a successful terminal shader paint; fallback, not-ready, base-only, cancellation, Settings rebuild, and teardown cannot authorize a destination commit
+  - race terminal paint/completion against CUSTOM save/cancel, Settings entry, topology reduction/return, and final exit; teardown must first close transition admission and the compositor shutdown barrier, reconcile one committed base, request render-owner retirement without a Qt-thread wait, and clean GL resources on each context/surface affinity thread while manager ownership remains until asynchronous stop acknowledgement; every real retirement must emit request-to-ack `latency_ms`, with zero parser anomalies above `250 ms`
+  - require reusable Settings pause to reopen display/controller/compositor admission before first-image publication; reject `blocked_save`/image-delivery drops caused by a stale quiesce flag, half-open nested admission, or any attempt to resume a permanently quiesced display
+  - require PERF HUD/public busy state, compositor frame state, queued completion, and resident destination commit to agree for every generation; reject wrapper-active/compositor-empty state, `terminal_due` surviving quiesce, a new transition after shutdown begins, or a completion queue older than two owner frames
+  - require zero raw `Cannot make QOpenGLContext current in a different thread`, stale hidden-warmup callback, context-generation reuse, crash, or process hang after repeated edit/runtime rebuilds
+  - require a committed base to retain stable texture residency after every transition and Settings rebuild at 100-200% DPR, including one-pixel-shrink geometries; paint may not upload or convert to recover residency
   - parse ordinary and deliberately externally loaded windows separately
   - compare against the pre-overhaul baseline only after the new ResourceManager texture/VBO/VAO/program/framebuffer/renderbuffer plateau is established
 - Parser command:
@@ -302,6 +330,7 @@ python -m pytest tests/test_image_prefetcher.py tests/test_image_pipeline.py -q 
   - short Spotify overlay paint-delivery gaps or accepted-update waits may be hidden by healthy ten-second average throughput
   - cache fallback warnings need producer-state classification
   - pending paint/update delivery needs to be distinguished from render timer cadence and queued-dispatch coalescing
+  - asynchronous adaptive render-owner retirement needs request-to-ack latency and stale-pending-race classification
 - Transition/cache health commands:
 ```powershell
 python tools/transition_perf_health_parser.py --log logs\screensaver_perf.log --max-samples 8
@@ -312,13 +341,13 @@ python tools/transition_perf_health_parser.py --log logs\screensaver_cache.log -
 ```
 - Start runtime collection with `--usage`; combine it with `--perf --viz` when diagnosing visualizer/cadence pressure. The parser auto-merges `screensaver_usage.log` beside the primary `screensaver_perf.log` when present, while `--usage-log` selects an explicit sidecar.
 - `--usage` samples about every 15 seconds and records collector-owned main-plus-child/main/system CPU-time deltas, bounded top-four OS-thread CPU attribution, RSS/private/VMS, thread/handle/IO totals, ThreadManager submitted/completed/failed activity, app-shared ResourceManager totals and GL texture/VBO/VAO/program/framebuffer/renderbuffer registrations, Windows per-process GPU engine usage, dedicated/shared VRAM, collection duration, cadence gap, and skipped submissions. `na` means unavailable, unsupported, or not yet primed, never measured zero. Sampling stays serialized inside the collector, so alternating ThreadManager IO workers share one valid baseline rather than manufacturing idle samples.
-- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, per-process-lifetime RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, direct-vs-owned upload staging, transition start refusals, instant destination commits, dropped next-image requests, GL program lifecycle/binding errors, first-frame/reactivity safeguard failures, unexpected legacy visualizer selection, compositor visualizer render failures/FBO churn, and usage samples close to visualizer timing warnings. Dated rotations are ordered by full date and usage sequence resets start a new lifetime, so growth and throughput never cross application starts. Hot-thread summaries identify `MainThread`, named Python workers, and child PID/TID owners without stack collection. The parser also parses fixed-memory `[MICROGAP]` summaries by owning screen/surface and `transition_active` / `just_ended` / `mode_handoff` / `steady_idle` context, so a healthy average cannot hide a `100+ ms` paint gap, delivered wait, or still-pending accepted update. Historical paused transition probes are reported separately and excluded from live severe latency; playing probes remain severe. Correlation is evidence, not automatic root-cause proof.
+- The parser flags slow/late/skipped telemetry, sustained CPU/GPU pressure, per-process-lifetime RSS/private/VMS/thread/handle/VRAM growth, compute backlog growth, ResourceManager registration growth, GL texture-manager cleanup above four textures/one PBO/five registrations, direct-vs-owned upload staging, transition start refusals, instant destination commits, dropped next-image requests, GL program lifecycle/binding errors, Qt/OpenGL affinity violations, terminal transaction failures, stale image-publication suppression, adaptive render-owner stop acknowledgements above `250 ms`, first-frame/reactivity safeguard failures, unexpected legacy visualizer selection, compositor visualizer render failures/FBO churn, and usage samples close to visualizer timing warnings. Dated rotations are ordered by full date and usage sequence resets start a new lifetime, so growth and throughput never cross application starts. Hot-thread summaries identify `MainThread`, named Python workers, and child PID/TID owners without stack collection. The parser also parses fixed-memory `[MICROGAP]` summaries by owning screen/surface and `transition_active` / `just_ended` / `mode_handoff` / `steady_idle` context, so a healthy average cannot hide a `100+ ms` paint gap, delivered wait, or still-pending accepted update. Historical paused transition probes are reported separately and excluded from live severe latency; playing probes remain severe. Correlation is evidence, not automatic root-cause proof.
 - Focused implementation bar:
 ```powershell
 python -m pytest tests/test_thread_manager.py tests/test_usage_sampler.py tests/test_resource_manager.py tests/test_display_cleanup.py tests/test_gl_texture_streaming.py tests/test_image_prefetcher.py tests/test_logging_config.py tests/test_transition_perf_health_parser.py tests/test_fresh_start_logging.py -q --tb=short
 ```
 - Non-interference is mandatory: no tray probe, unmanaged thread, per-frame OS/GL query, extra UI-thread timer, repaint/update rescue, mode retuning, source-cadence change, or automatic quality reduction. Renderer microgap collection is `--perf`-only, uses preallocated fixed buckets and the existing ten-second summary, and retains only one oldest accepted-but-unpainted timestamp. Run the current-good visualizer reactivity and smoothness lock before and after telemetry/shared-perf changes.
-- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, Spotify overlay microgaps/waits that exceed owner-cadence thresholds, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
+- Add `--fail-on-anomaly` when using it as a CI/local bar. It flags paired paint-delivery starvation where same-screen `GL RENDER` remains healthy but `GL PAINT` under-delivers, high-refresh visual paint/render windows stuck near 60fps, high-refresh animation/control callback cadence collapsed near 60fps, stable divisor-like cadence (`target/2` or `target/3`), Spotify visualizer overlay overpaint beyond the owning display target, Spotify visualizer overlay under-delivery where the feed is healthy but paint/update cadence is visibly choppy, Spotify overlay microgaps/waits that exceed owner-cadence thresholds, render timer wakeups skipped because an update dispatch was still queued or paint pending had gone stale (`pending_skips`), 60Hz transition/render/paint windows far under target, AnimationManager progress-sample windows far under target, MediaWidget timer gaps, Spotify visualizer timing warnings, settings UI stalls above 1s, pending-paint requeue rescues, passive pending-paint stalls with `no_requeue=True`, Qt/OpenGL affinity or terminal-transaction failures, adaptive render-owner stop acknowledgement above `250 ms`, zero-producer cache worker fallbacks, slow GL texture uploads, and loud shader fallbacks.
 - Use `--extra-log logs\screensaver_spotify_vis.log --extra-log logs\screensaver.log` when investigating Spotify/media/visualizer topology; the perf sidecar owns render/paint cadence, the viz sidecar owns visualizer creation/display ownership, and the main log carries media/fallback context.
 - Add `--timeline` when root-causing collapse. It prints settings stalls, edit saves, display lifecycle churn, frame-budget spikes, visualizer tick spikes, slow uploads, fallback use, and pending-paint rescues so paint starvation can be correlated before touching runtime cadence. Preserve explicit ordinary/settings-rebuild/external-load scenario boundaries in the run notes; the parser cannot infer unrelated application load from SRPSS logs alone.
 - For current shader-authoritative compositor transitions, `GL PAINT` / `GL RENDER` are the primary visible cadence signals. `GL ANIM` transition-progress windows should not be required for those paths after the paint-time `FrameState` handoff; if they reappear during shader transitions, treat that as a regression toward UI-timer-owned progress.

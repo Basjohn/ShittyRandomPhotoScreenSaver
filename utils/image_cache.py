@@ -1,14 +1,15 @@
 """
 LRU (Least Recently Used) cache for images.
 
-Caches decoded images to avoid redundant disk I/O and decoding.
-Supports caching of QImage (thread-safe decode) and QPixmap (UI-ready).
+Caches decoded images and immutable upload payloads to avoid redundant disk I/O,
+scaling, and GL upload preparation.
 """
 from collections import OrderedDict
 import threading
 from typing import Optional, Union
 from PySide6.QtGui import QPixmap, QImage
 from core.logging.logger import get_logger, is_verbose_logging
+from rendering.image_upload_payload import ImageUploadPayload
 
 logger = get_logger(__name__)
 
@@ -38,7 +39,10 @@ class ImageCache:
         self.max_items = max_items
         self.max_memory_bytes = max_memory_mb * 1024 * 1024
         
-        self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
+        self._cache: OrderedDict[
+            str,
+            Union[QImage, QPixmap, ImageUploadPayload],
+        ] = OrderedDict()
         self._current_memory = 0
         # Lightweight telemetry counters for cache profiling.
         self._hit_count: int = 0
@@ -49,7 +53,10 @@ class ImageCache:
         logger.info(f"ImageCache initialized: max_items={max_items}, "
                    f"max_memory={max_memory_mb}MB")
     
-    def get(self, key: str) -> Optional[Union[QImage, QPixmap]]:
+    def get(
+        self,
+        key: str,
+    ) -> Optional[Union[QImage, QPixmap, ImageUploadPayload]]:
         """
         Get an image from cache.
         
@@ -73,7 +80,11 @@ class ImageCache:
                 logger.debug(f"Cache miss: {key}")
             return None
     
-    def put(self, key: str, image: Union[QImage, QPixmap]) -> None:
+    def put(
+        self,
+        key: str,
+        image: Union[QImage, QPixmap, ImageUploadPayload],
+    ) -> None:
         """
         Add an image to cache.
         
@@ -199,7 +210,10 @@ class ImageCache:
         if is_verbose_logging():
             logger.debug(f"Evicted from cache: {key}")
     
-    def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
+    def _estimate_size(
+        self,
+        image: Union[QImage, QPixmap, ImageUploadPayload],
+    ) -> int:
         """
         Estimate memory size of a QPixmap.
         
@@ -209,6 +223,9 @@ class ImageCache:
         Returns:
             Estimated size in bytes
         """
+        if isinstance(image, ImageUploadPayload):
+            return int(image.byte_size)
+
         # Handle null/invalid images
         if (isinstance(image, QPixmap) and image.isNull()) or (isinstance(image, QImage) and image.isNull()):
             return 0

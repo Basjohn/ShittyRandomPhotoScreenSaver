@@ -958,10 +958,13 @@ def _append_devcurve_visual_extras(extra: Dict[str, Any], widget: Any) -> None:
     """Attach GL-safe Dev Curve extras for the compositor overlay."""
     extra['devcurve_base_level'] = float(getattr(widget, '_devcurve_base_level', 0.58))
     extra['devcurve_sample_count'] = int(getattr(widget, '_devcurve_sample_count', 96))
-    extra['devcurve_curve_bass'] = list(getattr(widget, '_devcurve_curve_bass', []))
-    extra['devcurve_curve_vocals'] = list(getattr(widget, '_devcurve_curve_vocals', []))
-    extra['devcurve_curve_mids'] = list(getattr(widget, '_devcurve_curve_mids', []))
-    extra['devcurve_curve_transients'] = list(getattr(widget, '_devcurve_curve_transients', []))
+    # Completed worker frames are immutable after UI publication. Preserve
+    # their list identity through transport instead of copying 4x96 samples
+    # again on every visualizer tick.
+    extra['devcurve_curve_bass'] = getattr(widget, '_devcurve_curve_bass', [])
+    extra['devcurve_curve_vocals'] = getattr(widget, '_devcurve_curve_vocals', [])
+    extra['devcurve_curve_mids'] = getattr(widget, '_devcurve_curve_mids', [])
+    extra['devcurve_curve_transients'] = getattr(widget, '_devcurve_curve_transients', [])
     extra['devcurve_layer_bass_color'] = getattr(widget, '_devcurve_layer_bass_color', None)
     extra['devcurve_layer_vocals_color'] = getattr(widget, '_devcurve_layer_vocals_color', None)
     extra['devcurve_layer_mids_color'] = getattr(widget, '_devcurve_layer_mids_color', None)

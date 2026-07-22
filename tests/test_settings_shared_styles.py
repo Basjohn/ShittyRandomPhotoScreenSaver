@@ -51,3 +51,39 @@ def test_no_wheel_slider_does_not_store_invalid_current_slider(qt_app):
         shared_styles.Shiboken = original_shiboken
         shared_styles._last_moved_slider = original_last_moved
         current.deleteLater()
+
+
+def test_complex_script_fallback_prefers_installed_shaping_font(monkeypatch):
+    inserted: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        shared_styles.QFontDatabase,
+        "families",
+        staticmethod(lambda: ["Arial", "Nirmala UI"]),
+    )
+    monkeypatch.setattr(
+        shared_styles.QFont,
+        "substitutes",
+        staticmethod(lambda _family: []),
+    )
+    monkeypatch.setattr(
+        shared_styles.QFont,
+        "insertSubstitution",
+        staticmethod(lambda family, fallback: inserted.append((family, fallback))),
+    )
+
+    assert shared_styles._configure_complex_script_fallbacks() == "Nirmala UI"
+    assert inserted == [
+        (family, "Nirmala UI")
+        for family in shared_styles._COMPLEX_SCRIPT_BASE_FAMILIES
+    ]
+
+
+def test_complex_script_fallback_is_optional(monkeypatch):
+    monkeypatch.setattr(
+        shared_styles.QFontDatabase,
+        "families",
+        staticmethod(lambda: ["Arial"]),
+    )
+
+    assert shared_styles._configure_complex_script_fallbacks() is None

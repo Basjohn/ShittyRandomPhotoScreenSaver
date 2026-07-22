@@ -21,6 +21,14 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+_PAINT_PATH_WINDOW_S = 10.0
+_PAINT_PATHS = (
+    "idle_gl",
+    "transition_gl",
+    "idle_qpainter_fallback",
+    "transition_qpainter_fallback",
+)
+
 
 def _get_screen_index(widget) -> int | None:
     parent = None
@@ -167,6 +175,7 @@ def begin_paint_metrics(widget, label: str) -> None:
 def record_paint_metrics(widget, paint_duration_ms: float) -> None:
     if not is_perf_metrics_enabled():
         return
+    _record_paint_path_window(widget, paint_duration_ms)
     metrics = widget._paint_metrics
     if metrics is None:
         return
@@ -192,6 +201,66 @@ def record_paint_metrics(widget, paint_duration_ms: float) -> None:
                 stall_context,
             )
             widget._paint_warning_last_ts = now
+
+
+def _record_paint_path_window(widget, paint_duration_ms: float) -> None:
+    """Aggregate paint architecture evidence without per-frame logging."""
+
+    path = str(getattr(widget, "_last_paint_path", "") or "")
+    if path not in _PAINT_PATHS:
+        return
+    now = time.monotonic()
+    window = getattr(widget, "_paint_path_window", None)
+    if not isinstance(window, dict):
+        window = {
+            "started": now,
+            "counts": [0, 0, 0, 0],
+            "totals": [0.0, 0.0, 0.0, 0.0],
+            "maxima": [0.0, 0.0, 0.0, 0.0],
+        }
+        widget._paint_path_window = window
+
+    index = _PAINT_PATHS.index(path)
+    counts = window["counts"]
+    totals = window["totals"]
+    maxima = window["maxima"]
+    counts[index] += 1
+    totals[index] += float(paint_duration_ms)
+    maxima[index] = max(maxima[index], float(paint_duration_ms))
+
+    elapsed_s = max(0.0, now - float(window["started"]))
+    if elapsed_s < _PAINT_PATH_WINDOW_S:
+        return
+
+    payload: list[object] = [
+        _get_screen_index(widget),
+        elapsed_s * 1000.0,
+        sum(counts),
+    ]
+    for path_index in range(len(_PAINT_PATHS)):
+        count = int(counts[path_index])
+        payload.extend(
+            [
+                count,
+                (float(totals[path_index]) / count) if count else 0.0,
+                float(maxima[path_index]),
+            ]
+        )
+    logger.info(
+        "[PERF] [GL PAINT PATH] screen=%s elapsed_ms=%.1f total=%d "
+        "idle_gl=%d idle_gl_avg_ms=%.3f idle_gl_max_ms=%.3f "
+        "transition_gl=%d transition_gl_avg_ms=%.3f transition_gl_max_ms=%.3f "
+        "idle_qpainter_fallback=%d idle_qpainter_avg_ms=%.3f idle_qpainter_max_ms=%.3f "
+        "transition_qpainter_fallback=%d transition_qpainter_avg_ms=%.3f "
+        "transition_qpainter_max_ms=%.3f",
+        *payload,
+    )
+    widget._paint_path_window = {
+        "started": now,
+        "counts": [0, 0, 0, 0],
+        "totals": [0.0, 0.0, 0.0, 0.0],
+        "maxima": [0.0, 0.0, 0.0, 0.0],
+    }
 
 
 def finalize_paint_metrics(widget, outcome: str = "stopped") -> None:

@@ -9,6 +9,7 @@ instrumentation around transition cancellation.
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import Qt, QPoint
@@ -16,7 +17,7 @@ from PySide6.QtWidgets import QWidget
 
 from core.animation import AnimationManager, EasingCurve
 from core.animation.frame_interpolator import FrameState
-from rendering.gl_compositor import GLCompositorWidget
+from rendering.gl_compositor import GLCompositorWidget, _TerminalTransitionCompletion
 from rendering.gl_compositor_pkg.paint import _sync_transition_progress_from_frame_state
 from rendering.gl_profiler import TransitionProfiler
 from rendering.gl_transition_renderer import _aspect_fill_source_rect
@@ -204,12 +205,32 @@ def test_cancel_current_transition_snaps_to_new_pixmap(qt_app, monkeypatch):
     )
 
     assert anim_id is not None
+    calls = []
+
+    class _TextureManager:
+        new_tex_id = 202
+
+        def commit_cached_texture(self, pixmap, *, texture_id=None):
+            calls.append(("commit", pixmap, texture_id))
+            return int(texture_id or 0)
+
+        def clear_committed_texture(self):
+            calls.append(("clear",))
+
+    comp._texture_manager = _TextureManager()
+    monkeypatch.setattr(
+        comp,
+        "_release_transition_textures",
+        lambda: calls.append(("release",)),
+    )
     comp.cancel_current_transition(snap_to_new=True)
 
     assert anim_mgr.get_active_count() == 0
     assert comp._current_anim_id is None
     assert comp._base_pixmap is not None
     assert comp._base_pixmap.cacheKey() == new_pm.cacheKey()
+    assert calls[0] == ("commit", new_pm, 202)
+    assert calls[1] == ("release",)
 
     anim_mgr.cancel_all()
     anim_mgr.stop()
@@ -274,10 +295,18 @@ def test_stop_rendering_invalidates_late_lazy_animation_callback(qt_app, monkeyp
 
     assert anim_id.startswith("wipe:timeline:")
     assert animate_calls == []
-    assert scheduled and scheduled[0][0] == 200
+    assert scheduled == []
     comp.stop_rendering(reason="test-late-callback")
 
-    scheduled[0][1]()
+    comp._terminal_transaction = _TerminalTransitionCompletion(
+        animation_generation=comp._transition_animation_generation - 1,
+        transition_name="wipe",
+        complete_callback=lambda: complete_calls.append("complete"),
+        created_ts=0.0,
+        phase="completion_queued",
+    )
+    comp._terminal_completion_dispatch_pending = True
+    comp._srpss_complete_terminal_transition()
 
     assert update_calls == []
     assert complete_calls == []
@@ -315,16 +344,194 @@ def test_transition_render_timer_starts_before_first_animation_tick(qt_app, monk
 
     assert anim_id.startswith("wipe:timeline:")
     assert calls == ["program", "render_timer", "paint_metrics"]
-    assert scheduled and scheduled[0][0] == 200
+    assert scheduled == []
     assert "animate" not in calls
     assert update_calls == []
 
-    scheduled[0][1]()
+    queued: list[object] = []
 
-    assert update_calls == [1.0]
+    def _queue_completion(completion):
+        completion.phase = "completion_queued"
+        queued.append(completion)
+        return True
+
+    monkeypatch.setattr(
+        comp,
+        "_queue_terminal_transition_completion",
+        _queue_completion,
+    )
+    comp._presentation_paint_completed(
+        comp._presentation_dirty_generation,
+        terminal_transition_rendered=False,
+    )
+    assert queued == []
     assert complete_calls == []
-    comp._presentation_paint_completed(comp._presentation_dirty_generation)
+
+    comp._presentation_paint_completed(
+        comp._presentation_dirty_generation,
+        terminal_transition_rendered=True,
+    )
+    assert len(queued) == 1
+    comp._terminal_completion_dispatch_pending = True
+    comp._srpss_complete_terminal_transition()
+
+    # Terminal paint is authoritative; wrapper progress is not replayed on a
+    # second completion clock after the destination has been rendered.
+    assert update_calls == []
     assert complete_calls == ["complete"]
+
+
+@pytest.mark.qt_no_exception_capture
+def test_rejected_terminal_dispatch_defers_once_without_per_paint_retry(
+    qt_app,
+    monkeypatch,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    completions = []
+    deferred = []
+    pauses = []
+    generation = comp._transition_animation_generation
+    comp._terminal_transaction = _TerminalTransitionCompletion(
+        animation_generation=generation,
+        transition_name="wipe",
+        complete_callback=lambda: completions.append("complete"),
+        created_ts=0.0,
+    )
+    comp._presentation_dirty_generation = 4
+    comp._presentation_requested_generation = 4
+    comp._presentation_ack_generation = 3
+
+    monkeypatch.setattr(
+        "rendering.gl_compositor.QMetaObject.invokeMethod",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "core.threading.manager.ThreadManager.single_shot",
+        lambda delay, callback: deferred.append((delay, callback)),
+    )
+    monkeypatch.setattr(comp, "_stop_frame_pacing", lambda: pauses.append(True))
+
+    comp._presentation_paint_completed(
+        4,
+        terminal_transition_rendered=True,
+    )
+    comp._presentation_paint_completed(
+        4,
+        terminal_transition_rendered=True,
+    )
+
+    assert comp._terminal_transaction is not None
+    assert comp._terminal_transaction.phase == "completion_dispatch_failed"
+    assert comp._terminal_completion_dispatch_pending is False
+    assert pauses == []
+    assert deferred == []
+    assert completions == []
+    assert comp.can_accept_transition() is False
+
+
+@pytest.mark.qt_no_exception_capture
+@pytest.mark.parametrize(
+    ("name", "state_attr", "release_textures"),
+    [
+        ("crossfade", "_crossfade", False),
+        ("slide", "_slide", False),
+        ("wipe", "_wipe", False),
+        ("blockspin", "_blockspin", False),
+        ("warp", "_warp", True),
+        ("raindrops", "_raindrops", True),
+        ("blockflip", "_blockflip", False),
+        ("diffuse", "_diffuse", False),
+        ("blinds", "_blinds", False),
+        ("crumble", "_crumble", False),
+        ("particle", "_particle", False),
+        ("burn", "_burn", True),
+    ],
+)
+def test_transition_completion_promotes_destination_before_pair_release(
+    qt_app,
+    monkeypatch,
+    name,
+    state_attr,
+    release_textures,
+):
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    destination = solid_pixmap(64, 64, Qt.GlobalColor.green)
+    calls = []
+
+    class _TextureManager:
+        new_tex_id = 202
+
+        def commit_cached_texture(self, pixmap, *, texture_id=None):
+            calls.append(("commit", pixmap, texture_id))
+            return int(texture_id or 0)
+
+        def clear_committed_texture(self):
+            calls.append(("clear",))
+
+    manager = _TextureManager()
+    comp._texture_manager = manager
+    setattr(comp, state_attr, SimpleNamespace(new_pixmap=destination))
+    monkeypatch.setattr(comp, "_stop_frame_pacing", lambda: None)
+    monkeypatch.setattr(comp, "_release_transition_textures", lambda: calls.append(("release",)))
+    monkeypatch.setattr(comp, "request_scene_update", lambda **_kwargs: True)
+
+    comp._complete_transition(
+        name,
+        state_attr,
+        on_finished=None,
+        release_textures=release_textures,
+    )
+
+    assert comp._base_pixmap is destination
+    assert calls[0] == ("commit", destination, 202)
+    if release_textures:
+        assert calls[1] == ("release",)
+    else:
+        assert calls == [("commit", destination, 202)]
+
+
+@pytest.mark.qt_no_exception_capture
+def test_transition_completion_commits_payload_identity(qt_app, monkeypatch):
+    from rendering.image_upload_payload import ImageUploadPayload
+
+    parent, comp = _setup_compositor(monkeypatch)  # noqa: F841
+    destination = solid_pixmap(8, 8, Qt.GlobalColor.green)
+    payload = ImageUploadPayload.from_rgba8(8, 8, b"\x06" * (8 * 8 * 4))
+    calls = []
+
+    class _TextureManager:
+        new_tex_id = 303
+
+        def commit_cached_texture(
+            self,
+            pixmap=None,
+            *,
+            payload=None,
+            texture_id=None,
+        ):
+            calls.append((pixmap, payload, texture_id))
+            return int(texture_id or 0)
+
+        def clear_committed_texture(self):
+            calls.append(("clear",))
+
+    comp._texture_manager = _TextureManager()
+    comp._wipe = SimpleNamespace(
+        new_pixmap=destination,
+        new_upload_payload=payload,
+    )
+    monkeypatch.setattr(comp, "_stop_frame_pacing", lambda: None)
+    monkeypatch.setattr(comp, "request_scene_update", lambda **_kwargs: True)
+
+    comp._complete_transition(
+        "wipe",
+        "_wipe",
+        on_finished=None,
+    )
+
+    assert comp._base_pixmap is destination
+    assert comp._base_upload_payload is payload
+    assert calls == [(None, payload, 303)]
 
 
 @pytest.mark.qt_no_exception_capture
@@ -605,7 +812,7 @@ def test_warm_transition_resources_uses_single_current_context_cycle(qt_app, mon
     monkeypatch.setattr(
         comp,
         "_warm_pixmap_textures_in_current_context",
-        lambda old_pixmap, new_pixmap: calls.append("textures") or True,
+        lambda old_pixmap, new_pixmap, **_kwargs: calls.append("textures") or True,
     )
     monkeypatch.setattr(
         comp,
