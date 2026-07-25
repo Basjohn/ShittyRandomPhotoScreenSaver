@@ -566,6 +566,7 @@ def dispatch_bubble_simulation(widget: Any, now_ts: float) -> None:
         dt_bubble, eb_snap, sim_settings, pulse_params,
         callback=widget._bubble_compute_done,
         task_id=getattr(widget, "_bubble_sim_task_id", f"bubble_sim_{id(widget)}"),
+        category="visualizer.bubble_simulation",
     )
 
 

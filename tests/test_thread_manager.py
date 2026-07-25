@@ -142,6 +142,11 @@ class TestTaskClass:
         task = Task(lambda: None, task_id="my_task")
         assert task.task_id == "my_task"
 
+    def test_task_category_is_passive_metadata(self):
+        task = Task(lambda: None, category="visualizer.audio_analysis")
+        assert task.category == "visualizer.audio_analysis"
+        assert task.kwargs == {}
+
     def test_task_comparison_by_priority(self):
         """Test Task comparison uses priority."""
         low = Task(lambda: None, priority=TaskPriority.LOW)
@@ -206,6 +211,96 @@ class TestThreadManagerSubmit:
         finally:
             original_executor.shutdown(wait=False, cancel_futures=True)
             manager.shutdown()
+
+    def test_category_counts_are_authoritative_without_ui_drain(self):
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                future.set_result(fn())
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            manager.submit_compute_task(
+                lambda: "done",
+                task_id="categorized_fast_task",
+                category="visualizer.audio_analysis",
+            )
+            snapshot = manager.get_task_category_stats()
+            assert snapshot["visualizer.audio_analysis"] == {
+                "submitted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "rejected": 0,
+                "active": 0,
+            }
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
+    def test_category_cardinality_is_bounded_with_overflow_bucket(self):
+        class InlineExecutor:
+            def submit(self, fn):
+                future = Future()
+                future.set_result(fn())
+                return future
+
+            def shutdown(self, wait=True, cancel_futures=False):
+                return None
+
+        manager = ThreadManager()
+        original_executor = manager._executors[ThreadPoolType.COMPUTE]
+        manager._executors[ThreadPoolType.COMPUTE] = InlineExecutor()
+        try:
+            for index in range(65):
+                manager.submit_compute_task(
+                    lambda: None,
+                    task_id=f"bounded_category_{index}",
+                    category=f"dynamic.{index}",
+                )
+
+            snapshot = manager.get_task_category_stats()
+            assert len(snapshot) == manager._max_task_categories
+            assert snapshot["other"]["submitted"] == 2
+        finally:
+            original_executor.shutdown(wait=False, cancel_futures=True)
+            manager.shutdown()
+
+    def test_category_snapshot_reports_active_and_failed_tasks(self):
+        manager = ThreadManager()
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_task():
+            started.set()
+            release.wait(timeout=1.0)
+            raise RuntimeError("expected")
+
+        manager.submit_compute_task(
+            blocking_task,
+            category="image.processing",
+        )
+        assert started.wait(timeout=0.5)
+        active = manager.get_task_category_stats()["image.processing"]
+        assert active["submitted"] == 1
+        assert active["active"] == 1
+
+        release.set()
+        deadline = time.time() + 1.0
+        while time.time() < deadline:
+            snapshot = manager.get_task_category_stats()["image.processing"]
+            if snapshot["active"] == 0:
+                break
+            time.sleep(0.01)
+        assert snapshot["failed"] == 1
+        assert snapshot["active"] == 0
+        manager.shutdown()
 
     def test_submit_io_task(self):
         """Test submitting task to IO pool."""

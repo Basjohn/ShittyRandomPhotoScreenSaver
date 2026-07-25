@@ -265,6 +265,7 @@ class ImagePrefetcher:
                 path,
                 priority=TaskPriority.LOW,
                 callback=_on_done,
+                category="image.prefetch_raw",
             )
         except Exception as e:
             logger.debug(f"Prefetch submit failed for {path}: {e}")
@@ -388,6 +389,7 @@ class ImagePrefetcher:
                 _compute_scaled_variant,
                 priority=TaskPriority.LOW,
                 callback=_on_done,
+                category="image.prefetch_scaled",
             )
         except Exception as e:
             logger.debug("Scaled prefetch submit failed for %s: %s", cache_key, e)

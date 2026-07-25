@@ -1,0 +1,83 @@
+"""Passive accounting tests for the existing image-cache behavior."""
+import math
+
+import pytest
+from PySide6.QtGui import QImage, QPixmap
+
+from utils.image_cache import ImageCache
+
+
+def test_qimage_exact_bytes_are_separate_from_approximate_budget():
+    cache = ImageCache(max_items=2, owner="decode-cache", generation=7)
+    image = QImage(5, 2, QImage.Format.Format_RGB888)
+
+    cache.put("image", image)
+
+    assert cache.memory_usage() == 5 * 2 * 4
+    assert cache.tracked_memory_usage() == image.sizeInBytes()
+    snapshot = cache.get_accounting_snapshot()
+    assert snapshot["total_tracked_bytes"] == image.sizeInBytes()
+    assert snapshot["resources"][0]["owner"] == "decode-cache"
+    assert snapshot["resources"][0]["generation"] == 7
+    assert snapshot["resources"][0]["dimensions"] == (5, 2)
+    assert snapshot["resources"][0]["lease_count"] is None
+    with pytest.raises(TypeError):
+        snapshot["total_tracked_bytes"] = 0
+    with pytest.raises(TypeError):
+        snapshot["resources"][0]["tracked_bytes"] = 0
+
+
+def test_qpixmap_exact_bytes_use_depth_rounding(qt_app):
+    cache = ImageCache(max_items=2)
+    pixmap = QPixmap(7, 3)
+
+    cache.put("pixmap", pixmap)
+
+    expected = 7 * 3 * math.ceil(pixmap.depth() / 8)
+    assert cache.tracked_memory_usage() == expected
+    entry = cache.get_accounting_snapshot()["resources"][0]
+    assert entry["tracked_bytes"] == expected
+    assert entry["format"] == f"QPixmap(depth={pixmap.depth()})"
+
+
+def test_exact_counter_follows_replacement_eviction_remove_and_clear():
+    cache = ImageCache(max_items=1)
+    first = QImage(3, 2, QImage.Format.Format_RGB888)
+    replacement = QImage(4, 2, QImage.Format.Format_Grayscale8)
+
+    cache.put("same", first)
+    cache.put("same", replacement)
+    assert cache.tracked_memory_usage() == replacement.sizeInBytes()
+
+    other = QImage(2, 2, QImage.Format.Format_ARGB32)
+    cache.put("other", other)
+    assert not cache.contains("same")
+    assert cache.tracked_memory_usage() == other.sizeInBytes()
+
+    assert cache.remove("other") is True
+    assert cache.tracked_memory_usage() == 0
+    cache.put("again", first)
+    cache.clear()
+    assert cache.tracked_memory_usage() == 0
+
+
+def test_snapshot_reads_precomputed_metadata_not_live_qt_objects():
+    cache = ImageCache(max_items=1)
+    image = QImage(3, 2, QImage.Format.Format_RGB888)
+    cache.put("image", image)
+
+    class _ExplodingImage:
+        def width(self):
+            raise AssertionError("snapshot touched live image")
+
+        def height(self):
+            raise AssertionError("snapshot touched live image")
+
+        def depth(self):
+            raise AssertionError("snapshot touched live image")
+
+    cache._cache["image"] = _ExplodingImage()
+    snapshot = cache.get_accounting_snapshot()
+
+    assert snapshot["resources"][0]["dimensions"] == (3, 2)
+    assert snapshot["resources"][0]["tracked_bytes"] == image.sizeInBytes()

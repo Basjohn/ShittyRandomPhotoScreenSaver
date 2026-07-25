@@ -34,13 +34,19 @@ class GLGeometryManager:
             manager.draw_quad()
     """
     
-    def __init__(self):
+    def __init__(self, owner: str = "GLGeometryManager", generation: object = None):
+        self._owner = str(owner)
+        self._generation = generation
         self._quad_vao: int = 0
         self._quad_vbo: int = 0
         self._box_vao: int = 0
         self._box_vbo: int = 0
         self._box_vertex_count: int = 0
         self._initialized: bool = False
+        self._quad_vao_rid: Optional[str] = None
+        self._quad_vbo_rid: Optional[str] = None
+        self._box_vao_rid: Optional[str] = None
+        self._box_vbo_rid: Optional[str] = None
     
     @property
     def quad_vao(self) -> int:
@@ -139,10 +145,15 @@ class GLGeometryManager:
                 from core.resources.manager import ResourceManager
                 rm = ResourceManager.get_or_create_app_shared()
                 self._quad_vao_rid = rm.register_gl_vao(
-                    self._quad_vao, description="GeometryManager quad VAO"
+                    self._quad_vao, description="GeometryManager quad VAO",
+                    owner=self._owner, generation=self._generation,
+                    dimensions=None, format="VERTEX_ARRAY", tracked_bytes=None,
                 )
                 self._quad_vbo_rid = rm.register_gl_vbo(
-                    self._quad_vbo, description="GeometryManager quad VBO"
+                    self._quad_vbo, description="GeometryManager quad VBO",
+                    owner=self._owner, generation=self._generation,
+                    dimensions=(4, 4), format="float32[x,y,u,v]",
+                    tracked_bytes=ctypes.sizeof(vertex_data),
                 )
             except Exception as e:
                 logger.debug("[GL GEOMETRY] Failed to register quad handles: %s", e)
@@ -253,10 +264,16 @@ class GLGeometryManager:
                 from core.resources.manager import ResourceManager
                 rm = ResourceManager.get_or_create_app_shared()
                 self._box_vao_rid = rm.register_gl_vao(
-                    self._box_vao, description="GeometryManager box VAO"
+                    self._box_vao, description="GeometryManager box VAO",
+                    owner=self._owner, generation=self._generation,
+                    dimensions=None, format="VERTEX_ARRAY", tracked_bytes=None,
                 )
                 self._box_vbo_rid = rm.register_gl_vbo(
-                    self._box_vbo, description="GeometryManager box VBO"
+                    self._box_vbo, description="GeometryManager box VBO",
+                    owner=self._owner, generation=self._generation,
+                    dimensions=(self._box_vertex_count, 8),
+                    format="float32[x,y,z,nx,ny,nz,u,v]",
+                    tracked_bytes=ctypes.sizeof(box_vertex_data),
                 )
             except Exception as e:
                 logger.debug("[GL GEOMETRY] Failed to register box handles: %s", e)
@@ -335,12 +352,16 @@ class GLGeometryManager:
         try:
             if self._quad_vbo:
                 gl.glDeleteBuffers(1, [self._quad_vbo])
+                self._release_resource_tracking(self._quad_vbo_rid)
             if self._quad_vao:
                 gl.glDeleteVertexArrays(1, [self._quad_vao])
+                self._release_resource_tracking(self._quad_vao_rid)
             if self._box_vbo:
                 gl.glDeleteBuffers(1, [self._box_vbo])
+                self._release_resource_tracking(self._box_vbo_rid)
             if self._box_vao:
                 gl.glDeleteVertexArrays(1, [self._box_vao])
+                self._release_resource_tracking(self._box_vao_rid)
             logger.debug("[GL GEOMETRY] Geometry cleaned up")
         except Exception as e:
             logger.debug("[GL GEOMETRY] Cleanup error: %s", e)
@@ -351,6 +372,22 @@ class GLGeometryManager:
         self._box_vbo = 0
         self._box_vertex_count = 0
         self._initialized = False
+        self._quad_vao_rid = None
+        self._quad_vbo_rid = None
+        self._box_vao_rid = None
+        self._box_vbo_rid = None
+
+    @staticmethod
+    def _release_resource_tracking(resource_id: Optional[str]) -> None:
+        if not resource_id:
+            return
+        try:
+            from core.resources.manager import ResourceManager
+            manager = ResourceManager.get_app_shared()
+            if manager is not None:
+                manager.release_tracking(resource_id)
+        except Exception as e:
+            logger.debug("[GL GEOMETRY] Failed to release resource tracking: %s", e)
 
 
 # Module-level singleton for backward compatibility

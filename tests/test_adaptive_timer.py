@@ -36,8 +36,10 @@ class _MockThreadManager:
 
     def __init__(self):
         self._threads: list = []
+        self.categories: list[str] = []
 
-    def submit_task(self, pool_type, fn, *, task_id=None):
+    def submit_task(self, pool_type, fn, *, task_id=None, category="uncategorized"):
+        self.categories.append(category)
         t = threading.Thread(target=fn, daemon=True, name=task_id or "mock_tm")
         t.start()
         self._threads.append(t)
@@ -195,6 +197,10 @@ class TestAdaptiveTimerLifecycle(unittest.TestCase):
         self.assertTrue(result)
         self.assertTrue(self.timer.is_active())
         self.assertEqual(self.timer.get_state(), TimerState.RUNNING)
+        self.assertEqual(
+            self.compositor._parent._thread_manager.categories,
+            ["presentation.adaptive_timer"],
+        )
     
     def test_pause_transitions_to_paused(self):
         """Pause transitions from RUNNING to PAUSED."""

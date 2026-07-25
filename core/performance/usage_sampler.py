@@ -1,10 +1,11 @@
 """Low-pressure whole-process resource telemetry for ``--usage`` runs."""
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable, Mapping
 
 import psutil
 
@@ -358,11 +359,13 @@ class UsageTelemetryService:
         interval_ms: int = DEFAULT_USAGE_INTERVAL_MS,
         process_collector: ProcessUsageCollector | None = None,
         gpu_collector: WindowsGpuUsageCollector | None = None,
+        resource_snapshot_provider: Callable[[], Mapping[str, Any] | Any] | None = None,
     ) -> None:
         self._thread_manager = thread_manager
         self._interval_ms = max(5_000, int(interval_ms))
         self._process_collector = process_collector or ProcessUsageCollector()
         self._gpu_collector = gpu_collector or WindowsGpuUsageCollector()
+        self._resource_snapshot_provider = resource_snapshot_provider
         self._timer: Any | None = None
         self._stopped = True
         self._in_flight = False
@@ -429,13 +432,14 @@ class UsageTelemetryService:
                 skipped,
                 task_id=f"usage_sampler_{sequence}",
                 priority=TaskPriority.LOW,
+                category="diagnostics.usage",
             )
         except Exception:
             self._in_flight = False
             if not self._stopped:
                 logger.warning("[USAGE] sample_submit_failed sequence=%d", sequence, exc_info=True)
 
-    def _thread_snapshot(self) -> dict[str, int]:
+    def _thread_snapshot(self) -> dict[str, Any]:
         active_ids = self._thread_manager.get_active_tasks()
         non_usage_active = sum(
             1 for task_id in active_ids if not task_id.startswith("usage_sampler_")
@@ -444,6 +448,8 @@ class UsageTelemetryService:
         io_stats = stats.get("io", {})
         compute_stats = stats.get("compute", {})
         config = self._thread_manager.config
+        category_getter = getattr(self._thread_manager, "get_task_category_stats", None)
+        categories = category_getter() if callable(category_getter) else {}
         return {
             "tm_active": non_usage_active,
             "tm_io_max": int(config.get(ThreadPoolType.IO, 0) or 0),
@@ -454,7 +460,27 @@ class UsageTelemetryService:
             "tm_compute_submitted": int(compute_stats.get("submitted", 0) or 0),
             "tm_compute_completed": int(compute_stats.get("completed", 0) or 0),
             "tm_compute_failed": int(compute_stats.get("failed", 0) or 0),
+            "tm_categories": json.dumps(
+                categories,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
         }
+
+    def _resource_snapshot(self) -> dict[str, Any]:
+        """Read one immutable owner-maintained accounting snapshot."""
+        provider = self._resource_snapshot_provider
+        if provider is None:
+            return {}
+        try:
+            snapshot = provider()
+            aggregate = getattr(snapshot, "aggregate_fields", None)
+            if callable(aggregate):
+                snapshot = aggregate()
+            return dict(snapshot) if isinstance(snapshot, Mapping) else {}
+        except Exception:
+            logger.debug("[USAGE] Resource accounting snapshot failed", exc_info=True)
+            return {}
 
     def _collect_and_log(
         self,
@@ -467,6 +493,7 @@ class UsageTelemetryService:
             process = self._process_collector.collect()
             gpu = self._gpu_collector.collect(process.pids)
             threads = self._thread_snapshot()
+            resources = self._resource_snapshot()
             collect_ms = (time.perf_counter() - started) * 1000.0
             logger.info(
                 "[USAGE] sample seq=%d cadence_gap_ms=%s skipped=%d collect_ms=%s "
@@ -476,9 +503,18 @@ class UsageTelemetryService:
                 "io_read_mb=%s io_write_mb=%s gpu_supported=%d gpu_active=%d "
                 "gpu_status=%s gpu_busy_pct=%s gpu_engine_sum_pct=%s "
                 "vram_supported=%d vram_dedicated_mb=%s vram_shared_mb=%s "
+                "tracked_resources=%s tracked_known_bytes=%s "
+                "cpu_cache_resources=%s cpu_cache_bytes=%s "
+                "rm_resources=%s rm_known_bytes=%s rm_unknown_resources=%s "
+                "gl_resources=%s gl_known_bytes=%s gl_unknown_resources=%s "
+                "gl_texture_resources=%s gl_texture_bytes=%s "
+                "gl_framebuffer_resources=%s gl_framebuffer_bytes=%s "
+                "gl_renderbuffer_resources=%s gl_renderbuffer_bytes=%s "
+                "gl_pbo_resources=%s gl_pbo_bytes=%s qt_default_fbo=%s "
                 "tm_active=%d tm_io_max=%d tm_compute_max=%d "
                 "tm_io_submitted=%d tm_io_completed=%d tm_io_failed=%d "
-                "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d",
+                "tm_compute_submitted=%d tm_compute_completed=%d tm_compute_failed=%d "
+                "tm_categories=%s",
                 sequence,
                 _fmt(cadence_gap_ms),
                 skipped,
@@ -505,6 +541,25 @@ class UsageTelemetryService:
                 int(gpu.vram_supported),
                 _fmt(gpu.vram_dedicated_mb),
                 _fmt(gpu.vram_shared_mb),
+                _fmt(resources.get("tracked_resources")),
+                _fmt(resources.get("tracked_known_bytes")),
+                _fmt(resources.get("cpu_cache_resources")),
+                _fmt(resources.get("cpu_cache_bytes")),
+                _fmt(resources.get("rm_resources")),
+                _fmt(resources.get("rm_known_bytes")),
+                _fmt(resources.get("rm_unknown_resources")),
+                _fmt(resources.get("gl_resources")),
+                _fmt(resources.get("gl_known_bytes")),
+                _fmt(resources.get("gl_unknown_resources")),
+                _fmt(resources.get("gl_texture_resources")),
+                _fmt(resources.get("gl_texture_bytes")),
+                _fmt(resources.get("gl_framebuffer_resources")),
+                _fmt(resources.get("gl_framebuffer_bytes")),
+                _fmt(resources.get("gl_renderbuffer_resources")),
+                _fmt(resources.get("gl_renderbuffer_bytes")),
+                _fmt(resources.get("gl_pbo_resources")),
+                _fmt(resources.get("gl_pbo_bytes")),
+                resources.get("qt_default_fbo", "na"),
                 threads["tm_active"],
                 threads["tm_io_max"],
                 threads["tm_compute_max"],
@@ -514,6 +569,7 @@ class UsageTelemetryService:
                 threads["tm_compute_submitted"],
                 threads["tm_compute_completed"],
                 threads["tm_compute_failed"],
+                threads["tm_categories"],
             )
         except Exception:
             collect_ms = (time.perf_counter() - started) * 1000.0

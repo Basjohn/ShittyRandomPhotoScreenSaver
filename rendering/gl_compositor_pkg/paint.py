@@ -137,7 +137,11 @@ def _log_shader_fallback_once(widget, active_names: list[str]) -> None:
 
 
 def handle_paintGL(widget) -> None:  # type: ignore[override]
-    _paint_start = time.time()
+    _paint_start = time.perf_counter()
+    if is_perf_metrics_enabled():
+        record_paint_start = getattr(widget, "_record_paint_start_metrics", None)
+        if callable(record_paint_start):
+            record_paint_start(_paint_start)
     _mark_widget_update_consumed(widget)
     
     # Phase 4: Disable GC during frame rendering to prevent GC pauses
@@ -160,8 +164,13 @@ def handle_paintGL(widget) -> None:  # type: ignore[override]
     try:
         paintGL_impl(widget, )
     finally:
-        paint_elapsed = (time.time() - _paint_start) * 1000.0
-        widget._record_paint_metrics(paint_elapsed)
+        _paint_end = time.perf_counter()
+        paint_elapsed = (_paint_end - _paint_start) * 1000.0
+        widget._record_paint_metrics(
+            paint_elapsed,
+            paint_start_ts=_paint_start,
+            paint_end_ts=_paint_end,
+        )
         
         # End frame budget tracking and re-enable GC
         try:

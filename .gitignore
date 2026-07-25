@@ -126,7 +126,8 @@ MyReuseableUtilityModules/
 /tmp_codex*/
 /codex_tmp*/
 
-# Codex project config can be useful to track, but local runtime junk should not be.
+# This checkout's Codex sandbox config is local; runtime junk is local too.
+/.codex/config.toml
 /.codex/tmp/
 /.codex/cache/
 /.codex/logs/

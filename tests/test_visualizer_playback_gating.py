@@ -182,7 +182,7 @@ class TestVisualizerPlaybackGating:
         # Mock the compute task scheduling to track calls
         compute_calls = []
         
-        def track_compute_calls(job, callback):
+        def track_compute_calls(job, callback, **_metadata):
             compute_calls.append((job, callback))
             return Mock()
         

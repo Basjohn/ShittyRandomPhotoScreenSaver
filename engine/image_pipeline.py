@@ -1274,7 +1274,8 @@ def load_and_display_image_async(
     try:
         engine.thread_manager.submit_compute_task(
             _do_load_and_process,
-            callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_process_complete(r))
+            callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_process_complete(r)),
+            category="image.load_and_process",
         )
     except Exception as e:
         logger.warning(f"[ASYNC] Failed to submit task, falling back to sync: {e}")
@@ -1503,7 +1504,8 @@ def load_and_display_image_async_with_metas(
     try:
         engine.thread_manager.submit_compute_task(
             _do_load,
-            callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_complete(r))
+            callback=lambda r: engine.thread_manager.run_on_ui_thread(lambda: _on_complete(r)),
+            category="image.previous_load",
         )
     except Exception as e:
         logger.warning("[ASYNC-PREV] Failed to submit task: %s", e)

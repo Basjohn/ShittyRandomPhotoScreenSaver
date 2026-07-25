@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication
 
 from core.logging.logger import get_logger
 from core.animation import AnimationManager
+from core.performance.resource_metrics import log_lifecycle_resource_snapshot
 from core.settings import SettingsManager
 from rendering.transition_registry import get_transition_descriptor, is_transition_available_for_hw
 from rendering.display_widget import DisplayWidget
@@ -151,8 +152,18 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 logger.debug("[ENGINE] Exception suppressed: %s", _e)
 
     # Stop the engine but DON'T exit the app
+    log_lifecycle_resource_snapshot(
+        engine,
+        event="settings",
+        stage="before_stop",
+    )
     stop_start = time.perf_counter()
     engine.stop(exit_app=False)
+    log_lifecycle_resource_snapshot(
+        engine,
+        event="settings",
+        stage="after_stop",
+    )
     stop_ms = (time.perf_counter() - stop_start) * 1000
     overall_ms = (time.perf_counter() - request_start) * 1000
     logger.info("Settings stop() completed in %.1f ms (%.1f ms since request)", stop_ms, overall_ms)
@@ -204,6 +215,11 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                     logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
                 engine.display_manager = None
                 engine._display_initialized = False
+            log_lifecycle_resource_snapshot(
+                engine,
+                event="settings",
+                stage="after_display_cleanup",
+            )
 
             # Reset coordinator state (halo owner, ctrl state) to avoid stale refs
             try:
@@ -235,6 +251,11 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
                 logger.error("Failed to restart screensaver after settings; quitting")
                 QApplication.quit()
                 return
+            log_lifecycle_resource_snapshot(
+                engine,
+                event="settings",
+                stage="after_restart",
+            )
 
             total_duration = (time.perf_counter() - request_start) * 1000
             logger.info(
@@ -254,7 +275,17 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
     logger.info("CUSTOM layout reload requested")
 
     try:
+        log_lifecycle_resource_snapshot(
+            engine,
+            event="custom_edit",
+            stage="before_stop",
+        )
         engine.stop(exit_app=False)
+        log_lifecycle_resource_snapshot(
+            engine,
+            event="custom_edit",
+            stage="after_stop",
+        )
 
         if engine.display_manager:
             try:
@@ -263,6 +294,11 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
                 logger.debug("DisplayManager cleanup after custom layout reload failed", exc_info=True)
             engine.display_manager = None
             engine._display_initialized = False
+        log_lifecycle_resource_snapshot(
+            engine,
+            event="custom_edit",
+            stage="after_display_cleanup",
+        )
 
         try:
             from rendering.multi_monitor_coordinator import get_coordinator
@@ -293,6 +329,11 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             logger.error("Failed to restart screensaver after custom layout reload; quitting")
             QApplication.quit()
             return
+        log_lifecycle_resource_snapshot(
+            engine,
+            event="custom_edit",
+            stage="after_restart",
+        )
 
         logger.info("CUSTOM layout runtime reload complete")
     except Exception as e:

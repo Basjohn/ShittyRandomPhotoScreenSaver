@@ -908,9 +908,24 @@ class GLCompositorWidget(QOpenGLWidget):
         from rendering.gl_compositor_pkg.compositor_metrics import begin_paint_metrics
         begin_paint_metrics(self, label)
 
-    def _record_paint_metrics(self, paint_duration_ms: float) -> None:
+    def _record_paint_start_metrics(self, paint_start_ts: float) -> None:
+        from rendering.gl_compositor_pkg.compositor_metrics import record_paint_start_metrics
+        record_paint_start_metrics(self, paint_start_ts)
+
+    def _record_paint_metrics(
+        self,
+        paint_duration_ms: float,
+        *,
+        paint_start_ts: Optional[float] = None,
+        paint_end_ts: Optional[float] = None,
+    ) -> None:
         from rendering.gl_compositor_pkg.compositor_metrics import record_paint_metrics
-        record_paint_metrics(self, paint_duration_ms)
+        record_paint_metrics(
+            self,
+            paint_duration_ms,
+            paint_start_ts=paint_start_ts,
+            paint_end_ts=paint_end_ts,
+        )
 
     def _finalize_paint_metrics(self, outcome: str = "stopped") -> None:
         from rendering.gl_compositor_pkg.compositor_metrics import finalize_paint_metrics

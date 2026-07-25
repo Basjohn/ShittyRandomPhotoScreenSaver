@@ -1655,7 +1655,16 @@ def _direction_change_count(values: list[float], *, epsilon: float = 1e-4) -> in
 
 
 class _ImmediateComputeThreadManager:
-    def submit_compute_task(self, fn, callback=None) -> None:
+    def __init__(self) -> None:
+        self.categories: list[str] = []
+
+    def submit_compute_task(
+        self,
+        fn,
+        callback=None,
+        category="uncategorized",
+    ) -> None:
+        self.categories.append(category)
         result = SimpleNamespace(success=True, result=fn())
         if callback is not None:
             callback(result)
@@ -1664,8 +1673,15 @@ class _ImmediateComputeThreadManager:
 class _DeferredComputeThreadManager:
     def __init__(self) -> None:
         self.tasks: list[tuple[Callable[[], object], Callable[[object], None] | None]] = []
+        self.categories: list[str] = []
 
-    def submit_compute_task(self, fn, callback=None) -> None:
+    def submit_compute_task(
+        self,
+        fn,
+        callback=None,
+        category="uncategorized",
+    ) -> None:
+        self.categories.append(category)
         self.tasks.append((fn, callback))
 
     def run_next(self) -> object:
@@ -5351,6 +5367,7 @@ def test_stale_compute_job_cannot_commit_dsp_state_after_activation(qt_app, qtbo
     engine.tick()
 
     assert len(thread_manager.tasks) == 1
+    assert thread_manager.categories == ["visualizer.audio_analysis"]
     assert engine._compute_task_active is True
 
     engine.reset_smoothing_state()

@@ -1,461 +1,241 @@
 # Spec
 
-Last updated: 2026-07-15
+Last updated: 2026-07-26
 
-Canonical architecture and behavior contracts for SRPSS.
+Canonical stable architecture and product behaviour contracts for SRPSS.
+
+Implementation plans, benchmark results, and dated regressions do not belong here.
 
 ## 1. Product Intent
-- Deliver a smooth, stable, multi-monitor screensaver with configurable overlays.
-- Keep settings persistence deterministic and recoverable.
-- Keep visualizer mode behavior isolated while sharing explicit neutral seams.
+
+SRPSS must provide:
+
+- smooth multi-display image presentation;
+- stable configurable overlays;
+- responsive high-fidelity visualizers;
+- durable and recoverable settings;
+- predictable Normal and Media Center runtimes;
+- resource use appropriate for a screensaver.
+
+Priority order is defined in `Docs/Guardrails.md`.
 
 ## 2. Runtime Topology
+
 - `main.py` and `main_mc.py` bootstrap runtime variants.
-- `ScreensaverEngine` owns source cycling, transition scheduling, and display lifecycle.
-- `DisplayWidget` is the fullscreen rendering presenter.
-- Fullscreen geometry, taskbar coverage, one-pixel shrink behavior, compositor prewarm visibility, and startup first-frame presentation are fragile user-visible contracts. Do not alter them as part of unrelated performance work; changes require explicit user approval, a document-first audit, and regression evidence for startup flash/flicker, borders, taskbar coverage, and widget rebuild behavior.
-- `WidgetManager` owns overlay widget lifecycle, staged startup coordination, and the narrow runtime-pause quiesce seam used before display teardown/settings entry.
-- Factory-backed overlay widget family identity and setup metadata are centralized in `rendering/widget_descriptors.py`; `rendering/widget_setup_all.py` must consume that descriptor registry instead of hand-maintaining parallel per-widget setup branches. Spotify-dependent setup remains intentionally explicit and phased in this order: media-owned dependents, local visualizer, remote Custom visualizer reconcile, then final startup.
-- During display setup/rebuild, `rendering/widget_setup_all.py` is the sole lifecycle-start authority for factory-created widgets. `rendering/display_setup.py` and follow-on display glue must not immediately run a second initialize pass over the same created set.
-- Multi-display startup/rebuild must register the full allowed display set before the first display runs widget setup. Expensive show/GL startup may still be staggered, but that stagger must be owned by a timer/thread-manager seam with stale-generation suppression, not by `processEvents()` loops, sleeps, or other UI-thread pumping. Current-image replay after monitor rebuild must wait for generation-scoped display readiness instead of racing later staggered displays.
-- Display-owned high-frequency render timers must have explicit task ownership and a bounded loop-stopped acknowledgement during teardown. Display cleanup must not drop adaptive-timer ownership before the worker loop has observed stop and exited, or Python can remain alive after the app has logged a clean exit.
-- Runtime diagnostics are CLI-first and family-scoped. `--perf`, `--usage`, `--viz`, `--geo`, `--set`, `--life`, `--cache`, and `--steam` are the primary operator surface for diagnostics. Dedicated sidecar families should keep `WARNING`/`ERROR`/`CRITICAL` visible in general logs while moving routine INFO/DEBUG family noise into the family log.
-- `--usage` owns low-cadence whole-process resource telemetry in `screensaver_usage.log`. It samples the main process plus recursive children through one guarded app-shared `ThreadManager` IO task roughly every 15 seconds, with no overlapping samples. The recurring UI callback may only check/submit; OS collection and log emission stay off the UI thread. Records distinguish unsupported/unavailable GPU and VRAM counters from measured zero, carry sampler cost/cadence/skips, and contain no source paths, titles, account identifiers, or credentials. Usage telemetry must never repaint, retune visualizers, alter source cadence, lower fidelity, or make automatic quality decisions, and it stops before its owning ThreadManager on final shutdown.
-- Startup logging should advertise the available specific sidecars and the ones active for the current run so tracing can begin in the right file without diving into verbose logs first.
-- Fallbacks are an explicit failure signal, not a success path. Prefer clean success or explicit clean failure over substitute behavior; any runtime fallback that changes ownership, geometry source, display target, or recovery path must log loudly at `WARNING` or higher through the relevant existing diagnostics family.
+- `ScreensaverEngine` owns high-level runtime sequencing.
+- `DisplayManager` owns active display instances and topology response.
+- Each active display owns one presentation surface and its display-local geometry/DPR.
+- `DisplayWidget` is the fullscreen presentation host.
+- `WidgetManager` owns overlay widget lifecycle.
+- Image selection/decode/preparation is separate from GL presentation.
+- Visualizer simulation is separate from compositor presentation.
+- Settings/Edit recreation uses one ordered lifecycle.
 
-## 3. Centralized Ownership Contracts
-- Async business work uses `ThreadManager`.
-- Qt object lifecycle uses `ResourceManager`.
-- Settings read/write/migration uses `SettingsManager`.
-- Shared timeline/tick-driven runtime animations route through `AnimationManager`. Small widget-local effect animations may remain local when they are explicitly owned and cleaned up by the widget.
-- Engine-owned `AnimationManager` is also the app-shared fallback manager for runtime leaf/widget animation paths that do not need their own display-scoped transition manager.
-- `AnimationManager` diagnostics must carry enough passive ownership context to avoid false root-cause claims: owner labels, manager identity, current active/listener counts, and peak active/listener counts are part of the performance evidence contract. A final `active_count=0` snapshot alone does not prove idle churn if the interval contained active transition work.
-- Cross-module publish/subscribe events use `EventSystem`.
-- Worker process orchestration uses `ProcessSupervisor`.
-- `ProcessSupervisor` owns correlated worker-response waiting/buffering for shared response queues. Runtime callers must not reach into raw worker response queues directly, and the dormant callback-listener facade is not part of the live contract.
-- Engine-owned `ThreadManager` and `ResourceManager` instances are also the app-shared fallback managers for leaf/runtime helper code. Do not create ad hoc leaf managers when the shared seam can supply the same ownership cleanly.
-- When no app-shared `ThreadManager` is available, helper/UI fallbacks must stay intentionally narrow rather than silently creating another full-size compute-heavy manager.
-- `ThreadManager` active-task bookkeeping is authoritative at submit/complete/cancel/shutdown time and must not depend on a queued UI-thread mutation drain to become visible.
+No display may silently borrow display 0 state, geometry, input authority, or presentation ownership.
 
-## 4. Settings Architecture
+## 3. Stable Ownership Principles
 
-### 4.1 Storage model
-- Canonical persistence file: `%APPDATA%/SRPSS/settings_v2.json` (MC: `%APPDATA%/SRPSS_MC/settings_v2.json`).
-- Structured roots: `widgets`, `transitions`, `ui`.
-- Dotted-key API remains available via `SettingsManager`.
-- UI and helper code that need the active settings file or directory must use public `SettingsManager` path accessors rather than reaching into the backing store.
-- Root `widgets` writes, widgets-map replacement helpers, and SST widget imports must all converge on the same widgets-map normalization/schema contract. Do not let `set("widgets", ...)`, `set_widgets_map(...)`, or import flows drift into different visualizer-schema or default-merge behavior.
-- Tracked Normal/MC default `.sst` files are deterministic distribution artifacts, not runtime settings exports. They derive directly from the selected profile through `build_sst_defaults_snapshot(...)`, which resolves nested/dotted compatibility leaves into the same effective transport shape as a fresh reset, carry only stable generated-artifact metadata, and must never construct `SettingsManager`, probe legacy `QSettings`, or resolve an installed profile path.
-- Two clean default-SST regenerations from unchanged source must be byte-identical. Generated snapshots must equal the profile-aware canonical builder, exclude preserve-only Weather coordinates and credential/private fields, and keep the MC artifact as a derived Normal-plus-MC-differential output rather than a second hand-maintained defaults body. Operational migration metadata remains valid only for ordinary user/runtime exports.
+- One mutable concern has one authoritative owner.
+- Shared managers are used only for the contracts they actually own.
+- No shadow settings, task, transition, descriptor, lifecycle, or render frameworks.
+- Cross-thread data is immutable or explicitly synchronized.
+- Generations represent real lifetime boundaries.
+- Existing files, public ids, and paths are not renamed without explicit user instruction.
+- Fallbacks that change behaviour, quality, owner, display, or render path are loud failure evidence.
 
-### 4.2 Legacy global preset retirement
-- Legacy top-level global preset keys are retired: `preset`, `custom_preset_backup`.
-- Defaults and modern save paths do not emit those keys.
-- Existing settings that contain them are cleaned/migrated safely.
+Routing details live in `Docs/Contracts.md`.
 
-### 4.3 Cache invalidation safety
-- Section/root writes (`set('widgets', ...)`, `set('transitions', ...)`, `set_section(...)`) must invalidate descendant dotted-key cache entries.
-- New settings APIs must preserve equivalent invalidation behavior.
-- Public mutation APIs (`set`, `set_section`, `remove`, `clear`) must keep sync/change-notification behavior coherent enough that runtime/UI consumers do not need to guess which write paths emit `settings_changed` or flush critical roots.
+## 4. Presentation Contract
 
-### 4.4 Reset/import preservation
-- Preserve-on-reset keys are centralized in `core/settings/defaults.py`.
-- Reset/import logic must use that shared preservation contract.
+### 4.1 Display-local compositor
 
-### 4.5 Persisted visualizer schema migration
-- Persisted visualizer-section migrations must be version-gated through settings metadata rather than rerunning full legacy normalization on every load forever.
-- Legacy/global visualizer keys may still be normalized for imported or foreign payloads, but the main saved settings file should be upgraded once per schema version bump and then treated as current.
+The long-term target is one compositor surface per display.
 
-### 4.6 Active list-widget capacity policy
-- Active row/list widgets currently covered by the shared capacity policy are `reddit`, `reddit2`, and `gmail`.
-- Shared policy lives in `core/settings/widget_capacity_policy.py`:
-  - minimum configured/visible capacity `5`
-  - first-stage maximum capacity/fetch-cache envelope `25`
-- Persisted `limit` remains the configured-capacity key. Runtime may still distinguish configured capacity from effective visible capacity when future custom-height behavior needs that split.
-- Reddit fetches/caches a fixed candidate window up to the shared list maximum and immediately renders the configured visible count from that pool; the retired timed cache-growth reveal must not return unless a future provider truly delivers partial candidate windows. Gmail/Reddit vertical-resize work must not re-couple visible row count directly to network fetch size.
-- Under a committed `Custom` rect, `reddit`, `reddit2`, and `gmail` keep width authority on the saved rect, but runtime content may still adjust the committed height vertically to the real visible-row need. Any such vertical-only adjustment must persist back through the shared CUSTOM layout map so replay/ settings-close/startup do not restore stale height.
-- Non-`Custom` authored widget stacking is owned by the explicit `widgets.global.stacking_enabled` contract and currently defaults `True` for new users. Runtime stacking and settings-side stack prediction must both respect that flag instead of silently mutating or promising authored-position collision handling.
+It composes:
 
-### 4.7 Steam widget family data contract
-- Steam Settings, Achievement Pulse, and Abandonment Issues are production-visible without a development flag. `--devsteam` exposes only the unfinished Steam Journey and Friend Pulse card prototypes. `steam_progress` remains Steam Journey's stable persisted/runtime key for compatibility.
-- Steam credentials are not widget settings. Steam API/profile secrets live only in `core/steam/credentials.py` strict DPAPI-protected storage; plaintext fallback output is rejected and must leave no credential file behind.
-- Steam account/cache identity must use opaque derived keys, not raw profile identifiers. SST/settings export/import must strip injected Steam credential fields while preserving non-secret widget preferences.
-- Steam source feasibility is gated by `Docs/Steam_Data_Feasibility.md`. Publisher-key endpoints are excluded from client runtime; public app-news is app-scoped source material, not a personalized whole-library feed.
-- Steam backend/cache work lives under `core/steam/` and must stay fixture-safe until cards are explicitly promoted. Failed/private/invalid responses must not freshen valid cache records.
-- Steam request policy helpers may coalesce work, drop stale generations, and calculate backoff, but they must not own threads, timers, UI retries, or provider scheduling. Runtime scheduling remains ThreadManager-owned.
-- Steam asset caches must validate HTTPS/host, size, and image signature before a card can use the file for painting. Achievement schema icon URLs are conditional presentation data, never source authority.
-- Steam widget visibility is descriptor-owned: `achievement_pulse` and `abandonment_issues` factory/runtime/Custom/settings metadata is always active, while `steam_progress` and `friend_pulse` remain behind the named `--devsteam` gate. The Steam Settings section remains active in both cases and hides unfinished card buckets when the gate is absent.
-- Steam family cards use the shared header style: bundled Steam logo plus widget name. Enabled cards with no saved connection and no usable cache render a centered `Connect With Steam To Use` prompt, with only `Connect` acting as the settings affordance. Disabled cards remain hidden.
-- The Steam Settings section uses a bordered family shell with a true top-level family master above Connection & Privacy and the four card buckets. When `widgets.steam.enabled` is false, every Steam factory/expected-overlay path is gated and all subordinate settings are hidden; persisted per-card enabled choices remain untouched so re-enabling the family restores them. Card buckets divide their controls into nested Layout, Appearance, and Content groups where applicable.
-- Steam identity and data access are separate concerns: `Connect ID` uses a short-lived local OpenID callback and Steam's `check_authentication` verification to establish SteamID64 in a browser, while `Connect API KEY` captures the user Web API key only through an explicit user-clicked paste action. Steam Settings must prefer MC-style direct Qt URL launch; only a failed genuine secure-desktop route may use the helper handoff, which must be woken explicitly. Both must validate together before Steam account data is considered available. Steamworks OAuth remains optional and scope-gated to later partner endpoints only if Valve documents the exact needed scope.
-- Valid cached Steam card data remains authoritative when the connection/token needs attention. If the cache is at least one day stale, the optional default-on orange info affordance may appear beside the header and route to Steam connection settings; it must not trigger fetch/retry behavior.
-- Future Steam credential/identity work must request the longest safe supported lifetime available for the chosen mechanism so users are not forced into frequent re-authentication.
-- The Steam Settings section remains lazy. Opening general Settings must not import/build the Steam section, decrypt Steam credentials, scan Steam caches/assets, contact Steam, construct runtime overlays, or mark Steam data fresh. Once the user opens the Steam section, it may submit bounded exact-path reads for one recent-games record, up to five corresponding per-app achievement records, and one owned-library record through shared IO so Achievement choices can show unlock-recency-ordered cached names and Abandonment's pin picker can show cached games. It must not enumerate cache directories, decode assets, decrypt or validate credentials, or contact Steam; the owned-library provider refresh remains an explicit user action.
-- Steam card constructors and paint paths remain provider/cache/credential inert. Production cards load opaque-keyed versioned cache records through ThreadManager before requesting their first coordinated fade so valid cached content is authoritative at first visibility; only after fade completion may they submit a bounded startup refresh. Achievement cache-first resolution reads at most five recent candidate achievement records, chooses by newest positive unlock timestamp, and reads schema/name/icon data only for the selected app. Abandonment selection reads owned/recent records, profile policy state, and at most 12 exact cached achievement records, prioritizing current/pinned identity before its shortlist; it may not enumerate the cache directory or request achievement data to choose a game. After that identity is committed, the existing worker refresh/rotation job may hydrate exactly the selected app's achievement record when `ACHIEVEMENTS` or `LAST UNLOCK` is enabled, using the canonical per-app cache key, shared source lock/backoff, and a 24-hour automatic freshness window. That display hydration may enrich only the committed model and must not rerank, replace, or fan out across candidates. Validated public app-header/portrait artwork and allowlisted HTTPS achievement icons may load through the same worker-owned path, but painting uses only worker-prepared local images. Cache writes remain successful-result-only, freshness/coalescing/backoff policy and transition-deferred result application remain mandatory, and no private polling timer or UI retry loop may be added.
-- Achievement Pulse selection is a non-secret card preference (`most_recent`, `recent_2` through `recent_5`, or literal Custom app ID). Steam has no account-wide achievement-activity endpoint, so dynamic modes use the first five recent-play rows only as a bounded candidate set, rank candidates with known positive unlock timestamps by their newest unlock, and retain recent-play order as a stable fallback behind timestamped candidates when evidence is missing or zero. `Most Recent`, `Recent #2` through `Recent #5`, Previous, and cached Settings labels all consume that same achievement-recency order. A stale or forced refresh may fetch up to five candidate achievement records through the existing worker/cache/coalescing/backoff path, then fetch schema only for the selected app. Freshness authority is the active mode's recent/candidate/selected-schema set; an unrelated stale owned-library fallback record cannot churn Pulse refresh work, while a successful empty recent result is complete rather than an invitation to poll. Cached names may decorate combo labels in parentheses without replacing the stable mode values or causing a settings write. The shared Steam freshness window is configurable from 5 to 240 minutes and defaults to 6 minutes. Its explicit widget-level manual refresh may bypass freshness but must still respect in-flight dedupe and backoff; it cannot create a private polling timer or write normal settings account data.
-- Achievement Pulse is the current engineering/customization baseline for future Steam cards, not their visual identity template. Its non-secret painter-owned preferences include font family/size, artwork visibility, `wide`, `square`, or `portrait` artwork shape, bounded compact-art width, one to five latest unlocks, optional latest-achievement artwork, supporting-field visibility, default-on all-field double capsules, an independent capsule font size, and alpha-capable capsule fill/border colours. Wide artwork uses the public header capsule with a smooth cover crop and matches the header's top/right silhouette and border weight. Square and Portrait use Steam's portrait library capsule, share those header/right rails, and are clamped to 140-190 authored pixels in width. Square keeps equal dimensions; Portrait uses a 1.4 height ratio and is the fresh-install default at 140 x 196. Their authored envelopes grow rather than clipping the centered-below-art Unlocked line or bottom capsule rails; the default Portrait card is 600 x 334 at the canonical font/capsule settings. When the primary unlocked row joins to a valid HTTPS schema `icon`, the default-on optional 40px framed cover crop sits in the prior-unlock lane beneath the primary title, follows measured secondary text, and narrows only the rows it overlaps. It must not move or reflow the primary unlock, game title, game art, Unlocked, or capsules, and missing/invalid icon data must remove only the flair. Game title and unlock text shrink to measured hierarchy floors before final elision: the game title may not become smaller than the primary unlock, and the primary unlock may not become smaller than prior unlocks. Latest unlocks render without numeric or `Latest:` prefixes. Compact supporting capsules use uppercase colon-free left-aligned labels and right-aligned uppercase values. With double capsules enabled, every visible field centers its heading over a fitted full-width value capsule; Previous alone changes its doubled heading to `PREVIOUSLY`. Capsule height and the authored card height grow from measured capsule-font metrics, preserving rail spacing and bottom anchoring. Values use user-selected RGBA fill/border colours and bottom/right-only exterior shadows. Source defaults off because runtime presentation is cache-backed, while Previous defaults on with the second achievement-recency-ranked game. `Custom` geometry uniformly scales the selected authored composition rather than reflowing or truncating data authority.
-- Abandonment Issues is the second production Steam card and must remain visually distinct from Achievement Pulse: its default is a warm backlog shelf/ledger composition with a large Portrait cover, `BACKLOG` tab, default-on rediscovery message, double-line `LAST VISIT` stamp, and optional ledger rows rather than Achievement capsules. `portrait` is the canonical saved cover-shape token; legacy `square` means the same 1:1.4 Steam library cover and migrates without changing the asset URL. Rediscovery copy is stable per game and uses an exact 60/40 bucket contract: `Long Forgotten` owns 60 buckets and ten authored title-case alternatives own four buckets each. The line can be hidden without suppressing functional unavailable/connect messaging. Steam Journey and Friend Pulse must likewise establish a visibly distinct silhouette, information primitive, hierarchy, accent treatment, and restrained motion language while inheriting the production cards' settings/lifecycle/cache/DPR/measurement safety.
-- Abandonment's default ledger is `PLAYED`, `ACHIEVEMENTS`, `LAST UNLOCK`, and `LAST PLAYED`; `BACKLOG CLASS`, shelf position, source, and selection mode remain optional diagnostic fields and default off. `LAST PLAYED` is an exact `DD/MM/YYYY` UTC date only when that row's positive non-future `GetOwnedGames.rtime_last_played` evidence is verified. `ACHIEVEMENTS` and `LAST UNLOCK` use one successful exact-path selected-app achievement snapshot, reusing cache or allowing the bounded worker hydration above; unknown/private evidence removes the affected shelf, while a successful zero-unlock snapshot may say `NO UNLOCKS`. `BACKLOG CLASS` is presentation-only engagement depth (`BARELY STARTED`, `SHORT START`, or `DEEP BACKLOG`), never a completion/quality claim. Enabled shelves must grow the authored two-column ledger by whole rows rather than truncating after four fields, shrinking the existing composition, or adding paint/timer work; disabling both achievement-dependent shelves suppresses selected-app achievement hydration. Title and rediscovery copy shrink before elision, and the title may never become smaller than the fitted rediscovery line. Each prepared presentation emits one privacy-safe `[STEAM][ABANDONMENT_SHELVES]` sidecar record listing requested/rendered/unavailable shelf IDs and evidence states without game titles or values, while `[STEAM][ABANDONMENT_ACHIEVEMENTS]` records only selected app ID, cache/network outcome, source status, and evidence availability.
-- Abandonment smart selection uses only owned games with a non-empty display title, at least the configurable 15-minute default session floor, and an individually valid positive non-future `GetOwnedGames.rtime_last_played` timestamp at least 12 weeks old by default. Recent Games may exclude a candidate but can never supply or infer its age. Missing, zero, malformed, future, private, and unavailable timestamps are unknown; smart mode excludes them and pinned mode reports history unavailable without substitution.
-- Abandonment ranking prefers at least 26 weeks of verified inactivity, under 2 hours of play, and, only when an existing local snapshot is available, at most 2 unlocked achievements. Unknown achievement counts are neutral. An all-unlocked snapshot is demoted but never presented as proof of completion; higher-playtime, higher-unlock, and 12-26-week candidates remain eligible. Smart selection is a deterministic weighted-random draw from preference tiers, not backlog-order traversal: tier weight is independent of candidate count, every tier remains reachable, and the current game is excluded whenever an alternative exists. A profile/policy draw counter keeps displays synchronized while producing a new draw each interval. The displayed `BACKLOG N/M` value is the selected game's current preference-rank position, not a sequential rotation cursor. Ranking-policy changes invalidate the retained semantic choice once, while normal cache reloads preserve it. Never Show is explicit, profile-private cooldown/rotation state is shared across displays, and `widgets.steam.refresh_minutes` is the sole automatic-change cadence authority with a 5-minute minimum and 6-minute fresh-install default. No Abandonment-specific rotation setting may compete with it; legacy `rotation_interval_minutes` data is ignored and removed on save. Persisted `changed_at` authority is evaluated against the current shared refresh interval after widget/settings/display rebuilds or interval changes: a rebuilt card rotates immediately when overdue or arms one shortened first interval for the remaining time, then returns to its single ordinary recurring interval. If its low-frequency expiry collides with a parent image transition, the operation remains pending and retries through the shared `ThreadManager.single_shot` transition-deferral seam; it is never silently discarded and does not gain another recurring timer.
-- Abandonment automatic refresh reuses the owned-library source for 24 hours, recent games for the shared 6-minute default/5-minute minimum, and successful selected-app achievement evidence for 24 hours. That same shared interval advances the semantic game choice from cache only: it cannot initiate owned/recent refresh or candidate achievement probes. Once the choice is committed, its existing worker job may make at most one selected-app achievement request when a dependent shelf is enabled and the exact record is stale/missing; this cannot alter the chosen identity. Explicit manual refresh may bypass freshness while still honoring source-key in-flight coordination and backoff, and a widget-level manual refresh forces one non-repeating cache-backed draw before restarting the full shared cadence. After cache-only selection, one missing allowlisted public app-art asset may be hydrated by the same existing IO preparation job when automatic updates are allowed, before the sparse content commit. A definitive missing/invalid requested variant may make one bounded fallback request for the alternate allowlisted app-art shape; transient network failures do not fan out into a second request. `--noupdates` keeps automatic achievement and artwork hydration strictly cache-only. Optional Guilt Desaturater is a worker-prepared, bucketed, capped artwork-only transform based solely on verified inactivity.
-- A successful Steam provider response authoritatively freshens its source cache record even when the payload is byte-equivalent. Process-shared locks keyed by opaque profile/cache source make immediate cross-display/card followers reuse that record; unchanged visible-model fingerprints still suppress repaint and prepared-art invalidation. Failed/private/invalid responses remain unable to freshen cache.
-- Live Steam game/title/art changes use a sparse painter-opacity transition through the shared `AnimationManager`: fade dynamic content out, commit the complete prepared model/art together while hidden, then fade in. Stable header/chrome stays fixed; transitions may not add `QGraphicsEffect`, a private high-frequency timer, provider work, image preparation, or per-frame scaling.
-- When an Achievement Pulse refresh receives an unauthorized response, existing cached content remains authoritative. The result marks connection attention without retry pressure, and the default-on stale information affordance is eligible only once that cache is at least one day old.
+- current image;
+- optional transition;
+- optional visualizer;
+- dimming and overlays that belong in the GL scene.
 
-## 5. Visualizer System Contract
+Ordinary Qt widgets may remain above the compositor where appropriate.
 
-### 5.1 Mode identity
-Source of truth: `core/settings/visualizer_mode_registry.py`.
+### 4.2 Producer/consumer relationship
 
-Active ids:
-- `spectrum`
-- `oscilloscope`
-- `sine_wave`
-- `bubble`
-- `devcurve` (display label: Spline Curve)
+State producers publish the latest immutable state.
 
-### 5.2 Naming contract
-- Internal id and key namespace remain `devcurve`.
-- User-facing label is Spline Curve.
-- `--devcurve` remains accepted as compatibility no-op.
+The compositor consumes the latest scene when Qt presents.
 
-### 5.3 Shared seams
-- Mapping normalization: `visualizer_settings_snapshot.py`
-- Technical normalization / legacy migration contract: `visualizer_settings_contract.py`
-- Retired-mode forward migration: `core/settings/visualizer_retired_modes.py`; retired selections resolve to the registry default and their owned keys are stripped before canonical persistence.
-- Typed visualizer persistence: `SettingsManager.set_spotify_visualizer_settings()` writes one complete normalized `widgets` root transaction while preserving sibling widgets.
-- Settings-model field-spec source of truth: `core/settings/models/_spotify_visualizer.py`; grouped build specs, serializer specs, defaults, and ordered build/serialize section merges must be updated together so `from_settings()`, `from_mapping()`, and `to_dict()` remain one contract instead of drifting per entry point
-- Canonical mode/preset activation payload: `visualizer_presets.resolve_visualizer_activation_payload()`
-- Curated preset import/export transfer: `core/settings/visualizer_preset_transfer.py`; zip/folder imports replace the active curated tree, while loose JSON imports are parsed, canonicalized, and written to the inferred mode/slot.
-- Runtime config application: `widgets/spotify_visualizer/config_applier.py`
-- GPU state handoff: `widgets/spotify_bars_gl_overlay.py`
-- Shared common uniform upload and rainbow transport prep: `widgets/spotify_visualizer/overlay_uniforms.py`
-- Mode-program resolution and renderer-owned uniform dispatch: `widgets/spotify_visualizer/overlay_render_dispatch.py`
-- Shared GL frame shell for backbuffer clear, fade gating, and stencil-wrapped render execution: `widgets/spotify_visualizer/overlay_frame_shell.py`
-- Outer visualizer card geometry policy: `widgets/spotify_visualizer/card_geometry.py`; mode/preset-owned outer height and media-relative placement belong here rather than in the stencil shell or generic overlay-widget sizing
-- Painted-card stencil-mask math: `widgets/spotify_visualizer/overlay_mask.py`
-- Overlay runtime-state handoff: `widgets/spotify_visualizer/overlay_state.py`
-- Runtime mode/preset resets may preserve the GL overlay object for performance, but they must still blank/hide the overlay, request a cold mode reset, and wait for the fresh activation/generation handoff before first visible bar authority returns.
-- Engine config replay: `_replay_engine_config()` reads from authoritative mode config via `_get_mode_technical_config(...)`, not transient widget cache
-- ThreadManager/engine hookup must not trigger authoritative engine replay until the visualizer has an authoritative settings model plus technical-config cache for the active mode. Cold startup must apply the resolved activation payload before any such replay is attempted.
-- External runtime setters and bar-buffer resize must stay no-op safe when the shared beat engine is unavailable, and when authoritative mode config is ready they must prefer that replay path over ad hoc engine-local fallback state.
-- Live audio block-size changes are capture-rebind boundaries: when mode-owned technical config changes the preferred block size at runtime, the active audio worker must restart capture instead of waiting for a full runtime rebuild or settings-dialog restart.
-- Visualizer tick ownership has one runtime owner: the dedicated recurring timer. Transition `AnimationManager` instances must not subscribe or run full visualizer `_on_tick()` work because that couples visualizer cost directly into transition progress/control cadence.
-- Steady-state visualizer cadence has one owner: once fresh-frame gating is out of the way, the dedicated recurring timer is authoritative and `_on_tick` must not apply a second silent steady-state FPS throttle on top of that timer.
-- Steady-state visualizer cadence must also stay deterministic for a given target: phase-offset or anti-alignment tricks must not become a sticky randomized interval penalty across startup, settings recreate, or mode/preset activation paths.
-- Paused idle-reveal modes remain animated, but synthetic idle presentation must not inherit the live-playback no-transition cadence boost. A lower timer-owned paused source target may retain headroom above a 60 Hz owner so motion stays smooth; it must reduce accepted payload production rather than drop overlay repaint requests after payload acceptance. Live playback cadence, one repaint request per accepted overlay payload, and mode-owned motion speed remain unchanged.
-- Media-driven playback-state changes must be resilient to short controller wobble: quick paused/playing flaps may update media UI immediately, but the visualizer/capture path must not tear down reactivity or restart capture until a non-playing state survives a short confirmation window.
-- Playback authority and capture lifecycle are separate seams: after a non-playing state is confirmed, the visualizer may enter its idle presentation immediately, but loopback capture should stay warm for a short grace window so quick real-world resumes do not pay a cold restart and 1.5s weak-reactivity ramp unless capture actually went cold.
-- Post-audio silence decay is a playing-only cleanup path. Once playback is genuinely non-playing, idle-reveal modes must keep their shared beat-engine idle seed instead of letting stale last-audio timestamps decay the paused presentation back to zero.
-- Warm capture frames after confirmed non-playing are drain-only. They must not update shared waveform authority or idle-reveal modes will briefly render stale live audio before the paused idle seed can "break free."
-- Startup playback seeding has trust levels: provisional shared-cache non-playing seeds may inform temporary state, but they must not become authoritative first-visible idle reveal truth until a live media update confirms them. Startup timers may act as watchdog diagnostics, but they must not become reveal authority in place of real readiness.
-- If a wake request is deferred during staged startup, the hot-start path must replay a real engine wake once startup ownership transfers. Merely clearing a deferred-wake flag without executing the wake contract is forbidden because it strands startup on weak pre-wake Bubble/Sine/Devcurve behavior.
-- Bubble startup/reactivity automation must cover the authored curated preset path, not only generic simulation or parity cases. The `Preset 1 (Deep Sea)` family is a required oracle because generic parity can stay green while live Bubble still feels dead, and Bubble regressions this deep should also be checked against the historical-good comparison harness before trusting newer proxy bars.
-- Bubble's steady live motion must not ride on the shared control-normalized convenience lane alone. The beat engine owns a Bubble-specific continuous feed derived from raw band authority plus floor-pressure context so dynamic-floor expansion cannot silently flatten curated Bubble reactivity into a narrow plateau.
-- Bubble's beat-engine feed is the continuous lane only. Dispatch adds transient/current pulse authority separately at the runtime handoff, so the beat-engine feed must not double-count those accents or it will ratchet Bubble upward and destroy contraction.
-- Bubble's runtime pulse handoff must also stay live all the way through compute/render. If dispatch mixes current/transient pulse authority into the Bubble compute payload, that authority must measurably affect the rendered simulation output; dead `pulse_params` plumbing that stays green on feed-only tests is a regression.
-- Bubble loud-path authority must preserve supra-unit loudness through the Bubble-owned dispatch/simulation seam. Do not clamp Bubble's incoming loudness snapshot back to a generic `0..1` band before the hero/small size lanes evaluate it, or restrained-hot and truly loud windows will collapse back into the same visual bucket.
-- Bubble is a two-lane closure seam, not one generic motion bucket. The big-bubble hero lane must stay visibly active under both soft and loud authored phrases, must keep sustained-loud authority instead of starving after the initial hit, must not depend on dynamic-floor enablement to stay alive, and must not be visually flattened by hidden render-size multiplier/clamp saturation while the small/medium lane continues reacting underneath.
-- Bubble hero anti-flicker is a display-only seam. Any soft-passage settling for the hero radius must stay local to the rendered-radius handoff, must not smooth audio/floor/feed authority, and must disengage in hotter sustained passages where direct size authority is the correct visual truth.
-- `bubble_big_visual_smoothing` is the authored/preset-facing control for that display-only hero settling seam. It must remain big/hero-only, default to the current middle authored feel, and must not become a backdoor audio or loud-path authority control.
-- Bubble visible size semantics must stay distinct from Bubble motion/accent semantics. Transient punch may still drive speed and accent strongly, but truly louder `1.3+` Bubble windows need their own Bubble-owned sustained-size lift instead of being flattened into the same visible body as restrained transient-heavy windows.
-- Bubble drift loudness accent stays on the existing authored drift seam. Mild loud-passage drift lift may scale through the current `bubble_drift_amount` / `bubble_drift_speed` controls, but do not introduce a second dedicated loud-drift setting unless runtime evidence proves the shared authored controls cannot express the effect cleanly.
-- `bubble_group_drift` is an authored/preset-facing motion-layout control. When enabled it may align non-swirl Bubble drift into one shared direction carrier with per-bubble force variation, but it must not affect swirl modes and must not turn Bubble into a rigid single-vector slab.
-- Shared Bubble group-drift turns are a visual motion contract of their own:
-  - `bubble_drift_frequency` owns grouped carrier cadence/reversal timing
-  - `bubble_drift_amount` / `bubble_drift_speed` own grouped travel strength, not switch ownership
-  - low-frequency grouped drift must not snap between carrier directions in one frame
-  - swish variants must reverse deliberately on authored cadence instead of re-picking the same direction, should use a mild perpendicular arc so the turn reads as a gentle curve rather than a jerk, and should preserve a sparse signed lag spread so the field does not collapse into one rigid sweeping slab
-  - random/diagonal grouped turns should ease between carriers rather than reading as abrupt jitter
-  - Bubble specular size is relative to the rendered bubble body, not a second pulse-growth lane; do not double-count pulse growth into the highlight size or a few bubbles will balloon beyond the intended visual ratio
-- Bubble's small/medium lane has its own sustained-loud obligation. It must not only react in quiet phrases; the same shared Bubble feed must keep the smaller field visibly alive through hot sustained passages without needing Preset-9-style authored rescue settings just to look awake.
-- Bubble sustained-loud recovery must stay structurally separate from its soft transient feel. A fast fixed-threshold absolute loudness lane may drive movement semantics strongly and feed restrained big/small hold support, but it must not become a slow adaptive "loud mode", must not rely on dynamic floor, and must release quickly enough that drops still contract and breathe naturally.
-- Bubble sustained-loud closure must be proven against a harsher runtime-loud oracle, not only against friendly bass-heavy helper phrases. The acceptance bar is: soft/transient feel stays good, real long hot sections with sparse onset help keep the small lane visibly alive, the big lane reaches a strong authored upper range without crude hard-clamp mode-switching, and ordinary hot passages still stay below a fake ceiling.
-- Bubble runtime-loud bars must also model the exact late-window pathologies seen in bad runtime, not just generic weak motion: if the soft opening looks good but the hot window kills the small lane, freezes hero size to one visible value, pins hero clamp pressure, or makes size/clamp edits help only by collapsing the small lane, the Bubble contract is still broken.
-- Bubble loud-path oracles must grade the actual Bubble worker snapshot path. Do not prove closure from a second helper-side `snapshot(...)` pass with neutral pulse params or from replay windows that accidentally mix soft and hot frames from the same repeated profile, because that turns a runtime-shaped bar back into a proxy and can hide the exact failure shape users still see live.
-- Spectrum startup/reactivity automation must also use an authored curated preset path, not only generic parity helpers. `Preset 1 (Organs)` is the standing Spectrum oracle for first-visible authority and startup/mode-switch parity.
-- Spectrum horizontal bar geometry has one shared contract. CPU helper math and shader layout must agree on the same slightly left-biased bar field so the mode does not reintroduce a visible left gutter or right-edge clipping through duplicate geometry calculations.
-- Spectrum solid-bar anti-flicker behavior is a display-only seam. Any chatter suppression for `single_piece` belongs after continuous bar computation at the overlay/display quantization layer, must not modify FFT/shared beat-engine floor logic, and should prefer continuous display-state easing over robotic segment pinning. Brief coherent all-zero source frames may be held locally and delayed-frame catch-up must be bounded so one event-loop stall cannot consume an entire smoothing backlog; neither rule changes the visualizer timer, FFT cadence, or accepted non-solid modes.
-- Idle-reveal modes must have a meaningful paused startup presentation without depending on a prior live audio frame. When playback is genuinely non-playing, the shared beat engine should still provide a low-energy idle waveform/bar seed so first visible startup does not collapse into a dead zero frame.
-- Oscilloscope display response is mode-owned at the waveform consumption seam. Its live waveform conditioning, line-speed blending, ghost-ring delay, playback-boundary waveform reset, and transient-width accent must stay in Oscilloscope-owned helpers/render code and must not reopen shared audio, shared floor, or other accepted mode behavior unless an Oscilloscope oracle proves the shared source is wrong.
-- Visualizer latency warnings are activation- and playback-aware: ordinary `[SPOTIFY_VIS][LATENCY]` warnings/errors must stay suppressed until the current activation has seen either live audio for that activation or a fresh engine frame for that activation, and must not age paused/non-playing stale audio into normal latency errors. Explicit probe-triggered latency requests may still log before readiness or while paused so reset/transition investigations remain visible.
+Normal producers never wait for paint acknowledgement.
 
-### 5.3.1 Retired Blob compatibility contract
-**Removed 2026-07-15:** Blob is not an active, gated, selectable, preset-owning, rendered, packaged, or tested visualizer mode.
+A single pending GUI update may be coalesced, but it is not a producer scheduler.
 
-- Saved/imported `blob` selections and all `blob_*` / `preset_blob` leaves are migration inputs only. `core/settings/visualizer_retired_modes.py` resolves the selection to the registry-owned supported default and strips those leaves before model normalization.
-- Defaults, typed settings, presets, Custom snapshots, generated JSON/SST artifacts, UI, runtime transport, shaders, diagnostics, and packaging must never re-emit or regain Blob ownership.
-- Historical Blob bug records remain documentation only. They are not runtime contracts or acceptance oracles.
-- Retired-mode migration must not modify shared audio extraction, animation/timer cadence, compositor behavior, or supported-mode tuning. The focused supported-mode reactivity lock remains the regression bar for shared visualizer seams.
+### 4.3 Clocks
 
-### 5.4 Mode isolation
-- Mode-owned behavior belongs to mode-owned code.
-- Shared seams must remain neutral and explicit.
-- No hidden cross-mode dependency on authored mode keys.
-- Technical settings are mode-owned at runtime and in canonical persistence. Shared/global technical keys are legacy migration inputs only and must not remain in normalized settings, custom snapshots, or preset payloads.
-- Mode-owned technical values keep authored intent. In particular, valid low manual floors below `0.12` and authored `audio_block_size=0` automatic-selection requests must survive normalization, validation, startup, recreate, hot mode switch, and preset cycle unchanged; shared/global legacy technical keys may be stripped or migrated, but they must not poison current mode-owned values.
-- Preset-varying runtime visuals that affect activation or renderer state, including bar fill/border styling and legacy ghost controls, are mode-owned too. They must not travel through shared/global authored keys after normalization.
-- Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.
-- Visualizer settings-model refactors must preserve ordered grouped section merges for both constructor assembly and persistence serialization. Do not reintroduce bespoke handwritten field families or entry-point-specific fallback paths once a group has been centralized.
-- Live diagnostics for visualizer activation must report the resolved preset identity and the actual applied worker/widget technical state, not only raw settings payloads.
-- High-frequency visualizer diagnostics (`BARS`, `FLOOR`, `TRANSIENT`, `DEVCURVE`, `GLOW`) must build their detailed payloads only on actual emit paths; guardrail warnings such as `LATENCY`, `FIRST_FRAME_GUARD`, and `MODE_RESET_ASSERT` stay loud.
+Separate logical clocks exist for:
 
-### 5.5 Runtime card/shadow contract
-- Runtime overlay card shadows are painter-owned, not `QGraphicsDropShadowEffect`-owned.
-- `widgets.shadows.enabled`, `widgets.shadows.text_enabled`, and `widgets.shadows.header_enabled` are the runtime shadow controls for framed widgets.
-- Shadow direction is not currently a truthful family-wide setting. Painted cards, text, headers, icons, controls, Weather details, Media controls, and analogue-clock details still consume separate `shadowtuning.json` sections or local offsets, while several outer-card paths reserve visual gutter only on the right/bottom. Do not expose `widgets.shadows.offset` as a global direction control until those consumers share a signed-vector resolver and direction-aware visual padding/cache keys; a partial selector that affects only factory/card paths is forbidden.
-- Framed widgets that use the painted shadow path must explicitly clear transparent backing regions before repainting cached shadow output so stale shadow pixels cannot accumulate in the gutter.
-- Direct `QWidget` implementations that do not inherit `BaseOverlayWidget` but need framed-card parity, such as the Spotify visualizer, must mirror the same painted-frame contract explicitly rather than assuming inheritance.
-- Spotify visualizer outer card sizing is intentionally special: presets and live mode settings own outer dimensions, and media-relative placement belongs to the visualizer card-geometry policy rather than the generic overlay-widget card-height path. Future custom edit/resizing work should extend that outer-geometry policy, not bypass it.
-- When a committed visualizer CUSTOM rect already exists, startup creation must prime that rect before `startup_create`/prewarm work reads geometry, and later foreign outer-geometry writes must not be allowed to override that committed CUSTOM rect while CUSTOM authority remains active.
-- Visualizer spawn ownership under `Custom` is a participating-display contract, not a media-follow shortcut: if the requested CUSTOM monitor is not currently part of the active compositor/display set, local/remote visualizer creation must choose a participating display instance instead of spawning into unseen territory.
-- Multi-display startup must register the full allowed `DisplayWidget` set before the first display runs widget setup that performs participation-based owner selection, so a later requested CUSTOM monitor is seen as pending startup instead of being misclassified as absent.
-- When the requested CUSTOM display still exists in runtime but is temporarily non-participating during display sleep/wake churn, remote reconcile must treat fallback as a last resort: schedule one cautious delayed recheck through `ThreadManager.single_shot`, and only then fall back if the requested display still has not resumed participation.
-- Creator-time CUSTOM visualizer route repair must stay committed-layout-aware. If the visualizer is still in `Custom` but its monitor field reads as missing/`ALL` during recreate, recover that route only from matching saved visualizer screen-bucket evidence; do not let a broad authored-restore helper claim success unless the visualizer actually exits `Custom` onto a non-`ALL` authored route.
-- Analog clock cache/paint geometry should stay explicit and shared: the analogue card ring is intentionally larger than the inner face, framed mode keeps extra outer-ring breathing room between numerals and the card edge, the numerals are intentionally smaller than the old digital-proportional fallback, and numeral placement uses an authored optical layout map rather than plain text centering so wide Roman numerals such as `VIII` remain visually balanced across future resizing work. The shared one-second clock ticker owns repaint cadence; analogue hand angles use exact whole-second state, including one-second minute/hour progression, so callback microsecond jitter cannot create semi-smooth start/stop motion. Do not add a per-frame or private clock timer to simulate ticking.
-- Clock mode swaps under a committed CUSTOM rect are full outer-geometry swaps, not inner-content mutations. Switching between digital and analogue must rebuild the saved CUSTOM rect around the target mode's natural shape, preserve the authored scale, and persist the rebuilt rect as the new custom truth instead of cramming the target mode into the previous mode's outer box. The Clock setting remains behavior authority: CUSTOM may persist `geometry_variant` solely to identify which outer shape the rect represents, but replay must never derive or overwrite `display_mode` from it. Legacy payload copies of `display_mode` are one-time geometry migration evidence only and must be stripped after reconciliation.
+- visualizer simulation;
+- transition elapsed time;
+- Qt presentation opportunity.
 
-## 6. Preset Architecture Contract
-- Authored curated source: `presets/visualizer_modes/`.
-- Runtime shipped trees are generated artifacts.
-- Repair tool must normalize schema without rewriting authored intent.
-- Reindex mutates only slot filename numbering and `preset_index`.
-- Tests must not require curated/authored preset files to have specific names, slots, or numeric visual values beyond schema/index/repair contracts. Authored preset content may be fixed, indexed, cleaned, or validated structurally, but exact creative values are not a runtime compatibility contract.
+Paint delay may skip intermediate render snapshots. It may not change logical visualizer behaviour or create catch-up update bursts.
 
-## 7. Startup Staging Contract
-- Startup timing policy source: `rendering/overlay_startup_policy.py`.
-- Spotify-related secondary-stage widgets must wait for anchor/position readiness before reveal.
-- Spotify-related secondary-stage widgets must also recover cleanly if their first secondary-stage starter fires before the media anchor becomes visible; later anchor visibility sync must be allowed to release the staged reveal once the centralized manager deadline is satisfied.
-- Mute button follows secondary-stage reveal contract.
-- Cold startup should prioritize first useful display over eager GL compilation. Transition GL startup should compile only the minimal safe subset needed for immediate runtime. Deferred transition warmup should use a hidden/quiescent shared GL context when possible so the live compositor surface is not perturbed after the first image appears; only non-live surfaces may fall back to direct compositor-context warmup. That hidden deferred path should cover both remaining transition-program compilation and representative transition-resource warmup where safe, so first use does not pay avoidable visible-surface prep cost. Transition correctness must not depend on that deferred startup warmup succeeding: first-use transition startup must ensure/bind the needed compositor program in a real current GL context before animation begins. Spotify visualizer GL startup should compile the resolved supported startup mode first, seed the GL overlay with that mode before prewarm, and warm the remaining supported mode programs incrementally afterward.
-- Multi-display GL transition pacing uses two shared seams: a small display-level image handoff stagger plus compositor-side desync at transition start. Compositor-side desync must remain effectively imperceptible and shared across compositor transition families, not only crossfade.
-- Single-display runtime must bypass compositor-side desync entirely. Request acceptance, deferred/desync wait, and actual transition runtime are separate telemetry concerns; transition duration metrics should begin at the real compositor handoff, not at the earlier request timestamp.
-- GL transition duration/completion remains owned by `AnimationManager`, but visible shader progress is refreshed from paint-time `FrameState` interpolation before shader dispatch. `FrameState` paint reads use elapsed-time/easing authority so shader-visible progress is not capped by a lower-cadence `GL ANIM` callback/sample stream. High-refresh visual smoothness must be judged from `GL PAINT` / render-timer cadence, not only the lower-frequency progress-sample callback cadence. If render-timer cadence is healthy while same-screen `GL PAINT` cadence collapses, the failure is paint/event-loop delivery starvation until proven otherwise; do not solve it by queueing more UI work.
-- Cold visualizer construction must not invent a separate runtime truth. When a resolved startup mode is already known, the visualizer widget and GL overlay must be seeded with that mode at construction/prewarm time; when no resolved mode is available yet, the canonical product default is `bubble`.
-- Cold/recreated display startup must also keep first-image recovery explicit. If the first immediate `_show_next_image()` call fails, the engine should perform a bounded immediate retry sequence rather than relying only on the long rotation timer.
+### 4.4 Transition completion
 
-## 7.1 Transition Registry Contract
-- `rendering/transition_registry.py` is the canonical source of truth for ordinary transition identity and startup/runtime metadata.
-- Descriptor metadata should own at least:
-  - stable persisted transition names and legacy alias canonicalization,
-  - UI order/labels for ordinary transition selectors,
-  - cycle/random-pool participation,
-  - hardware-gating metadata,
-  - compositor program-key routing,
-  - startup-safe transition-program warmup participation.
-- `ui/tabs/transitions_tab.py`, `widgets/context_menu.py`, `engine/screensaver_engine.py`, `engine/engine_handlers.py`, `rendering/transition_factory.py`, `rendering/gl_compositor.py`, and `rendering/gl_compositor_pkg/gl_lifecycle.py` should consume that shared registry for ordinary transition identity/routing instead of keeping parallel handwritten lists.
-- Keep transition-specific runtime behavior explicit in the transition implementations and factory creator methods. Do not flatten per-transition math or widget-local settings UI behavior into a giant opaque descriptor table just for neatness.
+Transition progress uses monotonic elapsed time.
 
-## 8. Widget Descriptor / Registry Contract
-- `rendering/widget_descriptors.py` is the canonical registry for factory-backed overlay widgets.
-- Descriptor metadata must own at least widget identity, parent attribute name, factory routing, startup-stage intent, environment gating, and any shared setup extras such as base-settings inheritance or shadow-config injection.
-- `rendering/widget_setup_all.py` may orchestrate creation, reuse, expected-overlay tracking, and ThreadManager injection, but it must not reintroduce handwritten per-family registration truth that duplicates descriptor metadata.
-- That orchestrator should keep its special Spotify phases explicit as one named setup plan rather than scattering ordering across incidental helper call sites. Future widget work may extend those phases, but should not hide new startup/reconcile dependencies behind ad hoc call order.
-- `rendering/widget_descriptors.py` also owns the canonical `WidgetsTab` section registry for section order, labels, dev gating, and builder routing. `ui/tabs/widgets_tab.py` may orchestrate lazy/non-lazy mounting, but it must not keep a second handwritten family list for those same sections.
-- `rendering/widget_descriptors.py` owns `WidgetsTab` standard-section load routing through descriptor-owned section and single-section helper seams, so build/load pairs do not drift back into handwritten imports and per-section dispatch chains inside `widgets_tab.py`.
-- `rendering/widget_descriptors.py` owns `WidgetsTab` standard-section save routing and preserved-widget-key ownership, including single-section saver access for preview/live-config composition, so save/fallback behavior for lazily unbuilt sections does not drift back into handwritten per-section branches inside `widgets_tab.py`.
-- `rendering/widget_descriptors.py` owns `WidgetsTab` section identity, lazy-bootstrap intent, and default-selection policy so fragile assumptions about numeric tab indices, fixed section order, or special “always build this last section” cases do not drift back into `widgets_tab.py`.
-- `rendering/widget_descriptors.py` owns `WidgetsTab` CUSTOM size-lock metadata where a section's size controls become derived/no-op in `Custom`, so future widget additions do not have to reintroduce tab-local handwritten lock tables.
-- Descriptor helpers may be numerous, but they should stay grouped around one canonical registry truth rather than turning back into parallel ownership. Active descriptor views and descriptor-index lookups may be cached, but that cache must remain environment/dev-gate-aware so gated widget families do not become stale across settings/tests/build paths.
-- WidgetsTab-specific descriptor metadata should not duplicate runtime routing truth unnecessarily. For example, a custom-position UI binding may own the combo attr and authored fallback label, but effective position-key ownership should still come from the runtime descriptor contract.
-- When a lazy-built section cannot hydrate or save correctly without another section's controls, that inter-section dependency should be explicit in descriptor metadata rather than hidden in tab order or constructor side effects. Mutual dependencies are acceptable if the lazy builder treats "currently building" sections as in-progress rather than recursively re-entering them.
-- The default selected `WidgetsTab` section is descriptor-owned so startup/reset behavior does not quietly depend on a hardcoded “section 0” assumption.
-- The user-facing General section (stable internal descriptor id/module suffix: `defaults`) follows that same descriptor-owned builder/load/save path for shared widget shadow toggles, card-border-width persistence, authored stacking, and reset-position actions instead of remaining a special inline branch in `widgets_tab.py`. Preserve the internal id so saved lazy-section state and routing do not churn merely because the visible label changed.
-- General-section cache maintenance is an explicit allowlist, not a filesystem browser or broad reset. It may clear only the named RSS image, Reddit post-snapshot, Weather response, Gmail metadata, Steam response/public-artwork, and Settings performance-cache families; it must preserve installed settings, CUSTOM layouts, generated defaults, credentials and credential metadata, Reddit pacing markers, deprecated Imgur data, and unrelated files. Recursive Steam-cache work must stay off the UI thread, must not follow symbolic links or remove directories, and locked/in-use files must fail softly with scoped feedback.
-- When standard widget sections already have descriptor-owned persisted-widget-key metadata, `widgets_tab.py` should prefer descriptor-owned save-result application helpers over manually reassigning those standard section payloads one key at a time. Keep genuinely special merges, such as visualizer mode-preserving persistence, explicit.
-- For standard widget sections, `rendering/widget_descriptors.py` owns canonical `WidgetsTab` signal-block attribute membership so repeated load-time bookkeeping stays out of `widgets_tab.py`. Keep only genuinely special non-standard buckets such as visualizer-specific controls explicit when the descriptor layer would not improve clarity.
-- `WidgetsTab` load-time signal blocking for standard sections should prefer descriptor-owned target collection helpers over repeating attribute scans inline. Keep only the genuinely special non-descriptor groups as explicit extras at the call site.
-- When standard widget sections already have descriptor-owned build/load/save metadata, `widgets_tab.py` should prefer descriptor helper orchestration over keeping its own inline dispatch loops for those same sections.
-- Programmatic/lazy settings entry should stay narrow and descriptor-owned too. If `SettingsDialog` or headless callers need a section surface such as Media/Visualizers, they should materialize only the descriptor-declared programmatic dependency set rather than eagerly building every WidgetsTab section.
-- Descriptor-owned lazy/programmatic `WidgetsTab` hydration must also run under the same loading/save-suppression guard as full tab load. Building or hydrating a lazily materialized section must never save partial/default widget state back into settings just because constructor-time control sync emitted ordinary UI signals.
-- Normal lazy-save orchestration must collect only hydrated section descriptors. Expected omission of an unbuilt section is not a guard violation and must not emit `blocked_save_from_unhydrated_section`; direct or accidental attempts to collect an unhydrated descriptor must still preserve existing data and trigger that warning. Special post-save transforms, including visualizer normalization and Custom snapshot writes, must not run for an unhydrated section.
-- Standard widget default-backed `WidgetsTab` attrs such as base colors, media artwork size, and card-border-width defaults should also prefer descriptor-owned init metadata when that replaces a second handwritten attr table without obscuring genuinely special settings behavior.
-- Runtime capability ownership also belongs in `rendering/widget_descriptors.py`: startup stage, anchor dependence, service-backed status, descriptor-owned service-runtime contract participation, settings-section ownership, and live-refresh routing must not drift back into handwritten prefix checks inside `WidgetManager`.
-- Canonical widget settings position options also belong in `rendering/widget_descriptors.py`. Widget settings builders must consume descriptor-owned position labels/capabilities instead of retyping the same 9-grid list in each tab module.
-- Descriptor-owned stack-preview/settings-composition metadata should drive `WidgetsTab` preview/save truth for standard widget families instead of per-widget handwritten UI reads where the descriptor can express the same contract.
-- Future custom layout/edit-mode capability metadata should extend the same descriptor layer rather than introducing a separate widget-position registry.
-- CUSTOM resize must remain descriptor-owned and widget-logical: plain scroll wheel and corner-drag resize may adjust widget-owned size axes only where the widget can express that safely, both paths must feed the same widget-logical resize authority, and participating widgets must keep clear runtime/settings-side recovery affordances.
-- Descriptor-owned CUSTOM runtime exceptions must stay explicit too. If a family such as `gmail`/`reddit` keeps committed width but needs content-owned vertical height after replay, that exception belongs in descriptor-owned CUSTOM capability metadata plus the shared custom-layout persistence seam, not in ad hoc widget-local settings writes.
-- First meaningful CUSTOM edit-mode phase is now landed as a shell-driven global active-display session with explicit monitor-routing authority:
-  - `rendering/custom_layout_contract.py` owns the normalized display-local rect contract and persistence helpers under `widgets.custom_layout`,
-  - `rendering/custom_layout_manager.py` owns global session lifecycle across the active `DisplayWidget` set, temporary shell orchestration, save/cancel, runtime-update deferral, intentional Media-shell visualizer recovery, numbered-monitor ownership transfer between compositor-backed displays, and canonical post-save/revert rebuild across display instances,
-  - `widgets/edit_shell_widget.py` owns the temporary display-owned shell surface, resize/restore affordances for participating families, and optional widget-specific recovery actions exposed by the session manager,
-  - `rendering/widget_descriptors.py` now also owns the live widget attr name and first-phase resize-mode ownership for CUSTOM edit participation.
-- First-phase CUSTOM precision editing is also descriptor/contract owned rather than mouse-handler ad hoc: live shells clamp to one display at a time and snap against the shared 12px grid scaffold, real display edges, peer widget shells, and destination-display live peers only while an edit session is active. The static overlay must reflect that primary snap scaffold truth rather than implying a separate guide system.
-- Media-shell **Reset Visualizer** is an edit-session recovery action, not an authored-layout reset. It must create or restore an editable visualizer shell rectangle in the active session, may use a transparent placeholder when live capture is missing, and must not clear visualizer `Custom` authority, save settings, exit edit mode, or request a runtime rebuild by itself; the normal Save action remains the only commit path.
-- Entering settings while a CUSTOM shell session is active must cancel the global shell session first, then proceed through the normal engine stop/settings-dialog startup path. Settings entry must not rely on later display teardown to clean up edit-session surfaces indirectly.
-- Layout slots are source-free copies of current widget layout state, not active profiles. `Shift+1` through `Shift+9` and `Shift+0` save slots, while `1` through `9` and `0` load them; slot `0` is the tenth ordinary slot. Saving captures widget presence, authored positions/monitors/margins, size/count/layout-affecting fields, and the current `widgets.custom_layout` / `widgets.custom_layout_restore` maps through an allowlist. It must not capture provider/source identity such as subreddit, account, weather location, media provider, visualizer mode/preset/technical payloads, or sound selections.
-- Loading a layout slot writes its captured layout fields into the current widgets settings, saves them, and uses the same clean CUSTOM runtime-reload/display-recreation path as an edit-session save. The slot remains only a saved source payload; later settings/edit-mode changes persist normally in the user's current experience but do not mutate the slot unless the user saves that slot again. If a slot is loaded while edit mode is active, the current shell state is committed first, then the slot payload is applied and rebuilt once.
-- Explicit `Custom` position-slot UX is also now part of the first-phase contract: participating widget families expose the `Custom` slot through descriptor-owned position labels, WidgetsTab disables that slot until a real saved custom layout exists, persisted widget position now accepts `custom` as a first-class runtime value, saving an edit session promotes the relevant widget-family settings position to `Custom`, and switching back to an authored position must stop runtime custom-rect authority without deleting the saved payload.
-- The last known non-`Custom` authored route is also a first-class saved contract: participating widget families persist their most recent authored `position` + `monitor` route separately from CUSTOM geometry so edit mode can provide a global reset-to-authored action without guessing from live shell state.
-- That authored-route restore mutation must be shared, not duplicated: runtime context-menu reset, invalid-route runtime recovery, and any settings-dialog “Disable Custom Mode” affordance should call the same pure settings-level helper to restore last-known authored routes and clear the targeted CUSTOM geometry payload.
-- Canonical application-default position reset is a separate contract from authored-route restore. Settings affordances that promise “defaults” should reset widget position/monitor routes to the current profile's shipped defaults (Normal vs MC) while also clearing persisted CUSTOM geometry payloads.
-- Base widget settings remain canonical even while `Custom` resize is active. For example, Media runtime refresh must still reapply authored `font_size`, `artwork_size`, and rounded-artwork-border settings; CUSTOM resize is an overlay scale contract, not a replacement settings section.
-- A committed `Custom` layout owns the outer rect and only the descriptor-declared resize axes stored in its size payload. Internal placement, content, style, and behavior settings remain live settings authority and must not be captured or replayed by CUSTOM merely because they affect drawing inside that rect. Gmail `sender_subject_ratio` is the reference case: moving Text Balance must redistribute the sender/subject slots inside the fixed outer rect, while CUSTOM may continue to own its resize-derived font size. Legacy CUSTOM payload copies of internal settings must be ignored rather than allowed to overwrite current Settings values.
-- WidgetsTab should visibly lock only those size-driving controls that lose live authority while a widget family is in `Custom`. The first disabled control in an affected section should surface the styled orange `Disable Custom Mode To Change!` affordance, and unrelated style/behavior controls such as font family, provider choice, or visualizer mode/preset controls should remain editable when they still affect the live result.
-- CUSTOM uniform resize is now landed for the safe authored-size families that already expose real widget-logical hooks: `clock*`, `weather`, `media`, `reddit*`, `gmail`, and `spotify_volume`. Deprecated Imgur retains legacy CUSTOM support only until its end-to-end removal and is not an enhancement target. `spotify_visualizer` now also treats its saved CUSTOM rect as authoritative outer-card geometry through the visualizer card-geometry contract instead of relying on shell-only behavior.
-- `spotify_visualizer` now uses an explicit routing-mode contract:
-  - while its effective slot is not `Custom`, `position` / `monitor`, authored placement, startup, fade/reveal, and visibility remain exact `Follow Media` parity,
-  - while its effective slot is `Custom`, it owns its own `position` / `monitor`, may live on a different numbered display from Media, and runtime positioning must honor its saved per-display rect instead of re-anchoring to the media card,
-  - even in `Custom`, it remains content-anchored to Media and still hides with the anchor media widget,
-  - creator/setup paths must resolve a canonical media anchor across the active display set instead of requiring a local media widget.
-- `spotify_volume` remains intentionally media-owned even after the visualizer routing split: it may persist its own per-display rect only under `media.position == Custom`, and runtime positioning must honor that rect and its saved scale contract instead of always forcing the slider back to the authored slider footprint.
-- `spotify_visualizer` CUSTOM sizing preserves the committed outer width and top-left/display ownership. Saved CUSTOM width must not silently widen or narrow on runtime replay; only live height may be re-resolved from current mode/preset-authored card metrics plus the saved visualizer scale payload.
-- Visualizer edit-mode participation should not snapshot only the QWidget shell or only the GL layer. Its edit shell must use the composited display-surface view of the current visualizer rect so the painted card, border, stencil-clipped GL content, and overlay shell remain visually coherent during CUSTOM editing.
-- That composited visualizer edit-shell capture should be built from the visualizer card snapshot plus the GL overlay framebuffer, not by grabbing the whole display surface. Whole-display grabs are not a safe dependency for entering edit mode on a compositor-backed display.
-- `monitor` remains the authoritative cross-display ownership field. CUSTOM layout geometry never replaces monitor routing; numbered-monitor widgets may change ownership through edit-shell transfer, while `ALL` widgets stay display-locked and surface an explicit blocked affordance instead of silently collapsing their routing semantics.
-- CUSTOM edit mode itself is global to the active display set. Entering it from one display should activate shells on every live compositor-backed `DisplayWidget`, and cross-display handoff targets must come from that active display set rather than every raw OS screen.
-- The normal visualizer runtime placement path must honor committed CUSTOM rect authority when the owning media slot is set to `Custom`; otherwise post-save/runtime rebuilds will silently re-anchor the visualizer back to the media card and fight saved geometry.
-- Saved CUSTOM geometry must reapply through shared runtime seams, not one-off widget patches. `BaseOverlayWidget` therefore treats `_custom_layout_local_rect` as an authoritative local-geometry override, while `DisplayWidget`/`WidgetManager` reapply saved custom layouts after widget setup, resize, and live widget refreshes. Visualizer-specific startup stabilization may exist only as a cautious delayed verify/confirm seam on top of that shared contract, not as a blind next-turn geometry rewrite.
-- Saved CUSTOM geometry must also survive live widget self-resize pressure. If a CUSTOM-positioned overlay recalculates its own minimum/maximum size from content, refresh, or typography changes, the saved `_custom_layout_local_rect` remains authoritative and must be reasserted through the shared overlay seam instead of letting the widget quietly grow/shrink itself out of the committed rect.
-- Shared CUSTOM replay must reassert the committed outer rect after any descriptor-owned resize payload is applied, not only for special widget families. Font, artwork, icon, and track scaling may update internals, but they must not become a second outer-geometry authority during runtime replay.
-- Shrinking a widget below its authored/default runtime size is a first-class CUSTOM contract too. Runtime replay must temporarily override any earlier authored minimum/maximum size constraints so a committed smaller CUSTOM rect can actually take effect after rebuild.
-- CUSTOM layout screen ownership must use live display binding, not constructor-time guesses. `CustomLayoutManager` should re-sync against the owning `DisplayWidget` screen binding before session start, save, and runtime reapply so edit-mode persistence does not depend on whether `_screen` happened to be populated during `DisplayWidget.__init__`.
-- During widget rebuild/setup, saved CUSTOM geometry should be applied before widget activation/fade startup so settings-entry and edit-mode rebuilds do not briefly expose authored-anchor positions before the real reveal path.
-- Settings-entry and CUSTOM runtime-reload display recreation must also arm a short pointer-event suppression window on the newly recreated `DisplayWidget` set so the save/revert click that triggered the rebuild cannot be re-consumed as startup-time next-image/exit/context-menu input on the fresh displays.
-- Edit-mode display ownership should mirror normal runtime: temporary grid and shells are display-owned child surfaces, and cross-display movement reassigns shell ownership by explicit reparenting to the target display instead of relying on independent top-level windows plus repeated desktop-stack correction.
-- `EditShellWidget` speaks global geometry only, while `CustomLayoutManager` owns all live global-rect application and global-to-display-local translation. Live drag should not apply against an outdated parent/display first and "correct later."
-- Live move drag should stay fluid: during drag, CUSTOM movement clamps to the active display set and updates alignment guides, but authoritative snap-to-grid / snap-to-peer position commits happen on drag finish rather than forcing sticky snap corrections on every mouse-move frame.
-- Saved CUSTOM rect replay must clamp against the real target display bounds through the shared custom-layout contract. Denormalized saved width/height are not sacred if they would extend past the live display.
-- Edit-mode stack ordering should also stay session-owned. Background clicks, shell menu requests, and menu show/hide should all funnel through one deferred restack seam, and active edit-mode context menus should suspend shell/grid restacks until the menu closes so popup ordering does not fight the display-owned grid/shell surfaces.
-- CUSTOM save/reset now commits through the canonical widget rebuild path so reveal/fade behavior matches ordinary runtime setup instead of depending on per-widget live refresh seams.
-- CUSTOM save/reset should not briefly restore the old live widgets or paused Spotify-dependent special widgets before rebuild. The old runtime layer stays hidden while the rebuild path becomes authoritative.
-- Runtime CUSTOM rebuilds must explicitly re-prime fade coordination when the compositor is already ready; otherwise the cold-start one-shot compositor-ready signal will not refire and primary overlays can remain queued forever after edit-mode exit.
-- Runtime CUSTOM rebuilds must also clear stale fade participants before registering the new widget set; otherwise compositor-ready rebuilds can keep waiting on overlays from the previous setup cycle and leave rebuilt widgets permanently queued.
-- CUSTOM display bindings should resolve through canonical display identity first, but still recognize legacy saved buckets whose keys were identity-plus-geometry (`serial|...|geom:...`). Exact geometry equality is not a safe long-term match requirement for MC display persistence.
-- Legacy authored widget stacking does not apply while any widget family is using the `Custom` slot. Once CUSTOM mode is active anywhere, shared stacking must fully stand down for that runtime/layout pass so committed CUSTOM geometry remains the sole positioning authority after rebuild.
-- Legacy authored widget stacking is still valid for non-`Custom` anchor-based layouts and is not a general removal target yet. Only CUSTOM-positioned families are exempt from it.
-- Global reset-to-authored from edit mode clears CUSTOM geometry payloads, restores the saved authored route, and then uses that same canonical rebuild path so all widget families return to their authored anchors deterministically.
-- Local edit-shell resets are split by contract: `Reset Position` is a session-local geometry/ownership reset for that shell, while `Reset Size` is a session-local size-contract reset. Neither should masquerade as the global authored-layout reset.
-- CUSTOM edit mode may render a temporary low-opacity grid overlay, but that overlay is an edit-session affordance only. It must stay above the compositor and below the edit shells, and it must not become part of the saved geometry contract.
-- During an active CUSTOM edit session, `DisplayWidget` must suppress normal exit gestures and defer processed-image updates so the user edits against a stable scene instead of live transition churn.
-- During an active CUSTOM edit session, the real system cursor is the sole cursor authority. Interaction-mode / Ctrl halo state must be suspended for the duration of the session and restored only by returning to the ordinary post-edit screensaver cursor policy, not by force-reviving the halo on exit.
-- During an active CUSTOM edit session, runtime widgets represented by shells must also suppress ordinary visibility re-entry paths caused by live provider/media updates. Edit shells are the only visible authority until save/cancel/reset ends the session.
-- `spotify_volume` session-volume truth should come from the real provider-owned mixer session without a high-frequency polling loop. Activation, provider retargeting, and hidden→visible transitions are valid resync boundaries; continuous polling is not.
-- Narrow CUSTOM participants that still remain move-only must preserve their authored footprint during snap/clamp/save/reapply instead of inheriting the generic resizable-widget minimum edit rect. `spotify_volume` is no longer in that class because it now uses an authored resize-scale contract while remaining media-owned.
-- Shared lifecycle mechanics for service-backed overlay widgets belong in `widgets/service_widget_runtime.py`: parent transition-busy probing, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume, visible-fallback preservation for non-authoritative empty/error results, deferred-runtime timer/state reset, and timer-stop cleanup should extend that seam instead of being recopied into each widget. Provider logic, authored rendering, and widget-specific data semantics stay local.
-- Shared fetch-in-progress begin/end guards for service-backed overlay widgets also belong in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract. Keep provider-specific fetch payload semantics local.
-- Shared manual-refresh request flow for service-backed overlay widgets also belongs in `widgets/service_widget_runtime.py` when Gmail/Reddit-style widgets share the same contract: enabled checks, duplicate-fetch short-circuiting, transition deferral, and failure cleanup should not be recopied per widget.
-- Automatic service-update policy is also shared contract work: Gmail, Reddit, and Weather must honor one process-wide `--noupdates` CLI flag that disables automatic retrieval work, including startup fetches and periodic timers, while preserving manual refresh affordances such as double-click and refresh spirals.
-- Fresh cache is a separate startup-only contract from `--noupdates` for Gmail/Weather-style widgets: when those caches are newer than 15 minutes, startup should reuse that cache and skip the immediate startup refresh without disabling later periodic timers or manual refresh. Reddit is the intentional exception: it always reuses cached posts visibly, but automatic startup refresh runs only when updates are enabled, the shared Reddit blocked-cooldown gate is clear, and the per-cache-key terminal due horizon says the widget is due. Reddit startup must not mark a new due horizon until a source chain succeeds or all sources fail.
-- Shared list-capacity policy belongs on the same kind of canonical seam: `reddit`, `reddit2`, and `gmail` should consume the shared `5..25` capacity contract rather than drifting into widget-local UI/runtime ranges. Deprecated Imgur remains excluded pending removal.
-- Authored non-`Custom` widget stacking remains a shared runtime contract too: stack participants belong in the canonical display/widget-manager stack seam, and content-height-driven overlays must request a shared deferred restack there rather than relying on widget-local special cases.
-- Non-`Custom` stacking is column-aware, not merely same-anchor-aware: `Top Left`, `Middle Left`, and `Bottom Left` share one authored left-column plan (likewise center/right). The planner must preserve authored `top` / `middle` / `bottom` band order while compressing inter-widget spacing as needed.
-- That authored planner must measure real visible/runtime footprint, not inflated shadow/collision envelopes, or it will falsely conclude that a fitting column overflows.
-- Companion/media-relative widgets such as `spotify_visualizer` remain excluded as independently movable authored stack participants, but their known follow-media runtime footprint should still block lane space through the same shared planner so later fade-in does not overlap already-stacked authored widgets. When the visualizer follows media, authored stacking should treat that media+visualizer occupancy as one fixed obstacle rather than something the planner is allowed to shove around. `Custom` families remain excluded from that authored planner.
-- Which widget participates in which shared service-runtime contract now belongs in `rendering/widget_descriptors.py`, not in a vague `service_backed=True` assumption. Future widening should extend descriptor-owned contract metadata first, then consume that truth in code/tests/docs.
-- Service-backed widgets that keep narrower contracts, such as Weather, should still funnel repeated local scheduling policy through one canonical widget helper path so lifecycle-entry drift does not reappear between `start()` and lifecycle activation hooks. A blank Weather location is a valid provider-inert presentation state: it must initialize/fade without ThreadManager/provider/timer work, retain normal card spacing, and expose only an `Open Weather Settings` action through centralized input routing.
-- Deprecated Imgur remains on its legacy-local service path only until removal; do not expand it into shared service-widget contracts or spend work improving that path.
-- Dependent media-adjacent widgets that keep their own local timer/debounce policy, such as the Spotify volume slider, should also centralize stop/deactivate/cleanup timer-reset behavior in one local helper instead of repeating slightly different flush-state teardown branches.
-- Media-family widgets that keep richer widget-local polling semantics, such as `MediaWidget`, should also centralize smart-poll timer teardown and pending optimistic-state debounce teardown in canonical local helpers rather than keeping separate stop/deactivate/force-restart branches for the same timer state.
-- Media metadata relayout identity should follow visible text/layout inputs only. Album/state/artwork/provider polling churn may still refresh the card, but it must not become a second font-sizing or formatting authority when the user-visible title/artist presentation is unchanged.
-- Small media-adjacent dependent widgets with staged reveal state, such as `MuteButtonWidget`, should also centralize enable/disable/cleanup runtime reset behavior so poll state and secondary-stage reveal state do not leak across reuse paths.
-- Keep stable widget ids and settings keys. New widget families should extend the descriptor registry instead of adding another ad hoc setup branch unless the runtime truly requires a special-case path (for example, Spotify-dependent secondary-stage widgets).
-- Descriptor refactors are parity-first: monitor gating, expected-overlay truth, reuse behavior, factory kwargs, and startup-stage ownership must remain unchanged unless a deliberate migration is documented.
+Completion is local:
 
-## 9. Rendering and Input Contract
-- GL-first rendering path with safe fallback behavior.
-- Input routing is centralized; no widget-specific ad hoc global key/mouse handlers.
-- Focused keyboard transport shortcuts should travel through the same centralized input contract as the other runtime hotkeys. `Space` and `Home` are the focused play/pause hotkeys, while `Left` and `Right` are the focused previous/next track hotkeys; all four should route through the media widget's transport-command/feedback path rather than bypassing the input contract. Focused volume shortcuts stay on that same shared input seam too: `Up` / `Down` should reuse the Spotify volume slider step contract, while `PgUp` / `PgDn` and `End` should use the shared system-audio master volume / mute contract rather than widget-local ad hoc handlers.
-- Runtime interaction mode behavior must not break settings launch or shutdown paths.
-- Stop/settings-entry teardown must use the narrow quiesce boundary before displays are cleared or hidden: `ScreensaverEngine.stop(...)` should suppress new work through `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()` rather than relying on late cleanup side effects.
-- In MC builds, Interaction Mode is runtime policy, not an optional session toggle: MC startup and runtime reads treat it as enabled, and MC settings/context-menu surfaces must not offer a disable path that can strand the user outside the intended interaction model.
+- destination becomes base;
+- source/temporary resources release;
+- transition becomes inactive.
 
-## 10. Build Variants
-- Standard saver and MC maintain separate settings profiles.
-- Canonical profile defaults resolve through `core/settings/defaults.py`: `default_settings.py` is the authoritative Normal/Screensaver base, while `default_profile_overrides.py` contains only MC differences. `tools/default_settings_editor.py` discovers the editable tree recursively, writes Normal changes into the base, keeps MC compact, provides type-aware alpha-colour/font editors, valid-text guidance, and privacy-filtered SST/JSON import, stores undo outside the repository, and transactionally regenerates JSON plus both SST artifacts in fresh processes. Default SST regeneration derives directly from the profile-aware builder and may never construct `SettingsManager`, inspect migration state, or resolve an installed `settings_v2.json`. Imports exclude active CUSTOM geometry and layout slots as profile/machine-local state. A successful Foundry Save and Regenerate is the new default authority; tests/contracts must follow it unless reproducible runtime, safety, migration, or compatibility evidence proves the change harmful. Runtime-enforced MC policy may still supersede an editable MC default.
-- Frozen preset resolution converges on shared ProgramData curated root.
+No distributed terminal transaction is part of the stable architecture.
 
-## 11. Gmail Widget Architecture
+## 5. Visualizer Contract
 
-### 10.1 Availability
-- Gmail widget is a normal feature and must not be hidden behind a dev-gate or CLI flag.
-- Widget factory registration, settings UI, expected-overlay checks, and rendering paths are always available; actual overlay display is controlled only by `widgets.gmail.enabled` and monitor selection.
+- Visualizer behaviour is mode-owned and protected.
+- Spectrum, Sine Waves, Bubble, Dev Curve, Oscilloscope, and other supported modes retain distinct attack, decay, smoothing, responsiveness, and motion.
+- Shared infrastructure changes must not flatten or overdamp modes.
+- Simulation does not subscribe to transition cadence.
+- Simulation does not wait for compositor paint.
+- Render-state coalescing occurs only after logical input/simulation processing.
+- Mode-specific arrays/history/work do not bleed across activation.
+- All activation paths consume one resolved mode/preset payload.
+- A narrow explicit renderer interface replaces compatibility forwarding.
 
-### 10.2 Backend routing
-- Unified backend (`core/gmail/gmail_backend.py`) routes to OAuth/REST or IMAP based on config
-- OAuth mode: `core/gmail/gmail_oauth.py` (PKCE flow, DPAPI token storage)
-- IMAP mode: `core/gmail/gmail_imap.py` (App Password authentication)
-- REST client: `core/gmail/gmail_client.py` (metadata-only API calls)
-- Deep-link helpers: `core/gmail/gmail_deeplinks.py` owns Gmail web URL construction
-- IMAP/Gmail row links use `X-GM-THRID` decimal ids converted to lowercase hex for `#all/<thread_hex>` routes; RFC `Message-ID` search is the fallback when thread id is unavailable
+Focused behaviour and settings contracts live in the existing visualizer documents.
 
-### 10.3 Widget contracts
-- Overlay widget: `widgets/gmail_widget.py` (email list, actions, paint events)
-- Widget components: `widgets/gmail_components.py` (nine-position GmailPosition enum, relative-time formatting, sender/subject cleanup helpers, email cache)
-- Settings UI: `ui/tabs/widgets_tab_gmail.py` (backend selector, credentials, widget settings, sender/subject cleanup controls)
-- Gmail settings remain a flat dict under `gmail` in `core/settings/default_settings.py`; do not add a Gmail settings dataclass unless the whole widget settings architecture is deliberately migrated
-- Gmail settings UI load/reset/import code must block signals for every Gmail control while values are being populated. `GMAIL_SIGNAL_BLOCK_ATTRS` is descriptor-owned in `rendering/widget_descriptors.py` and re-used by the Gmail settings module rather than duplicated there.
-- Gmail settings panel/button visibility updates must avoid redundant `setVisible(...)` calls during construction and load, following the historical R-18 settings flicker guardrail. When the settings parent page is hidden, backend-specific child panels must compare desired state against explicit hidden state, not transient `isVisible()`, so OAuth-only text/buttons stay hidden for IMAP on fresh settings open.
-- If the Gmail backend service is temporarily unavailable during settings construction/load, backend panel visibility must fall back to the UI backend selector value instead of showing both backend panels.
-- Gmail settings construction must not synchronously load backend/auth credential state. The initial backend-specific UI should be derived from the combo/defaults, with credential/auth refresh queued after construction.
-- Styled combo boxes must not force popup-view creation during settings construction; popup view styling belongs on popup open, not in constructors.
-- Gmail IMAP Save & Test must not block the settings UI. Test supplied credentials on the IO pool first, save credentials only after a successful test, and return all UI label/button/popup updates to the UI thread.
-- Gmail OAuth code exchange must also stay off the UI thread. The callback server may acknowledge the browser request immediately, but token exchange/network work must go through a real `ThreadManager` IO task and marshal Qt signal/UI updates back to the UI thread.
-- Gmail's loopback OAuth callback listener is itself a bounded `ThreadManager` IO task, not a raw thread. One generation-scoped context owns its stop/finished signals, captured redirect/PKCE values, close-once socket release, and task id; success, browser rejection, timeout, settings-owner destruction, credential clearing, and application teardown must all converge on that owner without UI polling or repaint/timer pressure.
-- Gmail user-facing settings UI defaults must be read from canonical widget defaults; missing Gmail defaults should fail loudly in tests instead of quietly introducing new hardcoded fallback drift.
-- Settings-dialog cached widget defaults must be treated as an optimization only. WidgetsTab must merge cached defaults with fresh canonical defaults, and cache invalidation must include both `defaults.py` and `default_settings.py` so new Gmail defaults are not hidden by stale cache data.
-- Gmail visual settings must keep geometry and hit rects aligned: display, position, single `gmail.width`, Media-style margins, header frame, and row click targets must be derived from measured widget layout. Gmail must not expose custom per-side padding controls unless the whole widget family gains the same concept.
-- Gmail header styling must maintain visual parity with peer overlay headers (Media/Spotify/Reddit): comparable logo scale, frame border weight, radius, and top inset. Default Gmail header font/logo sizing follows Media's derived relationship (`font * 1.2`, then `header * 1.3`), with `gmail.header_logo_px_adjust` reserved for final visual nudging.
-- Gmail row interaction must work in normal and MC modes: full row sender/subject hit rect opens the message URL through central input URL routing, while the vertical action-menu hit rect opens the menu and must not be consumed by row click handling
-- Gmail secure-desktop/normal SCR URL clicks use the shared helper/task-scheduler bridge route. MC Reddit URL clicks keep the MC direct Qt/browser route. Where multiple eligible browser windows already exist, both paths may prefer a display-0 browser window first, but they must still fall back cleanly to the current first-match/direct-open behavior.
-- Gmail MC action-menu popup handling must not immediately reclaim DisplayWidget focus in a way that steals input from the popup; the menu object must remain alive until it hides.
-- Gmail action-menu operations must have real backend effects for the active backend. IMAP actions must use IMAP-safe identifiers such as UID, not only Gmail web/message ids.
-- Gmail action menus must include Mark as Read/Unread, Spam, and Delete where the active backend can support them. Archive is hidden for IMAP because runtime testing repeatedly showed it accepts no reliable local behavior; the Archive code path may remain for OAuth/future diagnostics. Required Gmail action image assets must be present in the repo and covered by build-script asset tests; missing optional image assets must still fall back to simple generated icons rather than silently leaving important actions visually blank.
-- Gmail display text cleanup is part of the widget contract: title casing must preserve contractions, sender cleanup must prefer RFC-style display names over raw addresses, subject/sender shortening must run before final pixel elision, and punctuation-only separator tokens such as `|` or `-` must not count as words
-- Gmail row text columns must remain stable across visible rows: timestamp, envelope, action, margins, and inter-column spacing are reserved first, then the remaining shared text budget is split by `gmail.sender_subject_ratio` (10-80, canonical default 35/65 sender-to-subject). The settings slider is visually oriented so left grants more sender space and right grants more subject space. Shorter senders leave blank space instead of moving the subject start position, the two text slots may never exceed the remaining row budget, subject word shortening remains available, and the retired subject-character limit is ignored. Legacy `sender_column_width` input may migrate once but is not emitted by current settings or defaults.
-- Gmail IMAP Inbox listing must preserve the active mailbox order returned from the selected label instead of over-fetching and date-sorting in the widget. Runtime evidence showed the over-fetch/date-sort mitigation mismatched Gmail's visible Inbox.
-- Gmail cached mail must be stored and loaded in the same backend order used for visible display, so startup cache display does not visibly reorder a few seconds later when the live fetch completes.
-- Gmail live fetches that come back empty must not displace valid cached or already-displayed mail. When Gmail has valid visible content, an empty live result is treated as non-authoritative and the existing display remains in place.
-- Gmail IMAP partial per-message fetch failures must also be treated as non-authoritative. A degraded partial result must not overwrite a fuller cached/already-displayed list or poison the cache with a truncated mailbox snapshot.
-- Gmail error completion should continue to use the shared `widgets/service_widget_runtime.py` visible-fallback contract when deciding whether an empty/error fetch is non-authoritative once valid content is already on screen.
-- Gmail sender casing may apply conservative display capitalization for visual consistency, but must preserve established mixed/all-caps brand tokens such as `PayPal`, `ChatGPT`, `FNB`, and `AI`
-- Gmail date display modes are `relative`, `numeric`, and `words`. Relative uses age labels such as `Yesterday`, `Last Week`, `Last Month`, and `Two Years Ago`; numeric uses numbered dates; words uses calendar labels such as `April 16th`.
-- Gmail thread/duplicate display may collapse truly identical or Gmail-threaded entries only when `gmail.group_threads` is enabled, and read/unread groups must remain separate. Its fresh/reset value is owned by the Defaults Foundry like every other user preference; the current canonical default is enabled and tests/docs must follow that source rather than preserving an older literal.
-- Gmail IMAP Archive is considered unsupported/hidden for now. The retained code still attempts `-X-GM-LABELS` before hard-named All Mail MOVE for future diagnostics, but the IMAP menu must not present Archive as a working user action.
-- Gmail may expose manual refresh through an optional, default-on quiet icon-only refresh control and blank-space double-click, but refresh must respect fetch-in-progress guards and must not animate or repaint continuously while idle. If a hand-drawn arrow reads ambiguously in runtime screenshots, prefer a neutral spiral or asset-backed icon over repeated arrow geometry tweaks.
-- Gmail user-facing defaults must come from the settings/defaults system. Hardcoded Gmail values are acceptable only for private drawing constants or legacy migration fallbacks.
-- Gmail settings buckets must not disable/re-enable whole-dialog updates or pre-polish hidden bucket bodies by temporarily showing them during settings construction. R-18 established constructor-time visibility calls as a settings flicker hazard, so bucket toggles should use ordinary guarded body visibility changes and keep runtime flicker validation open until proven.
-- Gmail Text Limits settings should stay readable at normal settings widths: sender word and sender-column controls on one row, subject word and subject-character controls on a second aligned row/grid.
-- Gmail must not do per-tick network work, pixmap scaling, lazy pixmap conversion, over-painting, or unnecessary `update()` calls when its data and animation state are unchanged.
-- Gmail stable visual content may be cached in a DPR-aware transparent pixmap, but live dynamic controls such as the refresh spiral must be painted on top without invalidating the stable cache. Cache regeneration must not change widget graphics effects, hide/show widgets, reparent, resize, or call overlay-effect invalidation because Qt shadow/effect corruption is a known fragile area.
-- Shared overlay-effect invalidation is now a narrow transient-opacity refresh seam only. It exists to repaint widgets that currently own a live `QGraphicsOpacityEffect` fade, not to perform broad menu/focus/display-change cache busting for painter-owned shadows. Do not attempt to detect shadow corruption by introspecting `QGraphicsEffect` state alone; the known failure was visual Qt pixmap/cache corruption and should be treated as a multi-monitor runtime validation problem if it ever reappears.
-- Runtime widget card shadows are painter-owned and controlled by `widgets.shadows.enabled`, not by Qt drop-shadow effects. Framed overlay cards use cached DPR-aware painter output and explicitly clear each transparent backing region before painting so stale shadow pixels cannot accumulate in the card gutter. `widgets.shadows.text_enabled` controls painter-drawn text shadows and `widgets.shadows.header_enabled` controls painter-drawn header-frame shadows. The Spotify visualizer GL overlay uses a rounded-rect stencil mask in `paintGL()` whenever the painted card shadow path is active; the mask inset must include the 1-px painted-frame inset (`inset=1.0 * dpr`) plus `border_width_px * 0.5 * dpr` so GL content stays inside the inner edge of the centred card pen stroke without changing visualizer content size, amplitude, curve scale, or authored mode behavior.
-- Gmail refresh must avoid visible UI churn during pending or active image transitions. If any parent display in the Qt parent chain reports accepted image-change work or a running transition, refresh start should be delayed and fetched mail/error results should be held briefly and applied once idle, so spinner animation, network task submission, cache writes, card-height recompute, unread signals, sound detection, and full widget repaints do not compete with transition frames. If a transition is requested after a refresh is already in flight, Gmail must suspend live refresh-spinner repainting immediately and keep result application deferred until idle.
-- Gmail transition-aware refresh deferral, deferred fetch-result/error staging, and deferred single-shot timer ownership should continue to use the shared `widgets/service_widget_runtime.py` seam unless Gmail acquires a contract the shared helper truly cannot express.
-- Gmail refreshes that return the same visible message list and unread count must not rewrite cache or repaint. Gmail cache writes should use the IO thread pool when available; the UI thread should only perform Qt-owned painting, state application, signals, and UI/media objects that require it.
-- Gmail must participate in the shared widget performance logger when perf metrics are enabled, including at least paint, refresh dispatch, fetch result/error apply, and cache write buckets so regressions appear in `perf_widgets.log`.
-- Shared browser foreground preference may prefer an already-open eligible browser window on display 0, but it must remain a narrow best-effort ranking policy over the existing launch paths. Do not add brittle browser automation, process injection, or window-moving behavior.
-- Gmail build/release work must verify all Gmail image assets, notification sound assets, Qt multimedia dependencies, and generated/fallback asset dependencies are included in build scripts, frozen build config, resource copy steps, and installer/package outputs. Widget image lookup must not depend only on the launch cwd, because standard `.scr` launches can start outside the app directory. Frozen builds should prefer `%ProgramData%\SRPSS\sounds\tutuogg.ogg` for the default notification sound, with `resources/tutuogg.ogg` as the script/dev fallback. Build scripts must include only the default OGG, not the entire `resources` directory, so ignored local OAuth files are never bundled. Final packaged artifacts still require runtime validation.
-- Gmail must not fade into view when there is no authenticated account information and no usable cache.
-- Gmail worst-case empty-state copy such as `No unread emails` is a fallback-only surface and must render in the content area below the header frame, not centered across the entire card.
+## 6. GL and Lifecycle Contract
 
-### 10.4 Security invariants
-- OAuth tokens stored encrypted via DPAPI
-- API calls are metadata-only (no body/snippet content)
-- `EmailMetadata` may contain provider ids needed for links/deduping (`X-GM-THRID`, `X-GM-MSGID`, RFC `Message-ID`, IMAP UID), but must not contain bodies, snippets, or raw headers
-- Secure-desktop/browser opening must use the correct runtime route: SCR/secure-desktop paths use the helper/secure launcher bridge only when direct launch is unavailable, while MC-mode and interactive Settings URL clicks open directly via Qt rather than being queued through the Reddit helper bridge. Any secure fallback must wake the helper explicitly.
-- Display-0 browser preference must stay centralized in the shared Windows/browser routing seam. Gmail/Reddit widget click handlers must not grow their own monitor/window-enumeration logic.
-- Reddit widget controls that consume a click without producing a URL, such as the refresh spiral, must not set the central `reddit_handled` URL flag. Only a resolved Reddit URL should request the normal-build helper/exit path.
-- Reddit refresh spiral clicks must queue refresh through the existing Reddit fetch path, respect fetch-in-progress guards, and defer refresh start/result apply/cache regeneration while parent display transitions are pending or active when an existing cached pixmap can be reused. If a transition is requested after a Reddit refresh is already in flight, Reddit must suspend live refresh-spinner repainting immediately and keep result application deferred until idle.
-- Reddit transition-aware refresh deferral and deferred single-shot timer ownership should continue through `widgets/service_widget_runtime.py` rather than reintroducing private parent-probe/timer helpers. Deferred fetched-post application must preserve provider metadata such as source id and attempted source chain so cache authority does not change after a transition clears.
-- Reddit empty/error fetches that arrive after valid content is already visible are non-authoritative by default and should continue to preserve the current display through the shared `widgets/service_widget_runtime.py` visible-fallback seam unless a future widget-specific rule explicitly overrides that behavior.
-- Reddit post-source acquisition is an explicit provider seam owned by `core/reddit_post_provider.py`. The branded Reddit widget keeps card rendering, candidate-window cache authority, cooldown UX, configured visible-count slicing, and click routing local; swapping future external or authenticated sources must not duplicate or replace that card/runtime ownership. RSS remains the default selected source. HTML listing fetches are a deliberate provider fallback because Reddit's structured public endpoints are fragile; the bounded source chain is session/configured source first, then `old.reddit.com/r/<subreddit>/`, then `www.reddit.com/r/<subreddit>/`, with substantial successful HTML listings promoted as the widget's session primary. Sparse HTML fallback listings are degraded partial truth: when they return fewer than the full candidate window and a richer cache exists, newer dated fallback rows merge into the existing cached candidates instead of replacing the cache outright; sparse primary/RSS results remain authoritative. All Reddit-facing sources must reuse stable persona/request-slot seams and update the content cache only when they return valid non-empty posts.
-- Reddit automatic retrieval uses a conservative terminal cadence: roughly every `15min` per Reddit widget after a source-chain success or all-source failure, with `reddit2` staggered by about `30s` from `reddit` rather than having a permanently longer repeat interval. Settings/edit rebuilds must reattach to the existing per-cache-key due horizon instead of restarting it. Manual refresh is intentionally shorter-gated at about `3min` so the spiral remains useful, but it still routes through the same fetch/cache/blocked-cooldown owner.
-- RSS image-source startup negotiation must use the real runtime pool target rather than an unrelated fixed disk-cache ceiling. When the on-disk RSS cache already satisfies the effective startup pool target derived from the queue/preload caps, startup should skip Bing/Flickr/NASA negotiation entirely; high-quality fallback feeds are only for real deficits below that target.
+- All GL creation, mutation, and deletion occurs on the owning thread with the correct context current.
+- Every GL resource has one owner, context/share generation, byte size, and deterministic deletion path.
+- Context-affinity errors are never suppressed as routine cleanup.
+- Settings, Edit, topology changes, and exit stop old work before destroying old GL resources.
+- Compositor/surface destruction occurs after child/native resource cleanup.
+- Late worker results are rejected by lifetime generation.
+- Partial GL reinitialization is not part of the stable architecture unless separately designed and approved.
+- Correctness never depends on optional deferred warmup.
 
-## 12. Spline Curve (`devcurve`) Visualizer
+## 7. CPU and Threading Contract
 
-- `devcurve` is the runtime id for the Spline Curve visualizer.
-- Spline Curve foreground specular uses the existing specular alpha path for idle/play behavior: runtime activity fades the specular multiplier down while paused/idle and back up when playback resumes.
-- The idle specular fade must not introduce a new shader shape mode, full-width blob chaining, or preset value enforcement. Authored preset alpha remains the base value; runtime activity only multiplies it.
-- No credential leakage in tests (all mocked with fake data)
+- `ThreadManager` owns registered async tasks and workers; it is not a presentation clock.
+- GUI and GL mutation remain on the GUI/context owner.
+- Workers perform coarse I/O, decode, preparation, and measured pure computation.
+- High-frequency tiny jobs are batched, coalesced, vectorized, or removed.
+- More Python threads are not assumed to provide multi-core scaling.
+- Hidden/static systems stop unnecessary recurring work.
+- Task accounting is direct and passive; diagnostics do not enqueue UI work.
 
-## 13. Documentation Contract
-- `Index.md`: module map.
-- `Docs/Contracts.md`: short contract index for fast owner lookup.
-- `Current_Plan.md`: active priorities only.
-- `Docs/Guardrails.md`: policy/rules.
-- `Docs/Historical_Bugs.md`: historical timeline and root-cause record.
+## 8. Image, Memory, and GPU Resource Contract
+
+- CPU image caches are byte-bounded.
+- GPU resources are byte-accounted and generation-safe.
+- Normal cycling reaches a stable RAM/VRAM plateau.
+- Image representations have explicit owners and lifetimes.
+- Workers may publish immutable thread-safe upload data.
+- Workers do not create GUI-affine `QPixmap` or call GL.
+- Visible paint does not decode, convert, or hash whole image buffers.
+- Stable source and transform metadata provide normal identity.
+- Shared texture reuse is legal only in a verified live share group with explicit leases and exactly-once deletion.
+- Context-local GL objects remain context-local.
+- Prefetch is bounded by bytes and outstanding work.
+
+## 9. Settings and Persistence Contract
+
+- `SettingsManager` owns settings read/write/migration.
+- Canonical defaults and profile differences remain single-source.
+- Root/section writes invalidate dependent caches.
+- All widgets-map/import mutation routes use one normalization contract.
+- Reset/import preservation is centralized.
+- Public mutation APIs have coherent persistence and notification semantics.
+- Credentials and machine-private identity do not enter normal settings exports.
+- Visualizer mode-owned technical settings remain mode-owned.
+
+Detailed rules live in focused defaults/settings documents.
+
+## 10. Widget and CUSTOM Layout Contract
+
+- Widget family metadata is descriptor-owned.
+- Widget setup has one authority.
+- Shared service-widget lifecycle mechanics remain centralized without absorbing provider behaviour.
+- CUSTOM layout uses one normalized display-local contract.
+- Persisted geometry is display-bounded and DPR-aware.
+- Live content refresh cannot silently override committed CUSTOM geometry.
+- Edit is a coordinated active-display session.
+- Drag/resize feel and recovery affordances are product contracts.
+- Settings/Edit widget work follows the runtime lifecycle contract.
+
+## 11. Diagnostics Contract
+
+Diagnostics are:
+
+- CLI-first;
+- family-scoped;
+- sampled;
+- bounded;
+- passive;
+- privacy-safe.
+
+They must not:
+
+- repaint;
+- retune visualizers;
+- alter cadence;
+- lower quality;
+- create per-component or unbounded observation timers or queues;
+- become runtime control flow.
+
+Exactly one app-owned, opt-in, bounded, low-rate event-loop lateness sampler is permitted. It is a diagnostic recorder only: it may aggregate and report sampled lateness, but must never control scheduling, cadence, quality, lifecycle, retries, or any other runtime behaviour.
+
+## 12. Validation Contract
+
+Tests are necessary but not sufficient for:
+
+- visual fidelity;
+- frame pacing;
+- focus/windowing;
+- multi-display presentation;
+- GL lifecycle;
+- RAM/VRAM behaviour.
+
+High-risk changes require:
+
+- focused automation;
+- runtime-shaped validation;
+- p95/p99/max timing;
+- memory/resource accounting;
+- repeated lifecycle tests;
+- manual visual review where applicable.
+
+Detailed validation lives in `Docs/TestSuite.md` and `Docs/Harness_Index.md`.
+
+## 13. Recovery Boundary
+
+Recovery work is based on:
+
+```text
+main (based on baseline)
+00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
+```
+
+Donor reference:
+
+```text
+donor-7376bb9
+7376bb9bb380253f3bd14079e65d7bdbca062fad
+```
+
+The donor branch is reference-only, read-only, and not a merge target.
+
+The stable architecture excludes:
+
+- adaptive presentation workers;
+- producer-to-paint acknowledgement;
+- compositor-owned visualizer cadence;
+- distributed terminal transactions;
+- partial GL reinitialization;
+- compatibility mega-layers;
+- hot-path whole-buffer identity hashing.
+
+The detailed recovery design lives in `Docs/Compositor_Architecture.md`.

@@ -1,164 +1,89 @@
 # Contracts
 
-Last updated: 2026-07-14
+Last updated: 2026-07-23
 
-Short contract index for SRPSS.
+Fast routing index for SRPSS contracts.
 
-This document is not a second `Spec.md`. Its job is to answer:
-- what contract family am I touching?
-- where is the canonical owner?
-- what nearby files usually participate?
+This is not a second `Spec.md`. Find the owner here, then read only the owning code and focused document.
 
-Use this as a fast routing layer, then open the owning files and `Spec.md` for the deeper rules.
+## How to Use
 
-## How To Use This
+1. Identify the contract family.
+2. Read the canonical owner.
+3. Read the focused document only when listed.
+4. Read `Spec.md` only if stable architecture or product behaviour changes.
+5. Apply the relevant section of `Docs/Guardrails.md`.
 
-1. Identify the behavior family you are changing or debugging.
-2. Start with the canonical owner in the table below.
-3. Read the listed related files only after the owner is clear.
-4. Treat `Spec.md` as the final architecture contract and `Index.md` as the live module map.
+## Core Runtime Contracts
 
-## Core Ownership Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
+| Family | Canonical owner | Focused document | Contract |
 |---|---|---|---|
-| Threading / async task ownership | `core/threading/manager.py` | `engine/*`, widget runtime helpers | One authoritative task submission/cancel/shutdown seam. |
-| Qt resource lifecycle | `core/resources/manager.py` | widgets, rendering, displays | One authoritative GUI/resource cleanup seam. |
-| Settings read/write/migration | `core/settings/settings_manager.py` | `core/settings/defaults.py`, `core/settings/default_settings.py`, `core/settings/json_store.py` | One persistence API and one schema-normalization path. |
-| Shared runtime animation ownership | `core/animation/animator.py` | widget fade helpers, render timing, perf parser | Shared timeline/tick animation without shadow managers; perf output must identify owner and peak active/listener counts. |
-| Event publish/subscribe | `core/events/event_system.py` | engine, runtime glue | One cross-module signaling seam. |
-| Worker process orchestration | `core/process/supervisor.py` | image pipeline, helper bridges | One worker lifecycle and response-correlation seam. |
+| Runtime start/stop and display recreation | `ScreensaverEngine`, `DisplayManager` | `Docs/Compositor_Architecture.md` for render recovery | One ordered runtime lifecycle |
+| Fullscreen display presentation | `DisplayWidget` and display-owned compositor | `Docs/Compositor_Architecture.md` | One surface per display; no global display authority |
+| Overlay widget lifecycle | `WidgetManager` | `Docs/10_WIDGET_GUIDELINES.md` | One setup/reveal/cleanup authority |
+| Thread and task registry | `core/threading/manager.py` | `Docs/Guardrails.md` | Coarse async work; no frame-clock handshakes |
+| Qt/native resource tracking | `core/resources/manager.py` plus explicit GL owner | `Docs/Compositor_Architecture.md` | Tracking does not replace context ownership |
+| Shared application events | `core/events/event_system.py` | — | Meaningful cross-module events, not frame transport |
+| Worker process orchestration | `core/process/supervisor.py` | — | One correlated process-response seam |
+| Shared animation timeline | `core/animation/animator.py` | — | Shared animations only; not visualizer simulation |
 
-## Registry And Metadata Contracts
+## Rendering and Performance Contracts
 
-| Contract Family | Canonical Owner | Related Files | Goal |
+| Family | Canonical owner | Focused document | Contract |
 |---|---|---|---|
-| Widget family identity / settings section metadata | `rendering/widget_descriptors.py` | `rendering/widget_setup_all.py`, `ui/tabs/widgets_tab.py`, `ui/tabs/widgets_tab_defaults.py` | One descriptor truth for factory-backed widgets and standard settings sections. |
-| Transition identity / aliases / startup warmup metadata | `rendering/transition_registry.py` | `rendering/transition_factory.py`, `ui/tabs/transitions_tab.py`, compositor helpers | One transition registry instead of duplicated lists. |
-| Visualizer mode identity / labels | `core/settings/visualizer_mode_registry.py` | presets, settings UI, widget runtime | Stable internal ids with canonical labels and prefixes. |
-| Visualizer preset activation payload | `core/settings/visualizer_presets.py` | `widgets/spotify_visualizer/activation_runtime.py`, settings UI | One resolved mode/preset payload for every activation path. |
-| CUSTOM layout normalized storage contract | `rendering/custom_layout_contract.py` | `rendering/custom_layout_manager.py`, `widgets/edit_shell_widget.py` | One display-local persistence and clamp/snap contract. |
+| Compositor architecture | display-owned compositor | `Docs/Compositor_Architecture.md` | Producers publish; compositor consumes |
+| Transition identity | `rendering/transition_registry.py` | `Docs/Transition_Change_Checklist.md` | One registry for ids, aliases, gating, and UI |
+| Transition progress/completion | transition controller/compositor-local state | `Docs/Compositor_Architecture.md` | Local elapsed-time progress and local finalization |
+| Visualizer simulation | visualizer controller/model | `Docs/Visualizer_Reference.md` | Independent logical cadence and mode behaviour |
+| Visualizer changes | visualizer subsystem | `Docs/Visualizer_Change_Checklist.md` | Fidelity contract and complete change sweep |
+| Visualizer renderer integration | narrow renderer interface | `Docs/Compositor_Architecture.md` | No widget impersonation or paint acknowledgement |
+| CPU image pipeline/cache | image pipeline/cache owner | `Docs/Compositor_Architecture.md` | Immutable worker result and byte-bounded storage |
+| GPU resource store | explicit GL/context owner | `Docs/Compositor_Architecture.md` | Byte accounting, generation, leases, deletion |
+| Performance instrumentation | existing perf/usage modules | `Docs/Logging_Guide.md`, `Docs/TestSuite.md` | Passive sampled observation, never cadence |
+| Performance acceptance | benchmark and runtime gates | `Docs/TestSuite.md` | Tail latency and fidelity outrank average FPS |
 
-## Settings Contracts
+## Settings and Persistence Contracts
 
-| Contract Family | Canonical Owner | Related Files | Goal |
+| Family | Canonical owner | Focused document | Contract |
 |---|---|---|---|
-| Canonical defaults | `core/settings/default_settings.py`, `core/settings/default_profile_overrides.py`, `core/settings/defaults.py` | `tools/default_settings_editor.py`, `tools/regenerate_sst_defaults.py`, generated JSON/SST artifacts | One resolved source of default truth: authoritative Normal base plus MC-only differences. The editor recursively discovers leaves, writes Normal into the base, keeps MC compact, offers alpha swatches/font controls/valid-text guidance and privacy-filtered SST/JSON import, and transactionally regenerates artifacts. Default SST generation calls the profile-aware canonical builder directly, uses deterministic metadata, validates parity/private-field absence, and has no SettingsManager or installed-profile path; imports exclude active geometry/layout slots. A successful Foundry save becomes the contract unless proven harmful by reproducible runtime/safety evidence. |
-| Preserve-on-reset / default loading | `core/settings/defaults.py` | `core/settings/settings_manager.py`, settings reset/import flows | Fresh initialization, widget fallback, validation repair, and reset all request the same profile-resolved defaults. |
-| Widgets-map normalization / schema ownership | `core/settings/settings_manager.py` | SST import, `set_widgets_map`, root `widgets` writes | Prevent drift between settings write paths. |
-| Silent widgets-map repair writes | `core/settings/settings_manager.py` | `set_widgets_map(..., emit_change=False)`, CUSTOM/runtime repair paths | Only owner-local repair/rebuild paths may suppress `settings_changed`; the write must still sync, normalize, and invalidate dotted caches while the caller refreshes runtime state explicitly. |
-| Steam credential / identity storage | `core/steam/credentials.py`, `core/steam/openid.py` | Steam settings UI, future Steam backend/cache, SST import/export | Steam API/profile secrets are not settings. `Connect ID` uses a state-bound loopback OpenID callback plus Steam assertion verification; the user key is explicitly pasted, tested, and persisted only through DPAPI. Opaque metadata can route cache reads without decrypting the identity. |
-| Steam source/backend/cache contract | `Docs/Steam_Data_Feasibility.md`, `core/steam/backend.py`, `core/steam/cache.py`, `core/steam/models.py`, `core/steam/achievement_pulse_cache.py`, `core/steam/abandonment_cache.py` | Production Steam cards, provider tests, cache tests | Steam endpoints are source-classified before UI use, publisher-only endpoints are barred client-side, and tests use fake openers/fixtures. Failed/private/invalid responses cannot freshen cache. Successful responses freshen their source record even when equivalent; process-shared opaque-profile/cache-key locks and card-level follower markers prevent duplicate cross-card/display requests, while unchanged visible fingerprints suppress repaint/prepared-art churn. Cache bridges own no UI, timer, or thread scheduling. |
-| Steam request/profile/asset policy | `core/steam/request_policy.py`, `core/steam/profile_state.py`, `core/steam/assets.py`, `core/steam/events.py` | Steam provider scheduling, production/future Steam cards, Steam asset tests | Coalesce identical work by profile/source/category/app, drop stale-generation results, keep backoff explicit, store profile rotation/cooldown state outside settings, validate cached assets before paint use, prepare Abandonment desaturation off-thread in bounded buckets, and publish narrow non-secret data-ready events. |
-| Steam descriptor/settings/visual skeleton | `rendering/widget_descriptors.py`, `rendering/widget_factories.py`, `rendering/widget_setup_all.py`, `widgets/steam_components.py`, `widgets/steam_card_widget.py`, `ui/tabs/widgets_tab_steam.py` | Steam cards/settings, future Steam widget work | Achievement Pulse, Abandonment Issues, and the lazy Steam Settings section are active without a flag. `--devsteam` exposes only Steam Journey (`steam_progress` compatibility key) and Friend Pulse. The family master gates factory/expected-overlay truth while preserving card choices; controls use Layout/Appearance/Content buckets. Opening Steam may read one recent record, up to five exact corresponding achievement records, and one owned record on shared IO for choice labels, but cannot decrypt credentials, enumerate caches/assets, contact Steam, or own private polling timers. Production cards preload opaque-keyed cache before first fade and schedule bounded worker refresh only after fade. |
-| Achievement Pulse selection/view model | `core/steam/achievement_pulse.py`, `core/steam/achievement_pulse_cache.py`, `core/steam/assets.py`, `widgets/steam_components.py`, `widgets/steam_card_widget.py` | Achievement Pulse card, Steam cache/fixture bars | Selected-app resolution is pure cache/fixture logic for Most Recent, Recent #2-#5, and literal Custom app ID. Dynamic modes use up to five recent-play rows as candidates, rank known positive unlock timestamps newest-first, and preserve recent-play order only as fallback behind timestamped candidates. Settings labels and Previous consume the same order. A stale/forced refresh probes at most five candidate achievement records through existing cache/coalescing/backoff work, then fetches schema only for the selected app. The model retains up to five newest unlocks, maps schema display names, and joins the primary unlock to its HTTPS schema icon. The optional 40px framed icon sits immediately after measured primary-unlock text without moving title/art/Unlocked/capsule geometry and disappears on missing/invalid assets. Wide/square/portrait artwork, a widened fitted centered Unlocked rail, compact or default-on all-field double capsules, independent capsule-font/card growth, alpha styling, exterior shadows, whole-rail growth, and uniform `Custom` scaling remain authoritative. |
-| Abandonment Issues selection/view model | `core/steam/abandonment_issues.py`, `core/steam/abandonment_cache.py`, `core/steam/assets.py`, `widgets/steam_abandonment_components.py`, `widgets/abandonment_issues_widget.py` | Abandonment card, source/cache/visual/lifecycle bars | Eligibility requires owned status, title, configurable 15-minute floor, positive non-future verified `rtime_last_played`, 12-week age, recent exclusion, and Never Show exclusion. Ranking prefers 26-week-old sub-2-hour starts and opportunistically 0-2 unlocked achievements from at most 12 exact cached snapshots; unknown is neutral and selection performs no sweep/request. All-unlocked is only a demotion signal. After selection, the existing worker may hydrate exactly that app's achievement record only when `ACHIEVEMENTS` or `LAST UNLOCK` is visible, with a 24-hour cache, shared exact-key coordination/backoff, no candidate fan-out, and no same-job rerank. The default user ledger shows playtime, selected-app achievement count, selected-app latest-unlock age, and exact verified UTC last-played date; derived Backlog Class is optional. Missing/private evidence omits its shelf, queue/source/selection diagnostics default off, and arbitrary enabled combinations grow whole two-column rows rather than truncating. Policy changes rerank once; `widgets.steam.refresh_minutes` is the sole profile-shared/cache-only semantic-rotation cadence, weighted-random selection replaces backlog-order traversal, and user-facing `BACKLOG N/M` is rank rather than cursor. Legacy per-card `rotation_interval_minutes` is ignored and removed on save. Persisted selection age is reevaluated against the current shared interval so rebuilds or interval changes arm only the true remaining first interval or rotate immediately when overdue; manual widget refresh forces one non-repeating cache-backed draw and restarts the shared cadence. Missing selected achievement evidence and one missing selected public-art asset may hydrate on the existing IO preparation job when automatic updates are allowed; art gets one alternate-shape fallback only after a definitive 404/invalid asset. Transient failures do not fan out and `--noupdates` remains automatic-hydration-cache-only. Default-on rediscovery copy is deterministic per game, assigns `Long Forgotten` 60 of 100 stable buckets and each of ten authored alternatives four buckets, and can be hidden independently of functional state messaging. Shelf/evidence logs omit titles and values. Owned and selected-achievement freshness are 24 hours, recent follows shared settings, Guilt art is worker-prepared, and sparse shared-animation fades preserve stable chrome. |
-| Visualizer settings grouped model | `core/settings/models/_spotify_visualizer.py` | snapshot/serializer/build callers | One ordered grouped field-spec contract for visualizer persistence. |
-| Visualizer normalization / legacy migration | `core/settings/visualizer_settings_snapshot.py`, `core/settings/visualizer_settings_contract.py` | preset import/runtime apply | One mapping-normalization seam and one technical migration seam. |
-| Shared list-widget capacity policy | `core/settings/widget_capacity_policy.py` | Gmail/Reddit settings + runtime | One active visible-capacity envelope for list widgets, with Reddit using the maximum as a candidate-cache window rather than a timed growth reveal. |
+| Settings read/write/migration | `core/settings/settings_manager.py` | `Docs/Defaults_Guide.md` | One persistence and normalization path |
+| Canonical defaults | defaults modules under `core/settings/` | `Docs/Defaults_Guide.md` | Normal base plus explicit profile differences |
+| Visualizer settings model | `core/settings/models/_spotify_visualizer.py` | `Docs/Visualizer_Reference.md` | One grouped model and serializer |
+| Visualizer mode identity | `core/settings/visualizer_mode_registry.py` | `Docs/Visualizer_Reference.md` | Stable ids and labels |
+| Visualizer preset activation | `core/settings/visualizer_presets.py` and activation seam | `Docs/Visualizer_Reference.md` | One resolved activation payload |
+| Storage paths | `core/settings/storage_paths.py` | `Docs/Defaults_Guide.md` | No ad hoc machine paths |
+| Credentials | provider-specific credential modules | provider focused docs | Credentials never become ordinary settings/export data |
 
-## Rendering And Display Contracts
+## Widgets and Layout Contracts
 
-| Contract Family | Canonical Owner | Related Files | Goal |
+| Family | Canonical owner | Focused document | Contract |
 |---|---|---|---|
-| Fullscreen display presenter | `rendering/display_widget.py` | `engine/display_manager.py`, GL init helpers | One screen-owned runtime presenter. |
-| Display startup / rebuild orchestration | `engine/display_manager.py`, `engine/screensaver_engine.py` | `rendering/display_setup.py`, `rendering/widget_setup_all.py` | Register the full active display set before first show, preserve staggered GL startup through owned scheduling, suppress stale delayed shows after cleanup, and keep monitor hotplug single-owner: `DisplayManager` detects/emits while `ScreensaverEngine` rebuilds and redisplays. |
-| Display setup / startup glue | `rendering/display_setup.py` | `rendering/widget_setup_all.py`, `rendering/display_gl_init.py` | One display bootstrap flow after display ownership is established. |
-| Overlay widget lifecycle / fade sync / runtime pause prep | `rendering/widget_manager.py` | `rendering/widget_setup_all.py`, `rendering/widget_stacking.py` | One overlay lifecycle and reveal coordination seam. |
-| Authored stacking planner | `rendering/widget_stacking.py` | `rendering/widget_manager.py`, settings preview composition | One non-`Custom` stacking calculation seam. |
-| Centralized overlay positioning | `rendering/widget_positioner.py` | overlay widgets | One anchor/margin positioning contract. |
-| Centralized input routing | `rendering/input_handler.py` | media, Reddit/Gmail click handlers | One keyboard/mouse/URL routing seam. |
-| Renderer backend selection / surface init | `rendering/backends/__init__.py`, `rendering/display_gl_init.py` | `rendering/display_widget.py` | One backend selection + render-surface contract with visible fallback reporting. |
+| Widget metadata | `rendering/widget_descriptors.py` | `Docs/10_WIDGET_GUIDELINES.md` | One descriptor source |
+| Widget setup | `rendering/widget_setup_all.py` | `Docs/10_WIDGET_GUIDELINES.md` | One setup authority |
+| Widget positioning | existing position/stacking owners | `Docs/10_WIDGET_GUIDELINES.md` | One authored positioning path |
+| CUSTOM layout storage and apply | existing CUSTOM layout contract/manager | `Docs/10_WIDGET_GUIDELINES.md` | Display-bounded, descriptor-capability-driven |
+| Service-widget shared lifecycle | existing service runtime helper | `Docs/10_WIDGET_GUIDELINES.md` | Shared mechanics only; provider behaviour local |
+| Steam family | modules under `core/steam/` and Steam widgets | existing Steam focused docs | Core docs route; domain docs own detailed behaviour |
 
-## Performance And Cadence Contracts
+## Validation Contracts
 
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Transition paint progress authority | `core/animation/frame_interpolator.py` | `rendering/gl_compositor_pkg/paint.py`, transition controllers | Paint reads use elapsed-time/easing state so visible shader progress is not capped by stale `AnimationManager` callback samples. |
-| Transition start / render wake authority | `rendering/gl_compositor.py` | `core/animation/animator.py`, compositor metrics | Render strategy and transition metrics begin at transition start, not from the first animation callback. |
-| Transition/display perf health bar | `tools/transition_perf_health_parser.py` | `core/animation/animator.py`, compositor metrics, sidecar logs | Keep paired render/paint starvation, `GL ANIM` vs `GL PAINT`, fallback usage, texture uploads, visualizer latency, and owner/peak-count animation evidence loud. |
-| No UI-pressure cadence fixes | `Docs/Guardrails.md` | adaptive timers, display rebuild, settings entry | Do not fix missed paints or low FPS by queueing extra UI work; prove ownership/timing/cache/upload root cause first. |
+| Family | Canonical document | Contract |
+|---|---|---|
+| Test levels and release gates | `Docs/TestSuite.md` | Unit, integration, runtime, soak, and manual review |
+| Recurring harness commands | `Docs/Harness_Index.md` | Task-specific commands only |
+| Historical regression lessons | `Docs/Historical_Bugs.md` | Dated evidence, not current architecture |
+| Active work | `Current_Plan.md` | Unfinished checklist only |
+| Documentation drift | `Docs/Documentation_Maintenance.md` | One truth per document role |
 
-## CUSTOM Layout Contracts
+## Contract Change Rule
 
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| CUSTOM session orchestration | `rendering/custom_layout_manager.py` | `rendering/custom_layout_contract.py`, `widgets/edit_shell_widget.py`, display rebuild hooks | One edit-session/save/replay/reload seam across active displays. |
-| Temporary edit shell behavior | `widgets/edit_shell_widget.py` | custom layout manager | One shell-only drag/resize/reset UI, not live widget truth. |
-| Saved custom rect authority reassertion | `widgets/base_overlay_widget.py` | widget subclasses, custom layout manager | Prevent live content sizing from overriding committed custom rects, except for descriptor-approved vertical-only CUSTOM height adjustments that persist back through the shared layout seam while width stays authoritative. |
-| Visualizer CUSTOM outer-card authority | `widgets/spotify_visualizer/card_geometry.py`, `widgets/spotify_visualizer_widget.py` | custom layout manager, widget creators | Keep visualizer custom rect authority separate from mode/preset preferred geometry. |
-| Clock CUSTOM mode-swap rect ownership | `widgets/clock_widget.py` | custom layout persistence, tests | Digital/analog swaps rebuild and persist the full custom rect, not just inner scaling. |
+A contract change must update:
 
-## Visualizer Contracts
+1. the canonical owner;
+2. the focused document;
+3. `Spec.md` only if stable architecture changes;
+4. `Index.md` only if ownership/navigation changes;
+5. tests/harness references;
+6. `Current_Plan.md` only while work remains active.
 
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Runtime coordinator | `widgets/spotify_visualizer_widget.py` | activation/config/runtime helpers | One owner for mode activation, render lifecycle, and runtime state handoff. |
-| Visualizer tick cadence | `widgets/spotify_visualizer/tick_helpers.py` | `core/animation/animator.py`, transition controllers | Dedicated recurring timer owns visualizer ticks; transition `AnimationManager` instances must not run visualizer `_on_tick()` listeners. |
-| Activation / mode switch runtime contract | `widgets/spotify_visualizer/activation_runtime.py` | `mode_transition.py`, preset manager | One resolved-activation path for startup, settings refresh, and hot switches. |
-| Technical config caching / replay | `widgets/spotify_visualizer/technical_config.py`, `runtime_config.py` | beat engine, widget runtime | One authoritative runtime technical-config replay seam. |
-| Shared beat/audio engine | `widgets/spotify_visualizer/beat_engine.py` | bubble feed, capture lifecycle, idle seed | One capture/floor/reactivity engine shared across modes. |
-| Bubble simulation contract | `widgets/spotify_visualizer/bubble_simulation.py` | beat engine, runtime dispatch | One Bubble render-motion owner with isolated loud/soft behavior. |
-| Overlay render shell | `widgets/spotify_bars_gl_overlay.py`, `widgets/spotify_visualizer/overlay_frame_shell.py` | overlay mask/state/uniforms | One GL shell for transport, masking, and draw sequencing. |
-| Visualizer outer card geometry | `widgets/spotify_visualizer/card_geometry.py` | widget runtime, custom layout | One owner for outer card height/width policy. |
-| Display-only Spectrum smoothing | `widgets/spotify_visualizer/spectrum_solid_hysteresis.py` | Spectrum renderer/widget runtime | One visual-only solid-bar smoothing seam with brief coherent-zero hold and bounded delayed-frame catch-up; no shared audio/timer ownership. |
-
-## Service-Backed Widget Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Shared service-widget lifecycle mechanics | `widgets/service_widget_runtime.py` | Gmail, Reddit, Weather, Steam cards | One place for transition-aware refresh deferral, visible fallback preservation, and timer ownership. |
-| Abandonment semantic rotation | `core/steam/abandonment_issues.py`, `core/steam/abandonment_cache.py` | `widgets/abandonment_issues_widget.py`, profile state | One profile-shared preference-biased random draw counter; no sequential backlog traversal, immediate repeats, candidate-provider work, or transition-collision loss. After the cache-only identity commit, the selected app alone may fill stale/missing achievement evidence for enabled shelves and a missing allowlisted public-art cache entry on worker IO when automatic updates are permitted; neither may change the committed identity or fan out. |
-| Gmail backend routing | `core/gmail/gmail_backend.py` | OAuth, IMAP, REST, widget | One backend-selection seam for Gmail data/actions. |
-| Reddit post-source provider seam | `core/reddit_post_provider.py` | `widgets/reddit_widget.py`, widget factory, future external/authenticated feed backends | One explicit post-retrieval contract for the branded Reddit widget, with family-shared provider selection, RSS/HTML/PullPush/public-JSON provider support, bounded session/configured -> `old.reddit.com` -> `www.reddit.com` fallback, substantial-listing session source promotion, stable persona/request-slot ownership, and no movement of card/runtime ownership out of the widget. |
-| Gmail overlay rendering / runtime behavior | `widgets/gmail_widget.py` | `widgets/gmail_components.py`, settings tab | One Gmail card/runtime contract, including width-fixed CUSTOM vertical content-fit participation, reserve-first row budgeting, and a dimensionless sender/subject ratio that cannot overrun timestamp/envelope/action lanes. |
-| Reddit overlay rendering / runtime behavior | `widgets/reddit_widget.py` | service-widget runtime, helper bridge | One Reddit card/runtime contract, including Reddit-local candidate-window cache reuse, immediate configured visible-count display, fresh-cache startup skip, `30s` paired-stale startup staggering, terminal-only `15min` automatic due advancement, `3min` manual refresh gating, no cache-mtime freshness writes for empty/error/fallback display, loud blocked/rate-limit failure handling, and width-fixed CUSTOM vertical content-fit participation for descriptor-approved height persistence. |
-| Weather overlay rendering / runtime behavior | `widgets/weather_widget.py` | weather cache/runtime helpers, `rendering/input_handler.py` | One Weather card/runtime contract. Blank location is a successful provider-inert lifecycle state with stable spacing and a centralized link to Weather source settings, not an exception/fallback or fetch/timer trigger. |
-
-## Clock Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Analogue second-hand cadence | `widgets/clock_ticker.py`, `widgets/clock_widget.py` | clock tests and runtime paint | One shared one-second ticker with exact whole-second hand angles; no microsecond-jitter interpolation or private high-frequency repaint timer. |
-
-## Media And Dependent Widget Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Media widget runtime / provider behavior | `widgets/media_widget.py` | controllers, painting, widget manager | One media card owner for text/layout/provider state. |
-| Mute button dependent behavior | `widgets/mute_button_widget.py` | media widget, widget manager | One dependent mute-button anchor/reveal contract. |
-| Spotify volume dependent behavior | `widgets/spotify_volume_widget.py` | media widget, custom layout manager | One dependent volume-slider anchor/resize contract. |
-| Spotify widget creation ordering | `rendering/spotify_widget_creators.py` | widget setup all, widget manager | One creator seam for media-owned dependents and visualizer setup. |
-
-## Logging And Diagnostics Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Logging setup / sidecar routing | `core/logging/logger.py` | `Docs/Logging_Guide.md` | One CLI-first logging family contract. |
-| Operator logging workflow | `Docs/Logging_Guide.md` | logger setup, runtime flags | One map for where diagnostics should go. |
-| Fallback warning policy | `core/logging/logger.py`, `Docs/Guardrails.md` | runtime call sites | Fallbacks stay loud at `WARNING+` and carry family tags when possible. |
-
-## Security / External Routing Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| Secure URL launch bridge | `core/windows/secure_url_launcher.py` | Steam Settings, Gmail, helper/task routes | One URL-launch seam: MC and interactive Settings prefer native Qt direct launch; the ProgramData helper queue is a secure-desktop fallback only and must wake the helper after enqueue. |
-| Browser foreground preference | `core/windows/browser_window_routing.py` | Gmail/Reddit/helper callers | One narrow browser targeting/ranking seam. |
-| DPAPI credential storage | `core/windows/dpapi.py` | Gmail auth/token storage | One credential encryption/decryption seam. |
-
-## Build / Runtime Variant Contracts
-
-| Contract Family | Canonical Owner | Related Files | Goal |
-|---|---|---|---|
-| SCR bootstrap | `main.py` | logger, engine startup, packaged runtime | One normal screensaver entry path. |
-| MC bootstrap | `main_mc.py` | MC settings/runtime policy | One media-center entry path. |
-| Canonical settings/storage paths | `core/settings/storage_paths.py` | settings manager, caches, runtime data | One filesystem location contract. |
-
-## Deep-Dive References
-
-- `Spec.md`: full architecture/behavior contract.
-- `Index.md`: live module map.
-- `Docs/Guardrails.md`: anti-regression rules.
-- `Docs/Historical_Bugs.md`: dated failure shapes and lessons.
-- `Docs/Logging_Guide.md`: logging-family workflow.
-- `Docs/10_WIDGET_GUIDELINES.md`: widget creation and settings integration.
+Do not duplicate the full rule across all documents.

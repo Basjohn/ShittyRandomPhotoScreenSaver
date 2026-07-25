@@ -271,14 +271,23 @@ class TaskResult:
 
 
 class Task:
-    """Wrapper for executable tasks with metadata"""
-    def __init__(self, func: Callable, *args, task_id: str = None, 
-                 priority: TaskPriority = TaskPriority.NORMAL, **kwargs):
+    """Wrapper for executable tasks with metadata."""
+
+    def __init__(
+        self,
+        func: Callable,
+        *args,
+        task_id: str = None,
+        priority: TaskPriority = TaskPriority.NORMAL,
+        category: str = "uncategorized",
+        **kwargs,
+    ):
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.task_id = task_id or f"task_{id(self)}"
         self.priority = priority
+        self.category = str(category or "uncategorized")
         self.created_at = time.time()
         self.future: Optional[Future] = None
 
@@ -299,6 +308,8 @@ class ThreadManager:
     """
     _app_shared_manager: Optional["ThreadManager"] = None
     _app_shared_lock = threading.RLock()
+    _max_task_categories = 64
+    _max_task_category_length = 80
 
     @classmethod
     def set_app_shared(cls, manager: Optional["ThreadManager"]) -> Optional["ThreadManager"]:
@@ -370,6 +381,8 @@ class ThreadManager:
         self._executors: Dict[ThreadPoolType, ThreadPoolExecutor] = {}
         self._active_tasks: Dict[str, Task] = {}
         self._active_tasks_lock = threading.RLock()
+        self._category_stats_lock = threading.RLock()
+        self._category_stats: Dict[str, Dict[str, int]] = {}
         self._stats = {pool_type: {'submitted': 0, 'completed': 0, 'failed': 0} 
                       for pool_type in ThreadPoolType}
         
@@ -441,7 +454,8 @@ class ThreadManager:
 
     def submit_task(self, pool_type: ThreadPoolType, func: Callable, *args,
                    task_id: str = None, priority: TaskPriority = TaskPriority.NORMAL,
-                   callback: Callable[[TaskResult], None] = None, **kwargs) -> str:
+                   callback: Callable[[TaskResult], None] = None,
+                   category: str = "uncategorized", **kwargs) -> str:
         """
         Submit a task to the specified thread pool.
         
@@ -452,6 +466,8 @@ class ThreadManager:
             task_id: Optional unique identifier
             priority: Task priority
             callback: Optional callback for result
+            category: Stable diagnostics category. This passive metadata never
+                affects scheduling.
             **kwargs: Keyword arguments for func
         
         Returns:
@@ -460,12 +476,20 @@ class ThreadManager:
         if self._shutdown:
             raise RuntimeError("Thread manager is shut down")
         
-        task = Task(func, *args, task_id=task_id, priority=priority, **kwargs)
+        task = Task(
+            func,
+            *args,
+            task_id=task_id,
+            priority=priority,
+            category=category,
+            **kwargs,
+        )
         task.pool_type = pool_type
         executor = self._executors[pool_type]
         
         def wrapped_func():
             start_time = time.time()
+            outcome = "failed"
             try:
                 result = task.func(*task.args, **task.kwargs)
                 execution_time = time.time() - start_time
@@ -476,6 +500,7 @@ class ThreadManager:
                     task_id=task.task_id
                 )
                 self._enqueue_mutation(('completed', pool_type.value))
+                outcome = "completed"
             except Exception as e:
                 execution_time = time.time() - start_time
                 task_result = TaskResult(
@@ -486,8 +511,9 @@ class ThreadManager:
                 )
                 logger.error(f"Task {task.task_id} failed: {e}")
                 self._enqueue_mutation(('failed', pool_type.value))
+                outcome = "failed"
             finally:
-                self._unregister_active_task(task.task_id)
+                self._unregister_active_task(task.task_id, outcome=outcome)
             
             # Execute callback
             if callback:
@@ -513,7 +539,7 @@ class ThreadManager:
         try:
             future = executor.submit(wrapped_func)
         except Exception:
-            self._unregister_active_task(task.task_id)
+            self._unregister_active_task(task.task_id, outcome="rejected")
             raise
         task.future = future
         
@@ -569,7 +595,7 @@ class ThreadManager:
         if task and task.future:
             cancelled = task.future.cancel()
             if cancelled:
-                self._unregister_active_task(task_id)
+                self._unregister_active_task(task_id, outcome="cancelled")
                 logger.info(f"Cancelled task {task_id}")
             return cancelled
         return False
@@ -583,6 +609,14 @@ class ThreadManager:
         """Get statistics for all thread pools"""
         return {pool_type.value: stats.copy() 
                for pool_type, stats in self._stats.items()}
+
+    def get_task_category_stats(self) -> Dict[str, Dict[str, int]]:
+        """Return an authoritative passive snapshot of task counts by category."""
+        with self._category_stats_lock:
+            return {
+                category: counts.copy()
+                for category, counts in sorted(self._category_stats.items())
+            }
 
     def shutdown(self, wait: bool = True, timeout: Optional[float] = None):
         """
@@ -664,11 +698,46 @@ class ThreadManager:
         """Synchronously register an in-flight task so bookkeeping is immediately authoritative."""
         with self._active_tasks_lock:
             self._active_tasks[task.task_id] = task
+        with self._category_stats_lock:
+            category = task.category.strip()[: self._max_task_category_length] or "uncategorized"
+            if (
+                category not in self._category_stats
+                and len(self._category_stats) >= self._max_task_categories - 1
+            ):
+                category = "other"
+            task.category = category
+            counts = self._category_stats.setdefault(
+                category,
+                {
+                    "submitted": 0,
+                    "completed": 0,
+                    "failed": 0,
+                    "cancelled": 0,
+                    "rejected": 0,
+                    "active": 0,
+                },
+            )
+            counts["submitted"] += 1
+            counts["active"] += 1
 
-    def _unregister_active_task(self, task_id: str) -> None:
+    def _unregister_active_task(
+        self,
+        task_id: str,
+        *,
+        outcome: str | None = None,
+    ) -> None:
         """Synchronously remove an in-flight task from the authoritative registry."""
         with self._active_tasks_lock:
-            self._active_tasks.pop(task_id, None)
+            task = self._active_tasks.pop(task_id, None)
+        if task is None:
+            return
+        with self._category_stats_lock:
+            counts = self._category_stats.get(task.category)
+            if counts is None:
+                return
+            counts["active"] = max(0, int(counts.get("active", 0)) - 1)
+            if outcome in {"completed", "failed", "cancelled", "rejected"}:
+                counts[outcome] = int(counts.get(outcome, 0)) + 1
 
     # Internal: mutation queue -------------------------------------------
     def _enqueue_mutation(self, ev: tuple) -> None:

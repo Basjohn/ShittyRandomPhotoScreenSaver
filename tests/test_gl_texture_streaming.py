@@ -208,3 +208,134 @@ class TestResourceManagerGLTracking:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestPassiveGLAccounting:
+    """Mocked accounting checks; no real GL context is used."""
+
+    def test_pbo_registration_records_exact_requested_bytes(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glGenBuffers.return_value = 41
+        fake_gl.GL_PIXEL_UNPACK_BUFFER = 1
+        fake_gl.GL_STREAM_DRAW = 2
+        registry = MagicMock()
+        registry.register_gl_vbo.return_value = "pbo-rid"
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(ResourceManager, "get_or_create_app_shared", classmethod(lambda cls: registry))
+        manager = module.GLTextureManager(owner="compositor:4", generation=4)
+
+        assert manager._get_or_create_pbo(4097) == 41
+
+        kwargs = registry.register_gl_vbo.call_args.kwargs
+        assert kwargs["owner"] == "compositor:4"
+        assert kwargs["generation"] == 4
+        assert kwargs["format"] == "PIXEL_UNPACK_BUFFER"
+        assert kwargs["tracked_bytes"] == 4097
+        assert manager._pbo_pool[0].resource_id == "pbo-rid"
+
+    def test_quad_vbo_registration_records_exact_requested_bytes(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import geometry_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glGenVertexArrays.return_value = 3
+        fake_gl.glGenBuffers.return_value = 4
+        fake_gl.GL_ARRAY_BUFFER = 1
+        fake_gl.GL_STATIC_DRAW = 2
+        fake_gl.GL_FLOAT = 3
+        fake_gl.GL_FALSE = 0
+        registry = MagicMock()
+        registry.register_gl_vao.return_value = "vao-rid"
+        registry.register_gl_vbo.return_value = "vbo-rid"
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(ResourceManager, "get_or_create_app_shared", classmethod(lambda cls: registry))
+        manager = module.GLGeometryManager(owner="compositor:3", generation=3)
+
+        assert manager._create_quad_geometry() is True
+
+        vao_kwargs = registry.register_gl_vao.call_args.kwargs
+        vbo_kwargs = registry.register_gl_vbo.call_args.kwargs
+        assert vao_kwargs["tracked_bytes"] is None
+        assert vbo_kwargs["owner"] == "compositor:3"
+        assert vbo_kwargs["generation"] == 3
+        assert vbo_kwargs["dimensions"] == (4, 4)
+        assert vbo_kwargs["tracked_bytes"] == 4 * 4 * 4
+
+    def test_texture_registration_records_requested_rgba8_bytes(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glGenTextures.return_value = 55
+        fake_gl.GL_TEXTURE_2D = 1
+        fake_gl.GL_UNPACK_ALIGNMENT = 2
+        fake_gl.GL_TEXTURE_MIN_FILTER = 3
+        fake_gl.GL_TEXTURE_MAG_FILTER = 4
+        fake_gl.GL_LINEAR = 5
+        fake_gl.GL_TEXTURE_WRAP_S = 6
+        fake_gl.GL_TEXTURE_WRAP_T = 7
+        fake_gl.GL_CLAMP_TO_EDGE = 8
+        fake_gl.GL_RGBA8 = 9
+        fake_gl.GL_BGRA = 10
+        fake_gl.GL_UNSIGNED_BYTE = 11
+        registry = MagicMock()
+        registry.register_gl_texture.return_value = "texture-rid"
+        image = MagicMock()
+        image.convertToFormat.return_value = image
+        image.width.return_value = 13
+        image.height.return_value = 7
+        image.constBits.return_value.tobytes.return_value = b"x" * (13 * 7 * 4)
+        pixmap = MagicMock()
+        pixmap.isNull.return_value = False
+        pixmap.toImage.return_value = image
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(ResourceManager, "get_or_create_app_shared", classmethod(lambda cls: registry))
+        manager = module.GLTextureManager(owner="compositor:8", generation=8)
+        monkeypatch.setattr(manager, "_get_or_create_pbo", lambda size: 0)
+
+        assert manager.upload_pixmap(pixmap) == 55
+
+        kwargs = registry.register_gl_texture.call_args.kwargs
+        assert kwargs["dimensions"] == (13, 7)
+        assert kwargs["format"] == "RGBA8"
+        assert kwargs["tracked_bytes"] == 13 * 7 * 4
+        assert manager._texture_resource_ids[55] == "texture-rid"
+
+    def test_owner_delete_releases_tracking_only_after_success(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        registry = MagicMock()
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(ResourceManager, "get_app_shared", classmethod(lambda cls: registry))
+        manager = module.GLTextureManager()
+        manager._pbo_pool.append(module.PBOEntry(9, 256, resource_id="rid-ok"))
+
+        manager._cleanup_pbo_pool()
+
+        registry.release_tracking.assert_called_once_with("rid-ok")
+
+    def test_failed_owner_delete_does_not_release_tracking(self, monkeypatch):
+        from unittest.mock import MagicMock
+        from core.resources.manager import ResourceManager
+        from rendering.gl_programs import texture_manager as module
+
+        fake_gl = MagicMock()
+        fake_gl.glDeleteBuffers.side_effect = RuntimeError("delete failed")
+        registry = MagicMock()
+        monkeypatch.setattr(module, "gl", fake_gl)
+        monkeypatch.setattr(ResourceManager, "get_app_shared", classmethod(lambda cls: registry))
+        manager = module.GLTextureManager()
+        manager._pbo_pool.append(module.PBOEntry(9, 256, resource_id="rid-live"))
+
+        manager._cleanup_pbo_pool()
+
+        registry.release_tracking.assert_not_called()

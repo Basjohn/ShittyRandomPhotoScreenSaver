@@ -1,186 +1,388 @@
 # SRPSS Guardrails
 
-Last updated: 2026-07-02
+Last updated: 2026-07-25
 
-Policy rules to keep architecture coherent and prevent repeat regressions.
+Durable cross-cutting rules for SRPSS.
 
-## 1. Documentation Boundaries
-- `Spec.md` for architecture contracts.
-- `Index.md` for module ownership map.
-- `Current_Plan.md` for active work only.
-- `Docs/Historical_Bugs.md` for dated bug narratives.
-- `Docs/Visualizer_Change_Checklist.md` for visualizer setting changes.
-- Runtime logging families should present a CLI-first operator surface. Prefer explicit flags such as `--perf`, `--viz`, `--geo`, `--set`, and `--life`; do not reintroduce environment-variable activation for diagnostic families.
-- Logs must use their relevant CLI family whenever possible. If diagnostics belong to geometry, cache, lifecycle, settings, or another existing family, route them there instead of inventing ad hoc always-on chatter.
-- All runtime fallbacks must log loudly. If a fallback changes ownership, geometry source, display target, recovery behavior, or another authoritative contract, emit `WARNING` or higher through the relevant existing diagnostics family instead of silently absorbing it.
-- Prefer root-cause clean success or explicit clean failure over fallback behavior; a logged fallback is a diagnostic safety net, not a successful fix.
-- Any fallback usage must be log loud. Silent fallback activation is not acceptable.
-- Churn should be avoided, but when it is noticed anywhere it should still be documented as future work instead of being silently ignored just because the current task is elsewhere.
+This is a gatekeeper, not a specification. Read Sections 1–3 for every task, then only the relevant domain section.
 
-## 2. Centralized Ownership
-- Threading through `ThreadManager`.
-- Qt lifecycle through `ResourceManager`.
-- Settings through `SettingsManager`.
-- Shared timeline/tick-driven runtime animation through `AnimationManager`.
-- Cross-module publish/subscribe events through `EventSystem`.
-- Worker process orchestration through `ProcessSupervisor`.
-- Worker-process callers should consume supervisor-owned correlated response helpers or polling surfaces, not raw response queues. Do not keep a second queue-drain contract in engine/rendering code, and do not reintroduce the dormant callback-listener facade as if it were a live runtime path.
-- Leaf/runtime helper code should prefer the app-shared `ThreadManager` / `ResourceManager` seam rather than constructing ad hoc manager instances.
-- Leaf/runtime animation helpers should prefer the app-shared `AnimationManager` seam rather than constructing ad hoc managers when they only need ordinary shared-timeline animation ownership.
-- Animation cadence diagnostics must preserve owner and peak-count context. Do not classify an `AnimationManager` window as idle churn from a final `active_count=0` / `listeners=0` sample if the log interval lacks `max_active` and `max_listeners` evidence.
-- If a helper path truly must create its own `ThreadManager`, keep that fallback intentionally narrow instead of silently creating another full-size compute-heavy manager.
-- Do not let `ThreadManager` active-task truth depend on deferred UI-thread bookkeeping. Submit/complete/cancel/shutdown paths must see the same authoritative in-flight task registry immediately.
-- High-frequency render/timer workers must acknowledge stop before display cleanup drops ownership. Do not use "immediate" cleanup paths that merely clear local handles while the worker loop can still be alive in `ThreadManager`.
-- Prefer one clean contract path over mirrored implementations. If the code already has a canonical seam for a behavior, extend that seam instead of adding a second “similar but slightly different” path nearby.
-- During display/widget startup, do not keep two lifecycle-start authorities alive. If `widget_setup_all` already initializes/activates the created widgets, display glue must not immediately run another initialize pass over the same set.
+## 1. Priority Order
 
-No shadow frameworks or parallel ownership paths.
+When goals conflict:
 
-## 3. Settings Safety
-- Canonical defaults are single-source.
-- Section/root writes must invalidate descendant cache entries.
-- Root `widgets` writes, widgets-map replacement helpers, and SST widget imports must share one widgets-map normalization/schema contract. Do not allow `set("widgets", ...)`, `set_widgets_map(...)`, or import flows to drift into different visualizer-schema or default-merge behavior.
-- Public settings mutation APIs should not drift in sync/signal semantics. If `set`/`set_section` notify runtime listeners and flush critical roots, do not leave `remove`/`clear` behind as silent special cases unless that silence is a deliberate documented contract.
-- Reset/import preserve behavior uses one shared preservation contract.
-- Retired global preset schema keys stay retired.
-- Active list widgets should share one capacity-policy seam. If `reddit`, `reddit2`, and `gmail` need minimum/maximum visible row rules or staged-growth thresholds, extend `core/settings/widget_capacity_policy.py` instead of hardcoding new per-widget UI/runtime ranges.
-- Non-`Custom` authored widget stacking should also stay shared. If content-height changes can affect collision/stacking, extend the canonical display/widget-manager stack seam instead of leaving one widget with a private recalculate hook while another silently grows into its neighbor.
-- Non-`Custom` authored stacking must stay column-aware and shared. If `Top Left`, `Middle Left`, and `Bottom Left` (or their center/right equivalents) can interact, resolve that through the canonical shared stacking planner rather than treating only identical anchors as possible conflicts. Preserve authored `top` / `middle` / `bottom` band intent inside each column and keep companion/media-relative widgets such as `spotify_visualizer` out of authored stacking altogether.
-- Authored stacking must measure visible/runtime footprint, not shadow padding or debug collision envelopes. If a widget needs a larger collision/debug rect for other reasons, add that through a different seam instead of feeding it back into lane-fit math.
-- Companion/media-relative widgets should not become independently movable authored stack participants just to fix fade-in overlap. Reserve their known runtime footprint through the same shared stacking seam instead, and when that footprint follows a host card such as media, model it as one fixed occupied block rather than something the planner can negotiate away.
-- Because authored stacking is still fragile under some real layouts, it must remain explicit and switchable through `widgets.global.stacking_enabled`. New-user defaults are currently on, so future work must validate the planner against real authored screenshots plus `--geo` traces instead of assuming the default setting is protective by itself.
+1. visualizer fidelity and reactivity;
+2. lifecycle and OpenGL safety;
+3. frame pacing and perceived smoothness;
+4. correct multi-display behaviour;
+5. bounded RAM and VRAM;
+6. CPU and task efficiency;
+7. average FPS;
+8. code elegance.
 
-## 4. Visualizer Safety
-- Mode identity and labels come from the mode registry.
-- Internal ids remain stable even when user-facing labels change.
-- Shared seams stay explicit and neutral.
-- Reindex logic is index/filename normalization, not creative payload rewriting.
-- `core/settings/models/_spotify_visualizer.py` is the grouped field-spec source of truth for visualizer settings ingestion/persistence. When a settings family changes, update its defaults/build specs/serializer specs together and preserve ordered grouped merges for `from_settings()`, `from_mapping()`, and `to_dict()`.
-- Do not reintroduce bespoke entry-point-specific field families or fallback paths once a visualizer settings group has been centralized.
-- `rendering/transition_registry.py` is the canonical source of truth for ordinary transition identity, legacy alias handling, cycle/random participation, hardware gating, and startup shader warmup metadata. Do not add new handwritten transition-name lists to the tab, context menu, engine, factory, or compositor when the registry can own the same truth.
-- `widgets/spotify_visualizer/card_geometry.py` is the canonical source of truth for Spotify visualizer outer card geometry. Keep mode/preset-owned preferred height and media-relative placement there; keep painted-card stencil math in `widgets/spotify_visualizer/overlay_mask.py` / `overlay_frame_shell.py` rather than blending the two contracts together.
-- `Spectrum`, `Sine Waves`, `Bubble`, `Dev Curve`, and `Oscilloscope` currently have accepted runtime reactivity. Before touching shared visualizer/audio/activation/render/transition seams, run the focused visualizer reactivity lock from `Docs/Harness_Index.md`, and rerun it after the change. Treat stale Bubble oracle expectations as re-baseline work, not as permission to change Bubble feel.
-- When editing or fixing specific visualizer mode related problems keep work mode isolated unless specifically told, do not allow or introduce bleed.
+Higher average FPS does not justify worse motion, visualizer feel, lifecycle safety, image quality, or resource use.
 
-## 5. UI/UX Safety
-- Do not remove custom styling to hide runtime issues.
-- Fix startup/focus/visibility bugs at root cause.
-- Do not touch the fullscreen / one-pixel shrink / startup flash seam opportunistically. The current fullscreen geometry and startup presentation ordering are fragile, user-visible contracts; changes to fullscreen sizing, taskbar coverage, compositor prewarm visibility, first-frame readiness, or startup flash behavior require explicit user greenlight, a document-first audit, and bars/runtime evidence. If a performance pass introduces flashes, flicker, black borders, taskbar gaps, or rebuild/widget regressions, revert that seam to last committed behavior instead of layering guards.
-- UI pressure is not a performance fix. Do not try to solve cadence, transition FPS, missed paints, widget starvation, or visualizer latency by queueing extra UI-thread work, repaint/update retries, rescue timers, or broader widget refreshes. If a render/update delivery seam looks stuck, first prove ownership/timing/cache/upload root cause with `--perf` bars; any proposed retry path must have a regression bar proving it does not increase UI-thread churn.
-- Whole-process profiling belongs to opt-in `--usage`, never the tray or a permanently running widget/UI timer. Keep sampling slow, non-overlapping, and worker-owned; the UI callback may submit only. Every sample must report its own collection duration, cadence gap, skipped submissions, and unsupported counters honestly. Profiling may observe visualizer reactivity/smoothness and transition cadence but must not retune modes, drop repaint requests, lower fidelity, or automatically change quality/settings.
-- If `GL RENDER` timer cadence is healthy while same-screen `GL PAINT` cadence is bad, treat it as paint/event-loop delivery starvation. Add paired render/paint evidence and timeline correlation before changing cadence mechanics; do not add repaint retries or update requeues.
-- `QOpenGLWidget.paintGL()` must not self-schedule continuous `update()` calls as a cadence mechanism. The owning tick/frame handoff should request repaint; paint-owned recursive updates create child-GL overpaint and can starve other displays.
-- Do not producer-throttle Spotify visualizer overlay repaint requests to make passive counters look cleaner. The visualizer feed may run above a low-refresh owner display; Qt may coalesce naturally, but dropping `set_state()` repaint requests before `QOpenGLWidget.update()` can create visible 60Hz stutter/under-delivery.
-- Paused visualizer pressure must be reduced only at its timer-owned synthetic-idle source budget. Do not spend the live no-transition boost on paused idle frames, but retain enough low-refresh headroom for smooth motion and restore the full live target immediately when playback resumes.
-- High-refresh helper/timer threads must not busy-spin in Python for precision. A timer that holds the GIL can make its own `GL RENDER` metrics look healthy while starving Qt/Python paint delivery, visualizer ticks, and widget timers. Prefer deadline waits that sleep/yield and prove the behavior with `--perf` parser bars.
-- Visualizer ticks must not subscribe to transition `AnimationManager` cadence. Transition managers own transition progress/completion only; running full visualizer `_on_tick()` work as a transition tick listener can collapse mixed-refresh control cadence and must stay barred by tests.
-- Shader-authoritative compositor transitions should not depend on per-frame UI `AnimationManager` callbacks for visible progress. Prefer paint-time `FrameState` progress plus one generation-guarded completion handoff; do not move cadence problems back onto a UI `QTimer` stream.
-- Do not emulate startup/rebuild delays by looping `QCoreApplication.processEvents()` or sleeping on the UI thread. If display startup needs stagger to avoid GL/compositor load spikes, preserve the stagger through an owned timer/thread-manager seam with stale-generation suppression, not arbitrary UI pumping.
-- Do not add `QTimer` / `QTimer.singleShot` runtime or lifecycle delays. Delayed work belongs behind the app-owned `ThreadManager` seam with cancellation/stale-generation behavior, or it should fail loudly rather than creating a second Qt-timer ownership path.
-- Respect staged startup contracts for dependent overlay widgets.
-- If startup or a display-recreation path cannot show the first image immediately, use a bounded immediate retry seam before falling back to the long rotation timer. Do not leave recreated/cold startup displays blank just because a transient load was already in progress.
-- Deferred GL warmup must not disturb a compositor that is already visibly presenting a seeded base frame. Prefer a hidden/shared offscreen warmup context; only non-live surfaces may fall back to direct compositor-context warmup.
-- Hidden deferred GL warmup should cover both remaining transition-program compilation and representative transition-resource warmup where safe, so first use does not pay avoidable visible-surface prep on the compositor.
-- Do not couple transition correctness to deferred startup warmup. If startup prewarm is skipped, unavailable, or incomplete, first-use transition startup must still ensure/bind the required compositor program through the shared GL lifecycle seam instead of silently degrading or assuming the deferred compile already ran.
-- Multi-display transition desync should remain shared and imperceptible. If compositor-side desync needs tuning, extend the shared compositor transition-start seam instead of special-casing one transition family while the others still start in lockstep.
-- When a compositor transition is shader-authoritative, do not keep a second CPU-side reveal simulation alive just to mirror old overlay behavior. Remove dead hot-path region/block bookkeeping rather than paying per-frame CPU cost that the compositor shader no longer consumes.
-- When settings entry, stop, or teardown is involved, suppress new runtime work through the explicit quiesce boundary (`ScreensaverEngine.stop` → `DisplayManager.quiesce_all()` → `DisplayWidget.quiesce_for_runtime_pause()` → `WidgetManager.prepare_for_runtime_pause()`) instead of layering more late cleanup side effects onto display clear/hide paths.
-- Settings-driven and CUSTOM-driven display recreation must arm a short recreated-display pointer-input suppression window so the save/revert/settings click that triggered the rebuild cannot be re-consumed by the newly created fullscreen displays.
-- Browser-window preference work must stay narrow and centralized: helper/SCR and MC direct-open flows may share a best-effort display-0 foreground preference, but widget click handlers must not grow their own browser/window-selection logic or broader automation behavior.
-- Do not over-centralize tiny widget-local effect fades just for purity. `AnimationManager` should own shared timeline/tick animation seams; tightly local `QVariantAnimation`/effect fades may remain widget-local when they are explicitly owned, cleaned up, and not recreating a second broader animation registry.
+Do not silently reduce visualizer behaviour, source cadence, transition quality, image quality, overlay smoothness, or display support to improve a counter.
 
-## 5.1 Widget Registry Safety
-- `rendering/widget_descriptors.py` is the canonical source of truth for factory-backed widget family metadata.
-- Do not add new handwritten setup branches in `rendering/widget_setup_all.py` for ordinary factory-backed widgets when the descriptor registry can own the same truth.
-- Keep the remaining Spotify-dependent setup special cases explicit as one ordered setup plan, not as scattered helper-call coincidence. If a future widget introduces a real startup/reconcile dependency, add it as an explicit phase or extend descriptor truth; do not hide it in ad hoc local ordering.
-- When a widget needs base-settings inheritance, shadow-config injection, or dev gating, extend the descriptor contract rather than duplicating that setup logic at the call site.
-- `ui/tabs/widgets_tab.py` must consume the descriptor-owned widget section registry for section order, labels, dev gating, and builder routing. Do not keep a parallel handwritten subtab list there once the descriptor path owns it.
-- New WidgetsTab sections must not casually worsen settings-open or section-switch cost. Prefer lazy-built descriptor-owned sections, keep `bootstrap_in_lazy_mode` rare, keep cross-section dependencies explicit and minimal, and do not turn one widget's builder/loader into a reason every other widget section has to materialize.
-- `ui/tabs/widgets_tab.py` must use descriptor-owned standard-section signal-block target collection during load-time population instead of re-scanning standard section attr names inline. Keep only genuinely special non-standard control groups explicit where the descriptor layer would not improve clarity.
-- Descriptor-layer cleanup should reduce fragmented helper surfaces and duplicate UI truth, not invent a second level of implicit magic. If a UI descriptor needs routing authority, prefer deriving it from the runtime descriptor contract instead of storing a second settings-key truth.
-- Cached active descriptor views are acceptable, but they must stay environment/dev-gate-aware so gated families such as deprecated Imgur or Steam do not go stale across tests or runtime toggles while they remain present.
-- `rendering/widget_manager.py` must consume descriptor-owned runtime capability metadata for live settings routing when a widget family already has a canonical handler. Do not reintroduce handwritten `startswith("widgets....")` ownership checks for descriptor-owned families.
-- Descriptor-owned service-runtime contract participation also belongs in `rendering/widget_descriptors.py`. Do not widen shared service-backed behavior based only on `service_backed=True` when the finer-grained contract can be recorded explicitly.
-- `WidgetsTab` preview/save truth for standard widget families should prefer descriptor-owned stack-preview/settings-composition metadata over handwritten per-widget UI reads. If a widget field must stay special-cased, document why the descriptor contract could not express it.
-- `WidgetsTab` should also prefer descriptor-owned application of standard saved section payloads once persisted-key ownership already lives in the descriptor registry. Keep special persistence merges, such as visualizer mode-preserving save behavior, explicit rather than hiding them in a generic helper.
-- Keep the user-facing General section on the same descriptor-owned build/load/save path as the other standard sections, retaining its stable internal `defaults` id/module names. Do not reintroduce a half-special inline branch for shared widget shadow toggles, card-border-width persistence, authored stacking, or reset actions.
-- General cache maintenance must remain an explicit family allowlist and execute filesystem work through the shared ThreadManager IO pool (or its narrow helper fallback), never synchronously on the UI thread. Do not expose credentials, credential metadata, installed settings, CUSTOM layouts, generated defaults, Reddit pacing markers, deprecated Imgur, directories, symbolic-link targets, or arbitrary paths as clearable data; locked/in-use files must be reported and skipped rather than escalating deletion.
-- Widget settings builders/loaders should stay cheap and UI-focused. Backend auth probes, cache inspection, or other expensive work should be deferred or explicitly requested rather than performed synchronously during ordinary settings construction/load.
-- For existing WidgetsTab performance work, prefer narrow optimizations that preserve persistence, bucket-state, lazy-build, and scroll-state contracts. Avoid broad “speedups” that bypass descriptor-owned load/save routing or silently drop unbuilt-section truth.
+## 2. Change Scope and Token Discipline
 
-## 5.2 Service-Backed Widget Safety
-- Shared service-backed widget lifecycle mechanics belong in `widgets/service_widget_runtime.py`.
-- Do not re-copy parent transition probes, deferred single-shot timer ownership, deferred refresh/result staging, spinner suspend/resume logic, simple fetch-in-progress begin/end guard bookkeeping, manual-refresh request flow, or visible-fallback preservation for non-authoritative empty/error results into Gmail/Reddit/Weather-style widgets when the shared helper already expresses the contract.
-- Do not treat `service_backed=True` as enough detail by itself when broadening shared widget behavior. Extend descriptor-owned service-runtime contract metadata first so widening stays explicit and reviewable.
-- Keep provider behavior, cache semantics, and authored rendering local; the shared seam is for lifecycle mechanics, not a new widget superclass or manager hierarchy.
+### Normal work
 
-## 5.3 CUSTOM Layout Safety
-- CUSTOM layout/edit mode must continue to extend descriptor-owned position/capability metadata rather than inventing a second widget-position registry.
-- Layout slots must stay source-free and allowlist-based. They may copy placement, enabled state, size/count/layout-affecting fields, and the CUSTOM layout maps, but must not become broad widget snapshots that capture providers, accounts, subreddit/weather/source choices, visualizer mode/preset/technical payloads, sounds, credentials, or cache identity.
-- Edit mode remains a global active-display shell session; do not reintroduce display-local partial edit semantics.
-- Edit-mode shell/grid ownership should follow normal runtime where possible: prefer display-owned child surfaces with explicit cross-display reparenting over separate top-level tool windows plus repeated `raise_()` correction.
-- In edit mode, keep geometry authority clean too: `EditShellWidget` should emit/request global rects only, and `CustomLayoutManager` should own the live apply path plus global-to-local conversion instead of letting the shell move against an old parent first and then correcting it afterward.
-- Drag feel matters as much as correctness. Live move drag should stay guide/clamp-driven and defer hard snap commits until release; do not make shells feel sticky by forcing full snap-to-grid/peer correction on every mouse-move event.
-- While a CUSTOM edit session is active, treat the real system cursor as the only cursor authority. Suspend interaction-mode / Ctrl halo state for the whole session and restore only the ordinary hidden-cursor screensaver policy when the session exits.
-- Edit-mode stack ownership should stay session-level, not caller-level. Background clicks, shell context-menu requests, and menu show/hide should request one shared deferred restack contract, and active context menus should suspend shell/grid restacks until the menu closes.
-- Future edge-only resize work for list widgets must preserve the existing primary size contract: wheel and corner resize stay uniform-only, while top/bottom and later left/right edge gestures remain separate content-capacity/content-budget extensions rather than replacement size authorities.
-- Dragging must keep explicit snapping and compositor-backed-display target resolution; do not fall back to freehand or raw-screen heuristics.
-- Resize must remain widget-logical and descriptor-owned. Plain scroll wheel and corner-drag resize are the current resize gestures; both must flow through the same widget-logical resize authority, and corner drag should keep the opposite corner anchored instead of inventing a separate freeform transform path.
-- CUSTOM size payloads may own only the descriptor-declared outer-size/scale axes. Do not capture or replay unrelated internal placement, content, style, or behavior settings in those payloads; current Settings values must continue to work inside the committed outer rect, and obsolete payload keys must be ignored safely.
-- Any widget that supports CUSTOM resize must keep clear recovery affordances: runtime edit-shell reset plus settings-side authored-layout revert.
-- Treat DPR and multi-monitor portability as a first-class constraint. Persist committed geometry through the shared CUSTOM layout contract, not ad hoc raw-pixel paths.
-- While a saved CUSTOM rect is active, widget-local content/typography refresh logic must not become a second geometry authority. If a widget recalculates its own minimum/maximum size, the shared overlay/custom-layout seam must reassert the committed rect rather than letting the live widget silently resize itself.
-- Saved CUSTOM rect replay must still respect real display bounds. Do not preserve a denormalized saved size so literally that replay can leak a widget past the target display edge.
-- Keep the current runtime positioning system as the authored/default fallback path. `Custom` should remain unavailable until a real saved payload exists.
-- Prefer safe edit shells/bounds during editing if live widget behavior would introduce churn, network work, or rendering instability.
+Read:
 
-## 6. Testing and Validation
-- Add automated regression coverage for changed contracts.
-- Prefer runtime-shaped automation over weak proxy guards whenever the failure is user-visible and repeatable in principle. If a bug is fundamentally about startup parity, first-visible authority, curated preset reactivity, mode/preset switching, dynamic-floor behavior, or another real runtime contract, tests should exercise that real contract path instead of only lower-level helper math or generic "no warning logged" coverage.
-- When a historical bug family has already taught the project how it lies, reuse that full vantage. For visualizer work in particular, combine:
-  - historical-bug failure shapes from `Docs/Historical_Bugs.md`,
-  - authored curated preset oracles where applicable,
-  - synthetic-audio parity/runtime tests for hot switch, preset cycle, and first-visible behavior,
-  - and only then lighter unit coverage for helper math.
-- Do not accept a green suite that only proves adjacent seams while the known user-visible failure shape remains unmodeled. If runtime keeps surfacing a complaint that tests miss, strengthen the automation bar until that exact complaint has a meaningful automated oracle.
-- Do not treat tests alone as sufficient for visual/timing-sensitive bug closure.
-- Preserve useful harnesses/probes that materially improve diagnosis quality.
+- Sections 1–3;
+- the one relevant domain section;
+- `Docs/Contracts.md` to locate the owner.
 
-## 7. Focus and Shadow Cache Safety (U-05 Lessons)
+Do not read every core document for a local change.
 
-### 7.1 Focus Policy Manipulation
-- **Never manipulate focus policies on large widget trees at runtime.**
-- Recursive `setFocusPolicy()` on dozens of widgets destabilizes Qt's focus tree, causing `focusInEvent`/`focusOutEvent` cascades. Runtime widget shadows must stay on the painter-owned card/text/header paths; do not reintroduce `QGraphicsDropShadowEffect` for overlay shadows.
-- If focus policy changes are required, apply them at widget construction time only.
+### High-risk work
 
-### 7.2 Dead Code Verification
-- **Always verify a new function is actually wired into a call chain before declaring a fix complete.**
-- A function that "looks correct" but is never invoked is a regression waiting to happen. Use `grep` to confirm all new helpers have ≥1 caller in production code (excluding tests).
+Before changing compositor/GL, visualizer timing, Settings/Edit lifecycle, worker/timer architecture, transition completion, or RAM/VRAM ownership, record briefly:
 
-### 7.3 Multi-Top-Level Window Z-Order
-- **When restoring focus/activation to a top-level window that has separate top-level overlays (halo, tooltips), always re-raise the overlays after raising the main window.**
-- `widget.raise_()` on a top-level window changes its position in the desktop stack, which can push separate top-level overlay windows behind it even if they have `WindowStaysOnTopHint`.
-- Re-raising overlays with `overlay.raise_()` after focus restoration preserves visual layering without affecting keyboard focus (overlays should have `WindowDoesNotAcceptFocus`).
+1. measured problem;
+2. owner of each mutable concern;
+3. proposed data/control flow;
+4. failure modes and rollback;
+5. acceptance metrics.
 
-### 7.4 Graphics Effect Recreation During Active Animations
-- **Never recreate or replace a `QGraphicsEffect` (opacity, shadow, etc.) while a `QVariantAnimation` is actively driving it.**
-- Overlay card/text/header shadows are painter-owned now, so broad menu/focus/display-change effect-cache busting should stay retired.
-- `rendering/widget_effects.py` is a narrow transient-opacity refresh seam only: it may request repaint for widgets that currently own a live `QGraphicsOpacityEffect`, but it must not toggle, recreate, or broadcast effect churn just because a menu opened or focus changed.
-- If a future regression appears, fix the real fade/effect owner or visual backing-store issue instead of reintroducing global cache-busting.
+### Complexity escalation
 
-## 8. Visualizer State Isolation (R-22 Lessons)
+Adding more than one new long-lived thread, timer, queue, state machine, generation, retry, cache, fallback renderer, GL context, or compatibility layer requires architecture review.
 
-### 8.1 Runtime Arrays and Caches Are Mode-Owned
-- **Mode-specific runtime arrays, cached render-state buffers, and activation-era transient data must be cleared before a new visualizer mode or preset is allowed to commit fresh display state.**
-- R-22 showed that reset/overlay cleanup alone is not enough if previous-mode arrays, floors, or pending compute work can still mutate shared runtime state after activation changes.
-- Bar arrays, dynamic floors, AGC-like envelopes, transient buses, renderer-local history, and similar mode-owned caches must not survive a mode or preset boundary unless the new activation explicitly reuses them by contract.
+State what existing mechanism is removed or replaced. Complexity may not merely accumulate.
 
-### 8.2 Activation Must Be Transactional
-- **Startup create, settings refresh, context-menu mode switch, double-click cycle, preset cycle, and forced preset activation must all consume the same resolved mode/preset payload before touching widget, engine, or overlay state.**
-- Do not maintain separate "hot path" and "settings path" interpretations of the target mode config.
-- Activation-id checks, generation tracking, and fresh-frame gates are not optional polish. They are part of the runtime isolation contract and must survive refactors.
+## 3. Immediate Stop Conditions
 
-### 8.3 Shared Settings Must Not Reintroduce Cross-Mode Bleed
-- **Technical settings and preset-varying runtime visuals that belong to one mode must not leak back through shared/global authored keys after normalization.**
-- Legacy shared/global technical keys may be accepted as migration inputs, but normalized settings, custom snapshots, and preset payloads must store mode-owned values under the owning mode.
-- If diagnostics/logging report active visualizer state, they must reflect the resolved preset identity and the actual applied runtime/worker state, not only raw pre-normalized settings payloads.
+Stop and reassess when:
+
+- Spectrum becomes flatter;
+- Bubble becomes less reactive or elastic;
+- any visualizer becomes visibly less smooth;
+- p99/max frame delivery worsens despite better averages;
+- cursor halo or unrelated UI becomes choppy;
+- a producer waits for paint completion;
+- a `QOpenGLContext` affinity warning appears;
+- Settings/Edit needs another cleanup flag, retry, generation, or delay;
+- RAM or VRAM grows monotonically;
+- live resource use cannot be explained;
+- task rate rises without measured benefit;
+- a silent fallback is required;
+- a fix needs broad dynamic forwarding or widget impersonation;
+- tests pass while the known user-visible failure remains;
+- one phase starts changing lifecycle, compositor, visualizer behaviour, memory, and threading together.
+
+Do not answer these failures with another flag or retry.
+
+## 4. Repository and Documentation Stability
+
+- Edit existing files in place.
+- **Never rename or move an existing file, directory, document, module, or public path unless the user explicitly requests that exact rename or move.**
+- Do not create “v2”, “new”, “replacement”, or “proposed” canonical copies.
+- Preserve public setting keys, visualizer ids, transition ids, widget ids, and storage paths unless an explicit migration is approved.
+- Stable architecture belongs in `Spec.md`.
+- Active unfinished work belongs in `Current_Plan.md`.
+- Detailed subsystem rules belong in the existing focused document.
+- Dated failure history belongs in `Docs/Historical_Bugs.md`.
+- Completed work is removed from `Current_Plan.md`.
+
+## 5. Ownership and Architecture
+
+### One mutable concern, one owner
+
+Examples:
+
+- runtime lifecycle: runtime coordinator;
+- settings: `SettingsManager`;
+- task registry: `ThreadManager`;
+- visualizer simulation: visualizer controller/model;
+- transition state: transition owner;
+- image cache: image pipeline/cache;
+- GL lifetime: context/resource owner;
+- presentation: display compositor.
+
+Managers coordinate; they do not become co-owners.
+
+### Centralization is not universalization
+
+Do not force:
+
+- every GUI timer through `ThreadManager`;
+- visualizer simulation through `AnimationManager`;
+- per-frame state through `EventSystem`;
+- GL context decisions through `ResourceManager`;
+- unrelated responsibilities into a generic manager.
+
+### No shadow frameworks
+
+Do not create a second settings path, task registry, transition registry, descriptor registry, lifecycle authority, renderer, or cleanup owner.
+
+Temporary comparison paths require an explicit development flag, separate metrics, and removal deadline. They may not activate silently.
+
+### No compatibility mega-layer
+
+Do not use:
+
+- broad `__getattr__`/`__setattr__`;
+- giant forwarded-attribute lists;
+- widget impersonation;
+- whole-widget free-function seams;
+- generic managers with unrelated state.
+
+Use explicit interfaces and immutable data.
+
+### Generations represent lifetimes
+
+Use generations for runtime/context recreation, stale request rejection, or activation replacement.
+
+Do not create dirty/requested/acknowledged/presented generations for ordinary frames.
+
+## 6. Presentation and Compositor
+
+- One compositor surface per display is acceptable.
+- One surface does not mean one scheduler or one clock.
+- Visualizer simulation, transition time, and Qt presentation remain separate.
+- Producers publish latest immutable state and return.
+- The compositor consumes the latest scene when Qt paints.
+- Intermediate render snapshots may coalesce; logical input may not be dropped before simulation.
+- A GUI-local pending `update()` flag is allowed.
+- That flag is not a producer acknowledgement.
+
+Prohibited:
+
+- worker wait for `paintGL()`;
+- presentation-generation wait;
+- producer pause until paint;
+- scheduler release by accepted paint;
+- catch-up repaint bursts;
+- compositor-owned visualizer cadence;
+- distributed terminal-frame transactions.
+
+`paintGL()` may draw, calculate local transition progress, record passive metrics, and request another frame while local animation remains active.
+
+`paintGL()` may not simulate visualizers, decode/convert images, hash whole buffers, wait for workers/fences, run lifecycle, or emit per-frame INFO logs.
+
+Transition completion is local: destination becomes base, old/temporary resources release, transition becomes inactive.
+
+Each display owns its surface, viewport, DPR, scene, update state, and resources/leases. Display 0 is not implicit global authority.
+
+A clearly owned GUI-local `QTimer` is allowed. Retry timers and duplicate cadence authorities are not. Never sleep or pump events on the GUI thread.
+
+## 7. Visualizer Safety
+
+Protected mode behaviour includes:
+
+- attack;
+- amplitude;
+- decay;
+- smoothing;
+- overshoot;
+- elasticity;
+- settling;
+- low-energy response;
+- spatial distribution;
+- continuity under irregular presentation.
+
+Before and after shared visualizer/audio/timing/render changes:
+
+- run the focused reactivity harness;
+- run deterministic replay where available;
+- compare Spectrum and Bubble;
+- test irregular paint cadence/UI stalls;
+- perform manual review;
+- do not rewrite expected output merely to pass.
+
+Visualizer simulation is independent of paint and transition cadence.
+
+The compositor may skip render snapshots, but cannot block simulation, change simulation time, drop input before integration, or flatten behaviour after a stall.
+
+Worker visualizer work requires one owner, bounded input, no stale/new overlap, latest-result publication, generation rejection, no UI wait, and no per-display duplicate simulation.
+
+More worker threads do not prove multi-core scaling. Use measured vectorized/native work or remove duplicate work before lowering fidelity.
+
+Mode arrays, history, envelopes, buffers, and pending work are mode-owned and cleared on activation unless reuse is explicit.
+
+## 8. GL Lifecycle, Settings, and Edit
+
+All GL creation, mutation, and deletion occurs:
+
+- on the owner thread;
+- with the expected context current;
+- under the correct runtime/context generation.
+
+Assertions identify thread, context/share group, resource, owner, and generation.
+
+Never suppress:
+
+```text
+Cannot make QOpenGLContext current in a different thread
+```
+
+Settings, Edit, topology recreation, and exit follow full ordered teardown:
+
+1. close old-runtime admission;
+2. stop producers and GUI timers;
+3. disconnect callbacks;
+4. cancel/drain workers;
+5. prevent old-runtime GUI/GL work;
+6. delete child GL resources with valid context;
+7. destroy compositor/surface last;
+8. assert no old-generation resources;
+9. create a clean generation.
+
+Partial GL reinitialization requires a separate approved architecture proposal.
+
+A worker may stop asynchronously, but context destruction cannot proceed while it can touch the retiring runtime.
+
+Do not clear handles while a worker lives, destroy the context first, block the GUI indefinitely, force-drop ownership, or add cleanup retry timers.
+
+Every GL resource has one owner, byte size, context/share generation, and exactly-once deletion path.
+
+Do not rely on garbage collection, `QObject.destroyed`, `deleteLater()` alone, or driver cleanup.
+
+Warmup is optional optimization; correctness never depends on it.
+
+## 9. CPU, Threading, Logging, RAM, and VRAM
+
+### CPU and threading
+
+Reduce work before adding threads.
+
+Before adding a worker:
+
+- identify the hotspot;
+- measure queue/callback cost and GIL behaviour;
+- remove duplicate work;
+- batch tiny jobs;
+- stop hidden/static work;
+- coalesce latest non-critical state.
+
+Do not use a general COMPUTE task per presentation frame, worker-to-paint handshake, busy-spin timing, or one UI callback per diagnostic event.
+
+Measure GUI timer lateness, callback duration, paint duration, scene age, signal backlog, synchronous I/O, and logging overhead.
+
+### Logging
+
+Diagnostics are CLI-gated, sampled, fixed-memory, aggregated, non-overlapping, and lazily formatted.
+
+No per-frame INFO logs or per-frame state dumps.
+
+### Memory and resources
+
+Byte-account:
+
+- encoded/decoded/scaled images;
+- `QImage`/`QPixmap`;
+- upload buffers;
+- textures;
+- FBOs/PBOs/renderbuffers;
+- retained frames;
+- transition and visualizer resources.
+
+Record identity, owner, bytes, format, generation, leases, and deletion reason.
+
+Image cycling, transitions, and Settings/Edit cycles must reach a stable plateau.
+
+For the current dual-1440p target:
+
+- investigate application-owned GL allocations above roughly 500 MiB;
+- investigate RSS above roughly 900 MiB;
+- explicitly explain multi-gigabyte private commit.
+
+These are investigation gates, not budgets to consume.
+
+CPU/GPU caches require byte limits, pinning, deterministic eviction, stale-prefetch cancellation, pressure behaviour, and metrics.
+
+Shared textures require verified share group, exact identity, explicit leases, generation safety, and exactly-once deletion. No GL calls under registry locks.
+
+Workers may prepare immutable thread-safe image data. They may not create GUI-affine `QPixmap` or call GL.
+
+Avoid repeated full-buffer copies, hot-path whole-buffer hashing, visible-paint conversion, and UI fence waits.
+
+## 10. Settings, Widgets, and Layout
+
+- Defaults and normalization remain single-source.
+- Mutation APIs preserve cache invalidation, persistence, and notification semantics.
+- Widget metadata remains descriptor-owned.
+- Transition identity remains registry-owned.
+- Visualizer identity/settings remain registry/model-owned.
+- Shared service-widget lifecycle contains mechanics only; provider behaviour remains local.
+- CUSTOM layout is descriptor-capability-driven, display-bounded, and DPR-aware.
+- Live content refresh cannot become a second geometry owner.
+- Drag/resize feel is part of correctness.
+- Focus policies are not recursively changed across live widget trees.
+- Active graphics effects are not replaced mid-animation.
+- Settings/Edit work obeys Section 8.
+
+Detailed rules stay in existing focused documents.
+
+## 11. Testing and Evidence
+
+Test the real failure shape.
+
+Startup, first-visible state, visualizer feel, frame delivery, lifecycle, multi-display ownership, and memory growth require runtime-shaped coverage.
+
+Visual/timing work requires:
+
+- automation;
+- runtime logs;
+- p95/p99/max;
+- manual review.
+
+Performance reports include scenario, environment, average FPS, p50/p90/p95/p99/max, gap counts, CPU, task rate, RSS/private commit, tracked GL bytes, driver VRAM, visualizer result, and lifecycle result.
+
+Recovery evidence:
+
+```text
+logs/evidence_chest/logs7376bb9.zip
+logs/evidence_chest/logs00edb57.zip
+recovery-00edb57
+donor-7376bb9
+```
+
+Do not merge the donor branch wholesale.
+
+Every new production helper must have a production caller verified by repository search.
+
+## 12. Recovery Prohibitions
+
+Until recovery completes, do not preserve or reintroduce:
+
+- adaptive timer/presentation worker;
+- worker-to-`paintGL()` acknowledgement;
+- dirty/requested/acknowledged frame generations;
+- compositor-owned visualizer cadence;
+- distributed terminal transactions;
+- partial Settings/Edit GL reinitialization;
+- visualizer compatibility mega-layer;
+- broad dynamic forwarding;
+- full-buffer SHA-256 hot-path identity;
+- silent child-surface or `QPainter` fallback;
+- general worker tasks used as GUI timers;
+- garbage-collection-owned GL lifetime;
+- unbounded image or GPU caches.
+
+Donor ideas may be reconstructed only after isolated review and benchmark:
+
+- resource accounting;
+- bounded texture reuse/leases;
+- immutable worker/render handoff;
+- GL affinity assertions;
+- passive diagnostics;
+- stale-result generation rejection.
+
+## 13. High-Risk Pre-Commit Gate
+
+- [ ] One problem and hypothesis
+- [ ] Owners/thread affinity documented
+- [ ] No producer waits for paint
+- [ ] No hidden fallback
+- [ ] No unexplained timer/thread/queue/generation/retry
+- [ ] Visualizer fidelity protected
+- [ ] p95/p99/max measured
+- [ ] RAM/VRAM plateau tested
+- [ ] Settings/Edit exercised
+- [ ] Multi-display path exercised
+- [ ] Helpers have production callers
+- [ ] Logs remain sampled
+- [ ] Rollback commit known
+- [ ] `Current_Plan.md` updated when applicable

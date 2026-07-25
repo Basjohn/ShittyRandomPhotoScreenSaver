@@ -652,7 +652,10 @@ def init_gl_pipeline(widget) -> None:
         # Initialize geometry - each compositor needs its own VAOs since
         # OpenGL VAOs are NOT shared between GL contexts (each display has its own context)
         if widget._geometry_manager is None:
-            widget._geometry_manager = GLGeometryManager()
+            lifetime_identity = f"{type(widget).__name__}:{id(widget)}"
+            widget._geometry_manager = GLGeometryManager(
+                owner=lifetime_identity, generation=id(widget),
+            )
         if not widget._geometry_manager.initialize():
             logger.warning("[GL COMPOSITOR] Failed to initialize geometry manager")
             widget._gl_disabled_for_session = True
@@ -669,7 +672,10 @@ def init_gl_pipeline(widget) -> None:
         # Initialize texture manager - each compositor needs its own textures since
         # OpenGL textures are NOT shared between GL contexts
         if widget._texture_manager is None:
-            widget._texture_manager = GLTextureManager()
+            lifetime_identity = f"{type(widget).__name__}:{id(widget)}"
+            widget._texture_manager = GLTextureManager(
+                owner=lifetime_identity, generation=id(widget),
+            )
 
         widget._gl_pipeline.initialized = True
         _pipeline_elapsed = (time.time() - _pipeline_start) * 1000.0
@@ -738,11 +744,21 @@ def cleanup_gl_pipeline(widget) -> None:
                 if vbo_id:
                     buf = (ctypes.c_uint * 1)(int(vbo_id))
                     gl.glDeleteBuffers(1, buf)
+                    manager = widget._geometry_manager
+                    if manager is not None:
+                        rid_attr = f"_{vbo_attr}_rid"
+                        manager._release_resource_tracking(getattr(manager, rid_attr, None))
+                        setattr(manager, rid_attr, None)
             for vao_attr in ["quad_vao", "box_vao"]:
                 vao_id = getattr(widget._gl_pipeline, vao_attr, 0)
                 if vao_id:
                     arr = (ctypes.c_uint * 1)(int(vao_id))
                     gl.glDeleteVertexArrays(1, arr)
+                    manager = widget._geometry_manager
+                    if manager is not None:
+                        rid_attr = f"_{vao_attr}_rid"
+                        manager._release_resource_tracking(getattr(manager, rid_attr, None))
+                        setattr(manager, rid_attr, None)
         except Exception:
             logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
 

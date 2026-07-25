@@ -82,6 +82,11 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     monkeypatch.setattr(engine_handlers, "AnimationManager", _Animations)
     monkeypatch.setattr(engine_handlers, "SettingsDialog", _Dialog)
     monkeypatch.setattr(
+        engine_handlers,
+        "log_lifecycle_resource_snapshot",
+        lambda _engine, *, event, stage: events.append(("snapshot", event, stage)),
+    )
+    monkeypatch.setattr(
         engine_handlers.DisplayWidget,
         "suppress_pointer_input_globally",
         staticmethod(lambda *_args, **_kwargs: events.append(("suppress_pointer", None))),
@@ -96,7 +101,71 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     assert ("animations_cleanup", None) in events
     assert events.index(("animations_cleanup", None)) < events.index(("initialize_display", None))
     assert ("dialog_delete", None) in events
+    assert events.index(("snapshot", "settings", "before_stop")) < events.index(("engine_stop", False))
+    assert events.index(("engine_stop", False)) < events.index(("snapshot", "settings", "after_stop"))
+    assert events.index(("display_cleanup", None)) < events.index(("snapshot", "settings", "after_display_cleanup"))
+    assert events.index(("engine_start", None)) < events.index(("snapshot", "settings", "after_restart"))
     assert app is not None
+
+
+def test_custom_edit_reload_snapshots_real_lifecycle_boundaries(monkeypatch):
+    from engine import engine_handlers
+
+    events = []
+
+    class _DisplayManager:
+        def cleanup(self):
+            events.append(("display_cleanup", None))
+
+    class _Settings:
+        def load(self):
+            events.append(("settings_load", None))
+
+    class _Coordinator:
+        def cleanup(self):
+            events.append(("coordinator_cleanup", None))
+
+    class _Engine:
+        def __init__(self):
+            self.display_manager = _DisplayManager()
+            self.settings_manager = _Settings()
+            self._display_initialized = True
+
+        def stop(self, exit_app=False):
+            events.append(("engine_stop", exit_app))
+
+        def _initialize_display(self):
+            events.append(("initialize_display", None))
+            return True
+
+        def _setup_rotation_timer(self):
+            events.append(("setup_rotation_timer", None))
+
+        def start(self):
+            events.append(("engine_start", None))
+            return True
+
+    monkeypatch.setattr(
+        engine_handlers,
+        "log_lifecycle_resource_snapshot",
+        lambda _engine, *, event, stage: events.append(("snapshot", event, stage)),
+    )
+    monkeypatch.setattr(
+        engine_handlers.DisplayWidget,
+        "suppress_pointer_input_globally",
+        staticmethod(lambda *_args, **_kwargs: events.append(("suppress_pointer", None))),
+    )
+    monkeypatch.setattr(
+        "rendering.multi_monitor_coordinator.get_coordinator",
+        lambda: _Coordinator(),
+    )
+
+    engine_handlers.on_custom_layout_reload_requested(_Engine())
+
+    assert events.index(("snapshot", "custom_edit", "before_stop")) < events.index(("engine_stop", False))
+    assert events.index(("engine_stop", False)) < events.index(("snapshot", "custom_edit", "after_stop"))
+    assert events.index(("display_cleanup", None)) < events.index(("snapshot", "custom_edit", "after_display_cleanup"))
+    assert events.index(("engine_start", None)) < events.index(("snapshot", "custom_edit", "after_restart"))
 
 
 def test_sources_changed_during_settings_is_deferred(monkeypatch):

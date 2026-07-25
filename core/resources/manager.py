@@ -12,12 +12,26 @@ import uuid
 import weakref
 import os
 import threading
+from types import MappingProxyType
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
 
 from .types import CleanupProtocol, ResourceInfo, ResourceType
 from core.logging.logger import get_logger, is_verbose_logging
 
 T = TypeVar('T')
+
+
+def _freeze_snapshot_value(value):
+    """Detach mutable metadata before exposing an immutable snapshot."""
+    if value is None or isinstance(value, (str, int, float, bool, bytes)):
+        return value
+    if isinstance(value, dict):
+        return MappingProxyType({
+            key: _freeze_snapshot_value(item) for key, item in value.items()
+        })
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return tuple(_freeze_snapshot_value(item) for item in value)
+    return repr(value)
 
 _logger = get_logger("resources.manager")
 
@@ -425,6 +439,49 @@ class ResourceManager:
                         stats[handle_type] += 1
                         stats["total"] += 1
             return stats
+
+    def get_accounting_snapshot(self):
+        """Return an immutable, detached snapshot of registered resources."""
+        with self._lock:
+            resources = []
+            known_tracked_bytes = 0
+            unknown_tracked_resources = 0
+            for info in self._resources.values():
+                metadata = dict(info.metadata)
+                tracked_bytes = metadata.get("tracked_bytes")
+                if (
+                    isinstance(tracked_bytes, int)
+                    and not isinstance(tracked_bytes, bool)
+                    and tracked_bytes >= 0
+                ):
+                    known_tracked_bytes += tracked_bytes
+                else:
+                    tracked_bytes = None
+                    unknown_tracked_resources += 1
+                dimensions = metadata.get("dimensions")
+                if dimensions is not None:
+                    dimensions = tuple(dimensions)
+                resources.append(MappingProxyType({
+                    "resource_id": info.resource_id,
+                    "resource_type": info.resource_type.name,
+                    "description": info.description,
+                    "group": metadata.get("group", info.group),
+                    "gl_handle_type": _freeze_snapshot_value(
+                        metadata.get("gl_handle_type")
+                    ),
+                    "owner": _freeze_snapshot_value(metadata.get("owner")),
+                    "generation": _freeze_snapshot_value(metadata.get("generation")),
+                    "dimensions": dimensions,
+                    "format": _freeze_snapshot_value(metadata.get("format")),
+                    "tracked_bytes": tracked_bytes,
+                    "lease_count": None,
+                }))
+            return MappingProxyType({
+                "total_resources": len(resources),
+                "known_tracked_bytes": known_tracked_bytes,
+                "unknown_tracked_resources": unknown_tracked_resources,
+                "resources": tuple(resources),
+            })
     
     def get(self, resource_id: str) -> Optional[Any]:
         """
@@ -470,43 +527,44 @@ class ResourceManager:
         with self._lock:
             if not resource_id or resource_id not in self._resources:
                 return False
-            
-            # Check reference count
+
             if not force and self._resources[resource_id].reference_count > 1:
                 raise RuntimeError(
                     f"Cannot unregister resource {resource_id} with active references. "
                     f"Reference count: {self._resources[resource_id].reference_count}"
                 )
-            
-            # Get resource and cleanup info before removing
-            # Check strong refs first, then weak refs
-            resource = self._strong_refs.get(resource_id)
+
+            resource = self._strong_refs.pop(resource_id, None)
             if resource is None:
                 resource = self._weak_refs.get(resource_id, lambda: None)()
-            cleanup_info = self._cleanup_handlers.get(resource_id, None)
-            
-            # Perform cleanup before removing from tracking
-            if cleanup_info is not None:
-                try:
-                    handler, is_method = cleanup_info
-                    if is_method:
-                        # Method - call without resource arg (only if resource exists)
-                        if resource is not None:
-                            handler()
-                    else:
-                        # Function - call with resource arg (only if resource exists)
-                        if resource is not None:
-                            handler(resource)
-                    self._logger.debug(f"Cleaned up resource: {resource_id}")
-                except Exception as e:
-                    self._logger.error(f"Error cleaning up resource {resource_id}: {e}")
-            
-            # Now remove from tracking
+            cleanup_info = self._cleanup_handlers.pop(resource_id, None)
+            self._resources.pop(resource_id, None)
+            self._weak_refs.pop(resource_id, None)
+
+        # Cleanup may call GL; registry locks must never cross this boundary.
+        if cleanup_info is not None:
+            try:
+                handler, is_method = cleanup_info
+                if is_method:
+                    if resource is not None:
+                        handler()
+                elif resource is not None:
+                    handler(resource)
+                self._logger.debug(f"Cleaned up resource: {resource_id}")
+            except Exception as e:
+                self._logger.error(f"Error cleaning up resource {resource_id}: {e}")
+
+        return True
+
+    def release_tracking(self, resource_id: str) -> bool:
+        """Forget an owner-deleted resource without invoking its cleanup."""
+        with self._lock:
+            if not resource_id or resource_id not in self._resources:
+                return False
             self._cleanup_handlers.pop(resource_id, None)
             self._resources.pop(resource_id, None)
             self._weak_refs.pop(resource_id, None)
-            self._strong_refs.pop(resource_id, None)  # Remove strong ref if exists
-            
+            self._strong_refs.pop(resource_id, None)
             return True
     
     def _finalize_resource(self, resource_id: str) -> None:
@@ -560,27 +618,24 @@ class ResourceManager:
                 self.__class__._app_shared_manager = None
         
         with self._lock:
-            # Group resources for deterministic cleanup ordering
             groups = {
                 'qt': [],
                 'network': [],
                 'cache': [],
                 'filesystem': [],
-                'other': []
+                'other': [],
             }
-            
             for resource_id, info in self._resources.items():
                 groups[info.group].append(resource_id)
-            
-            # Cleanup order: Qt first, then others
-            cleanup_order = ['qt', 'network', 'cache', 'filesystem', 'other']
-            
-            for group in cleanup_order:
-                for resource_id in groups[group]:
-                    try:
-                        self.unregister(resource_id, force=True)
-                    except Exception as e:
-                        self._logger.error(f"Error cleaning up {resource_id}: {e}")
+
+        # Cleanup handlers, including GL deletion, run outside the registry lock.
+        cleanup_order = ['qt', 'network', 'cache', 'filesystem', 'other']
+        for group in cleanup_order:
+            for resource_id in groups[group]:
+                try:
+                    self.unregister(resource_id, force=True)
+                except Exception as e:
+                    self._logger.error(f"Error cleaning up {resource_id}: {e}")
         
         # Clear object pools
         try:

@@ -1,41 +1,83 @@
 # Project Overview
 
-Last updated: 2026-06-30
-
-This is the top-level orientation for SRPSS documentation.
+Last updated: 2026-07-23
 
 ## What SRPSS Is
-SRPSS is a Windows screensaver/media runtime with:
-- image-source orchestration,
-- GL transition/rendering pipeline,
-- overlay widget system,
-- settings architecture built for durability and migration.
 
-## Documentation Boundaries
-- `Spec.md`: architecture contracts and behavior rules.
-- `Index.md`: where code lives and who owns what.
-- `Current_Plan.md`: active work only.
-- `Docs/Historical_Bugs.md`: dated bug narratives and lessons.
-- `Docs/Visualizer_Change_Checklist.md`: required change sweep for visualizer settings.
-- `Docs/Transition_Change_Checklist.md`: required change sweep for transition registry/runtime work.
+SRPSS is a Windows screensaver and media runtime with:
 
-## Core Engineering Principles
-- Centralized manager ownership for threading/resource/settings/animation.
-- Mode isolation with explicit shared seams.
-- Runtime correctness over temporary compatibility shortcuts.
-- Tests are required but visual/runtime behavior still needs runtime validation when the symptom is visual/timing-sensitive.
+- multi-display image presentation;
+- OpenGL transitions and visual effects;
+- Spotify visualizers;
+- configurable overlay widgets;
+- durable settings, profiles, imports, and migrations;
+- Normal and Media Center runtime variants.
 
-## Key Runtime Areas
-- Engine/display lifecycle: `engine/`, `rendering/`.
-- Settings and schema: `core/settings/`.
-- Widgets and overlays: `widgets/`, `rendering/widget_manager.py`.
-- Visualizer system: `widgets/spotify_visualizer*`, `core/settings/visualizer_*`.
-- Visualizer preset import/export: `core/settings/visualizer_preset_transfer.py`.
-- Visualizer preset repair/audit tooling: `tools/visualizer_preset_repair.py`.
-- Source ingestion: `sources/rss/`.
+## Documentation Read Order
 
-## How to Navigate
-1. Read `Spec.md` for current contract.
-2. Use `Index.md` to locate ownership boundaries.
-3. Use focused docs under `Docs/` for defaults, test policy, visualizer specifics, transition changes, and shared UI style.
-4. Use `Docs/Historical_Bugs.md` before reworking fragile areas.
+Do **not** read the entire documentation tree for every task.
+
+1. Read `Index.md` to identify the owning subsystem.
+2. Read the short relevant section of `Docs/Guardrails.md`.
+3. Use `Docs/Contracts.md` to find the canonical code and focused document.
+4. Read `Spec.md` only when changing stable architecture or product behaviour.
+5. Read `Current_Plan.md` only when working on active planned work.
+6. Read focused documents only for the subsystem being changed.
+7. Read `Docs/Historical_Bugs.md` when touching a fragile area with prior regressions.
+
+For compositor recovery work, also read:
+
+- `Docs/Compositor_Architecture.md`
+- `Docs/TestSuite.md`
+- the relevant section of `Docs/Harness_Index.md`
+
+## Document Roles
+
+| File | Role |
+|---|---|
+| `Index.md` | Navigation and ownership map |
+| `Docs/Guardrails.md` | Durable cross-cutting safety rules |
+| `Docs/Contracts.md` | Fast task-to-owner routing |
+| `Spec.md` | Stable architecture and behaviour contracts |
+| `Current_Plan.md` | Unfinished active work only |
+| `Docs/Compositor_Architecture.md` | Compositor recovery and target design |
+| `Docs/TestSuite.md` | Testing levels and release bars |
+| `Docs/Harness_Index.md` | Commands for recurring investigations |
+| `Docs/Historical_Bugs.md` | Dated regression narratives and lessons |
+| `Docs/Documentation_Maintenance.md` | Documentation drift and size control |
+
+## Core Engineering Priorities
+
+When goals conflict:
+
+1. visualizer fidelity and reactivity;
+2. lifecycle and GL safety;
+3. frame pacing and perceived smoothness;
+4. correct multi-display behaviour;
+5. bounded RAM and VRAM;
+6. CPU and task efficiency;
+7. average FPS;
+8. code elegance.
+
+## Recovery References
+
+```text
+behavioural recovery base: recovery-00edb57
+baseline commit:           00edb57a3076b845cb8ee4b6cb7f36ea83411f0c
+donor branch:              donor-7376bb9
+donor commit:              7376bb9bb380253f3bd14079e65d7bdbca062fad
+```
+
+Runtime evidence belongs under:
+
+```text
+logs/evidence_chest/
+```
+
+The donor branch is reference material. It must not be merged wholesale into the recovery branch.
+
+## Repository Stability Rule
+
+Existing files and documents are updated in place.
+
+Do not rename or move any existing file, directory, or document unless the user explicitly requests that exact rename or move.

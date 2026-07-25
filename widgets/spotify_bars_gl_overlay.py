@@ -1638,12 +1638,22 @@ void main() {
                 lambda h, _g=_gl_mod: _g.glDeleteVertexArrays(1, [h]),
                 description="SpotifyBarsGLOverlay VAO",
                 group="spotify_vis_gl",
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                dimensions=None,
+                format="VERTEX_ARRAY",
+                tracked_bytes=None,
             )
             self._gl_vbo_rid = rm.register_gl_handle(
                 vbo, "vbo",
                 lambda h, _g=_gl_mod: _g.glDeleteBuffers(1, [h]),
                 description="SpotifyBarsGLOverlay VBO",
                 group="spotify_vis_gl",
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                dimensions=(4, 2),
+                format="float32[x,y]",
+                tracked_bytes=int(vertices.nbytes),
             )
             logger.debug("[SPOTIFY_VIS] GL handles registered with ResourceManager")
         except Exception as e:
@@ -1762,6 +1772,11 @@ void main() {
                 lambda h, _g=_gl_mod: _g.glDeleteProgram(h),
                 description=f"SpotifyBarsGLOverlay {mode} shader",
                 group="spotify_vis_gl",
+                owner=f"{type(self).__name__}:{id(self)}",
+                generation=id(self),
+                dimensions=None,
+                format="GL_PROGRAM",
+                tracked_bytes=None,
             )
             self._gl_program_rids[mode] = rid
         except Exception as e:
@@ -1836,6 +1851,7 @@ void main() {
                 try:
                     if ctx_acquired:
                         _gl.glDeleteProgram(prog)
+                        self._release_resource_tracking(self._gl_program_rids.get(mode))
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete %s program: %s", mode, e)
             self._gl_programs.clear()
@@ -1854,6 +1870,7 @@ void main() {
                 try:
                     if ctx_acquired:
                         _gl.glDeleteBuffers(1, [self._gl_vbo])
+                        self._release_resource_tracking(self._gl_vbo_rid)
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete VBO: %s", e)
                 self._gl_vbo = None
@@ -1862,6 +1879,7 @@ void main() {
                 try:
                     if ctx_acquired:
                         _gl.glDeleteVertexArrays(1, [self._gl_vao])
+                        self._release_resource_tracking(self._gl_vao_rid)
                 except Exception as e:
                     logger.debug("[SPOTIFY_VIS] Failed to delete VAO: %s", e)
                 self._gl_vao = None
@@ -1876,6 +1894,18 @@ void main() {
         self._gl_vao_rid = None
         self._gl_vbo_rid = None
         logger.debug("[SPOTIFY_VIS] GL handles cleaned up")
+
+    @staticmethod
+    def _release_resource_tracking(resource_id: str | None) -> None:
+        if not resource_id:
+            return
+        try:
+            from core.resources.manager import ResourceManager
+            manager = ResourceManager.get_app_shared()
+            if manager is not None:
+                manager.release_tracking(resource_id)
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Failed to release GL resource tracking", exc_info=True)
 
     def _get_dpr(self) -> float:
         """Resolve device pixel ratio for the backing FBO."""

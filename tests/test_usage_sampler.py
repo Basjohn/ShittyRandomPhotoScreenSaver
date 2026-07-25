@@ -55,6 +55,26 @@ class _Manager:
             "compute": {"submitted": 4, "completed": 4, "failed": 0},
         }
 
+    def get_task_category_stats(self):
+        return {
+            "diagnostics.usage": {
+                "submitted": 1,
+                "completed": 0,
+                "failed": 0,
+                "cancelled": 0,
+                "rejected": 0,
+                "active": 1,
+            },
+            "visualizer.audio_analysis": {
+                "submitted": 23,
+                "completed": 22,
+                "failed": 0,
+                "cancelled": 0,
+                "rejected": 0,
+                "active": 1,
+            },
+        }
+
 
 class _ProcessCollector:
     def collect(self):
@@ -105,6 +125,27 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
         manager,
         process_collector=_ProcessCollector(),
         gpu_collector=gpu,
+        resource_snapshot_provider=lambda: {
+            "tracked_resources": 5,
+            "tracked_known_bytes": 4096,
+            "cpu_cache_resources": 2,
+            "cpu_cache_bytes": 2048,
+            "rm_resources": 3,
+            "rm_known_bytes": 2048,
+            "rm_unknown_resources": 1,
+            "gl_resources": 3,
+            "gl_known_bytes": 2048,
+            "gl_unknown_resources": 1,
+            "gl_texture_resources": 1,
+            "gl_texture_bytes": 1024,
+            "gl_framebuffer_resources": 0,
+            "gl_framebuffer_bytes": 0,
+            "gl_renderbuffer_resources": 0,
+            "gl_renderbuffer_bytes": 0,
+            "gl_pbo_resources": 1,
+            "gl_pbo_bytes": 1024,
+            "qt_default_fbo": "qt_owned_untracked",
+        },
     )
 
     with caplog.at_level(logging.INFO, logger="core.performance.usage_sampler"):
@@ -115,7 +156,15 @@ def test_usage_service_logs_complete_sample_off_submitted_task(caplog):
     assert "rss_app_mb=420.0" in sample
     assert "gpu_busy_pct=67.0" in sample
     assert "vram_dedicated_mb=512.0" in sample
+    assert "tracked_known_bytes=4096" in sample
+    assert "cpu_cache_bytes=2048" in sample
+    assert "gl_texture_bytes=1024" in sample
+    assert "gl_framebuffer_bytes=0" in sample
+    assert "gl_pbo_bytes=1024" in sample
+    assert "qt_default_fbo=qt_owned_untracked" in sample
     assert "tm_active=1" in sample
+    assert '"visualizer.audio_analysis":{"active":1' in sample
+    assert manager.tasks[0][2]["category"] == "diagnostics.usage"
 
     service.stop()
     assert manager.timer.stopped is True

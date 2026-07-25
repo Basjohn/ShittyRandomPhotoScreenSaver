@@ -547,3 +547,80 @@ class TestPoolCleanup:
         qt_resource_manager.shutdown()
         stats = qt_resource_manager.get_pool_stats()
         assert stats["pixmap_pool_size"] == 0
+
+
+class TestResourceAccountingSnapshot:
+    """Passive immutable accounting and tracking-only release."""
+
+    def test_snapshot_preserves_known_and_unknown_bytes(self, resource_manager):
+        known = MagicMock()
+        unknown = MagicMock()
+        resource_manager.register(
+            known, ResourceType.NATIVE_HANDLE, "known",
+            owner="display:1", generation=12, dimensions=(8, 4),
+            format="RGBA8", tracked_bytes=128, group="gl",
+        )
+        resource_manager.register(
+            unknown, ResourceType.NATIVE_HANDLE, "unknown",
+            owner="display:1", generation=12, dimensions=None,
+            format="GL_PROGRAM", tracked_bytes=None, group="gl",
+        )
+
+        snapshot = resource_manager.get_accounting_snapshot()
+
+        assert snapshot["known_tracked_bytes"] == 128
+        assert snapshot["unknown_tracked_resources"] == 1
+        assert snapshot["resources"][0]["dimensions"] == (8, 4)
+        assert snapshot["resources"][0]["lease_count"] is None
+        assert snapshot["resources"][1]["tracked_bytes"] is None
+        with pytest.raises(TypeError):
+            snapshot["known_tracked_bytes"] = 0
+        with pytest.raises(TypeError):
+            snapshot["resources"][0]["owner"] = "changed"
+
+    def test_release_tracking_never_invokes_cleanup(self, resource_manager):
+        cleanup = MagicMock()
+        resource = MagicMock()
+        resource_id = resource_manager.register(
+            resource, ResourceType.NATIVE_HANDLE, "owner-deleted",
+            cleanup_handler=cleanup, tracked_bytes=64,
+        )
+
+        assert resource_manager.release_tracking(resource_id) is True
+        assert resource_manager.release_tracking(resource_id) is False
+        cleanup.assert_not_called()
+        assert resource_manager.get_accounting_snapshot()["total_resources"] == 0
+
+    def test_cleanup_handler_runs_outside_registry_lock(self, resource_manager):
+        lock_owned_during_cleanup = []
+        resource = MagicMock()
+
+        def cleanup(_resource):
+            lock_owned_during_cleanup.append(resource_manager._lock._is_owned())
+
+        resource_id = resource_manager.register(
+            resource, ResourceType.NATIVE_HANDLE, "gl-like", cleanup_handler=cleanup,
+        )
+        assert resource_manager.unregister(resource_id, force=True) is True
+        assert lock_owned_during_cleanup == [False]
+
+    def test_gl_handle_kind_is_retained_for_aggregate_classification(self, resource_manager):
+        resource_id = resource_manager.register_gl_handle(
+            42,
+            "texture",
+            lambda _handle: None,
+            owner="compositor:1",
+            generation=3,
+            dimensions=(4, 4),
+            format="RGBA8",
+            tracked_bytes=64,
+        )
+
+        resource = next(
+            item
+            for item in resource_manager.get_accounting_snapshot()["resources"]
+            if item["resource_id"] == resource_id
+        )
+        assert resource["gl_handle_type"] == "texture"
+        assert resource["tracked_bytes"] == 64
+        assert resource_manager.release_tracking(resource_id) is True

@@ -164,13 +164,36 @@ def begin_paint_metrics(widget, label: str) -> None:
     )
 
 
-def record_paint_metrics(widget, paint_duration_ms: float) -> None:
+def record_paint_start_metrics(widget, paint_start_ts: float) -> None:
+    """Record paint delivery before the existing pending-update flag is consumed."""
     if not is_perf_metrics_enabled():
         return
     metrics = widget._paint_metrics
     if metrics is None:
         return
-    dt_seconds = metrics.record(paint_duration_ms)
+    metrics.record_paint_start(
+        paint_start_ts,
+        int(getattr(widget, "_transition_animation_generation", 0) or 0),
+    )
+
+
+def record_paint_metrics(
+    widget,
+    paint_duration_ms: float,
+    *,
+    paint_start_ts: Optional[float] = None,
+    paint_end_ts: Optional[float] = None,
+) -> None:
+    if not is_perf_metrics_enabled():
+        return
+    metrics = widget._paint_metrics
+    if metrics is None:
+        return
+    dt_seconds = metrics.record(
+        paint_duration_ms,
+        paint_start_ts=paint_start_ts,
+        paint_end_ts=paint_end_ts,
+    )
     now = time.time()
     stall_context = _get_stall_context(widget)
     active_transition_window = _is_active_transition_paint_window(stall_context)
@@ -209,20 +232,29 @@ def finalize_paint_metrics(widget, outcome: str = "stopped") -> None:
             target_fps = int(getattr(getattr(widget, "_animation_manager", None), "fps", 0) or 0)
         except Exception:
             target_fps = 0
+    timing = metrics.timing_summary()
     logger.info(
         "[PERF] [GL PAINT] %s metrics: screen=%s, frames=%d, avg_fps=%.1f, dt_min=%.2fms, dt_max=%.2fms, "
-        "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, target_fps=%d, outcome=%s",
-        metrics.label.capitalize(),
-        _get_screen_index(widget),
-        metrics.frame_count,
-        avg_fps,
-        min_dt_ms,
-        max_dt_ms,
-        metrics.min_duration_ms,
-        metrics.max_duration_ms,
-        metrics.slow_count,
-        target_fps,
-        outcome,
+        "dur_min=%.2fms, dur_max=%.2fms, slow_frames=%d, target_fps=%d, outcome=%s, "
+        "window_frames=%d, render_requests=%d, skipped_requests=%d, "
+        "request_acceptance_pct=%.2f, last_presented_frame=%d, scene_generation=%d, "
+        "dt_p50_ms=%.2f, dt_p90_ms=%.2f, dt_p95_ms=%.2f, dt_p99_ms=%.2f, dt_max_ms=%.2f, "
+        "dt_over_25_ms=%d, dt_over_33_ms=%d, dt_over_50_ms=%d, dt_over_100_ms=%d, "
+        "paint_p50_ms=%.2f, paint_p90_ms=%.2f, paint_p95_ms=%.2f, paint_p99_ms=%.2f, paint_max_ms=%.2f, "
+        "request_age_p50_ms=%.2f, request_age_p90_ms=%.2f, request_age_p95_ms=%.2f, request_age_p99_ms=%.2f, request_age_max_ms=%.2f",
+        metrics.label.capitalize(), _get_screen_index(widget), metrics.frame_count, avg_fps,
+        min_dt_ms, max_dt_ms, metrics.min_duration_ms, metrics.max_duration_ms,
+        metrics.slow_count, target_fps, outcome, timing["window_frames"], timing["requests"],
+        timing["skipped_requests"], timing["request_acceptance_pct"],
+        timing["last_presented_frame_index"], timing["last_scene_generation"],
+        timing["interval_p50_ms"], timing["interval_p90_ms"],
+        timing["interval_p95_ms"], timing["interval_p99_ms"], timing["interval_max_ms"],
+        timing["interval_over_25_ms"], timing["interval_over_33_ms"],
+        timing["interval_over_50_ms"], timing["interval_over_100_ms"],
+        timing["duration_p50_ms"], timing["duration_p90_ms"], timing["duration_p95_ms"],
+        timing["duration_p99_ms"], timing["duration_max_ms"], timing["request_age_p50_ms"],
+        timing["request_age_p90_ms"], timing["request_age_p95_ms"], timing["request_age_p99_ms"],
+        timing["request_age_max_ms"],
     )
 
 
@@ -234,6 +266,9 @@ def record_render_timer_tick(widget, *, accepted_update: bool = True) -> None:
     metrics = widget._render_timer_metrics
     if metrics is None or not is_perf_metrics_enabled():
         return
+    paint_metrics = getattr(widget, "_paint_metrics", None)
+    if paint_metrics is not None:
+        paint_metrics.record_render_request(accepted_update=accepted_update)
     dt = metrics.record_tick(accepted_update=accepted_update)
     if dt is None:
         return

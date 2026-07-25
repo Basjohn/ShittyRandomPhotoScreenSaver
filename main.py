@@ -24,6 +24,7 @@ from core.logging.logger import (
     setup_logging,
     get_logger,
     get_log_dir,
+    is_perf_metrics_enabled,
 )
 from core.settings.settings_manager import SettingsManager
 from core.animation import AnimationManager
@@ -434,13 +435,28 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
             msg3.exec()
             return run_config(app)
 
+        event_loop_recorder = None
+        if is_perf_metrics_enabled():
+            try:
+                from core.performance.event_loop_recorder import EventLoopStallRecorder
+
+                event_loop_recorder = EventLoopStallRecorder(parent=app)
+                event_loop_recorder.start()
+            except Exception:
+                event_loop_recorder = None
+                logger.exception("[PERF] Failed to start event-loop lateness recorder")
+
         if usage_enabled:
             try:
                 from core.performance.usage_sampler import UsageTelemetryService
+                from core.performance.resource_metrics import collect_resource_accounting
 
                 if engine.thread_manager is None:
                     raise RuntimeError("ThreadManager unavailable after engine start")
-                engine._usage_telemetry = UsageTelemetryService(engine.thread_manager)
+                engine._usage_telemetry = UsageTelemetryService(
+                    engine.thread_manager,
+                    resource_snapshot_provider=lambda: collect_resource_accounting(engine),
+                )
                 if not engine._usage_telemetry.start():
                     raise RuntimeError("usage telemetry declined startup")
             except Exception:
@@ -477,7 +493,14 @@ def run_screensaver(app: QApplication, *, usage_enabled: bool = False) -> int:
 
         logger.info("Screensaver engine started - entering event loop")
         _schedule_runtime_reddit_helper_session(engine)
-        return app.exec()
+        try:
+            return app.exec()
+        finally:
+            if event_loop_recorder is not None:
+                try:
+                    event_loop_recorder.stop()
+                except Exception:
+                    logger.debug("[PERF] Event-loop recorder stop failed", exc_info=True)
         
     except Exception as e:
         logger.exception(f"Failed to start screensaver engine: {e}")

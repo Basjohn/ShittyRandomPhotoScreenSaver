@@ -5,10 +5,25 @@ Caches decoded images to avoid redundant disk I/O and decoding.
 Supports caching of QImage (thread-safe decode) and QPixmap (UI-ready).
 """
 from collections import OrderedDict
+import math
 import threading
+from types import MappingProxyType
 from typing import Optional, Union
 from PySide6.QtGui import QPixmap, QImage
 from core.logging.logger import get_logger, is_verbose_logging
+
+
+def _freeze_snapshot_value(value):
+    """Detach mutable metadata before exposing an immutable snapshot."""
+    if value is None or isinstance(value, (str, int, float, bool, bytes)):
+        return value
+    if isinstance(value, dict):
+        return MappingProxyType({
+            key: _freeze_snapshot_value(item) for key, item in value.items()
+        })
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return tuple(_freeze_snapshot_value(item) for item in value)
+    return repr(value)
 
 logger = get_logger(__name__)
 
@@ -27,7 +42,14 @@ class ImageCache:
       grep for that tag to gate/strip profiling in production builds.
     """
     
-    def __init__(self, max_items: int = 10, max_memory_mb: int = 500):
+    def __init__(
+        self,
+        max_items: int = 10,
+        max_memory_mb: int = 500,
+        *,
+        owner: str = "ImageCache",
+        generation: object = None,
+    ):
         """
         Initialize image cache.
         
@@ -40,6 +62,11 @@ class ImageCache:
         
         self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
         self._current_memory = 0
+        self._tracked_bytes_by_key: dict[str, int] = {}
+        self._resource_metadata_by_key: dict[str, MappingProxyType] = {}
+        self._current_tracked_bytes = 0
+        self._owner = str(owner)
+        self._generation = generation
         # Lightweight telemetry counters for cache profiling.
         self._hit_count: int = 0
         self._miss_count: int = 0
@@ -88,10 +115,24 @@ class ImageCache:
             if key in self._cache:
                 old_img = self._cache.pop(key)
                 self._current_memory -= self._estimate_size(old_img)
+                self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
+                self._resource_metadata_by_key.pop(key, None)
             
             # Add new entry
             self._cache[key] = image
             self._current_memory += self._estimate_size(image)
+            tracked_bytes = self._tracked_size(image)
+            self._tracked_bytes_by_key[key] = tracked_bytes
+            self._resource_metadata_by_key[key] = MappingProxyType({
+                "key": key,
+                "owner": self._owner,
+                "generation": _freeze_snapshot_value(self._generation),
+                "dimensions": (int(image.width()), int(image.height())),
+                "format": self._image_format(image),
+                "tracked_bytes": tracked_bytes,
+                "lease_count": None,
+            })
+            self._current_tracked_bytes += tracked_bytes
             
             # Evict if necessary
             while self._should_evict_locked():
@@ -130,6 +171,8 @@ class ImageCache:
             if key in self._cache:
                 pixmap = self._cache.pop(key)
                 self._current_memory -= self._estimate_size(pixmap)
+                self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
+                self._resource_metadata_by_key.pop(key, None)
                 if is_verbose_logging():
                     logger.debug(f"Removed from cache: {key}")
                 return True
@@ -141,6 +184,9 @@ class ImageCache:
             count = len(self._cache)
             self._cache.clear()
             self._current_memory = 0
+            self._tracked_bytes_by_key.clear()
+            self._resource_metadata_by_key.clear()
+            self._current_tracked_bytes = 0
             logger.info(f"Cache cleared: {count} images removed")
     
     def size(self) -> int:
@@ -158,6 +204,30 @@ class ImageCache:
         with self._lock:
             return self._current_memory / (1024 * 1024)
     
+    def tracked_memory_usage(self) -> int:
+        """Return exact logical bytes tracked for current cache entries."""
+        with self._lock:
+            return self._current_tracked_bytes
+
+    def get_accounting_snapshot(self):
+        """Return an immutable, detached snapshot of logical cache resources."""
+        with self._lock:
+            # All Qt-derived metadata is captured by put() on the caller's
+            # owning thread. Snapshot readers therefore never touch QPixmap
+            # or QImage objects from the background usage sampler.
+            resources = [
+                self._resource_metadata_by_key[key]
+                for key in self._cache
+                if key in self._resource_metadata_by_key
+            ]
+            return MappingProxyType({
+                "owner": self._owner,
+                "generation": _freeze_snapshot_value(self._generation),
+                "total_tracked_bytes": self._current_tracked_bytes,
+                "resource_count": len(resources),
+                "resources": tuple(resources),
+            })
+
     def get_stats(self) -> dict:
         """
         Get cache statistics.
@@ -176,6 +246,7 @@ class ImageCache:
                 'item_count': item_count,
                 'max_items': self.max_items,
                 'memory_usage_mb': memory_mb,
+                'tracked_memory_bytes': self._current_tracked_bytes,
                 'max_memory_mb': max_memory_mb,
                 'utilization_percent': (item_count / self.max_items) * 100 if self.max_items > 0 else 0.0,
                 'hits': self._hit_count,
@@ -195,6 +266,8 @@ class ImageCache:
             return
         key, img = self._cache.popitem(last=False)
         self._current_memory -= self._estimate_size(img)
+        self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
+        self._resource_metadata_by_key.pop(key, None)
         self._evict_count += 1
         if is_verbose_logging():
             logger.debug(f"Evicted from cache: {key}")
@@ -218,6 +291,23 @@ class ImageCache:
         width = image.width()
         height = image.height()
         return width * height * 4
+
+    @staticmethod
+    def _tracked_size(image: Union[QImage, QPixmap]) -> int:
+        """Return exact logical bytes for the supported Qt image type."""
+        if image.isNull():
+            return 0
+        if isinstance(image, QImage):
+            return int(image.sizeInBytes())
+        bytes_per_pixel = math.ceil(max(0, int(image.depth())) / 8)
+        return int(image.width()) * int(image.height()) * bytes_per_pixel
+
+    @staticmethod
+    def _image_format(image: Union[QImage, QPixmap]) -> str:
+        if isinstance(image, QImage):
+            image_format = image.format()
+            return getattr(image_format, "name", str(image_format))
+        return f"QPixmap(depth={int(image.depth())})"
     
     def __len__(self) -> int:
         """Get number of cached images."""

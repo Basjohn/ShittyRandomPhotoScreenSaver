@@ -212,7 +212,8 @@ class TimerRenderStrategy(RenderStrategy):
                     ThreadPoolType.COMPUTE,
                     self._timer_loop,
                     interval_ms,
-                    task_id=f"timer_{id(self)}"
+                    task_id=f"timer_{id(self)}",
+                    category="presentation.render_strategy",
                 )
                 
                 # Register with ResourceManager for cleanup tracking

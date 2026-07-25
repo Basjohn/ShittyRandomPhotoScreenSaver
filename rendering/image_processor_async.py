@@ -98,7 +98,11 @@ class AsyncImageProcessor:
                 image, screen_size, mode, use_lanczos, sharpen
             )
 
-        return thread_manager.submit_compute_task(_do_process, callback=callback)
+        return thread_manager.submit_compute_task(
+            _do_process,
+            callback=callback,
+            category="image.processing",
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers (QImage-based equivalents of ImageProcessor paths)

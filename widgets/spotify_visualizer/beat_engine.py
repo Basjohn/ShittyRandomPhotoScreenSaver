@@ -546,7 +546,11 @@ class _SpotifyBeatEngine(QObject):
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
         try:
-            tm.submit_compute_task(_job, callback=_on_result)
+            tm.submit_compute_task(
+                _job,
+                callback=_on_result,
+                category="visualizer.audio_analysis",
+            )
         except Exception as e:
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             if token == self._compute_gate_token:

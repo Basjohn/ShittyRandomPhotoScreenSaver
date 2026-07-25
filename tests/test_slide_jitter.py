@@ -59,7 +59,15 @@ class _MockThreadManager:
     """Minimal TM mock for adaptive timer."""
     def __init__(self):
         self._threads = []
-    def submit_task(self, pool_type, fn, *, task_id=None):
+    def submit_task(
+        self,
+        pool_type,
+        fn,
+        *,
+        task_id=None,
+        category="uncategorized",
+    ):
+        del pool_type, category
         t = threading.Thread(target=fn, daemon=True, name=task_id or "mock")
         t.start()
         self._threads.append(t)

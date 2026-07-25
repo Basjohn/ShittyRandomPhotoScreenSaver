@@ -410,7 +410,8 @@ class AdaptiveTimerStrategy:
             self._thread_manager.submit_task(
                 ThreadPoolType.COMPUTE,
                 self._timer_loop,
-                task_id=task_id
+                task_id=task_id,
+                category="presentation.adaptive_timer",
             )
             # Store task_id to track if thread is running
             self._task_id = task_id

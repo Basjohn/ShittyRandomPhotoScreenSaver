@@ -48,6 +48,7 @@ class PBOEntry:
     pbo_id: int
     size: int
     in_use: bool = False
+    resource_id: Optional[str] = None
 
 
 class GLTextureManager:
@@ -65,8 +66,10 @@ class GLTextureManager:
     # Cache configuration
     MAX_CACHED_TEXTURES = 12
     
-    def __init__(self):
+    def __init__(self, owner: str = "GLTextureManager", generation: object = None):
         self._initialized: bool = False
+        self._owner = str(owner)
+        self._generation = generation
         
         # Texture cache: pixmap.cacheKey() -> texture_id
         self._texture_cache: Dict[int, int] = {}
@@ -78,6 +81,7 @@ class GLTextureManager:
         
         # PBO pool for async uploads
         self._pbo_pool: List[PBOEntry] = []
+        self._texture_resource_ids: Dict[int, str] = {}
         
     @property
     def old_tex_id(self) -> int:
@@ -233,7 +237,17 @@ class GLTextureManager:
         try:
             from core.resources.manager import ResourceManager
             rm = ResourceManager.get_or_create_app_shared()
-            rm.register_gl_texture(tex_id, description=f"GLTextureManager {w}x{h}")
+            rid = rm.register_gl_texture(
+                tex_id,
+                description=f"GLTextureManager {w}x{h}",
+                owner=self._owner,
+                generation=self._generation,
+                dimensions=(w, h),
+                format="RGBA8",
+                tracked_bytes=w * h * 4,
+            )
+            if rid:
+                self._texture_resource_ids[tex_id] = rid
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
         
@@ -288,6 +302,7 @@ class GLTextureManager:
                     if old_tex:
                         try:
                             gl.glDeleteTextures(int(old_tex))
+                            self._release_texture_tracking(int(old_tex))
                         except Exception:
                             logger.debug("[GL TEXTURE] Failed to delete cached texture %s", 
                                         old_tex, exc_info=True)
@@ -353,13 +368,22 @@ class GLTextureManager:
                 gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
                 gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, required_size, None, gl.GL_STREAM_DRAW)
                 gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, 0)
-                self._pbo_pool.append(PBOEntry(pbo_id, required_size, True))
+                entry = PBOEntry(pbo_id, required_size, True)
+                self._pbo_pool.append(entry)
                 
                 # Register PBO with ResourceManager for VRAM leak prevention
                 try:
                     from core.resources.manager import ResourceManager
                     rm = ResourceManager.get_or_create_app_shared()
-                    rm.register_gl_vbo(pbo_id, description=f"GLTextureManager PBO {required_size}B")
+                    entry.resource_id = rm.register_gl_vbo(
+                        pbo_id,
+                        description=f"GLTextureManager PBO {required_size}B",
+                        owner=self._owner,
+                        generation=self._generation,
+                        dimensions=None,
+                        format="PIXEL_UNPACK_BUFFER",
+                        tracked_bytes=required_size,
+                    )
                 except Exception as e:
                     logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical
                 
@@ -382,6 +406,7 @@ class GLTextureManager:
         for entry in self._pbo_pool:
             try:
                 gl.glDeleteBuffers(1, [entry.pbo_id])
+                self._release_resource_tracking(entry.resource_id)
             except Exception as e:
                 logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         self._pbo_pool.clear()
@@ -400,6 +425,8 @@ class GLTextureManager:
             if ids:
                 arr = (ctypes.c_uint * len(ids))(*ids)
                 gl.glDeleteTextures(len(ids), arr)
+                for tex_id in ids:
+                    self._release_texture_tracking(tex_id)
         except Exception:
             logger.debug("[GL TEXTURE] Failed to delete cached textures", exc_info=True)
         
@@ -412,3 +439,19 @@ class GLTextureManager:
         self.cleanup_cache()
         self._cleanup_pbo_pool()
         self._initialized = False
+
+    def _release_texture_tracking(self, texture_id: int) -> None:
+        resource_id = self._texture_resource_ids.pop(int(texture_id), None)
+        self._release_resource_tracking(resource_id)
+
+    @staticmethod
+    def _release_resource_tracking(resource_id: Optional[str]) -> None:
+        if not resource_id:
+            return
+        try:
+            from core.resources.manager import ResourceManager
+            manager = ResourceManager.get_app_shared()
+            if manager is not None:
+                manager.release_tracking(resource_id)
+        except Exception as e:
+            logger.debug("[GL TEXTURE] Failed to release resource tracking: %s", e)
