@@ -1,0 +1,4396 @@
+{
+  "active_plateaus": [
+    [
+      6,
+      8332800,
+      2,
+      1,
+      2
+    ],
+    [
+      6,
+      14786560,
+      2,
+      1,
+      2
+    ]
+  ],
+  "coverage": {
+    "active_transition": true,
+    "bubble": true,
+    "in_flight_decode": true,
+    "resolution_change": true,
+    "sleep_wake": "unsupported_in_deterministic_headless_harness",
+    "spectrum": true
+  },
+  "cycles": [
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1000,
+      "cycle": 1,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 1,
+      "old_generation": 0,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1001,
+      "cycle": 2,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 2,
+      "old_generation": 1,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1002,
+      "cycle": 3,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 3,
+      "old_generation": 2,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1003,
+      "cycle": 4,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 4,
+      "old_generation": 3,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1004,
+      "cycle": 5,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 5,
+      "old_generation": 4,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1005,
+      "cycle": 6,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 6,
+      "old_generation": 5,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1006,
+      "cycle": 7,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 7,
+      "old_generation": 6,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1007,
+      "cycle": 8,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 8,
+      "old_generation": 7,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1008,
+      "cycle": 9,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 9,
+      "old_generation": 8,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1009,
+      "cycle": 10,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 10,
+      "old_generation": 9,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1010,
+      "cycle": 11,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 11,
+      "old_generation": 10,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1011,
+      "cycle": 12,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 12,
+      "old_generation": 11,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1012,
+      "cycle": 13,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 13,
+      "old_generation": 12,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1013,
+      "cycle": 14,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 14,
+      "old_generation": 13,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1014,
+      "cycle": 15,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 15,
+      "old_generation": 14,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1015,
+      "cycle": 16,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 16,
+      "old_generation": 15,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1016,
+      "cycle": 17,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 17,
+      "old_generation": 16,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1017,
+      "cycle": 18,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 18,
+      "old_generation": 17,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1018,
+      "cycle": 19,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 19,
+      "old_generation": 18,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1019,
+      "cycle": 20,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 20,
+      "old_generation": 19,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1020,
+      "cycle": 21,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 21,
+      "old_generation": 20,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1021,
+      "cycle": 22,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 22,
+      "old_generation": 21,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1022,
+      "cycle": 23,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 23,
+      "old_generation": 22,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1023,
+      "cycle": 24,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 24,
+      "old_generation": 23,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1024,
+      "cycle": 25,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 25,
+      "old_generation": 24,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1025,
+      "cycle": 26,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 26,
+      "old_generation": 25,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1026,
+      "cycle": 27,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 27,
+      "old_generation": 26,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1027,
+      "cycle": 28,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 28,
+      "old_generation": 27,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1028,
+      "cycle": 29,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 29,
+      "old_generation": 28,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1029,
+      "cycle": 30,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 30,
+      "old_generation": 29,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1030,
+      "cycle": 31,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 31,
+      "old_generation": 30,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1031,
+      "cycle": 32,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 32,
+      "old_generation": 31,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1032,
+      "cycle": 33,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 33,
+      "old_generation": 32,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1033,
+      "cycle": 34,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 34,
+      "old_generation": 33,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1034,
+      "cycle": 35,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 35,
+      "old_generation": 34,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1035,
+      "cycle": 36,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 36,
+      "old_generation": 35,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1036,
+      "cycle": 37,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 37,
+      "old_generation": 36,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1037,
+      "cycle": 38,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 38,
+      "old_generation": 37,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1038,
+      "cycle": 39,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 39,
+      "old_generation": 38,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1039,
+      "cycle": 40,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 40,
+      "old_generation": 39,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1040,
+      "cycle": 41,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 41,
+      "old_generation": 40,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1041,
+      "cycle": 42,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 42,
+      "old_generation": 41,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1042,
+      "cycle": 43,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 43,
+      "old_generation": 42,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1043,
+      "cycle": 44,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 44,
+      "old_generation": 43,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1044,
+      "cycle": 45,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 45,
+      "old_generation": 44,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1045,
+      "cycle": 46,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 46,
+      "old_generation": 45,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1046,
+      "cycle": 47,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 47,
+      "old_generation": 46,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1047,
+      "cycle": 48,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 48,
+      "old_generation": 47,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1048,
+      "cycle": 49,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 49,
+      "old_generation": 48,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1049,
+      "cycle": 50,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 50,
+      "old_generation": 49,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "settings",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1050,
+      "cycle": 1,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 51,
+      "old_generation": 50,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1051,
+      "cycle": 2,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 52,
+      "old_generation": 51,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1052,
+      "cycle": 3,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 53,
+      "old_generation": 52,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1053,
+      "cycle": 4,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 54,
+      "old_generation": 53,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1054,
+      "cycle": 5,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 55,
+      "old_generation": 54,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1055,
+      "cycle": 6,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 56,
+      "old_generation": 55,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1056,
+      "cycle": 7,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 57,
+      "old_generation": 56,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1057,
+      "cycle": 8,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 58,
+      "old_generation": 57,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1058,
+      "cycle": 9,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 59,
+      "old_generation": 58,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1059,
+      "cycle": 10,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 60,
+      "old_generation": 59,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1060,
+      "cycle": 11,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 61,
+      "old_generation": 60,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1061,
+      "cycle": 12,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 62,
+      "old_generation": 61,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1062,
+      "cycle": 13,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 63,
+      "old_generation": 62,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1063,
+      "cycle": 14,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 64,
+      "old_generation": 63,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1064,
+      "cycle": 15,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 65,
+      "old_generation": 64,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1065,
+      "cycle": 16,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 66,
+      "old_generation": 65,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1066,
+      "cycle": 17,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 67,
+      "old_generation": 66,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1067,
+      "cycle": 18,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 68,
+      "old_generation": 67,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1068,
+      "cycle": 19,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 69,
+      "old_generation": 68,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1069,
+      "cycle": 20,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 70,
+      "old_generation": 69,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1070,
+      "cycle": 21,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 71,
+      "old_generation": 70,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1071,
+      "cycle": 22,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 72,
+      "old_generation": 71,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1072,
+      "cycle": 23,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 73,
+      "old_generation": 72,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1073,
+      "cycle": 24,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 74,
+      "old_generation": 73,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1074,
+      "cycle": 25,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 75,
+      "old_generation": 74,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1075,
+      "cycle": 26,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 76,
+      "old_generation": 75,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1076,
+      "cycle": 27,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 77,
+      "old_generation": 76,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1077,
+      "cycle": 28,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 78,
+      "old_generation": 77,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1078,
+      "cycle": 29,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 79,
+      "old_generation": 78,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1079,
+      "cycle": 30,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 80,
+      "old_generation": 79,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1080,
+      "cycle": 31,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 81,
+      "old_generation": 80,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1081,
+      "cycle": 32,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 82,
+      "old_generation": 81,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1082,
+      "cycle": 33,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 83,
+      "old_generation": 82,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1083,
+      "cycle": 34,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 84,
+      "old_generation": 83,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1084,
+      "cycle": 35,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 85,
+      "old_generation": 84,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1085,
+      "cycle": 36,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 86,
+      "old_generation": 85,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1086,
+      "cycle": 37,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 87,
+      "old_generation": 86,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1087,
+      "cycle": 38,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 88,
+      "old_generation": 87,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1088,
+      "cycle": 39,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 89,
+      "old_generation": 88,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1089,
+      "cycle": 40,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 90,
+      "old_generation": 89,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1090,
+      "cycle": 41,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 91,
+      "old_generation": 90,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1091,
+      "cycle": 42,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 92,
+      "old_generation": 91,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1092,
+      "cycle": 43,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 93,
+      "old_generation": 92,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1093,
+      "cycle": 44,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 94,
+      "old_generation": 93,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1094,
+      "cycle": 45,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 95,
+      "old_generation": 94,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1095,
+      "cycle": 46,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 96,
+      "old_generation": 95,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1096,
+      "cycle": 47,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 97,
+      "old_generation": 96,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1097,
+      "cycle": 48,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 98,
+      "old_generation": 97,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1098,
+      "cycle": 49,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 99,
+      "old_generation": 98,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1099,
+      "cycle": 50,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 100,
+      "old_generation": 99,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "edit",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1100,
+      "cycle": 1,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 101,
+      "old_generation": 100,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1101,
+      "cycle": 2,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 102,
+      "old_generation": 101,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1102,
+      "cycle": 3,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 103,
+      "old_generation": 102,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1103,
+      "cycle": 4,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 104,
+      "old_generation": 103,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1104,
+      "cycle": 5,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 105,
+      "old_generation": 104,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1105,
+      "cycle": 6,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 106,
+      "old_generation": 105,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1106,
+      "cycle": 7,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 107,
+      "old_generation": 106,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1107,
+      "cycle": 8,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 108,
+      "old_generation": 107,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1108,
+      "cycle": 9,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 109,
+      "old_generation": 108,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1109,
+      "cycle": 10,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 110,
+      "old_generation": 109,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1110,
+      "cycle": 11,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 111,
+      "old_generation": 110,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1111,
+      "cycle": 12,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 112,
+      "old_generation": 111,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1112,
+      "cycle": 13,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 113,
+      "old_generation": 112,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1113,
+      "cycle": 14,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 114,
+      "old_generation": 113,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1114,
+      "cycle": 15,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 115,
+      "old_generation": 114,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1115,
+      "cycle": 16,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 116,
+      "old_generation": 115,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1116,
+      "cycle": 17,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 117,
+      "old_generation": 116,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1117,
+      "cycle": 18,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 118,
+      "old_generation": 117,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1118,
+      "cycle": 19,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 119,
+      "old_generation": 118,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1119,
+      "cycle": 20,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 120,
+      "old_generation": 119,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1120,
+      "cycle": 21,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 121,
+      "old_generation": 120,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1121,
+      "cycle": 22,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 122,
+      "old_generation": 121,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1122,
+      "cycle": 23,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 123,
+      "old_generation": 122,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1123,
+      "cycle": 24,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 124,
+      "old_generation": 123,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 8332800,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1124,
+      "cycle": 25,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 125,
+      "old_generation": 124,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1125,
+      "cycle": 26,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 126,
+      "old_generation": 125,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1126,
+      "cycle": 27,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 127,
+      "old_generation": 126,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1127,
+      "cycle": 28,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 128,
+      "old_generation": 127,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1128,
+      "cycle": 29,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 129,
+      "old_generation": 128,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1129,
+      "cycle": 30,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 130,
+      "old_generation": 129,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1130,
+      "cycle": 31,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 131,
+      "old_generation": 130,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1131,
+      "cycle": 32,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 132,
+      "old_generation": 131,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1132,
+      "cycle": 33,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 133,
+      "old_generation": 132,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1133,
+      "cycle": 34,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 134,
+      "old_generation": 133,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1134,
+      "cycle": 35,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 135,
+      "old_generation": 134,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1135,
+      "cycle": 36,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 136,
+      "old_generation": 135,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1136,
+      "cycle": 37,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 137,
+      "old_generation": 136,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1137,
+      "cycle": 38,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 138,
+      "old_generation": 137,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1138,
+      "cycle": 39,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 139,
+      "old_generation": 138,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1139,
+      "cycle": 40,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 140,
+      "old_generation": 139,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1140,
+      "cycle": 41,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 141,
+      "old_generation": 140,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1141,
+      "cycle": 42,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 142,
+      "old_generation": 141,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1142,
+      "cycle": 43,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 143,
+      "old_generation": 142,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1143,
+      "cycle": 44,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 144,
+      "old_generation": 143,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1144,
+      "cycle": 45,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 145,
+      "old_generation": 144,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1145,
+      "cycle": 46,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 146,
+      "old_generation": 145,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1146,
+      "cycle": 47,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 147,
+      "old_generation": 146,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1147,
+      "cycle": 48,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 148,
+      "old_generation": 147,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1148,
+      "cycle": 49,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "spectrum",
+      "new_generation": 149,
+      "old_generation": 148,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    },
+    {
+      "active_counts": {
+        "callbacks": 2,
+        "gl_bytes": 14786560,
+        "gl_resources": 6,
+        "timers": 2,
+        "workers": 1
+      },
+      "active_transition": true,
+      "context_id": 1149,
+      "cycle": 50,
+      "errors": [],
+      "in_flight_decode": true,
+      "mode": "bubble",
+      "new_generation": 150,
+      "old_generation": 149,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "scenario": "mixed",
+      "stopped_counts": {
+        "callbacks": 0,
+        "gl_bytes": 0,
+        "gl_resources": 0,
+        "timers": 0,
+        "workers": 0
+      }
+    }
+  ],
+  "cycles_per_scenario": 50,
+  "errors": [],
+  "pass_criteria": {
+    "all_stale_callbacks_rejected": true,
+    "no_timer_worker_callback_growth": true,
+    "valid_teardown_order": true,
+    "zero_cross_thread_gl": true,
+    "zero_old_generation_resources": true,
+    "zero_stale_publications": true
+  },
+  "scenarios": {
+    "edit": 50,
+    "mixed": 50,
+    "settings": 50
+  },
+  "schema_version": 1,
+  "stale_rejections": 150,
+  "total_cycles": 150
+}

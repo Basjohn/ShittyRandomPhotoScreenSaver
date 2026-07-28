@@ -10,6 +10,7 @@ import ctypes
 import sys
 import time
 from typing import TYPE_CHECKING
+from PySide6.QtCore import QCoreApplication, QThread
 from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
 
 try:
@@ -55,19 +56,29 @@ def _qt_object_is_valid(obj: object | None) -> bool:
 
 
 def _schedule_deferred_gl_warmup(widget, callback, *, delay_ms: int = 140) -> None:
-    """Schedule non-critical GL warmup through the managed delayed-work seam."""
+    """Schedule warmup owned by the compositor lifecycle that requested it."""
+    lifecycle_generation = int(getattr(widget, "_gl_lifecycle_generation", 0))
 
-    def _run(w=widget) -> None:
+    def _run(w=widget, expected_generation=lifecycle_generation) -> None:
         if not _qt_object_is_valid(w):
             logger.warning(
                 "[GL COMPOSITOR][WARNING] Skipped deferred GL warmup for deleted widget callback=%s",
                 getattr(callback, "__name__", repr(callback)),
             )
             return
+        if (
+            bool(getattr(w, "_render_shutdown_requested", False))
+            or int(getattr(w, "_gl_lifecycle_generation", 0)) != expected_generation
+        ):
+            logger.info(
+                "[LIFECYCLE] Rejected stale deferred GL warmup callback=%s generation=%d",
+                getattr(callback, "__name__", repr(callback)),
+                expected_generation,
+            )
+            return
         callback(w)
 
     ThreadManager.single_shot(max(0, int(delay_ms)), _run)
-
 
 def _wgl_proc_address(name: str) -> int | None:
     if sys.platform != "win32":
@@ -689,87 +700,172 @@ def init_gl_pipeline(widget) -> None:
         widget._gl_disabled_for_session = True
         widget._use_shaders = False
 
+def gl_pipeline_has_live_resources(widget) -> bool:
+    """Return whether this compositor still owns deletable GL objects."""
+    pipeline = getattr(widget, "_gl_pipeline", None)
+    if pipeline is not None:
+        if bool(getattr(pipeline, "initialized", False)):
+            return True
+        resource_attrs = (
+            "basic_program", "raindrops_program", "warp_program",
+            "diffuse_program", "blockflip_program", "crossfade_program",
+            "slide_program", "wipe_program", "blinds_program",
+            "crumble_program", "particle_program", "burn_program",
+            "quad_vbo", "box_vbo", "quad_vao", "box_vao",
+        )
+        if any(int(getattr(pipeline, attr, 0) or 0) for attr in resource_attrs):
+            return True
+
+    manager = getattr(widget, "_texture_manager", None)
+    if manager is not None:
+        if bool(getattr(manager, "_initialized", False)):
+            return True
+        if int(getattr(manager, "_old_tex_id", 0) or 0):
+            return True
+        if int(getattr(manager, "_new_tex_id", 0) or 0):
+            return True
+        if getattr(manager, "_texture_cache", None):
+            return True
+        if getattr(manager, "_pbo_pool", None):
+            return True
+        if getattr(manager, "_texture_resource_ids", None):
+            return True
+    return False
+
+
 def cleanup_gl_pipeline(widget) -> None:
-    if gl is None or widget._gl_pipeline is None:
+    """Delete all live GL objects while the widget context is current."""
+    live_resources = gl_pipeline_has_live_resources(widget)
+    if widget._gl_pipeline is None and not live_resources:
         _cleanup_deferred_warmup_resources(widget)
         return
-    try:
-        widget._startup_transition_warm_queue = []
-        widget._startup_transition_resource_warm_queue = []
-        widget._startup_transition_resource_warm_types = set()
-    except Exception:
-        pass
-
-    try:
-        is_valid = getattr(widget, "isValid", None)
-        if callable(is_valid) and not is_valid():
-            widget._reset_pipeline_state()
-            return
-    except Exception as e:
-        logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-
-    try:
-        widget.makeCurrent()
-    except Exception as e:
-        logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
-        widget._reset_pipeline_state()
+    if gl is None:
+        if live_resources:
+            raise RuntimeError("Cannot delete live GL resources: PyOpenGL is unavailable")
+        _cleanup_deferred_warmup_resources(widget)
         return
 
+    widget._startup_transition_warm_queue = []
+    widget._startup_transition_resource_warm_queue = []
+    widget._startup_transition_resource_warm_types = set()
+
+    is_valid = getattr(widget, "isValid", None)
+    if callable(is_valid) and not is_valid():
+        if live_resources:
+            raise RuntimeError("Cannot delete live GL resources: compositor context is invalid")
+        widget._reset_pipeline_state()
+        _cleanup_deferred_warmup_resources(widget)
+        return
+
+    application = QCoreApplication.instance()
+    if application is not None and QThread.currentThread() is not application.thread():
+        raise RuntimeError(
+            "Cross-thread GL teardown rejected: compositor cleanup must run on the GUI thread"
+        )
     try:
-        # Clean up textures via texture manager
-        try:
-            if widget._texture_manager is not None:
-                widget._texture_manager.cleanup()
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to cleanup texture manager", exc_info=True)
+        widget.makeCurrent()
+    except Exception as exc:
+        if live_resources:
+            raise RuntimeError(
+                "Cannot delete live GL resources: makeCurrent() failed"
+            ) from exc
+        widget._reset_pipeline_state()
+        _cleanup_deferred_warmup_resources(widget)
+        return
 
-        # Delete shader programs
-        program_attrs = [
-            "basic_program", "raindrops_program", "warp_program", "diffuse_program",
-            "blockflip_program", "crossfade_program", "slide_program",
-            "wipe_program", "blinds_program", "crumble_program", "particle_program", "burn_program",
-        ]
+    context_getter = getattr(widget, "context", None)
+    expected_context = context_getter() if callable(context_getter) else None
+    current_context = QOpenGLContext.currentContext()
+    if expected_context is not None and current_context != expected_context:
         try:
-            for attr in program_attrs:
-                prog_id = getattr(widget._gl_pipeline, attr, 0)
-                if prog_id:
-                    gl.glDeleteProgram(int(prog_id))
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to delete shader program", exc_info=True)
+            widget.doneCurrent()
+        finally:
+            raise RuntimeError(
+                "Cannot delete live GL resources: compositor context did not become current"
+            )
 
-        # Delete geometry buffers
-        try:
-            for vbo_attr in ["quad_vbo", "box_vbo"]:
-                vbo_id = getattr(widget._gl_pipeline, vbo_attr, 0)
-                if vbo_id:
-                    buf = (ctypes.c_uint * 1)(int(vbo_id))
-                    gl.glDeleteBuffers(1, buf)
-                    manager = widget._geometry_manager
-                    if manager is not None:
-                        rid_attr = f"_{vbo_attr}_rid"
-                        manager._release_resource_tracking(getattr(manager, rid_attr, None))
-                        setattr(manager, rid_attr, None)
-            for vao_attr in ["quad_vao", "box_vao"]:
-                vao_id = getattr(widget._gl_pipeline, vao_attr, 0)
-                if vao_id:
-                    arr = (ctypes.c_uint * 1)(int(vao_id))
-                    gl.glDeleteVertexArrays(1, arr)
-                    manager = widget._geometry_manager
-                    if manager is not None:
-                        rid_attr = f"_{vao_attr}_rid"
-                        manager._release_resource_tracking(getattr(manager, rid_attr, None))
-                        setattr(manager, rid_attr, None)
-        except Exception:
-            logger.debug("[GL COMPOSITOR] Failed to delete geometry buffers", exc_info=True)
+    cleanup_errors: list[str] = []
+    try:
+        manager = getattr(widget, "_texture_manager", None)
+        if manager is not None:
+            try:
+                manager.cleanup(strict=True)
+            except Exception as exc:
+                cleanup_errors.append(f"textures:{type(exc).__name__}:{exc}")
 
+        pipeline = widget._gl_pipeline
+        program_attrs = (
+            "basic_program", "raindrops_program", "warp_program",
+            "diffuse_program", "blockflip_program", "crossfade_program",
+            "slide_program", "wipe_program", "blinds_program",
+            "crumble_program", "particle_program", "burn_program",
+        )
+        for attr in program_attrs:
+            program_id = int(getattr(pipeline, attr, 0) or 0)
+            if not program_id:
+                continue
+            try:
+                gl.glDeleteProgram(program_id)
+                setattr(pipeline, attr, 0)
+            except Exception as exc:
+                cleanup_errors.append(
+                    f"program:{attr}:{type(exc).__name__}:{exc}"
+                )
+
+        geometry_manager = getattr(widget, "_geometry_manager", None)
+        for attr in ("quad_vbo", "box_vbo"):
+            buffer_id = int(getattr(pipeline, attr, 0) or 0)
+            if not buffer_id:
+                continue
+            try:
+                gl.glDeleteBuffers(1, (ctypes.c_uint * 1)(buffer_id))
+                setattr(pipeline, attr, 0)
+                if geometry_manager is not None:
+                    rid_attr = f"_{attr}_rid"
+                    geometry_manager._release_resource_tracking(
+                        getattr(geometry_manager, rid_attr, None)
+                    )
+                    setattr(geometry_manager, rid_attr, None)
+            except Exception as exc:
+                cleanup_errors.append(
+                    f"buffer:{attr}:{type(exc).__name__}:{exc}"
+                )
+
+        for attr in ("quad_vao", "box_vao"):
+            vao_id = int(getattr(pipeline, attr, 0) or 0)
+            if not vao_id:
+                continue
+            try:
+                gl.glDeleteVertexArrays(1, (ctypes.c_uint * 1)(vao_id))
+                setattr(pipeline, attr, 0)
+                if geometry_manager is not None:
+                    rid_attr = f"_{attr}_rid"
+                    geometry_manager._release_resource_tracking(
+                        getattr(geometry_manager, rid_attr, None)
+                    )
+                    setattr(geometry_manager, rid_attr, None)
+            except Exception as exc:
+                cleanup_errors.append(
+                    f"vertex_array:{attr}:{type(exc).__name__}:{exc}"
+                )
+
+        if cleanup_errors:
+            raise RuntimeError(
+                "GL resource deletion incomplete: " + " | ".join(cleanup_errors)
+            )
         widget._reset_pipeline_state()
     finally:
         try:
             widget.doneCurrent()
-        except Exception as e:
-            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+        except Exception as exc:
+            if not cleanup_errors:
+                cleanup_errors.append(f"doneCurrent:{type(exc).__name__}:{exc}")
         _cleanup_deferred_warmup_resources(widget)
 
+    if cleanup_errors:
+        raise RuntimeError(
+            "GL context release incomplete: " + " | ".join(cleanup_errors)
+        )
 
 def _cleanup_deferred_warmup_resources(widget) -> None:
     context = getattr(widget, "_deferred_warmup_context", None)

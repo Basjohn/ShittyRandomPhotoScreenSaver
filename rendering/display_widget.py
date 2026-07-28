@@ -244,6 +244,7 @@ class DisplayWidget(QWidget):
         self._transition_fallback_type: str = "Crossfade"
         self._transition_random_enabled: bool = False
         self._settings_listener_connected: bool = False
+        self._runtime_cleanup_complete: bool = False
         self._settings_refresh_handler_ids: set[str] = set()
         self.current_pixmap: Optional[QPixmap] = None
         self.current_image_path: Optional[str] = None
@@ -1171,16 +1172,25 @@ class DisplayWidget(QWidget):
         finally:
             self._render_surface = None
 
-    def _cleanup_widget(self) -> None:
-        """Delegates to rendering.display_gl_init."""
+    def _cleanup_widget(
+        self,
+        attr_name: str,
+        tag: str,
+        stop_method: str = "cleanup",
+    ) -> None:
+        """Clean one legacy overlay attribute through the shared helper."""
         from rendering.display_gl_init import cleanup_widget
-        cleanup_widget(self)
+        cleanup_widget(self, attr_name, tag, stop_method)
+
+    def cleanup_runtime(self, reason: str = "explicit") -> None:
+        """Synchronously tear down this display while GL ownership is valid."""
+        from rendering.display_cleanup import cleanup_runtime
+        cleanup_runtime(self, reason=reason)
 
     def _on_destroyed(self, *_args) -> None:
-        """Delegates to rendering.display_cleanup."""
+        """Residual QObject destruction safety net."""
         from rendering.display_cleanup import on_destroyed
         on_destroyed(self, *_args)
-
     def _update_backend_fallback_overlay(self) -> None:
         """Show or hide diagnostic overlay based on backend selection state."""
 
@@ -1512,11 +1522,6 @@ class DisplayWidget(QWidget):
                 logger.debug("[LIFECYCLE] WidgetManager cleanup failed", exc_info=True)
         
         super().closeEvent(event)
-
-    def _on_destroyed(self) -> None:
-        """Delegates to rendering.display_gl_init."""
-        from rendering.display_gl_init import on_destroyed
-        on_destroyed(self)
 
     def _resolve_media_widget_for_transport(self) -> Optional[MediaWidget]:
         """Return the best media widget candidate across active displays."""

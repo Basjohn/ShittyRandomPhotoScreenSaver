@@ -183,31 +183,21 @@ def ensure_gl_compositor(widget) -> None:
             logger.debug("[GL COMPOSITOR] Failed to update compositor geometry", exc_info=True)
 
 def cleanup_widget(widget, attr_name: str, tag: str, stop_method: str = "cleanup") -> None:
-    """Helper to safely cleanup a widget attribute.
-    
-    Args:
-        attr_name: Name of the widget attribute (e.g., "media_widget")
-        tag: Log tag for debug messages (e.g., "MEDIA")
-        stop_method: Method to call for cleanup ("cleanup", "stop", or None)
-    """
+    """Stop and detach one legacy overlay attribute from its DisplayWidget."""
     try:
-        widget = getattr(widget, attr_name, None)
-        if widget is None:
+        child = getattr(widget, attr_name, None)
+        if child is None:
             return
         if stop_method:
-            method = getattr(widget, stop_method, None)
+            method = getattr(child, stop_method, None)
             if callable(method):
-                try:
-                    method()
-                except Exception as e:
-                    logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        try:
-            widget.hide()
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+                method()
+        hide = getattr(child, "hide", None)
+        if callable(hide):
+            hide()
         setattr(widget, attr_name, None)
-    except Exception as e:
-        logger.debug("[%s] Failed to cleanup in _on_destroyed: %s", tag, e, exc_info=True)
+    except Exception as exc:
+        logger.debug("[%s] Legacy widget cleanup failed: %s", tag, exc, exc_info=True)
 
 def on_destroyed(widget) -> None:
     """Cleanup when widget is destroyed."""

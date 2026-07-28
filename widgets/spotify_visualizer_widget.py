@@ -1585,7 +1585,14 @@ class SpotifyVisualizerWidget(QWidget):
         stop_legacy(self)
 
     def cleanup(self) -> None:
+        """Release logical producers and parent-owned visualizer GL resources."""
         self.stop()
+        try:
+            self.detach_from_animation_manager()
+        except Exception:
+            logger.debug("[SPOTIFY_VIS] Cleanup animation detach failed", exc_info=True)
+        self._engine = None
+        self._destroy_parent_overlay(reason="widget_cleanup")
 
     # ------------------------------------------------------------------
     # UI and painting

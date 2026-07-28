@@ -66,8 +66,10 @@ Do not read every document by default.
 | Domain | Primary owner/location |
 |---|---|
 | Runtime sequencing | `engine/screensaver_engine.py` |
+| Full runtime teardown | `engine/engine_lifecycle.py::teardown_display_runtime` |
 | Display topology/lifecycle | `engine/display_manager.py` |
 | Fullscreen presenter | `rendering/display_widget.py` |
+| Display-local ordered teardown | `rendering/display_cleanup.py::cleanup_runtime` |
 | Display setup | existing modules under `rendering/display_*` |
 | Widget lifecycle | `rendering/widget_manager.py` |
 | Widget setup | `rendering/widget_setup_all.py` |
@@ -126,6 +128,7 @@ donor:           7376bb9bb380253f3bd14079e65d7bdbca062fad
 evidence:        logs/evidence_chest/
 Phase 1 report:  Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
 Phase 2 report:  Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
+Phase 3 report:  Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
 ```
 
 Read `Docs/Compositor_Architecture.md`.
@@ -139,6 +142,7 @@ Read `Docs/Compositor_Architecture.md`.
 | `Docs/TestSuite.md` | Test selection and gates |
 | `Docs/Harness_Index.md` | Focused recurring commands |
 | `tools/visualizer_replay.py` | Deterministic visualizer replay, protected golden verification, and review artifacts |
+| `tools/phase3_lifecycle_harness.py` | Deterministic 50/50/50 full-teardown, generation, callback, and resource plateau gate |
 
 ## Navigation Rule
 

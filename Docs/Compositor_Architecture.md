@@ -272,6 +272,15 @@ Default lifecycle:
 11. create new runtime/context generation;
 12. reconnect and restart.
 
+Phase 3 implementation boundary (2026-07-28):
+
+- `engine.engine_lifecycle.teardown_display_runtime()` is the coordinator-owned full-stop seam;
+- `DisplayManager.cleanup()` retains any display whose explicit cleanup fails;
+- `DisplayWidget.cleanup_runtime()` stops child producers and visualizer overlays before compositor deletion;
+- `GLCompositorWidget.cleanup()` verifies GUI thread/current context and reports `DESTROYED` only after strict texture/PBO/program/buffer deletion;
+- deferred GL warmups are compositor-lifecycle-generation guarded;
+- engine delayed/image callbacks require runtime generation plus exact display-manager identity.
+
 Partial reinitialization is deferred until a separately approved design proves it safe and worthwhile.
 
 ## 12. Image and Upload Path

@@ -117,6 +117,10 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Compositor/surface destruction occurs after child/native resource cleanup.
 - Late worker results are rejected by lifetime generation.
 - Partial GL reinitialization is not part of the stable architecture unless separately designed and approved.
+- Settings and committed CUSTOM Edit perform full display teardown before dialog/reload work and build a fresh `DisplayManager` afterward.
+- Delayed GUI/worker publication is valid only when both the engine runtime generation and exact owning `DisplayManager` still match.
+- `DisplayWidget.cleanup_runtime()` is the normal synchronous owner; `QObject.destroyed` is only a residual safety net.
+- A compositor remains `DESTROYING` and retains failed resource ownership when context acquisition or GL deletion cannot be proved.
 - Correctness never depends on optional deferred warmup.
 
 ## 7. CPU and Threading Contract

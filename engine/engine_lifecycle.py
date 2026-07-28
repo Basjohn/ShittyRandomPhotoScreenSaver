@@ -58,6 +58,72 @@ def stop_qtimer_safe(
 
 
 # ------------------------------------------------------------------
+# Display runtime teardown
+# ------------------------------------------------------------------
+
+def teardown_display_runtime(
+    engine: ScreensaverEngine,
+    *,
+    reason: str,
+) -> None:
+    """Synchronously destroy one display runtime before reconfiguration."""
+    manager = getattr(engine, "display_manager", None)
+    if manager is None:
+        engine._display_initialized = False
+        return
+
+    try:
+        display_count = manager.get_display_count()
+    except Exception:
+        display_count = len(getattr(manager, "displays", []))
+    logger.info(
+        "[LIFECYCLE] Full display teardown started reason=%s count=%d",
+        reason,
+        display_count,
+    )
+
+    if is_perf_metrics_enabled():
+        states = []
+        for display in getattr(manager, "displays", []):
+            describe = getattr(display, "describe_runtime_state", None)
+            if callable(describe):
+                states.append(describe())
+        logger.info(
+            "[PERF][ENGINE] pre_teardown_display_states reason=%s count=%d states=%s",
+            reason,
+            display_count,
+            states,
+        )
+
+    quiesce = getattr(manager, "quiesce_all", None)
+    if callable(quiesce):
+        quiesce()
+    clear = getattr(manager, "clear_all", None)
+    if callable(clear):
+        clear()
+
+    cleanup_manager = getattr(manager, "cleanup", None)
+    if not callable(cleanup_manager):
+        raise RuntimeError("DisplayManager has no cleanup() contract")
+    cleanup_manager()
+
+    flush_urls = getattr(manager, "flush_deferred_reddit_urls", None)
+    if callable(flush_urls):
+        flush_urls(ensure_widgets_dismissed=True)
+
+    if getattr(engine, "display_manager", None) is manager:
+        engine.display_manager = None
+    engine._display_initialized = False
+    engine._display_initializing = False
+    engine._pending_displays_ready_generation = None
+    engine._loading_in_progress = False
+    logger.info(
+        "[LIFECYCLE] Full display teardown complete reason=%s generation=%s",
+        reason,
+        getattr(engine, "_runtime_generation", "unknown"),
+    )
+
+# ------------------------------------------------------------------
 # Engine stop
 # ------------------------------------------------------------------
 
@@ -75,9 +141,13 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
     """
     from engine.screensaver_engine import EngineState
 
-    # Check if running (using property)
-    if not engine._running:
-        logger.debug("Engine not running")
+    current_state = engine._get_state()
+    if not bool(getattr(engine, "_running", False)) and current_state not in {
+        EngineState.RUNNING,
+        EngineState.STARTING,
+        EngineState.REINITIALIZING,
+    }:
+        logger.debug("Engine stop ignored in state=%s", current_state.name)
         return
 
     # Determine target state based on exit_app
@@ -93,6 +163,17 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
         # Force transition anyway for safety
         with engine._state_lock:
             engine._state = target_state
+
+    advance_generation = getattr(engine, "_advance_runtime_generation", None)
+    if callable(advance_generation):
+        advance_generation(
+            "application_exit" if exit_app else "runtime_reconfiguration"
+        )
+    else:
+        engine._runtime_generation = int(getattr(engine, "_runtime_generation", 0)) + 1
+    engine._pending_displays_ready_generation = None
+    engine._pending_monitor_replay_image = None
+    engine._prefetch_resume_scheduled = False
 
     try:
         logger.info("Stopping screensaver engine...")
@@ -117,69 +198,12 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
             stop_qtimer_safe(engine, engine._rotation_timer, description="Engine rotation timer")
             engine._rotation_timer = None
 
-        # Clear and hide/cleanup displays
-        if engine.display_manager:
-            try:
-                try:
-                    display_count = engine.display_manager.get_display_count()
-                except Exception as e:
-                    logger.debug("[ENGINE] Exception suppressed: %s", e)
-                    display_count = len(getattr(engine.display_manager, "displays", []))
-                logger.info(
-                    "Stopping displays via DisplayManager (count=%s, exit_app=%s)",
-                    display_count,
-                    exit_app,
-                )
-            except Exception:
-                logger.info(
-                    "Stopping displays via DisplayManager (count=?, exit_app=%s)",
-                    exit_app,
-                )
-
-            # Instrumentation: aggregate display states before shutdown
-            if is_perf_metrics_enabled():
-                try:
-                    display_states = []
-                    for disp in getattr(engine.display_manager, "displays", []):
-                        try:
-                            state = disp.describe_runtime_state()
-                            display_states.append(state)
-                        except Exception as exc:
-                            logger.debug("[ENGINE] Failed to get display state: %s", exc)
-                    logger.info("[PERF][ENGINE] pre_clear_display_states count=%s states=%s", display_count, display_states)
-                except Exception as exc:
-                    logger.debug("[ENGINE] Failed to aggregate display states: %s", exc)
-
-            try:
-                engine.display_manager.quiesce_all()
-            except Exception as e:
-                logger.debug("DisplayManager.quiesce_all() failed during stop: %s", e, exc_info=True)
-
-            try:
-                engine.display_manager.clear_all()
-            except Exception as e:
-                logger.debug("DisplayManager.clear_all() failed during stop: %s", e, exc_info=True)
-
-            if exit_app:
-                # Exiting app - full cleanup
-                try:
-                    engine.display_manager.cleanup()
-                    logger.debug("Displays cleared and cleaned up")
-                except Exception as e:
-                    logger.warning("DisplayManager.cleanup() failed during stop: %s", e, exc_info=True)
-                else:
-                    try:
-                        engine.display_manager.flush_deferred_reddit_urls(ensure_widgets_dismissed=True)
-                    except Exception as e:
-                        logger.warning("Deferred Reddit flush failed: %s", e, exc_info=True)
-            else:
-                # Just pausing (e.g., for settings) - hide windows
-                try:
-                    engine.display_manager.hide_all()
-                    logger.debug("Displays cleared and hidden")
-                except Exception as e:
-                    logger.warning("DisplayManager.hide_all() failed during stop: %s", e, exc_info=True)
-
+        # A pause is a full runtime boundary: no display, widget, timer, or GL
+        # object survives into Settings/CUSTOM reconfiguration.
+        teardown_display_runtime(
+            engine,
+            reason="application_exit" if exit_app else "runtime_reconfiguration",
+        )
         # Stop any pending image loads
         engine._loading_in_progress = False
 
@@ -233,9 +257,6 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
                 logger.info("ThreadManager shutdown complete")
             except Exception as e:
                 logger.warning("ThreadManager shutdown failed: %s", e, exc_info=True)
-
-        engine.stopped.emit()
-        logger.info("Screensaver engine stopped")
 
         # Emit a concise image cache summary for profiling.
         # Tagged with "[PERF] ImageCache" so production builds can grep and
@@ -295,13 +316,13 @@ def stop(engine: ScreensaverEngine, exit_app: bool = True) -> None:
             QApplication.quit()
 
     except Exception as e:
-        logger.exception(f"Engine stop failed: {e}")
-        # Force quit on error only if exit_app was requested
+        logger.exception("Engine stop failed: %s", e)
         if exit_app:
             try:
                 QApplication.quit()
             except Exception as quit_error:
-                logger.error(f"Failed to quit application: {quit_error}")
+                logger.error("Failed to quit application: %s", quit_error)
+        raise
 
 
 # ------------------------------------------------------------------
@@ -342,19 +363,8 @@ def cleanup(engine: ScreensaverEngine) -> None:
             except Exception as e:
                 logger.debug("[PERF] Engine summary logging failed: %s", e, exc_info=True)
 
-        # Cleanup display manager
-        if engine.display_manager:
-            try:
-                engine.display_manager.cleanup()
-                logger.debug("Display manager cleaned up")
-            except Exception as e:
-                logger.warning("DisplayManager.cleanup() failed during engine cleanup: %s", e, exc_info=True)
-            else:
-                try:
-                    engine.display_manager.flush_deferred_reddit_urls(ensure_widgets_dismissed=True)
-                except Exception as e:
-                    logger.warning("Deferred Reddit flush failed during engine cleanup: %s", e, exc_info=True)
-
+        # Clean up a residual display stack even if the engine was already stopped.
+        teardown_display_runtime(engine, reason="engine_cleanup")
         # Cleanup thread manager
         if engine.thread_manager:
             try:

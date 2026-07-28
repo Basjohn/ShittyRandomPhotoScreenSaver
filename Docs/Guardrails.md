@@ -229,6 +229,10 @@ Settings, Edit, topology recreation, and exit follow full ordered teardown:
 8. assert no old-generation resources;
 9. create a clean generation.
 
+The current production boundary is one engine runtime generation plus exact `DisplayManager` identity. Settings/CUSTOM handlers must call full teardown before constructing dialogs or replacement displays. `DisplayManager.cleanup()` invokes `DisplayWidget.cleanup_runtime()` synchronously; do not move correctness back to `QObject.destroyed`, `deleteLater()`, hide-only pauses, or post-dialog cleanup.
+
+Context acquisition/deletion failure is a hard incomplete teardown: retain the resource/manager, keep the compositor out of `DESTROYED`, log the owner/context/generation, and fail the reconfiguration. Never clear handles to manufacture a zero count.
+
 Partial GL reinitialization requires a separate approved architecture proposal.
 
 A worker may stop asynchronously, but context destruction cannot proceed while it can touch the retiring runtime.

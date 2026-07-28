@@ -78,26 +78,28 @@ def test_s_hotkey_opens_settings_without_crash(engine_with_settings, qt_app):
     
     # Verify displays are visible before S key
     assert engine.display_manager is not None
-    for display in engine.display_manager.displays:
+    old_displays = list(engine.display_manager.displays)
+    for display in old_displays:
         assert display.isVisible(), "Displays should be visible while running"
-    
-    # Simulate S key press - stop(exit_app=False)
+
+    # Settings admission is a full runtime boundary, not a hide-only pause.
     engine.stop(exit_app=False)
-    
-    # CRITICAL: Verify displays are HIDDEN after stop
-    for display in engine.display_manager.displays:
-        assert not display.isVisible(), "Displays MUST be hidden when settings open!"
-    
-    # Verify engine stopped
+
+    assert engine.display_manager is None
+    assert engine._display_initialized is False
+    for display in old_displays:
+        assert not display.isVisible(), "Old displays must be closed before settings open"
+
     assert engine._running is False, "Engine should be stopped"
-    
-    # Now simulate settings dialog closing and restart
-    engine.display_manager.show_all()
-    engine.start()
-    
-    # Verify displays visible again
+
+    # Simulate the handler's fresh display/timer build after settings closes.
+    assert engine._initialize_display()
+    engine._setup_rotation_timer()
+    assert engine.start()
+
+    assert engine.display_manager is not None
     for display in engine.display_manager.displays:
-        assert display.isVisible(), "Displays should be visible after restart"
+        assert display.isVisible(), "Fresh displays should be visible after restart"
 
 
 def test_display_initialized_flag_lifecycle(qt_app):
@@ -223,7 +225,7 @@ def test_settings_request_cancels_active_custom_layout_session_before_stop(monke
             return 0
 
     engine = SimpleNamespace(
-        display_manager=SimpleNamespace(displays=[]),
+        display_manager=SimpleNamespace(displays=[], cleanup=lambda: calls.append("display_cleanup")),
         resource_manager=None,
         settings_manager=SimpleNamespace(),
         _display_initialized=False,
@@ -326,7 +328,7 @@ def test_engine_start_schedules_bounded_first_image_retry(monkeypatch, qt_app):
     assert scheduled == [180]
 
 
-def test_engine_stop_quiesces_displays_before_clearing_and_hiding():
+def test_engine_stop_quiesces_clears_and_fully_cleans_displays():
     order: list[str] = []
 
     class _Lock:
@@ -348,8 +350,8 @@ def test_engine_stop_quiesces_displays_before_clearing_and_hiding():
         def clear_all(self):
             order.append("clear")
 
-        def hide_all(self):
-            order.append("hide")
+        def cleanup(self):
+            order.append("cleanup")
 
     from engine import engine_lifecycle
 
@@ -392,4 +394,5 @@ def test_engine_stop_quiesces_displays_before_clearing_and_hiding():
     finally:
         monkeypatch.undo()
 
-    assert order == ["quiesce", "clear", "hide"]
+    assert order == ["quiesce", "clear", "cleanup"]
+    assert engine.display_manager is None

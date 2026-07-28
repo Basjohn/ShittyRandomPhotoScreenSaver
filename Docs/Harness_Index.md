@@ -217,6 +217,17 @@ Capture per cycle:
 - RSS/VRAM;
 - warnings/errors.
 
+Run the deterministic ownership gate:
+
+```powershell
+.\.venv\Scripts\python.exe tools\phase3_lifecycle_harness.py --cycles 50 --output Docs\phase_reports\artifacts\P03\lifecycle_churn_report.json
+.\.venv\Scripts\python.exe -m pytest tests\test_phase3_runtime_lifecycle.py -q
+```
+
+This exercises the production engine/display teardown seams with exact context/resource/timer/worker/callback accounting and stale decode publication. It must report 150 cycles, 150 rejected stale callbacks, zero stopped ownership, and no errors. It complements, rather than replaces, real Windows Qt context cleanup (`tests/test_gl_compositor_cleanup.py`), runtime-shaped Settings/CUSTOM tests, Phase 4 driver/RSS/VRAM plateau work, and Phase 11 sleep/wake validation.
+
+Authoritative Phase 3 evidence: `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
+
 ## 7. RAM/VRAM Plateau Harness
 
 Required scenarios:

@@ -880,7 +880,7 @@ class DisplayManager(QObject):
             logger.debug("[SYNC] Synchronized transition started successfully")
     
     def cleanup(self) -> None:
-        """Clean up all display widgets."""
+        """Synchronously destroy every display runtime and its GL resources."""
         self._display_startup_generation += 1
         self._display_startup_ready_expected = set()
         self._display_startup_ready_seen = set()
@@ -888,40 +888,32 @@ class DisplayManager(QObject):
         count = len(self.displays)
         logger.info("Cleaning up %d display widgets", count)
 
-        # Reset global DisplayWidget state to avoid stale references after cleanup
         try:
             from rendering.display_widget import DisplayWidget
             from PySide6.QtGui import QGuiApplication
-            
-            # Remove event filter from app before destroying the owner widget
+
             owner = DisplayWidget._event_filter_owner
             if owner is not None:
-                try:
-                    app = QGuiApplication.instance()
-                    if app is not None:
-                        app.removeEventFilter(owner)
-                except Exception as e:
-                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-            
+                app = QGuiApplication.instance()
+                if app is not None:
+                    app.removeEventFilter(owner)
+
             DisplayWidget._global_ctrl_held = False
             DisplayWidget._halo_owner = None
             DisplayWidget._event_filter_installed = False
             DisplayWidget._event_filter_owner = None
             DisplayWidget._focus_owner = None
-            # Clear the screen-to-widget cache to avoid stale references
             DisplayWidget._instances_by_screen.clear()
             logger.debug("[CLEANUP] Reset all DisplayWidget global state")
-        except Exception as e:
-            logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
+        except Exception as exc:
+            logger.debug("[DISPLAY_MANAGER] Global state reset failed: %s", exc)
 
         pending_reddit_urls: list[str] = []
+        failed_displays = []
+        cleanup_errors: list[str] = []
 
-        for idx, display in enumerate(self.displays):
-            try:
-                screen_index = getattr(display, "screen_index", idx)
-            except Exception as e:
-                logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-                screen_index = idx
+        for idx, display in enumerate(list(self.displays)):
+            screen_index = getattr(display, "screen_index", idx)
             logger.debug(
                 "Cleaning up display widget (index=%d/%d, screen_index=%s)",
                 idx,
@@ -929,56 +921,53 @@ class DisplayManager(QObject):
                 screen_index,
             )
 
+            url = getattr(display, "_pending_reddit_url", None)
+            prequeued = bool(getattr(display, "_pending_reddit_url_prequeued", False))
+            if isinstance(url, str) and url and not prequeued:
+                pending_reddit_urls.append(url)
+            setattr(display, "_pending_reddit_url", None)
+            setattr(display, "_pending_reddit_url_prequeued", False)
+
             try:
-                url = getattr(display, "_pending_reddit_url", None)
-                prequeued = bool(getattr(display, "_pending_reddit_url_prequeued", False))
-                if isinstance(url, str) and url and not prequeued:
-                    pending_reddit_urls.append(url)
-                try:
-                    setattr(display, "_pending_reddit_url", None)
-                    setattr(display, "_pending_reddit_url_prequeued", False)
-                except Exception as e:
-                    logger.debug("[DISPLAY_MANAGER] Exception suppressed: %s", e)
-                # Instrumentation: log state and stop render pipeline before clearing
                 if is_perf_metrics_enabled():
-                    try:
-                        state = display.describe_runtime_state()
-                        logger.info("[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s", screen_index, state)
-                    except Exception as exc:
-                        logger.debug("[DISPLAY_MANAGER] Failed to describe state: %s", exc)
-                try:
-                    display.shutdown_render_pipeline("cleanup")
-                except Exception as exc:
-                    logger.debug("[DISPLAY_MANAGER] shutdown_render_pipeline failed: %s", exc)
-                # Ensure per-display cleanup (pan & scan, transitions, overlays)
-                try:
-                    display.clear()
-                except Exception as e:
-                    logger.debug(
-                        "Display.clear() failed during cleanup (index=%d, screen_index=%s): %s",
-                        idx,
+                    logger.info(
+                        "[PERF][DISPLAY_MANAGER] cleanup_display screen=%s state=%s",
                         screen_index,
-                        e,
-                        exc_info=True,
+                        display.describe_runtime_state(),
                     )
+                display.quiesce_for_runtime_pause()
+                display.clear()
+                cleanup_runtime = getattr(display, "cleanup_runtime", None)
+                if not callable(cleanup_runtime):
+                    raise RuntimeError("DisplayWidget has no cleanup_runtime() contract")
+                cleanup_runtime("display_manager_cleanup")
                 display.close()
                 display.deleteLater()
-            except Exception as e:
-                logger.warning(
-                    "Error closing display (index=%d, screen_index=%s): %s",
+            except Exception as exc:
+                failed_displays.append(display)
+                cleanup_errors.append(
+                    f"screen={screen_index} type={type(exc).__name__} error={exc}"
+                )
+                logger.error(
+                    "Display runtime cleanup failed (index=%d, screen_index=%s): %s",
                     idx,
                     screen_index,
-                    e,
+                    exc,
                     exc_info=True,
                 )
 
+        self._deferred_reddit_urls = pending_reddit_urls
+        if cleanup_errors:
+            # Retain failed objects so a caller can inspect or retry; clearing the
+            # list here would falsely declare ownership released.
+            self.displays = failed_displays
+            raise RuntimeError(
+                "Display runtime cleanup incomplete: " + " | ".join(cleanup_errors)
+            )
+
         self.displays.clear()
         self.current_images.clear()
-
-        self._deferred_reddit_urls = pending_reddit_urls
-
         logger.info("Display manager cleanup complete")
-
     def take_deferred_reddit_urls(self) -> list[str]:
         """Retrieve and clear deferred Reddit URLs collected during cleanup."""
         urls, self._deferred_reddit_urls = self._deferred_reddit_urls, []

@@ -399,47 +399,74 @@ class GLTextureManager:
                 entry.in_use = False
                 return
     
-    def _cleanup_pbo_pool(self) -> None:
-        """Delete all PBOs in pool."""
+    def _cleanup_pbo_pool(self, *, strict: bool = False) -> None:
+        """Delete all PBOs, retaining failed entries in strict teardown."""
         if gl is None:
+            if strict and self._pbo_pool:
+                raise RuntimeError("Cannot delete live PBOs: PyOpenGL is unavailable")
             return
+        failed_entries: List[PBOEntry] = []
+        errors: list[str] = []
         for entry in self._pbo_pool:
             try:
                 gl.glDeleteBuffers(1, [entry.pbo_id])
                 self._release_resource_tracking(entry.resource_id)
-            except Exception as e:
-                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-        self._pbo_pool.clear()
-    
+            except Exception as exc:
+                failed_entries.append(entry)
+                errors.append(f"pbo={entry.pbo_id}:{type(exc).__name__}:{exc}")
+                logger.debug("[GL TEXTURE] PBO deletion failed", exc_info=True)
+        self._pbo_pool = failed_entries if strict else []
+        if strict and errors:
+            raise RuntimeError("PBO deletion incomplete: " + " | ".join(errors))
+
     # -------------------------------------------------------------------------
     # Cleanup
     # -------------------------------------------------------------------------
-    
-    def cleanup_cache(self) -> None:
-        """Delete all cached textures."""
+
+    def cleanup_cache(self, *, strict: bool = False) -> None:
+        """Delete cached textures, retaining ownership if strict deletion fails."""
+        ids = [int(texture_id) for texture_id in self._texture_cache.values() if texture_id]
         if gl is None:
+            if strict and ids:
+                raise RuntimeError("Cannot delete live textures: PyOpenGL is unavailable")
+            self._texture_cache.clear()
+            self._texture_lru.clear()
             return
-        
+
         try:
-            ids = [int(t) for t in self._texture_cache.values() if t]
             if ids:
                 arr = (ctypes.c_uint * len(ids))(*ids)
                 gl.glDeleteTextures(len(ids), arr)
-                for tex_id in ids:
-                    self._release_texture_tracking(tex_id)
-        except Exception:
-            logger.debug("[GL TEXTURE] Failed to delete cached textures", exc_info=True)
-        
+                for texture_id in ids:
+                    self._release_texture_tracking(texture_id)
+        except Exception as exc:
+            logger.debug("[GL TEXTURE] Cached texture deletion failed", exc_info=True)
+            if strict:
+                raise RuntimeError("Cached texture deletion incomplete") from exc
+        else:
+            self._texture_cache.clear()
+            self._texture_lru.clear()
+            return
+
+        # Legacy non-strict callers retain their historical best-effort reset.
         self._texture_cache.clear()
         self._texture_lru.clear()
-    
-    def cleanup(self) -> None:
-        """Full cleanup - release all textures and PBOs."""
-        self.release_transition_textures()
-        self.cleanup_cache()
-        self._cleanup_pbo_pool()
-        self._initialized = False
 
+    def cleanup(self, *, strict: bool = False) -> None:
+        """Release textures and PBOs; strict mode preserves failed ownership."""
+        self.release_transition_textures()
+        errors: list[str] = []
+        try:
+            self.cleanup_cache(strict=strict)
+        except Exception as exc:
+            errors.append(f"textures:{type(exc).__name__}:{exc}")
+        try:
+            self._cleanup_pbo_pool(strict=strict)
+        except Exception as exc:
+            errors.append(f"pbos:{type(exc).__name__}:{exc}")
+        if errors:
+            raise RuntimeError("GLTextureManager cleanup incomplete: " + " | ".join(errors))
+        self._initialized = False
     def _release_texture_tracking(self, texture_id: int) -> None:
         resource_id = self._texture_resource_ids.pop(int(texture_id), None)
         self._release_resource_tracking(resource_id)

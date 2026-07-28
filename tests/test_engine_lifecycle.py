@@ -103,6 +103,7 @@ def test_settings_handler_cleans_dialog_animation_manager_before_runtime_restart
     assert ("dialog_delete", None) in events
     assert events.index(("snapshot", "settings", "before_stop")) < events.index(("engine_stop", False))
     assert events.index(("engine_stop", False)) < events.index(("snapshot", "settings", "after_stop"))
+    assert events.index(("display_cleanup", None)) < events.index(("dialog_init", None))
     assert events.index(("display_cleanup", None)) < events.index(("snapshot", "settings", "after_display_cleanup"))
     assert events.index(("engine_start", None)) < events.index(("snapshot", "settings", "after_restart"))
     assert app is not None

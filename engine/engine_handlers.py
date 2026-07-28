@@ -159,10 +159,17 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
     )
     stop_start = time.perf_counter()
     engine.stop(exit_app=False)
+    from engine.engine_lifecycle import teardown_display_runtime
+    teardown_display_runtime(engine, reason="settings_pre_dialog")
     log_lifecycle_resource_snapshot(
         engine,
         event="settings",
         stage="after_stop",
+    )
+    log_lifecycle_resource_snapshot(
+        engine,
+        event="settings",
+        stage="after_display_cleanup",
     )
     stop_ms = (time.perf_counter() - stop_start) * 1000
     overall_ms = (time.perf_counter() - request_start) * 1000
@@ -204,22 +211,6 @@ def on_settings_requested(engine: ScreensaverEngine) -> None:
             logger.info("Settings dialog closed, performing full-style restart of screensaver")
             sources_changed_during_settings = bool(getattr(engine, "_sources_changed_during_settings", False))
             engine._settings_dialog_active = False
-
-            # Tear down any existing display manager stack so we get a fresh
-            # set of DisplayWidget instances (clears stale GL/compositor state
-            # and avoids banding on secondary displays).
-            if engine.display_manager:
-                try:
-                    engine.display_manager.cleanup()
-                except Exception:
-                    logger.debug("DisplayManager cleanup after settings failed", exc_info=True)
-                engine.display_manager = None
-                engine._display_initialized = False
-            log_lifecycle_resource_snapshot(
-                engine,
-                event="settings",
-                stage="after_display_cleanup",
-            )
 
             # Reset coordinator state (halo owner, ctrl state) to avoid stale refs
             try:
@@ -287,13 +278,8 @@ def on_custom_layout_reload_requested(engine: ScreensaverEngine) -> None:
             stage="after_stop",
         )
 
-        if engine.display_manager:
-            try:
-                engine.display_manager.cleanup()
-            except Exception:
-                logger.debug("DisplayManager cleanup after custom layout reload failed", exc_info=True)
-            engine.display_manager = None
-            engine._display_initialized = False
+        from engine.engine_lifecycle import teardown_display_runtime
+        teardown_display_runtime(engine, reason="custom_edit_reload")
         log_lifecycle_resource_snapshot(
             engine,
             event="custom_edit",

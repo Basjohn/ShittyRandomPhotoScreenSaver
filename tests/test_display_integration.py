@@ -597,6 +597,11 @@ class TestDisplayManagerSync:
             def shutdown_render_pipeline(self, reason="unspecified"):
                 return None
 
+            def quiesce_for_runtime_pause(self):
+                return None
+
+            def cleanup_runtime(self, reason="explicit"):
+                return None
             def clear(self):
                 return None
 
@@ -984,7 +989,9 @@ class TestDisplayManagerSync:
 
         assert ScreensaverEngine._initialize_display(engine) is True
         assert created_managers[0].monitors_changed.connected == [monitor_handler]
-        assert created_managers[0].displays_ready.connected == [engine._on_displays_ready]
+        assert len(created_managers[0].displays_ready.connected) == 1
+        created_managers[0].displays_ready.connected[0](7)
+        engine._on_displays_ready.assert_called_once_with(7, created_managers[0], 0)
 
         ScreensaverEngine._subscribe_to_events(engine)
         assert engine.event_system.subscriptions == [("settings.changed", settings_handler)]
@@ -992,7 +999,9 @@ class TestDisplayManagerSync:
 
         assert ScreensaverEngine._initialize_display(engine) is True
         assert created_managers[1].monitors_changed.connected == [monitor_handler]
-        assert created_managers[1].displays_ready.connected == [engine._on_displays_ready]
+        assert len(created_managers[1].displays_ready.connected) == 1
+        created_managers[1].displays_ready.connected[0](8)
+        assert engine._on_displays_ready.call_args_list[-1].args == (8, created_managers[1], 0)
 
 
 # ---------------------------------------------------------------------------

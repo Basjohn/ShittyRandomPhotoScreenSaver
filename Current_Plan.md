@@ -40,20 +40,8 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [x] **Phase 0 / Gate 0:** freeze, evidence, and ownership inventory are complete; the Phase 1 checkpoint supplies the clean committed recovery point. See `Docs/phase_reports/P00_FREEZE_INVENTORY_AND_EVIDENCE.md`, `Docs/phase_reports/P00_SOURCE_OWNERSHIP_INVENTORY.md`, and `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 1 / Gate 1:** bounded passive frame, event-loop, task, CPU-image, GL-resource, and lifecycle-snapshot measurement validated without behavioural change. See `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 2 / Gate 2:** deterministic all-mode visualizer replay, protected baseline goldens, cadence-separation tests, quantitative metrics, and Spectrum/Bubble logical review artifacts are complete. See `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
+- [x] **Phase 3 / Gate 3:** full stop/destroy/recreate lifecycle, generation-and-manager stale-work rejection, strict owner-context GL deletion, and 50 Settings + 50 Edit + 50 mixed hostile cycles are complete without fallback, affinity errors, stale publication, or stopped-resource growth. See `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
 
-
-## Phase 3 — Lifecycle Safety
-
-- [ ] Restore full stop/destroy/recreate semantics.
-- [ ] Stop producers before GL teardown.
-- [ ] Reject stale worker results.
-- [ ] Delete GL resources on owner context/thread.
-- [ ] Run repeated Settings cycles.
-- [ ] Run repeated Edit cycles.
-- [ ] Run mixed lifecycle cycles.
-- [ ] Confirm zero context-affinity errors and zero resource accumulation.
-
-**Gate:** lifecycle is repeatable and boring.
 
 ## Phase 4 — Baseline Memory/VRAM Containment
 
@@ -131,10 +119,15 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [ ] Remove duplicate runtime paths.
 - [ ] Remove dead retry/backoff state.
 - [ ] Remove obsolete metrics.
+- [ ] Remove or migrate inert `workers.fft` settings/default leaves after a compatibility audit; do not restore a separate FFT process without contrary latency and reliability evidence.
+- [ ] Bound and rotate the Reddit helper log before oversized-log startup failure.
+- [ ] Expire/reconcile `.bridge_ready` and URL queue state so stale files cannot block helper recovery.
+- [ ] Verify and correct the ProgramData ACL/ownership creation path so administrator takeover is not required.
+- [ ] Add automated helper recovery coverage for an oversized log, stale bridge signal, queued URLs, and restricted ProgramData ownership.
 - [ ] Prove no silent fallback.
 - [ ] Keep one understandable runtime path.
 
-**Gate:** code matches target architecture.
+**Gate:** code matches target architecture and adopted helper recovery failures are reproducibly closed.
 
 ## Phase 11 — Full Validation
 
@@ -164,19 +157,18 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 ## Current Phase
 
 ```text
-Phase: 3 — Lifecycle Safety
+Phase: 4 — Baseline Memory/VRAM Containment
 Branch: main
-Last evidence: Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
+Last evidence: Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
 ```
 
-- [-] Inventory the real Settings, Edit, stop, display-destroy, and recreate call order and identify the single generation boundary.
-- [ ] Advance the runtime generation at full reconfiguration admission so stale worker and deferred GUI callbacks cannot mutate the replacement display.
-- [ ] Stop producers and disconnect/cancel callbacks before display-local GL teardown.
-- [ ] Destroy visualizer and display GL resources synchronously on the owning GUI thread with the owning context current; fail loudly if context acquisition fails.
-- [ ] Guard deferred warmup and image-result callbacks with both runtime generation and owning display identity.
-- [ ] Add hostile in-flight callback, transition, Spectrum, and Bubble lifecycle cases.
-- [ ] Run 50 Settings cycles, 50 Edit cycles, and 50 mixed cycles with zero context-affinity errors, dead-generation callbacks, or live-resource growth.
-- [ ] Record lifecycle ordering, focused automation, runtime results, and rollback in `Docs/phase_reports/P03_*.md`.
+- [-] Trace the baseline image path and record every encoded, decoded, oriented, scaled, `QImage`, `QPixmap`, upload-buffer, texture, FBO, PBO, transition, preview, and fallback representation with its owning object and release event.
+- [ ] Reconcile Phase 1 logical byte metrics with the real cache, transition, compositor, and visualizer owners; identify unexplained or count-only retention before changing budgets.
+- [ ] Add deterministic alternating large/small image churn with aspect-ratio, transition, resize, and Settings/Edit cases, recording RAM plus exact application-owned CPU/GL bytes.
+- [ ] Replace unbounded or count-only CPU image caches with immutable byte-accounted entries and conservative eviction without moving GUI-only objects onto workers.
+- [ ] Release obsolete transition sources, upload staging, replaced textures, and resized FBOs immediately at their current ownership seams.
+- [ ] Remove duplicate per-display CPU copies only where source identity, transform, dimensions, and quality are exactly equal; preserve the baseline presentation topology.
+- [ ] Run plateau and pressure evidence, require no monotonic RAM/VRAM growth, rerun the Phase 2 visualizer lock, and record rollback in `Docs/phase_reports/P04_*.md`.
 ## Deferred Until Recovery Passes
 
 - new production widget families;
@@ -195,7 +187,4 @@ Last evidence: Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 
 USER TASK BOX. ADD ITEMS BELOW INTO PLANNED STEPS AND EMPTY BOX. NEVER EVER DELETE THIS BOX AS A WHOLE OR THESE INSTRUCTIONS, ONLY PROPERLY ADOPTED IDEAS, YA GOBLIN ASS BITCH.
 #######
-!IMPORTANT! Reddit helper log doesn't cleanly keep size down and rotate, once it gets to 27mb the helper fails to launch and gives an error about the log. The expired files .bridge_ready may all contribute. To get Reddit links working in Screensaver mode again I had to: 1. Completely delete the logs. 2. Delete everything in url_queue and 3. Take ownership of ProgramData despite being an administrator. 
-
-Unsure if 3 was required. 1 allowed the helper to start again but it did not save/launch urls. 2 and 3 were done together and fully resolved issues.
 #######

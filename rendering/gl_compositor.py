@@ -231,6 +231,7 @@ class GLCompositorWidget(QOpenGLWidget):
         self._current_anim_id: Optional[str] = None
         self._transition_animation_generation: int = 0
         self._render_shutdown_requested: bool = False
+        self._gl_lifecycle_generation: int = 0
         # Default easing is QUAD_IN_OUT; callers can override per-transition.
         self._current_easing: EasingCurve = EasingCurve.QUAD_IN_OUT
         self._current_anim_metrics: Optional[_AnimationRunMetrics] = None
@@ -1561,23 +1562,32 @@ class GLCompositorWidget(QOpenGLWidget):
         return cleanup_gl_pipeline(self)
 
     def cleanup(self) -> None:
-        """Clean up GL resources and transition to DESTROYED state."""
+        """Destroy GL resources; never report DESTROYED after a failed delete."""
+        from rendering.gl_compositor_pkg.gl_lifecycle import gl_pipeline_has_live_resources
+
+        if (
+            self._gl_state.get_state() == GLContextState.DESTROYED
+            and not gl_pipeline_has_live_resources(self)
+        ):
+            return
+
         self._render_shutdown_requested = True
+        self._gl_lifecycle_generation += 1
         self._transition_animation_generation += 1
         self._cancel_current_animation()
-        # Stop render strategy first to prevent timer callbacks during cleanup
         self._stop_render_strategy()
-        
-        # Transition to DESTROYING state
-        self._gl_state.transition(GLContextState.DESTROYING)
+
+        if self._gl_state.get_state() != GLContextState.DESTROYING:
+            self._gl_state.transition(GLContextState.DESTROYING)
         try:
             self._cleanup_gl_pipeline()
         except Exception:
-            logger.debug("[GL COMPOSITOR] cleanup() failed", exc_info=True)
-        finally:
-            # Transition to DESTROYED state
-            self._gl_state.transition(GLContextState.DESTROYED)
-    
+            logger.error(
+                "[GL COMPOSITOR] cleanup failed; compositor remains DESTROYING",
+                exc_info=True,
+            )
+            raise
+        self._gl_state.transition(GLContextState.DESTROYED)
     def is_gl_ready(self) -> bool:
         """Check if GL context is ready for rendering.
         

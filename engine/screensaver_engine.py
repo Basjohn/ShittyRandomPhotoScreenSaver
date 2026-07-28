@@ -159,9 +159,14 @@ class ScreensaverEngine(QObject):
         self._current_image: Optional[ImageMetadata] = None
         self._pending_monitor_replay_image: Optional[ImageMetadata] = None
         self._display_initializing: bool = False
-        self._pending_displays_ready_generation: Optional[int] = None
+        self._pending_displays_ready_generation: Optional[tuple[int, object, int]] = None
         self._settings_dialog_active: bool = False
         self._sources_changed_during_settings: bool = False
+        # One owner-wide generation fences every delayed/worker publication.
+        # It advances before runtime teardown, so callbacks from the old display
+        # stack cannot publish into a newly-created stack.
+        self._runtime_generation: int = 0
+        self._lifecycle_rejected_callbacks: int = 0
         self._loading_in_progress: bool = False
         self._loading_lock = threading.Lock()  # FIX: Protect loading flag from race conditions
         # Per-display image history for multi-monitor "previous" support.
@@ -248,6 +253,51 @@ class ScreensaverEngine(QObject):
         with self._state_lock:
             return self._state
     
+    def _advance_runtime_generation(self, reason: str) -> int:
+        """Invalidate all delayed publications owned by the current runtime."""
+        with self._state_lock:
+            self._runtime_generation += 1
+            generation = self._runtime_generation
+        logger.info(
+            "[LIFECYCLE] Runtime generation advanced generation=%d reason=%s",
+            generation,
+            reason,
+        )
+        return generation
+
+    def _capture_runtime_identity(self) -> tuple[int, object | None]:
+        """Capture the generation and exact DisplayManager owning new work."""
+        with self._state_lock:
+            generation = self._runtime_generation
+        return generation, self.display_manager
+
+    def _is_runtime_identity_current(
+        self,
+        generation: int,
+        display_manager: object | None,
+    ) -> bool:
+        """Return whether a delayed publication still belongs to this runtime."""
+        with self._state_lock:
+            current_generation = self._runtime_generation
+            current_state = self._state
+        return (
+            int(generation) == current_generation
+            and display_manager is self.display_manager
+            and current_state not in {
+                EngineState.STOPPING,
+                EngineState.SHUTTING_DOWN,
+                EngineState.UNINITIALIZED,
+            }
+        )
+
+    def _record_stale_runtime_callback(self, label: str, generation: int) -> None:
+        self._lifecycle_rejected_callbacks += 1
+        logger.info(
+            "[LIFECYCLE] Rejected stale runtime callback label=%s callback_generation=%d current_generation=%d",
+            label,
+            generation,
+            self._runtime_generation,
+        )
     def _is_state(self, *states: EngineState) -> bool:
         """Thread-safe check if current state is one of the given states."""
         with self._state_lock:
@@ -668,7 +718,15 @@ class ScreensaverEngine(QObject):
             self.display_manager.settings_requested.connect(self._on_settings_requested)
             self.display_manager.custom_layout_reload_requested.connect(self._on_custom_layout_reload_requested)
             self.display_manager.monitors_changed.connect(self._on_monitors_changed)
-            self.display_manager.displays_ready.connect(self._on_displays_ready)
+            display_manager = self.display_manager
+            runtime_generation = int(getattr(self, "_runtime_generation", 0))
+            self.display_manager.displays_ready.connect(
+                lambda generation, manager=display_manager, runtime=runtime_generation: self._on_displays_ready(
+                    generation,
+                    manager,
+                    runtime,
+                )
+            )
             
             # Initialize displays
             display_count = self.display_manager.initialize_displays()
@@ -683,10 +741,10 @@ class ScreensaverEngine(QObject):
             if display_count > 0:
                 self._display_initialized = True
                 self._display_initializing = False
-                pending_ready_generation = self._pending_displays_ready_generation
+                pending_ready = self._pending_displays_ready_generation
                 self._pending_displays_ready_generation = None
-                if pending_ready_generation is not None:
-                    self._on_displays_ready(pending_ready_generation)
+                if pending_ready is not None:
+                    self._on_displays_ready(*pending_ready)
                 return True
             
             self._display_initializing = False
@@ -700,11 +758,30 @@ class ScreensaverEngine(QObject):
             self._pending_displays_ready_generation = None
             return False
 
-    def _on_displays_ready(self, generation: int) -> None:
-        """Replay the current image only after the rebuilt display generation is ready."""
+    def _on_displays_ready(
+        self,
+        generation: int,
+        display_manager: object | None = None,
+        runtime_generation: int | None = None,
+    ) -> None:
+        """Replay only when the rebuilt manager still owns this callback."""
+        if display_manager is not None and runtime_generation is not None:
+            if not self._is_runtime_identity_current(runtime_generation, display_manager):
+                self._record_stale_runtime_callback("displays_ready", runtime_generation)
+                return
 
         if getattr(self, "_display_initializing", False):
-            self._pending_displays_ready_generation = generation
+            pending_runtime = (
+                int(runtime_generation)
+                if runtime_generation is not None
+                else int(getattr(self, "_runtime_generation", 0))
+            )
+            pending_manager = display_manager if display_manager is not None else self.display_manager
+            self._pending_displays_ready_generation = (
+                int(generation),
+                pending_manager,
+                pending_runtime,
+            )
             return
 
         image = self._pending_monitor_replay_image
@@ -713,7 +790,6 @@ class ScreensaverEngine(QObject):
         self._pending_monitor_replay_image = None
         logger.info("[DISPLAY] Display generation ready; replaying current image generation=%s", generation)
         self._load_and_display_image(image)
-    
     def _setup_rotation_timer(self) -> None:
         """Setup timer for image rotation."""
         interval_seconds = self.settings_manager.get('timing.interval', 10)
@@ -937,21 +1013,17 @@ class ScreensaverEngine(QObject):
             return False
 
     def _schedule_startup_first_image_retry(self, attempt: int = 1) -> None:
-        """Best-effort bounded retry for startup image display failures.
-
-        This is intentionally narrow: it is only for the startup/recreation
-        window where the first immediate `_show_next_image()` call failed.
-        """
+        """Best-effort bounded retry owned by one runtime generation."""
         max_attempts = 4
         if attempt > max_attempts:
             return
 
         delay_ms = 180
+        runtime_generation, display_manager = self._capture_runtime_identity()
 
         def _retry() -> None:
-            if self._is_state(EngineState.STOPPING, EngineState.SHUTTING_DOWN, EngineState.UNINITIALIZED):
-                return
-            if self.display_manager is None:
+            if not self._is_runtime_identity_current(runtime_generation, display_manager):
+                self._record_stale_runtime_callback("startup_first_image_retry", runtime_generation)
                 return
             if self._loading_in_progress:
                 logger.warning(
@@ -961,7 +1033,10 @@ class ScreensaverEngine(QObject):
                 )
                 self._schedule_startup_first_image_retry(attempt + 1)
                 return
-            if any(getattr(display, "current_image_path", None) for display in getattr(self.display_manager, "displays", [])):
+            if any(
+                getattr(display, "current_image_path", None)
+                for display in getattr(display_manager, "displays", [])
+            ):
                 return
             if self._show_next_image():
                 logger.warning(
@@ -978,7 +1053,6 @@ class ScreensaverEngine(QObject):
             self._schedule_startup_first_image_retry(attempt + 1)
 
         ThreadManager.single_shot(delay_ms, _retry)
-    
     def _load_image_via_worker(
         self,
         image_path: str,

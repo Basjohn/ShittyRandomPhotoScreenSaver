@@ -1,6 +1,8 @@
-"""DisplayWidget destruction and cleanup logic.
+"""DisplayWidget runtime teardown.
 
-Extracted from display_widget.py to reduce monolith size.
+The normal path is explicit and synchronous: DisplayManager invokes
+``cleanup_runtime`` while the compositor and its GL context still exist.  The
+QObject ``destroyed`` signal is only a residual safety net.
 """
 
 from __future__ import annotations
@@ -16,88 +18,103 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def on_destroyed(widget: "DisplayWidget", *_args) -> None:
-    """Ensure active transitions are stopped when the widget is destroyed."""
-    # NOTE: Deferred Reddit URL opening is now handled by DisplayManager.cleanup()
-    # to ensure it happens AFTER windows are hidden but BEFORE QApplication.quit()
-    if widget.settings_manager and widget._settings_listener_connected:
-        try:
-            widget.settings_manager.settings_changed.disconnect(widget._on_settings_value_changed)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-        finally:
-            widget._settings_listener_connected = False
+def cleanup_runtime(widget: "DisplayWidget", *, reason: str) -> None:
+    """Stop producers, destroy GL resources, then destroy render surfaces."""
+    if bool(getattr(widget, "_runtime_cleanup_complete", False)):
+        return
 
-    # Phase 5: Unregister from MultiMonitorCoordinator
-    if widget._screen is not None:
-        try:
-            widget._coordinator.unregister_instance(widget, widget._screen)
-        except Exception as e:
-            logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    widget.shutdown_render_pipeline(reason)
 
-    # Phase 5: Release focus and event filter ownership via coordinator
-    try:
-        widget._coordinator.release_focus(widget)
-        widget._coordinator.uninstall_event_filter(widget)
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    manager = getattr(widget, "_widget_manager", None)
+    if manager is not None:
+        manager.cleanup()
 
-    widget._destroy_render_surface()
-
-    # Ensure compositor is torn down cleanly
-    try:
-        if widget._gl_compositor is not None:
-            cleanup = getattr(widget._gl_compositor, "cleanup", None)
-            if callable(cleanup):
-                try:
-                    cleanup()
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Cleanup failed: %s", e, exc_info=True)
-            widget._gl_compositor.hide()
-            widget._gl_compositor.setParent(None)
-            widget._gl_compositor = None
-    except Exception as e:
-        logger.debug("[GL COMPOSITOR] Teardown failed: %s", e, exc_info=True)
-        widget._gl_compositor = None
-
-    # Cleanup all overlay widgets using helper
-    widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "stop")
+    # Some overlays predate WidgetManager ownership. Their lifecycle methods
+    # are idempotent, so clean them explicitly after the managed set.
+    widget._cleanup_widget("spotify_visualizer_widget", "SPOTIFY_VIS", "cleanup")
     widget._cleanup_widget("media_widget", "MEDIA", "cleanup")
     widget._cleanup_widget("weather_widget", "WEATHER", "cleanup")
     widget._cleanup_widget("reddit_widget", "REDDIT", "cleanup")
     widget._cleanup_widget("reddit2_widget", "REDDIT2", "cleanup")
     widget._cleanup_widget("_pixel_shift_manager", "PIXEL_SHIFT", "cleanup")
 
-    # Cleanup cursor halo (top-level window, must be explicitly destroyed)
+    if widget.settings_manager and widget._settings_listener_connected:
+        try:
+            widget.settings_manager.settings_changed.disconnect(
+                widget._on_settings_value_changed
+            )
+        except Exception as exc:
+            logger.debug("[DISPLAY_WIDGET] Settings disconnect failed: %s", exc)
+        finally:
+            widget._settings_listener_connected = False
+
+    if widget._screen is not None:
+        try:
+            widget._coordinator.unregister_instance(widget, widget._screen)
+        except Exception as exc:
+            logger.debug("[DISPLAY_WIDGET] Coordinator unregister failed: %s", exc)
+
+    try:
+        widget._coordinator.release_focus(widget)
+        widget._coordinator.uninstall_event_filter(widget)
+    except Exception as exc:
+        logger.debug("[DISPLAY_WIDGET] Coordinator release failed: %s", exc)
+
+    try:
+        if widget._transition_controller is not None:
+            widget._transition_controller.stop_current(reason=reason)
+        elif widget._current_transition:
+            widget._current_transition.stop()
+            widget._current_transition.cleanup()
+            widget._current_transition = None
+    except Exception as exc:
+        logger.debug("[TRANSITION] Cleanup failed: %s", exc, exc_info=True)
+
+    try:
+        hide_all_overlays(widget)
+    except Exception as exc:
+        logger.debug("[OVERLAYS] Hide failed: %s", exc, exc_info=True)
+    widget._cancel_transition_watchdog()
+
     try:
         if widget._ctrl_cursor_hint is not None:
             widget._ctrl_cursor_hint.hide()
+            widget._ctrl_cursor_hint.close()
             widget._ctrl_cursor_hint.deleteLater()
             widget._ctrl_cursor_hint = None
-    except Exception as e:
-        logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
+    except Exception as exc:
+        logger.debug("[DISPLAY_WIDGET] Cursor halo cleanup failed: %s", exc)
         widget._ctrl_cursor_hint = None
 
-    # Stop and clean up any active transition via TransitionController
-    try:
-        if widget._transition_controller is not None:
-            widget._transition_controller.stop_current()
-        elif widget._current_transition:
-            try:
-                widget._current_transition.stop()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            try:
-                widget._current_transition.cleanup()
-            except Exception as e:
-                logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
-            widget._current_transition = None
-    except Exception as e:
-        logger.debug("[TRANSITION] Cleanup failed: %s", e, exc_info=True)
+    # GL resources must be deleted while their QOpenGLWidget/context is still
+    # alive. cleanup() deliberately raises if live resources cannot acquire the
+    # context; do not destroy the surface and make the leak unrecoverable.
+    compositor = getattr(widget, "_gl_compositor", None)
+    if compositor is not None:
+        compositor.cleanup()
+        from rendering.gl_compositor_pkg.gl_lifecycle import gl_pipeline_has_live_resources
+        if gl_pipeline_has_live_resources(compositor):
+            raise RuntimeError("Compositor cleanup returned with live GL resources")
+        compositor.hide()
+        compositor.setParent(None)
+        compositor.deleteLater()
+        widget._gl_compositor = None
 
-    # Hide overlays and cancel watchdog timer
+    widget._destroy_render_surface()
+    widget._runtime_cleanup_complete = True
+    logger.info(
+        "[LIFECYCLE] Display runtime cleanup complete screen=%s reason=%s",
+        getattr(widget, "screen_index", "unknown"),
+        reason,
+    )
+
+
+def on_destroyed(widget: "DisplayWidget", *_args) -> None:
+    """Residual safety net; normal teardown must finish before destruction."""
     try:
-        hide_all_overlays(widget)
-    except Exception as e:
-        logger.debug("[OVERLAYS] Hide failed: %s", e, exc_info=True)
-    widget._cancel_transition_watchdog()
+        cleanup_runtime(widget, reason="qobject_destroyed_fallback")
+    except Exception:
+        logger.critical(
+            "[LIFECYCLE] Display reached QObject destruction before clean runtime teardown",
+            exc_info=True,
+        )
