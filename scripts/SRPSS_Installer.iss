@@ -4,21 +4,20 @@
 ; - Sets SCRNSAVE.EXE for the current user to SRPSS.scr
 ;
 ; Usage (dev side):
-; 1) Build SRPSS.exe via the PyInstaller script:
-;    - scripts/build.ps1       -> ..\release\SRPSS.exe
-; 2) Rename SRPSS.exe to SRPSS.scr and leave it under ..\release\.
-; 3) Open this .iss file in Inno Setup and Compile.
-; 4) Distribute the generated Setup_SRPSS.exe to end users.
+; 1) Run tools/build_runner.py and build Standard Screensaver.
+; 2) Compile this .iss file in Inno Setup (or select Standard Installer).
+; 3) Distribute release\installers\Setup_SRPSS.exe to end users.
 
 [Setup]
 AppId={{D8A5B7C8-9F9B-4F0D-9C5A-0F2F6A1E7C11}
 AppName=ShittyRandomPhotoScreenSaver
-AppVersion=4.0
+AppVersion=4.6.8
 AppPublisher=Jayde Ver Elst
 DefaultDirName={commonpf}\SRPSS
 DefaultGroupName=ShittyRandomPhotoScreenSaver
 DisableDirPage=yes
 DisableProgramGroupPage=yes
+OutputDir=..\release\installers
 OutputBaseFilename=Setup_SRPSS
 Compression=lzma
 SolidCompression=yes
@@ -26,14 +25,14 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.0
+VersionInfoVersion=4.6.8
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; Main screensaver: build via scripts/build.ps1, then rename SRPSS.exe -> SRPSS.scr
-Source: ".\..\release\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
+; Main screensaver from the canonical release payload.
+Source: ".\..\release\screensaver\SRPSS.scr"; DestDir: "{sys}"; Flags: ignoreversion
 
 ; Application icon used for shortcuts and ARP entry
 Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
@@ -42,7 +41,7 @@ Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".\..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ignoreversion
 
 ; Reddit helper watcher bundle (laid down by the installer; no one-file runtime extraction)
-Source: ".\..\release\helpers\SRPSS_RedditHelper\*"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: ".\..\release\reddit_helper\*"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 ; Shared task-definition template used by both installer registration and
 ; repo-side harness tooling so we test the same XML contract.

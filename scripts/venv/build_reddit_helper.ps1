@@ -5,16 +5,16 @@ Output:
   release/reddit_helper/SRPSS_RedditHelper.exe
 
 Persistent helper venv:
-  build_deps/venv
+  .venv (repo root)
 
 This avoids global Python pollution while keeping builds fast and repeatable.
 Dependencies are pinned in:
   build_deps/requirements_helper.txt
 
 Usage:
-  powershell -ExecutionPolicy Bypass -File .\scripts\build_reddit_helper.ps1
-  powershell -ExecutionPolicy Bypass -File .\scripts\build_reddit_helper.ps1 -Console
-  powershell -ExecutionPolicy Bypass -File .\scripts\build_reddit_helper.ps1 -ReinstallVenvDeps
+  powershell -ExecutionPolicy Bypass -File .\scripts\venv\build_reddit_helper.ps1
+  powershell -ExecutionPolicy Bypass -File .\scripts\venv\build_reddit_helper.ps1 -Console
+  powershell -ExecutionPolicy Bypass -File .\scripts\venv\build_reddit_helper.ps1 -ReinstallVenvDeps
 #>
 
 [CmdletBinding()]
@@ -137,7 +137,7 @@ function Ensure-HelperVenv {
         }
 
         Write-Host "[BUILD-HELPER] Creating persistent helper virtual environment: $VenvDir"
-        & $BasePython -m venv $VenvDir
+        & $BasePython -m venv $VenvDir | ForEach-Object { Write-Host $_ }
     }
 
     if (-not (Test-Path $VenvPython)) {
@@ -146,7 +146,7 @@ function Ensure-HelperVenv {
 
     $venvVersion = Get-PythonVersionText -PythonExe $VenvPython
     if (-not $venvVersion.StartsWith("3.11.")) {
-        throw "Existing helper venv is Python $venvVersion, but this build expects Python 3.11. Delete '$VenvDir' and rerun."
+        throw "Existing repo-root .venv is Python $venvVersion, but this build expects Python 3.11. Delete .venv and rerun."
     }
 
     Write-Host "[BUILD-HELPER] Using helper venv Python: $VenvPython"
@@ -170,8 +170,8 @@ function Ensure-HelperVenv {
 
     $pyInstallerAvailable = $false
     try {
-        $pyInstallerVersion = (& $VenvPython -m PyInstaller --version 2>$null)
-        if ($pyInstallerVersion) {
+        $null = & $VenvPython -m PyInstaller --version 2>$null
+        if ($LASTEXITCODE -eq 0) {
             $pyInstallerAvailable = $true
         }
     } catch {
@@ -182,8 +182,11 @@ function Ensure-HelperVenv {
 
     if ($needsDeps) {
         Write-Host "[BUILD-HELPER] Installing/updating helper venv dependencies..."
-        & $VenvPython -m pip install --upgrade pip
-        & $VenvPython -m pip install -r $RequirementsFile
+        & $VenvPython -m pip install --upgrade pip | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed with exit code $LASTEXITCODE" }
+
+        & $VenvPython -m pip install -r $RequirementsFile | ForEach-Object { Write-Host $_ }
+        if ($LASTEXITCODE -ne 0) { throw "helper dependency install failed with exit code $LASTEXITCODE" }
         $desiredStamp | Out-File -FilePath $StampPath -Encoding utf8 -Force
     } else {
         Write-Host "[BUILD-HELPER] Helper venv dependencies look current; skipping pip install."
@@ -205,17 +208,32 @@ function Ensure-HelperVenv {
 
 Set-ScriptWindowMinimized -Disable:$Console
 
-$Root = Resolve-Path (Join-Path $PSScriptRoot '..')
-$Root = $Root.Path
+function Resolve-RepoRoot {
+    $here = Resolve-Path $PSScriptRoot
+    $current = Get-Item $here.Path
+
+    while ($null -ne $current) {
+        if ((Test-Path (Join-Path $current.FullName "versioning.py")) -and
+            (Test-Path (Join-Path $current.FullName "scripts"))) {
+            return $current.FullName
+        }
+
+        $current = $current.Parent
+    }
+
+    throw "Could not locate SRPSS repo root above: $PSScriptRoot"
+}
+
+$Root = Resolve-RepoRoot
 
 $ReleaseRoot = Join-Path $Root 'release'
 $DistributionDir = Join-Path $ReleaseRoot 'reddit_helper'
 $LogDir = Join-Path $Root 'logs'
 $BuildDepsDir = Join-Path $Root 'build_deps'
-$VenvDir = Join-Path $BuildDepsDir 'venv'
+$VenvDir = Join-Path $Root '.venv'
 $RequirementsFile = Join-Path $BuildDepsDir 'requirements_helper.txt'
 $BuildRoot = Join-Path $Root 'build'
-$BuildDir = Join-Path $BuildRoot 'normal\reddit_helper'
+$BuildDir = Join-Path $BuildRoot 'venv\reddit_helper'
 $StagingDistDir = Join-Path $BuildDir 'dist'
 $PyInstallerWorkDir = Join-Path $BuildDir 'work'
 $SpecDir = Join-Path $BuildDir 'spec'

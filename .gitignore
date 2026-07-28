@@ -170,7 +170,9 @@ dmypy.json
 *.manifest
 *.spec.bak
 
-# SRPSS build scratch output
+# SRPSS build scratch output. Current workers use /build/<environment>/<product>/.
+/build/
+# Legacy scratch paths retained here so older local scripts cannot expose debris.
 /build_nuitka/
 /build_nuitka_venv/
 /build_nuitka_mc_onedir/
@@ -179,13 +181,19 @@ dmypy.json
 /build_reddit_helper_venv/
 /build_deps/
 /dist/
-/build/
 
 # SRPSS venv build-runner local junk
 /scripts/venv/.venv/
 /scripts/venv/**/__pycache__/
 /scripts/venv/**/*.py[cod]
 /scripts/venv/**/*.log
+
+# Tracked repo-root-venv build workers used by tools/build_runner.py.
+!/scripts/venv/
+/scripts/venv/*
+!/scripts/venv/build_nuitka.ps1
+!/scripts/venv/build_nuitka_mc_onedir.ps1
+!/scripts/venv/build_reddit_helper.ps1
 
 # Accidental/invalid output locations from running copied scripts from scripts/venv
 /scripts/release/

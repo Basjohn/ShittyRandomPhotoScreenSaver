@@ -350,12 +350,12 @@ def regenerate_repo_shipped_visualizer_preset_artifacts(repo_root: Path | None =
 
     Generated artifacts:
     - ``<repo>/presets/visualizer_modes_manifest.json``
-    - ``<repo>/release/main_mc.dist/presets/visualizer_modes``
-    - ``<repo>/release/main_mc.dist/presets/visualizer_modes_manifest.json``
+    - ``<repo>/release/media_center/presets/visualizer_modes``
+    - ``<repo>/release/media_center/presets/visualizer_modes_manifest.json``
     """
     root = Path(repo_root) if repo_root is not None else Path(__file__).resolve().parents[1]
     source_root = root / "presets" / "visualizer_modes"
-    release_root = root / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+    release_root = root / "release" / "media_center" / "presets" / "visualizer_modes"
 
     if not source_root.exists() or not source_root.is_dir():
         raise FileNotFoundError(f"Authoritative visualizer preset source tree not found: {source_root}")

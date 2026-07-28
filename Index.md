@@ -60,6 +60,7 @@ Do not read every document by default.
 |---|---|
 | `main.py` | Normal screensaver runtime and Windows invocation modes |
 | `main_mc.py` | Media Center runtime |
+| `tools/build_runner.py` | Build Foundry GUI/CLI owner for normal and repo-root-venv release pipelines |
 
 ## Runtime Ownership Map
 

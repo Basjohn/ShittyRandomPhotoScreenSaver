@@ -6,6 +6,17 @@ from pathlib import Path
 
 
 class TestRedditHelperRuntime:
+    def test_repo_helper_candidate_uses_canonical_release_directory(
+        self, tmp_path, monkeypatch
+    ):
+        from core.windows import reddit_helper_runtime as runtime
+
+        monkeypatch.setattr(runtime, "_repo_root", lambda: tmp_path)
+
+        assert runtime._repo_helper_candidates() == [
+            tmp_path / "release" / "reddit_helper" / "SRPSS_RedditHelper.exe"
+        ]
+
     def test_enqueue_url_marks_secure_desktop_entries_with_not_before_timestamp(self, tmp_path, monkeypatch):
         from core.windows import reddit_helper_bridge as bridge
 

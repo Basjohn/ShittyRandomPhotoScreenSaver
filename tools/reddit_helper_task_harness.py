@@ -31,8 +31,7 @@ LEGACY_TASK_NAMES = (r"\SRPSS\RedditHelper", r"SRPSS\RedditHelper")
 DEFAULT_PACKAGED_HELPER = (
     REPO_ROOT
     / "release"
-    / "helpers"
-    / "SRPSS_RedditHelper"
+    / "reddit_helper"
     / "SRPSS_RedditHelper.exe"
 )
 

@@ -100,10 +100,7 @@ def _repo_root() -> Path:
 
 def _repo_helper_candidates() -> list[Path]:
     root = _repo_root()
-    return [
-        root / "release" / "helpers" / HELPER_EXE_NAME,
-        root / "release_helpers" / HELPER_EXE_NAME,
-    ]
+    return [root / "release" / "reddit_helper" / HELPER_EXE_NAME]
 
 
 def _source_helper_command() -> Optional[list[str]]:

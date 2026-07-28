@@ -81,7 +81,7 @@ def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
 
     assert '"--onedir"' in build_script
     assert '"--onefile"' not in build_script
-    assert r"release\helpers\SRPSS_RedditHelper\*" in installer
+    assert r"release\reddit_helper\*" in installer
     assert "no one-file runtime extraction" in installer
 
 

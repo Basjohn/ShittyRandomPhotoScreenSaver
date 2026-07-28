@@ -4,16 +4,16 @@
 ;
 ; Usage:
 ;   1) Run scripts/build_nuitka_mc_onedir.ps1 to produce:
-;        release\main_mc.dist\SRPSS_Media_Center.exe
-;        release\main_mc.dist\*
+;        release\media_center\SRPSS_Media_Center.exe
+;        release\media_center\*
 ;   2) Compile this ISS script in Inno Setup. Output installer will copy
-;      every file under SRPSS_Media_Center.dist into {app}.
+;      every file under release\media_center into {app}.
 ;
 
 [Setup]
 AppId={{31A3E38F-0A6C-46CF-8934-9EB8A42F0463}
 AppName=SRPSS - Media Center
-AppVersion=4.0
+AppVersion=4.6.8
 AppPublisher=Jayde Ver Elst
 AppPublisherURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
 AppSupportURL=https://github.com/Basjohn/ShittyRandomPhotoScreenSaver
@@ -23,6 +23,7 @@ DefaultGroupName=SRPSS - Media Center
 PrivilegesRequired=lowest
 DisableDirPage=no
 DisableProgramGroupPage=yes
+OutputDir=..\release\installers
 OutputBaseFilename=Setup_SRPSS_Media_Center
 Compression=lzma
 SolidCompression=yes
@@ -30,7 +31,7 @@ ArchitecturesInstallIn64BitMode=x64os
 SetupIconFile=..\SRPSS.ico
 UninstallDisplayIcon={app}\SRPSS.ico
 WizardSmallImageFile=..\images\LogoBMP.bmp
-VersionInfoVersion=4.0
+VersionInfoVersion=4.6.8
 AllowUNCPath=False
 
 [Languages]
@@ -43,16 +44,16 @@ Name: "runafter"; Description: "Run After Install"; GroupDescription: "Post-inst
 
 [Files]
 ; Copy everything inside the Nuitka onedir output into {app}
-Source: "..\release\main_mc.dist\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
+Source: "..\release\media_center\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion; Excludes: "presets\visualizer_modes\*"
 ; Keep one packaged copy inside the MC install so visualizer imports can
 ; still restore from bundled assets even though runtime loading now uses the
 ; shared ProgramData tree.
-Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{app}\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 ; Active curated preset tree shared with SCR/NORMAL builds.
-Source: "..\release\main_mc.dist\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "..\release\main_mc.dist\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+Source: "..\release\media_center\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\release\media_center\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
 ; Include the EXE itself (for convenience when browsing install dir)
-Source: "..\release\main_mc.dist\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\release\media_center\SRPSS_Media_Center.exe"; DestDir: "{app}"; Flags: ignoreversion
 ; Installer icon for shortcuts / ARP entry
 Source: "..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 

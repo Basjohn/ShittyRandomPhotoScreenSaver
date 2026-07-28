@@ -230,7 +230,7 @@ def test_regenerate_repo_shipped_visualizer_preset_artifacts_rebuilds_release_tr
     tmp_path: Path,
 ) -> None:
     source_root = tmp_path / "presets" / "visualizer_modes" / "spectrum"
-    release_root = tmp_path / "release" / "main_mc.dist" / "presets" / "visualizer_modes" / "spectrum"
+    release_root = tmp_path / "release" / "media_center" / "presets" / "visualizer_modes" / "spectrum"
     source_root.mkdir(parents=True)
     release_root.mkdir(parents=True)
 
@@ -246,7 +246,7 @@ def test_regenerate_repo_shipped_visualizer_preset_artifacts_rebuilds_release_tr
         "spectrum/preset_2_bars.json",
     }
     assert load_curated_visualizer_preset_manifest(
-        tmp_path / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+        tmp_path / "release" / "media_center" / "presets" / "visualizer_modes"
     ) == {
         "spectrum/preset_1_organs.json",
         "spectrum/preset_2_bars.json",

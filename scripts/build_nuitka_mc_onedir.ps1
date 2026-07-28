@@ -6,6 +6,7 @@ Legacy no-venv version:
 - Installs Nuitka only if missing
 - Does not create or manage a project .venv
 - Compiles main_mc.py into SRPSS_Media_Center.exe plus dependency folder
+- Stages Nuitka output under /build/normal/media_center and publishes /release/media_center
 
 Usage:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_nuitka_mc_onedir.ps1
@@ -41,15 +42,25 @@ Set-ScriptWindowMinimized -Disable:$Console
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $Root = $Root.Path
-$BuildDir = Join-Path $Root 'build_nuitka_mc_onedir'
-$ReleaseDir = Join-Path $Root 'release'
+$BuildRoot = Join-Path $Root 'build'
+$BuildDir = Join-Path $BuildRoot 'normal\media_center'
+$BuildOutputDir = Join-Path $BuildDir 'output'
+$ReleaseRoot = Join-Path $Root 'release'
+$DistributionDir = Join-Path $ReleaseRoot 'media_center'
 $LogDir = Join-Path $Root 'logs'
+$BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path $LogDir ("build_nuitka_mc_onedir_{0}.log" -f $Timestamp)
 $MaxLogFiles = 10
 
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
-New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
+    throw "Shared build layout helper not found: $BuildLayoutScript"
+}
+. $BuildLayoutScript
+
+Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 $existingLogs = @(Get-ChildItem -Path $LogDir -Filter "build_nuitka_mc_onedir_*.log" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
@@ -118,7 +129,7 @@ $argsList = @(
     "-m", "nuitka",
     "--standalone",
     "--remove-output",
-    "--output-dir=$ReleaseDir",
+    "--output-dir=$BuildOutputDir",
     "--output-filename=$AppName",
     $consoleArg,
     "--enable-plugin=pyside6",
@@ -154,11 +165,17 @@ Write-Host ("python " + ($argsList -join ' '))
 Push-Location $Root
 try {
     python @argsList *>&1 | Tee-Object -FilePath $LogFile
+    $BuildExit = $LASTEXITCODE
 } finally {
     Pop-Location
 }
 
-$Exe = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "$AppName.exe" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($BuildExit -ne 0) {
+    Write-Host "[BUILD-N-ONEDIR] Build failed with exit code $BuildExit. See log: $LogFile"
+    exit $BuildExit
+}
+
+$Exe = Get-ChildItem -Path $BuildOutputDir -Recurse -Filter "$AppName.exe" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $Exe) {
     Write-Host "[BUILD-N-ONEDIR] Build failed or no executable produced. See log: $LogFile"
     exit 1
@@ -176,14 +193,31 @@ try {
 }
 
 try {
-    if (Test-Path $BuildDir) {
-        Remove-Item -Path $BuildDir -Recurse -Force -ErrorAction Stop
-        Write-Host "[BUILD-N-ONEDIR] Cleaned build directory: $BuildDir"
+    $publishedDir = Publish-SRPSSDirectory `
+        -SourcePath $Exe.DirectoryName `
+        -TargetPath $DistributionDir `
+        -ReleaseRoot $ReleaseRoot `
+        -RequiredRelativePaths @("$AppName.exe")
+    $Exe = Get-Item -LiteralPath (Join-Path $publishedDir "$AppName.exe")
+
+    foreach ($legacyPath in @(
+        (Join-Path $ReleaseRoot 'main_mc.build'),
+        (Join-Path $ReleaseRoot 'main_mc.dist')
+    )) {
+        Remove-SRPSSLegacyReleasePath -Path $legacyPath -ReleaseRoot $ReleaseRoot
     }
+} catch {
+    Write-Host "[BUILD-N-ONEDIR] Error: failed to publish Media Center payload - $($_.Exception.Message)"
+    exit 1
+}
+
+try {
+    Remove-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot
+    Write-Host "[BUILD-N-ONEDIR] Cleaned build directory: $BuildDir"
 } catch {
     Write-Host "[BUILD-N-ONEDIR] Warning: Failed to delete build directory $BuildDir - $_"
 }
 
 Write-Host "[BUILD-N-ONEDIR] Build success (one-dir root): $($Exe.DirectoryName)"
-Write-Host "[BUILD-N-ONEDIR] Release directory: $ReleaseDir"
+Write-Host "[BUILD-N-ONEDIR] Release directory: $DistributionDir"
 Write-Host "[BUILD-N-ONEDIR] Log: $LogFile"

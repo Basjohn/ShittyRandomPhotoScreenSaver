@@ -1450,13 +1450,13 @@ def test_checked_in_appdata_fixture_uses_modern_visualizer_schema():
     assert not retired, f"tests_tmp_appdata fixture still carries retired visualizer keys: {retired}"
 
 
-def test_release_main_mc_dist_curated_tree_matches_source_when_present():
+def test_release_media_center_curated_tree_matches_source_when_present():
     root = Path(__file__).resolve().parents[1]
     source_root = root / "presets" / "visualizer_modes"
-    release_root = root / "release" / "main_mc.dist" / "presets" / "visualizer_modes"
+    release_root = root / "release" / "media_center" / "presets" / "visualizer_modes"
 
     if not release_root.exists():
-        pytest.skip("release/main_mc.dist preset tree not present in this checkout")
+        pytest.skip("release/media_center preset tree not present in this checkout")
 
     source_files = sorted(
         path.relative_to(source_root).as_posix()
@@ -1467,7 +1467,7 @@ def test_release_main_mc_dist_curated_tree_matches_source_when_present():
         for path in release_root.rglob("*.json")
     )
 
-    assert release_files == source_files, "release/main_mc.dist preset tree drifted from source presets"
+    assert release_files == source_files, "release/media_center preset tree drifted from source presets"
 
     mismatched: list[str] = []
     for rel in source_files:
@@ -1476,7 +1476,7 @@ def test_release_main_mc_dist_curated_tree_matches_source_when_present():
         if source_text != release_text:
             mismatched.append(rel)
 
-    assert not mismatched, f"release/main_mc.dist preset payloads differ from source: {mismatched}"
+    assert not mismatched, f"release/media_center preset payloads differ from source: {mismatched}"
 
 
 def test_malformed_curated_preset_is_skipped_without_crashing_reload(monkeypatch, tmp_path):

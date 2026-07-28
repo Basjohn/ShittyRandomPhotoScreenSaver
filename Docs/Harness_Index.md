@@ -314,7 +314,51 @@ General rule:
 - no real account data in repository artifacts;
 - provider/cache tests do not replace runtime widget lifecycle tests.
 
-## 12. Harness Maintenance
+## 12. Build Foundry
+
+Use the single standard-library GUI owner for both build environments:
+
+```powershell
+python tools/build_runner.py
+python tools/build_runner.py --mode normal
+python tools/build_runner.py --mode venv
+```
+
+The selected environment changes only the PowerShell workers. Normal mode uses
+`scripts/*.ps1`; repo-venv mode uses `scripts/venv/*.ps1`. Both modes compile
+the canonical installer definitions in `scripts/`. The runner reports Reddit
+helper input drift inline, persists the auto-close preference under local app
+data, exposes per-job log/output links, and shows stage progress while each
+long-running compiler owns the pipeline.
+
+Selecting an installer without its product build intentionally packages the
+existing canonical release payload. Keep the corresponding product steps
+selected when fresh binaries are required.
+
+Build workers stage compiler products under the ignored
+`build/<environment>/<product>/` tree.
+Successful products publish into one release tree:
+
+```text
+release/
+  screensaver/
+  media_center/
+  reddit_helper/
+  installers/
+```
+
+Validate routing and helper-fingerprint status without opening the GUI or
+starting a build:
+
+```powershell
+python tools/build_runner.py --smoke-test --mode normal
+python tools/build_runner.py --smoke-test --mode venv
+```
+
+Do not run the test suite concurrently with a Nuitka/PyInstaller build from the
+same checkout.
+
+## 13. Harness Maintenance
 
 Add an entry only for a recurring investigation with a stable command or procedure.
 

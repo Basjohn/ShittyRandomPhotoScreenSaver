@@ -5,7 +5,7 @@ Legacy no-venv version:
 - Uses the currently active/global Python on PATH
 - Installs Nuitka only if missing
 - Does not create or manage a project .venv
-- Places executables in /release
+- Stages Nuitka output under /build/normal/screensaver and publishes /release/screensaver
 - Auto-detects an .ico in project root for --windows-icon-from-ico
 - Keeps optimizations reasonable to avoid AV false positives
 
@@ -45,15 +45,26 @@ Set-ScriptWindowMinimized -Disable:$Console
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
 $Root = $Root.Path
-$BuildDir = Join-Path $Root 'build_nuitka'
-$ReleaseDir = Join-Path $Root 'release'
+$BuildRoot = Join-Path $Root 'build'
+$BuildDir = Join-Path $BuildRoot 'normal\screensaver'
+$BuildOutputDir = Join-Path $BuildDir 'output'
+$PackageDir = Join-Path $BuildDir 'package'
+$ReleaseRoot = Join-Path $Root 'release'
+$DistributionDir = Join-Path $ReleaseRoot 'screensaver'
 $LogDir = Join-Path $Root 'logs'
+$BuildLayoutScript = Join-Path $Root 'tools\build_layout.ps1'
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $LogFile = Join-Path $LogDir ("build_nuitka_{0}.log" -f $Timestamp)
 $MaxLogFiles = 10
 
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
-New-Item -ItemType Directory -Force -Path $ReleaseDir | Out-Null
+if (-not (Test-Path -LiteralPath $BuildLayoutScript -PathType Leaf)) {
+    throw "Shared build layout helper not found: $BuildLayoutScript"
+}
+. $BuildLayoutScript
+
+Reset-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot | Out-Null
+New-Item -ItemType Directory -Force -Path $BuildOutputDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ReleaseRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 
 $existingLogs = @(Get-ChildItem -Path $LogDir -Filter "build_nuitka_*.log" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending)
@@ -127,7 +138,7 @@ $argsList = @(
     "--standalone",
     "--remove-output",
     $consoleArg,
-    "--output-dir=$ReleaseDir",
+    "--output-dir=$BuildOutputDir",
     "--output-filename=$AppName",
     "--enable-plugin=pyside6",
     "--include-data-dir=presets=presets",
@@ -164,11 +175,17 @@ Write-Host ("python " + ($argsList -join ' '))
 Push-Location $Root
 try {
     python @argsList *>&1 | Tee-Object -FilePath $LogFile
+    $BuildExit = $LASTEXITCODE
 } finally {
     Pop-Location
 }
 
-$Exe = Get-ChildItem -Path $ReleaseDir -Recurse -Filter "$AppName.exe" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($BuildExit -ne 0) {
+    Write-Host "[BUILD-N] Build failed with exit code $BuildExit. See log: $LogFile"
+    exit $BuildExit
+}
+
+$Exe = Get-ChildItem -Path $BuildOutputDir -Recurse -Filter "$AppName.exe" -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
 if (-not $Exe) {
     Write-Host "[BUILD-N] Build failed or no executable produced. See log: $LogFile"
     exit 1
@@ -201,7 +218,21 @@ if (-not $SkipScrRename) {
     Write-Host "[BUILD-N] SkipScrRename enabled; SCR copy not produced."
 }
 
-$loggingCfgPath = [System.IO.Path]::ChangeExtension($primaryArtifact.FullName, ".logging.cfg")
+if (Test-Path -LiteralPath $PackageDir) {
+    Remove-Item -LiteralPath $PackageDir -Recurse -Force
+}
+New-Item -ItemType Directory -Path $PackageDir | Out-Null
+Copy-Item -LiteralPath $primaryArtifact.FullName -Destination $PackageDir -Force
+if (
+    $KeepExe -and
+    ($primaryArtifact.Extension -ieq ".scr") -and
+    (Test-Path -LiteralPath $Exe.FullName -PathType Leaf)
+) {
+    Copy-Item -LiteralPath $Exe.FullName -Destination $PackageDir -Force
+}
+
+$packagedPrimaryPath = Join-Path $PackageDir $primaryArtifact.Name
+$loggingCfgPath = [System.IO.Path]::ChangeExtension($packagedPrimaryPath, ".logging.cfg")
 try {
     if ($Console) {
         "1" | Out-File -FilePath $loggingCfgPath -Encoding utf8 -Force
@@ -213,14 +244,35 @@ try {
 }
 
 try {
-    if (Test-Path $BuildDir) {
-        Remove-Item -Path $BuildDir -Recurse -Force -ErrorAction Stop
-        Write-Host "[BUILD-N] Cleaned build directory: $BuildDir"
+    $publishedDir = Publish-SRPSSDirectory `
+        -SourcePath $PackageDir `
+        -TargetPath $DistributionDir `
+        -ReleaseRoot $ReleaseRoot `
+        -RequiredRelativePaths @($primaryArtifact.Name)
+    $primaryArtifact = Get-Item -LiteralPath (Join-Path $publishedDir $primaryArtifact.Name)
+
+    foreach ($legacyPath in @(
+        (Join-Path $ReleaseRoot "$AppName.exe"),
+        (Join-Path $ReleaseRoot "$AppName.scr"),
+        (Join-Path $ReleaseRoot "$AppName.logging.cfg"),
+        (Join-Path $ReleaseRoot 'main.build'),
+        (Join-Path $ReleaseRoot 'main.dist'),
+        (Join-Path $ReleaseRoot 'main.onefile-build')
+    )) {
+        Remove-SRPSSLegacyReleasePath -Path $legacyPath -ReleaseRoot $ReleaseRoot
     }
+} catch {
+    Write-Host "[BUILD-N] Error: failed to publish screensaver payload - $($_.Exception.Message)"
+    exit 1
+}
+
+try {
+    Remove-SRPSSBuildDirectory -Path $BuildDir -BuildRoot $BuildRoot
+    Write-Host "[BUILD-N] Cleaned build directory: $BuildDir"
 } catch {
     Write-Host "[BUILD-N] Warning: Failed to delete build directory $BuildDir - $_"
 }
 
 Write-Host "[BUILD-N] Build success: $($primaryArtifact.FullName)"
-Write-Host "[BUILD-N] Release directory: $ReleaseDir"
+Write-Host "[BUILD-N] Release directory: $DistributionDir"
 Write-Host "[BUILD-N] Log: $LogFile"
