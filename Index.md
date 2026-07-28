@@ -93,6 +93,7 @@ Do not read every document by default.
 | Visualizer renderer | existing GL visualizer renderer modules |
 | CUSTOM layout | existing custom-layout contract/manager modules |
 | Input routing | existing centralized input handler |
+| Secure-desktop URL/helper handoff | installer task/ACL contract plus `core/windows/reddit_helper_bridge.py`, `core/windows/reddit_helper_runtime.py`, and `helpers/reddit_helper_worker.py` |
 | Logging/performance | modules under `core/performance/`, logging tools |
 
 Use `Docs/Contracts.md` before assuming a nearby helper is an authority.

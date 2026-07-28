@@ -972,6 +972,7 @@ This is the long-term anti-regression record for the project, not an active task
 - [x] SOLVED
 
 - **Final resolved state:** real runtime success now holds with a durable reusable scheduled task named `SRPSS_RedditHelper`, interactive-only launch authority, normal saver exit, helper-side shell polling, and post-handoff self-exit. The queue/clipboard fallback behavior remains secondary.
+- **2026-07-28 recovery follow-up:** the original launch-authority fix remains healthy: the installed task is still interactive-only, its latest observed result was `0`, and recent queued links reached the helper. A separate recovery/ownership family is now active in `Current_Plan.md`: both helper log writers are unbounded, `.bridge_ready` is rewritten as a hard availability gate, runtime-created ProgramData paths do not have an installer-owned least-privilege ACL contract, and queue terminal/debris retention is incomplete. The current healthy machine snapshot has a broad inherited `BUILTIN\Users` write shape across the shared tree; regardless of how that ACL arose, it is not an acceptable packaged repair because the same tree contains the helper executable and an `open_settings` command spool. Keep Task Scheduler authority intact while P0 replaces the fragile storage/recovery layer.
 - **What finally worked:** the winning launch-authority model is:
   - saver writes queue entries and exits normally
   - saver may refresh a benign ProgramData session ticket while active, but that ticket never gates saver shutdown

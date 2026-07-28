@@ -1,6 +1,6 @@
 # Contracts
 
-Last updated: 2026-07-23
+Last updated: 2026-07-28
 
 Fast routing index for SRPSS contracts.
 
@@ -26,6 +26,7 @@ This is not a second `Spec.md`. Find the owner here, then read only the owning c
 | Shared application events | `core/events/event_system.py` | — | Meaningful cross-module events, not frame transport |
 | Worker process orchestration | `core/process/supervisor.py` | — | One correlated process-response seam |
 | Shared animation timeline | `core/animation/animator.py` | — | Shared animations only; not visualizer simulation |
+| Secure-desktop URL/helper handoff | installer task/ACL contract, `core/windows/reddit_helper_bridge.py`, `core/windows/reddit_helper_runtime.py`, and `helpers/reddit_helper_worker.py` | `Docs/Historical_Bugs.md` R-02; active recovery in `Current_Plan.md` | Atomic bounded spool; interactive-only ephemeral helper; saver teardown never waits |
 
 ## Rendering and Performance Contracts
 
