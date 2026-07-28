@@ -135,8 +135,10 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 
 ## 8. Image, Memory, and GPU Resource Contract
 
-- CPU image caches are byte-bounded.
-- GPU resources are byte-accounted and generation-safe.
+- CPU image caches are bounded by exact logical bytes and entry count; persisted legacy limits are clamped to the supported production envelope.
+- Prefetch concurrency, pending count, and future decoded/scaled bytes are bounded independently of cache residency.
+- Display-owned `QPixmap` backing stores are captured on the GUI thread into detached accounting sidecars and deduplicated by Qt backing identity.
+- GPU textures and upload-PBO retention are byte-accounted, byte-bounded, and generation-safe.
 - Normal cycling reaches a stable RAM/VRAM plateau.
 - Image representations have explicit owners and lifetimes.
 - Workers may publish immutable thread-safe upload data.
@@ -146,6 +148,9 @@ Focused behaviour and settings contracts live in the existing visualizer documen
 - Shared texture reuse is legal only in a verified live share group with explicit leases and exactly-once deletion.
 - Context-local GL objects remain context-local.
 - Prefetch is bounded by bytes and outstanding work.
+- Same-image reuse is permitted only for exact source/transform/size/mode/DPR identity; differing targets retain independent representations.
+- Terminal transition completion or cancellation releases active texture pins; owner-context teardown returns application-owned GL resources to zero.
+- Deterministic application-owned byte accounting is required in automation; driver-reported VRAM remains a real-platform validation gate.
 
 ## 9. Settings and Persistence Contract
 

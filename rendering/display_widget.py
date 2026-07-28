@@ -520,6 +520,8 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+        self.refresh_image_resource_accounting()
+
     def _resolve_display_target_fps(self, detected_hz: int) -> int:
         """Resolve per-display target FPS.
         
@@ -958,6 +960,18 @@ class DisplayWidget(QWidget):
         """
         return self.get_target_size()
 
+    def refresh_image_resource_accounting(self) -> None:
+        """Capture display-owned QPixmap backing stores on the GUI thread."""
+        from rendering.image_resource_accounting import refresh_display_image_accounting
+
+        refresh_display_image_accounting(self)
+
+    def get_image_accounting_snapshot(self):
+        """Return the detached image-resource sidecar for background sampling."""
+        from rendering.image_resource_accounting import get_display_image_accounting
+
+        return get_display_image_accounting(self)
+
     def set_image(self, pixmap: QPixmap, image_path: str = "") -> None:
         """Display a raw pixmap via the legacy synchronous processing path.
 
@@ -990,6 +1004,7 @@ class DisplayWidget(QWidget):
                 original_pixmap,
                 image_path,
             )
+            self.refresh_image_resource_accounting()
             return
         from rendering.display_image_ops import set_processed_image
         set_processed_image(self, processed_pixmap, original_pixmap, image_path)
@@ -1292,6 +1307,7 @@ class DisplayWidget(QWidget):
         except Exception as e:
             logger.debug("[DISPLAY_WIDGET] Exception suppressed: %s", e)
 
+        self.refresh_image_resource_accounting()
         self.update()
 
     def quiesce_for_runtime_pause(self) -> None:
@@ -1317,6 +1333,7 @@ class DisplayWidget(QWidget):
         self._last_pixmap_seed_ts = None
         self._pre_raise_log_emitted = False
         self._base_fallback_paint_logged = False
+        self.refresh_image_resource_accounting()
 
     def show_error(self, message: str) -> None:
         """Show error message on the display widget."""
@@ -1327,6 +1344,7 @@ class DisplayWidget(QWidget):
         self._last_pixmap_seed_ts = None
         self._pre_raise_log_emitted = False
         self._base_fallback_paint_logged = False
+        self.refresh_image_resource_accounting()
         self.update()
         logger.warning(f"[FALLBACK] Showing error: {message}")
 

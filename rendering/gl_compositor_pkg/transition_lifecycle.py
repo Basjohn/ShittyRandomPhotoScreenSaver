@@ -101,6 +101,20 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
             logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
             new_pm = None
 
+    if new_pm is None and widget._particle is not None:
+        try:
+            new_pm = widget._particle.new_pixmap
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            new_pm = None
+
+    if new_pm is None and widget._burn is not None:
+        try:
+            new_pm = widget._burn.new_pixmap
+        except Exception as e:
+            logger.debug("[GL COMPOSITOR] Exception suppressed: %s", e)
+            new_pm = None
+
     # NOTE: _shooting_stars and _shuffle snap-to-new removed - these transitions are retired.
 
     if snap_to_new and new_pm is not None:
@@ -116,6 +130,8 @@ def cancel_current_transition(widget, snap_to_new: bool = True) -> None:
     widget._diffuse = None
     widget._raindrops = None
     widget._crumble = None
+    widget._particle = None
+    widget._burn = None
 
     # Ensure any transition textures are freed when a transition is
     # cancelled so we do not leak VRAM across many rotations.

@@ -28,6 +28,13 @@ from utils.image_cache import ImageCache
 
 logger = get_logger(__name__)
 
+_MIB = 1024 * 1024
+
+
+def _request_logical_bytes(request: Dict[str, Any]) -> int:
+    """Return the future RGBA8 footprint represented by a scaled request."""
+    return max(0, int(request.get("width") or 0)) * max(0, int(request.get("height") or 0)) * 4
+
 
 def _cache_trace(message: str, *args: Any) -> None:
     if is_cache_logging_enabled():
@@ -41,16 +48,28 @@ class ImagePrefetcher:
         cache: ImageCache,
         max_concurrent: int = 2,
         post_transition_delay_ms: float = 100.0,
+        max_pending_requests: Optional[int] = None,
+        max_pending_scaled_bytes: Optional[int] = None,
     ) -> None:
         self._threads = thread_manager
         self._cache = cache
-        self._max_concurrent = max(1, int(max_concurrent))
+        self._max_concurrent = max(1, min(4, int(max_concurrent)))
+        self._max_pending_requests = max(
+            self._max_concurrent,
+            int(max_pending_requests or (self._max_concurrent * 4)),
+        )
+        cache_budget = max(1, int(getattr(cache, "max_memory_bytes", 256 * _MIB)))
+        self._max_pending_scaled_bytes = max(
+            16 * _MIB,
+            int(max_pending_scaled_bytes or min(cache_budget // 2, 128 * _MIB)),
+        )
         self._inflight: Set[str] = set()
         self._pending_raw_paths: deque[str] = deque()
         self._pending_raw_keys: Set[str] = set()
         self._scaled_inflight: Set[str] = set()
         self._pending_scaled_requests: List[Dict[str, Any]] = []
         self._pending_scaled_keys: Set[str] = set()
+        self._pending_scaled_bytes = 0
         self._lock = threading.Lock()
         # Desync: post-transition delay to reduce IO contention
         self._post_transition_delay_ms = max(0.0, float(post_transition_delay_ms))
@@ -108,6 +127,17 @@ class ImagePrefetcher:
                 "scaled_inflight": len(self._scaled_inflight),
                 "scaled_pending": len(self._pending_scaled_requests),
             }
+
+    def snapshot_budget_state(self) -> Dict[str, int]:
+        """Return exact pending-work budget state for diagnostics/tests."""
+        with self._lock:
+            return {
+                "raw_pending": len(self._pending_raw_paths),
+                "scaled_pending": len(self._pending_scaled_requests),
+                "scaled_pending_bytes": self._pending_scaled_bytes,
+                "max_pending_requests": self._max_pending_requests,
+                "max_pending_scaled_bytes": self._max_pending_scaled_bytes,
+            }
     
     def clear_inflight(self) -> None:
         """Clear the inflight set. Call when sources change to avoid stale paths."""
@@ -118,6 +148,7 @@ class ImagePrefetcher:
             self._scaled_inflight.clear()
             self._pending_scaled_requests.clear()
             self._pending_scaled_keys.clear()
+            self._pending_scaled_bytes = 0
         if is_verbose_logging():
             logger.debug("Prefetcher inflight set cleared")
         _cache_trace("Cleared inflight and pending prefetch state")
@@ -146,10 +177,12 @@ class ImagePrefetcher:
                     self._inflight.add(p)
                     submissions.append(p)
                     active_slots -= 1
-                else:
+                elif len(self._pending_raw_paths) < self._max_pending_requests:
                     self._pending_raw_paths.append(p)
                     self._pending_raw_keys.add(p)
                     queued_count += 1
+                else:
+                    skipped_count += 1
 
         for path in submissions:
             self._submit_load(path)
@@ -198,6 +231,7 @@ class ImagePrefetcher:
         queued_any = False
         queued_count = 0
         skipped_without_raw = 0
+        skipped_budget = 0
         with self._lock:
             for request in requests:
                 cache_key = str(request.get("cache_key") or "")
@@ -212,8 +246,16 @@ class ImagePrefetcher:
                     continue
                 if cache_key in self._scaled_inflight or cache_key in self._pending_scaled_keys:
                     continue
+                request_bytes = _request_logical_bytes(request)
+                if (
+                    len(self._pending_scaled_requests) >= self._max_pending_requests
+                    or self._pending_scaled_bytes + request_bytes > self._max_pending_scaled_bytes
+                ):
+                    skipped_budget += 1
+                    continue
                 self._pending_scaled_requests.append(dict(request))
                 self._pending_scaled_keys.add(cache_key)
+                self._pending_scaled_bytes += request_bytes
                 queued_any = True
                 queued_count += 1
 
@@ -226,6 +268,13 @@ class ImagePrefetcher:
             _cache_trace(
                 "Skipped scaled prefetch requests without raw producer skipped=%d",
                 skipped_without_raw,
+            )
+        if skipped_budget:
+            _cache_trace(
+                "Skipped scaled prefetch requests at bounded backlog skipped=%d pending_bytes=%d cap_bytes=%d",
+                skipped_budget,
+                self._pending_scaled_bytes,
+                self._max_pending_scaled_bytes,
             )
         return queued_count
 
@@ -306,6 +355,10 @@ class ImagePrefetcher:
                 request = self._pending_scaled_requests.pop(idx)
                 cache_key = str(request.get("cache_key") or "")
                 self._pending_scaled_keys.discard(cache_key)
+                self._pending_scaled_bytes = max(
+                    0,
+                    self._pending_scaled_bytes - _request_logical_bytes(request),
+                )
                 self._scaled_inflight.add(cache_key)
                 requests_to_submit.append(request)
 
@@ -331,7 +384,7 @@ class ImagePrefetcher:
         use_lanczos = bool(request.get("use_lanczos", False))
         sharpen = bool(request.get("sharpen", False))
 
-        def _compute_scaled_variant() -> Optional[tuple[str, QPixmap]]:
+        def _compute_scaled_variant() -> Optional[tuple[str, QImage]]:
             try:
                 base = self._cache.get(raw_path)
                 if isinstance(base, QPixmap) and not base.isNull():
@@ -347,10 +400,7 @@ class ImagePrefetcher:
                 )
                 if scaled.isNull():
                     return None
-                pixmap = QPixmap.fromImage(scaled)
-                if pixmap.isNull():
-                    return None
-                return cache_key, pixmap
+                return cache_key, scaled
             except Exception as e:
                 logger.debug("Scaled prefetch compute failed for %s: %s", cache_key, e)
                 return None
@@ -359,8 +409,8 @@ class ImagePrefetcher:
             try:
                 payload = res.result if res and res.success else None
                 if payload:
-                    key, pixmap = payload
-                    self._cache.put(key, pixmap)
+                    key, image = payload
+                    self._cache.put(key, image)
                     stats = request.get("stats")
                     if isinstance(stats, dict):
                         stats["scaled_prefetch_completed"] = int(stats.get("scaled_prefetch_completed", 0)) + 1

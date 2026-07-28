@@ -174,6 +174,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
         logger.warning("[CACHE][FALLBACK] Received null processed pixmap")
         widget.error_message = "Failed to load image"
         widget.current_pixmap = None
+        widget.refresh_image_resource_accounting()
         widget.update()
         return
 
@@ -355,6 +356,7 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                         widget._overlay_timeouts[overlay_key] = widget._current_transition_started_at
                     # Raise widgets SYNCHRONOUSLY after compositor start.
                     _raise_runtime_widgets_above_compositor(widget, stage="transition_start")
+                    widget.refresh_image_resource_accounting()
                     logger.debug(f"Transition started: {transition.__class__.__name__}")
                     return
                 else:
@@ -400,6 +402,8 @@ def set_processed_image(widget, processed_pixmap: QPixmap, original_pixmap: QPix
                     widget.set_transition_work_pending(False)
             else:
                 _schedule_startup_first_frame_ready(widget, image_path)
+
+        widget.refresh_image_resource_accounting()
 
 def _on_transition_finished(
     widget,
@@ -472,6 +476,7 @@ def _on_transition_finished(
         logger.debug("[DISPLAY_WIDGET] Transition completed signal failed: %s", e)
     widget.image_displayed.emit(image_path)
     widget._pending_transition_finish_args = None
+    widget.refresh_image_resource_accounting()
 
 def push_spotify_visualizer_frame(
     widget,

@@ -266,3 +266,81 @@ def test_prefetch_registration_survives_transition_cooldown(qt_app):
     }
     assert threads.io_callbacks == []
     assert threads.compute_callbacks == []
+
+
+def test_prefetch_backlogs_are_count_and_byte_bounded(qt_app):
+    cache = _FakeCache()
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(
+        threads,
+        cache,
+        max_concurrent=2,
+        max_pending_requests=3,
+    )
+    raw_paths = [fr"C:\wall\{idx}.jpg" for idx in range(20)]
+
+    prefetcher.prefetch_paths(raw_paths)
+
+    state = prefetcher.snapshot_budget_state()
+    assert len(threads.io_callbacks) == 2
+    assert state["raw_pending"] == 3
+    assert state["raw_pending"] <= state["max_pending_requests"]
+
+    raw_path = raw_paths[0]
+    cache.store[raw_path] = _solid_qimage(3840, 2160, "blue")
+    prefetcher._scaled_inflight.add("busy")
+    bounded = ImagePrefetcher(
+        threads,
+        cache,
+        max_concurrent=1,
+        max_pending_requests=10,
+        max_pending_scaled_bytes=20 * 1024 * 1024,
+    )
+    bounded._scaled_inflight.add("busy")
+    requests = [
+        {
+            "stats": {},
+            "path": raw_path,
+            "cache_key": f"bounded-{idx}",
+            "width": 2560,
+            "height": 1440,
+            "display_mode": DisplayMode.FILL,
+            "use_lanczos": False,
+            "sharpen": False,
+        }
+        for idx in range(4)
+    ]
+
+    assert bounded.register_scaled_requests(requests) == 1
+    budget = bounded.snapshot_budget_state()
+    assert budget["scaled_pending"] == 1
+    assert budget["scaled_pending_bytes"] == 2560 * 1440 * 4
+    assert budget["scaled_pending_bytes"] <= budget["max_pending_scaled_bytes"]
+
+
+def test_scaled_prefetch_compute_returns_qimage_not_qpixmap(qt_app):
+    raw_path = r"C:\wall\worker-safe.jpg"
+    cache = _FakeCache({raw_path: _solid_qimage(320, 180, "blue")})
+    threads = _FakeThreads()
+    prefetcher = ImagePrefetcher(threads, cache, max_concurrent=1)
+
+    prefetcher.register_scaled_requests(
+        [
+            {
+                "stats": {},
+                "path": raw_path,
+                "cache_key": "worker-safe-scaled",
+                "width": 160,
+                "height": 90,
+                "display_mode": DisplayMode.FILL,
+                "use_lanczos": False,
+                "sharpen": False,
+            }
+        ]
+    )
+
+    compute, _callback = threads.compute_callbacks[0]
+    key, image = compute()
+    assert key == "worker-safe-scaled"
+    assert isinstance(image, QImage)
+    assert not isinstance(image, QPixmap)

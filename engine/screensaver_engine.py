@@ -664,9 +664,26 @@ class ScreensaverEngine(QObject):
 
     def _initialize_cache_prefetcher(self) -> None:
         try:
-            max_items = int(self.settings_manager.get('cache.max_items', 24))
-            max_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 1024))
-            max_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
+            configured_items = int(self.settings_manager.get('cache.max_items', 16))
+            configured_mem_mb = int(self.settings_manager.get('cache.max_memory_mb', 256))
+            max_items = max(2, min(32, configured_items))
+            max_mem_mb = max(64, min(256, configured_mem_mb))
+            configured_conc = int(self.settings_manager.get('cache.max_concurrent', 2))
+            max_conc = max(1, min(4, configured_conc))
+            if (
+                max_items != configured_items
+                or max_mem_mb != configured_mem_mb
+                or max_conc != configured_conc
+            ):
+                logger.warning(
+                    "[CACHE] Clamped legacy cache budget items=%d->%d memory_mb=%d->%d concurrent=%d->%d",
+                    configured_items,
+                    max_items,
+                    configured_mem_mb,
+                    max_mem_mb,
+                    configured_conc,
+                    max_conc,
+                )
             self._image_cache = ImageCache(max_items=max_items, max_memory_mb=max_mem_mb)
             if self.thread_manager:
                 self._prefetcher = ImagePrefetcher(self.thread_manager, self._image_cache, max_concurrent=max_conc)

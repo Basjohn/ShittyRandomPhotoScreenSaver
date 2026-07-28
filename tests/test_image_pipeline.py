@@ -107,6 +107,77 @@ def test_same_image_replacement_stays_atomic_across_displays(monkeypatch):
     ]
 
 
+def test_same_image_reuses_identical_transform_processing(monkeypatch):
+    meta = SimpleNamespace(local_path=r"C:\wall\shared.jpg", url=None)
+    engine = SimpleNamespace(image_queue=SimpleNamespace(next=lambda: None))
+    targets = [
+        SimpleNamespace(
+            get_target_size=lambda: QSize(2560, 1440),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+        SimpleNamespace(
+            get_target_size=lambda: QSize(2560, 1440),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+    ]
+    calls = []
+    shared_result = {"path": str(meta.local_path)}
+
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+        calls.append(display_index)
+        return shared_result
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    processed, selected = _process_same_image_with_replacements(
+        engine,
+        targets,
+        meta,
+        False,
+        False,
+    )
+
+    assert selected is meta
+    assert calls == [0]
+    assert processed[0] is processed[1]
+
+
+def test_same_image_does_not_reuse_different_dpr_processing(monkeypatch):
+    meta = SimpleNamespace(local_path=r"C:\wall\shared.jpg", url=None)
+    engine = SimpleNamespace(image_queue=SimpleNamespace(next=lambda: None))
+    targets = [
+        SimpleNamespace(
+            get_target_size=lambda: QSize(1920, 1080),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=1.0,
+        ),
+        SimpleNamespace(
+            get_target_size=lambda: QSize(1920, 1080),
+            display_mode=DisplayMode.FILL,
+            device_pixel_ratio=2.0,
+        ),
+    ]
+    calls = []
+
+    def _process(_engine, _display, display_index, _meta, _lanczos, _sharpen):
+        calls.append(display_index)
+        return {"path": str(meta.local_path), "display": display_index}
+
+    monkeypatch.setattr("engine.image_pipeline._process_display_image_candidate", _process)
+
+    processed, selected = _process_same_image_with_replacements(
+        engine,
+        targets,
+        meta,
+        False,
+        False,
+    )
+
+    assert selected is meta
+    assert calls == [0, 1]
+    assert processed[0] is not processed[1]
 def test_cache_trace_can_emit_loud_fallback_records(monkeypatch, caplog):
     monkeypatch.setattr("engine.image_pipeline.is_cache_logging_enabled", lambda: True)
 

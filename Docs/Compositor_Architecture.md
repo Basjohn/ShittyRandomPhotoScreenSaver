@@ -308,6 +308,16 @@ Normal identity uses:
 
 All CPU and GPU caches are byte-bounded.
 
+Phase 4 implementation boundary (2026-07-28):
+
+- the baseline CPU cache retains at most 16 entries by default and 256 MiB, with legacy settings clamped to 2–32 entries / 64–256 MiB;
+- prefetch admits at most four concurrent requests and independently bounds pending count and future scaled RGBA8 bytes;
+- exact-transform displays may share immutable QImage/QPixmap backing, while size/mode/DPR differences remain independent;
+- each compositor owns a 128 MiB / 12-entry texture LRU and one idle PBO under 64 MiB;
+- active transition texture pairs are pinned only through terminal presentation/cancellation;
+- display QPixmap metadata is captured on the GUI thread and globally deduplicated by backing identity in passive snapshots;
+- Phase 6 still owns any cross-context/shared GPU resource store and lease design.
+
 For the current dual-1440p environment:
 
 - investigate application-owned GL allocations above roughly 500 MiB;

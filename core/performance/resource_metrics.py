@@ -46,6 +46,8 @@ class ResourceAccountingRecord:
 class ResourceAccountingSnapshot:
     cpu_cache_resources: int
     cpu_cache_bytes: int
+    cpu_display_resources: int
+    cpu_display_bytes: int
     registry_resources: int
     registry_known_bytes: int
     registry_unknown_resources: int
@@ -64,11 +66,11 @@ class ResourceAccountingSnapshot:
 
     @property
     def known_tracked_bytes(self) -> int:
-        return self.cpu_cache_bytes + self.registry_known_bytes
+        return self.cpu_cache_bytes + self.cpu_display_bytes + self.registry_known_bytes
 
     @property
     def total_resources(self) -> int:
-        return self.cpu_cache_resources + self.registry_resources
+        return self.cpu_cache_resources + self.cpu_display_resources + self.registry_resources
 
     def aggregate_fields(self) -> dict[str, int | str]:
         """Return stable flat fields used by periodic and lifecycle logs."""
@@ -77,6 +79,8 @@ class ResourceAccountingSnapshot:
             "tracked_known_bytes": self.known_tracked_bytes,
             "cpu_cache_resources": self.cpu_cache_resources,
             "cpu_cache_bytes": self.cpu_cache_bytes,
+            "cpu_display_resources": self.cpu_display_resources,
+            "cpu_display_bytes": self.cpu_display_bytes,
             "rm_resources": self.registry_resources,
             "rm_known_bytes": self.registry_known_bytes,
             "rm_unknown_resources": self.registry_unknown_resources,
@@ -163,6 +167,27 @@ def collect_resource_accounting(engine: Any) -> ResourceAccountingSnapshot:
                     )
                 )
 
+    display_manager = getattr(engine, "display_manager", None)
+    seen_display_resources: set[str] = set()
+    for display in list(getattr(display_manager, "displays", ()) or ()):
+        getter = getattr(display, "get_image_accounting_snapshot", None)
+        if not callable(getter):
+            continue
+        display_snapshot = getter()
+        for index, item in enumerate(display_snapshot.get("resources", ())):
+            resource_id = str(item.get("resource_id") or f"display:{id(display)}:{index}")
+            if resource_id in seen_display_resources:
+                continue
+            seen_display_resources.add(resource_id)
+            records.append(
+                _record_from_mapping(
+                    source="cpu_display",
+                    resource_id=resource_id,
+                    resource_kind="cpu_pixmap",
+                    values=item,
+                )
+            )
+
     resource_manager = getattr(engine, "resource_manager", None)
     if resource_manager is not None:
         getter = getattr(resource_manager, "get_accounting_snapshot", None)
@@ -183,6 +208,7 @@ def collect_resource_accounting(engine: Any) -> ResourceAccountingSnapshot:
                 )
 
     cpu_records = [record for record in records if record.source == "cpu_image_cache"]
+    display_records = [record for record in records if record.source == "cpu_display"]
     manager_records = [record for record in records if record.source == "resource_manager"]
     gl_records = [
         record
@@ -229,6 +255,8 @@ def collect_resource_accounting(engine: Any) -> ResourceAccountingSnapshot:
     return ResourceAccountingSnapshot(
         cpu_cache_resources=len(cpu_records),
         cpu_cache_bytes=known_bytes(cpu_records),
+        cpu_display_resources=len(display_records),
+        cpu_display_bytes=known_bytes(display_records),
         registry_resources=len(manager_records),
         registry_known_bytes=known_bytes(manager_records),
         registry_unknown_resources=sum(
@@ -265,6 +293,7 @@ def log_lifecycle_resource_snapshot(
             "[PERF] [RESOURCE] snapshot event=%s stage=%s "
             "tracked_resources=%d tracked_known_bytes=%d "
             "cpu_cache_resources=%d cpu_cache_bytes=%d "
+            "cpu_display_resources=%d cpu_display_bytes=%d "
             "rm_resources=%d rm_known_bytes=%d rm_unknown_resources=%d "
             "gl_resources=%d gl_known_bytes=%d gl_unknown_resources=%d "
             "gl_texture_resources=%d gl_texture_bytes=%d "
@@ -278,6 +307,8 @@ def log_lifecycle_resource_snapshot(
             fields["tracked_known_bytes"],
             fields["cpu_cache_resources"],
             fields["cpu_cache_bytes"],
+            fields["cpu_display_resources"],
+            fields["cpu_display_bytes"],
             fields["rm_resources"],
             fields["rm_known_bytes"],
             fields["rm_unknown_resources"],

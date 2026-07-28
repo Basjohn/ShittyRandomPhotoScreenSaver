@@ -2,7 +2,7 @@
 LRU (Least Recently Used) cache for images.
 
 Caches decoded images to avoid redundant disk I/O and decoding.
-Supports caching of QImage (thread-safe decode) and QPixmap (UI-ready).
+Supports immutable QImage entries and legacy GUI-owned QPixmap entries with exact logical-byte eviction.
 """
 from collections import OrderedDict
 import math
@@ -30,7 +30,7 @@ logger = get_logger(__name__)
 
 class ImageCache:
     """
-    LRU cache for QPixmap objects.
+    LRU cache for immutable QImage and legacy GUI-owned QPixmap objects.
     
     Features:
     - Automatic size management (evicts oldest entries when full)
@@ -55,10 +55,10 @@ class ImageCache:
         
         Args:
             max_items: Maximum number of images to cache
-            max_memory_mb: Maximum memory to use (approximate, in MB)
+            max_memory_mb: Maximum exact logical image bytes to retain, in MiB
         """
-        self.max_items = max_items
-        self.max_memory_bytes = max_memory_mb * 1024 * 1024
+        self.max_items = max(1, int(max_items))
+        self.max_memory_bytes = max(1, int(float(max_memory_mb) * 1024 * 1024))
         
         self._cache: OrderedDict[str, Union[QImage, QPixmap]] = OrderedDict()
         self._current_memory = 0
@@ -84,7 +84,7 @@ class ImageCache:
             key: Cache key (usually file path)
         
         Returns:
-            QPixmap if found, None otherwise
+            Cached QImage/QPixmap if found, otherwise None
         """
         with self._lock:
             if key in self._cache:
@@ -108,20 +108,20 @@ class ImageCache:
         
         Args:
             key: Cache key (usually file path)
-            pixmap: QPixmap to cache
+            image: immutable QImage or GUI-owned QPixmap to cache
         """
         # Remove if already exists (to update order)
         with self._lock:
             if key in self._cache:
                 old_img = self._cache.pop(key)
-                self._current_memory -= self._estimate_size(old_img)
+                self._current_memory -= self._tracked_size(old_img)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
             
             # Add new entry
             self._cache[key] = image
-            self._current_memory += self._estimate_size(image)
             tracked_bytes = self._tracked_size(image)
+            self._current_memory += tracked_bytes
             self._tracked_bytes_by_key[key] = tracked_bytes
             self._resource_metadata_by_key[key] = MappingProxyType({
                 "key": key,
@@ -170,7 +170,7 @@ class ImageCache:
         with self._lock:
             if key in self._cache:
                 pixmap = self._cache.pop(key)
-                self._current_memory -= self._estimate_size(pixmap)
+                self._current_memory -= self._tracked_size(pixmap)
                 self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
                 self._resource_metadata_by_key.pop(key, None)
                 if is_verbose_logging():
@@ -195,12 +195,12 @@ class ImageCache:
             return len(self._cache)
     
     def memory_usage(self) -> int:
-        """Get approximate memory usage in bytes."""
+        """Get exact logical retained image bytes."""
         with self._lock:
             return self._current_memory
     
     def memory_usage_mb(self) -> float:
-        """Get approximate memory usage in MB."""
+        """Get exact logical retained image bytes in MiB."""
         with self._lock:
             return self._current_memory / (1024 * 1024)
     
@@ -257,15 +257,15 @@ class ImageCache:
     
     def _should_evict_locked(self) -> bool:
         """Check if eviction is needed (caller holds lock)."""
-        return (len(self._cache) > self.max_items or 
-                self._current_memory > self.max_memory_bytes)
+        return (len(self._cache) > self.max_items or
+                self._current_tracked_bytes > self.max_memory_bytes)
     
     def _evict_oldest_locked(self) -> None:
         """Evict the least recently used entry (caller holds lock)."""
         if not self._cache:
             return
         key, img = self._cache.popitem(last=False)
-        self._current_memory -= self._estimate_size(img)
+        self._current_memory -= self._tracked_size(img)
         self._current_tracked_bytes -= self._tracked_bytes_by_key.pop(key, 0)
         self._resource_metadata_by_key.pop(key, None)
         self._evict_count += 1
@@ -274,7 +274,7 @@ class ImageCache:
     
     def _estimate_size(self, image: Union[QImage, QPixmap]) -> int:
         """
-        Estimate memory size of a QPixmap.
+        Return the legacy RGBA estimate retained only for compatibility.
         
         Args:
             pixmap: QPixmap to estimate

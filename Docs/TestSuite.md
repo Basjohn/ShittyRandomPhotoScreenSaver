@@ -248,6 +248,17 @@ Require stable plateau and tracked byte explanation.
 
 Count-only cache tests are insufficient.
 
+Phase 4 owns these concrete automated bars:
+
+- `tests/test_phase4_resource_containment.py` — exact texture-byte eviction with active-pair pinning, independent PBO bounds, Particle/Burn cancellation, and cross-display QPixmap alias deduplication;
+- `tests/test_image_cache_accounting.py` — exact QImage/QPixmap logical-byte eviction and detached metadata;
+- `tests/test_image_prefetcher.py` — concurrency/count/future-byte backlog bounds and worker-safe QImage results;
+- `tests/test_image_pipeline.py` — exact transform sharing plus non-sharing across differing target/DPR identity;
+- `tests/test_gl_texture_streaming.py` and `tests/test_memory_pooling.py` — upload/PBO reuse and cleanup regressions;
+- `tools/phase4_resource_harness.py` — 45-cycle owner/allocator plateau gate with real Qt image allocations and RSS.
+
+The authoritative artifact is `Docs/phase_reports/artifacts/P04/resource_plateau_report.json`. Driver-reported VRAM, a normal 30-minute wall-clock run, and the two-hour soak remain Phase 11 platform gates.
+
 ## 9. CPU/Task Gate
 
 Measure:

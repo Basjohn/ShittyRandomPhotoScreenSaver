@@ -945,7 +945,7 @@ class GLCompositorWidget(QOpenGLWidget):
         name: str,
         state_attr: str,
         on_finished: Optional[Callable[[], None]],
-        release_textures: bool = False,
+        release_textures: bool = True,
     ) -> None:
         """Generic transition completion handler."""
         try:
@@ -953,11 +953,13 @@ class GLCompositorWidget(QOpenGLWidget):
             self._stop_frame_pacing()
             self._finalize_animation_metrics(outcome="complete")
             self._finalize_paint_metrics(outcome="complete")
-            if release_textures:
-                try:
-                    self._release_transition_textures()
-                except Exception as e:
-                    logger.debug("[GL COMPOSITOR] Failed to release %s textures: %s", name, e, exc_info=True)
+            # Every terminal presentation releases active pair pins. The
+            # byte-budgeted cache may retain the destination texture, but the
+            # obsolete source is immediately eligible for owner-context delete.
+            try:
+                self._release_transition_textures()
+            except Exception as e:
+                logger.debug("[GL COMPOSITOR] Failed to release %s textures: %s", name, e, exc_info=True)
             state = getattr(self, state_attr, None)
             if state is not None:
                 try:

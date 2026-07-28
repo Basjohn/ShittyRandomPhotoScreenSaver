@@ -41,18 +41,9 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 - [x] **Phase 1 / Gate 1:** bounded passive frame, event-loop, task, CPU-image, GL-resource, and lifecycle-snapshot measurement validated without behavioural change. See `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 2 / Gate 2:** deterministic all-mode visualizer replay, protected baseline goldens, cadence-separation tests, quantitative metrics, and Spectrum/Bubble logical review artifacts are complete. See `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
 - [x] **Phase 3 / Gate 3:** full stop/destroy/recreate lifecycle, generation-and-manager stale-work rejection, strict owner-context GL deletion, and 50 Settings + 50 Edit + 50 mixed hostile cycles are complete without fallback, affinity errors, stale publication, or stopped-resource growth. See `Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md`.
+- [x] **Phase 4 / Gate 4:** exact byte/count CPU cache and prefetch bounds, per-compositor texture/PBO budgets, complete terminal transition release, exact-transform sharing, GUI-captured QPixmap accounting, and a 45-cycle/30-virtual-minute owner/allocator plateau are complete. See `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` and `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`.
 
 
-## Phase 4 — Baseline Memory/VRAM Containment
-
-- [ ] Map all image representations and owners.
-- [ ] Introduce byte-bounded CPU caches.
-- [ ] Release obsolete transition resources.
-- [ ] Release replaced/resized GL resources.
-- [ ] Remove duplicate display copies where safely shareable.
-- [ ] Prove stable RAM/VRAM plateau.
-
-**Gate:** bounded explainable memory without changing presentation topology.
 
 ## Phase 5 — CPU and Task Reduction
 
@@ -157,18 +148,20 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 ## Current Phase
 
 ```text
-Phase: 4 — Baseline Memory/VRAM Containment
+Phase: 5 — CPU and Task Reduction
 Branch: main
-Last evidence: Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
+Last evidence: Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
 ```
 
-- [-] Trace the baseline image path and record every encoded, decoded, oriented, scaled, `QImage`, `QPixmap`, upload-buffer, texture, FBO, PBO, transition, preview, and fallback representation with its owning object and release event.
-- [ ] Reconcile Phase 1 logical byte metrics with the real cache, transition, compositor, and visualizer owners; identify unexplained or count-only retention before changing budgets.
-- [ ] Add deterministic alternating large/small image churn with aspect-ratio, transition, resize, and Settings/Edit cases, recording RAM plus exact application-owned CPU/GL bytes.
-- [ ] Replace unbounded or count-only CPU image caches with immutable byte-accounted entries and conservative eviction without moving GUI-only objects onto workers.
-- [ ] Release obsolete transition sources, upload staging, replaced textures, and resized FBOs immediately at their current ownership seams.
-- [ ] Remove duplicate per-display CPU copies only where source identity, transform, dimensions, and quality are exactly equal; preserve the baseline presentation topology.
-- [ ] Run plateau and pressure evidence, require no monotonic RAM/VRAM growth, rerun the Phase 2 visualizer lock, and record rollback in `Docs/phase_reports/P04_*.md`.
+- [-] Inventory every recurring operation and record trigger, frequency, thread, typical/p95 duration, allocations, queue delay, coalescing eligibility, hidden/static behavior, and cross-display duplication.
+- [ ] Reconcile Phase 1 task categories and the baseline ~90–100 compute submissions/second against live owners; keep a bounded `other` bucket and identify the first measured high-rate owner.
+- [ ] Establish idle, visualizer, transition, image-decode, and controlled background-load baselines for process CPU, GUI event-loop delay, task submissions, queue depth, callback tails, and duplicate/stale publication.
+- [ ] Remove tiny recurring pool jobs whose queue/callback overhead exceeds useful work; keep Qt/GL mutation on the GUI/context owner and coarse I/O/decode/measured computation on workers.
+- [ ] Coalesce duplicate scene invalidations, visual render-state publication, geometry updates, stale image results, metadata refresh, and deletion requests without dropping audio impulses, stop/release, topology, or settings events.
+- [ ] Stop recurring work when its owner is hidden or static, and require near-zero idle general-pool submissions outside justified monitoring.
+- [ ] Batch/vectorize only measured Python-heavy hotspots; do not add Python threads or multiprocessing without latency, memory, and GIL evidence.
+- [ ] Rerun the protected visualizer replay/runtime lock and Phase 4 resource gate after each optimization slice; require lower task/CPU cost with equivalent or better p99 frame delivery and no new synchronization.
+- [ ] Record the task inventory, before/after evidence, unsupported platform measurements, and direct rollback in `Docs/phase_reports/P05_CPU_TASK_REDUCTION.md`.
 ## Deferred Until Recovery Passes
 
 - new production widget families;

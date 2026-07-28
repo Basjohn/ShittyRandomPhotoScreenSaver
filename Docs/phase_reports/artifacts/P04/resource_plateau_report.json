@@ -1,0 +1,748 @@
+{
+  "budgets": {
+    "cpu_cache_bytes": 100663296,
+    "pbo_pool_bytes": 41943040,
+    "texture_cache_bytes": 100663296
+  },
+  "coverage": {
+    "active_transition": true,
+    "alternating_large_small": true,
+    "driver_vram": "unsupported_in_deterministic_offscreen_harness",
+    "modeled_full_owner_resets": 3,
+    "portrait_landscape_ultrawide": true,
+    "two_display_shared_backing": true
+  },
+  "cycles": 45,
+  "lifecycle_returns": [
+    {
+      "cpu_cache_bytes": 0,
+      "cpu_display_bytes": 0,
+      "cycle": 15,
+      "pbo_bytes": 0,
+      "texture_bytes": 0
+    },
+    {
+      "cpu_cache_bytes": 0,
+      "cpu_display_bytes": 0,
+      "cycle": 30,
+      "pbo_bytes": 0,
+      "texture_bytes": 0
+    },
+    {
+      "cpu_cache_bytes": 0,
+      "cpu_display_bytes": 0,
+      "cycle": 45,
+      "pbo_bytes": 0,
+      "texture_bytes": 0
+    }
+  ],
+  "pass_criteria": {
+    "cpu_cache_within_byte_budget": true,
+    "lifecycle_returns_all_owned_bytes_to_zero": true,
+    "pbo_pool_within_byte_budget": true,
+    "rss_repeated_resolution_drift_under_8_mib": true,
+    "rss_tail_high_water_range_under_8_mib": true,
+    "terminal_display_is_single_unique_frame": true,
+    "texture_cache_within_byte_budget_after_terminal": true
+  },
+  "passed": true,
+  "records": [
+    {
+      "active_display_bytes": 8294400,
+      "active_texture_bytes": 8294400,
+      "cache_bytes": 16588800,
+      "cache_items": 2,
+      "cycle": 1,
+      "pbo_bytes": 8294400,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 75735040,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 8294400
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 41472000,
+      "cache_bytes": 82944000,
+      "cache_items": 4,
+      "cycle": 2,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 175288320,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 41472000
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 49766400,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 3,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191897600,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 49766400
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 64512000,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 4,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153190400,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 64512000
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 84326400,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 5,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171163648,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 84326400
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 6,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167485440,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 7,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 155967488,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 8,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182689792,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 9,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191909888,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 10,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153198592,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 11,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171167744,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 91699200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 12,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167489536,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 91699200
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 99993600,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 13,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 155971584,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 99993600
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 14,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182693888,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 15,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191909888,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 14745600,
+      "active_texture_bytes": 14745600,
+      "cache_bytes": 29491200,
+      "cache_items": 2,
+      "cycle": 16,
+      "pbo_bytes": 14745600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 95129600,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 14745600
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 34560000,
+      "cache_bytes": 69120000,
+      "cache_items": 4,
+      "cycle": 17,
+      "pbo_bytes": 19814400,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 154583040,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 34560000
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 38246400,
+      "cache_bytes": 76492800,
+      "cache_items": 6,
+      "cycle": 18,
+      "pbo_bytes": 19814400,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 150904832,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 38246400
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 46540800,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 19,
+      "pbo_bytes": 19814400,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 155983872,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 46540800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 79718400,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 20,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182706176,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 79718400
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 21,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191922176,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 22,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153210880,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 23,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171180032,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 91699200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 24,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167501824,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 91699200
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 99993600,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 25,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 155992064,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 99993600
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 26,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182714368,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 27,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191930368,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 28,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153219072,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 29,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171188224,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 91699200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 30,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167518208,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 91699200
+    },
+    {
+      "active_display_bytes": 8294400,
+      "active_texture_bytes": 8294400,
+      "cache_bytes": 16588800,
+      "cache_items": 2,
+      "cycle": 31,
+      "pbo_bytes": 8294400,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 75796480,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 8294400
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 41472000,
+      "cache_bytes": 82944000,
+      "cache_items": 4,
+      "cycle": 32,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 175341568,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 41472000
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 49766400,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 33,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191938560,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 49766400
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 64512000,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 34,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153227264,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 64512000
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 84326400,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 35,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171196416,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 84326400
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 36,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167518208,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 37,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 156004352,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 38,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182726656,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 39,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191942656,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    },
+    {
+      "active_display_bytes": 23040000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 79257600,
+      "cache_items": 5,
+      "cycle": 40,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        2560,
+        1440
+      ],
+      "rss_bytes": 153231360,
+      "terminal_display_bytes": 14745600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 34560000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 85708800,
+      "cache_items": 6,
+      "cycle": 41,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3440,
+        1440
+      ],
+      "rss_bytes": 171200512,
+      "terminal_display_bytes": 19814400,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 23500800,
+      "active_texture_bytes": 91699200,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 42,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1280,
+        720
+      ],
+      "rss_bytes": 167522304,
+      "terminal_display_bytes": 3686400,
+      "terminal_texture_bytes": 91699200
+    },
+    {
+      "active_display_bytes": 11980800,
+      "active_texture_bytes": 99993600,
+      "cache_bytes": 93081600,
+      "cache_items": 8,
+      "cycle": 43,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1920,
+        1080
+      ],
+      "rss_bytes": 156008448,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 99993600
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 88012800,
+      "cache_bytes": 90316800,
+      "cache_items": 6,
+      "cycle": 44,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        3840,
+        2160
+      ],
+      "rss_bytes": 182730752,
+      "terminal_display_bytes": 33177600,
+      "terminal_texture_bytes": 88012800
+    },
+    {
+      "active_display_bytes": 41472000,
+      "active_texture_bytes": 96307200,
+      "cache_bytes": 99532800,
+      "cache_items": 6,
+      "cycle": 45,
+      "pbo_bytes": 33177600,
+      "resolution": [
+        1080,
+        1920
+      ],
+      "rss_bytes": 191946752,
+      "terminal_display_bytes": 8294400,
+      "terminal_texture_bytes": 96307200
+    }
+  ],
+  "rss": {
+    "first_bytes": 75735040,
+    "last_bytes": 191946752,
+    "max_repeated_resolution_drift_bytes": 4096,
+    "tail_growth_bytes_unadjusted_for_resolution": 96817152,
+    "tail_high_water_range_bytes": 12288,
+    "tail_max_bytes": 191946752,
+    "tail_min_bytes": 75796480,
+    "window_high_waters_bytes": [
+      191897600,
+      191909888,
+      191909888,
+      191922176,
+      191930368,
+      191938560,
+      191942656
+    ]
+  },
+  "schema_version": 1,
+  "virtual_duration_minutes": 30.0,
+  "virtual_interval_seconds": 40,
+  "wall_clock_seconds": 0.5201390000001993
+}

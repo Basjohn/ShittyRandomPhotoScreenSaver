@@ -63,17 +63,38 @@ class GLTextureManager:
     - All methods must be called from UI thread with valid GL context
     """
     
-    # Cache configuration
+    # Per-compositor retention budgets. Active transition pairs may temporarily
+    # exceed the cache budget, but become immediately evictable on completion.
     MAX_CACHED_TEXTURES = 12
+    MAX_CACHED_TEXTURE_BYTES = 128 * 1024 * 1024
+    MAX_PBO_POOL_ENTRIES = 1
+    MAX_PBO_POOL_BYTES = 64 * 1024 * 1024
     
-    def __init__(self, owner: str = "GLTextureManager", generation: object = None):
+    def __init__(
+        self,
+        owner: str = "GLTextureManager",
+        generation: object = None,
+        *,
+        max_cached_texture_bytes: Optional[int] = None,
+        max_pbo_pool_bytes: Optional[int] = None,
+    ):
         self._initialized: bool = False
         self._owner = str(owner)
         self._generation = generation
+        self._max_cached_texture_bytes = max(
+            1,
+            int(max_cached_texture_bytes or self.MAX_CACHED_TEXTURE_BYTES),
+        )
+        self._max_pbo_pool_bytes = max(
+            1,
+            int(max_pbo_pool_bytes or self.MAX_PBO_POOL_BYTES),
+        )
         
         # Texture cache: pixmap.cacheKey() -> texture_id
         self._texture_cache: Dict[int, int] = {}
         self._texture_lru: List[int] = []
+        self._texture_bytes_by_id: Dict[int, int] = {}
+        self._current_texture_bytes = 0
         
         # Current transition textures
         self._old_tex_id: int = 0
@@ -159,8 +180,10 @@ class GLTextureManager:
                 if pbo_id > 0:
                     gl.glBindBuffer(gl.GL_PIXEL_UNPACK_BUFFER, pbo_id)
                     try:
-                        # Orphan buffer to avoid sync stalls
-                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, None, gl.GL_STREAM_DRAW)
+                        # Orphan without shrinking a reused PBO behind its
+                        # exact owner-side size/accounting metadata.
+                        pbo_capacity = self._pbo_capacity(pbo_id)
+                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, pbo_capacity, None, gl.GL_STREAM_DRAW)
                         mapped_ptr = gl.glMapBuffer(gl.GL_PIXEL_UNPACK_BUFFER, gl.GL_WRITE_ONLY)
                         if mapped_ptr:
                             ctypes.memmove(mapped_ptr, data, data_size)
@@ -171,7 +194,8 @@ class GLTextureManager:
                             use_pbo = True
                     except Exception as e:
                         logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, data_size, data, gl.GL_STREAM_DRAW)
+                        gl.glBufferData(gl.GL_PIXEL_UNPACK_BUFFER, pbo_capacity, None, gl.GL_STREAM_DRAW)
+                        gl.glBufferSubData(gl.GL_PIXEL_UNPACK_BUFFER, 0, data_size, data)
                         use_pbo = True
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
@@ -251,6 +275,9 @@ class GLTextureManager:
         except Exception as e:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)  # Non-critical - texture still usable
         
+        texture_bytes = w * h * 4
+        self._texture_bytes_by_id[tex_id] = texture_bytes
+        self._current_texture_bytes += texture_bytes
         return tex_id
     
     # -------------------------------------------------------------------------
@@ -258,59 +285,99 @@ class GLTextureManager:
     # -------------------------------------------------------------------------
     
     def get_or_create_texture(self, pixmap: QPixmap) -> int:
-        """Get cached texture or upload new one. Returns texture ID or 0."""
+        """Get or upload a texture under count and exact RGBA8 byte budgets."""
         if gl is None or pixmap is None or pixmap.isNull():
             return 0
-        
-        # Get cache key
+
         key = 0
         try:
             if hasattr(pixmap, "cacheKey"):
                 key = int(pixmap.cacheKey())
-        except Exception as e:
-            logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-            key = 0
-        
-        # Check cache
+        except Exception as exc:
+            logger.debug("[GL TEXTURE] cacheKey unavailable: %s", exc)
+
         if key > 0:
-            tex_id = self._texture_cache.get(key, 0)
-            if tex_id:
-                # Refresh LRU position
-                try:
-                    if key in self._texture_lru:
-                        self._texture_lru.remove(key)
-                    self._texture_lru.append(key)
-                except Exception as e:
-                    logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-                return int(tex_id)
-        
-        # Upload new texture
-        tex_id = self.upload_pixmap(pixmap)
-        if not tex_id:
-            return 0
-        
-        # Add to cache with LRU eviction
-        if key > 0:
-            self._texture_cache[key] = tex_id
-            try:
+            texture_id = int(self._texture_cache.get(key, 0) or 0)
+            if texture_id:
+                if key in self._texture_lru:
+                    self._texture_lru.remove(key)
                 self._texture_lru.append(key)
-                while len(self._texture_lru) > self.MAX_CACHED_TEXTURES:
-                    evict_key = self._texture_lru.pop(0)
-                    if evict_key == key:
-                        continue
-                    old_tex = self._texture_cache.pop(evict_key, 0)
-                    if old_tex:
-                        try:
-                            gl.glDeleteTextures(int(old_tex))
-                            self._release_texture_tracking(int(old_tex))
-                        except Exception:
-                            logger.debug("[GL TEXTURE] Failed to delete cached texture %s", 
-                                        old_tex, exc_info=True)
-            except Exception as e:
-                logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
-        
-        return tex_id
-    
+                return texture_id
+
+        texture_id = int(self.upload_pixmap(pixmap) or 0)
+        if not texture_id:
+            return 0
+
+        cache_key = key if key > 0 else -texture_id
+        replaced_id = int(self._texture_cache.get(cache_key, 0) or 0)
+        if replaced_id and replaced_id != texture_id:
+            self._delete_cached_texture(cache_key)
+        self._texture_cache[cache_key] = texture_id
+        if cache_key in self._texture_lru:
+            self._texture_lru.remove(cache_key)
+        self._texture_lru.append(cache_key)
+        self._evict_cache_to_budget(
+            protected_ids={texture_id, self._old_tex_id, self._new_tex_id}
+        )
+        return texture_id
+
+    def _delete_cached_texture(self, cache_key: int) -> bool:
+        texture_id = int(self._texture_cache.get(cache_key, 0) or 0)
+        if not texture_id:
+            if cache_key in self._texture_lru:
+                self._texture_lru.remove(cache_key)
+            return True
+        try:
+            gl.glDeleteTextures(texture_id)
+        except Exception:
+            logger.debug(
+                "[GL TEXTURE] Failed to delete cached texture %s",
+                texture_id,
+                exc_info=True,
+            )
+            return False
+        self._texture_cache.pop(cache_key, None)
+        if cache_key in self._texture_lru:
+            self._texture_lru.remove(cache_key)
+        self._current_texture_bytes = max(
+            0,
+            self._current_texture_bytes - self._texture_bytes_by_id.pop(texture_id, 0),
+        )
+        self._release_texture_tracking(texture_id)
+        return True
+
+    def _evict_cache_to_budget(self, protected_ids: Optional[set[int]] = None) -> None:
+        """Evict unpinned LRU textures until count and byte budgets are met."""
+        protected = {int(value) for value in (protected_ids or set()) if value}
+        failed_keys: set[int] = set()
+        while (
+            len(self._texture_cache) > self.MAX_CACHED_TEXTURES
+            or self._current_texture_bytes > self._max_cached_texture_bytes
+        ):
+            candidate = next(
+                (
+                    cache_key
+                    for cache_key in self._texture_lru
+                    if int(self._texture_cache.get(cache_key, 0) or 0) not in protected
+                    and cache_key not in failed_keys
+                ),
+                None,
+            )
+            if candidate is None:
+                break
+            if not self._delete_cached_texture(candidate):
+                failed_keys.add(candidate)
+
+    def get_stats(self) -> dict[str, int]:
+        """Return exact compositor-owned texture and PBO retention."""
+        return {
+            "texture_count": len(self._texture_cache),
+            "texture_bytes": self._current_texture_bytes,
+            "max_texture_bytes": self._max_cached_texture_bytes,
+            "pbo_count": len(self._pbo_pool),
+            "pbo_bytes": sum(entry.size for entry in self._pbo_pool),
+            "max_pbo_bytes": self._max_pbo_pool_bytes,
+        }
     # -------------------------------------------------------------------------
     # Transition Texture Management
     # -------------------------------------------------------------------------
@@ -337,9 +404,10 @@ class GLTextureManager:
         return True
     
     def release_transition_textures(self) -> None:
-        """Release current transition texture references (keeps cache)."""
+        """Release active pair pins and immediately enforce cache budgets."""
         self._old_tex_id = 0
         self._new_tex_id = 0
+        self._evict_cache_to_budget()
     
     def has_transition_textures(self) -> bool:
         """Check if transition textures are ready."""
@@ -392,12 +460,49 @@ class GLTextureManager:
             logger.debug("[GL TEXTURE] Exception suppressed: %s", e)
         return 0
     
+    def _pbo_capacity(self, pbo_id: int) -> int:
+        for entry in self._pbo_pool:
+            if entry.pbo_id == pbo_id:
+                return max(1, int(entry.size))
+        return 1
+
     def _release_pbo(self, pbo_id: int) -> None:
-        """Mark PBO as available in pool."""
+        """Mark a PBO idle and trim retained staging storage to its byte cap."""
         for entry in self._pbo_pool:
             if entry.pbo_id == pbo_id:
                 entry.in_use = False
+                self._trim_pbo_pool()
                 return
+
+    def _trim_pbo_pool(self) -> None:
+        """Retain at most one useful idle PBO within the exact byte budget."""
+        idle = sorted(
+            (entry for entry in self._pbo_pool if not entry.in_use),
+            key=lambda entry: entry.size,
+            reverse=True,
+        )
+        keep_ids: set[int] = set()
+        retained_bytes = 0
+        for entry in idle:
+            if (
+                len(keep_ids) < self.MAX_PBO_POOL_ENTRIES
+                and retained_bytes + entry.size <= self._max_pbo_pool_bytes
+            ):
+                keep_ids.add(entry.pbo_id)
+                retained_bytes += entry.size
+
+        retained: List[PBOEntry] = []
+        for entry in self._pbo_pool:
+            if entry.in_use or entry.pbo_id in keep_ids:
+                retained.append(entry)
+                continue
+            try:
+                gl.glDeleteBuffers(1, [entry.pbo_id])
+                self._release_resource_tracking(entry.resource_id)
+            except Exception:
+                logger.debug("[GL TEXTURE] Failed to trim idle PBO", exc_info=True)
+                retained.append(entry)
+        self._pbo_pool = retained
     
     def _cleanup_pbo_pool(self, *, strict: bool = False) -> None:
         """Delete all PBOs, retaining failed entries in strict teardown."""
@@ -431,6 +536,8 @@ class GLTextureManager:
                 raise RuntimeError("Cannot delete live textures: PyOpenGL is unavailable")
             self._texture_cache.clear()
             self._texture_lru.clear()
+            self._texture_bytes_by_id.clear()
+            self._current_texture_bytes = 0
             return
 
         try:
@@ -446,11 +553,15 @@ class GLTextureManager:
         else:
             self._texture_cache.clear()
             self._texture_lru.clear()
+            self._texture_bytes_by_id.clear()
+            self._current_texture_bytes = 0
             return
 
         # Legacy non-strict callers retain their historical best-effort reset.
         self._texture_cache.clear()
         self._texture_lru.clear()
+        self._texture_bytes_by_id.clear()
+        self._current_texture_bytes = 0
 
     def cleanup(self, *, strict: bool = False) -> None:
         """Release textures and PBOs; strict mode preserves failed ownership."""

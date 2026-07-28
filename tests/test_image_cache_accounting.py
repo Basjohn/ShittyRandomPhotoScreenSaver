@@ -7,13 +7,13 @@ from PySide6.QtGui import QImage, QPixmap
 from utils.image_cache import ImageCache
 
 
-def test_qimage_exact_bytes_are_separate_from_approximate_budget():
+def test_qimage_exact_bytes_drive_the_retention_budget():
     cache = ImageCache(max_items=2, owner="decode-cache", generation=7)
     image = QImage(5, 2, QImage.Format.Format_RGB888)
 
     cache.put("image", image)
 
-    assert cache.memory_usage() == 5 * 2 * 4
+    assert cache.memory_usage() == image.sizeInBytes()
     assert cache.tracked_memory_usage() == image.sizeInBytes()
     snapshot = cache.get_accounting_snapshot()
     assert snapshot["total_tracked_bytes"] == image.sizeInBytes()
@@ -81,3 +81,21 @@ def test_snapshot_reads_precomputed_metadata_not_live_qt_objects():
 
     assert snapshot["resources"][0]["dimensions"] == (3, 2)
     assert snapshot["resources"][0]["tracked_bytes"] == image.sizeInBytes()
+
+
+def test_exact_byte_budget_evicts_even_below_item_limit():
+    one_image_bytes = QImage(64, 64, QImage.Format.Format_ARGB32).sizeInBytes()
+    cache = ImageCache(
+        max_items=10,
+        max_memory_mb=(one_image_bytes + 1) / (1024 * 1024),
+    )
+    first = QImage(64, 64, QImage.Format.Format_ARGB32)
+    second = QImage(64, 64, QImage.Format.Format_ARGB32)
+
+    cache.put("first", first)
+    cache.put("second", second)
+
+    assert not cache.contains("first")
+    assert cache.contains("second")
+    assert cache.memory_usage() == second.sizeInBytes()
+    assert cache.memory_usage() <= cache.max_memory_bytes

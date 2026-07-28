@@ -250,6 +250,17 @@ Output:
 
 Monotonic growth fails the run.
 
+Run the deterministic Phase 4 owner/allocator gate:
+
+```powershell
+.\.venv\Scripts\python.exe tools\phase4_resource_harness.py --cycles 45 --output Docs\phase_reports\artifacts\P04\resource_plateau_report.json
+.\.venv\Scripts\python.exe -m pytest tests\test_phase4_resource_containment.py tests\test_image_cache_accounting.py tests\test_image_prefetcher.py tests\test_image_pipeline.py tests\test_gl_texture_streaming.py tests\test_memory_pooling.py -q
+```
+
+The 45 rotations represent 30 virtual minutes at the shipped 40-second interval and exercise alternating resolutions/aspects, active transitions, exact-transform two-display sharing, pressure budgets, and full owner resets. It uses production cache/accounting/transition/texture/PBO seams with real QImage/QPixmap allocations and RSS, but a fake GL deletion ledger; it does not claim driver VRAM or replace the Phase 11 real-platform soak.
+
+Authoritative Phase 4 evidence: `Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md` and `Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md`.
+
 ## 8. Background-Load Matrix
 
 Run combined normal operation under controlled:

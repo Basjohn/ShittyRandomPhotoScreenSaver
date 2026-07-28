@@ -294,13 +294,17 @@ For the current dual-1440p target:
 
 These are investigation gates, not budgets to consume.
 
-CPU/GPU caches require byte limits, pinning, deterministic eviction, stale-prefetch cancellation, pressure behaviour, and metrics.
+CPU/GPU caches require exact logical-byte and count limits, pinning, deterministic eviction, stale-prefetch cancellation, pressure behaviour, and metrics. Count-only limits never substitute for byte budgets, and persisted legacy values must be clamped before owner construction.
 
 Shared textures require verified share group, exact identity, explicit leases, generation safety, and exactly-once deletion. No GL calls under registry locks.
 
-Workers may prepare immutable thread-safe image data. They may not create GUI-affine `QPixmap` or call GL.
+Workers may prepare immutable thread-safe image data. They may not create GUI-affine `QPixmap` or call GL. Pending decode/scale work is bounded by concurrency, queue count, and future decoded bytes.
 
-Avoid repeated full-buffer copies, hot-path whole-buffer hashing, visible-paint conversion, and UI fence waits.
+Avoid repeated full-buffer copies, hot-path whole-buffer hashing, visible-paint conversion, and UI fence waits. Share immutable image backing only for exact source, transform, dimensions, mode, and DPR identity.
+
+Transition completion/cancellation clears every transition state family and releases active texture pins. PBO pools and texture caches have independent byte caps and owner-context deletion; do not raise either cap to hide unexplained growth.
+
+Background samplers read detached GUI-captured image metadata. They never inspect live `QPixmap`/widget/compositor objects from a worker thread.
 
 ## 10. Settings, Widgets, and Layout
 
@@ -363,7 +367,10 @@ Until recovery completes, do not preserve or reintroduce:
 - silent child-surface or `QPainter` fallback;
 - general worker tasks used as GUI timers;
 - garbage-collection-owned GL lifetime;
-- unbounded image or GPU caches.
+- unbounded or count-only image/GPU caches;
+- unbounded prefetch queues or unbounded future decoded bytes;
+- worker-created `QPixmap` or worker-side live Qt display inspection;
+- transition pins retained after terminal presentation.
 
 Donor ideas may be reconstructed only after isolated review and benchmark:
 

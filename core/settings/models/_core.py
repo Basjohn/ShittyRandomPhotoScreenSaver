@@ -115,8 +115,8 @@ class InputSettings:
 class CacheSettings:
     """Cache-related settings."""
     prefetch_ahead: int = 5
-    max_items: int = 30  # Raised from 24 to 30 (Phase 4.1)
-    max_memory_mb: int = 1024
+    max_items: int = 16
+    max_memory_mb: int = 256
     max_concurrent: int = 2
     
     @classmethod
@@ -124,8 +124,8 @@ class CacheSettings:
         """Load cache settings from SettingsManager."""
         return cls(
             prefetch_ahead=settings.get("cache.prefetch_ahead", 5),
-            max_items=settings.get("cache.max_items", 30),
-            max_memory_mb=settings.get("cache.max_memory_mb", 1024),
+            max_items=settings.get("cache.max_items", 16),
+            max_memory_mb=settings.get("cache.max_memory_mb", 256),
             max_concurrent=settings.get("cache.max_concurrent", 2),
         )
     

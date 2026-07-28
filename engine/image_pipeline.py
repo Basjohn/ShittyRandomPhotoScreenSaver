@@ -741,6 +741,7 @@ class _DisplayProcessingTarget:
     width: int
     height: int
     display_mode: DisplayMode
+    device_pixel_ratio: float = 1.0
 
     def get_target_size(self) -> QSize:
         return QSize(self.width, self.height)
@@ -751,7 +752,6 @@ class _ProcessedDisplayImage:
     """Thread-safe compute result; QPixmap materialization remains on the GUI."""
 
     image: QImage
-    original_image: QImage
     width: int
     height: int
     display_mode: DisplayMode
@@ -777,6 +777,9 @@ def _snapshot_display_processing_targets(display_manager: object) -> tuple[_Disp
                 height=max(1, height),
                 display_mode=_normalize_display_mode(
                     getattr(display, "display_mode", DisplayMode.FILL)
+                ),
+                device_pixel_ratio=float(
+                    getattr(display, "_device_pixel_ratio", 1.0)
                 ),
             )
         )
@@ -854,14 +857,14 @@ def _process_display_image_candidate(
     if cache is not None:
         cached_scaled = cache.get(scaled_key)
         if isinstance(cached_scaled, QImage) and not cached_scaled.isNull():
-            processed_qimage = cached_scaled.copy()
+            processed_qimage = cached_scaled
             _bump_cache_runtime_stat(engine, "scaled_hits")
         else:
             _bump_cache_runtime_stat(engine, "scaled_misses")
 
         cached_raw = cache.get(img_path)
         if isinstance(cached_raw, QImage) and not cached_raw.isNull():
-            qimage = cached_raw.copy()
+            qimage = cached_raw
             _bump_cache_runtime_stat(engine, "raw_hits")
         else:
             _bump_cache_runtime_stat(engine, "raw_misses")
@@ -874,7 +877,7 @@ def _process_display_image_candidate(
         if not loaded.isNull():
             qimage = loaded
             if cache is not None:
-                cache.put(img_path, qimage.copy())
+                cache.put(img_path, qimage)
 
     if processed_qimage is None:
         if (
@@ -892,7 +895,7 @@ def _process_display_image_candidate(
                 timeout_ms=3000,
             )
             if worker_qimage is not None and not worker_qimage.isNull():
-                processed_qimage = worker_qimage.copy()
+                processed_qimage = worker_qimage
             elif qimage is None or qimage.isNull():
                 logger.warning(
                     "%s ImageWorker rejected candidate for display %d: %s",
@@ -917,16 +920,10 @@ def _process_display_image_candidate(
         return None
 
     if cache is not None:
-        cache.put(scaled_key, processed_qimage.copy())
-    original_qimage = (
-        qimage.copy()
-        if qimage is not None and not qimage.isNull()
-        else processed_qimage.copy()
-    )
+        cache.put(scaled_key, processed_qimage)
 
     return _ProcessedDisplayImage(
-        image=processed_qimage.copy(),
-        original_image=original_qimage,
+        image=processed_qimage,
         width=width,
         height=height,
         display_mode=display_mode,
@@ -992,6 +989,20 @@ def _process_display_with_replacements(
     return None, None
 
 
+def _display_processing_reuse_key(display: Any) -> tuple[Any, ...]:
+    """Return an exact transform key, or a unique key for structural fakes."""
+    try:
+        size = display.get_target_size()
+        return (
+            int(size.width()),
+            int(size.height()),
+            _normalize_display_mode(display.display_mode).value,
+            float(getattr(display, "device_pixel_ratio", 1.0)),
+        )
+    except Exception:
+        return ("unique", id(display))
+
+
 def _process_same_image_with_replacements(
     engine: "ScreensaverEngine",
     displays: List[Any],
@@ -1007,15 +1018,21 @@ def _process_same_image_with_replacements(
 
     for replacement_index in range(max(0, int(max_replacements)) + 1):
         processed: Dict[int, _ProcessedDisplayImage | Dict[str, Any]] = {}
+        processed_by_transform: Dict[tuple[Any, ...], _ProcessedDisplayImage | Dict[str, Any]] = {}
         for display_index, display in enumerate(displays):
-            result = _process_display_image_candidate(
-                engine,
-                display,
-                display_index,
-                candidate,
-                use_lanczos,
-                sharpen,
-            )
+            transform_key = _display_processing_reuse_key(display)
+            result = processed_by_transform.get(transform_key)
+            if result is None:
+                result = _process_display_image_candidate(
+                    engine,
+                    display,
+                    display_index,
+                    candidate,
+                    use_lanczos,
+                    sharpen,
+                )
+                if result is not None:
+                    processed_by_transform[transform_key] = result
             if result is None:
                 break
             processed[display_index] = result
@@ -1223,14 +1240,19 @@ def load_and_display_image_async(
             # PERF: Stagger transition starts by 100ms per display to avoid
             # simultaneous transition completions which cause 100+ms UI blocks.
             stagger_ms = TRANSITION_STAGGER_MS
+            shared_gui_pixmaps: Dict[int, QPixmap] = {}
 
             for i, display in enumerate(displays):
                 if i not in processed:
                     continue
 
                 proc_data = processed[i]
-                processed_pixmap = QPixmap.fromImage(proc_data.image)
-                original_pixmap = QPixmap.fromImage(proc_data.original_image)
+                reuse_token = id(proc_data)
+                processed_pixmap = shared_gui_pixmaps.get(reuse_token)
+                if processed_pixmap is None:
+                    processed_pixmap = QPixmap.fromImage(proc_data.image)
+                    shared_gui_pixmaps[reuse_token] = processed_pixmap
+                original_pixmap = processed_pixmap
                 img_path = proc_data.path
 
                 if processed_pixmap.isNull():
@@ -1417,7 +1439,7 @@ def load_and_display_image_async_with_metas(
                     continue
                 proc = processed[i]
                 processed_pixmap = QPixmap.fromImage(proc.image)
-                original_pixmap = QPixmap.fromImage(proc.original_image)
+                original_pixmap = processed_pixmap
                 delay_ms = i * stagger_ms
                 if delay_ms > 0:
                     def _delayed(d=display, pp=processed_pixmap, op=original_pixmap, ip=proc.path):

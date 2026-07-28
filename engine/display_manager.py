@@ -411,6 +411,11 @@ class DisplayManager(QObject):
                 resource_manager=self._resource_manager,
                 thread_manager=self._thread_manager,
             )
+            display._image_resource_owner = f"display:{screen_index}:manager:{id(self)}"
+            display._image_resource_generation = id(self)
+            refresh_accounting = getattr(display, "refresh_image_resource_accounting", None)
+            if callable(refresh_accounting):
+                refresh_accounting()
             
             # Connect signals
             display.exit_requested.connect(self._on_exit_requested)

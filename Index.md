@@ -84,6 +84,8 @@ Do not read every document by default.
 | Transition identity | `rendering/transition_registry.py` |
 | Compositor | existing compositor modules under `rendering/` |
 | Image pipeline | existing image-pipeline and prefetch modules |
+| Display image accounting | `rendering/image_resource_accounting.py` |
+| Compositor texture/PBO budgets | `rendering/gl_programs/texture_manager.py` |
 | Visualizer model/runtime | existing modules under `widgets/spotify_visualizer/` |
 | Visualizer replay schema/runtime | `widgets/spotify_visualizer/feature_frame.py`, `widgets/spotify_visualizer/replay_runtime.py` |
 | Visualizer renderer | existing GL visualizer renderer modules |
@@ -129,6 +131,8 @@ evidence:        logs/evidence_chest/
 Phase 1 report:  Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
 Phase 2 report:  Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 Phase 3 report:  Docs/phase_reports/P03_GL_LIFECYCLE_AND_RECONFIGURATION.md
+Phase 4 report:  Docs/phase_reports/P04_MEMORY_VRAM_CONTAINMENT.md
+Phase 4 map:     Docs/phase_reports/P04_RESOURCE_LIFETIME_MAP.md
 ```
 
 Read `Docs/Compositor_Architecture.md`.
@@ -143,6 +147,7 @@ Read `Docs/Compositor_Architecture.md`.
 | `Docs/Harness_Index.md` | Focused recurring commands |
 | `tools/visualizer_replay.py` | Deterministic visualizer replay, protected golden verification, and review artifacts |
 | `tools/phase3_lifecycle_harness.py` | Deterministic 50/50/50 full-teardown, generation, callback, and resource plateau gate |
+| `tools/phase4_resource_harness.py` | Deterministic 45-cycle CPU-image/display/texture/PBO budget and allocator plateau gate |
 
 ## Navigation Rule
 
