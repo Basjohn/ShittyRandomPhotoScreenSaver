@@ -1,6 +1,6 @@
 # Index
 
-Last updated: 2026-07-26
+Last updated: 2026-07-28
 
 Navigation and ownership map for SRPSS.
 
@@ -83,6 +83,7 @@ Do not read every document by default.
 | Compositor | existing compositor modules under `rendering/` |
 | Image pipeline | existing image-pipeline and prefetch modules |
 | Visualizer model/runtime | existing modules under `widgets/spotify_visualizer/` |
+| Visualizer replay schema/runtime | `widgets/spotify_visualizer/feature_frame.py`, `widgets/spotify_visualizer/replay_runtime.py` |
 | Visualizer renderer | existing GL visualizer renderer modules |
 | CUSTOM layout | existing custom-layout contract/manager modules |
 | Input routing | existing centralized input handler |
@@ -124,6 +125,7 @@ donor branch:    donor-7376bb9 (reference-only/read-only)
 donor:           7376bb9bb380253f3bd14079e65d7bdbca062fad
 evidence:        logs/evidence_chest/
 Phase 1 report:  Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
+Phase 2 report:  Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 ```
 
 Read `Docs/Compositor_Architecture.md`.
@@ -136,6 +138,7 @@ Read `Docs/Compositor_Architecture.md`.
 | `tests/run_chunked.py` | Bounded subprocess suite execution |
 | `Docs/TestSuite.md` | Test selection and gates |
 | `Docs/Harness_Index.md` | Focused recurring commands |
+| `tools/visualizer_replay.py` | Deterministic visualizer replay, protected golden verification, and review artifacts |
 
 ## Navigation Rule
 

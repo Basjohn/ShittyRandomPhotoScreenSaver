@@ -1,6 +1,6 @@
 # Harness Index
 
-Last updated: 2026-07-26
+Last updated: 2026-07-28
 
 Compact routing for recurring investigation commands.
 
@@ -86,6 +86,19 @@ Required accompanying runtime work:
 - live Settings/Edit restart.
 
 Do not treat stale expected output as permission to change feel.
+
+### Deterministic replay and protected goldens
+
+Use the repository `.venv` on Windows:
+
+```powershell
+$env:QT_QPA_PLATFORM='offscreen'
+.\.venv\Scripts\python.exe tools\visualizer_replay.py verify
+.\.venv\Scripts\python.exe tools\visualizer_replay.py metrics
+.\.venv\Scripts\python.exe tools\visualizer_replay.py artifacts
+```
+
+`verify` is the normal infrastructure gate and is read-only. `bootstrap-goldens` is only for an empty baseline directory. `update-goldens` requires an acknowledged intentional behaviour change and an approved visualizer change declaration. Review the Spectrum/Bubble artifacts under `Docs/phase_reports/artifacts/P02/` and the Phase 2 evidence in `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
 
 ## 4. Compositor Recovery
 

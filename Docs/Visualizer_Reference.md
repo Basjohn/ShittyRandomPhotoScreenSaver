@@ -79,6 +79,8 @@ Visualizer tick cadence has one steady-state owner: the dedicated recurring time
 - Use `--perf` when visualizer work may affect frame or tick cadence.
 - Before and after shared visualizer/runtime changes, run the focused supported-mode reactivity lock from `Docs/Harness_Index.md`.
 - `[SPOTIFY_VIS][FIRST_FRAME_PRIMER]` means an unready activation frame was blanked/primed; investigate repetition or subsequent first-frame bleed rather than accepting stale authority.
+- Deterministic fidelity replay is owned by `widgets/spotify_visualizer/feature_frame.py`, `widgets/spotify_visualizer/replay_runtime.py`, and `tools/visualizer_replay.py`. Fixtures and protected outputs are versioned under `tests/fixtures/visualizer_replay/v1/` and `tests/goldens/visualizer_replay/v1/`.
+- Infrastructure changes run replay verification read-only. Intentional behaviour changes require the roadmap visualizer declaration and explicit golden-update acknowledgements.
 
 ## 8. Common Drift Risks
 

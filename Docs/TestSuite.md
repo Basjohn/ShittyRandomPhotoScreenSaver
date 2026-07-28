@@ -175,6 +175,16 @@ Measure where applicable:
 
 Infrastructure work does not regenerate baseline expected output.
 
+The Phase 2 lock is owned by:
+
+- `tests/test_visualizer_analysis_acceptance.py`;
+- `tests/test_visualizer_feature_frame.py`;
+- `tests/test_visualizer_replay.py`;
+- `tests/fixtures/visualizer_replay/v1/`;
+- `tests/goldens/visualizer_replay/v1/`.
+
+Run `\.venv\Scripts\python.exe tools\visualizer_replay.py verify` for infrastructure work. Expected output is exact canonical JSON after seven-decimal normalization. Golden mutation requires the explicit policy documented in `Docs/Harness_Index.md` and the Phase 2 report.
+
 ## 6. Frame-Pacing Gate
 
 Report:

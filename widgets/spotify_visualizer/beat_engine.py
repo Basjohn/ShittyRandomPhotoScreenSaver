@@ -9,7 +9,7 @@ This module contains the _SpotifyBeatEngine class which handles:
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Optional, Sequence
 import time
 import math
 
@@ -36,6 +36,61 @@ from widgets.spotify_visualizer.transient_bus import TransientEnergyBands, Trans
 
 
 logger = get_logger(__name__)
+
+
+def _smooth_analysis_bars(
+    raw_bars: Sequence[float],
+    previous_bars: Sequence[float],
+    prior_timestamp: float,
+    current_timestamp: float,
+    *,
+    bar_count: int,
+    smoothing_tau: float,
+    segment_hysteresis: float,
+    min_change_threshold: float,
+) -> tuple[List[float], bool, EnergyBands]:
+    """Return the deterministic smoothing result for one analysis frame."""
+    dt = (
+        max(0.0, current_timestamp - prior_timestamp)
+        if prior_timestamp >= 0.0
+        else 0.0
+    )
+    if dt > 2.0 or dt <= 0.0:
+        smoothed = list(raw_bars)
+        return smoothed, True, extract_energy_bands(raw_bars)
+
+    tau_rise = smoothing_tau * 0.35
+    tau_decay = smoothing_tau * 1.5
+    alpha_rise = 1.0 - math.exp(-dt / tau_rise)
+    alpha_decay = 1.0 - math.exp(-dt / tau_decay)
+    alpha_rise = max(0.0, min(1.0, alpha_rise))
+    alpha_decay = max(0.0, min(1.0, alpha_decay))
+
+    smoothed: List[float] = []
+    for i in range(bar_count):
+        cur = previous_bars[i] if i < len(previous_bars) else 0.0
+        tgt = raw_bars[i] if i < len(raw_bars) else 0.0
+
+        delta = abs(tgt - cur)
+        if delta < min_change_threshold:
+            smoothed.append(cur)
+            continue
+
+        if tgt > cur:
+            tgt_adjusted = tgt + segment_hysteresis
+        elif tgt < cur:
+            tgt_adjusted = tgt - segment_hysteresis
+        else:
+            tgt_adjusted = tgt
+
+        tgt_adjusted = max(0.0, min(1.0, tgt_adjusted))
+        alpha = alpha_rise if tgt_adjusted >= cur else alpha_decay
+        nxt = cur + (tgt_adjusted - cur) * alpha
+        if abs(nxt) < 1e-3:
+            nxt = 0.0
+        smoothed.append(nxt)
+
+    return smoothed, False, extract_energy_bands(smoothed)
 
 
 class _SpotifyBeatEngine(QObject):
@@ -308,54 +363,18 @@ class _SpotifyBeatEngine(QObject):
     def _apply_smoothing(self, target_bars: List[float]) -> List[float]:
         """Apply time-based exponential smoothing with anti-flicker (Solution 1+2)."""
         now_ts = time.time()
-        last_ts = self._last_smooth_ts
-        dt = max(0.0, now_ts - last_ts) if last_ts >= 0.0 else 0.0
-        
-        if dt > 2.0 or dt <= 0.0:
-            self._smoothed_bars = list(target_bars)
-            return self._smoothed_bars
-        
-        base_tau = self._smoothing_tau
-        tau_rise = base_tau * 0.35
-        tau_decay = base_tau * 1.5
-        alpha_rise = 1.0 - math.exp(-dt / tau_rise)
-        alpha_decay = 1.0 - math.exp(-dt / tau_decay)
-        alpha_rise = max(0.0, min(1.0, alpha_rise))
-        alpha_decay = max(0.0, min(1.0, alpha_decay))
-        
-        bar_count = self._bar_count
-        smoothed = self._smoothed_bars
-        hysteresis = self._segment_hysteresis
-        min_change = self._min_change_threshold
-        
-        for i in range(bar_count):
-            cur = smoothed[i] if i < len(smoothed) else 0.0
-            tgt = target_bars[i] if i < len(target_bars) else 0.0
-            
-            # Solution 2: Minimum change threshold - filter micro-oscillations
-            delta = abs(tgt - cur)
-            if delta < min_change:
-                smoothed[i] = cur
-                continue
-            
-            # Solution 1: Segment hysteresis - prevent boundary oscillation
-            if tgt > cur:
-                tgt_adjusted = tgt + hysteresis
-            elif tgt < cur:
-                tgt_adjusted = tgt - hysteresis
-            else:
-                tgt_adjusted = tgt
-            
-            tgt_adjusted = max(0.0, min(1.0, tgt_adjusted))
-            
-            alpha = alpha_rise if tgt_adjusted >= cur else alpha_decay
-            nxt = cur + (tgt_adjusted - cur) * alpha
-            if abs(nxt) < 1e-3:
-                nxt = 0.0
-            smoothed[i] = nxt
-        
-        return smoothed
-
+        smoothed, _reset, _energy = _smooth_analysis_bars(
+            target_bars,
+            self._smoothed_bars,
+            self._last_smooth_ts,
+            now_ts,
+            bar_count=self._bar_count,
+            smoothing_tau=self._smoothing_tau,
+            segment_hysteresis=self._segment_hysteresis,
+            min_change_threshold=self._min_change_threshold,
+        )
+        self._smoothed_bars = smoothed
+        return self._smoothed_bars
     def acquire(self) -> None:
         self._ref_count += 1
 
@@ -449,60 +468,21 @@ class _SpotifyBeatEngine(QObject):
                 return None
             
             now_ts = time.time()
-            dt = max(0.0, now_ts - last_smooth_ts) if last_smooth_ts >= 0.0 else 0.0
-            
-            if dt > 2.0 or dt <= 0.0:
-                return {
-                    'raw': raw_bars,
-                    'smoothed': list(raw_bars),
-                    'ts': now_ts,
-                    'reset': True,
-                    'energy': extract_energy_bands(raw_bars),
-                    'worker_state': worker_state,
-                    'activation_id': activation_id,
-                }
-            
-            base_tau = smoothing_tau
-            tau_rise = base_tau * 0.35
-            tau_decay = base_tau * 1.5
-            alpha_rise = 1.0 - math.exp(-dt / tau_rise)
-            alpha_decay = 1.0 - math.exp(-dt / tau_decay)
-            alpha_rise = max(0.0, min(1.0, alpha_rise))
-            alpha_decay = max(0.0, min(1.0, alpha_decay))
-            
-            smoothed = []
-            for i in range(bar_count):
-                cur = smoothed_copy[i] if i < len(smoothed_copy) else 0.0
-                tgt = raw_bars[i] if i < len(raw_bars) else 0.0
-                
-                # Solution 2: Minimum change threshold
-                delta = abs(tgt - cur)
-                if delta < min_change:
-                    smoothed.append(cur)
-                    continue
-                
-                # Solution 1: Segment hysteresis
-                if tgt > cur:
-                    tgt_adjusted = tgt + hysteresis
-                elif tgt < cur:
-                    tgt_adjusted = tgt - hysteresis
-                else:
-                    tgt_adjusted = tgt
-                
-                tgt_adjusted = max(0.0, min(1.0, tgt_adjusted))
-                
-                alpha = alpha_rise if tgt_adjusted >= cur else alpha_decay
-                nxt = cur + (tgt_adjusted - cur) * alpha
-                if abs(nxt) < 1e-3:
-                    nxt = 0.0
-                smoothed.append(nxt)
-            
-            # Extract energy bands from smoothed bars
-            energy = extract_energy_bands(smoothed)
+            smoothed, reset, energy = _smooth_analysis_bars(
+                raw_bars,
+                smoothed_copy,
+                last_smooth_ts,
+                now_ts,
+                bar_count=bar_count,
+                smoothing_tau=smoothing_tau,
+                segment_hysteresis=hysteresis,
+                min_change_threshold=min_change,
+            )
             return {
                 'raw': raw_bars,
                 'smoothed': smoothed,
                 'ts': now_ts,
+                'reset': reset,
                 'energy': energy,
                 'worker_state': worker_state,
                 'activation_id': activation_id,
@@ -519,29 +499,14 @@ class _SpotifyBeatEngine(QObject):
                     return
                 if data.get('activation_id') != self._activation_id:
                     return
-                raw_bars = data.get('raw')
-                smoothed_bars = data.get('smoothed')
-                ts = data.get('ts', time.time())
-                worker_state = data.get('worker_state')
-                if worker_state is not None:
-                    try:
-                        self._audio_worker.commit_compute_snapshot(worker_state)
-                    except Exception:
-                        logger.debug("[SPOTIFY_VIS] Failed to commit audio worker compute state", exc_info=True)
-                if isinstance(raw_bars, list):
-                    self._bars_result_buffer.publish(raw_bars)
-                    self._latest_bars = raw_bars
-                if isinstance(smoothed_bars, list):
-                    self._smoothed_bars = smoothed_bars
-                    self._last_smooth_ts = ts
-                    self._latest_generation_with_frame = self._generation_id
-                energy = data.get('energy')
-                if isinstance(energy, EnergyBands):
-                    self._energy_bands = energy
-                try:
-                    self._last_audio_ts = time.time()
-                except Exception as e:
-                    logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+                self._commit_analysis_frame(
+                    raw_bars=data.get('raw'),
+                    smoothed_bars=data.get('smoothed'),
+                    timestamp=data.get('ts', time.time()),
+                    activation_id=data.get('activation_id'),
+                    worker_state=data.get('worker_state'),
+                    energy=data.get('energy'),
+                )
             except Exception:
                 logger.debug("[SPOTIFY_VIS] compute task callback failed", exc_info=True)
 
@@ -555,6 +520,153 @@ class _SpotifyBeatEngine(QObject):
             logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
             if token == self._compute_gate_token:
                 self._compute_task_active = False
+
+    def _commit_analysis_frame(
+        self,
+        *,
+        raw_bars: object,
+        smoothed_bars: object,
+        timestamp: object,
+        activation_id: object,
+        worker_state: object = None,
+        energy: object = None,
+        waveform: Optional[List[float]] = None,
+        waveform_count: Optional[int] = None,
+        audio_timestamp: Optional[float] = None,
+    ) -> bool:
+        """Publish one verified live or replay analysis frame."""
+        if activation_id != self._activation_id:
+            return False
+
+        if worker_state is not None:
+            try:
+                self._audio_worker.commit_compute_snapshot(worker_state)
+            except Exception:
+                logger.debug("[SPOTIFY_VIS] Failed to commit audio worker compute state", exc_info=True)
+        if isinstance(raw_bars, list):
+            self._bars_result_buffer.publish(raw_bars)
+            self._latest_bars = raw_bars
+        if isinstance(smoothed_bars, list):
+            self._smoothed_bars = smoothed_bars
+            self._last_smooth_ts = float(timestamp)
+            self._latest_generation_with_frame = self._generation_id
+        if isinstance(energy, EnergyBands):
+            self._energy_bands = energy
+        if waveform is not None:
+            self._waveform = waveform
+            self._waveform_count = int(waveform_count or 0)
+            self._latest_generation_with_waveform = self._generation_id
+        try:
+            self._last_audio_ts = (
+                time.time() if audio_timestamp is None else float(audio_timestamp)
+            )
+        except Exception as e:
+            logger.debug("[SPOTIFY_VIS] Exception suppressed: %s", e)
+        return True
+
+    def accept_analysis_frame(
+        self,
+        raw_bars: object,
+        timestamp: object,
+        *,
+        activation_id: object,
+        waveform: object = None,
+        waveform_count: object = None,
+        worker_state: object = None,
+        energy_override: object = None,
+    ) -> bool:
+        """Synchronously accept one timestamped analysis frame for replay."""
+        if (
+            not isinstance(activation_id, int)
+            or isinstance(activation_id, bool)
+            or activation_id != self._activation_id
+        ):
+            return False
+        if not isinstance(raw_bars, list) or len(raw_bars) != self._bar_count:
+            return False
+        if (
+            not isinstance(timestamp, (int, float))
+            or isinstance(timestamp, bool)
+            or not math.isfinite(float(timestamp))
+            or float(timestamp) < 0.0
+        ):
+            return False
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+            or float(value) > 1.0
+            for value in raw_bars
+        ):
+            return False
+        if energy_override is not None:
+            if not isinstance(energy_override, EnergyBands):
+                return False
+            if any(
+                not math.isfinite(float(value)) or value < 0.0 or value > 1.0
+                for value in (
+                    energy_override.bass,
+                    energy_override.mid,
+                    energy_override.high,
+                    energy_override.overall,
+                )
+            ):
+                return False
+
+        normalized_waveform: Optional[List[float]] = None
+        normalized_waveform_count: Optional[int] = None
+        if waveform is not None:
+            if not isinstance(waveform, (list, tuple)):
+                return False
+            if any(
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                for value in waveform
+            ):
+                return False
+            waveform_values = [float(value) for value in waveform]
+            sample_count = len(waveform_values)
+            if waveform_count is None:
+                normalized_waveform_count = min(256, sample_count)
+            elif (
+                not isinstance(waveform_count, int)
+                or isinstance(waveform_count, bool)
+                or waveform_count < 0
+                or waveform_count > min(256, sample_count)
+            ):
+                return False
+            else:
+                normalized_waveform_count = waveform_count
+            if sample_count >= 256:
+                normalized_waveform = waveform_values[-256:]
+            else:
+                normalized_waveform = waveform_values + [0.0] * (256 - sample_count)
+        elif waveform_count is not None:
+            return False
+
+        smoothed, _reset, energy = _smooth_analysis_bars(
+            raw_bars,
+            self._smoothed_bars,
+            self._last_smooth_ts,
+            float(timestamp),
+            bar_count=self._bar_count,
+            smoothing_tau=self._smoothing_tau,
+            segment_hysteresis=self._segment_hysteresis,
+            min_change_threshold=self._min_change_threshold,
+        )
+        return self._commit_analysis_frame(
+            raw_bars=list(raw_bars),
+            smoothed_bars=smoothed,
+            timestamp=float(timestamp),
+            activation_id=activation_id,
+            worker_state=worker_state,
+            energy=energy if energy_override is None else energy_override,
+            waveform=normalized_waveform,
+            waveform_count=normalized_waveform_count,
+            audio_timestamp=float(timestamp),
+        )
 
     def get_generation_id(self) -> int:
         return self._generation_id

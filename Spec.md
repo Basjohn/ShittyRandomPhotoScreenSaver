@@ -103,6 +103,8 @@ No distributed terminal transaction is part of the stable architecture.
 - Mode-specific arrays/history/work do not bleed across activation.
 - All activation paths consume one resolved mode/preset payload.
 - A narrow explicit renderer interface replaces compatibility forwarding.
+- Deterministic timestamped feature replay uses the same logical simulation/tick path as live analysis and remains independent of presentation opportunities.
+- Baseline fixtures and golden logical outputs are versioned; infrastructure verification is read-only and may not regenerate them.
 
 Focused behaviour and settings contracts live in the existing visualizer documents.
 

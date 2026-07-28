@@ -1,6 +1,6 @@
 # Current Plan
 
-Last updated: 2026-07-26
+Last updated: 2026-07-28
 
 Active work only.
 
@@ -39,17 +39,8 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 
 - [x] **Phase 0 / Gate 0:** freeze, evidence, and ownership inventory are complete; the Phase 1 checkpoint supplies the clean committed recovery point. See `Docs/phase_reports/P00_FREEZE_INVENTORY_AND_EVIDENCE.md`, `Docs/phase_reports/P00_SOURCE_OWNERSHIP_INVENTORY.md`, and `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
 - [x] **Phase 1 / Gate 1:** bounded passive frame, event-loop, task, CPU-image, GL-resource, and lifecycle-snapshot measurement validated without behavioural change. See `Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md`.
+- [x] **Phase 2 / Gate 2:** deterministic all-mode visualizer replay, protected baseline goldens, cadence-separation tests, quantitative metrics, and Spectrum/Bubble logical review artifacts are complete. See `Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md`.
 
-## Phase 2 — Visualizer Fidelity Lock
-
-- [ ] Deterministic timestamped input replay.
-- [ ] Baseline output capture per supported mode.
-- [ ] Spectrum and Bubble quantitative metrics.
-- [ ] Manual baseline recordings.
-- [ ] Irregular-presentation tests.
-- [ ] Prevent infrastructure work from rewriting expected output.
-
-**Gate:** visualizer feel is protected independently of paint cadence.
 
 ## Phase 3 — Lifecycle Safety
 
@@ -173,18 +164,19 @@ A phase is complete only with tests, runtime evidence, visualizer result, and ro
 ## Current Phase
 
 ```text
-Phase: 2 — Deterministic Visualizer Replay
+Phase: 3 — Lifecycle Safety
 Branch: main
-Last evidence: Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
+Last evidence: Docs/phase_reports/P02_VISUALIZER_FIDELITY_LOCK.md
 ```
 
-- [-] Define the timestamped replay payload and capture representative clips: silence, beats, sustained tones, transients, noisy music, and volume changes.
-- [ ] Capture baseline state/output series for every supported mode, including Spectrum and Bubble.
-- [ ] Add quantitative mode metrics: latency, peak amplitude, decay, overshoot, elasticity, settling, low-energy response, and discontinuities.
-- [ ] Prove replay is independent of irregular presentation cadence and GUI stalls.
-- [ ] Preserve golden payloads from infrastructure-driven rewrites; require an explicit visualizer-change declaration for intentional algorithm changes.
-- [ ] Produce perceptual review artifacts and perform manual Spectrum/Bubble comparison.
-- [ ] Record pass tolerances, focused automation, runtime-shaped results, and rollback in `Docs/phase_reports/P02_*.md`.
+- [-] Inventory the real Settings, Edit, stop, display-destroy, and recreate call order and identify the single generation boundary.
+- [ ] Advance the runtime generation at full reconfiguration admission so stale worker and deferred GUI callbacks cannot mutate the replacement display.
+- [ ] Stop producers and disconnect/cancel callbacks before display-local GL teardown.
+- [ ] Destroy visualizer and display GL resources synchronously on the owning GUI thread with the owning context current; fail loudly if context acquisition fails.
+- [ ] Guard deferred warmup and image-result callbacks with both runtime generation and owning display identity.
+- [ ] Add hostile in-flight callback, transition, Spectrum, and Bubble lifecycle cases.
+- [ ] Run 50 Settings cycles, 50 Edit cycles, and 50 mixed cycles with zero context-affinity errors, dead-generation callbacks, or live-resource growth.
+- [ ] Record lifecycle ordering, focused automation, runtime results, and rollback in `Docs/phase_reports/P03_*.md`.
 ## Deferred Until Recovery Passes
 
 - new production widget families;
@@ -200,3 +192,10 @@ Last evidence: Docs/phase_reports/P01_MEASUREMENT_FOUNDATION.md
 - Do not copy stable contracts from `Spec.md`.
 - Do not add provider-specific feature backlogs.
 - Do not rename this file.
+
+USER TASK BOX. ADD ITEMS BELOW INTO PLANNED STEPS AND EMPTY BOX. NEVER EVER DELETE THIS BOX AS A WHOLE OR THESE INSTRUCTIONS, ONLY PROPERLY ADOPTED IDEAS, YA GOBLIN ASS BITCH.
+#######
+!IMPORTANT! Reddit helper log doesn't cleanly keep size down and rotate, once it gets to 27mb the helper fails to launch and gives an error about the log. The expired files .bridge_ready may all contribute. To get Reddit links working in Screensaver mode again I had to: 1. Completely delete the logs. 2. Delete everything in url_queue and 3. Take ownership of ProgramData despite being an administrator. 
+
+Unsure if 3 was required. 1 allowed the helper to start again but it did not save/launch urls. 2 and 3 were done together and fully resolved issues.
+#######
