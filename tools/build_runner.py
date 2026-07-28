@@ -182,7 +182,13 @@ def _run_preflight() -> PreflightResult:
     logo = REPO_ROOT / "images" / "LogoBMP.bmp"
     default_sound = REPO_ROOT / "resources" / "tutuogg.ogg"
 
-    helper_exe = REPO_ROOT / "release" / "helpers" / "SRPSS_RedditHelper.exe"
+    helper_exe = (
+        REPO_ROOT
+        / "release"
+        / "helpers"
+        / "SRPSS_RedditHelper"
+        / "SRPSS_RedditHelper.exe"
+    )
 
     if not std_scr.exists():
         r.warnings.append(
@@ -195,7 +201,7 @@ def _run_preflight() -> PreflightResult:
         )
     if not helper_exe.exists():
         r.warnings.append(
-            "release/helpers/SRPSS_RedditHelper.exe not found "
+            "release/helpers/SRPSS_RedditHelper/SRPSS_RedditHelper.exe not found "
             "(will be created by build step 3)."
         )
     if not icon.exists():

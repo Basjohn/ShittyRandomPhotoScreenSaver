@@ -28,6 +28,7 @@ from core.mc import is_mc_build
 from core.logging.logger import get_logger
 from core.windows import reddit_helper_bridge
 from core.windows.reddit_helper_installer import _log_helper_event, _running_as_system
+from core.windows.reddit_helper_storage import read_json_bounded
 
 logger = get_logger(__name__)
 
@@ -199,7 +200,8 @@ def resolve_helper_command(
 
 def _read_json(path: Path) -> Optional[dict]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        payload = read_json_bounded(path)
+        return payload if isinstance(payload, dict) else None
     except Exception:
         return None
 

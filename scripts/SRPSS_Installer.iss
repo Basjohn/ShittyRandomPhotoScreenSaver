@@ -41,8 +41,8 @@ Source: ".\..\SRPSS.ico"; DestDir: "{app}"; Flags: ignoreversion
 ; Media provider logos (Spotify is bundled via images dir; MusicBee icon)
 Source: ".\..\images\icons8-musicbee-96.png"; DestDir: "{app}\images"; Flags: ignoreversion
 
-; Reddit helper watcher (placed at install time, not runtime-extracted)
-Source: ".\..\release\helpers\SRPSS_RedditHelper.exe"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: ignoreversion
+; Reddit helper watcher bundle (laid down by the installer; no one-file runtime extraction)
+Source: ".\..\release\helpers\SRPSS_RedditHelper\*"; DestDir: "{commonappdata}\SRPSS\helper"; Flags: recursesubdirs createallsubdirs ignoreversion
 
 ; Shared task-definition template used by both installer registration and
 ; repo-side harness tooling so we test the same XML contract.
@@ -52,6 +52,15 @@ Source: ".\reddit_helper_task_template.xml"; Flags: dontcopy
 ; Delivered to a stable ProgramData path so upgrades always clean-replace them.
 Source: ".\..\presets\visualizer_modes\*"; DestDir: "{commonappdata}\SRPSS\presets\visualizer_modes"; Flags: recursesubdirs createallsubdirs ignoreversion
 Source: ".\..\resources\tutuogg.ogg"; DestDir: "{commonappdata}\SRPSS\sounds"; Flags: ignoreversion
+
+[Dirs]
+Name: "{commonappdata}\SRPSS"
+Name: "{commonappdata}\SRPSS\helper"
+Name: "{commonappdata}\SRPSS\presets"
+Name: "{commonappdata}\SRPSS\sounds"
+Name: "{commonappdata}\SRPSS\url_queue"
+Name: "{commonappdata}\SRPSS\logs"
+Name: "{commonappdata}\SRPSS\helper_signals"
 
 [InstallDelete]
 ; Remove any legacy SRPSS screen saver binaries that can cause duplicate
@@ -63,6 +72,7 @@ Type: files; Name: "{sys}\\ShittyRandomPhotoScreenSaver.scr"
 ; Wipe old shipped curated presets before the new ones land so stale/renamed
 ; files are never left behind alongside the authoritative replacement set.
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\presets\visualizer_modes"
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: files; Name: "{commonappdata}\SRPSS\sounds\tutuogg.ogg"
 
 [Registry]
@@ -89,9 +99,8 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""SRPSS_RedditHelper"" 
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN ""\SRPSS\RedditHelper"" /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteLegacyHelperTask"
 
 [UninstallDelete]
-; Clean up Reddit helper and queue
-Type: files; Name: "{commonappdata}\SRPSS\helper\SRPSS_RedditHelper.exe"
-Type: dirifempty; Name: "{commonappdata}\SRPSS\helper"
+; Clean up Reddit helper bundle and queue
+Type: filesandordirs; Name: "{commonappdata}\SRPSS\helper"
 Type: filesandordirs; Name: "{commonappdata}\SRPSS\url_queue"
 
 [Run]
@@ -121,6 +130,83 @@ begin
     Result := DomainName + '\' + UserName
   else
     Result := UserName;
+end;
+
+function RunIcacls(const TargetPath, Arguments: String): Boolean;
+var
+  ResultCode: Integer;
+  IcaclsPath: String;
+begin
+  IcaclsPath := ExpandConstant('{sys}\icacls.exe');
+  ResultCode := -1;
+  Result := Exec(
+    IcaclsPath,
+    '"' + TargetPath + '" ' + Arguments,
+    '',
+    SW_HIDE,
+    ewWaitUntilTerminated,
+    ResultCode
+  );
+  if Result then
+    Result := ResultCode = 0;
+  if not Result then
+    Log(Format('SRPSS: ACL reconciliation failed path="%s" args="%s" rc=%d', [
+      TargetPath,
+      Arguments,
+      ResultCode
+    ]));
+end;
+
+function ApplyRedditHelperAcl(
+  const TargetPath, CurrentUserId, CurrentUserRights: String
+): Boolean;
+var
+  RemoveBroadGrants: String;
+  GrantRequiredPrincipals: String;
+begin
+  RemoveBroadGrants :=
+    '/inheritance:r ' +
+    '/remove:g "*S-1-1-0" "*S-1-5-11" "*S-1-5-32-545" /T /Q';
+  GrantRequiredPrincipals :=
+    '/grant:r ' +
+    '"*S-1-5-18:(OI)(CI)F" ' +
+    '"*S-1-5-32-544:(OI)(CI)F" ' +
+    '"' + CurrentUserId + ':(OI)(CI)' + CurrentUserRights + '" /T /Q';
+
+  { Grant explicit recovery/traversal authority before inheritance is removed. }
+  Result := RunIcacls(TargetPath, GrantRequiredPrincipals);
+  if Result then
+    Result := RunIcacls(TargetPath, RemoveBroadGrants);
+end;
+
+function ReconcileRedditHelperStorageAcls(): Boolean;
+var
+  BaseDir: String;
+  CurrentUserId: String;
+begin
+  BaseDir := ExpandConstant('{commonappdata}\SRPSS');
+  CurrentUserId := BuildCurrentUserId();
+  Result := CurrentUserId <> '';
+
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir, CurrentUserId, 'RX');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\helper', CurrentUserId, 'RX');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\presets', CurrentUserId, 'RX');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\sounds', CurrentUserId, 'RX');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\url_queue', CurrentUserId, 'M');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\logs', CurrentUserId, 'M');
+  if Result then
+    Result := ApplyRedditHelperAcl(BaseDir + '\helper_signals', CurrentUserId, 'M');
+
+  if Result then
+    Log('SRPSS: Reddit helper ProgramData ACLs reconciled successfully')
+  else
+    Log('SRPSS: Reddit helper ProgramData ACL reconciliation did not complete');
 end;
 
 procedure TryDeleteTaskByName(const TaskName: String);
@@ -246,6 +332,14 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    RegisterRedditHelperTask();
+    if ReconcileRedditHelperStorageAcls() then
+      RegisterRedditHelperTask()
+    else
+      MsgBox(
+        'SRPSS installed, but the Reddit helper storage permissions could not be secured.' + #13#10 + #13#10 +
+        'The Reddit helper task was not registered because URL handoff would be unreliable.',
+        mbError,
+        MB_OK
+      );
   end;
 end;

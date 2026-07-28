@@ -45,6 +45,46 @@ def test_build_helper_arguments_matches_expected_shape():
     assert arguments.endswith("--idle-exit-seconds 20")
 
 
+def test_storage_recovery_harness_exercises_bounded_failure_path():
+    from tools import reddit_helper_task_harness as harness
+
+    result = harness.storage_recovery_test()
+
+    assert result["success"] is True
+    assert result["marker_independent"] is True
+    assert result["recovery"]["recovered"] == 1
+    assert result["log_failure_survived"] is True
+    assert result["processed"] == 2
+    assert len(result["receipts"]) == 2
+    assert sum(result["log_sizes"].values()) <= result["log_limit_bytes"]
+
+
+def test_installer_reconciles_protected_and_writable_programdata_acls():
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+
+    assert "ReconcileRedditHelperStorageAcls" in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\helper\', CurrentUserId, \'RX\')' in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\presets\', CurrentUserId, \'RX\')' in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\sounds\', CurrentUserId, \'RX\')' in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\url_queue\', CurrentUserId, \'M\')' in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\logs\', CurrentUserId, \'M\')' in installer
+    assert 'ApplyRedditHelperAcl(BaseDir + \'\\helper_signals\', CurrentUserId, \'M\')' in installer
+    assert '"*S-1-5-32-545"' in installer
+    assert '"*S-1-5-11"' in installer
+    assert '"*S-1-1-0"' in installer
+    assert "/C /Q" not in installer
+
+
+def test_helper_packaging_is_installer_laid_ondir_not_self_extracting_onefile():
+    build_script = (REPO_ROOT / "scripts" / "build_reddit_helper.ps1").read_text(encoding="utf-8")
+    installer = (REPO_ROOT / "scripts" / "SRPSS_Installer.iss").read_text(encoding="utf-8")
+
+    assert '"--onedir"' in build_script
+    assert '"--onefile"' not in build_script
+    assert r"release\helpers\SRPSS_RedditHelper\*" in installer
+    assert "no one-file runtime extraction" in installer
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows-only scheduled task smoke test")
 def test_scheduled_task_smoke_test_via_harness_when_enabled(tmp_path):
     if os.environ.get("SRPSS_RUN_TASK_SMOKE_TEST") != "1":

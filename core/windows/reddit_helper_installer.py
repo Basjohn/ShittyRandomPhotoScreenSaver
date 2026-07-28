@@ -17,12 +17,14 @@ from datetime import datetime
 from pathlib import Path
 
 from core.logging.logger import get_logger
+from core.windows.reddit_helper_storage import append_bounded_log
 
 logger = get_logger(__name__)
 
 IS_WINDOWS = sys.platform == "win32"
 
 BASE_DIR = Path(os.getenv("PROGRAMDATA", r"C:\ProgramData")) / "SRPSS"
+_BREADCRUMB_FAILURE_REPORTED = False
 
 
 def _running_as_system() -> bool:
@@ -34,12 +36,18 @@ def _running_as_system() -> bool:
 
 
 def _log_helper_event(message: str) -> None:
+    global _BREADCRUMB_FAILURE_REPORTED
+    if os.getenv("PYTEST_CURRENT_TEST") and not os.getenv("SRPSS_ALLOW_TEST_HELPER_BREADCRUMBS"):
+        return
     try:
         log_dir = BASE_DIR / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / "scr_helper.log"
         stamp = datetime.utcnow().isoformat(timespec="seconds") + "Z"
-        with log_file.open("a", encoding="utf-8") as handle:
-            handle.write(f"{stamp} {message}\n")
+        if not append_bounded_log(log_file, f"{stamp} {message}"):
+            if not _BREADCRUMB_FAILURE_REPORTED:
+                logger.warning("[REDDIT] Helper breadcrumb diagnostics are unavailable")
+                _BREADCRUMB_FAILURE_REPORTED = True
+        else:
+            _BREADCRUMB_FAILURE_REPORTED = False
     except Exception as e:
         logger.debug("[REDDIT] Exception suppressed: %s", e)

@@ -1,8 +1,8 @@
 <#
-Builds the Reddit helper watcher into a standalone EXE using an isolated persistent virtual environment.
+Builds the Reddit helper watcher into an installer-laid on-disk bundle using an isolated persistent virtual environment.
 
 Output:
-  release/helpers/SRPSS_RedditHelper.exe
+  release/helpers/SRPSS_RedditHelper/SRPSS_RedditHelper.exe
 
 Persistent helper venv:
   build_deps/venv
@@ -281,7 +281,7 @@ Write-Host "[BUILD-HELPER] App version: $AppVersion"
 # PyInstaller args.
 $argsList = @(
     "-m", "PyInstaller",
-    "--onefile",
+    "--onedir",
     "--clean",
     "--noconfirm",
     "--name", $AppName,
@@ -324,14 +324,15 @@ try {
 }
 
 # Verify output.
-$Exe = Join-Path $ReleaseDir "$AppName.exe"
+$BundleDir = Join-Path $ReleaseDir $AppName
+$Exe = Join-Path $BundleDir "$AppName.exe"
 if (-not (Test-Path $Exe)) {
     Write-Host "[BUILD-HELPER] Helper build failed. See log: $LogFile"
     exit 1
 }
 
-$size = (Get-Item $Exe).Length / 1MB
-Write-Host "[BUILD-HELPER] Build success: $Exe ($([math]::Round($size, 1)) MB)"
+$size = ((Get-ChildItem -Path $BundleDir -File -Recurse | Measure-Object -Property Length -Sum).Sum) / 1MB
+Write-Host "[BUILD-HELPER] Build success: $BundleDir ($([math]::Round($size, 1)) MB)"
 
 # Clean up intermediate build directory.
 try {

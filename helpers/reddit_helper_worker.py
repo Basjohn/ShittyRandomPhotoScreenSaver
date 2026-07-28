@@ -19,7 +19,9 @@ import argparse
 import ctypes
 import json
 import logging
+import math
 import os
+import re
 import subprocess
 import sys
 import time
@@ -27,6 +29,7 @@ import webbrowser
 from ctypes import wintypes
 from pathlib import Path
 from typing import Any, Dict, Iterator
+from urllib.parse import urlsplit
 
 from core.logging.logger import get_logger
 from core.constants.timing import (
@@ -39,6 +42,17 @@ from core.windows.reddit_helper_runtime import (
     HEARTBEAT_FILE_NAME,
     SESSION_HELPER_SHUTDOWN_PREFIX,
     remove_helper_run_entry,
+)
+from core.windows.reddit_helper_storage import (
+    HELPER_LOG_MAX_BYTES,
+    QUEUE_ENTRY_MAX_BYTES,
+    QUEUE_MAX_LIVE_ENTRIES,
+    QUEUE_MAX_TOTAL_BYTES,
+    install_null_logging,
+    make_rotating_log_handler,
+    queue_usage,
+    read_json_bounded,
+    write_json_atomic_bounded,
 )
 
 logger = get_logger(__name__)
@@ -65,6 +79,11 @@ _NO_WINDOW_FLAG = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 OPEN_URL_MAX_AGE_SECONDS = 3600.0
 OPEN_SETTINGS_MAX_AGE_SECONDS = 900.0
+QUEUE_TERMINAL_MAX_ENTRIES = 128
+QUEUE_TERMINAL_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+QUEUE_RECEIPT_MAX_AGE_SECONDS = 24 * 60 * 60
+QUEUE_ALLOWED_ACTIONS = {"open_url", "open_settings"}
+QUEUE_SAFE_TOKEN = re.compile(r"^[A-Za-z0-9_-]{1,160}$")
 
 WATCHER_MUTEX_NAME = r"Local\SRPSS_RedditHelper_Watcher"
 _ERROR_ALREADY_EXISTS = 183
@@ -82,21 +101,23 @@ class ShellNotReadyError(RuntimeError):
     """Raised when the helper is alive but the interactive shell is not ready yet."""
 
 
-def configure_logging(log_dir: Path, verbose: bool) -> None:
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_file = log_dir / "reddit_helper.log"
-
-    handlers: list[logging.Handler] = [
-        logging.FileHandler(log_file, encoding="utf-8"),
-    ]
-    if verbose:
-        handlers.append(logging.StreamHandler(sys.stdout))
-
-    logging.basicConfig(
-        level=logging.DEBUG if verbose else logging.INFO,
-        format="%(asctime)s [helper] %(levelname)s - %(message)s",
-        handlers=handlers,
-    )
+def configure_logging(log_dir: Path, verbose: bool) -> bool:
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "reddit_helper.log"
+        handlers: list[logging.Handler] = [make_rotating_log_handler(log_file)]
+        if verbose:
+            handlers.append(logging.StreamHandler(sys.stdout))
+        logging.basicConfig(
+            level=logging.DEBUG if verbose else logging.INFO,
+            format="%(asctime)s [helper] %(levelname)s - %(message)s",
+            handlers=handlers,
+            force=True,
+        )
+        return True
+    except Exception:
+        install_null_logging(verbose=verbose)
+        return False
 
 
 _watcher_running = True
@@ -195,7 +216,7 @@ def parse_args() -> argparse.Namespace:
 def iter_queue_files(queue_dir: Path) -> Iterator[Path]:
     paths = {
         path.name.lower(): path
-        for pattern in ("*.json", "*.retry")
+        for pattern in ("*.json", "*.retry", "*.processing")
         for path in queue_dir.glob(pattern)
         if path.is_file()
     }
@@ -234,6 +255,7 @@ def _write_heartbeat_with_lifecycle(
     poll_interval: float,
     persistent: bool,
     owner_pid: int,
+    logging_available: bool = True,
 ) -> None:
     payload = {
         "updated_at": time.time(),
@@ -242,6 +264,7 @@ def _write_heartbeat_with_lifecycle(
         "poll_interval": float(poll_interval),
         "persistent": bool(persistent),
         "owner_pid": int(owner_pid or 0),
+        "logging_available": bool(logging_available),
     }
     path = _heartbeat_path(signal_dir)
     tmp_path = path.with_suffix(".tmp")
@@ -281,9 +304,169 @@ def _session_ticket_active(path: Path | None, *, now: float | None = None) -> bo
 
 
 def _write_entry_payload(target_path: Path, payload: Dict[str, Any]) -> None:
-    tmp_path = target_path.with_suffix(".tmp")
-    tmp_path.write_text(json.dumps(payload), encoding="utf-8")
-    tmp_path.replace(target_path)
+    write_json_atomic_bounded(target_path, payload)
+
+
+def _safe_token(data: Dict[str, Any]) -> str:
+    token = str(data.get("token") or "").strip()
+    return token if QUEUE_SAFE_TOKEN.fullmatch(token) else ""
+
+
+def _validate_queue_payload(data: Any) -> Dict[str, Any]:
+    if not isinstance(data, dict):
+        raise ValueError("queue payload must be a JSON object")
+
+    try:
+        schema_version = int(data.get("schema_version") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid schema_version") from exc
+    if schema_version not in {0, 1}:
+        raise ValueError(f"unsupported schema_version: {schema_version}")
+
+    action = str(data.get("action") or "open_url").strip().lower()
+    if action not in QUEUE_ALLOWED_ACTIONS:
+        raise ValueError(f"unsupported action: {action}")
+
+    token = str(data.get("token") or "").strip()
+    if token and not QUEUE_SAFE_TOKEN.fullmatch(token):
+        raise ValueError("invalid queue token")
+
+    for field in ("timestamp", "not_before_ts", "next_attempt_ts"):
+        if data.get(field) is None:
+            continue
+        try:
+            value = float(data[field])
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid {field}") from exc
+        if not math.isfinite(value) or value < 0.0:
+            raise ValueError(f"invalid {field}")
+
+    try:
+        retry_count = int(data.get("retry_count") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("invalid retry_count") from exc
+    if retry_count < 0 or retry_count > RETRY_MAX_ATTEMPTS:
+        raise ValueError("invalid retry_count")
+
+    if action == "open_url":
+        url = data.get("url")
+        if not isinstance(url, str) or not url.strip() or len(url.encode("utf-8")) > 8192:
+            raise ValueError("invalid or oversized URL")
+        parsed = urlsplit(url.strip())
+        if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("URL must use HTTP or HTTPS")
+    else:
+        command = data.get("command")
+        if (
+            not isinstance(command, list)
+            or not command
+            or len(command) > 32
+            or any(not isinstance(part, str) or not part.strip() or len(part) > 4096 for part in command)
+        ):
+            raise ValueError("invalid settings command")
+
+    return data
+
+
+def _terminal_path(entry_path: Path, suffix: str) -> Path:
+    target = entry_path.with_suffix(suffix)
+    if not target.exists() or target == entry_path:
+        return target
+    return entry_path.with_name(f"{entry_path.stem}_{int(time.time() * 1000)}{suffix}")
+
+
+def _quarantine_entry(entry_path: Path, suffix: str, *, reason: str) -> None:
+    target = _terminal_path(entry_path, suffix)
+    try:
+        entry_path.replace(target)
+        logging.warning("Quarantined queue entry %s as %s (%s)", entry_path.name, target.name, reason)
+    except OSError:
+        logging.warning("Failed to quarantine queue entry %s (%s)", entry_path.name, reason)
+
+
+def _prune_terminal_entries(queue_dir: Path, *, now: float | None = None) -> int:
+    now = time.time() if now is None else float(now)
+    terminals = [
+        path
+        for path in queue_dir.iterdir()
+        if path.is_file() and path.suffix.lower() in {".corrupt", ".failed", ".expired", ".receipt"}
+    ]
+    terminals.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+    removed = 0
+    retained = 0
+    for path in terminals:
+        max_age = (
+            QUEUE_RECEIPT_MAX_AGE_SECONDS
+            if path.suffix.lower() == ".receipt"
+            else QUEUE_TERMINAL_MAX_AGE_SECONDS
+        )
+        try:
+            age = max(0.0, now - path.stat().st_mtime)
+            if age > max_age or retained >= QUEUE_TERMINAL_MAX_ENTRIES:
+                path.unlink(missing_ok=True)
+                removed += 1
+            else:
+                retained += 1
+        except OSError:
+            continue
+    return removed
+
+
+def reconcile_queue(queue_dir: Path) -> Dict[str, int]:
+    """Recover interrupted writes and cap retained terminal diagnostics."""
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    recovered = 0
+    quarantined = 0
+
+    for tmp_path in list(queue_dir.glob("*.tmp")):
+        if not tmp_path.is_file():
+            continue
+        try:
+            data = _validate_queue_payload(read_json_bounded(tmp_path))
+            token = _safe_token(data)
+            if not token:
+                raise ValueError("temporary entry has no safe token")
+            target = queue_dir / f"{token}.json"
+            if target.exists():
+                tmp_path.unlink(missing_ok=True)
+            else:
+                tmp_path.replace(target)
+                recovered += 1
+        except Exception as exc:
+            _quarantine_entry(tmp_path, ".corrupt", reason=str(exc))
+            quarantined += 1
+
+    pruned = _prune_terminal_entries(queue_dir)
+    live_count, total_bytes = queue_usage(queue_dir)
+    if live_count > QUEUE_MAX_LIVE_ENTRIES or total_bytes > QUEUE_MAX_TOTAL_BYTES:
+        logging.warning(
+            "Queue is over its storage bound (live=%d/%d bytes=%d/%d); draining existing work only",
+            live_count,
+            QUEUE_MAX_LIVE_ENTRIES,
+            total_bytes,
+            QUEUE_MAX_TOTAL_BYTES,
+        )
+    return {"recovered": recovered, "quarantined": quarantined, "pruned": pruned}
+
+
+def _receipt_path(queue_dir: Path, token: str) -> Path | None:
+    return queue_dir / f"{token}.receipt" if QUEUE_SAFE_TOKEN.fullmatch(token) else None
+
+
+def _write_receipt(queue_dir: Path, data: Dict[str, Any]) -> None:
+    token = _safe_token(data)
+    receipt_path = _receipt_path(queue_dir, token)
+    if receipt_path is None:
+        return
+    write_json_atomic_bounded(
+        receipt_path,
+        {
+            "schema_version": 1,
+            "token": token,
+            "completed_at": time.time(),
+            "action": str(data.get("action") or "open_url"),
+        },
+    )
 
 
 def _acquire_watcher_singleton(name: str = WATCHER_MUTEX_NAME) -> tuple[object | None, bool]:
@@ -532,10 +715,14 @@ def open_url(url: str) -> bool:
     # already has its own direct QDesktopServices path inside the main app.
     try:
         os.startfile(url)  # type: ignore[attr-defined]
-        logging.info("Shell launch request accepted via os.startfile: %s", url)
+        logging.info("Shell launch request accepted via os.startfile: %s", _url_for_log(url))
         return True
     except Exception as exc:
-        logging.debug("os.startfile failed (%s), trying QDesktopServices fallback: %s", exc, url)
+        logging.debug(
+            "os.startfile failed (%s), trying QDesktopServices fallback: %s",
+            exc,
+            _url_for_log(url),
+        )
 
     try:
         from PySide6.QtCore import QUrl
@@ -548,11 +735,11 @@ def open_url(url: str) -> bool:
             created_app = True
         opened = bool(QDesktopServices.openUrl(QUrl(url)))
         if opened:
-            logging.info("Shell launch request accepted via QDesktopServices: %s", url)
+            logging.info("Shell launch request accepted via QDesktopServices: %s", _url_for_log(url))
             return True
-        logging.debug("QDesktopServices.openUrl returned False for URL: %s", url)
+        logging.debug("QDesktopServices.openUrl returned False for URL: %s", _url_for_log(url))
     except Exception as exc:
-        logging.debug("QDesktopServices fallback failed for %s: %s", url, exc)
+        logging.debug("QDesktopServices fallback failed for %s: %s", _url_for_log(url), exc)
     finally:
         try:
             if created_app and app is not None:
@@ -564,13 +751,23 @@ def open_url(url: str) -> bool:
     try:
         result = webbrowser.open(url)
         if result:
-            logging.info("Shell launch request accepted via webbrowser.open: %s", url)
+            logging.info("Shell launch request accepted via webbrowser.open: %s", _url_for_log(url))
             return True
-        logging.warning("webbrowser.open returned False for URL: %s", url)
+        logging.warning("webbrowser.open returned False for URL: %s", _url_for_log(url))
         return False
     except Exception as exc:
-        logging.error("open_url failed for %s: %s", url, exc)
+        logging.error("open_url failed for %s: %s", _url_for_log(url), exc)
         return False
+
+
+def _url_for_log(url: str) -> str:
+    """Keep last-resort diagnostics useful without retaining URL query payloads."""
+    try:
+        parsed = urlsplit(str(url))
+        value = f"{parsed.scheme}://{parsed.netloc}"
+    except Exception:
+        value = "<unparseable-url>"
+    return value[:512]
 
 
 def _shell_window_present() -> bool:
@@ -639,13 +836,9 @@ def process_queue(
             break
 
         try:
-            data = json.loads(entry_path.read_text(encoding="utf-8"))
+            data = _validate_queue_payload(read_json_bounded(entry_path))
         except Exception as exc:
-            logging.warning("Failed to parse %s: %s", entry_path.name, exc)
-            try:
-                entry_path.rename(entry_path.with_suffix(".corrupt"))
-            except Exception:
-                logging.debug("Failed to rename corrupt queue entry: %s", entry_path, exc_info=True)
+            _quarantine_entry(entry_path, ".corrupt", reason=str(exc))
             continue
 
         if not _retry_ready(data):
@@ -658,6 +851,12 @@ def process_queue(
 
         token = str(data.get("token") or "").strip()
         url = str(data.get("url") or "").strip()
+        receipt_path = _receipt_path(queue_dir, token)
+        if receipt_path is not None and receipt_path.exists():
+            logging.info("Discarding already-completed queue token: %s", token)
+            entry_path.unlink(missing_ok=True)
+            processed += 1
+            continue
 
         # Suppress duplicates within the same processing batch. Prefer token-based
         # dedupe, then fall back to URL dedupe when token is missing.
@@ -670,7 +869,11 @@ def process_queue(
             seen_tokens.add(token)
         elif url:
             if url in seen_urls:
-                logging.info("Skipping duplicate queue URL in batch: %s (%s)", url, entry_path.name)
+                logging.info(
+                    "Skipping duplicate queue URL in batch: %s (%s)",
+                    _url_for_log(url),
+                    entry_path.name,
+                )
                 entry_path.unlink(missing_ok=True)
                 processed += 1
                 continue
@@ -687,13 +890,13 @@ def process_queue(
             )
             logging.info(
                 "Deferring URL launch while saver session ticket is still active: %s",
-                data.get("url") or "",
+                _url_for_log(str(data.get("url") or "")),
             )
             processed += 1
             continue
 
         if _entry_is_expired(data, action=action):
-            expired_path = entry_path.with_suffix(".expired")
+            expired_path = _terminal_path(entry_path, ".expired")
             _write_entry_payload(expired_path, data)
             if expired_path != entry_path:
                 entry_path.unlink(missing_ok=True)
@@ -704,6 +907,14 @@ def process_queue(
         success = False
         error = _action_error(action)
         defer_seconds: float | None = None
+        processing_path = entry_path.with_suffix(".processing")
+        if processing_path != entry_path:
+            try:
+                entry_path.replace(processing_path)
+                entry_path = processing_path
+            except OSError as exc:
+                logging.warning("Could not claim queue entry %s: %s", entry_path.name, exc)
+                continue
 
         if action == "open_url":
             success, error, defer_seconds = _handle_open_url(data)
@@ -716,6 +927,10 @@ def process_queue(
             error = f"unknown action: {action}"
 
         if success:
+            try:
+                _write_receipt(queue_dir, data)
+            except Exception:
+                logging.warning("Failed to write completion receipt for %s", entry_path.name)
             entry_path.unlink(missing_ok=True)
         elif defer_seconds is not None:
             _defer_entry(entry_path, data, delay_seconds=defer_seconds, reason=error)
@@ -733,8 +948,19 @@ def main() -> int:
     args = parse_args()
     _hide_own_window()
 
-    args.queue.mkdir(parents=True, exist_ok=True)
-    configure_logging(args.log_dir, args.verbose)
+    logging_available = configure_logging(args.log_dir, args.verbose)
+    try:
+        recovery = reconcile_queue(args.queue)
+    except Exception as exc:
+        logging.error("Queue startup reconciliation failed: %s", exc)
+        return 2
+    if not logging_available:
+        logging.warning(
+            "File diagnostics unavailable; continuing with queue recovery (max log size=%d)",
+            HELPER_LOG_MAX_BYTES,
+        )
+    if any(recovery.values()):
+        logging.info("Queue startup reconciliation: %s", recovery)
 
     if args.watch and not args.persistent and args.owner_pid <= 0:
         try:
@@ -755,6 +981,7 @@ def main() -> int:
         poll_interval=args.poll_interval if args.watch else 0.0,
         persistent=args.persistent,
         owner_pid=args.owner_pid,
+        logging_available=logging_available,
     )
 
     if args.watch:
@@ -769,6 +996,7 @@ def main() -> int:
             owner_pid=args.owner_pid,
             idle_exit_seconds=args.idle_exit_seconds,
             session_ticket_path=args.session_ticket,
+            logging_available=logging_available,
         )
 
     logging.info("Helper started one-shot (queue=%s)", args.queue)
@@ -787,6 +1015,7 @@ def _run_watcher(
     owner_pid: int = 0,
     idle_exit_seconds: float = 0.0,
     session_ticket_path: Path | None = None,
+    logging_available: bool = True,
 ) -> int:
     """Continuous watcher loop — polls queue, opens URLs, sleeps."""
     global _watcher_running
@@ -820,6 +1049,7 @@ def _run_watcher(
                     poll_interval=poll_interval,
                     persistent=persistent,
                     owner_pid=owner_pid,
+                    logging_available=logging_available,
                 )
 
                 processed, opened_url = process_queue(
@@ -901,32 +1131,33 @@ def _handle_open_url(data: Dict[str, Any]) -> tuple[bool, str, float | None]:
         logging.warning("Queue entry missing URL")
         return False, "missing url", None
 
-    logging.info("Launching deferred URL: %s", url)
+    safe_url = _url_for_log(str(url))
+    logging.info("Launching deferred URL: %s", safe_url)
     start = time.perf_counter()
     try:
         launched = open_url(url)
     except ShellNotReadyError:
-        logging.info("Deferring URL launch until the interactive shell is ready: %s", url)
+        logging.info("Deferring URL launch until the interactive shell is ready: %s", safe_url)
         return False, "shell_not_ready", SHELL_NOT_READY_DEFER_SECONDS
     duration = time.perf_counter() - start
 
     if launched:
-        logging.info("Launch request completed (%.2f ms): %s", duration * 1000.0, url)
+        logging.info("Launch request completed (%.2f ms): %s", duration * 1000.0, safe_url)
 
         # Best-effort only. A foreground failure must not turn a successful
         # browser launch into a helper failure.
         try:
             if bring_browser_foreground(url):
-                logging.info("Browser foregrounded after helper launch: %s", url)
+                logging.info("Browser foregrounded after helper launch: %s", safe_url)
             else:
-                logging.warning("Browser foreground not confirmed after launch request: %s", url)
+                logging.warning("Browser foreground not confirmed after launch request: %s", safe_url)
         except Exception as exc:
             logger.debug("[REDDIT] Exception suppressed during foreground attempt: %s", exc)
-            logging.debug("Browser foreground attempt errored: %s", url, exc_info=True)
+            logging.debug("Browser foreground attempt errored: %s", safe_url, exc_info=True)
 
         return True, "", None
 
-    logging.error("Launch failed: %s", url)
+    logging.error("Launch failed: %s", safe_url)
     return False, "open_url failed", None
 
 
@@ -952,7 +1183,12 @@ def _handle_open_settings(data: Dict[str, Any], signal_dir: Path) -> bool:
     except Exception as exc:
         logger.debug("[REDDIT] Failed to prepare completion path %s: %s", completion_path, exc)
 
-    logging.info("Launching settings helper command: %s", command)
+    executable_name = Path(str(command[0])).name
+    logging.info(
+        "Launching settings helper command executable=%s arg_count=%d",
+        executable_name,
+        len(command),
+    )
     try:
         proc = subprocess.Popen(
             command,
